@@ -55,7 +55,7 @@
 <a href=#55 id=55 data-nosnippet>55</a>        <span class="kw">let </span><span class="kw-2">mut </span>work = Work {
 <a href=#56 id=56 data-nosnippet>56</a>            used: <span class="number">0</span>,
 <a href=#57 id=57 data-nosnippet>57</a>            max: limits.max_work,
-<a href=#58 id=58 data-nosnippet>58</a>            cancellation,
+<a href=#58 id=58 data-nosnippet>58</a>            cancellation: cancellation.polling(),
 <a href=#59 id=59 data-nosnippet>59</a>        };
 <a href=#60 id=60 data-nosnippet>60</a>        <span class="kw">let </span>result = build(theory, <span class="prelude-val">None</span>, limits, <span class="kw-2">&amp;mut </span>work);
 <a href=#61 id=61 data-nosnippet>61</a>        TightAttempt {
@@ -79,7 +79,7 @@
 <a href=#79 id=79 data-nosnippet>79</a>        <span class="kw">let </span><span class="kw-2">mut </span>work = Work {
 <a href=#80 id=80 data-nosnippet>80</a>            used: <span class="number">0</span>,
 <a href=#81 id=81 data-nosnippet>81</a>            max: limits.max_work,
-<a href=#82 id=82 data-nosnippet>82</a>            cancellation,
+<a href=#82 id=82 data-nosnippet>82</a>            cancellation: cancellation.polling(),
 <a href=#83 id=83 data-nosnippet>83</a>        };
 <a href=#84 id=84 data-nosnippet>84</a>        build(theory, <span class="prelude-val">Some</span>(ranks), limits, <span class="kw-2">&amp;mut </span>work)
 <a href=#85 id=85 data-nosnippet>85</a>    }

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-86489835.js";
+            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1ecb55d0.js"></script>
+        <script src="../toc-2436da5c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -194,6 +194,12 @@ in the <a href="correspondence.html#indexed-reads-counters-and-packed-scans">cor
 Native runtime-effect composition and the outer tight classifier, recognizer and
 producer proofs remain separate. Historical source records do not qualify changed
 native operations.</p>
+<p>The native control representation uses a borrowed <code>CancellationPoll</code> view:
+the owning poll delegates through it, and tight work retains it for repeated
+polls. The conversion retains the represented flag references and slot identity
+under the same fixed per-invocation observation model. It adds no concurrent
+atomic, Rust lifetime, timer or dynamic-response guarantee. The historical
+<code>Evaluator</code> results below keep their original control representation.</p>
 <h2 id="recognizing-bodies-for-tight-checking"><a class="header" href="#recognizing-bodies-for-tight-checking">Recognizing bodies for tight checking</a></h2>
 <p>The optimized tight check needs a structural certificate before it may replace
 proper-subset reduct search. Its body classifier distinguishes exact admitted

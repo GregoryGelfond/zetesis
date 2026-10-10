@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-86489835.js";
+            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1ecb55d0.js"></script>
+        <script src="../toc-2436da5c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -273,12 +273,15 @@ definitions from each verified base answer. It returns full original answers;
 <code>#show</code> does not determine which definitions qualify. See the
 <a href="../architecture/grounding.html#terminal-definition-analysis">grounding contract</a>.
 Explicit <code>--grounder eager</code> still requests complete materialization.</p>
-<p>For a formula input, explicit <code>--grounder lazy</code> selects CPU hybrid grounding:
+<p>For a formula input, explicit <code>--grounder lazy</code> selects hybrid grounding:
 the producer core is materialized, while eligible integrity constraints are
 checked from their admitted source families. Certified terminal definitions are
 deferred too, and reconstructed from each accepted base answer, as automatic
-admission does over an eager base. It runs on the CPU backend, uses indexed
-joins and refuses objective declarations and table joins.</p>
+admission does over an eager base. The core uses the selected CPU or GPU backend;
+source joins and streamed constraint checks run on the host. Hybrid grounding
+uses indexed joins and refuses table joins. With objectives, terminal definitions remain in
+the core. Only answers that pass every original constraint enter scoring and
+optimal-tie retention.</p>
 <p>The three grounders: <code>eager</code> instantiates every rule before solving; <code>lazy</code>
 instantiates on demand wherever admitted — relational source joins, or the
 hybrid formula schedule with terminal definitions deferred; <code>auto</code> admits
@@ -419,7 +422,7 @@ tight support, a general reduct query, and optimum ties. It compares the
 selected route with CPU execution and known full-model contracts. Actual route
 and work evidence is mandatory; a requested device name alone cannot pass a
 check. This small installed check is distinct from the repository’s maintained
-59-test physical qualification suite.</p>
+63-test physical qualification suite.</p>
 <p>Corpus and backend checks accept every backend: <code>--backend cpu</code> (the default),
 <code>gpu</code>, <code>metal</code> or <code>vulkan</code>. GPU corpus checks request the eager general formula
 route. Decoding a Vulkan route awaits qualification on a Vulkan host. An

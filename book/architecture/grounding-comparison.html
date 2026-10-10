@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-86489835.js";
+            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1ecb55d0.js"></script>
+        <script src="../toc-2436da5c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -195,7 +195,7 @@ acceptance criterion.</p>
 <tbody>
 <tr><td>clingo ordinary grounding</td><td>Selected source parts are instantiated and simplified into ground input for solving</td><td>Grounding of those selected parts in their parameter/incremental context</td></tr>
 <tr><td>zetesis eager formula</td><td>Possible support is completed and a finite atom catalog, shared formula DAG, objectives and observations are constructed</td><td>Source lowering and every relevant original formula/metadata obligation</td></tr>
-<tr><td>zetesis hybrid formula</td><td>Complete support, arithmetic admission and producer-core materialization precede source-constraint checks against core answers</td><td>Core answer membership and every streamed constraint for each accepted answer; complete core enumeration for exhaustion</td></tr>
+<tr><td>zetesis hybrid formula</td><td>Complete support, arithmetic admission and producer-core materialization precede source-constraint checks against core answers</td><td>Core membership and every streamed constraint before acceptance or scoring; complete enumeration, or exhaustive optimal search under sound objective bounds</td></tr>
 <tr><td>zetesis eager relational</td><td>A bounded complete graph is compiled explicitly from relational templates</td><td>The retained ground instances and graph identity</td></tr>
 <tr><td>zetesis lazy relational</td><td>Templates remain available; source joins generate instances during frozen-gate positive inference</td><td>Final closure coverage and constraints, plus separately complete candidate enumeration</td></tr>
 </tbody>
@@ -203,9 +203,11 @@ acceptance criterion.</p>
 </div>
 <p>These routes do not have equal language coverage. The
 <a href="../reference/language.html">language reference</a> identifies the current profiles.
-The CPU hybrid formula profile retains bounded choices and other producers
-eagerly. It streams eligible ordinary constraints and currently refuses objectives
-and table joins. General demand-driven formula producers are not implemented.</p>
+The hybrid formula profile retains bounded choices and other producers
+eagerly. It streams eligible ordinary constraints and scores objectives only after
+those checks complete. Core membership uses the selected CPU or GPU executor;
+source joins and constraint checks run on the host. Table joins remain unsupported in this profile. General
+demand-driven formula producers are not implemented.</p>
 <p><label class="checkbox-label"><input class="checkbox-img" type="checkbox"><img src="grounding-comparison.svg" alt="Grounding selected program parts produces retained solver input; lazy relational checking composes source joins with world-specific reduct rounds."><span class="img-wrapper"><img src="grounding-comparison.svg" alt="Grounding selected program parts produces retained solver input; lazy relational checking composes source joins with world-specific reduct rounds."></span></label></p>
 <p>Three operations must remain distinct. <strong>Source instantiation</strong> produces bound
 rule instances. <strong>Candidate generation</strong> proposes interpretations, or gate seeds
@@ -395,8 +397,11 @@ profile’s <a href="grounding.html#eager-and-lazy-execution">hybrid constraint 
 <p>Parsing, source ownership and source joins run on the host. In the relational
 lazy device path, Metal computes per-world positive consequences and frozen-gate
 tests from bounded source chunks; it is not replaying a CPU-completed closure.
-The general formula GPU path consumes an eager theory and retains exact CPU
-completion of residual membership work. Neither path is full GPU grounding.</p>
+The formula GPU path checks a retained theory: the complete eager theory or the
+producer core of hybrid grounding. Tight cores use complete support checking;
+general cores retain exact CPU completion of unresolved device results. Hybrid
+answers then pass every streamed constraint on the host before scoring or
+publication. Neither path is full GPU grounding.</p>
 <p>Avoiding a rule vector can save storage. Repeated joins, masks, demanded
 catalogs, concurrent workspaces and transfers also cost memory and time. A useful
 comparison therefore records eager grounding and solving separately, interleaved

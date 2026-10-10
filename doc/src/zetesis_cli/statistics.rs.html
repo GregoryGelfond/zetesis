@@ -782,261 +782,297 @@
 <a href=#782 id=782 data-nosnippet>782</a>                plan.peak_bytes,
 <a href=#783 id=783 data-nosnippet>783</a>                plan.retained_bytes
 <a href=#784 id=784 data-nosnippet>784</a>            )<span class="question-mark">?</span>,
-<a href=#785 id=785 data-nosnippet>785</a>        }
-<a href=#786 id=786 data-nosnippet>786</a>    }
-<a href=#787 id=787 data-nosnippet>787</a>    <span class="macro">writeln!</span>(
-<a href=#788 id=788 data-nosnippet>788</a>        sink,
-<a href=#789 id=789 data-nosnippet>789</a>        <span class="string">"  class attempts: tight refusal={:?}; positive refusal={:?}; restriction refusal={:?}; restriction work={}; committed restriction clauses={}"</span>,
-<a href=#790 id=790 data-nosnippet>790</a>        certified.tight_refusal,
-<a href=#791 id=791 data-nosnippet>791</a>        certified.positive_refusal,
-<a href=#792 id=792 data-nosnippet>792</a>        certified.restriction_refusal,
-<a href=#793 id=793 data-nosnippet>793</a>        certified.restriction_work,
-<a href=#794 id=794 data-nosnippet>794</a>        certified.restriction_clauses
-<a href=#795 id=795 data-nosnippet>795</a>    )<span class="question-mark">?</span>;
-<a href=#796 id=796 data-nosnippet>796</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(peak) = certified.positive_check_peak_bytes {
-<a href=#797 id=797 data-nosnippet>797</a>        <span class="macro">writeln!</span>(
-<a href=#798 id=798 data-nosnippet>798</a>            sink,
-<a href=#799 id=799 data-nosnippet>799</a>            <span class="string">"  positive checking: peak plan and evaluation bytes={peak}"
-<a href=#800 id=800 data-nosnippet>800</a>        </span>)<span class="question-mark">?</span>;
-<a href=#801 id=801 data-nosnippet>801</a>    }
-<a href=#802 id=802 data-nosnippet>802</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(
-<a href=#803 id=803 data-nosnippet>803</a>        certified.plan,
-<a href=#804 id=804 data-nosnippet>804</a>        <span class="prelude-val">Some</span>(zetesis_sat::CertificatePlanStatistics::Positive(<span class="kw">_</span>))
-<a href=#805 id=805 data-nosnippet>805</a>    ) &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(attempt) = certified.positive_attempt
-<a href=#806 id=806 data-nosnippet>806</a>    {
-<a href=#807 id=807 data-nosnippet>807</a>        <span class="macro">writeln!</span>(
-<a href=#808 id=808 data-nosnippet>808</a>            sink,
-<a href=#809 id=809 data-nosnippet>809</a>            <span class="string">"  positive preparation attempt: work={}; observed peak bytes={}; primitive retained bytes={}; positive plan not selected"</span>,
-<a href=#810 id=810 data-nosnippet>810</a>            attempt.work, attempt.peak_bytes, attempt.retained_bytes
-<a href=#811 id=811 data-nosnippet>811</a>        )<span class="question-mark">?</span>;
-<a href=#812 id=812 data-nosnippet>812</a>    }
-<a href=#813 id=813 data-nosnippet>813</a>    <span class="prelude-val">Ok</span>(())
-<a href=#814 id=814 data-nosnippet>814</a>}
-<a href=#815 id=815 data-nosnippet>815</a>
-<a href=#816 id=816 data-nosnippet>816</a><span class="kw">fn </span>formula(
-<a href=#817 id=817 data-nosnippet>817</a>    sink: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Write,
-<a href=#818 id=818 data-nosnippet>818</a>    config: <span class="kw-2">&amp;</span><span class="kw">crate</span>::SolveConfig,
-<a href=#819 id=819 data-nosnippet>819</a>    report: <span class="kw-2">&amp;</span>Details&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#820 id=820 data-nosnippet>820</a>) -&gt; io::Result&lt;()&gt; {
-<a href=#821 id=821 data-nosnippet>821</a>    <span class="kw">let </span>grounder = <span class="kw">if let </span><span class="prelude-val">Some</span>(terminal) = report.terminal_execution {
-<a href=#822 id=822 data-nosnippet>822</a>        <span class="kw">match </span>terminal.base {
-<a href=#823 id=823 data-nosnippet>823</a>            zetesis_themelios::BaseKind::Eager =&gt; <span class="string">"eager_base_terminal_definitions"</span>,
-<a href=#824 id=824 data-nosnippet>824</a>            zetesis_themelios::BaseKind::Hybrid =&gt; <span class="string">"hybrid_base_terminal_definitions"</span>,
-<a href=#825 id=825 data-nosnippet>825</a>        }
-<a href=#826 id=826 data-nosnippet>826</a>    } <span class="kw">else if </span>report.hybrid_execution.is_some() {
-<a href=#827 id=827 data-nosnippet>827</a>        <span class="string">"hybrid"
-<a href=#828 id=828 data-nosnippet>828</a>    </span>} <span class="kw">else </span>{
-<a href=#829 id=829 data-nosnippet>829</a>        <span class="string">"eager"
-<a href=#830 id=830 data-nosnippet>830</a>    </span>};
-<a href=#831 id=831 data-nosnippet>831</a>    <span class="kw">let </span>oracle = <span class="kw">match </span>report
-<a href=#832 id=832 data-nosnippet>832</a>        .countermodel_statistics
-<a href=#833 id=833 data-nosnippet>833</a>        .and_then(|s| s.certified)
-<a href=#834 id=834 data-nosnippet>834</a>        .and_then(|s| s.plan)
-<a href=#835 id=835 data-nosnippet>835</a>    {
-<a href=#836 id=836 data-nosnippet>836</a>        <span class="prelude-val">Some</span>(zetesis_sat::CertificatePlanStatistics::Tight(<span class="kw">_</span>)) =&gt; <span class="string">"tight-support"</span>,
-<a href=#837 id=837 data-nosnippet>837</a>        <span class="prelude-val">Some</span>(zetesis_sat::CertificatePlanStatistics::Positive(<span class="kw">_</span>)) =&gt; <span class="string">"positive-consequences"</span>,
-<a href=#838 id=838 data-nosnippet>838</a>        <span class="prelude-val">None </span>=&gt; <span class="string">"countermodel"</span>,
-<a href=#839 id=839 data-nosnippet>839</a>    };
-<a href=#840 id=840 data-nosnippet>840</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(execution) = report.formula_execution {
-<a href=#841 id=841 data-nosnippet>841</a>        <span class="kw">let </span>backend = <span class="kw">if </span>execution.adapter.is_empty() {
-<a href=#842 id=842 data-nosnippet>842</a>            <span class="string">"cpu batched exact completion"
-<a href=#843 id=843 data-nosnippet>843</a>        </span>} <span class="kw">else if </span>execution.tight_work_per_candidate.is_some() {
-<a href=#844 id=844 data-nosnippet>844</a>            <span class="string">"GPU tight support"
-<a href=#845 id=845 data-nosnippet>845</a>        </span>} <span class="kw">else </span>{
-<a href=#846 id=846 data-nosnippet>846</a>            <span class="string">"hybrid GPU propagation + exact CPU residual search"
-<a href=#847 id=847 data-nosnippet>847</a>        </span>};
-<a href=#848 id=848 data-nosnippet>848</a>        <span class="macro">writeln!</span>(
-<a href=#849 id=849 data-nosnippet>849</a>            sink,
-<a href=#850 id=850 data-nosnippet>850</a>            <span class="string">"  effective execution: backend={backend}; oracle={oracle}; grounder={grounder}; CPU completion requested workers={}; peak preflight workers={}; adapter={}"</span>,
-<a href=#851 id=851 data-nosnippet>851</a>            config.completion_workers, execution.completion.effective_workers, execution.adapter
-<a href=#852 id=852 data-nosnippet>852</a>        )<span class="question-mark">?</span>;
-<a href=#853 id=853 data-nosnippet>853</a>        <span class="macro">writeln!</span>(
-<a href=#854 id=854 data-nosnippet>854</a>            sink,
-<a href=#855 id=855 data-nosnippet>855</a>            <span class="string">"  formula completion: entered={}; residuals entered={}; completed before commit={}; failed={}; peak requested scratch bytes={}; peak shared owner, query and transient/result scratch bytes={}; scratch limit={}; counters overflowed={}"</span>,
-<a href=#856 id=856 data-nosnippet>856</a>            execution.completion.entered,
-<a href=#857 id=857 data-nosnippet>857</a>            execution.completion.residuals,
-<a href=#858 id=858 data-nosnippet>858</a>            execution.completion.completed,
-<a href=#859 id=859 data-nosnippet>859</a>            execution.completion.failed,
-<a href=#860 id=860 data-nosnippet>860</a>            execution.completion.requested_scratch_bytes,
-<a href=#861 id=861 data-nosnippet>861</a>            execution.completion.peak_scratch_bytes,
-<a href=#862 id=862 data-nosnippet>862</a>            config.max_completion_scratch_bytes,
-<a href=#863 id=863 data-nosnippet>863</a>            execution.completion.overflowed
-<a href=#864 id=864 data-nosnippet>864</a>        )<span class="question-mark">?</span>;
-<a href=#865 id=865 data-nosnippet>865</a>        <span class="macro">writeln!</span>(
-<a href=#866 id=866 data-nosnippet>866</a>            sink,
-<a href=#867 id=867 data-nosnippet>867</a>            <span class="string">"  formula residual completion: completed locally={}; failed={}"</span>,
-<a href=#868 id=868 data-nosnippet>868</a>            execution.completion.residual_completed, execution.completion.residual_failed
-<a href=#869 id=869 data-nosnippet>869</a>        )<span class="question-mark">?</span>;
-<a href=#870 id=870 data-nosnippet>870</a>        <span class="kw">for </span>(label, measurement) <span class="kw">in </span>[
-<a href=#871 id=871 data-nosnippet>871</a>            (<span class="string">"completion coordinator wall"</span>, execution.completion.wall),
-<a href=#872 id=872 data-nosnippet>872</a>            (
-<a href=#873 id=873 data-nosnippet>873</a>                <span class="string">"summed worker original validation"</span>,
-<a href=#874 id=874 data-nosnippet>874</a>                execution.completion.worker_original,
-<a href=#875 id=875 data-nosnippet>875</a>            ),
-<a href=#876 id=876 data-nosnippet>876</a>            (<span class="string">"summed worker reduct"</span>, execution.completion.worker_reduct),
-<a href=#877 id=877 data-nosnippet>877</a>        ] {
-<a href=#878 id=878 data-nosnippet>878</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(measurement) = measurement {
-<a href=#879 id=879 data-nosnippet>879</a>                <span class="macro">writeln!</span>(
-<a href=#880 id=880 data-nosnippet>880</a>                    sink,
-<a href=#881 id=881 data-nosnippet>881</a>                    <span class="string">"  {label}: calls={}; elapsed ns={}; overflowed={}"</span>,
-<a href=#882 id=882 data-nosnippet>882</a>                    measurement.calls,
-<a href=#883 id=883 data-nosnippet>883</a>                    measurement.elapsed.as_nanos(),
-<a href=#884 id=884 data-nosnippet>884</a>                    measurement.overflowed
-<a href=#885 id=885 data-nosnippet>885</a>                )<span class="question-mark">?</span>;
-<a href=#886 id=886 data-nosnippet>886</a>            }
-<a href=#887 id=887 data-nosnippet>887</a>        }
-<a href=#888 id=888 data-nosnippet>888</a>        <span class="macro">writeln!</span>(
-<a href=#889 id=889 data-nosnippet>889</a>            sink,
-<a href=#890 id=890 data-nosnippet>890</a>            <span class="string">"  formula accounting: pending candidates={}; queued verified models={}"</span>,
-<a href=#891 id=891 data-nosnippet>891</a>            execution.pending_candidates, execution.queued_models
-<a href=#892 id=892 data-nosnippet>892</a>        )<span class="question-mark">?</span>;
-<a href=#893 id=893 data-nosnippet>893</a>        <span class="macro">writeln!</span>(
-<a href=#894 id=894 data-nosnippet>894</a>            sink,
-<a href=#895 id=895 data-nosnippet>895</a>            <span class="string">"  formula batch limits: candidates={}; pending bytes={}"</span>,
-<a href=#896 id=896 data-nosnippet>896</a>            config.batch_size, config.max_batch_bytes
-<a href=#897 id=897 data-nosnippet>897</a>        )<span class="question-mark">?</span>;
-<a href=#898 id=898 data-nosnippet>898</a>        <span class="kw">if </span>!execution.adapter.is_empty() {
-<a href=#899 id=899 data-nosnippet>899</a>            formula_gpu(sink, execution)<span class="question-mark">?</span>;
-<a href=#900 id=900 data-nosnippet>900</a>        }
-<a href=#901 id=901 data-nosnippet>901</a>        <span class="prelude-val">Ok</span>(())
-<a href=#902 id=902 data-nosnippet>902</a>    } <span class="kw">else </span>{
-<a href=#903 id=903 data-nosnippet>903</a>        <span class="macro">writeln!</span>(
-<a href=#904 id=904 data-nosnippet>904</a>            sink,
-<a href=#905 id=905 data-nosnippet>905</a>            <span class="string">"  effective execution: backend=cpu; oracle={oracle}; grounder={grounder}; native CPU search; batch-completion scratch limit=inapplicable"
-<a href=#906 id=906 data-nosnippet>906</a>        </span>)
-<a href=#907 id=907 data-nosnippet>907</a>    }
-<a href=#908 id=908 data-nosnippet>908</a>}
-<a href=#909 id=909 data-nosnippet>909</a>
-<a href=#910 id=910 data-nosnippet>910</a><span class="kw">fn </span>formula_gpu(
-<a href=#911 id=911 data-nosnippet>911</a>    sink: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Write,
-<a href=#912 id=912 data-nosnippet>912</a>    execution: <span class="kw-2">&amp;</span><span class="kw">crate</span>::FormulaExecutionStatistics,
-<a href=#913 id=913 data-nosnippet>913</a>) -&gt; io::Result&lt;()&gt; {
-<a href=#914 id=914 data-nosnippet>914</a>    <span class="macro">writeln!</span>(
-<a href=#915 id=915 data-nosnippet>915</a>        sink,
-<a href=#916 id=916 data-nosnippet>916</a>        <span class="string">"  formula GPU decoded: batches={}; candidates={}; primitive work={}; completed sweeps={}; GPU-decided committed={}; CPU residuals completed={}"</span>,
-<a href=#917 id=917 data-nosnippet>917</a>        execution.gpu_batches,
-<a href=#918 id=918 data-nosnippet>918</a>        execution.gpu_candidates,
-<a href=#919 id=919 data-nosnippet>919</a>        execution.gpu_work,
-<a href=#920 id=920 data-nosnippet>920</a>        execution.gpu_rounds,
-<a href=#921 id=921 data-nosnippet>921</a>        execution.gpu_decided,
-<a href=#922 id=922 data-nosnippet>922</a>        execution.cpu_residuals
-<a href=#923 id=923 data-nosnippet>923</a>    )<span class="question-mark">?</span>;
-<a href=#924 id=924 data-nosnippet>924</a>    <span class="macro">writeln!</span>(
-<a href=#925 id=925 data-nosnippet>925</a>        sink,
-<a href=#926 id=926 data-nosnippet>926</a>        <span class="string">"  formula GPU submitted: batches={}; candidates={}; completed work/sweeps for unreturned results=unavailable"</span>,
-<a href=#927 id=927 data-nosnippet>927</a>        execution.gpu_submitted_batches, execution.gpu_submitted_candidates
-<a href=#928 id=928 data-nosnippet>928</a>    )<span class="question-mark">?</span>;
-<a href=#929 id=929 data-nosnippet>929</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(residuals) = execution.gpu_residuals {
-<a href=#930 id=930 data-nosnippet>930</a>        <span class="macro">writeln!</span>(
-<a href=#931 id=931 data-nosnippet>931</a>            sink,
-<a href=#932 id=932 data-nosnippet>932</a>            <span class="string">"  formula GPU decoded residuals: fixed point={}; round limit={}; work limit={}; precede CPU completion and commit"</span>,
-<a href=#933 id=933 data-nosnippet>933</a>            residuals.fixed_point, residuals.round_limit, residuals.work_limit,
-<a href=#934 id=934 data-nosnippet>934</a>        )<span class="question-mark">?</span>;
-<a href=#935 id=935 data-nosnippet>935</a>    }
-<a href=#936 id=936 data-nosnippet>936</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(work) = execution.tight_work_per_candidate {
-<a href=#937 id=937 data-nosnippet>937</a>        <span class="macro">writeln!</span>(
-<a href=#938 id=938 data-nosnippet>938</a>            sink,
-<a href=#939 id=939 data-nosnippet>939</a>            <span class="string">"  tight GPU limits: complete support scan work/candidate={work}; propagation sweeps=not applicable"
-<a href=#940 id=940 data-nosnippet>940</a>        </span>)<span class="question-mark">?</span>;
-<a href=#941 id=941 data-nosnippet>941</a>    }
-<a href=#942 id=942 data-nosnippet>942</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(work) = execution.gpu_scheduled_work {
-<a href=#943 id=943 data-nosnippet>943</a>        <span class="macro">writeln!</span>(
-<a href=#944 id=944 data-nosnippet>944</a>            sink,
-<a href=#945 id=945 data-nosnippet>945</a>            <span class="string">"  tight GPU scheduled full-scan work={work}; includes submitted unreturned batches"
-<a href=#946 id=946 data-nosnippet>946</a>        </span>)<span class="question-mark">?</span>;
-<a href=#947 id=947 data-nosnippet>947</a>    }
-<a href=#948 id=948 data-nosnippet>948</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(limits) = execution.gpu_limits {
-<a href=#949 id=949 data-nosnippet>949</a>        <span class="macro">writeln!</span>(
-<a href=#950 id=950 data-nosnippet>950</a>            sink,
-<a href=#951 id=951 data-nosnippet>951</a>            <span class="string">"  formula GPU limits: propagation sweeps/candidate={}; propagation work/candidate={}"</span>,
-<a href=#952 id=952 data-nosnippet>952</a>            limits.rounds_per_candidate, limits.work_per_candidate
-<a href=#953 id=953 data-nosnippet>953</a>        )<span class="question-mark">?</span>;
-<a href=#954 id=954 data-nosnippet>954</a>    }
-<a href=#955 id=955 data-nosnippet>955</a>    <span class="macro">writeln!</span>(
-<a href=#956 id=956 data-nosnippet>956</a>        sink,
-<a href=#957 id=957 data-nosnippet>957</a>        <span class="string">"  formula GPU resources: peak authored GPU bytes={}; GPU kernel timing=unavailable"</span>,
-<a href=#958 id=958 data-nosnippet>958</a>        execution.peak_accounted_bytes
-<a href=#959 id=959 data-nosnippet>959</a>    )
-<a href=#960 id=960 data-nosnippet>960</a>}
-<a href=#961 id=961 data-nosnippet>961</a>
-<a href=#962 id=962 data-nosnippet>962</a><span class="kw">fn </span>closure(sink: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Write, options: <span class="kw-2">&amp;</span>Options, report: <span class="kw-2">&amp;</span>Details&lt;<span class="lifetime">'_</span>&gt;) -&gt; io::Result&lt;()&gt; {
-<a href=#963 id=963 data-nosnippet>963</a>    <span class="comment">// The statistics say which route ran; without one, the requested policy
-<a href=#964 id=964 data-nosnippet>964</a>    // says which would have.
-<a href=#965 id=965 data-nosnippet>965</a>    </span><span class="kw">let </span>grounder = report.closure_execution.map_or(
-<a href=#966 id=966 data-nosnippet>966</a>        <span class="kw">if </span>options.grounder == Grounder::Eager {
-<a href=#967 id=967 data-nosnippet>967</a>            <span class="string">"eager"
-<a href=#968 id=968 data-nosnippet>968</a>        </span>} <span class="kw">else </span>{
-<a href=#969 id=969 data-nosnippet>969</a>            <span class="string">"lazy"
-<a href=#970 id=970 data-nosnippet>970</a>        </span>},
-<a href=#971 id=971 data-nosnippet>971</a>        |closure| closure.route.label(),
-<a href=#972 id=972 data-nosnippet>972</a>    );
-<a href=#973 id=973 data-nosnippet>973</a>    <span class="kw">let </span>cpu = report.shared_execution.is_some() || options.backend == Backend::Cpu;
-<a href=#974 id=974 data-nosnippet>974</a>    <span class="kw">if </span>cpu {
-<a href=#975 id=975 data-nosnippet>975</a>        <span class="macro">writeln!</span>(
-<a href=#976 id=976 data-nosnippet>976</a>            sink,
-<a href=#977 id=977 data-nosnippet>977</a>            <span class="string">"  effective execution: backend=cpu; oracle=closure; grounder={grounder}; workers={}"</span>,
-<a href=#978 id=978 data-nosnippet>978</a>            options.workers
-<a href=#979 id=979 data-nosnippet>979</a>        )<span class="question-mark">?</span>;
-<a href=#980 id=980 data-nosnippet>980</a>    } <span class="kw">else </span>{
-<a href=#981 id=981 data-nosnippet>981</a>        <span class="macro">writeln!</span>(
-<a href=#982 id=982 data-nosnippet>982</a>            sink,
-<a href=#983 id=983 data-nosnippet>983</a>            <span class="string">"  effective execution: oracle=closure; backend=requested GPU policy; grounder={grounder}; see backend diagnostics for actual adapter"
-<a href=#984 id=984 data-nosnippet>984</a>        </span>)<span class="question-mark">?</span>;
-<a href=#985 id=985 data-nosnippet>985</a>    }
-<a href=#986 id=986 data-nosnippet>986</a>    <span class="kw">if </span>report.shared_execution.is_some() {
-<a href=#987 id=987 data-nosnippet>987</a>        <span class="macro">writeln!</span>(
-<a href=#988 id=988 data-nosnippet>988</a>            sink,
-<a href=#989 id=989 data-nosnippet>989</a>            <span class="string">"  discovered gate tuples: {}; source and world work reported separately above"</span>,
-<a href=#990 id=990 data-nosnippet>990</a>            report.discovered_gate_atoms
-<a href=#991 id=991 data-nosnippet>991</a>        )
-<a href=#992 id=992 data-nosnippet>992</a>    } <span class="kw">else if let </span><span class="prelude-val">Some</span>(closure) = report.closure_execution {
-<a href=#993 id=993 data-nosnippet>993</a>        <span class="macro">writeln!</span>(
-<a href=#994 id=994 data-nosnippet>994</a>            sink,
-<a href=#995 id=995 data-nosnippet>995</a>            <span class="string">"  discovered gate tuples: {}"</span>,
-<a href=#996 id=996 data-nosnippet>996</a>            report.discovered_gate_atoms
-<a href=#997 id=997 data-nosnippet>997</a>        )<span class="question-mark">?</span>;
-<a href=#998 id=998 data-nosnippet>998</a>        independent_closure(sink, closure)
-<a href=#999 id=999 data-nosnippet>999</a>    } <span class="kw">else </span>{
-<a href=#1000 id=1000 data-nosnippet>1000</a>        <span class="macro">writeln!</span>(
-<a href=#1001 id=1001 data-nosnippet>1001</a>            sink,
-<a href=#1002 id=1002 data-nosnippet>1002</a>            <span class="string">"  discovered gate tuples: {}; oracle work=unavailable (not accumulated by this driver)"</span>,
-<a href=#1003 id=1003 data-nosnippet>1003</a>            report.discovered_gate_atoms
-<a href=#1004 id=1004 data-nosnippet>1004</a>        )
-<a href=#1005 id=1005 data-nosnippet>1005</a>    }
-<a href=#1006 id=1006 data-nosnippet>1006</a>}
-<a href=#1007 id=1007 data-nosnippet>1007</a>
-<a href=#1008 id=1008 data-nosnippet>1008</a><span class="kw">fn </span>independent_closure(
-<a href=#1009 id=1009 data-nosnippet>1009</a>    sink: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Write,
-<a href=#1010 id=1010 data-nosnippet>1010</a>    closure: <span class="kw-2">&amp;</span><span class="kw">crate</span>::ClosureExecutionStatistics,
-<a href=#1011 id=1011 data-nosnippet>1011</a>) -&gt; io::Result&lt;()&gt; {
-<a href=#1012 id=1012 data-nosnippet>1012</a>    <span class="kw">let </span>(rounds, units) = <span class="kw">match </span>closure.route {
-<a href=#1013 id=1013 data-nosnippet>1013</a>        <span class="kw">crate</span>::ClosureRoute::Eager =&gt; (<span class="string">"rule passes"</span>, <span class="string">"eager scan units"</span>),
-<a href=#1014 id=1014 data-nosnippet>1014</a>        <span class="kw">crate</span>::ClosureRoute::Lazy(<span class="kw">_</span>) =&gt; (<span class="string">"source rounds"</span>, <span class="string">"join/copy units"</span>),
-<a href=#1015 id=1015 data-nosnippet>1015</a>    };
-<a href=#1016 id=1016 data-nosnippet>1016</a>    <span class="macro">writeln!</span>(
-<a href=#1017 id=1017 data-nosnippet>1017</a>        sink,
-<a href=#1018 id=1018 data-nosnippet>1018</a>        <span class="string">"  independent closure: checks completed={}; stopped={}; {rounds}={}; work={} ({units}); derived atoms={}; stopped checks return no counters"</span>,
-<a href=#1019 id=1019 data-nosnippet>1019</a>        closure.completed_checks,
-<a href=#1020 id=1020 data-nosnippet>1020</a>        closure.stopped_checks,
-<a href=#1021 id=1021 data-nosnippet>1021</a>        closure.rounds,
-<a href=#1022 id=1022 data-nosnippet>1022</a>        closure.work,
-<a href=#1023 id=1023 data-nosnippet>1023</a>        closure.derived_atoms
-<a href=#1024 id=1024 data-nosnippet>1024</a>    )<span class="question-mark">?</span>;
-<a href=#1025 id=1025 data-nosnippet>1025</a>    <span class="kw">if let </span><span class="kw">crate</span>::ClosureRoute::Lazy(joins) = closure.route {
-<a href=#1026 id=1026 data-nosnippet>1026</a>        <span class="macro">writeln!</span>(
-<a href=#1027 id=1027 data-nosnippet>1027</a>            sink,
-<a href=#1028 id=1028 data-nosnippet>1028</a>            <span class="string">"  closure joins: catalog work={} (within work); bindings={}; tuple probes={}; dense heads={} (recorded as bits); block steps={} (blocks joined by words); peak named closure bytes={} (admitted or reserved capacity, not RSS)"</span>,
-<a href=#1029 id=1029 data-nosnippet>1029</a>            joins.catalog_work,
-<a href=#1030 id=1030 data-nosnippet>1030</a>            joins.bindings,
-<a href=#1031 id=1031 data-nosnippet>1031</a>            joins.tuple_probes,
-<a href=#1032 id=1032 data-nosnippet>1032</a>            joins.dense_heads,
-<a href=#1033 id=1033 data-nosnippet>1033</a>            joins.block_steps,
-<a href=#1034 id=1034 data-nosnippet>1034</a>            joins.peak_closure_bytes
-<a href=#1035 id=1035 data-nosnippet>1035</a>        )<span class="question-mark">?</span>;
-<a href=#1036 id=1036 data-nosnippet>1036</a>    }
-<a href=#1037 id=1037 data-nosnippet>1037</a>    <span class="prelude-val">Ok</span>(())
-<a href=#1038 id=1038 data-nosnippet>1038</a>}
-<a href=#1039 id=1039 data-nosnippet>1039</a>
-<a href=#1040 id=1040 data-nosnippet>1040</a><span class="attr">#[cfg(test)]
-<a href=#1041 id=1041 data-nosnippet>1041</a></span><span class="kw">mod </span>tests;
+<a href=#785 id=785 data-nosnippet>785</a>            zetesis_sat::CertificatePlanStatistics::Stratified(plan) =&gt; <span class="macro">writeln!</span>(
+<a href=#786 id=786 data-nosnippet>786</a>                sink,
+<a href=#787 id=787 data-nosnippet>787</a>                <span class="string">"  stratified certificate: components={}; derived atoms={}; activated formula nodes={}; dependencies={}; propagated dependencies={}; construction peak bytes={}; retained bytes={}"</span>,
+<a href=#788 id=788 data-nosnippet>788</a>                plan.components,
+<a href=#789 id=789 data-nosnippet>789</a>                plan.derived_atoms,
+<a href=#790 id=790 data-nosnippet>790</a>                plan.activated_nodes,
+<a href=#791 id=791 data-nosnippet>791</a>                plan.dependencies,
+<a href=#792 id=792 data-nosnippet>792</a>                plan.propagated_dependencies,
+<a href=#793 id=793 data-nosnippet>793</a>                plan.peak_bytes,
+<a href=#794 id=794 data-nosnippet>794</a>                plan.retained_bytes
+<a href=#795 id=795 data-nosnippet>795</a>            )<span class="question-mark">?</span>,
+<a href=#796 id=796 data-nosnippet>796</a>        }
+<a href=#797 id=797 data-nosnippet>797</a>    }
+<a href=#798 id=798 data-nosnippet>798</a>    <span class="macro">writeln!</span>(
+<a href=#799 id=799 data-nosnippet>799</a>        sink,
+<a href=#800 id=800 data-nosnippet>800</a>        <span class="string">"  class attempts: tight refusal={:?}; positive refusal={:?}; stratified refusal={:?}; restriction refusal={:?}; restriction work={}; committed restriction clauses={}"</span>,
+<a href=#801 id=801 data-nosnippet>801</a>        certified.tight_refusal,
+<a href=#802 id=802 data-nosnippet>802</a>        certified.positive_refusal,
+<a href=#803 id=803 data-nosnippet>803</a>        certified.stratified_refusal,
+<a href=#804 id=804 data-nosnippet>804</a>        certified.restriction_refusal,
+<a href=#805 id=805 data-nosnippet>805</a>        certified.restriction_work,
+<a href=#806 id=806 data-nosnippet>806</a>        certified.restriction_clauses
+<a href=#807 id=807 data-nosnippet>807</a>    )<span class="question-mark">?</span>;
+<a href=#808 id=808 data-nosnippet>808</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(peak) = certified.tight_check_peak_bytes {
+<a href=#809 id=809 data-nosnippet>809</a>        <span class="macro">writeln!</span>(
+<a href=#810 id=810 data-nosnippet>810</a>            sink,
+<a href=#811 id=811 data-nosnippet>811</a>            <span class="string">"  tight checking: peak plan and evaluation bytes={peak}"
+<a href=#812 id=812 data-nosnippet>812</a>        </span>)<span class="question-mark">?</span>;
+<a href=#813 id=813 data-nosnippet>813</a>    }
+<a href=#814 id=814 data-nosnippet>814</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(peak) = certified.positive_check_peak_bytes {
+<a href=#815 id=815 data-nosnippet>815</a>        <span class="macro">writeln!</span>(
+<a href=#816 id=816 data-nosnippet>816</a>            sink,
+<a href=#817 id=817 data-nosnippet>817</a>            <span class="string">"  positive checking: peak plan and evaluation bytes={peak}"
+<a href=#818 id=818 data-nosnippet>818</a>        </span>)<span class="question-mark">?</span>;
+<a href=#819 id=819 data-nosnippet>819</a>    }
+<a href=#820 id=820 data-nosnippet>820</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(
+<a href=#821 id=821 data-nosnippet>821</a>        certified.plan,
+<a href=#822 id=822 data-nosnippet>822</a>        <span class="prelude-val">Some</span>(zetesis_sat::CertificatePlanStatistics::Positive(<span class="kw">_</span>))
+<a href=#823 id=823 data-nosnippet>823</a>    ) &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(attempt) = certified.positive_attempt
+<a href=#824 id=824 data-nosnippet>824</a>    {
+<a href=#825 id=825 data-nosnippet>825</a>        <span class="macro">writeln!</span>(
+<a href=#826 id=826 data-nosnippet>826</a>            sink,
+<a href=#827 id=827 data-nosnippet>827</a>            <span class="string">"  positive preparation attempt: work={}; observed peak bytes={}; primitive retained bytes={}; positive plan not selected"</span>,
+<a href=#828 id=828 data-nosnippet>828</a>            attempt.work, attempt.peak_bytes, attempt.retained_bytes
+<a href=#829 id=829 data-nosnippet>829</a>        )<span class="question-mark">?</span>;
+<a href=#830 id=830 data-nosnippet>830</a>    }
+<a href=#831 id=831 data-nosnippet>831</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(peak) = certified.stratified_check_peak_bytes {
+<a href=#832 id=832 data-nosnippet>832</a>        <span class="macro">writeln!</span>(
+<a href=#833 id=833 data-nosnippet>833</a>            sink,
+<a href=#834 id=834 data-nosnippet>834</a>            <span class="string">"  stratified checking: peak plan and evaluation bytes={peak}"
+<a href=#835 id=835 data-nosnippet>835</a>        </span>)<span class="question-mark">?</span>;
+<a href=#836 id=836 data-nosnippet>836</a>    }
+<a href=#837 id=837 data-nosnippet>837</a>    <span class="kw">if </span>!<span class="macro">matches!</span>(
+<a href=#838 id=838 data-nosnippet>838</a>        certified.plan,
+<a href=#839 id=839 data-nosnippet>839</a>        <span class="prelude-val">Some</span>(zetesis_sat::CertificatePlanStatistics::Stratified(<span class="kw">_</span>))
+<a href=#840 id=840 data-nosnippet>840</a>    ) &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(attempt) = certified.stratified_attempt
+<a href=#841 id=841 data-nosnippet>841</a>    {
+<a href=#842 id=842 data-nosnippet>842</a>        <span class="macro">writeln!</span>(
+<a href=#843 id=843 data-nosnippet>843</a>            sink,
+<a href=#844 id=844 data-nosnippet>844</a>            <span class="string">"  stratified preparation attempt: work={}; observed peak bytes={}; primitive retained bytes={}; stratified plan not selected"</span>,
+<a href=#845 id=845 data-nosnippet>845</a>            attempt.work, attempt.peak_bytes, attempt.retained_bytes
+<a href=#846 id=846 data-nosnippet>846</a>        )<span class="question-mark">?</span>;
+<a href=#847 id=847 data-nosnippet>847</a>    }
+<a href=#848 id=848 data-nosnippet>848</a>    <span class="prelude-val">Ok</span>(())
+<a href=#849 id=849 data-nosnippet>849</a>}
+<a href=#850 id=850 data-nosnippet>850</a>
+<a href=#851 id=851 data-nosnippet>851</a><span class="kw">fn </span>formula(
+<a href=#852 id=852 data-nosnippet>852</a>    sink: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Write,
+<a href=#853 id=853 data-nosnippet>853</a>    config: <span class="kw-2">&amp;</span><span class="kw">crate</span>::SolveConfig,
+<a href=#854 id=854 data-nosnippet>854</a>    report: <span class="kw-2">&amp;</span>Details&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#855 id=855 data-nosnippet>855</a>) -&gt; io::Result&lt;()&gt; {
+<a href=#856 id=856 data-nosnippet>856</a>    <span class="kw">let </span>grounder = <span class="kw">if let </span><span class="prelude-val">Some</span>(terminal) = report.terminal_execution {
+<a href=#857 id=857 data-nosnippet>857</a>        <span class="kw">match </span>terminal.base {
+<a href=#858 id=858 data-nosnippet>858</a>            zetesis_themelios::BaseKind::Eager =&gt; <span class="string">"eager_base_terminal_definitions"</span>,
+<a href=#859 id=859 data-nosnippet>859</a>            zetesis_themelios::BaseKind::Hybrid =&gt; <span class="string">"hybrid_base_terminal_definitions"</span>,
+<a href=#860 id=860 data-nosnippet>860</a>        }
+<a href=#861 id=861 data-nosnippet>861</a>    } <span class="kw">else if </span>report.hybrid_execution.is_some() {
+<a href=#862 id=862 data-nosnippet>862</a>        <span class="string">"hybrid"
+<a href=#863 id=863 data-nosnippet>863</a>    </span>} <span class="kw">else </span>{
+<a href=#864 id=864 data-nosnippet>864</a>        <span class="string">"eager"
+<a href=#865 id=865 data-nosnippet>865</a>    </span>};
+<a href=#866 id=866 data-nosnippet>866</a>    <span class="kw">let </span>oracle = <span class="kw">match </span>report
+<a href=#867 id=867 data-nosnippet>867</a>        .countermodel_statistics
+<a href=#868 id=868 data-nosnippet>868</a>        .and_then(|s| s.certified)
+<a href=#869 id=869 data-nosnippet>869</a>        .and_then(|s| s.plan)
+<a href=#870 id=870 data-nosnippet>870</a>    {
+<a href=#871 id=871 data-nosnippet>871</a>        <span class="prelude-val">Some</span>(zetesis_sat::CertificatePlanStatistics::Tight(<span class="kw">_</span>)) =&gt; <span class="string">"tight-support"</span>,
+<a href=#872 id=872 data-nosnippet>872</a>        <span class="prelude-val">Some</span>(zetesis_sat::CertificatePlanStatistics::Positive(<span class="kw">_</span>)) =&gt; <span class="string">"positive-consequences"</span>,
+<a href=#873 id=873 data-nosnippet>873</a>        <span class="prelude-val">Some</span>(zetesis_sat::CertificatePlanStatistics::Stratified(<span class="kw">_</span>)) =&gt; <span class="string">"stratified-consequences"</span>,
+<a href=#874 id=874 data-nosnippet>874</a>        <span class="prelude-val">None </span>=&gt; <span class="string">"countermodel"</span>,
+<a href=#875 id=875 data-nosnippet>875</a>    };
+<a href=#876 id=876 data-nosnippet>876</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(execution) = report.formula_execution {
+<a href=#877 id=877 data-nosnippet>877</a>        <span class="kw">let </span>backend = <span class="kw">if </span>execution.adapter.is_empty() {
+<a href=#878 id=878 data-nosnippet>878</a>            <span class="string">"cpu batched exact completion"
+<a href=#879 id=879 data-nosnippet>879</a>        </span>} <span class="kw">else if </span>execution.tight_work_per_candidate.is_some() {
+<a href=#880 id=880 data-nosnippet>880</a>            <span class="string">"GPU tight support"
+<a href=#881 id=881 data-nosnippet>881</a>        </span>} <span class="kw">else </span>{
+<a href=#882 id=882 data-nosnippet>882</a>            <span class="string">"hybrid GPU propagation + exact CPU residual search"
+<a href=#883 id=883 data-nosnippet>883</a>        </span>};
+<a href=#884 id=884 data-nosnippet>884</a>        <span class="macro">writeln!</span>(
+<a href=#885 id=885 data-nosnippet>885</a>            sink,
+<a href=#886 id=886 data-nosnippet>886</a>            <span class="string">"  effective execution: backend={backend}; oracle={oracle}; grounder={grounder}; CPU completion requested workers={}; peak preflight workers={}; adapter={}"</span>,
+<a href=#887 id=887 data-nosnippet>887</a>            config.completion_workers, execution.completion.effective_workers, execution.adapter
+<a href=#888 id=888 data-nosnippet>888</a>        )<span class="question-mark">?</span>;
+<a href=#889 id=889 data-nosnippet>889</a>        <span class="macro">writeln!</span>(
+<a href=#890 id=890 data-nosnippet>890</a>            sink,
+<a href=#891 id=891 data-nosnippet>891</a>            <span class="string">"  formula completion: entered={}; residuals entered={}; completed before commit={}; failed={}; peak requested scratch bytes={}; peak shared owner, query and transient/result scratch bytes={}; scratch limit={}; counters overflowed={}"</span>,
+<a href=#892 id=892 data-nosnippet>892</a>            execution.completion.entered,
+<a href=#893 id=893 data-nosnippet>893</a>            execution.completion.residuals,
+<a href=#894 id=894 data-nosnippet>894</a>            execution.completion.completed,
+<a href=#895 id=895 data-nosnippet>895</a>            execution.completion.failed,
+<a href=#896 id=896 data-nosnippet>896</a>            execution.completion.requested_scratch_bytes,
+<a href=#897 id=897 data-nosnippet>897</a>            execution.completion.peak_scratch_bytes,
+<a href=#898 id=898 data-nosnippet>898</a>            config.max_completion_scratch_bytes,
+<a href=#899 id=899 data-nosnippet>899</a>            execution.completion.overflowed
+<a href=#900 id=900 data-nosnippet>900</a>        )<span class="question-mark">?</span>;
+<a href=#901 id=901 data-nosnippet>901</a>        <span class="macro">writeln!</span>(
+<a href=#902 id=902 data-nosnippet>902</a>            sink,
+<a href=#903 id=903 data-nosnippet>903</a>            <span class="string">"  formula residual completion: completed locally={}; failed={}"</span>,
+<a href=#904 id=904 data-nosnippet>904</a>            execution.completion.residual_completed, execution.completion.residual_failed
+<a href=#905 id=905 data-nosnippet>905</a>        )<span class="question-mark">?</span>;
+<a href=#906 id=906 data-nosnippet>906</a>        <span class="kw">for </span>(label, measurement) <span class="kw">in </span>[
+<a href=#907 id=907 data-nosnippet>907</a>            (<span class="string">"completion coordinator wall"</span>, execution.completion.wall),
+<a href=#908 id=908 data-nosnippet>908</a>            (
+<a href=#909 id=909 data-nosnippet>909</a>                <span class="string">"summed worker original validation"</span>,
+<a href=#910 id=910 data-nosnippet>910</a>                execution.completion.worker_original,
+<a href=#911 id=911 data-nosnippet>911</a>            ),
+<a href=#912 id=912 data-nosnippet>912</a>            (<span class="string">"summed worker reduct"</span>, execution.completion.worker_reduct),
+<a href=#913 id=913 data-nosnippet>913</a>        ] {
+<a href=#914 id=914 data-nosnippet>914</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(measurement) = measurement {
+<a href=#915 id=915 data-nosnippet>915</a>                <span class="macro">writeln!</span>(
+<a href=#916 id=916 data-nosnippet>916</a>                    sink,
+<a href=#917 id=917 data-nosnippet>917</a>                    <span class="string">"  {label}: calls={}; elapsed ns={}; overflowed={}"</span>,
+<a href=#918 id=918 data-nosnippet>918</a>                    measurement.calls,
+<a href=#919 id=919 data-nosnippet>919</a>                    measurement.elapsed.as_nanos(),
+<a href=#920 id=920 data-nosnippet>920</a>                    measurement.overflowed
+<a href=#921 id=921 data-nosnippet>921</a>                )<span class="question-mark">?</span>;
+<a href=#922 id=922 data-nosnippet>922</a>            }
+<a href=#923 id=923 data-nosnippet>923</a>        }
+<a href=#924 id=924 data-nosnippet>924</a>        <span class="macro">writeln!</span>(
+<a href=#925 id=925 data-nosnippet>925</a>            sink,
+<a href=#926 id=926 data-nosnippet>926</a>            <span class="string">"  formula accounting: pending candidates={}; queued verified models={}"</span>,
+<a href=#927 id=927 data-nosnippet>927</a>            execution.pending_candidates, execution.queued_models
+<a href=#928 id=928 data-nosnippet>928</a>        )<span class="question-mark">?</span>;
+<a href=#929 id=929 data-nosnippet>929</a>        <span class="macro">writeln!</span>(
+<a href=#930 id=930 data-nosnippet>930</a>            sink,
+<a href=#931 id=931 data-nosnippet>931</a>            <span class="string">"  formula batch limits: candidates={}; pending bytes={}"</span>,
+<a href=#932 id=932 data-nosnippet>932</a>            config.batch_size, config.max_batch_bytes
+<a href=#933 id=933 data-nosnippet>933</a>        )<span class="question-mark">?</span>;
+<a href=#934 id=934 data-nosnippet>934</a>        <span class="kw">if </span>!execution.adapter.is_empty() {
+<a href=#935 id=935 data-nosnippet>935</a>            formula_gpu(sink, execution)<span class="question-mark">?</span>;
+<a href=#936 id=936 data-nosnippet>936</a>        }
+<a href=#937 id=937 data-nosnippet>937</a>        <span class="prelude-val">Ok</span>(())
+<a href=#938 id=938 data-nosnippet>938</a>    } <span class="kw">else </span>{
+<a href=#939 id=939 data-nosnippet>939</a>        <span class="macro">writeln!</span>(
+<a href=#940 id=940 data-nosnippet>940</a>            sink,
+<a href=#941 id=941 data-nosnippet>941</a>            <span class="string">"  effective execution: backend=cpu; oracle={oracle}; grounder={grounder}; native CPU search; batch-completion scratch limit=inapplicable"
+<a href=#942 id=942 data-nosnippet>942</a>        </span>)
+<a href=#943 id=943 data-nosnippet>943</a>    }
+<a href=#944 id=944 data-nosnippet>944</a>}
+<a href=#945 id=945 data-nosnippet>945</a>
+<a href=#946 id=946 data-nosnippet>946</a><span class="kw">fn </span>formula_gpu(
+<a href=#947 id=947 data-nosnippet>947</a>    sink: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Write,
+<a href=#948 id=948 data-nosnippet>948</a>    execution: <span class="kw-2">&amp;</span><span class="kw">crate</span>::FormulaExecutionStatistics,
+<a href=#949 id=949 data-nosnippet>949</a>) -&gt; io::Result&lt;()&gt; {
+<a href=#950 id=950 data-nosnippet>950</a>    <span class="macro">writeln!</span>(
+<a href=#951 id=951 data-nosnippet>951</a>        sink,
+<a href=#952 id=952 data-nosnippet>952</a>        <span class="string">"  formula GPU decoded: batches={}; candidates={}; primitive work={}; completed sweeps={}; GPU-decided committed={}; CPU residuals completed={}"</span>,
+<a href=#953 id=953 data-nosnippet>953</a>        execution.gpu_batches,
+<a href=#954 id=954 data-nosnippet>954</a>        execution.gpu_candidates,
+<a href=#955 id=955 data-nosnippet>955</a>        execution.gpu_work,
+<a href=#956 id=956 data-nosnippet>956</a>        execution.gpu_rounds,
+<a href=#957 id=957 data-nosnippet>957</a>        execution.gpu_decided,
+<a href=#958 id=958 data-nosnippet>958</a>        execution.cpu_residuals
+<a href=#959 id=959 data-nosnippet>959</a>    )<span class="question-mark">?</span>;
+<a href=#960 id=960 data-nosnippet>960</a>    <span class="macro">writeln!</span>(
+<a href=#961 id=961 data-nosnippet>961</a>        sink,
+<a href=#962 id=962 data-nosnippet>962</a>        <span class="string">"  formula GPU submitted: batches={}; candidates={}; completed work/sweeps for unreturned results=unavailable"</span>,
+<a href=#963 id=963 data-nosnippet>963</a>        execution.gpu_submitted_batches, execution.gpu_submitted_candidates
+<a href=#964 id=964 data-nosnippet>964</a>    )<span class="question-mark">?</span>;
+<a href=#965 id=965 data-nosnippet>965</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(residuals) = execution.gpu_residuals {
+<a href=#966 id=966 data-nosnippet>966</a>        <span class="macro">writeln!</span>(
+<a href=#967 id=967 data-nosnippet>967</a>            sink,
+<a href=#968 id=968 data-nosnippet>968</a>            <span class="string">"  formula GPU decoded residuals: fixed point={}; round limit={}; work limit={}; precede CPU completion and commit"</span>,
+<a href=#969 id=969 data-nosnippet>969</a>            residuals.fixed_point, residuals.round_limit, residuals.work_limit,
+<a href=#970 id=970 data-nosnippet>970</a>        )<span class="question-mark">?</span>;
+<a href=#971 id=971 data-nosnippet>971</a>    }
+<a href=#972 id=972 data-nosnippet>972</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(work) = execution.tight_work_per_candidate {
+<a href=#973 id=973 data-nosnippet>973</a>        <span class="macro">writeln!</span>(
+<a href=#974 id=974 data-nosnippet>974</a>            sink,
+<a href=#975 id=975 data-nosnippet>975</a>            <span class="string">"  tight GPU limits: complete support scan work/candidate={work}; propagation sweeps=not applicable"
+<a href=#976 id=976 data-nosnippet>976</a>        </span>)<span class="question-mark">?</span>;
+<a href=#977 id=977 data-nosnippet>977</a>    }
+<a href=#978 id=978 data-nosnippet>978</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(work) = execution.gpu_scheduled_work {
+<a href=#979 id=979 data-nosnippet>979</a>        <span class="macro">writeln!</span>(
+<a href=#980 id=980 data-nosnippet>980</a>            sink,
+<a href=#981 id=981 data-nosnippet>981</a>            <span class="string">"  tight GPU scheduled full-scan work={work}; includes submitted unreturned batches"
+<a href=#982 id=982 data-nosnippet>982</a>        </span>)<span class="question-mark">?</span>;
+<a href=#983 id=983 data-nosnippet>983</a>    }
+<a href=#984 id=984 data-nosnippet>984</a>    <span class="kw">if let </span><span class="prelude-val">Some</span>(limits) = execution.gpu_limits {
+<a href=#985 id=985 data-nosnippet>985</a>        <span class="macro">writeln!</span>(
+<a href=#986 id=986 data-nosnippet>986</a>            sink,
+<a href=#987 id=987 data-nosnippet>987</a>            <span class="string">"  formula GPU limits: propagation sweeps/candidate={}; propagation work/candidate={}"</span>,
+<a href=#988 id=988 data-nosnippet>988</a>            limits.rounds_per_candidate, limits.work_per_candidate
+<a href=#989 id=989 data-nosnippet>989</a>        )<span class="question-mark">?</span>;
+<a href=#990 id=990 data-nosnippet>990</a>    }
+<a href=#991 id=991 data-nosnippet>991</a>    <span class="macro">writeln!</span>(
+<a href=#992 id=992 data-nosnippet>992</a>        sink,
+<a href=#993 id=993 data-nosnippet>993</a>        <span class="string">"  formula GPU resources: peak authored GPU bytes={}; GPU kernel timing=unavailable"</span>,
+<a href=#994 id=994 data-nosnippet>994</a>        execution.peak_accounted_bytes
+<a href=#995 id=995 data-nosnippet>995</a>    )
+<a href=#996 id=996 data-nosnippet>996</a>}
+<a href=#997 id=997 data-nosnippet>997</a>
+<a href=#998 id=998 data-nosnippet>998</a><span class="kw">fn </span>closure(sink: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Write, options: <span class="kw-2">&amp;</span>Options, report: <span class="kw-2">&amp;</span>Details&lt;<span class="lifetime">'_</span>&gt;) -&gt; io::Result&lt;()&gt; {
+<a href=#999 id=999 data-nosnippet>999</a>    <span class="comment">// The statistics say which route ran; without one, the requested policy
+<a href=#1000 id=1000 data-nosnippet>1000</a>    // says which would have.
+<a href=#1001 id=1001 data-nosnippet>1001</a>    </span><span class="kw">let </span>grounder = report.closure_execution.map_or(
+<a href=#1002 id=1002 data-nosnippet>1002</a>        <span class="kw">if </span>options.grounder == Grounder::Eager {
+<a href=#1003 id=1003 data-nosnippet>1003</a>            <span class="string">"eager"
+<a href=#1004 id=1004 data-nosnippet>1004</a>        </span>} <span class="kw">else </span>{
+<a href=#1005 id=1005 data-nosnippet>1005</a>            <span class="string">"lazy"
+<a href=#1006 id=1006 data-nosnippet>1006</a>        </span>},
+<a href=#1007 id=1007 data-nosnippet>1007</a>        |closure| closure.route.label(),
+<a href=#1008 id=1008 data-nosnippet>1008</a>    );
+<a href=#1009 id=1009 data-nosnippet>1009</a>    <span class="kw">let </span>cpu = report.shared_execution.is_some() || options.backend == Backend::Cpu;
+<a href=#1010 id=1010 data-nosnippet>1010</a>    <span class="kw">if </span>cpu {
+<a href=#1011 id=1011 data-nosnippet>1011</a>        <span class="macro">writeln!</span>(
+<a href=#1012 id=1012 data-nosnippet>1012</a>            sink,
+<a href=#1013 id=1013 data-nosnippet>1013</a>            <span class="string">"  effective execution: backend=cpu; oracle=closure; grounder={grounder}; workers={}"</span>,
+<a href=#1014 id=1014 data-nosnippet>1014</a>            options.workers
+<a href=#1015 id=1015 data-nosnippet>1015</a>        )<span class="question-mark">?</span>;
+<a href=#1016 id=1016 data-nosnippet>1016</a>    } <span class="kw">else </span>{
+<a href=#1017 id=1017 data-nosnippet>1017</a>        <span class="macro">writeln!</span>(
+<a href=#1018 id=1018 data-nosnippet>1018</a>            sink,
+<a href=#1019 id=1019 data-nosnippet>1019</a>            <span class="string">"  effective execution: oracle=closure; backend=requested GPU policy; grounder={grounder}; see backend diagnostics for actual adapter"
+<a href=#1020 id=1020 data-nosnippet>1020</a>        </span>)<span class="question-mark">?</span>;
+<a href=#1021 id=1021 data-nosnippet>1021</a>    }
+<a href=#1022 id=1022 data-nosnippet>1022</a>    <span class="kw">if </span>report.shared_execution.is_some() {
+<a href=#1023 id=1023 data-nosnippet>1023</a>        <span class="macro">writeln!</span>(
+<a href=#1024 id=1024 data-nosnippet>1024</a>            sink,
+<a href=#1025 id=1025 data-nosnippet>1025</a>            <span class="string">"  discovered gate tuples: {}; source and world work reported separately above"</span>,
+<a href=#1026 id=1026 data-nosnippet>1026</a>            report.discovered_gate_atoms
+<a href=#1027 id=1027 data-nosnippet>1027</a>        )
+<a href=#1028 id=1028 data-nosnippet>1028</a>    } <span class="kw">else if let </span><span class="prelude-val">Some</span>(closure) = report.closure_execution {
+<a href=#1029 id=1029 data-nosnippet>1029</a>        <span class="macro">writeln!</span>(
+<a href=#1030 id=1030 data-nosnippet>1030</a>            sink,
+<a href=#1031 id=1031 data-nosnippet>1031</a>            <span class="string">"  discovered gate tuples: {}"</span>,
+<a href=#1032 id=1032 data-nosnippet>1032</a>            report.discovered_gate_atoms
+<a href=#1033 id=1033 data-nosnippet>1033</a>        )<span class="question-mark">?</span>;
+<a href=#1034 id=1034 data-nosnippet>1034</a>        independent_closure(sink, closure)
+<a href=#1035 id=1035 data-nosnippet>1035</a>    } <span class="kw">else </span>{
+<a href=#1036 id=1036 data-nosnippet>1036</a>        <span class="macro">writeln!</span>(
+<a href=#1037 id=1037 data-nosnippet>1037</a>            sink,
+<a href=#1038 id=1038 data-nosnippet>1038</a>            <span class="string">"  discovered gate tuples: {}; oracle work=unavailable (not accumulated by this driver)"</span>,
+<a href=#1039 id=1039 data-nosnippet>1039</a>            report.discovered_gate_atoms
+<a href=#1040 id=1040 data-nosnippet>1040</a>        )
+<a href=#1041 id=1041 data-nosnippet>1041</a>    }
+<a href=#1042 id=1042 data-nosnippet>1042</a>}
+<a href=#1043 id=1043 data-nosnippet>1043</a>
+<a href=#1044 id=1044 data-nosnippet>1044</a><span class="kw">fn </span>independent_closure(
+<a href=#1045 id=1045 data-nosnippet>1045</a>    sink: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>Write,
+<a href=#1046 id=1046 data-nosnippet>1046</a>    closure: <span class="kw-2">&amp;</span><span class="kw">crate</span>::ClosureExecutionStatistics,
+<a href=#1047 id=1047 data-nosnippet>1047</a>) -&gt; io::Result&lt;()&gt; {
+<a href=#1048 id=1048 data-nosnippet>1048</a>    <span class="kw">let </span>(rounds, units) = <span class="kw">match </span>closure.route {
+<a href=#1049 id=1049 data-nosnippet>1049</a>        <span class="kw">crate</span>::ClosureRoute::Eager =&gt; (<span class="string">"rule passes"</span>, <span class="string">"eager scan units"</span>),
+<a href=#1050 id=1050 data-nosnippet>1050</a>        <span class="kw">crate</span>::ClosureRoute::Lazy(<span class="kw">_</span>) =&gt; (<span class="string">"source rounds"</span>, <span class="string">"join/copy units"</span>),
+<a href=#1051 id=1051 data-nosnippet>1051</a>    };
+<a href=#1052 id=1052 data-nosnippet>1052</a>    <span class="macro">writeln!</span>(
+<a href=#1053 id=1053 data-nosnippet>1053</a>        sink,
+<a href=#1054 id=1054 data-nosnippet>1054</a>        <span class="string">"  independent closure: checks completed={}; stopped={}; {rounds}={}; work={} ({units}); derived atoms={}; stopped checks return no counters"</span>,
+<a href=#1055 id=1055 data-nosnippet>1055</a>        closure.completed_checks,
+<a href=#1056 id=1056 data-nosnippet>1056</a>        closure.stopped_checks,
+<a href=#1057 id=1057 data-nosnippet>1057</a>        closure.rounds,
+<a href=#1058 id=1058 data-nosnippet>1058</a>        closure.work,
+<a href=#1059 id=1059 data-nosnippet>1059</a>        closure.derived_atoms
+<a href=#1060 id=1060 data-nosnippet>1060</a>    )<span class="question-mark">?</span>;
+<a href=#1061 id=1061 data-nosnippet>1061</a>    <span class="kw">if let </span><span class="kw">crate</span>::ClosureRoute::Lazy(joins) = closure.route {
+<a href=#1062 id=1062 data-nosnippet>1062</a>        <span class="macro">writeln!</span>(
+<a href=#1063 id=1063 data-nosnippet>1063</a>            sink,
+<a href=#1064 id=1064 data-nosnippet>1064</a>            <span class="string">"  closure joins: catalog work={} (within work); bindings={}; tuple probes={}; dense heads={} (recorded as bits); block steps={} (blocks joined by words); peak named closure bytes={} (admitted or reserved capacity, not RSS)"</span>,
+<a href=#1065 id=1065 data-nosnippet>1065</a>            joins.catalog_work,
+<a href=#1066 id=1066 data-nosnippet>1066</a>            joins.bindings,
+<a href=#1067 id=1067 data-nosnippet>1067</a>            joins.tuple_probes,
+<a href=#1068 id=1068 data-nosnippet>1068</a>            joins.dense_heads,
+<a href=#1069 id=1069 data-nosnippet>1069</a>            joins.block_steps,
+<a href=#1070 id=1070 data-nosnippet>1070</a>            joins.peak_closure_bytes
+<a href=#1071 id=1071 data-nosnippet>1071</a>        )<span class="question-mark">?</span>;
+<a href=#1072 id=1072 data-nosnippet>1072</a>    }
+<a href=#1073 id=1073 data-nosnippet>1073</a>    <span class="prelude-val">Ok</span>(())
+<a href=#1074 id=1074 data-nosnippet>1074</a>}
+<a href=#1075 id=1075 data-nosnippet>1075</a>
+<a href=#1076 id=1076 data-nosnippet>1076</a><span class="attr">#[cfg(test)]
+<a href=#1077 id=1077 data-nosnippet>1077</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>

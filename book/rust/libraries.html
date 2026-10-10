@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-86489835.js";
+            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1ecb55d0.js"></script>
+        <script src="../toc-2436da5c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -266,7 +266,7 @@ row or locating a gate atom does not establish answer-set membership. See
 <tr><td>Reuse scalar query preparation</td><td><code>PreparedQueries</code>, <code>PreparationLimits</code>, <code>ClosureWorkspace</code></td><td><a href="parallel.html#reuse-preparation-across-scalar-checks">Repeated checks</a></td></tr>
 <tr><td>Build finite formulas and check membership</td><td><code>zetesis_ferraris::{Theory, FormulaParts, NodeView, Interpretation, check}</code></td><td><a href="reducts.html">Finite reducts</a></td></tr>
 <tr><td>Reuse original truth or a frozen reduct</td><td><code>EvaluationWorkspace</code>, <code>FormulaEvaluation</code>, <code>FrozenReduct</code></td><td><a href="reducts.html">Finite reducts</a></td></tr>
-<tr><td>Use checked formula specializations</td><td><code>zetesis_ferraris::{PositivePlan, TightPlan}</code></td><td><a href="sessions.html#formula-membership-plans">Formula plans</a></td></tr>
+<tr><td>Use checked formula specializations</td><td><code>zetesis_ferraris::{PositivePlan, StratifiedPlan, TightPlan, TightWorkspace}</code></td><td><a href="sessions.html#formula-membership-plans">Formula plans</a></td></tr>
 <tr><td>Cover and narrow candidate regions</td><td><code>zetesis_cpu::regions::{Region, Traversal}</code>, <code>zetesis_ferraris::{Narrower, producers}</code></td><td><a href="../architecture/execution.html">Exact execution</a></td></tr>
 <tr><td>Enumerate formula answers and complete reduct queries</td><td><code>zetesis_sat::{StableModels, SearchMethod, check_with, PreparedReduct, ReductWorkspace}</code></td><td><a href="sessions.html">Sessions</a></td></tr>
 <tr><td>Produce parallel candidate batches</td><td><code>StableModels::with_region_producers</code>, <code>next_batch_with_completion</code></td><td><a href="sessions.html#formula-membership-plans">Formula plans</a></td></tr>
@@ -310,6 +310,23 @@ semantic solver libraries. Record checks, physical tests and Lean proofs have
 different scopes; none alone certifies the complete Rust/WGSL implementation.
 See <a href="../reference/validation.html">validation</a> and
 <a href="../lean/correspondence.html">proof correspondence</a> before extending those claims.</p>
+<h2 id="migrating-from-040"><a class="header" href="#migrating-from-040">Migrating from 0.4.0</a></h2>
+<p>Lazy formula grounding now accepts objectives and GPU backends. The <code>zetesis</code>
+facade remains CPU enumeration of unscored, unprojected answer sets; these
+additions belong to the native session API and CLI.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Previous use</th><th>Migration</th></tr>
+</thead>
+<tbody>
+<tr><td><code>zetesis_sat::RegionFilterWorker</code> with thread-local scratch</td><td>The worker must implement <code>Send</code>: retained checkers can move between executor threads. Each checker remains exclusive to its enumeration. This callback is not part of the <code>zetesis</code> facade.</td></tr>
+<tr><td>Matching <code>HybridFeature::Objectives</code></td><td>Remove that arm; lazy formula admission now supports objectives. The <code>TableJoins</code> refusal remains.</td></tr>
+<tr><td>Matching <code>SolveError::HybridBackend</code>, its CLI counterpart or JSON <code>hybrid_backend</code></td><td>Remove that obsolete refusal. Hybrid sessions accept GPU backends; device availability and resource failures remain typed errors.</td></tr>
+<tr><td>Reading <code>ConstraintAllowance::statistics()</code> during an active check</td><td>Treat each field as settled charges, which may omit ongoing work. Fields are read independently. Totals are exact after operations settle or workers join, up to saturation; check-local and failure statistics remain exact.</td></tr>
+</tbody>
+</table>
+</div>
 <h2 id="migrating-from-030"><a class="header" href="#migrating-from-030">Migrating from 0.3.0</a></h2>
 <p>Version 0.4.0 changes resource configuration and several direct library interfaces.
 The <a href="../reference/commands.html#existing-scripts">command guide</a> covers retained CLI

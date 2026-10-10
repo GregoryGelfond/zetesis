@@ -56,7 +56,7 @@
 <a href=#56 id=56 data-nosnippet>56</a>        (<span class="string">"relation"</span>, <span class="string">"integration"</span>, <span class="number">2</span>),
 <a href=#57 id=57 data-nosnippet>57</a>        (<span class="string">"context"</span>, <span class="string">"integration"</span>, <span class="number">1</span>),
 <a href=#58 id=58 data-nosnippet>58</a>        (<span class="string">"solve-context"</span>, <span class="string">"lib"</span>, <span class="number">3</span>),
-<a href=#59 id=59 data-nosnippet>59</a>        (<span class="string">"session-resources"</span>, <span class="string">"integration"</span>, <span class="number">9</span>),
+<a href=#59 id=59 data-nosnippet>59</a>        (<span class="string">"session-resources"</span>, <span class="string">"integration"</span>, <span class="number">13</span>),
 <a href=#60 id=60 data-nosnippet>60</a>        (<span class="string">"language-consumers"</span>, <span class="string">"integration"</span>, <span class="number">2</span>),
 <a href=#61 id=61 data-nosnippet>61</a>        (<span class="string">"static"</span>, <span class="string">"integration"</span>, <span class="number">2</span>),
 <a href=#62 id=62 data-nosnippet>62</a>    ];
@@ -66,13 +66,13 @@
 <a href=#66 id=66 data-nosnippet>66</a>        .map(|(api, <span class="kw">_</span>)| <span class="kw-2">*</span>api)
 <a href=#67 id=67 data-nosnippet>67</a>        .ok_or_else(|| {
 <a href=#68 id=68 data-nosnippet>68</a>            Error::Invalid(
-<a href=#69 id=69 data-nosnippet>69</a>                <span class="string">"physical qualification requires one reviewed selection of 59 exact test identities"</span>.into(),
+<a href=#69 id=69 data-nosnippet>69</a>                <span class="string">"physical qualification requires one reviewed selection of 63 exact test identities"</span>.into(),
 <a href=#70 id=70 data-nosnippet>70</a>            )
 <a href=#71 id=71 data-nosnippet>71</a>        })<span class="question-mark">?</span>;
 <a href=#72 id=72 data-nosnippet>72</a>    <span class="kw">let </span>rows: Vec&lt;<span class="kw">_</span>&gt; = table.lines().collect();
 <a href=#73 id=73 data-nosnippet>73</a>    require(
 <a href=#74 id=74 data-nosnippet>74</a>        rows.len() == EXPECTED.len(),
-<a href=#75 id=75 data-nosnippet>75</a>        <span class="string">"physical qualification requires all fourteen groups and 59 named tests"</span>,
+<a href=#75 id=75 data-nosnippet>75</a>        <span class="string">"physical qualification requires all fourteen groups and 63 named tests"</span>,
 <a href=#76 id=76 data-nosnippet>76</a>    )<span class="question-mark">?</span>;
 <a href=#77 id=77 data-nosnippet>77</a>    <span class="kw">let </span><span class="kw-2">mut </span>groups = Vec::new();
 <a href=#78 id=78 data-nosnippet>78</a>    <span class="kw">let </span><span class="kw-2">mut </span>all_names = BTreeSet::new();

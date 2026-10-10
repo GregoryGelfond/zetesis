@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-86489835.js";
+            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1ecb55d0.js"></script>
+        <script src="../toc-2436da5c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -208,6 +208,10 @@ same authority. Pattern argument positions remain distinct from term identities,
 so repeated arguments and variable positions retain their meaning. An empty
 support relation may coexist with a nonempty vocabulary. Neither term admission
 nor a compiled pattern asserts an atom’s truth.</p>
+<p>A variable binding retains its vocabulary identity once. Reading a bound value
+borrows that vocabulary directly and checks the slot and readable term prefix;
+it does not acquire another owning handle for the duration of the read. Values
+that must survive a reader or a mutable computation still use scoped owned keys.</p>
 <p>Construct canonical programs through <code>zetesis</code>: macros let you write ASP
 directly, while typed constructors suit larger applications that compose
 programs from data and reusable components. Both produce the same
@@ -1166,8 +1170,10 @@ and every other relation are released at admission. Closing is charged as
 formula work, and its transient peak is admitted against <code>max_support_bytes</code>. Producers and constraints with aggregates,
 projected atoms or conditional scopes remain in <code>core_theory()</code>. Ordinary
 atom/scalar integrity constraints retain their prepared templates instead of
-complete formula DAGs. This first schedule requires indexed joins and refuses
-objective programs explicitly. The existing <code>ground()</code> methods remain eager.</p>
+complete formula DAGs. This schedule requires indexed joins. Objective programs
+are prepared by the same operation as eager grounding; solving checks the
+original constraints before scoring an answer. The existing <code>ground()</code> methods
+remain eager.</p>
 <p>Use <code>PreparedInput::hybrid(&amp;owner)</code> for solving. A core answer is only a proposal:
 the session checks the retained constraints before returning an answer of the
 original program. A core certificate applies to the core. It does not establish
@@ -1190,18 +1196,84 @@ same core, on any thread, borrows it for one unit of work and pairs the
 positions with its own occurrence maps in work proportional to the number of
 kept predicates. Checkers racing on a first use may each build, and one result
 is kept; a refused build keeps nothing. Each checker’s support ledger counts the
-shared structures’ retained bytes, as it counts the shared support base. Region checks select known-held
-positive rows before binding, while retaining rows without a known correspondence.
+shared structures’ retained bytes, as it counts the shared support base.
+Region checks select known-held positive rows before binding, while retaining
+rows without a known correspondence. Each join authenticates a joined positive
+literal’s exact source occurrence map once and reuses it across backtracking.
+Subsequent rows use their original source positions in the existing dense-ID map
+and read the current region’s held bits; equal atom contents do not establish
+that mapping.
 A necessary signed-predicate test can avoid a template that cannot have a sure
-body. Neither operation changes the final full-model check or arithmetic admission.
+body. Before its first region predicate test, each rule prepares windows for all
+its original atom occurrences. Region selection reuses their original-row windows and reads current
+truth; body checks use their canonical key windows. The exact body slice
+authenticates the association; a different body uses the ordinary full-index path.
+Final model checks use the model’s selected
+lookup, independently of prepared region metadata. These borrowed windows retain
+no bindings or truth. Their preparation and retained capacity are charged, so
+bounded-work prefixes can differ. Arithmetic admission is unchanged.
 The method checks the coordinate convention, not the origin
 of an arbitrary caller-created region. Use it only to restrict original
 candidates, never to evaluate their frozen reducts.</p>
+<p><code>consequence_region</code> can additionally return <code>Hold { atom, site }</code> or
+<code>Cut { atom, site }</code> for one open atom forced by a scalar-passing original
+constraint. <code>ConstraintRegionPass::First</code> begins a candidate closure;
+<code>Continue</code> spends the same allowance after that decision and ordinary formula
+propagation. <code>NoConsequence</code> and <code>Refuted { site }</code> finish the closure. Continuing
+without an active closure is a typed error. A returned decision applies only to
+the supplied region or a narrowing of it. The exact theory and the final original
+and reduct acceptance checks remain unchanged.
+For constraints containing only atom patterns, comparisons and admitted
+constructor assignments, the checker can collect several deductions from one
+rule against the same region. It still returns one deduction per call, allowing
+ordinary formula propagation between them. Reuse checks both held and cut masks;
+an unrelated region discards the saved deductions without renewing the allowance.
+A completed scan that found no deduction can be reused after assessing changes
+to its possible reads. For each retained changed atom of a signed predicate, the
+checker tests necessary constants and constructor shapes at every occurrence that reads
+that predicate. Only a mismatch can exclude the atom; repeated variables and
+lowered temporary slots remain independent wildcards. A change that disables
+every affected body occurrence preserves the completed result: cutting an atom
+disables positive and double-negated occurrences, while holding it disables
+default-negated occurrences. Newly held positive occurrences can restrict the
+next scan to those atoms’ occurrences. Enabling default-negated occurrences
+require a full scan. The scan preserves the ordinary binding, scalar and unit
+tests, and checks every affected occurrence even when signs differ.
+Changes accumulate until the rule is scanned. The implementation retains up to
+four distinct atoms per predicate and per pending rule; overflow, an enabling
+default-negated reader or relevant generated bindings restores a full scan. This bound
+controls reuse, not program admission. Default negation and double negation
+retain their dependencies, and changes from ordinary propagation count too.
+The retained change buffers and extra canonical term reads are charged. Successful
+<code>NoConsequence</code> settles the finished allowance while retaining that completed
+scan evidence. The next <code>First</code> gets a new allowance and may reuse the evidence
+after checking both decision masks; a sibling or reopened decision invalidates
+it. Errors, refutations, ordinary checks and abandoned productive batches also
+invalidate candidate evidence. A completed productive scan establishes a reusable
+negative result only after every emitted decision is confirmed in the current
+region, including the delivered prefix, and every intervening change is
+irrelevant or disabling. The rule stays eligible for a full scan until those
+conditions hold. Interrupted scans cannot establish this result.</p>
+<p>For eligible nongenerated bindings, one join enumerates prefixes with at most
+one mapped open positive occurrence. The remaining mapped positives must be
+held; unmapped rows retain ordinary checks and prevent a truth loan. Generated
+bindings and arithmetic outside this fragment retain the separate query modes.
+The arithmetic fallback preserves its existing failure order.
+Traversal and batching can change order and resource-limited prefixes; neither
+changes the original satisfaction or reduct checks.</p>
+<p>The core shares immutable signed-predicate dependencies and original atom-group
+coordinates. Each checker admits the complete mapping’s retained bytes once,
+even when its mutable state must be discarded and recreated. First-use races
+can build independently; only a completed mapping is published. Masks, dirty
+flags and pending deductions remain local and use accounted support storage.
+No ground-constraint table is retained.
+Multiple open occurrences remaining after normalization are conservatively
+left undecided.</p>
 <p>Support dictionaries and equality indexes are reused. Ordinary joins lend their
 current binding; generators retain their existing owned-row requirements.
 Prepared constraint plans borrow the immutable source components. Each checker
-owns its traversal and query workspace, so retaining a plan retains no candidate
-state or mutable workspace from another checker.
+owns its traversal, query workspace and closure-local deductions. Prepared plans
+contain no candidate truth, and no mutable workspace is shared between checkers.
 Candidate truth uses borrowed typed atom keys, with no temporary formula DAG or
 copied atom per instance. Original source-family arithmetic validation completes
 before the hybrid owner is returned, independently of later candidate truth.
@@ -1211,7 +1283,9 @@ candidate filtering cannot conceal fatal arithmetic.</p>
 prepared constraint plans and the support relations they read, which eager
 grounding can release after emission, and, once a region check has used them,
 the core’s typed atom index (two integer orders over the core’s atoms) and the
-kept support rows’ positions in it. The existing source, scalar and support ceilings still apply;
+kept support rows’ positions in it, together with the immutable dependency
+mapping once consequence checking needs it. The existing source, scalar and
+support ceilings still apply;
 they are not a single aggregate live-memory or RSS bound. Core atoms, nodes and
 roots retain the formula-theory ceilings, including coherence and unsupported
 atom guards. <code>streamed_templates()</code> counts lowered templates, including pool
@@ -1222,15 +1296,20 @@ byte allowance for structural capture-delta capacity growth within each join:
 the first check’s allowance also
 covers the checker’s preparation, and each later check is measured from the
 charges accepted when the previous one ended. The limits bound the work spent
-on one candidate, never the number of candidates. A refusal reports the check’s
+on one candidate, never the number of candidates. A consequence closure shares
+these limits across every continuation, including its final scan. A refusal reports the check’s
 own allowance as its limit. ID-only copies and lookups do not consume the byte
 allowance.
 For parallel composition, create <code>ConstraintAllowance::new(limits)</code> and
 use <code>checker_with_allowance(&amp;allowance, &amp;cancellation)</code> for every worker and final
 checker. Each check of each checker gets <code>limits</code>; the clones share one
 cumulative receipt of every accepted charge, and no limit is multiplied by the
-worker count. <code>allowance.statistics()</code> is exact after those workers join;
-live fields are independently observed monotone counters. Snapshot descriptors
+worker count. Preparation and checks publish accepted charges when they return,
+fail or unwind; dropping a checker also publishes any pending charges.
+<code>allowance.statistics()</code> is exact after all operations settle or workers join.
+During a running check its fields are independently observed monotone lower
+bounds and can omit in-flight charges. Check-local and failure receipts remain
+exact. These publication boundaries change no ceiling or cancellation poll. Snapshot descriptors
 are prepared once per checker, without copying support rows; per-operation
 binding/storage ceilings remain those of the admitted source. A new checker
 starts its own local receipt; a supplied shared allowance continues across
@@ -1614,11 +1693,44 @@ constraint unchanged. Transformation provenance remains evidence, while
 <code>formula_origins()</code> names the original constraint. <code>keyed_constraints()</code> on the admitted formula
 counts the constraints asked; the answer sets are the same either way, which
 the contract tests state against the hand-asked program and against clingo.
-A constraint outside the two patterns is left as written, and so is one
-with an anonymous variable in a key position: the asked atom stands under
+The keyed-value rewrite leaves a constraint outside these two patterns as
+written, including one with an anonymous variable in a key position: the asked atom stands under
 <code>not</code>, where <code>p(_, t)</code> holds when some key has the value <code>t</code>, so
 <code>not p(_, t)</code> would forbid only that no key has it, while the written
 constraint forbids a wrong value at every key.</p>
+<h2 id="constraints-over-fixed-witnesses"><a class="header" href="#constraints-over-fixed-witnesses">Constraints over fixed witnesses</a></h2>
+<p>Preparation can also specialize a positive constraint using a complete fixed
+fact relation. In <code>:- edge(X,Y), allowed(Y), bad(X,T).</code>, if facts are the only
+producers of <code>edge</code> and <code>allowed</code>, the complete matching <code>(X,Y)</code> tuples can be
+projected to their distinct <code>X</code> values. One residual <code>:- bad(x,T).</code> replaces
+all matching witnesses for each such value. Original facts remain; no auxiliary
+predicate or new answer-reconstruction step is introduced.</p>
+<p>The recognizer in
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_fixed_constraints.rs"><code>formula_fixed_constraints</code></a>
+uses one flat positive anchor and fixed unary guards. The entire constraint
+must contain only positive ordinary atoms and pure constructor patterns;
+numeric operations, comparisons, default negation and local scopes are excluded.
+Constants, repeated variables, arity and strong sign match exactly. Anchor
+variables used anywhere outside the removed block, including inside constructors,
+remain in the projected interface. Specialization requires both local and retained
+variables, a nonempty complete projection and repeated witnesses.
+Other shapes keep the original constraint.</p>
+<p><code>FactIndex::tuples</code> lends the existing correlated rows only after all-producer
+certification. A possible-support relation is insufficient. Keyed-value and
+fixed-witness preparation share one lazy fact reading of the same normalized
+program. Replacement requires an unambiguous original owner and preserves its
+statement identity and source provenance. Typed substitution validates newly
+ground constructor values before accepting the entire family; a logical value
+refusal leaves the original in place. Original source admission precedes the
+rewrite, and the original program and full answer vocabulary remain available.</p>
+<p>Optional work and output bounds, tightened by the remaining term-work,
+template and family-byte allowances, can leave a proposal unchanged. No partial
+family is published. Accepted work stays charged; cancellation and fallible
+allocation retain typed failures. Replacement compilation spends the existing
+budgets, so resource-limited prefixes can change. The
+<a href="../lean/correspondence.html#keyed-constraints-and-checked-source-arithmetic">correspondence account</a>
+separates equality of constraint firing from the compiler’s coverage, ownership,
+diagnostic and resource obligations.</p>
 <h2 id="inspect-terminal-positive-definitions"><a class="header" href="#inspect-terminal-positive-definitions">Inspect terminal positive definitions</a></h2>
 <p><code>zetesis_domain::terminal::analyze(&amp;program, limits)</code> identifies predicates whose
 producers are all flat positive normal rules and whose atoms have no semantic

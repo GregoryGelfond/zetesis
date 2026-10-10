@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-86489835.js";
+            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1ecb55d0.js"></script>
+        <script src="../toc-2436da5c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -658,6 +658,13 @@ solving; callers pass this value to the session and can cancel it through a clon
 the timer thread cannot be started; an already expired deadline starts no thread.
 Clones observe the same flags, and <code>poll()</code> reports <code>Stop::Cancelled</code> before
 <code>Stop::Deadline</code> when both apply.</p>
+<p>Repeated polls can retain <code>Cancellation::polling()</code>’s borrowed
+<code>CancellationPoll</code> view. Preparing the view resolves the token’s flag references
+and slot identity once, without allocation or reference-count updates. Each poll
+still reads the live flags in the same order. The view borrows the token; it
+neither owns a run guard nor extends a deadline. Tight certificate preparation
+and formula checking retain this view while preserving their poll before each
+charged primitive operation.</p>
 <p>Cancellation is observed at cooperative polling boundaries, not by forcibly
 terminating arbitrary work. A future deadline owns a timer that sets an expiry
 flag and retires then or when the last clone drops. Polling reads shared flags

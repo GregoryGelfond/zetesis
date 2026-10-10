@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-86489835.js";
+            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1ecb55d0.js"></script>
+        <script src="../toc-2436da5c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -292,8 +292,13 @@ assert_eq!(config.workers.get(), 4);
 <p>This policy derives named storage capacities from memory and keeps work as
 checked statistics without a selected operation-count cutoff. The independent
 capacities are not a global resident-memory guarantee. Explicit limit fields
-remain available when an embedding needs a bounded operation; optional analyses
-and device dispatches also retain internal effort bounds.</p>
+remain available when an embedding needs a bounded operation; other optional
+analyses and device dispatches also retain internal effort bounds.</p>
+<p>Tight, positive and stratified certificate preparation uses the session’s named scratch
+allowance and shared search work. It has no separate fixed producer, dependency
+or operation-count cutoff. Each certificate still checks the complete theory;
+unsupported programs or insufficient certificate storage leave general reduct
+checking available. Cancellation and allocation failures interrupt the run.</p>
 <h2 id="pulling-and-stopping"><a class="header" href="#pulling-and-stopping">Pulling and stopping</a></h2>
 <p><code>Session</code> is a fused iterator of <code>Result&lt;AnswerSet, SolveFailure&gt;</code>. Each
 privately constructed <code>AnswerSet</code> retains its original <code>Subject</code>, complete interpretation and optional
@@ -317,6 +322,11 @@ Dropping the iterator or calling <code>stop()</code> early does not imply that u
 candidates have been checked. Inspect <code>SemanticOutcome::completion()</code>; it is
 optional precisely because a consumer may stop before a terminal classification
 exists.</p>
+<p>Live <code>progress()</code> readings do not wait for workers. Terminal reports and
+<code>stop()</code> join native workers before recording their final work and decision
+counts. They preserve the original interruption reason and do not cancel a
+caller-owned token. Cooperative cleanup may extend beyond a requested deadline;
+it does not establish exhaustive coverage.</p>
 <p>For <code>Session::new</code> with an objective, the search phase ends before retained incumbents are yielded.
 Exhausted search establishes optimum ties; an interrupted phase may yield
 unproved incumbents. A score alone is not an optimum certificate. Use the
@@ -359,17 +369,27 @@ routes leave it absent and expose their own receipts.</p>
 <h2 id="formula-membership-plans"><a class="header" href="#formula-membership-plans">Formula membership plans</a></h2>
 <p>An ordinary CPU formula session with <code>Oracle::Auto</code> attempts an applicable class
 plan before general reduct checking. Full normalized source analysis can prefer
-positive consequence checking; a dependency projection supplies no such class
+positive or stratified consequence checking; a dependency projection supplies no such class
 certificate. Attempt order is only a hint: each plan validates the complete
 original ground theory itself.</p>
 <p><code>PositivePlan</code> admits positive atomic-head producers, including recursive ones,
 and arbitrary constraints. It computes their least consequences once, then
 checks original roots through the first failure. Clause search restricts candidates
 to that interpretation, or excludes them all when a constraint fails. Region search
-still checks original models and refutes any larger interpretation. A failed constraint leaves no answer
+uses a singleton cursor, checking accumulated restrictions before publication.
+A failed constraint leaves no answer
 set; it does not necessarily rule out larger classical models. <code>TightPlan</code>
 instead establishes its own acyclicity and supportedness conditions. Neither
-plan changes the definition of membership. The
+plan changes the definition of membership. CPU tight checks retain exclusive
+<code>TightWorkspace</code> scratch in each worker; immutable plans can be shared. Every
+call checks its retained capacity against the current allowance. Interrupted
+or rejected candidates cannot leave truth or support in the next check.</p>
+<p><code>StratifiedPlan</code> extends direct evaluation to the supported stratified normal
+grammar. It completes positive components in signed dependency order and checks
+the original constraints. Positive and stratified certificates share the same
+single-answer publication mechanism. Unsupported formulas fall back to another
+applicable certificate or general reduct checking. This direct route is currently
+CPU-only; an explicit GPU request retains its device checking contract. The
 <a href="../architecture/semantics.html">semantic argument</a> explains their relation to the
 frozen reduct.</p>
 <p>An explicit Metal or Vulkan formula session with <code>Oracle::Auto</code> uses the same
@@ -400,8 +420,8 @@ that case. Enabled phase measurements still include the preparation attempted
 before such a start failure.</p>
 <p>Class-shape or optional-capacity refusals retain general checking. Cancellation,
 exhausted shared work and allocation failure remain explicit interruptions.
-<code>ExecutionObservation::PositiveMembership</code> and <code>TightMembership</code> report the
-selected plan; the search statistics retain attempted construction, restrictions
+<code>ExecutionObservation::PositiveMembership</code>, <code>StratifiedMembership</code> and
+<code>TightMembership</code> report the selected plan; the search statistics retain attempted construction, restrictions
 and checking work. Use <code>Oracle::Countermodel</code> to select the general comparison
 path explicitly. Automatic device execution uses tight checking when its exact
 certificate is available; other theories retain general device checking.</p>
@@ -430,11 +450,21 @@ Reuse preserves consumed work and pending-candidate accounting after a refusal.<
 <h2 id="hybrid-formula-sessions"><a class="header" href="#hybrid-formula-sessions">Hybrid formula sessions</a></h2>
 <p><code>PreparedFormula::ground_hybrid()</code> and its bundle counterpart return a shared
 <code>HybridFormula</code> owning the original source, retained core and streamed constraint
-plans. Pass it through <code>PreparedInput::hybrid(&amp;owner)</code>. The current profile uses
-CPU execution, indexed joins and no objectives; richer constraints remain in
-the eager core. <code>Backend::Cpu</code> and <code>Grounder::Lazy</code> or <code>Auto</code> are accepted.
-A GPU backend, eager schedule, closure oracle or external batch executor is
-refused for this profile.</p>
+plans. Pass it through <code>PreparedInput::hybrid(&amp;owner)</code>. The profile uses indexed
+host joins; richer constraints remain in the eager core. <code>Grounder::Lazy</code> or
+<code>Auto</code> can use CPU or GPU core membership. A GPU request uses the existing tight
+checker or general formula executor, with exact CPU completion of unresolved
+results. Source-constraint propagation and final acceptance remain on the host.
+An eager schedule, closure oracle or external batch executor is refused for
+this profile.</p>
+<p>Objective programs use the ordinary scoring and optimal-answer selection.
+Each new core answer must satisfy the streamed constraints before it can be
+scored, retained or used to improve an objective bound. Rejected proposals leave
+the incumbent unchanged. An interrupted check cannot establish optimality.
+Retained optimal ties have already passed the check and are not checked again
+when returned. A model limit caps returned optimal ties without stopping the
+search for a better answer; <code>AnswerSelection::All</code> instead limits accepted
+answers in enumeration order.</p>
 <p>Preparation still completes possible support, arithmetic admission and the atom
 catalog. Eligible instances are visited during admission, but their full
 constraint DAGs are not stored. The original eager doors remain available.
@@ -446,14 +476,20 @@ core admission are separate; their elapsed time is not the total cost of source
 evaluation in a hybrid session.</p>
 <p>The session first rejects candidate regions with a certain source-constraint
 violation. This operation runs only on original candidate regions and returns
-<code>NotRefuted</code> when it cannot establish exclusion. It does not change proper-subset
+<code>NotRefuted</code> when it cannot establish exclusion. Source constraints may also
+hold or cut one open atom when their other body literals are true. The session
+alternates these deductions with formula propagation before choosing a split,
+using one source allowance for the entire closure. It does not change proper-subset
 queries of the frozen reduct. The ordinary formula enumerator obtains surviving
 core answers, then
 checks the streamed constraints before returning an <code>AnswerSet</code> of the original
 <code>Subject::Hybrid</code>. A violation rejects that core answer. A completed check permits
 publication; an interrupted or failed check remains pending and establishes
-neither acceptance nor exhaustion. A positive model limit counts accepted
-original-program answers, not rejected core proposals.</p>
+neither acceptance nor exhaustion. With <code>AnswerSelection::All</code>, a positive model
+limit counts accepted original-program answers. With <code>Optimal</code>, it caps retained
+and delivered best-known ties without stopping the search for a better answer.
+Exhaustion establishes their optimality; an interrupted search can return verified
+incumbents without proving an optimum.</p>
 <p>This example checks every full answer, including the domain facts. The core has
 eight answers; early region rejection leaves four for membership and final
 source checking. Each returned answer chooses a q-prefix followed by a p-suffix:</p>
@@ -520,14 +556,17 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
         .countermodel_statistics()
         .and_then(|statistics| statistics.region_filter)
         .ok_or("missing source region receipt")?;
-    assert!(regions.refuted &gt; 0);
+    // Source consequences prevent the forbidden combinations before splitting.
+    assert_eq!(regions.refuted, 0);
+    assert!(regions.checks &gt; 0);
     Ok(())
 }</code></pre>
 <p>Run the maintained example from a checkout:</p>
 <pre><code class="language-sh">cargo run --locked -p zetesis-solve --no-default-features --example book-hybrid
 </code></pre>
-<p><code>SolveConfig::constraints</code> supplies cumulative <code>ConstraintCheckLimits</code> for that
-session: charged work, substitutions and structural-capture reservations. The
+<p><code>SolveConfig::constraints</code> supplies <code>ConstraintCheckLimits</code> for each candidate
+closure or final answer check: charged work, substitutions and structural-capture
+reservations. The session retains a cumulative receipt across these operations. The
 retained <code>max_scalar_bytes</code> field bounds requested capture-delta capacity growth;
 each join reuses those cells, which borrow canonical terms. Flat binding copies retain IDs and frozen
 constructor lookup reuses admitted terms, so neither adds a scalar-byte charge.
@@ -535,14 +574,31 @@ Their physical storage remains under the admitted support allowance. The
 <code>scalar_bytes</code> receipt is cumulative reserved bytes, not live capacity or RSS.
 These limits are separate from source admission and per-candidate reduct-oracle
 limits. Completed support indexes are reused; constraint joins run for regions
-and for consumed core answers. The worker checks and final checker share one
-allowance. Additional region scans and preparation can cost more than the avoided membership work,
+and for consumed core answers. The worker checks and final checker share that
+receipt. Consequence passes within one closure share its allowance. Additional
+region scans and preparation can cost more than the avoided membership work,
 so the schedule still needs workload-specific measurement.</p>
+<p>Serial candidate traversal retains one source checker across answer pulls.
+Joined candidate production retains one per active producer slot across device
+batches, with at most the configured worker count of slots.
+The checker belongs to the exact source owner, has exclusive access to its
+scratch and can move between executor threads. <code>zetesis_sat::RegionFilterWorker</code>
+therefore requires <code>Send</code>; the callback is never invoked concurrently on one
+checker. Completion or stop releases this scratch while retaining statistics
+and pending candidate receipts. Each callback’s teardown is isolated; a panic
+is reported as <code>Incomplete::WorkerPanicked</code> when no earlier failure takes
+precedence. While candidate production remains open, a retryable batch-checker
+failure retains the serial source checker and the pending candidates; it does
+not repeat source preparation. Separate singleton checks still prepare per
+operation. These preparation counts do not measure allocations or device kernel
+time.</p>
 <p><code>SemanticOutcome::hybrid_execution()</code> reports consumed <code>core_answers</code>,
 <code>accepted</code>, <code>rejected</code>, <code>pending</code> and cumulative constraint-check statistics.
 Their invariant is <code>core_answers = accepted + rejected + pending</code>. Core answers
-still buffered by the inner enumerator are excluded. Formula search statistics
-include <code>region_filter</code> counts for attempted preparations, region checks,
+still buffered by the inner enumerator are excluded. Search statistics and
+device batch receipts describe the retained core. A device-checked core
+answer is counted as an original answer only after complete source acceptance.
+The <code>region_filter</code> counters record attempted preparations, region checks,
 refutations and failures. Those are not core-answer counts. Core membership
 statistics describe surviving proposals; <code>verified_models()</code> counts original-program
 answers. Cancellation or a deadline observed during source checking uses

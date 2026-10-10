@@ -220,233 +220,255 @@
 <a href=#220 id=220 data-nosnippet>220</a>    }
 <a href=#221 id=221 data-nosnippet>221</a>    <span class="doccomment">/// The open atoms, ascending.
 <a href=#222 id=222 data-nosnippet>222</a>    </span><span class="kw">pub fn </span>open(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = usize&gt; + <span class="lifetime">'_ </span>{
-<a href=#223 id=223 data-nosnippet>223</a>        (<span class="number">0</span>..<span class="self">self</span>.atoms).filter(<span class="kw">move </span>|<span class="kw-2">&amp;</span>atom| {
-<a href=#224 id=224 data-nosnippet>224</a>            <span class="kw">let </span>(word, bit) = locate(atom);
-<a href=#225 id=225 data-nosnippet>225</a>            (<span class="self">self</span>.held[word] | <span class="self">self</span>.cut[word]) &amp; bit == <span class="number">0
-<a href=#226 id=226 data-nosnippet>226</a>        </span>})
-<a href=#227 id=227 data-nosnippet>227</a>    }
-<a href=#228 id=228 data-nosnippet>228</a>    <span class="doccomment">/// The atoms this region decides that are not set in `seen`, each paired
-<a href=#229 id=229 data-nosnippet>229</a>    /// with whether it is held, ascending. `seen` is a decided-mask snapshot
-<a href=#230 id=230 data-nosnippet>230</a>    /// over the same atoms; words missing from `seen` count as unseen. Reports
-<a href=#231 id=231 data-nosnippet>231</a>    /// only real atoms, never a tail bit.
-<a href=#232 id=232 data-nosnippet>232</a>    </span><span class="kw">pub fn </span>decided_since&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#233 id=233 data-nosnippet>233</a>        <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">self</span>,
-<a href=#234 id=234 data-nosnippet>234</a>        seen: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[u64],
-<a href=#235 id=235 data-nosnippet>235</a>    ) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (usize, bool)&gt; + <span class="lifetime">'a </span>{
-<a href=#236 id=236 data-nosnippet>236</a>        (<span class="number">0</span>..<span class="self">self</span>.held.len()).flat_map(<span class="kw">move </span>|word| {
-<a href=#237 id=237 data-nosnippet>237</a>            <span class="kw">let </span>seen_word = seen.get(word).copied().unwrap_or(<span class="number">0</span>);
-<a href=#238 id=238 data-nosnippet>238</a>            <span class="kw">let </span>fresh = (<span class="self">self</span>.held[word] | <span class="self">self</span>.cut[word]) &amp; !seen_word;
-<a href=#239 id=239 data-nosnippet>239</a>            <span class="kw">let </span>held = <span class="self">self</span>.held[word];
-<a href=#240 id=240 data-nosnippet>240</a>            <span class="kw">let </span>base = word * <span class="number">64</span>;
-<a href=#241 id=241 data-nosnippet>241</a>            SetBits { bits: fresh }
-<a href=#242 id=242 data-nosnippet>242</a>                .map(<span class="kw">move </span>|bit| (base + bit, held &amp; (<span class="number">1u64 </span>&lt;&lt; bit) != <span class="number">0</span>))
-<a href=#243 id=243 data-nosnippet>243</a>                .filter(<span class="kw">move </span>|<span class="kw-2">&amp;</span>(atom, <span class="kw">_</span>)| atom &lt; <span class="self">self</span>.atoms)
-<a href=#244 id=244 data-nosnippet>244</a>        })
-<a href=#245 id=245 data-nosnippet>245</a>    }
-<a href=#246 id=246 data-nosnippet>246</a>    <span class="doccomment">/// Copy this region's decided mask (`held | cut`) into the available prefix
-<a href=#247 id=247 data-nosnippet>247</a>    /// of `dst`. A complete snapshot needs `self.len().div_ceil(64)` words.
-<a href=#248 id=248 data-nosnippet>248</a>    /// A shorter destination receives only its prefix; any excess destination
-<a href=#249 id=249 data-nosnippet>249</a>    /// words remain unchanged. An empty destination is valid. Missing snapshot
-<a href=#250 id=250 data-nosnippet>250</a>    /// words count as unseen when passed to [`Self::decided_since`].
-<a href=#251 id=251 data-nosnippet>251</a>    </span><span class="kw">pub fn </span>snapshot_decided(<span class="kw-2">&amp;</span><span class="self">self</span>, dst: <span class="kw-2">&amp;mut </span>[u64]) {
-<a href=#252 id=252 data-nosnippet>252</a>        <span class="kw">for </span>(word, (<span class="kw-2">&amp;</span>held, <span class="kw-2">&amp;</span>cut)) <span class="kw">in </span>dst.iter_mut().zip(<span class="self">self</span>.held.iter().zip(<span class="self">self</span>.cut.iter())) {
-<a href=#253 id=253 data-nosnippet>253</a>            <span class="kw-2">*</span>word = held | cut;
-<a href=#254 id=254 data-nosnippet>254</a>        }
-<a href=#255 id=255 data-nosnippet>255</a>    }
-<a href=#256 id=256 data-nosnippet>256</a>    <span class="doccomment">/// Every decided atom with whether it is held, ascending.
-<a href=#257 id=257 data-nosnippet>257</a>    </span><span class="kw">pub fn </span>decided(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (usize, bool)&gt; + <span class="lifetime">'_ </span>{
-<a href=#258 id=258 data-nosnippet>258</a>        <span class="self">self</span>.decided_since(<span class="kw-2">&amp;</span>[])
-<a href=#259 id=259 data-nosnippet>259</a>    }
-<a href=#260 id=260 data-nosnippet>260</a>    <span class="doccomment">/// The two regions an open atom splits this one into: cut, then held.
-<a href=#261 id=261 data-nosnippet>261</a>    /// Neither inherits a preference; their narrowing sets their own.
-<a href=#262 id=262 data-nosnippet>262</a>    ///
-<a href=#263 id=263 data-nosnippet>263</a>    /// # Panics
-<a href=#264 id=264 data-nosnippet>264</a>    /// Panics unless `atom` is one of the region's open atoms.
-<a href=#265 id=265 data-nosnippet>265</a>    </span><span class="attr">#[must_use]
-<a href=#266 id=266 data-nosnippet>266</a>    </span><span class="kw">pub fn </span>split(<span class="kw-2">mut </span><span class="self">self</span>, atom: usize) -&gt; (<span class="self">Self</span>, <span class="self">Self</span>) {
-<a href=#267 id=267 data-nosnippet>267</a>        <span class="comment">// A region is split on one of its OPEN atoms: an out-of-range or
-<a href=#268 id=268 data-nosnippet>268</a>        // already-decided atom fails fast, since deciding it would either touch
-<a href=#269 id=269 data-nosnippet>269</a>        // a non-atom bit or leave a narrowing's knowledge out of step with the
-<a href=#270 id=270 data-nosnippet>270</a>        // region's decision (a reader's seen-mask already covers a decided atom).
-<a href=#271 id=271 data-nosnippet>271</a>        </span><span class="macro">assert!</span>(
-<a href=#272 id=272 data-nosnippet>272</a>            <span class="self">self</span>.is_open(atom),
-<a href=#273 id=273 data-nosnippet>273</a>            <span class="string">"a region is split on one of its open atoms"
-<a href=#274 id=274 data-nosnippet>274</a>        </span>);
-<a href=#275 id=275 data-nosnippet>275</a>        <span class="kw">let </span>(word, bit) = locate(atom);
-<a href=#276 id=276 data-nosnippet>276</a>        <span class="comment">// Clone once for the held child; reuse this region as the cut child
-<a href=#277 id=277 data-nosnippet>277</a>        // rather than cloning it a second time.
-<a href=#278 id=278 data-nosnippet>278</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>held = <span class="self">self</span>.clone();
-<a href=#279 id=279 data-nosnippet>279</a>        held.held[word] |= bit;
-<a href=#280 id=280 data-nosnippet>280</a>        held.preferred = <span class="prelude-val">None</span>;
-<a href=#281 id=281 data-nosnippet>281</a>        <span class="self">self</span>.cut[word] |= bit;
-<a href=#282 id=282 data-nosnippet>282</a>        <span class="self">self</span>.preferred = <span class="prelude-val">None</span>;
-<a href=#283 id=283 data-nosnippet>283</a>        (<span class="self">self</span>, held)
-<a href=#284 id=284 data-nosnippet>284</a>    }
-<a href=#285 id=285 data-nosnippet>285</a>}
-<a href=#286 id=286 data-nosnippet>286</a>
-<a href=#287 id=287 data-nosnippet>287</a><span class="doccomment">/// The outcome of narrowing one region.
-<a href=#288 id=288 data-nosnippet>288</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-<a href=#289 id=289 data-nosnippet>289</a></span><span class="kw">pub enum </span>Narrowing {
-<a href=#290 id=290 data-nosnippet>290</a>    <span class="doccomment">/// No accepted candidate lies in the region.
-<a href=#291 id=291 data-nosnippet>291</a>    </span>Refuted,
-<a href=#292 id=292 data-nosnippet>292</a>    <span class="doccomment">/// The fixed point, and whether the narrowing decided an atom.
-<a href=#293 id=293 data-nosnippet>293</a>    </span>Fixed {
-<a href=#294 id=294 data-nosnippet>294</a>        <span class="doccomment">/// Whether any atom was decided by the narrowing.
-<a href=#295 id=295 data-nosnippet>295</a>        </span>changed: bool,
-<a href=#296 id=296 data-nosnippet>296</a>    },
-<a href=#297 id=297 data-nosnippet>297</a>}
-<a href=#298 id=298 data-nosnippet>298</a>
-<a href=#299 id=299 data-nosnippet>299</a><span class="doccomment">/// When a region is counted instead of split.
-<a href=#300 id=300 data-nosnippet>300</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-<a href=#301 id=301 data-nosnippet>301</a></span><span class="kw">pub enum </span>Counting {
-<a href=#302 id=302 data-nosnippet>302</a>    <span class="doccomment">/// Every region is split until decided: the traversal visits only leaves.
-<a href=#303 id=303 data-nosnippet>303</a>    </span>Never,
-<a href=#304 id=304 data-nosnippet>304</a>    <span class="doccomment">/// A region below the root whose narrowing decided nothing is counted:
-<a href=#305 id=305 data-nosnippet>305</a>    /// its open atoms are offered to a flat counter by the caller.
-<a href=#306 id=306 data-nosnippet>306</a>    </span>Unchanged,
+<a href=#223 id=223 data-nosnippet>223</a>        <span class="self">self</span>.held
+<a href=#224 id=224 data-nosnippet>224</a>            .iter()
+<a href=#225 id=225 data-nosnippet>225</a>            .zip(<span class="self">self</span>.cut.iter())
+<a href=#226 id=226 data-nosnippet>226</a>            .enumerate()
+<a href=#227 id=227 data-nosnippet>227</a>            .flat_map(<span class="kw">move </span>|(word, (<span class="kw-2">&amp;</span>held, <span class="kw-2">&amp;</span>cut))| {
+<a href=#228 id=228 data-nosnippet>228</a>                <span class="kw">let </span>base = word * <span class="number">64</span>;
+<a href=#229 id=229 data-nosnippet>229</a>                <span class="kw">let </span><span class="kw-2">mut </span>bits = !(held | cut);
+<a href=#230 id=230 data-nosnippet>230</a>                <span class="kw">let </span>valid = <span class="self">self</span>.atoms - base;
+<a href=#231 id=231 data-nosnippet>231</a>                <span class="kw">if </span>valid &lt; <span class="number">64 </span>{
+<a href=#232 id=232 data-nosnippet>232</a>                    bits &amp;= (<span class="number">1u64 </span>&lt;&lt; valid) - <span class="number">1</span>;
+<a href=#233 id=233 data-nosnippet>233</a>                }
+<a href=#234 id=234 data-nosnippet>234</a>                SetBits { bits }.map(<span class="kw">move </span>|bit| base + bit)
+<a href=#235 id=235 data-nosnippet>235</a>            })
+<a href=#236 id=236 data-nosnippet>236</a>    }
+<a href=#237 id=237 data-nosnippet>237</a>    <span class="doccomment">/// The atoms this region decides that are not set in `seen`, each paired
+<a href=#238 id=238 data-nosnippet>238</a>    /// with whether it is held, ascending. `seen` is a decided-mask snapshot
+<a href=#239 id=239 data-nosnippet>239</a>    /// over the same atoms; words missing from `seen` count as unseen. Reports
+<a href=#240 id=240 data-nosnippet>240</a>    /// only real atoms, never a tail bit.
+<a href=#241 id=241 data-nosnippet>241</a>    </span><span class="kw">pub fn </span>decided_since&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#242 id=242 data-nosnippet>242</a>        <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="self">self</span>,
+<a href=#243 id=243 data-nosnippet>243</a>        seen: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[u64],
+<a href=#244 id=244 data-nosnippet>244</a>    ) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (usize, bool)&gt; + <span class="lifetime">'a </span>{
+<a href=#245 id=245 data-nosnippet>245</a>        (<span class="number">0</span>..<span class="self">self</span>.held.len()).flat_map(<span class="kw">move </span>|word| {
+<a href=#246 id=246 data-nosnippet>246</a>            <span class="kw">let </span>seen_word = seen.get(word).copied().unwrap_or(<span class="number">0</span>);
+<a href=#247 id=247 data-nosnippet>247</a>            <span class="kw">let </span>fresh = (<span class="self">self</span>.held[word] | <span class="self">self</span>.cut[word]) &amp; !seen_word;
+<a href=#248 id=248 data-nosnippet>248</a>            <span class="kw">let </span>held = <span class="self">self</span>.held[word];
+<a href=#249 id=249 data-nosnippet>249</a>            <span class="kw">let </span>base = word * <span class="number">64</span>;
+<a href=#250 id=250 data-nosnippet>250</a>            SetBits { bits: fresh }
+<a href=#251 id=251 data-nosnippet>251</a>                .map(<span class="kw">move </span>|bit| (base + bit, held &amp; (<span class="number">1u64 </span>&lt;&lt; bit) != <span class="number">0</span>))
+<a href=#252 id=252 data-nosnippet>252</a>                .filter(<span class="kw">move </span>|<span class="kw-2">&amp;</span>(atom, <span class="kw">_</span>)| atom &lt; <span class="self">self</span>.atoms)
+<a href=#253 id=253 data-nosnippet>253</a>        })
+<a href=#254 id=254 data-nosnippet>254</a>    }
+<a href=#255 id=255 data-nosnippet>255</a>    <span class="doccomment">/// Copy this region's decided mask (`held | cut`) into the available prefix
+<a href=#256 id=256 data-nosnippet>256</a>    /// of `dst`. A complete snapshot needs `self.len().div_ceil(64)` words.
+<a href=#257 id=257 data-nosnippet>257</a>    /// A shorter destination receives only its prefix; any excess destination
+<a href=#258 id=258 data-nosnippet>258</a>    /// words remain unchanged. An empty destination is valid. Missing snapshot
+<a href=#259 id=259 data-nosnippet>259</a>    /// words count as unseen when passed to [`Self::decided_since`].
+<a href=#260 id=260 data-nosnippet>260</a>    </span><span class="kw">pub fn </span>snapshot_decided(<span class="kw-2">&amp;</span><span class="self">self</span>, dst: <span class="kw-2">&amp;mut </span>[u64]) {
+<a href=#261 id=261 data-nosnippet>261</a>        <span class="kw">for </span>(word, (<span class="kw-2">&amp;</span>held, <span class="kw-2">&amp;</span>cut)) <span class="kw">in </span>dst.iter_mut().zip(<span class="self">self</span>.held.iter().zip(<span class="self">self</span>.cut.iter())) {
+<a href=#262 id=262 data-nosnippet>262</a>            <span class="kw-2">*</span>word = held | cut;
+<a href=#263 id=263 data-nosnippet>263</a>        }
+<a href=#264 id=264 data-nosnippet>264</a>    }
+<a href=#265 id=265 data-nosnippet>265</a>    <span class="doccomment">/// Every decided atom with whether it is held, ascending.
+<a href=#266 id=266 data-nosnippet>266</a>    </span><span class="kw">pub fn </span>decided(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw">impl </span>Iterator&lt;Item = (usize, bool)&gt; + <span class="lifetime">'_ </span>{
+<a href=#267 id=267 data-nosnippet>267</a>        <span class="self">self</span>.decided_since(<span class="kw-2">&amp;</span>[])
+<a href=#268 id=268 data-nosnippet>268</a>    }
+<a href=#269 id=269 data-nosnippet>269</a>    <span class="doccomment">/// Borrow the held and cut masks, in that order, without copying.
+<a href=#270 id=270 data-nosnippet>270</a>    /// Both slices contain `self.len().div_ceil(64)` words. Bit `atom % 64`
+<a href=#271 id=271 data-nosnippet>271</a>    /// in word `atom / 64` represents that atom. The masks are disjoint;
+<a href=#272 id=272 data-nosnippet>272</a>    /// unused high bits of the last word are zero.
+<a href=#273 id=273 data-nosnippet>273</a>    ///
+<a href=#274 id=274 data-nosnippet>274</a>    /// Keeping both polarities permits exact comparison with an earlier region.
+<a href=#275 id=275 data-nosnippet>275</a>    /// Their union alone cannot distinguish removing or reversing a decision.
+<a href=#276 id=276 data-nosnippet>276</a>    /// The slices remain borrowed from this region; retaining a snapshot requires
+<a href=#277 id=277 data-nosnippet>277</a>    /// caller-owned storage and its own resource accounting.
+<a href=#278 id=278 data-nosnippet>278</a>    </span><span class="attr">#[must_use]
+<a href=#279 id=279 data-nosnippet>279</a>    </span><span class="kw">pub fn </span>decision_words(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; (<span class="kw-2">&amp;</span>[u64], <span class="kw-2">&amp;</span>[u64]) {
+<a href=#280 id=280 data-nosnippet>280</a>        (<span class="kw-2">&amp;</span><span class="self">self</span>.held, <span class="kw-2">&amp;</span><span class="self">self</span>.cut)
+<a href=#281 id=281 data-nosnippet>281</a>    }
+<a href=#282 id=282 data-nosnippet>282</a>    <span class="doccomment">/// The two regions an open atom splits this one into: cut, then held.
+<a href=#283 id=283 data-nosnippet>283</a>    /// Neither inherits a preference; their narrowing sets their own.
+<a href=#284 id=284 data-nosnippet>284</a>    ///
+<a href=#285 id=285 data-nosnippet>285</a>    /// # Panics
+<a href=#286 id=286 data-nosnippet>286</a>    /// Panics unless `atom` is one of the region's open atoms.
+<a href=#287 id=287 data-nosnippet>287</a>    </span><span class="attr">#[must_use]
+<a href=#288 id=288 data-nosnippet>288</a>    </span><span class="kw">pub fn </span>split(<span class="kw-2">mut </span><span class="self">self</span>, atom: usize) -&gt; (<span class="self">Self</span>, <span class="self">Self</span>) {
+<a href=#289 id=289 data-nosnippet>289</a>        <span class="comment">// A region is split on one of its OPEN atoms: an out-of-range or
+<a href=#290 id=290 data-nosnippet>290</a>        // already-decided atom fails fast, since deciding it would either touch
+<a href=#291 id=291 data-nosnippet>291</a>        // a non-atom bit or leave a narrowing's knowledge out of step with the
+<a href=#292 id=292 data-nosnippet>292</a>        // region's decision (a reader's seen-mask already covers a decided atom).
+<a href=#293 id=293 data-nosnippet>293</a>        </span><span class="macro">assert!</span>(
+<a href=#294 id=294 data-nosnippet>294</a>            <span class="self">self</span>.is_open(atom),
+<a href=#295 id=295 data-nosnippet>295</a>            <span class="string">"a region is split on one of its open atoms"
+<a href=#296 id=296 data-nosnippet>296</a>        </span>);
+<a href=#297 id=297 data-nosnippet>297</a>        <span class="kw">let </span>(word, bit) = locate(atom);
+<a href=#298 id=298 data-nosnippet>298</a>        <span class="comment">// Clone once for the held child; reuse this region as the cut child
+<a href=#299 id=299 data-nosnippet>299</a>        // rather than cloning it a second time.
+<a href=#300 id=300 data-nosnippet>300</a>        </span><span class="kw">let </span><span class="kw-2">mut </span>held = <span class="self">self</span>.clone();
+<a href=#301 id=301 data-nosnippet>301</a>        held.held[word] |= bit;
+<a href=#302 id=302 data-nosnippet>302</a>        held.preferred = <span class="prelude-val">None</span>;
+<a href=#303 id=303 data-nosnippet>303</a>        <span class="self">self</span>.cut[word] |= bit;
+<a href=#304 id=304 data-nosnippet>304</a>        <span class="self">self</span>.preferred = <span class="prelude-val">None</span>;
+<a href=#305 id=305 data-nosnippet>305</a>        (<span class="self">self</span>, held)
+<a href=#306 id=306 data-nosnippet>306</a>    }
 <a href=#307 id=307 data-nosnippet>307</a>}
 <a href=#308 id=308 data-nosnippet>308</a>
-<a href=#309 id=309 data-nosnippet>309</a><span class="doccomment">/// One region the traversal hands to the caller, with what the caller
-<a href=#310 id=310 data-nosnippet>310</a>/// carries alongside it.
-<a href=#311 id=311 data-nosnippet>311</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Eq)]
-<a href=#312 id=312 data-nosnippet>312</a></span><span class="kw">pub enum </span>Visit&lt;S = ()&gt; {
-<a href=#313 id=313 data-nosnippet>313</a>    <span class="doccomment">/// Every atom is decided: the region is one candidate.
-<a href=#314 id=314 data-nosnippet>314</a>    </span>Leaf(Region, S),
-<a href=#315 id=315 data-nosnippet>315</a>    <span class="doccomment">/// The region's open atoms are the caller's to count.
-<a href=#316 id=316 data-nosnippet>316</a>    </span>Counted(Region, S),
-<a href=#317 id=317 data-nosnippet>317</a>}
-<a href=#318 id=318 data-nosnippet>318</a>
-<a href=#319 id=319 data-nosnippet>319</a><span class="doccomment">/// The regions a traversal visited, by outcome.
-<a href=#320 id=320 data-nosnippet>320</a></span><span class="attr">#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-<a href=#321 id=321 data-nosnippet>321</a></span><span class="kw">pub struct </span>RegionStatistics {
-<a href=#322 id=322 data-nosnippet>322</a>    <span class="doccomment">/// Regions popped and narrowed, the root included.
-<a href=#323 id=323 data-nosnippet>323</a>    </span><span class="kw">pub </span>regions: usize,
-<a href=#324 id=324 data-nosnippet>324</a>    <span class="doccomment">/// Regions whose narrowing refuted them.
-<a href=#325 id=325 data-nosnippet>325</a>    </span><span class="kw">pub </span>refuted: usize,
-<a href=#326 id=326 data-nosnippet>326</a>    <span class="doccomment">/// Regions visited as leaves: every atom decided, one candidate each.
-<a href=#327 id=327 data-nosnippet>327</a>    </span><span class="kw">pub </span>leaves: usize,
-<a href=#328 id=328 data-nosnippet>328</a>    <span class="doccomment">/// Regions handed to the caller to count.
-<a href=#329 id=329 data-nosnippet>329</a>    </span><span class="kw">pub </span>counted: usize,
-<a href=#330 id=330 data-nosnippet>330</a>}
-<a href=#331 id=331 data-nosnippet>331</a>
-<a href=#332 id=332 data-nosnippet>332</a><span class="kw">impl </span>RegionStatistics {
-<a href=#333 id=333 data-nosnippet>333</a>    <span class="doccomment">/// The regions split since `before`: every region visited that was
-<a href=#334 id=334 data-nosnippet>334</a>    /// neither refuted nor a leaf nor counted.
-<a href=#335 id=335 data-nosnippet>335</a>    </span><span class="attr">#[must_use]
-<a href=#336 id=336 data-nosnippet>336</a>    </span><span class="kw">pub fn </span>splits_since(<span class="self">self</span>, before: <span class="self">Self</span>) -&gt; usize {
-<a href=#337 id=337 data-nosnippet>337</a>        (<span class="self">self</span>.regions - before.regions)
-<a href=#338 id=338 data-nosnippet>338</a>            - (<span class="self">self</span>.refuted - before.refuted)
-<a href=#339 id=339 data-nosnippet>339</a>            - (<span class="self">self</span>.leaves - before.leaves)
-<a href=#340 id=340 data-nosnippet>340</a>            - (<span class="self">self</span>.counted - before.counted)
-<a href=#341 id=341 data-nosnippet>341</a>    }
-<a href=#342 id=342 data-nosnippet>342</a>}
-<a href=#343 id=343 data-nosnippet>343</a>
-<a href=#344 id=344 data-nosnippet>344</a><span class="doccomment">/// The coverage tree of a root region, walked depth first. Each region
-<a href=#345 id=345 data-nosnippet>345</a>/// carries the caller's state `S`, what the narrowing knows about the
-<a href=#346 id=346 data-nosnippet>346</a>/// region; a split clones it into both children, so that a child starts
-<a href=#347 id=347 data-nosnippet>347</a>/// from its parent's knowledge and the regions share nothing.
-<a href=#348 id=348 data-nosnippet>348</a></span><span class="attr">#[derive(Clone, Debug)]
-<a href=#349 id=349 data-nosnippet>349</a></span><span class="kw">pub struct </span>Traversal&lt;S = ()&gt; {
-<a href=#350 id=350 data-nosnippet>350</a>    <span class="doccomment">/// The regions still to visit with their state, the next on top.
-<a href=#351 id=351 data-nosnippet>351</a>    </span>regions: Vec&lt;(Region, S)&gt;,
-<a href=#352 id=352 data-nosnippet>352</a>    counting: Counting,
-<a href=#353 id=353 data-nosnippet>353</a>    <span class="doccomment">/// The root has not been visited yet; it is split whatever its narrowing.
-<a href=#354 id=354 data-nosnippet>354</a>    </span>root: bool,
-<a href=#355 id=355 data-nosnippet>355</a>    <span class="doccomment">/// The caller narrowed the root before the traversal began, so it is
-<a href=#356 id=356 data-nosnippet>356</a>    /// not narrowed again.
-<a href=#357 id=357 data-nosnippet>357</a>    </span>narrowed_root: bool,
-<a href=#358 id=358 data-nosnippet>358</a>    statistics: RegionStatistics,
-<a href=#359 id=359 data-nosnippet>359</a>}
-<a href=#360 id=360 data-nosnippet>360</a>
-<a href=#361 id=361 data-nosnippet>361</a><span class="kw">impl </span>Traversal {
-<a href=#362 id=362 data-nosnippet>362</a>    <span class="doccomment">/// A traversal of every candidate of the root, carrying nothing.
-<a href=#363 id=363 data-nosnippet>363</a>    </span><span class="attr">#[must_use]
-<a href=#364 id=364 data-nosnippet>364</a>    </span><span class="kw">pub fn </span>new(root: Region, counting: Counting) -&gt; <span class="self">Self </span>{
-<a href=#365 id=365 data-nosnippet>365</a>        <span class="self">Self</span>::with_state(root, counting, ())
-<a href=#366 id=366 data-nosnippet>366</a>    }
-<a href=#367 id=367 data-nosnippet>367</a>}
-<a href=#368 id=368 data-nosnippet>368</a>
-<a href=#369 id=369 data-nosnippet>369</a><span class="kw">impl</span>&lt;S: Clone&gt; Traversal&lt;S&gt; {
-<a href=#370 id=370 data-nosnippet>370</a>    <span class="doccomment">/// A traversal of every candidate of the root, carrying `state` with the
-<a href=#371 id=371 data-nosnippet>371</a>    /// root and a clone of a region's state with each of its children.
-<a href=#372 id=372 data-nosnippet>372</a>    </span><span class="attr">#[must_use]
-<a href=#373 id=373 data-nosnippet>373</a>    </span><span class="kw">pub fn </span>with_state(root: Region, counting: Counting, state: S) -&gt; <span class="self">Self </span>{
-<a href=#374 id=374 data-nosnippet>374</a>        <span class="self">Self </span>{
-<a href=#375 id=375 data-nosnippet>375</a>            regions: <span class="macro">vec!</span>[(root, state)],
-<a href=#376 id=376 data-nosnippet>376</a>            counting,
-<a href=#377 id=377 data-nosnippet>377</a>            root: <span class="bool-val">true</span>,
-<a href=#378 id=378 data-nosnippet>378</a>            narrowed_root: <span class="bool-val">false</span>,
-<a href=#379 id=379 data-nosnippet>379</a>            statistics: <span class="self">self</span>::RegionStatistics::default(),
-<a href=#380 id=380 data-nosnippet>380</a>        }
-<a href=#381 id=381 data-nosnippet>381</a>    }
+<a href=#309 id=309 data-nosnippet>309</a><span class="doccomment">/// The outcome of narrowing one region.
+<a href=#310 id=310 data-nosnippet>310</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+<a href=#311 id=311 data-nosnippet>311</a></span><span class="kw">pub enum </span>Narrowing {
+<a href=#312 id=312 data-nosnippet>312</a>    <span class="doccomment">/// No accepted candidate lies in the region.
+<a href=#313 id=313 data-nosnippet>313</a>    </span>Refuted,
+<a href=#314 id=314 data-nosnippet>314</a>    <span class="doccomment">/// The fixed point, and whether the narrowing decided an atom.
+<a href=#315 id=315 data-nosnippet>315</a>    </span>Fixed {
+<a href=#316 id=316 data-nosnippet>316</a>        <span class="doccomment">/// Whether any atom was decided by the narrowing.
+<a href=#317 id=317 data-nosnippet>317</a>        </span>changed: bool,
+<a href=#318 id=318 data-nosnippet>318</a>    },
+<a href=#319 id=319 data-nosnippet>319</a>}
+<a href=#320 id=320 data-nosnippet>320</a>
+<a href=#321 id=321 data-nosnippet>321</a><span class="doccomment">/// When a region is counted instead of split.
+<a href=#322 id=322 data-nosnippet>322</a></span><span class="attr">#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+<a href=#323 id=323 data-nosnippet>323</a></span><span class="kw">pub enum </span>Counting {
+<a href=#324 id=324 data-nosnippet>324</a>    <span class="doccomment">/// Every region is split until decided: the traversal visits only leaves.
+<a href=#325 id=325 data-nosnippet>325</a>    </span>Never,
+<a href=#326 id=326 data-nosnippet>326</a>    <span class="doccomment">/// A region below the root whose narrowing decided nothing is counted:
+<a href=#327 id=327 data-nosnippet>327</a>    /// its open atoms are offered to a flat counter by the caller.
+<a href=#328 id=328 data-nosnippet>328</a>    </span>Unchanged,
+<a href=#329 id=329 data-nosnippet>329</a>}
+<a href=#330 id=330 data-nosnippet>330</a>
+<a href=#331 id=331 data-nosnippet>331</a><span class="doccomment">/// One region the traversal hands to the caller, with what the caller
+<a href=#332 id=332 data-nosnippet>332</a>/// carries alongside it.
+<a href=#333 id=333 data-nosnippet>333</a></span><span class="attr">#[derive(Clone, Debug, PartialEq, Eq)]
+<a href=#334 id=334 data-nosnippet>334</a></span><span class="kw">pub enum </span>Visit&lt;S = ()&gt; {
+<a href=#335 id=335 data-nosnippet>335</a>    <span class="doccomment">/// Every atom is decided: the region is one candidate.
+<a href=#336 id=336 data-nosnippet>336</a>    </span>Leaf(Region, S),
+<a href=#337 id=337 data-nosnippet>337</a>    <span class="doccomment">/// The region's open atoms are the caller's to count.
+<a href=#338 id=338 data-nosnippet>338</a>    </span>Counted(Region, S),
+<a href=#339 id=339 data-nosnippet>339</a>}
+<a href=#340 id=340 data-nosnippet>340</a>
+<a href=#341 id=341 data-nosnippet>341</a><span class="doccomment">/// The regions a traversal visited, by outcome.
+<a href=#342 id=342 data-nosnippet>342</a></span><span class="attr">#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+<a href=#343 id=343 data-nosnippet>343</a></span><span class="kw">pub struct </span>RegionStatistics {
+<a href=#344 id=344 data-nosnippet>344</a>    <span class="doccomment">/// Regions popped and narrowed, the root included.
+<a href=#345 id=345 data-nosnippet>345</a>    </span><span class="kw">pub </span>regions: usize,
+<a href=#346 id=346 data-nosnippet>346</a>    <span class="doccomment">/// Regions whose narrowing refuted them.
+<a href=#347 id=347 data-nosnippet>347</a>    </span><span class="kw">pub </span>refuted: usize,
+<a href=#348 id=348 data-nosnippet>348</a>    <span class="doccomment">/// Regions visited as leaves: every atom decided, one candidate each.
+<a href=#349 id=349 data-nosnippet>349</a>    </span><span class="kw">pub </span>leaves: usize,
+<a href=#350 id=350 data-nosnippet>350</a>    <span class="doccomment">/// Regions handed to the caller to count.
+<a href=#351 id=351 data-nosnippet>351</a>    </span><span class="kw">pub </span>counted: usize,
+<a href=#352 id=352 data-nosnippet>352</a>}
+<a href=#353 id=353 data-nosnippet>353</a>
+<a href=#354 id=354 data-nosnippet>354</a><span class="kw">impl </span>RegionStatistics {
+<a href=#355 id=355 data-nosnippet>355</a>    <span class="doccomment">/// The regions split since `before`: every region visited that was
+<a href=#356 id=356 data-nosnippet>356</a>    /// neither refuted nor a leaf nor counted.
+<a href=#357 id=357 data-nosnippet>357</a>    </span><span class="attr">#[must_use]
+<a href=#358 id=358 data-nosnippet>358</a>    </span><span class="kw">pub fn </span>splits_since(<span class="self">self</span>, before: <span class="self">Self</span>) -&gt; usize {
+<a href=#359 id=359 data-nosnippet>359</a>        (<span class="self">self</span>.regions - before.regions)
+<a href=#360 id=360 data-nosnippet>360</a>            - (<span class="self">self</span>.refuted - before.refuted)
+<a href=#361 id=361 data-nosnippet>361</a>            - (<span class="self">self</span>.leaves - before.leaves)
+<a href=#362 id=362 data-nosnippet>362</a>            - (<span class="self">self</span>.counted - before.counted)
+<a href=#363 id=363 data-nosnippet>363</a>    }
+<a href=#364 id=364 data-nosnippet>364</a>}
+<a href=#365 id=365 data-nosnippet>365</a>
+<a href=#366 id=366 data-nosnippet>366</a><span class="doccomment">/// The coverage tree of a root region, walked depth first. Each region
+<a href=#367 id=367 data-nosnippet>367</a>/// carries the caller's state `S`, what the narrowing knows about the
+<a href=#368 id=368 data-nosnippet>368</a>/// region; a split clones it into both children, so that a child starts
+<a href=#369 id=369 data-nosnippet>369</a>/// from its parent's knowledge and the regions share nothing.
+<a href=#370 id=370 data-nosnippet>370</a></span><span class="attr">#[derive(Clone, Debug)]
+<a href=#371 id=371 data-nosnippet>371</a></span><span class="kw">pub struct </span>Traversal&lt;S = ()&gt; {
+<a href=#372 id=372 data-nosnippet>372</a>    <span class="doccomment">/// The regions still to visit with their state, the next on top.
+<a href=#373 id=373 data-nosnippet>373</a>    </span>regions: Vec&lt;(Region, S)&gt;,
+<a href=#374 id=374 data-nosnippet>374</a>    counting: Counting,
+<a href=#375 id=375 data-nosnippet>375</a>    <span class="doccomment">/// The root has not been visited yet; it is split whatever its narrowing.
+<a href=#376 id=376 data-nosnippet>376</a>    </span>root: bool,
+<a href=#377 id=377 data-nosnippet>377</a>    <span class="doccomment">/// The caller narrowed the root before the traversal began, so it is
+<a href=#378 id=378 data-nosnippet>378</a>    /// not narrowed again.
+<a href=#379 id=379 data-nosnippet>379</a>    </span>narrowed_root: bool,
+<a href=#380 id=380 data-nosnippet>380</a>    statistics: RegionStatistics,
+<a href=#381 id=381 data-nosnippet>381</a>}
 <a href=#382 id=382 data-nosnippet>382</a>
-<a href=#383 id=383 data-nosnippet>383</a>    <span class="doccomment">/// A traversal of every candidate of a root the caller has narrowed
-<a href=#384 id=384 data-nosnippet>384</a>    /// already: the root is visited without a narrowing and split whatever
-<a href=#385 id=385 data-nosnippet>385</a>    /// that narrowing reported, and every region below it is narrowed by
-<a href=#386 id=386 data-nosnippet>386</a>    /// the caller's narrowing.
-<a href=#387 id=387 data-nosnippet>387</a>    </span><span class="attr">#[must_use]
-<a href=#388 id=388 data-nosnippet>388</a>    </span><span class="kw">pub fn </span>with_narrowed_root(root: Region, counting: Counting, state: S) -&gt; <span class="self">Self </span>{
-<a href=#389 id=389 data-nosnippet>389</a>        <span class="self">Self </span>{
-<a href=#390 id=390 data-nosnippet>390</a>            narrowed_root: <span class="bool-val">true</span>,
-<a href=#391 id=391 data-nosnippet>391</a>            ..<span class="self">Self</span>::with_state(root, counting, state)
-<a href=#392 id=392 data-nosnippet>392</a>        }
-<a href=#393 id=393 data-nosnippet>393</a>    }
-<a href=#394 id=394 data-nosnippet>394</a>
-<a href=#395 id=395 data-nosnippet>395</a>    <span class="doccomment">/// The regions visited so far, by outcome.
-<a href=#396 id=396 data-nosnippet>396</a>    </span><span class="attr">#[must_use]
-<a href=#397 id=397 data-nosnippet>397</a>    </span><span class="kw">pub const fn </span>statistics(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; RegionStatistics {
-<a href=#398 id=398 data-nosnippet>398</a>        <span class="self">self</span>.statistics
-<a href=#399 id=399 data-nosnippet>399</a>    }
-<a href=#400 id=400 data-nosnippet>400</a>
-<a href=#401 id=401 data-nosnippet>401</a>    <span class="doccomment">/// Narrow regions until one is a leaf or is counted; `None` once every
-<a href=#402 id=402 data-nosnippet>402</a>    /// region has been visited. The narrowing's failure type is the caller's;
-<a href=#403 id=403 data-nosnippet>403</a>    /// a failed reservation for the split is reported as `Stop::Allocation`.
-<a href=#404 id=404 data-nosnippet>404</a>    ///
-<a href=#405 id=405 data-nosnippet>405</a>    /// # Errors
-<a href=#406 id=406 data-nosnippet>406</a>    /// A stopped narrowing stops the traversal with its region kept on the
-<a href=#407 id=407 data-nosnippet>407</a>    /// stack, so a later call narrows the same region again.
-<a href=#408 id=408 data-nosnippet>408</a>    </span><span class="kw">pub fn </span>next&lt;E: From&lt;Stop&gt;&gt;(
-<a href=#409 id=409 data-nosnippet>409</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#410 id=410 data-nosnippet>410</a>        <span class="kw-2">mut </span>narrow: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;mut </span>Region, <span class="kw-2">&amp;mut </span>S) -&gt; <span class="prelude-ty">Result</span>&lt;Narrowing, E&gt;,
-<a href=#411 id=411 data-nosnippet>411</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;Visit&lt;S&gt;&gt;, E&gt; {
-<a href=#412 id=412 data-nosnippet>412</a>        <span class="kw">loop </span>{
-<a href=#413 id=413 data-nosnippet>413</a>            <span class="kw">let </span><span class="prelude-val">Some</span>((<span class="kw-2">mut </span>region, <span class="kw-2">mut </span>state)) = <span class="self">self</span>.regions.pop() <span class="kw">else </span>{
-<a href=#414 id=414 data-nosnippet>414</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
-<a href=#415 id=415 data-nosnippet>415</a>            };
-<a href=#416 id=416 data-nosnippet>416</a>            <span class="kw">let </span>changed = <span class="kw">if </span>std::mem::take(<span class="kw-2">&amp;mut </span><span class="self">self</span>.narrowed_root) {
-<a href=#417 id=417 data-nosnippet>417</a>                <span class="bool-val">true
-<a href=#418 id=418 data-nosnippet>418</a>            </span>} <span class="kw">else </span>{
-<a href=#419 id=419 data-nosnippet>419</a>                <span class="kw">match </span>narrow(<span class="kw-2">&amp;mut </span>region, <span class="kw-2">&amp;mut </span>state) {
-<a href=#420 id=420 data-nosnippet>420</a>                    <span class="prelude-val">Ok</span>(Narrowing::Refuted) =&gt; {
-<a href=#421 id=421 data-nosnippet>421</a>                        <span class="self">self</span>.statistics.regions += <span class="number">1</span>;
-<a href=#422 id=422 data-nosnippet>422</a>                        <span class="self">self</span>.statistics.refuted += <span class="number">1</span>;
-<a href=#423 id=423 data-nosnippet>423</a>                        <span class="self">self</span>.root = <span class="bool-val">false</span>;
-<a href=#424 id=424 data-nosnippet>424</a>                        <span class="kw">continue</span>;
-<a href=#425 id=425 data-nosnippet>425</a>                    }
-<a href=#426 id=426 data-nosnippet>426</a>                    <span class="prelude-val">Ok</span>(Narrowing::Fixed { changed }) =&gt; changed,
-<a href=#427 id=427 data-nosnippet>427</a>                    <span class="prelude-val">Err</span>(stop) =&gt; {
-<a href=#428 id=428 data-nosnippet>428</a>                        <span class="self">self</span>.regions.push((region, state));
-<a href=#429 id=429 data-nosnippet>429</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(stop);
-<a href=#430 id=430 data-nosnippet>430</a>                    }
-<a href=#431 id=431 data-nosnippet>431</a>                }
-<a href=#432 id=432 data-nosnippet>432</a>            };
-<a href=#433 id=433 data-nosnippet>433</a>            <span class="self">self</span>.statistics.regions += <span class="number">1</span>;
-<a href=#434 id=434 data-nosnippet>434</a>            <span class="kw">let </span>root = std::mem::replace(<span class="kw-2">&amp;mut </span><span class="self">self</span>.root, <span class="bool-val">false</span>);
-<a href=#435 id=435 data-nosnippet>435</a>            <span class="kw">let </span><span class="prelude-val">Some</span>(atom) = region.split_atom() <span class="kw">else </span>{
-<a href=#436 id=436 data-nosnippet>436</a>                <span class="self">self</span>.statistics.leaves += <span class="number">1</span>;
-<a href=#437 id=437 data-nosnippet>437</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(Visit::Leaf(region, state)));
-<a href=#438 id=438 data-nosnippet>438</a>            };
-<a href=#439 id=439 data-nosnippet>439</a>            <span class="kw">if </span><span class="self">self</span>.counting == Counting::Unchanged &amp;&amp; !root &amp;&amp; !changed {
-<a href=#440 id=440 data-nosnippet>440</a>                <span class="self">self</span>.statistics.counted += <span class="number">1</span>;
-<a href=#441 id=441 data-nosnippet>441</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(Visit::Counted(region, state)));
-<a href=#442 id=442 data-nosnippet>442</a>            }
-<a href=#443 id=443 data-nosnippet>443</a>            <span class="kw">let </span>(cut, held) = region.split(atom);
-<a href=#444 id=444 data-nosnippet>444</a>            <span class="self">self</span>.regions
-<a href=#445 id=445 data-nosnippet>445</a>                .try_reserve(<span class="number">2</span>)
-<a href=#446 id=446 data-nosnippet>446</a>                .map_err(|<span class="kw">_</span>| E::from(Stop::Allocation))<span class="question-mark">?</span>;
-<a href=#447 id=447 data-nosnippet>447</a>            <span class="self">self</span>.regions.push((held, state.clone()));
-<a href=#448 id=448 data-nosnippet>448</a>            <span class="self">self</span>.regions.push((cut, state));
-<a href=#449 id=449 data-nosnippet>449</a>        }
-<a href=#450 id=450 data-nosnippet>450</a>    }
-<a href=#451 id=451 data-nosnippet>451</a>}
+<a href=#383 id=383 data-nosnippet>383</a><span class="kw">impl </span>Traversal {
+<a href=#384 id=384 data-nosnippet>384</a>    <span class="doccomment">/// A traversal of every candidate of the root, carrying nothing.
+<a href=#385 id=385 data-nosnippet>385</a>    </span><span class="attr">#[must_use]
+<a href=#386 id=386 data-nosnippet>386</a>    </span><span class="kw">pub fn </span>new(root: Region, counting: Counting) -&gt; <span class="self">Self </span>{
+<a href=#387 id=387 data-nosnippet>387</a>        <span class="self">Self</span>::with_state(root, counting, ())
+<a href=#388 id=388 data-nosnippet>388</a>    }
+<a href=#389 id=389 data-nosnippet>389</a>}
+<a href=#390 id=390 data-nosnippet>390</a>
+<a href=#391 id=391 data-nosnippet>391</a><span class="kw">impl</span>&lt;S: Clone&gt; Traversal&lt;S&gt; {
+<a href=#392 id=392 data-nosnippet>392</a>    <span class="doccomment">/// A traversal of every candidate of the root, carrying `state` with the
+<a href=#393 id=393 data-nosnippet>393</a>    /// root and a clone of a region's state with each of its children.
+<a href=#394 id=394 data-nosnippet>394</a>    </span><span class="attr">#[must_use]
+<a href=#395 id=395 data-nosnippet>395</a>    </span><span class="kw">pub fn </span>with_state(root: Region, counting: Counting, state: S) -&gt; <span class="self">Self </span>{
+<a href=#396 id=396 data-nosnippet>396</a>        <span class="self">Self </span>{
+<a href=#397 id=397 data-nosnippet>397</a>            regions: <span class="macro">vec!</span>[(root, state)],
+<a href=#398 id=398 data-nosnippet>398</a>            counting,
+<a href=#399 id=399 data-nosnippet>399</a>            root: <span class="bool-val">true</span>,
+<a href=#400 id=400 data-nosnippet>400</a>            narrowed_root: <span class="bool-val">false</span>,
+<a href=#401 id=401 data-nosnippet>401</a>            statistics: <span class="self">self</span>::RegionStatistics::default(),
+<a href=#402 id=402 data-nosnippet>402</a>        }
+<a href=#403 id=403 data-nosnippet>403</a>    }
+<a href=#404 id=404 data-nosnippet>404</a>
+<a href=#405 id=405 data-nosnippet>405</a>    <span class="doccomment">/// A traversal of every candidate of a root the caller has narrowed
+<a href=#406 id=406 data-nosnippet>406</a>    /// already: the root is visited without a narrowing and split whatever
+<a href=#407 id=407 data-nosnippet>407</a>    /// that narrowing reported, and every region below it is narrowed by
+<a href=#408 id=408 data-nosnippet>408</a>    /// the caller's narrowing.
+<a href=#409 id=409 data-nosnippet>409</a>    </span><span class="attr">#[must_use]
+<a href=#410 id=410 data-nosnippet>410</a>    </span><span class="kw">pub fn </span>with_narrowed_root(root: Region, counting: Counting, state: S) -&gt; <span class="self">Self </span>{
+<a href=#411 id=411 data-nosnippet>411</a>        <span class="self">Self </span>{
+<a href=#412 id=412 data-nosnippet>412</a>            narrowed_root: <span class="bool-val">true</span>,
+<a href=#413 id=413 data-nosnippet>413</a>            ..<span class="self">Self</span>::with_state(root, counting, state)
+<a href=#414 id=414 data-nosnippet>414</a>        }
+<a href=#415 id=415 data-nosnippet>415</a>    }
+<a href=#416 id=416 data-nosnippet>416</a>
+<a href=#417 id=417 data-nosnippet>417</a>    <span class="doccomment">/// The regions visited so far, by outcome.
+<a href=#418 id=418 data-nosnippet>418</a>    </span><span class="attr">#[must_use]
+<a href=#419 id=419 data-nosnippet>419</a>    </span><span class="kw">pub const fn </span>statistics(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; RegionStatistics {
+<a href=#420 id=420 data-nosnippet>420</a>        <span class="self">self</span>.statistics
+<a href=#421 id=421 data-nosnippet>421</a>    }
+<a href=#422 id=422 data-nosnippet>422</a>
+<a href=#423 id=423 data-nosnippet>423</a>    <span class="doccomment">/// Narrow regions until one is a leaf or is counted; `None` once every
+<a href=#424 id=424 data-nosnippet>424</a>    /// region has been visited. The narrowing's failure type is the caller's;
+<a href=#425 id=425 data-nosnippet>425</a>    /// a failed reservation for the split is reported as `Stop::Allocation`.
+<a href=#426 id=426 data-nosnippet>426</a>    ///
+<a href=#427 id=427 data-nosnippet>427</a>    /// # Errors
+<a href=#428 id=428 data-nosnippet>428</a>    /// A stopped narrowing stops the traversal with its region kept on the
+<a href=#429 id=429 data-nosnippet>429</a>    /// stack, so a later call narrows the same region again.
+<a href=#430 id=430 data-nosnippet>430</a>    </span><span class="kw">pub fn </span>next&lt;E: From&lt;Stop&gt;&gt;(
+<a href=#431 id=431 data-nosnippet>431</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
+<a href=#432 id=432 data-nosnippet>432</a>        <span class="kw-2">mut </span>narrow: <span class="kw">impl </span>FnMut(<span class="kw-2">&amp;mut </span>Region, <span class="kw-2">&amp;mut </span>S) -&gt; <span class="prelude-ty">Result</span>&lt;Narrowing, E&gt;,
+<a href=#433 id=433 data-nosnippet>433</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;Visit&lt;S&gt;&gt;, E&gt; {
+<a href=#434 id=434 data-nosnippet>434</a>        <span class="kw">loop </span>{
+<a href=#435 id=435 data-nosnippet>435</a>            <span class="kw">let </span><span class="prelude-val">Some</span>((<span class="kw-2">mut </span>region, <span class="kw-2">mut </span>state)) = <span class="self">self</span>.regions.pop() <span class="kw">else </span>{
+<a href=#436 id=436 data-nosnippet>436</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
+<a href=#437 id=437 data-nosnippet>437</a>            };
+<a href=#438 id=438 data-nosnippet>438</a>            <span class="kw">let </span>changed = <span class="kw">if </span>std::mem::take(<span class="kw-2">&amp;mut </span><span class="self">self</span>.narrowed_root) {
+<a href=#439 id=439 data-nosnippet>439</a>                <span class="bool-val">true
+<a href=#440 id=440 data-nosnippet>440</a>            </span>} <span class="kw">else </span>{
+<a href=#441 id=441 data-nosnippet>441</a>                <span class="kw">match </span>narrow(<span class="kw-2">&amp;mut </span>region, <span class="kw-2">&amp;mut </span>state) {
+<a href=#442 id=442 data-nosnippet>442</a>                    <span class="prelude-val">Ok</span>(Narrowing::Refuted) =&gt; {
+<a href=#443 id=443 data-nosnippet>443</a>                        <span class="self">self</span>.statistics.regions += <span class="number">1</span>;
+<a href=#444 id=444 data-nosnippet>444</a>                        <span class="self">self</span>.statistics.refuted += <span class="number">1</span>;
+<a href=#445 id=445 data-nosnippet>445</a>                        <span class="self">self</span>.root = <span class="bool-val">false</span>;
+<a href=#446 id=446 data-nosnippet>446</a>                        <span class="kw">continue</span>;
+<a href=#447 id=447 data-nosnippet>447</a>                    }
+<a href=#448 id=448 data-nosnippet>448</a>                    <span class="prelude-val">Ok</span>(Narrowing::Fixed { changed }) =&gt; changed,
+<a href=#449 id=449 data-nosnippet>449</a>                    <span class="prelude-val">Err</span>(stop) =&gt; {
+<a href=#450 id=450 data-nosnippet>450</a>                        <span class="self">self</span>.regions.push((region, state));
+<a href=#451 id=451 data-nosnippet>451</a>                        <span class="kw">return </span><span class="prelude-val">Err</span>(stop);
+<a href=#452 id=452 data-nosnippet>452</a>                    }
+<a href=#453 id=453 data-nosnippet>453</a>                }
+<a href=#454 id=454 data-nosnippet>454</a>            };
+<a href=#455 id=455 data-nosnippet>455</a>            <span class="self">self</span>.statistics.regions += <span class="number">1</span>;
+<a href=#456 id=456 data-nosnippet>456</a>            <span class="kw">let </span>root = std::mem::replace(<span class="kw-2">&amp;mut </span><span class="self">self</span>.root, <span class="bool-val">false</span>);
+<a href=#457 id=457 data-nosnippet>457</a>            <span class="kw">let </span><span class="prelude-val">Some</span>(atom) = region.split_atom() <span class="kw">else </span>{
+<a href=#458 id=458 data-nosnippet>458</a>                <span class="self">self</span>.statistics.leaves += <span class="number">1</span>;
+<a href=#459 id=459 data-nosnippet>459</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(Visit::Leaf(region, state)));
+<a href=#460 id=460 data-nosnippet>460</a>            };
+<a href=#461 id=461 data-nosnippet>461</a>            <span class="kw">if </span><span class="self">self</span>.counting == Counting::Unchanged &amp;&amp; !root &amp;&amp; !changed {
+<a href=#462 id=462 data-nosnippet>462</a>                <span class="self">self</span>.statistics.counted += <span class="number">1</span>;
+<a href=#463 id=463 data-nosnippet>463</a>                <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(Visit::Counted(region, state)));
+<a href=#464 id=464 data-nosnippet>464</a>            }
+<a href=#465 id=465 data-nosnippet>465</a>            <span class="kw">let </span>(cut, held) = region.split(atom);
+<a href=#466 id=466 data-nosnippet>466</a>            <span class="self">self</span>.regions
+<a href=#467 id=467 data-nosnippet>467</a>                .try_reserve(<span class="number">2</span>)
+<a href=#468 id=468 data-nosnippet>468</a>                .map_err(|<span class="kw">_</span>| E::from(Stop::Allocation))<span class="question-mark">?</span>;
+<a href=#469 id=469 data-nosnippet>469</a>            <span class="self">self</span>.regions.push((held, state.clone()));
+<a href=#470 id=470 data-nosnippet>470</a>            <span class="self">self</span>.regions.push((cut, state));
+<a href=#471 id=471 data-nosnippet>471</a>        }
+<a href=#472 id=472 data-nosnippet>472</a>    }
+<a href=#473 id=473 data-nosnippet>473</a>}
 </code></pre></div></section></main></body></html>

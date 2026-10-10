@@ -280,106 +280,106 @@
 <a href=#280 id=280 data-nosnippet>280</a>        RunError::Constraint(<span class="kw">_</span>) =&gt; <span class="string">"constraint"</span>,
 <a href=#281 id=281 data-nosnippet>281</a>        RunError::ConstraintFailureMissing =&gt; <span class="string">"constraint_failure_missing"</span>,
 <a href=#282 id=282 data-nosnippet>282</a>        RunError::HybridStatisticsOverflow =&gt; <span class="string">"hybrid_statistics_overflow"</span>,
-<a href=#283 id=283 data-nosnippet>283</a>        RunError::HybridBackend { .. } =&gt; <span class="string">"hybrid_backend"</span>,
-<a href=#284 id=284 data-nosnippet>284</a>        RunError::Input(<span class="kw">_</span>) =&gt; <span class="string">"input"</span>,
-<a href=#285 id=285 data-nosnippet>285</a>        RunError::TimeLimitRange { .. } =&gt; <span class="string">"time_limit_range"</span>,
-<a href=#286 id=286 data-nosnippet>286</a>        RunError::DeadlineTimer(<span class="kw">_</span>) =&gt; <span class="string">"deadline_timer"</span>,
-<a href=#287 id=287 data-nosnippet>287</a>        RunError::Observation(<span class="kw">_</span>) =&gt; <span class="string">"observation"</span>,
-<a href=#288 id=288 data-nosnippet>288</a>        RunError::Projection(<span class="kw">_</span>) =&gt; <span class="string">"answer_projection"</span>,
-<a href=#289 id=289 data-nosnippet>289</a>        RunError::JsonRecord(<span class="kw">_</span>) =&gt; <span class="string">"json_record"</span>,
-<a href=#290 id=290 data-nosnippet>290</a>        RunError::ObservationOutputLimit { .. } =&gt; <span class="string">"observation_output_limit"</span>,
-<a href=#291 id=291 data-nosnippet>291</a>        RunError::MixedStandardInput =&gt; <span class="string">"mixed_standard_input"</span>,
-<a href=#292 id=292 data-nosnippet>292</a>        RunError::Admission(<span class="kw">_</span>) =&gt; <span class="string">"admission"</span>,
-<a href=#293 id=293 data-nosnippet>293</a>        RunError::Expansion(<span class="kw">_</span>) =&gt; <span class="string">"expansion"</span>,
-<a href=#294 id=294 data-nosnippet>294</a>        RunError::BundleLoad(<span class="kw">_</span>) =&gt; <span class="string">"bundle_load"</span>,
-<a href=#295 id=295 data-nosnippet>295</a>        RunError::BundleAdmission(<span class="kw">_</span>) =&gt; <span class="string">"bundle_admission"</span>,
-<a href=#296 id=296 data-nosnippet>296</a>        RunError::Batch(<span class="kw">_</span>) =&gt; <span class="string">"batch"</span>,
-<a href=#297 id=297 data-nosnippet>297</a>        RunError::QueryObservation(<span class="kw">_</span>) =&gt; <span class="string">"query_observation"</span>,
-<a href=#298 id=298 data-nosnippet>298</a>        RunError::CompletionPool(<span class="kw">_</span>) =&gt; <span class="string">"completion_pool"</span>,
-<a href=#299 id=299 data-nosnippet>299</a>        RunError::CompletionUnavailable =&gt; <span class="string">"completion_unavailable"</span>,
-<a href=#300 id=300 data-nosnippet>300</a>        RunError::BackendUnavailable =&gt; <span class="string">"backend_unavailable"</span>,
-<a href=#301 id=301 data-nosnippet>301</a>        RunError::Executor(<span class="kw">_</span>) =&gt; <span class="string">"executor"</span>,
-<a href=#302 id=302 data-nosnippet>302</a>        RunError::UnsupportedCombination { .. } =&gt; <span class="string">"unsupported_combination"</span>,
-<a href=#303 id=303 data-nosnippet>303</a>        RunError::UnsupportedOracle { .. } =&gt; <span class="string">"unsupported_oracle"</span>,
-<a href=#304 id=304 data-nosnippet>304</a>        RunError::UnsupportedSourceBatching =&gt; <span class="string">"unsupported_source_batching"</span>,
-<a href=#305 id=305 data-nosnippet>305</a>        RunError::ClosureReservation { .. } =&gt; <span class="string">"closure_reservation"</span>,
-<a href=#306 id=306 data-nosnippet>306</a>        RunError::SharedCpu(<span class="kw">_</span>) =&gt; <span class="string">"shared_cpu"</span>,
-<a href=#307 id=307 data-nosnippet>307</a>        RunError::PreparedInput { .. } =&gt; <span class="string">"prepared_input"</span>,
-<a href=#308 id=308 data-nosnippet>308</a>        RunError::Formula(<span class="kw">_</span>) =&gt; <span class="string">"formula"</span>,
-<a href=#309 id=309 data-nosnippet>309</a>        RunError::FormulaAdmission(<span class="kw">_</span>) =&gt; <span class="string">"formula_admission"</span>,
-<a href=#310 id=310 data-nosnippet>310</a>        RunError::FormulaBundleAdmission(<span class="kw">_</span>) =&gt; <span class="string">"formula_bundle_admission"</span>,
-<a href=#311 id=311 data-nosnippet>311</a>        RunError::Output(<span class="kw">_</span>) =&gt; <span class="string">"output"</span>,
-<a href=#312 id=312 data-nosnippet>312</a>        RunError::ExecutionObservation(<span class="kw">_</span>) =&gt; <span class="string">"execution_observation"</span>,
-<a href=#313 id=313 data-nosnippet>313</a>        RunError::PublicationStopped(<span class="kw">_</span>) =&gt; <span class="string">"publication_stopped"</span>,
-<a href=#314 id=314 data-nosnippet>314</a>        RunError::Static(<span class="kw">_</span>) =&gt; <span class="string">"static"</span>,
-<a href=#315 id=315 data-nosnippet>315</a>        RunError::Words(<span class="kw">_</span>) =&gt; <span class="string">"words"</span>,
-<a href=#316 id=316 data-nosnippet>316</a>        RunError::Model(<span class="kw">_</span>) =&gt; <span class="string">"model"</span>,
-<a href=#317 id=317 data-nosnippet>317</a>        RunError::FormulaBatchShape { .. } =&gt; <span class="string">"formula_batch_shape"</span>,
-<a href=#318 id=318 data-nosnippet>318</a>        RunError::CandidateStreamNotExhausted =&gt; <span class="string">"candidate_stream_not_exhausted"</span>,
-<a href=#319 id=319 data-nosnippet>319</a>        <span class="attr">#[cfg(feature = <span class="string">"gpu"</span>)]
-<a href=#320 id=320 data-nosnippet>320</a>        </span>RunError::Gpu(<span class="kw">_</span>) =&gt; <span class="string">"gpu"</span>,
-<a href=#321 id=321 data-nosnippet>321</a>        <span class="attr">#[cfg(feature = <span class="string">"gpu"</span>)]
-<a href=#322 id=322 data-nosnippet>322</a>        </span>RunError::LazyGpu(<span class="kw">_</span>) =&gt; <span class="string">"lazy_gpu"</span>,
-<a href=#323 id=323 data-nosnippet>323</a>        RunError::LazyStatisticsOverflow =&gt; <span class="string">"lazy_statistics_overflow"</span>,
-<a href=#324 id=324 data-nosnippet>324</a>        RunError::ClosureStatisticsOverflow =&gt; <span class="string">"closure_statistics_overflow"</span>,
-<a href=#325 id=325 data-nosnippet>325</a>        RunError::ModelStatisticsOverflow =&gt; <span class="string">"model_statistics_overflow"</span>,
-<a href=#326 id=326 data-nosnippet>326</a>    }
-<a href=#327 id=327 data-nosnippet>327</a>}
-<a href=#328 id=328 data-nosnippet>328</a>
-<a href=#329 id=329 data-nosnippet>329</a><span class="kw">fn </span>reconstruction_kind(error: <span class="kw-2">&amp;</span>zetesis_themelios::ReconstructionError) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
-<a href=#330 id=330 data-nosnippet>330</a>    <span class="kw">use </span>zetesis_core::{ModelError, ModelFailure};
-<a href=#331 id=331 data-nosnippet>331</a>    <span class="kw">use </span>zetesis_themelios::{FormulaFailure, ReconstructionError};
-<a href=#332 id=332 data-nosnippet>332</a>    <span class="kw">match </span>error {
-<a href=#333 id=333 data-nosnippet>333</a>        ReconstructionError::Source(error)
-<a href=#334 id=334 data-nosnippet>334</a>        | ReconstructionError::Model(ModelFailure::Stopped(error))
-<a href=#335 id=335 data-nosnippet>335</a>            <span class="kw">if </span><span class="macro">matches!</span>(error.as_ref(), FormulaFailure::Limit { .. }) =&gt;
-<a href=#336 id=336 data-nosnippet>336</a>        {
-<a href=#337 id=337 data-nosnippet>337</a>            <span class="string">"answer_reconstruction_limit"
-<a href=#338 id=338 data-nosnippet>338</a>        </span>}
-<a href=#339 id=339 data-nosnippet>339</a>        ReconstructionError::Model(ModelFailure::Model(ModelError::Bytes { .. })) =&gt; {
-<a href=#340 id=340 data-nosnippet>340</a>            <span class="string">"answer_reconstruction_limit"
-<a href=#341 id=341 data-nosnippet>341</a>        </span>}
-<a href=#342 id=342 data-nosnippet>342</a>        <span class="kw">_ </span>=&gt; <span class="string">"answer_reconstruction"</span>,
-<a href=#343 id=343 data-nosnippet>343</a>    }
-<a href=#344 id=344 data-nosnippet>344</a>}
-<a href=#345 id=345 data-nosnippet>345</a>
-<a href=#346 id=346 data-nosnippet>346</a><span class="kw">fn </span>reason_code(reason: Interruption) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
-<a href=#347 id=347 data-nosnippet>347</a>    <span class="kw">match </span>reason {
-<a href=#348 id=348 data-nosnippet>348</a>        Interruption::ModelConstruction(reason) =&gt; <span class="kw">match </span>reason {
-<a href=#349 id=349 data-nosnippet>349</a>            zetesis_solve::ModelConstructionStop::Control(stop) =&gt; stop_code(stop),
-<a href=#350 id=350 data-nosnippet>350</a>            zetesis_solve::ModelConstructionStop::Work { .. } =&gt; <span class="string">"work_limit"</span>,
-<a href=#351 id=351 data-nosnippet>351</a>            zetesis_solve::ModelConstructionStop::Bytes { .. } =&gt; <span class="string">"bytes_limit"</span>,
-<a href=#352 id=352 data-nosnippet>352</a>        },
-<a href=#353 id=353 data-nosnippet>353</a>        Interruption::Preparation(reason)
-<a href=#354 id=354 data-nosnippet>354</a>        | Interruption::Oracle(reason)
-<a href=#355 id=355 data-nosnippet>355</a>        | Interruption::Constraint(reason)
-<a href=#356 id=356 data-nosnippet>356</a>        | Interruption::Reconstruction(reason) =&gt; stop_code(reason),
-<a href=#357 id=357 data-nosnippet>357</a>        Interruption::Countermodel(reason) =&gt; {
-<a href=#358 id=358 data-nosnippet>358</a>            <span class="kw">use </span>zetesis_sat::Incomplete;
-<a href=#359 id=359 data-nosnippet>359</a>            <span class="kw">match </span>reason {
-<a href=#360 id=360 data-nosnippet>360</a>                Incomplete::Cancelled =&gt; <span class="string">"cancelled"</span>,
-<a href=#361 id=361 data-nosnippet>361</a>                Incomplete::Deadline =&gt; <span class="string">"deadline"</span>,
-<a href=#362 id=362 data-nosnippet>362</a>                Incomplete::WorkLimit =&gt; <span class="string">"work_limit"</span>,
-<a href=#363 id=363 data-nosnippet>363</a>                Incomplete::DecisionLimit =&gt; <span class="string">"decision_limit"</span>,
-<a href=#364 id=364 data-nosnippet>364</a>                Incomplete::CandidateLimit =&gt; <span class="string">"candidate_limit"</span>,
-<a href=#365 id=365 data-nosnippet>365</a>                Incomplete::ProjectionLimit { resource, .. } =&gt; <span class="kw">match </span>resource {
-<a href=#366 id=366 data-nosnippet>366</a>                    zetesis_sat::ProjectionResource::Entries =&gt; <span class="string">"projection_entries"</span>,
-<a href=#367 id=367 data-nosnippet>367</a>                    zetesis_sat::ProjectionResource::Nodes =&gt; <span class="string">"projection_nodes"</span>,
-<a href=#368 id=368 data-nosnippet>368</a>                    zetesis_sat::ProjectionResource::Bytes =&gt; <span class="string">"projection_bytes"</span>,
-<a href=#369 id=369 data-nosnippet>369</a>                },
-<a href=#370 id=370 data-nosnippet>370</a>                Incomplete::PendingBytes =&gt; <span class="string">"pending_bytes"</span>,
-<a href=#371 id=371 data-nosnippet>371</a>                Incomplete::CompletionScratch =&gt; <span class="string">"completion_scratch"</span>,
-<a href=#372 id=372 data-nosnippet>372</a>                Incomplete::ReductStorage { .. } =&gt; <span class="string">"reduct_storage"</span>,
-<a href=#373 id=373 data-nosnippet>373</a>                Incomplete::BatchCandidateLimit =&gt; <span class="string">"batch_candidate_limit"</span>,
-<a href=#374 id=374 data-nosnippet>374</a>                Incomplete::PendingBatch =&gt; <span class="string">"pending_batch"</span>,
-<a href=#375 id=375 data-nosnippet>375</a>                Incomplete::Allocation =&gt; <span class="string">"allocation"</span>,
-<a href=#376 id=376 data-nosnippet>376</a>                Incomplete::WorkerPanicked =&gt; <span class="string">"worker_panicked"</span>,
-<a href=#377 id=377 data-nosnippet>377</a>                Incomplete::Admission(<span class="kw">_</span>) =&gt; <span class="string">"admission"</span>,
-<a href=#378 id=378 data-nosnippet>378</a>                Incomplete::WrongTheory =&gt; <span class="string">"wrong_theory"</span>,
-<a href=#379 id=379 data-nosnippet>379</a>                Incomplete::RestrictionUniverse { .. } =&gt; <span class="string">"restriction_universe"</span>,
-<a href=#380 id=380 data-nosnippet>380</a>                Incomplete::ClosedEnumerator =&gt; <span class="string">"closed_enumerator"</span>,
-<a href=#381 id=381 data-nosnippet>381</a>                Incomplete::LateCertificate =&gt; <span class="string">"late_certificate"</span>,
-<a href=#382 id=382 data-nosnippet>382</a>                Incomplete::RegionFilter =&gt; <span class="string">"region_filter"</span>,
+<a href=#283 id=283 data-nosnippet>283</a>        RunError::Input(<span class="kw">_</span>) =&gt; <span class="string">"input"</span>,
+<a href=#284 id=284 data-nosnippet>284</a>        RunError::TimeLimitRange { .. } =&gt; <span class="string">"time_limit_range"</span>,
+<a href=#285 id=285 data-nosnippet>285</a>        RunError::DeadlineTimer(<span class="kw">_</span>) =&gt; <span class="string">"deadline_timer"</span>,
+<a href=#286 id=286 data-nosnippet>286</a>        RunError::Observation(<span class="kw">_</span>) =&gt; <span class="string">"observation"</span>,
+<a href=#287 id=287 data-nosnippet>287</a>        RunError::Projection(<span class="kw">_</span>) =&gt; <span class="string">"answer_projection"</span>,
+<a href=#288 id=288 data-nosnippet>288</a>        RunError::JsonRecord(<span class="kw">_</span>) =&gt; <span class="string">"json_record"</span>,
+<a href=#289 id=289 data-nosnippet>289</a>        RunError::ObservationOutputLimit { .. } =&gt; <span class="string">"observation_output_limit"</span>,
+<a href=#290 id=290 data-nosnippet>290</a>        RunError::MixedStandardInput =&gt; <span class="string">"mixed_standard_input"</span>,
+<a href=#291 id=291 data-nosnippet>291</a>        RunError::Admission(<span class="kw">_</span>) =&gt; <span class="string">"admission"</span>,
+<a href=#292 id=292 data-nosnippet>292</a>        RunError::Expansion(<span class="kw">_</span>) =&gt; <span class="string">"expansion"</span>,
+<a href=#293 id=293 data-nosnippet>293</a>        RunError::BundleLoad(<span class="kw">_</span>) =&gt; <span class="string">"bundle_load"</span>,
+<a href=#294 id=294 data-nosnippet>294</a>        RunError::BundleAdmission(<span class="kw">_</span>) =&gt; <span class="string">"bundle_admission"</span>,
+<a href=#295 id=295 data-nosnippet>295</a>        RunError::Batch(<span class="kw">_</span>) =&gt; <span class="string">"batch"</span>,
+<a href=#296 id=296 data-nosnippet>296</a>        RunError::QueryObservation(<span class="kw">_</span>) =&gt; <span class="string">"query_observation"</span>,
+<a href=#297 id=297 data-nosnippet>297</a>        RunError::CompletionPool(<span class="kw">_</span>) =&gt; <span class="string">"completion_pool"</span>,
+<a href=#298 id=298 data-nosnippet>298</a>        RunError::CompletionUnavailable =&gt; <span class="string">"completion_unavailable"</span>,
+<a href=#299 id=299 data-nosnippet>299</a>        RunError::BackendUnavailable =&gt; <span class="string">"backend_unavailable"</span>,
+<a href=#300 id=300 data-nosnippet>300</a>        RunError::Executor(<span class="kw">_</span>) =&gt; <span class="string">"executor"</span>,
+<a href=#301 id=301 data-nosnippet>301</a>        RunError::UnsupportedCombination { .. } =&gt; <span class="string">"unsupported_combination"</span>,
+<a href=#302 id=302 data-nosnippet>302</a>        RunError::UnsupportedOracle { .. } =&gt; <span class="string">"unsupported_oracle"</span>,
+<a href=#303 id=303 data-nosnippet>303</a>        RunError::UnsupportedSourceBatching =&gt; <span class="string">"unsupported_source_batching"</span>,
+<a href=#304 id=304 data-nosnippet>304</a>        RunError::ClosureReservation { .. } =&gt; <span class="string">"closure_reservation"</span>,
+<a href=#305 id=305 data-nosnippet>305</a>        RunError::SharedCpu(<span class="kw">_</span>) =&gt; <span class="string">"shared_cpu"</span>,
+<a href=#306 id=306 data-nosnippet>306</a>        RunError::PreparedInput { .. } =&gt; <span class="string">"prepared_input"</span>,
+<a href=#307 id=307 data-nosnippet>307</a>        RunError::Formula(<span class="kw">_</span>) =&gt; <span class="string">"formula"</span>,
+<a href=#308 id=308 data-nosnippet>308</a>        RunError::FormulaAdmission(<span class="kw">_</span>) =&gt; <span class="string">"formula_admission"</span>,
+<a href=#309 id=309 data-nosnippet>309</a>        RunError::FormulaBundleAdmission(<span class="kw">_</span>) =&gt; <span class="string">"formula_bundle_admission"</span>,
+<a href=#310 id=310 data-nosnippet>310</a>        RunError::Output(<span class="kw">_</span>) =&gt; <span class="string">"output"</span>,
+<a href=#311 id=311 data-nosnippet>311</a>        RunError::ExecutionObservation(<span class="kw">_</span>) =&gt; <span class="string">"execution_observation"</span>,
+<a href=#312 id=312 data-nosnippet>312</a>        RunError::PublicationStopped(<span class="kw">_</span>) =&gt; <span class="string">"publication_stopped"</span>,
+<a href=#313 id=313 data-nosnippet>313</a>        RunError::Static(<span class="kw">_</span>) =&gt; <span class="string">"static"</span>,
+<a href=#314 id=314 data-nosnippet>314</a>        RunError::Words(<span class="kw">_</span>) =&gt; <span class="string">"words"</span>,
+<a href=#315 id=315 data-nosnippet>315</a>        RunError::Model(<span class="kw">_</span>) =&gt; <span class="string">"model"</span>,
+<a href=#316 id=316 data-nosnippet>316</a>        RunError::FormulaBatchShape { .. } =&gt; <span class="string">"formula_batch_shape"</span>,
+<a href=#317 id=317 data-nosnippet>317</a>        RunError::CandidateStreamNotExhausted =&gt; <span class="string">"candidate_stream_not_exhausted"</span>,
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="attr">#[cfg(feature = <span class="string">"gpu"</span>)]
+<a href=#319 id=319 data-nosnippet>319</a>        </span>RunError::Gpu(<span class="kw">_</span>) =&gt; <span class="string">"gpu"</span>,
+<a href=#320 id=320 data-nosnippet>320</a>        <span class="attr">#[cfg(feature = <span class="string">"gpu"</span>)]
+<a href=#321 id=321 data-nosnippet>321</a>        </span>RunError::LazyGpu(<span class="kw">_</span>) =&gt; <span class="string">"lazy_gpu"</span>,
+<a href=#322 id=322 data-nosnippet>322</a>        RunError::LazyStatisticsOverflow =&gt; <span class="string">"lazy_statistics_overflow"</span>,
+<a href=#323 id=323 data-nosnippet>323</a>        RunError::ClosureStatisticsOverflow =&gt; <span class="string">"closure_statistics_overflow"</span>,
+<a href=#324 id=324 data-nosnippet>324</a>        RunError::ModelStatisticsOverflow =&gt; <span class="string">"model_statistics_overflow"</span>,
+<a href=#325 id=325 data-nosnippet>325</a>    }
+<a href=#326 id=326 data-nosnippet>326</a>}
+<a href=#327 id=327 data-nosnippet>327</a>
+<a href=#328 id=328 data-nosnippet>328</a><span class="kw">fn </span>reconstruction_kind(error: <span class="kw-2">&amp;</span>zetesis_themelios::ReconstructionError) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
+<a href=#329 id=329 data-nosnippet>329</a>    <span class="kw">use </span>zetesis_core::{ModelError, ModelFailure};
+<a href=#330 id=330 data-nosnippet>330</a>    <span class="kw">use </span>zetesis_themelios::{FormulaFailure, ReconstructionError};
+<a href=#331 id=331 data-nosnippet>331</a>    <span class="kw">match </span>error {
+<a href=#332 id=332 data-nosnippet>332</a>        ReconstructionError::Source(error)
+<a href=#333 id=333 data-nosnippet>333</a>        | ReconstructionError::Model(ModelFailure::Stopped(error))
+<a href=#334 id=334 data-nosnippet>334</a>            <span class="kw">if </span><span class="macro">matches!</span>(error.as_ref(), FormulaFailure::Limit { .. }) =&gt;
+<a href=#335 id=335 data-nosnippet>335</a>        {
+<a href=#336 id=336 data-nosnippet>336</a>            <span class="string">"answer_reconstruction_limit"
+<a href=#337 id=337 data-nosnippet>337</a>        </span>}
+<a href=#338 id=338 data-nosnippet>338</a>        ReconstructionError::Model(ModelFailure::Model(ModelError::Bytes { .. })) =&gt; {
+<a href=#339 id=339 data-nosnippet>339</a>            <span class="string">"answer_reconstruction_limit"
+<a href=#340 id=340 data-nosnippet>340</a>        </span>}
+<a href=#341 id=341 data-nosnippet>341</a>        <span class="kw">_ </span>=&gt; <span class="string">"answer_reconstruction"</span>,
+<a href=#342 id=342 data-nosnippet>342</a>    }
+<a href=#343 id=343 data-nosnippet>343</a>}
+<a href=#344 id=344 data-nosnippet>344</a>
+<a href=#345 id=345 data-nosnippet>345</a><span class="kw">fn </span>reason_code(reason: Interruption) -&gt; <span class="kw-2">&amp;</span><span class="lifetime">'static </span>str {
+<a href=#346 id=346 data-nosnippet>346</a>    <span class="kw">match </span>reason {
+<a href=#347 id=347 data-nosnippet>347</a>        Interruption::ModelConstruction(reason) =&gt; <span class="kw">match </span>reason {
+<a href=#348 id=348 data-nosnippet>348</a>            zetesis_solve::ModelConstructionStop::Control(stop) =&gt; stop_code(stop),
+<a href=#349 id=349 data-nosnippet>349</a>            zetesis_solve::ModelConstructionStop::Work { .. } =&gt; <span class="string">"work_limit"</span>,
+<a href=#350 id=350 data-nosnippet>350</a>            zetesis_solve::ModelConstructionStop::Bytes { .. } =&gt; <span class="string">"bytes_limit"</span>,
+<a href=#351 id=351 data-nosnippet>351</a>        },
+<a href=#352 id=352 data-nosnippet>352</a>        Interruption::Preparation(reason)
+<a href=#353 id=353 data-nosnippet>353</a>        | Interruption::Oracle(reason)
+<a href=#354 id=354 data-nosnippet>354</a>        | Interruption::Constraint(reason)
+<a href=#355 id=355 data-nosnippet>355</a>        | Interruption::Reconstruction(reason) =&gt; stop_code(reason),
+<a href=#356 id=356 data-nosnippet>356</a>        Interruption::Countermodel(reason) =&gt; {
+<a href=#357 id=357 data-nosnippet>357</a>            <span class="kw">use </span>zetesis_sat::Incomplete;
+<a href=#358 id=358 data-nosnippet>358</a>            <span class="kw">match </span>reason {
+<a href=#359 id=359 data-nosnippet>359</a>                Incomplete::Cancelled =&gt; <span class="string">"cancelled"</span>,
+<a href=#360 id=360 data-nosnippet>360</a>                Incomplete::Deadline =&gt; <span class="string">"deadline"</span>,
+<a href=#361 id=361 data-nosnippet>361</a>                Incomplete::WorkLimit =&gt; <span class="string">"work_limit"</span>,
+<a href=#362 id=362 data-nosnippet>362</a>                Incomplete::DecisionLimit =&gt; <span class="string">"decision_limit"</span>,
+<a href=#363 id=363 data-nosnippet>363</a>                Incomplete::CandidateLimit =&gt; <span class="string">"candidate_limit"</span>,
+<a href=#364 id=364 data-nosnippet>364</a>                Incomplete::ProjectionLimit { resource, .. } =&gt; <span class="kw">match </span>resource {
+<a href=#365 id=365 data-nosnippet>365</a>                    zetesis_sat::ProjectionResource::Entries =&gt; <span class="string">"projection_entries"</span>,
+<a href=#366 id=366 data-nosnippet>366</a>                    zetesis_sat::ProjectionResource::Nodes =&gt; <span class="string">"projection_nodes"</span>,
+<a href=#367 id=367 data-nosnippet>367</a>                    zetesis_sat::ProjectionResource::Bytes =&gt; <span class="string">"projection_bytes"</span>,
+<a href=#368 id=368 data-nosnippet>368</a>                },
+<a href=#369 id=369 data-nosnippet>369</a>                Incomplete::PendingBytes =&gt; <span class="string">"pending_bytes"</span>,
+<a href=#370 id=370 data-nosnippet>370</a>                Incomplete::CompletionScratch =&gt; <span class="string">"completion_scratch"</span>,
+<a href=#371 id=371 data-nosnippet>371</a>                Incomplete::ReductStorage { .. } =&gt; <span class="string">"reduct_storage"</span>,
+<a href=#372 id=372 data-nosnippet>372</a>                Incomplete::BatchCandidateLimit =&gt; <span class="string">"batch_candidate_limit"</span>,
+<a href=#373 id=373 data-nosnippet>373</a>                Incomplete::PendingBatch =&gt; <span class="string">"pending_batch"</span>,
+<a href=#374 id=374 data-nosnippet>374</a>                Incomplete::Allocation =&gt; <span class="string">"allocation"</span>,
+<a href=#375 id=375 data-nosnippet>375</a>                Incomplete::WorkerPanicked =&gt; <span class="string">"worker_panicked"</span>,
+<a href=#376 id=376 data-nosnippet>376</a>                Incomplete::Admission(<span class="kw">_</span>) =&gt; <span class="string">"admission"</span>,
+<a href=#377 id=377 data-nosnippet>377</a>                Incomplete::WrongTheory =&gt; <span class="string">"wrong_theory"</span>,
+<a href=#378 id=378 data-nosnippet>378</a>                Incomplete::RestrictionUniverse { .. } =&gt; <span class="string">"restriction_universe"</span>,
+<a href=#379 id=379 data-nosnippet>379</a>                Incomplete::ClosedEnumerator =&gt; <span class="string">"closed_enumerator"</span>,
+<a href=#380 id=380 data-nosnippet>380</a>                Incomplete::LateCertificate =&gt; <span class="string">"late_certificate"</span>,
+<a href=#381 id=381 data-nosnippet>381</a>                Incomplete::RegionFilter =&gt; <span class="string">"region_filter"</span>,
+<a href=#382 id=382 data-nosnippet>382</a>                Incomplete::InvalidRegionConsequence =&gt; <span class="string">"invalid_region_consequence"</span>,
 <a href=#383 id=383 data-nosnippet>383</a>                Incomplete::RegionFilterUnsupported =&gt; <span class="string">"region_filter_unsupported"</span>,
 <a href=#384 id=384 data-nosnippet>384</a>                Incomplete::LateRegionFilter =&gt; <span class="string">"late_region_filter"</span>,
 <a href=#385 id=385 data-nosnippet>385</a>                Incomplete::RegionFilterAlreadySet =&gt; <span class="string">"region_filter_already_set"</span>,

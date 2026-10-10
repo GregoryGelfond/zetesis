@@ -60,7 +60,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .countermodel_statistics()
         .and_then(|statistics| statistics.region_filter)
         .ok_or("missing source region receipt")?;
-    assert!(regions.refuted > 0);
+    // Source consequences prevent the forbidden combinations before splitting.
+    assert_eq!(regions.refuted, 0);
+    assert!(regions.checks > 0);
     Ok(())
 }
 // ANCHOR_END: example

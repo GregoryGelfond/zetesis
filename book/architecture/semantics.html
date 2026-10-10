@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-86489835.js";
+            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1ecb55d0.js"></script>
+        <script src="../toc-2436da5c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -248,6 +248,29 @@ its countermodel search to proper subsets.</p>
 aggregates. These constructs require their own source-to-formula preservation
 arguments. Classical equivalence of two aggregate expressions is insufficient:
 the replacement must preserve the required frozen-reduct behavior as well.</p>
+<h2 id="evaluate-stratified-normal-programs-directly"><a class="header" href="#evaluate-stratified-normal-programs-directly">Evaluate stratified normal programs directly</a></h2>
+<p>When positive dependencies stay within or below a component and every negative
+dependency reaches an earlier component, normal producers determine one
+interpretation. Complete each positive fixed point before consulting its absence
+in a later component:</p>
+<pre><code class="language-text">completed := empty interpretation
+for component in dependency order:
+    freeze negative literals using completed predecessors
+    completed := completed union least consequences of this component
+check every original constraint in completed
+</code></pre>
+<p>This is a specialization of the reduct definition. Positive cycles are allowed;
+negative cycles are not. Constraints may exclude the computed interpretation but
+cannot create another answer. Tightness alone does not justify this algorithm:
+<code>a :- not b. b :- not a.</code> is tight and has two answer sets.</p>
+<p><code>StratifiedPlan</code> checks the complete original formula theory. It admits atomic
+facts and atomic-head rules with conjunctions of atoms, falsum, truth and single
+default-negated atoms. It rejects choices and more general producer formulas.
+Signed dependencies and queued positive propagation use the original atom IDs
+and formula graph; the result retains its original theory owner. The
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StratifiedEvaluation.lean">stratified evaluation proof</a>
+establishes the mathematical reduct argument. Recognition of the Rust grammar
+and correspondence of its component schedule remain implementation obligations.</p>
 <h2 id="membership-enumeration-and-optimization"><a class="header" href="#membership-enumeration-and-optimization">Membership, enumeration, and optimization</a></h2>
 <p>Membership answers whether one candidate is an answer set. Enumeration also
 requires complete candidate coverage. A verified answer can be returned before

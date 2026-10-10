@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-86489835.js";
+            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1ecb55d0.js"></script>
+        <script src="../toc-2436da5c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -261,15 +261,44 @@ on the open atom the narrowing found most constrained, cut branch first;
 a region with every atom decided is a leaf, and a leaf is a classical model, since at a full decision every
 root is sure or never (<code>FormulaBounds.decided_leaf_models</code>). The leaf
 is the candidate the reduct decides.
-The knowledge of a region holds in every region inside it
+Once a step proves a region contradictory, narrowing discards it without
+visiting the remaining operands, parents or support wakeups. Work accounting
+covers the visited prefix; cleanup still settles worker receipts. Partial
+knowledge from a refuted or interrupted closure is not reused as a completed
+closure. This stopping rule applies to the region decision: operations returning
+a complete truth vector or least closure must still construct that result.</p>
+<p>The knowledge of a region holds in every region inside it
 (<code>FormulaBounds.known_mono</code>), so a split hands each child a copy of its
 parent’s knowledge and the child learns only what the split decided; the
 regions still share nothing. The readings are arrays over the DAG, and the
 regions partition the space exactly, so generation has the closure route’s
 shape: data-parallel work inside a region and share-nothing regions beside
-one another. A candidate-only restriction narrows the regions still to visit
+one another. The node-sure, node-never, atom-sure, atom-never, seen and chain-witness masks
+occupy disjoint spans of one owned word block. Narrowing splits that block once
+into borrowed slices; child copies remain independent and include every span,
+its boundaries, both counter arrays and the seeded state. A chain counts its
+processed neutral operands exactly: false for a disjunction, true for a
+conjunction. Its witness bit records a processed operand at the opposite,
+absorbing polarity. Propagation needs that witness’s existence, not its count.
+Queued events contribute neither count nor witness; this distinction preserves
+the original ordered scans and work charges.
+The counter arrays choose one width for the lifetime of a knowledge: <code>u16</code>,
+<code>u32</code> or native width, according to a bound on each cell. That bound includes
+all parent occurrences of all nodes carrying an atom, rather than the total
+size of the theory. Narrow cells reduce the bytes copied with each child.
+The witness replaces one counter per chain with one packed bit, subject to
+final-word padding. Allocation and retained-header costs remain part of memory
+accounting. The arrays retain their existing infallible allocation boundary. A candidate-only
+restriction narrows the regions still to visit
 without a restart, and no exclusion index is kept, because a leaf is visited
-once. The traversal itself is one operation in <code>zetesis-cpu</code>, shared by both
+once. Propagation under the original theory, permanent restrictions and current
+bound repeats to a shared fixed point before one split ranking. That ranking
+uses the active bound when present, otherwise the latest permanent restriction,
+otherwise the original theory. Its open atom with the most unknown parents is
+preferred, with ties going to the lowest atom. The packed region masks enumerate
+open atoms in ascending order, excluding decided atoms and unused final bits;
+each inspected parent count spends one work permit.
+The traversal itself is one operation in <code>zetesis-cpu</code>, shared by both
 routes when one worker walks; with several workers the formula route walks
 the same tree in <code>zetesis-sat</code>’s parallel regions, each worker owning a stack
 of regions and a shared pool offering regions to idle workers. The closure
@@ -315,6 +344,14 @@ joins before membership begins, so these stages share one cumulative work
 allowance without concurrent resets. This schedule does not overlap production
 with device execution. Pending-byte limits cover candidate transport, not the
 entire region frontier, thread stacks or process memory.</p>
+<p>The executor and its producer slots persist between batches. Each slot keeps
+its narrowing worklists and, when needed, one checker for the immutable source.
+Slots are used exclusively, may move between executor threads and number at
+most the requested workers. The retained checker borrows one stable owner;
+stopping or completing production drops the checkers before that owner.
+Candidate truth and support knowledge still travel with each region, so reuse
+does not transfer deductions between unrelated candidates. The coordinator’s
+separate singleton validation can still prepare a checker per operation.</p>
 <p>The original CPU <code>with_region_workers</code> operation remains useful when each
 worker should perform both operations. The two schedules share the original
 formula readings, support conditions, candidate partitions and reduct semantics.

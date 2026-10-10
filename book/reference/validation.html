@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-86489835.js";
+            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-1ecb55d0.js"></script>
+        <script src="../toc-2436da5c.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -327,7 +327,7 @@ Neither participates in production answer-set search.</p>
 <h2 id="read-coverage-and-hardware-reports"><a class="header" href="#read-coverage-and-hardware-reports">Read coverage and hardware reports</a></h2>
 <p>The hardware gate selects Metal on macOS and Vulkan elsewhere. Override the
 selection with <code>scripts/check.sh hardware --metal</code> or <code>--vulkan</code>.
-Each backend has a reviewed selection of 59 exact tests in 14 groups.
+Each backend has a reviewed selection of 63 exact tests in 14 groups.
 This includes complete terminal-definition reconstruction over device-verified
 base answers, compared with eager CPU answer sets and the original output queries.
 Logs and status files are retained under <code>target/hardware</code>.</p>
@@ -341,7 +341,7 @@ construction and closure against an independent ordered-set reference, tight and
 general formula checking, resource refusal, reusable sessions, and completed
 table joins composed with GPU checking. Formula tests do not replace the
 <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware.rs">static shader tests</a>.
-The <a href="coverage-0.4.0.html">0.4.0 coverage snapshot</a> records the selected Metal tests
+The <a href="coverage-0.5.0.html">0.5.0 coverage snapshot</a> records the selected Metal tests
 within workspace coverage. The <a href="coverage-0.3.0.html">0.3.0 snapshot</a> retains its
 earlier source and separate physical qualification.</p>
 <p>Coverage always has two separately instrumented populations:</p>
@@ -388,7 +388,7 @@ recently qualified source identified below. It is a recorded local measurement,
 not a live hosted-CI status. It does not use the combined portable-plus-Metal
 percentage. A release version does not change the source identity or test
 population of that measurement.
-The <a href="coverage-0.4.0.html">coverage and Metal qualification record</a> holds the exact
+The <a href="coverage-0.5.0.html">coverage and Metal qualification record</a> holds the exact
 counts, source-content manifest, qualification scope and reproduction command.</p>
 <p>Update the badge and the snapshot record together only after qualification
 completes. Line coverage identifies executed Rust lines; it does not establish

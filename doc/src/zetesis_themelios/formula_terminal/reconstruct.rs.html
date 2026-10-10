@@ -361,65 +361,59 @@
 <a href=#361 id=361 data-nosnippet>361</a>        <span class="kw-2">*</span>plan = <span class="prelude-val">Some</span>(built);
 <a href=#362 id=362 data-nosnippet>362</a>    }
 <a href=#363 id=363 data-nosnippet>363</a>    work.location = prepared.location;
-<a href=#364 id=364 data-nosnippet>364</a>    <span class="kw">let </span><span class="kw-2">mut </span>atoms = model.atoms().iter();
-<a href=#365 id=365 data-nosnippet>365</a>    <span class="kw">for _ in </span><span class="number">0</span>..atoms.len() {
-<a href=#366 id=366 data-nosnippet>366</a>        work.permit()<span class="question-mark">?</span>;
-<a href=#367 id=367 data-nosnippet>367</a>        <span class="kw">let </span>atom = atoms.next().expect(<span class="string">"checked immutable model length"</span>);
-<a href=#368 id=368 data-nosnippet>368</a>        <span class="kw">let </span>limits = work.limits;
-<a href=#369 id=369 data-nosnippet>369</a>        <span class="kw">let </span>location = work.location;
-<a href=#370 id=370 data-nosnippet>370</a>        work.atoms(<span class="kw-2">&amp;mut </span>writer, |writer, bound, counters| {
-<a href=#371 id=371 data-nosnippet>371</a>            writer
-<a href=#372 id=372 data-nosnippet>372</a>                .entry_atom_with(atom, bound, || counters.work(limits, location))<span class="question-mark">?
-<a href=#373 id=373 data-nosnippet>373</a>                </span>.insert_with(bound, || counters.work(limits, location))
-<a href=#374 id=374 data-nosnippet>374</a>        })<span class="question-mark">?</span>;
-<a href=#375 id=375 data-nosnippet>375</a>    }
-<a href=#376 id=376 data-nosnippet>376</a>    plan.as_ref()
-<a href=#377 id=377 data-nosnippet>377</a>        .expect(<span class="string">"a complete immutable plan was published"</span>)
-<a href=#378 id=378 data-nosnippet>378</a>        .derive(model, <span class="kw-2">&amp;mut </span>writer, <span class="kw-2">&amp;mut </span>work)<span class="question-mark">?</span>;
-<a href=#379 id=379 data-nosnippet>379</a>    work.location = prepared.location;
-<a href=#380 id=380 data-nosnippet>380</a>    publish(<span class="kw-2">&amp;mut </span>writer, <span class="kw-2">&amp;mut </span>work)
-<a href=#381 id=381 data-nosnippet>381</a>}
-<a href=#382 id=382 data-nosnippet>382</a>
-<a href=#383 id=383 data-nosnippet>383</a><span class="kw">fn </span>publish(writer: <span class="kw-2">&amp;mut </span>AtomInterner, work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Model, ReconstructionError&gt; {
-<a href=#384 id=384 data-nosnippet>384</a>    <span class="kw">let </span>limits = work.limits;
-<a href=#385 id=385 data-nosnippet>385</a>    <span class="kw">let </span>location = work.location;
-<a href=#386 id=386 data-nosnippet>386</a>    work.atoms(writer, |writer, bound, counters| {
-<a href=#387 id=387 data-nosnippet>387</a>        writer.commit_with(bound, || counters.work(limits, location))
-<a href=#388 id=388 data-nosnippet>388</a>    })<span class="question-mark">?</span>;
-<a href=#389 id=389 data-nosnippet>389</a>    <span class="kw">let </span>order = work.atoms(writer, |writer, bound, counters| {
-<a href=#390 id=390 data-nosnippet>390</a>        writer.ordered_ids_with(bound, || counters.work(limits, location))
-<a href=#391 id=391 data-nosnippet>391</a>    })<span class="question-mark">?</span>;
-<a href=#392 id=392 data-nosnippet>392</a>    <span class="kw">let </span><span class="kw-2">mut </span>order_lease = work.counters.lease();
-<a href=#393 id=393 data-nosnippet>393</a>    order_lease.observe(
-<a href=#394 id=394 data-nosnippet>394</a>        size_of_val(<span class="kw-2">&amp;</span>order) + order.capacity() * size_of::&lt;usize&gt;(),
-<a href=#395 id=395 data-nosnippet>395</a>        location,
-<a href=#396 id=396 data-nosnippet>396</a>    )<span class="question-mark">?</span>;
-<a href=#397 id=397 data-nosnippet>397</a>    work.observe(writer.storage_bytes())<span class="question-mark">?</span>;
-<a href=#398 id=398 data-nosnippet>398</a>    <span class="kw">let </span>catalog = work.atoms(writer, |writer, bound, counters| {
-<a href=#399 id=399 data-nosnippet>399</a>        writer.publish_selection_with(<span class="kw-2">&amp;</span>order, bound, || counters.work(limits, location))
-<a href=#400 id=400 data-nosnippet>400</a>    })<span class="question-mark">?</span>;
-<a href=#401 id=401 data-nosnippet>401</a>    <span class="kw">let </span><span class="kw-2">mut </span>output_lease = work.counters.lease();
-<a href=#402 id=402 data-nosnippet>402</a>    output_lease.observe(
-<a href=#403 id=403 data-nosnippet>403</a>        usize::try_from(catalog.publication_bytes())
-<a href=#404 id=404 data-nosnippet>404</a>            .map_err(|<span class="kw">_</span>| <span class="kw">super</span>::storage::overflow(location))<span class="question-mark">?</span>,
-<a href=#405 id=405 data-nosnippet>405</a>        location,
-<a href=#406 id=406 data-nosnippet>406</a>    )<span class="question-mark">?</span>;
-<a href=#407 id=407 data-nosnippet>407</a>    drop(order);
-<a href=#408 id=408 data-nosnippet>408</a>    drop(order_lease);
-<a href=#409 id=409 data-nosnippet>409</a>    <span class="kw">let </span>remaining = work.remaining(writer.storage_bytes())<span class="question-mark">?</span>;
-<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">let </span>result =
-<a href=#411 id=411 data-nosnippet>411</a>        Model::publish_ordered_catalog_with(catalog, remaining, || work.permit().map_err(Box::new));
-<a href=#412 id=412 data-nosnippet>412</a>    <span class="kw">let </span>peak = <span class="kw">match </span><span class="kw-2">&amp;</span>result {
-<a href=#413 id=413 data-nosnippet>413</a>        <span class="prelude-val">Ok</span>(model) =&gt; model.selection_bytes(),
-<a href=#414 id=414 data-nosnippet>414</a>        <span class="prelude-val">Err</span>(error) =&gt; error.peak_bytes(),
-<a href=#415 id=415 data-nosnippet>415</a>    };
-<a href=#416 id=416 data-nosnippet>416</a>    <span class="kw">let </span>observed = work.observe(writer.storage_bytes() + peak);
-<a href=#417 id=417 data-nosnippet>417</a>    <span class="kw">let </span>model = result.map_err(|error| ReconstructionError::Model(error.into_parts().<span class="number">0</span>))<span class="question-mark">?</span>;
-<a href=#418 id=418 data-nosnippet>418</a>    observed<span class="question-mark">?</span>;
-<a href=#419 id=419 data-nosnippet>419</a>    work.permit()<span class="question-mark">?</span>;
-<a href=#420 id=420 data-nosnippet>420</a>    <span class="prelude-val">Ok</span>(model)
-<a href=#421 id=421 data-nosnippet>421</a>}
-<a href=#422 id=422 data-nosnippet>422</a>
-<a href=#423 id=423 data-nosnippet>423</a><span class="attr">#[cfg(test)]
-<a href=#424 id=424 data-nosnippet>424</a></span><span class="kw">mod </span>tests;
+<a href=#364 id=364 data-nosnippet>364</a>    <span class="kw">let </span>location = work.location;
+<a href=#365 id=365 data-nosnippet>365</a>    work.atoms(<span class="kw-2">&amp;mut </span>writer, |writer, bound, counters| {
+<a href=#366 id=366 data-nosnippet>366</a>        writer.discover_model_with(<span class="kw-2">&amp;</span>prepared.closed.storage, model, bound, || {
+<a href=#367 id=367 data-nosnippet>367</a>            counters.work(limits, location)
+<a href=#368 id=368 data-nosnippet>368</a>        })
+<a href=#369 id=369 data-nosnippet>369</a>    })<span class="question-mark">?</span>;
+<a href=#370 id=370 data-nosnippet>370</a>    plan.as_ref()
+<a href=#371 id=371 data-nosnippet>371</a>        .expect(<span class="string">"a complete immutable plan was published"</span>)
+<a href=#372 id=372 data-nosnippet>372</a>        .derive(model, <span class="kw-2">&amp;mut </span>writer, <span class="kw-2">&amp;mut </span>work)<span class="question-mark">?</span>;
+<a href=#373 id=373 data-nosnippet>373</a>    work.location = prepared.location;
+<a href=#374 id=374 data-nosnippet>374</a>    publish(<span class="kw-2">&amp;mut </span>writer, <span class="kw-2">&amp;mut </span>work)
+<a href=#375 id=375 data-nosnippet>375</a>}
+<a href=#376 id=376 data-nosnippet>376</a>
+<a href=#377 id=377 data-nosnippet>377</a><span class="kw">fn </span>publish(writer: <span class="kw-2">&amp;mut </span>AtomInterner, work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Model, ReconstructionError&gt; {
+<a href=#378 id=378 data-nosnippet>378</a>    <span class="kw">let </span>limits = work.limits;
+<a href=#379 id=379 data-nosnippet>379</a>    <span class="kw">let </span>location = work.location;
+<a href=#380 id=380 data-nosnippet>380</a>    work.atoms(writer, |writer, bound, counters| {
+<a href=#381 id=381 data-nosnippet>381</a>        writer.commit_with(bound, || counters.work(limits, location))
+<a href=#382 id=382 data-nosnippet>382</a>    })<span class="question-mark">?</span>;
+<a href=#383 id=383 data-nosnippet>383</a>    <span class="kw">let </span>order = work.atoms(writer, |writer, bound, counters| {
+<a href=#384 id=384 data-nosnippet>384</a>        writer.ordered_ids_with(bound, || counters.work(limits, location))
+<a href=#385 id=385 data-nosnippet>385</a>    })<span class="question-mark">?</span>;
+<a href=#386 id=386 data-nosnippet>386</a>    <span class="kw">let </span><span class="kw-2">mut </span>order_lease = work.counters.lease();
+<a href=#387 id=387 data-nosnippet>387</a>    order_lease.observe(
+<a href=#388 id=388 data-nosnippet>388</a>        size_of_val(<span class="kw-2">&amp;</span>order) + order.capacity() * size_of::&lt;usize&gt;(),
+<a href=#389 id=389 data-nosnippet>389</a>        location,
+<a href=#390 id=390 data-nosnippet>390</a>    )<span class="question-mark">?</span>;
+<a href=#391 id=391 data-nosnippet>391</a>    work.observe(writer.storage_bytes())<span class="question-mark">?</span>;
+<a href=#392 id=392 data-nosnippet>392</a>    <span class="kw">let </span>catalog = work.atoms(writer, |writer, bound, counters| {
+<a href=#393 id=393 data-nosnippet>393</a>        writer.publish_selection_with(<span class="kw-2">&amp;</span>order, bound, || counters.work(limits, location))
+<a href=#394 id=394 data-nosnippet>394</a>    })<span class="question-mark">?</span>;
+<a href=#395 id=395 data-nosnippet>395</a>    <span class="kw">let </span><span class="kw-2">mut </span>output_lease = work.counters.lease();
+<a href=#396 id=396 data-nosnippet>396</a>    output_lease.observe(
+<a href=#397 id=397 data-nosnippet>397</a>        usize::try_from(catalog.publication_bytes())
+<a href=#398 id=398 data-nosnippet>398</a>            .map_err(|<span class="kw">_</span>| <span class="kw">super</span>::storage::overflow(location))<span class="question-mark">?</span>,
+<a href=#399 id=399 data-nosnippet>399</a>        location,
+<a href=#400 id=400 data-nosnippet>400</a>    )<span class="question-mark">?</span>;
+<a href=#401 id=401 data-nosnippet>401</a>    drop(order);
+<a href=#402 id=402 data-nosnippet>402</a>    drop(order_lease);
+<a href=#403 id=403 data-nosnippet>403</a>    <span class="kw">let </span>remaining = work.remaining(writer.storage_bytes())<span class="question-mark">?</span>;
+<a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">let </span>result =
+<a href=#405 id=405 data-nosnippet>405</a>        Model::publish_ordered_catalog_with(catalog, remaining, || work.permit().map_err(Box::new));
+<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">let </span>peak = <span class="kw">match </span><span class="kw-2">&amp;</span>result {
+<a href=#407 id=407 data-nosnippet>407</a>        <span class="prelude-val">Ok</span>(model) =&gt; model.selection_bytes(),
+<a href=#408 id=408 data-nosnippet>408</a>        <span class="prelude-val">Err</span>(error) =&gt; error.peak_bytes(),
+<a href=#409 id=409 data-nosnippet>409</a>    };
+<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">let </span>observed = work.observe(writer.storage_bytes() + peak);
+<a href=#411 id=411 data-nosnippet>411</a>    <span class="kw">let </span>model = result.map_err(|error| ReconstructionError::Model(error.into_parts().<span class="number">0</span>))<span class="question-mark">?</span>;
+<a href=#412 id=412 data-nosnippet>412</a>    observed<span class="question-mark">?</span>;
+<a href=#413 id=413 data-nosnippet>413</a>    work.permit()<span class="question-mark">?</span>;
+<a href=#414 id=414 data-nosnippet>414</a>    <span class="prelude-val">Ok</span>(model)
+<a href=#415 id=415 data-nosnippet>415</a>}
+<a href=#416 id=416 data-nosnippet>416</a>
+<a href=#417 id=417 data-nosnippet>417</a><span class="attr">#[cfg(test)]
+<a href=#418 id=418 data-nosnippet>418</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>

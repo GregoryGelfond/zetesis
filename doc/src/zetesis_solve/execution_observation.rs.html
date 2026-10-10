@@ -164,64 +164,68 @@
 <a href=#164 id=164 data-nosnippet>164</a>    <span class="doccomment">/// Complete positive atomic-head classification and least consequences enable
 <a href=#165 id=165 data-nosnippet>165</a>    /// the unique-answer restriction; original constraints remain authoritative.
 <a href=#166 id=166 data-nosnippet>166</a>    </span>PositiveMembership,
-<a href=#167 id=167 data-nosnippet>167</a>    <span class="doccomment">/// General reduct checking remains after an optional certificate refusal.
-<a href=#168 id=168 data-nosnippet>168</a>    </span>GeneralMembership(zetesis_sat::CertificateError),
-<a href=#169 id=169 data-nosnippet>169</a>    <span class="doccomment">/// Optional objective-plan preparation was refused; exact search remains.
-<a href=#170 id=170 data-nosnippet>170</a>    </span>ObjectiveUnavailable(ObjectiveBoundError),
-<a href=#171 id=171 data-nosnippet>171</a>    <span class="doccomment">/// Optional objective-bound construction was refused; exact search remains.
-<a href=#172 id=172 data-nosnippet>172</a>    </span>ObjectiveBoundStopped(ObjectiveBoundError),
-<a href=#173 id=173 data-nosnippet>173</a>    <span class="doccomment">/// A bound failed the original-theory ownership check.
-<a href=#174 id=174 data-nosnippet>174</a>    </span>ObjectiveTheoryMismatch,
-<a href=#175 id=175 data-nosnippet>175</a>    <span class="doccomment">/// Candidate restriction was refused; prior restrictions remain sound.
-<a href=#176 id=176 data-nosnippet>176</a>    </span>ObjectiveRestrictionStopped(zetesis_sat::Incomplete),
-<a href=#177 id=177 data-nosnippet>177</a>    <span class="doccomment">/// A dominance bound was installed after retaining a verified incumbent.
-<a href=#178 id=178 data-nosnippet>178</a>    </span>ObjectiveBound {
-<a href=#179 id=179 data-nosnippet>179</a>        <span class="doccomment">/// Cumulative installed restriction count.
-<a href=#180 id=180 data-nosnippet>180</a>        </span>restrictions: u64,
-<a href=#181 id=181 data-nosnippet>181</a>        <span class="doccomment">/// Incumbent priority/cost pairs.
-<a href=#182 id=182 data-nosnippet>182</a>        </span>costs: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[(i32, i64)],
-<a href=#183 id=183 data-nosnippet>183</a>        <span class="doccomment">/// Cumulative charged construction work.
-<a href=#184 id=184 data-nosnippet>184</a>        </span>work: u64,
-<a href=#185 id=185 data-nosnippet>185</a>    },
-<a href=#186 id=186 data-nosnippet>186</a>}
-<a href=#187 id=187 data-nosnippet>187</a>
-<a href=#188 id=188 data-nosnippet>188</a><span class="doccomment">/// Synchronous observations of one session's execution boundaries.
-<a href=#189 id=189 data-nosnippet>189</a>///
-<a href=#190 id=190 data-nosnippet>190</a>/// Each call is scoped to the session being initialized or pulled. The solver
-<a href=#191 id=191 data-nosnippet>191</a>/// borrows this observer only for that operation, does not retain events and
-<a href=#192 id=192 data-nosnippet>192</a>/// never treats an observer's error as a device failure or semantic evidence.
-<a href=#193 id=193 data-nosnippet>193</a>/// Failure stops the operation before its next execution step; a failed pull
-<a href=#194 id=194 data-nosnippet>194</a>/// leaves the session terminal and preserves its already checked prefix. The
-<a href=#195 id=195 data-nosnippet>195</a>/// callback controls its own effects, cancellation and resource use. Panics are
-<a href=#196 id=196 data-nosnippet>196</a>/// not caught. Returning an error cannot undo effects the callback already made.
-<a href=#197 id=197 data-nosnippet>197</a></span><span class="kw">pub trait </span>ExecutionObserver {
-<a href=#198 id=198 data-nosnippet>198</a>    <span class="doccomment">/// External observation failure, retained as the source of the solve fault.
-<a href=#199 id=199 data-nosnippet>199</a>    </span><span class="kw">type </span>Error: Error + Send + Sync + <span class="lifetime">'static</span>;
-<a href=#200 id=200 data-nosnippet>200</a>
-<a href=#201 id=201 data-nosnippet>201</a>    <span class="doccomment">/// Consume an observation before the next execution step.
-<a href=#202 id=202 data-nosnippet>202</a>    ///
-<a href=#203 id=203 data-nosnippet>203</a>    /// # Errors
-<a href=#204 id=204 data-nosnippet>204</a>    /// Return an external failure to stop the current operation.
-<a href=#205 id=205 data-nosnippet>205</a>    </span><span class="kw">fn </span>observe(<span class="kw-2">&amp;mut </span><span class="self">self</span>, observation: ExecutionObservation&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="self">Self</span>::Error&gt;;
-<a href=#206 id=206 data-nosnippet>206</a>}
-<a href=#207 id=207 data-nosnippet>207</a>
-<a href=#208 id=208 data-nosnippet>208</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">trait </span>ExecutionSink {
-<a href=#209 id=209 data-nosnippet>209</a>    <span class="kw">fn </span>record(<span class="kw-2">&amp;mut </span><span class="self">self</span>, observation: ExecutionObservation&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), SolveError&gt;;
+<a href=#167 id=167 data-nosnippet>167</a>    <span class="doccomment">/// Complete original stratified normal theory determines at most one answer.
+<a href=#168 id=168 data-nosnippet>168</a>    </span>StratifiedMembership,
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="doccomment">/// General reduct checking remains after an optional certificate refusal.
+<a href=#170 id=170 data-nosnippet>170</a>    </span>GeneralMembership(zetesis_sat::CertificateError),
+<a href=#171 id=171 data-nosnippet>171</a>    <span class="doccomment">/// Optional objective-plan preparation was refused; exact search remains.
+<a href=#172 id=172 data-nosnippet>172</a>    </span>ObjectiveUnavailable(ObjectiveBoundError),
+<a href=#173 id=173 data-nosnippet>173</a>    <span class="doccomment">/// Required-choice strengthening declined; the exact objective plan remains usable.
+<a href=#174 id=174 data-nosnippet>174</a>    </span>ChoiceObjectiveBoundUnavailable(ObjectiveBoundError),
+<a href=#175 id=175 data-nosnippet>175</a>    <span class="doccomment">/// Optional objective-bound construction was refused; exact search remains.
+<a href=#176 id=176 data-nosnippet>176</a>    </span>ObjectiveBoundStopped(ObjectiveBoundError),
+<a href=#177 id=177 data-nosnippet>177</a>    <span class="doccomment">/// A bound failed the original-theory ownership check.
+<a href=#178 id=178 data-nosnippet>178</a>    </span>ObjectiveTheoryMismatch,
+<a href=#179 id=179 data-nosnippet>179</a>    <span class="doccomment">/// Candidate restriction was refused; prior restrictions remain sound.
+<a href=#180 id=180 data-nosnippet>180</a>    </span>ObjectiveRestrictionStopped(zetesis_sat::Incomplete),
+<a href=#181 id=181 data-nosnippet>181</a>    <span class="doccomment">/// A dominance bound was installed after retaining a verified incumbent.
+<a href=#182 id=182 data-nosnippet>182</a>    </span>ObjectiveBound {
+<a href=#183 id=183 data-nosnippet>183</a>        <span class="doccomment">/// Cumulative installed restriction count.
+<a href=#184 id=184 data-nosnippet>184</a>        </span>restrictions: u64,
+<a href=#185 id=185 data-nosnippet>185</a>        <span class="doccomment">/// Incumbent priority/cost pairs.
+<a href=#186 id=186 data-nosnippet>186</a>        </span>costs: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>[(i32, i64)],
+<a href=#187 id=187 data-nosnippet>187</a>        <span class="doccomment">/// Cumulative charged construction work.
+<a href=#188 id=188 data-nosnippet>188</a>        </span>work: u64,
+<a href=#189 id=189 data-nosnippet>189</a>    },
+<a href=#190 id=190 data-nosnippet>190</a>}
+<a href=#191 id=191 data-nosnippet>191</a>
+<a href=#192 id=192 data-nosnippet>192</a><span class="doccomment">/// Synchronous observations of one session's execution boundaries.
+<a href=#193 id=193 data-nosnippet>193</a>///
+<a href=#194 id=194 data-nosnippet>194</a>/// Each call is scoped to the session being initialized or pulled. The solver
+<a href=#195 id=195 data-nosnippet>195</a>/// borrows this observer only for that operation, does not retain events and
+<a href=#196 id=196 data-nosnippet>196</a>/// never treats an observer's error as a device failure or semantic evidence.
+<a href=#197 id=197 data-nosnippet>197</a>/// Failure stops the operation before its next execution step; a failed pull
+<a href=#198 id=198 data-nosnippet>198</a>/// leaves the session terminal and preserves its already checked prefix. The
+<a href=#199 id=199 data-nosnippet>199</a>/// callback controls its own effects, cancellation and resource use. Panics are
+<a href=#200 id=200 data-nosnippet>200</a>/// not caught. Returning an error cannot undo effects the callback already made.
+<a href=#201 id=201 data-nosnippet>201</a></span><span class="kw">pub trait </span>ExecutionObserver {
+<a href=#202 id=202 data-nosnippet>202</a>    <span class="doccomment">/// External observation failure, retained as the source of the solve fault.
+<a href=#203 id=203 data-nosnippet>203</a>    </span><span class="kw">type </span>Error: Error + Send + Sync + <span class="lifetime">'static</span>;
+<a href=#204 id=204 data-nosnippet>204</a>
+<a href=#205 id=205 data-nosnippet>205</a>    <span class="doccomment">/// Consume an observation before the next execution step.
+<a href=#206 id=206 data-nosnippet>206</a>    ///
+<a href=#207 id=207 data-nosnippet>207</a>    /// # Errors
+<a href=#208 id=208 data-nosnippet>208</a>    /// Return an external failure to stop the current operation.
+<a href=#209 id=209 data-nosnippet>209</a>    </span><span class="kw">fn </span>observe(<span class="kw-2">&amp;mut </span><span class="self">self</span>, observation: ExecutionObservation&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), <span class="self">Self</span>::Error&gt;;
 <a href=#210 id=210 data-nosnippet>210</a>}
 <a href=#211 id=211 data-nosnippet>211</a>
-<a href=#212 id=212 data-nosnippet>212</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Ignore;
-<a href=#213 id=213 data-nosnippet>213</a><span class="kw">impl </span>ExecutionSink <span class="kw">for </span>Ignore {
-<a href=#214 id=214 data-nosnippet>214</a>    <span class="kw">fn </span>record(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: ExecutionObservation&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), SolveError&gt; {
-<a href=#215 id=215 data-nosnippet>215</a>        <span class="prelude-val">Ok</span>(())
-<a href=#216 id=216 data-nosnippet>216</a>    }
-<a href=#217 id=217 data-nosnippet>217</a>}
-<a href=#218 id=218 data-nosnippet>218</a>
-<a href=#219 id=219 data-nosnippet>219</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Observer&lt;<span class="lifetime">'a</span>, O&gt;(<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>O);
-<a href=#220 id=220 data-nosnippet>220</a><span class="kw">impl</span>&lt;O: ExecutionObserver&gt; ExecutionSink <span class="kw">for </span>Observer&lt;<span class="lifetime">'_</span>, O&gt; {
-<a href=#221 id=221 data-nosnippet>221</a>    <span class="kw">fn </span>record(<span class="kw-2">&amp;mut </span><span class="self">self</span>, observation: ExecutionObservation&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), SolveError&gt; {
-<a href=#222 id=222 data-nosnippet>222</a>        <span class="self">self</span>.<span class="number">0
-<a href=#223 id=223 data-nosnippet>223</a>            </span>.observe(observation)
-<a href=#224 id=224 data-nosnippet>224</a>            .map_err(|error| SolveError::ExecutionObservation(Box::new(error)))
-<a href=#225 id=225 data-nosnippet>225</a>    }
-<a href=#226 id=226 data-nosnippet>226</a>}
+<a href=#212 id=212 data-nosnippet>212</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">trait </span>ExecutionSink {
+<a href=#213 id=213 data-nosnippet>213</a>    <span class="kw">fn </span>record(<span class="kw-2">&amp;mut </span><span class="self">self</span>, observation: ExecutionObservation&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), SolveError&gt;;
+<a href=#214 id=214 data-nosnippet>214</a>}
+<a href=#215 id=215 data-nosnippet>215</a>
+<a href=#216 id=216 data-nosnippet>216</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Ignore;
+<a href=#217 id=217 data-nosnippet>217</a><span class="kw">impl </span>ExecutionSink <span class="kw">for </span>Ignore {
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">fn </span>record(<span class="kw-2">&amp;mut </span><span class="self">self</span>, <span class="kw">_</span>: ExecutionObservation&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), SolveError&gt; {
+<a href=#219 id=219 data-nosnippet>219</a>        <span class="prelude-val">Ok</span>(())
+<a href=#220 id=220 data-nosnippet>220</a>    }
+<a href=#221 id=221 data-nosnippet>221</a>}
+<a href=#222 id=222 data-nosnippet>222</a>
+<a href=#223 id=223 data-nosnippet>223</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">struct </span>Observer&lt;<span class="lifetime">'a</span>, O&gt;(<span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw-2">&amp;</span><span class="lifetime">'a </span><span class="kw-2">mut </span>O);
+<a href=#224 id=224 data-nosnippet>224</a><span class="kw">impl</span>&lt;O: ExecutionObserver&gt; ExecutionSink <span class="kw">for </span>Observer&lt;<span class="lifetime">'_</span>, O&gt; {
+<a href=#225 id=225 data-nosnippet>225</a>    <span class="kw">fn </span>record(<span class="kw-2">&amp;mut </span><span class="self">self</span>, observation: ExecutionObservation&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;(), SolveError&gt; {
+<a href=#226 id=226 data-nosnippet>226</a>        <span class="self">self</span>.<span class="number">0
+<a href=#227 id=227 data-nosnippet>227</a>            </span>.observe(observation)
+<a href=#228 id=228 data-nosnippet>228</a>            .map_err(|error| SolveError::ExecutionObservation(Box::new(error)))
+<a href=#229 id=229 data-nosnippet>229</a>    }
+<a href=#230 id=230 data-nosnippet>230</a>}
 </code></pre></div></section></main></body></html>
