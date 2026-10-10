@@ -602,9 +602,9 @@ integer range. This overapproximates correlations and uses no scalar comparison
 as a premise. Unknown or mixed domains and possible overflow decline the
 certificate; no Cartesian table of arithmetic results is retained. The checked
 interval transfers are shared with keyed-rewrite safety. Resource and owner failures
-remain located failures. Only success for every expression permits ordinary
-prefix pruning. A reached prefix may still contain a value absent from its later
-covering column; its arithmetic failures retain the ordinary deferred handling.
+remain located failures. Only success for every expression permits this
+certified selection. A reached prefix may still contain a value absent from its
+later covering column; its arithmetic failures retain the ordinary deferred handling.
 Evidence cursors always traverse complete rows.
 
 Hybrid capture and later model/region checks use this same preparation and

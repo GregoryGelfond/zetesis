@@ -7,6 +7,16 @@ their own source revisions, workloads and measurement conditions.
 
 ## Recorded comparisons
 
+The [10 October CPU corpus comparison](cpu-corpus-20261010.md) measures all
+94 cases before and after the final combined propagation, objective-preparation
+and arithmetic-checking changes. Automatic grounding's summed wall medians rise
+1.83%, to 755.324 ms against the paired clingo's 830.639 ms. Explicit lazy/hybrid
+grounding falls 51.90%, to 2,299.372 ms against 813.247 ms for its paired clingo.
+Win counts remain four and three respectively; most individual cases favor
+clingo. Full tables preserve both reference campaigns, stages, memory and
+reproduction commands. This compares a candidate with its preceding checkpoint,
+not the cumulative changes since released 0.4.0.
+
 The [7 October 2026 CPU corpus comparison](cpu-corpus-20261007.md) records all
 94 cases for a 0.4.0 release-preparation candidate: 729.179 ms against
 804.916 ms for clingo in summed three-run medians, with 4 native wins.

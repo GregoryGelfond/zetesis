@@ -175,8 +175,9 @@ Regions are the default method; the
 clauses remain a method a session may select.
 `Statistics::regions` reports regions visited, refuted and reached as leaves,
 propagations (a node learned and its parents revisited, a chain learning by
-one counter step, or an atom's support rechecked), atoms held and cut, whether the support cut applied, and
-the reading work, and `Statistics::reduct.regions` the same for the reduct
+one counter or witness step, or an atom's support rechecked), atoms held and cut,
+whether the support cut applied, and the reading work, and
+`Statistics::reduct.regions` the same for the reduct
 queries; `candidate_queries` and the projection history stay zero,
 since no classical query is asked and no exclusion index is kept. Laws:
 `FormulaBounds.lean` for the readings, the closure's rules and the leaf

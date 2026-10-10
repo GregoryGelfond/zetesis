@@ -116,6 +116,19 @@ different scopes; none alone certifies the complete Rust/WGSL implementation.
 See [validation](../reference/validation.md) and
 [proof correspondence](../lean/correspondence.md) before extending those claims.
 
+## Migrating from 0.4.0
+
+Lazy formula grounding now accepts objectives and GPU backends. The `zetesis`
+facade remains CPU enumeration of unscored, unprojected answer sets; these
+additions belong to the native session API and CLI.
+
+| Previous use | Migration |
+| --- | --- |
+| `zetesis_sat::RegionFilterWorker` with thread-local scratch | The worker must implement `Send`: retained checkers can move between executor threads. Each checker remains exclusive to its enumeration. This callback is not part of the `zetesis` facade. |
+| Matching `HybridFeature::Objectives` | Remove that arm; lazy formula admission now supports objectives. The `TableJoins` refusal remains. |
+| Matching `SolveError::HybridBackend`, its CLI counterpart or JSON `hybrid_backend` | Remove that obsolete refusal. Hybrid sessions accept GPU backends; device availability and resource failures remain typed errors. |
+| Reading `ConstraintAllowance::statistics()` during an active check | Treat each field as settled charges, which may omit ongoing work. Fields are read independently. Totals are exact after operations settle or workers join, up to saturation; check-local and failure statistics remain exact. |
+
 ## Migrating from 0.3.0
 
 Version 0.4.0 changes resource configuration and several direct library interfaces.
@@ -140,7 +153,6 @@ limits remain available for an explicitly bounded operation.
 | Narrowing with separate theory/producer/truth arguments and per-read callbacks | Pass `OriginalSubject` or `FrozenSubject` and reusable `NarrowingScratch`. Quota variants use `NarrowingQuota`; `narrow_known_metered` and `narrow_frozen_known_metered` are removed. |
 | `AtomTable::index` as an identity-recording operation | It performs structural lookup; the record encoder owns identity recording. `AtomIdentityMap::retain_held` releases unneeded owners. |
 | Native benchmark execution fields for workers, completion, batch and work caps | Use `NativeExecution::{threads, memory_bytes, time_limit_seconds}` with algorithm choices. New records identify the requested ordinary policy; historical report readers retain earlier fields. |
-| Native `zetesis_sat::RegionFilterWorker` with thread-local scratch | The worker must implement `Send`: joined candidate production retains each exclusive checker between batches and can move it between executor threads. This internal callback is not part of the `zetesis` facade. |
 
 Formula work includes logical operand occurrences, even inline pairs. Reused
 validation omits only scans actually avoided; raw input still receives complete

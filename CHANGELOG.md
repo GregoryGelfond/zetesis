@@ -22,6 +22,12 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Store propagation evidence for conjunctions and disjunctions with one count
+  and a packed flag, preserving the order of deductions.
+- Prepare the weights for choice-based objective bounds once and share their
+  compiler with exact bounds, preserving exact fallback and optimal ties.
+- Use checked numeric bounds to enable incremental lazy constraint checks for
+  eligible sums and differences, preserving arithmetic errors.
 - Use required choices to bound unavoidable objective costs before all choices
   are decided, preserving optimal ties and the original reduct checks.
 - Reuse completed filtering of short relation lookups during lazy grounding,

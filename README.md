@@ -93,8 +93,9 @@ all tied optima; without it, the default displays one optimum.
 
 Execution defaults to CPU and uses lazy grounding where supported. For formula
 programs, automatic grounding can defer eligible definitions until their answers
-are known; other rules are grounded eagerly. Explicit lazy CPU execution can stream
-eligible constraints while retaining their producer core. See the
+are known; other rules are grounded eagerly. Explicit lazy execution can stream
+eligible constraints while checking their formula core on the selected CPU or
+GPU. Source joins and streamed constraint checks run on the host. See the
 [grounding profiles](https://gregorygelfond.github.io/zetesis/book/architecture/grounding.html#eager-and-lazy-execution)
 for the current limits. Use `zetesis devices` to list GPU devices and
 `--backend gpu` to run on the GPU: Metal on macOS, Vulkan on Linux.
@@ -107,19 +108,20 @@ See `zetesis help solve`, or add `--advanced` for all execution and output optio
 
 ## Performance at a glance
 
-CPU measurements on an Apple M4 Pro compare zetesis 0.4.0
+CPU measurements on an Apple M4 Pro compare zetesis
 with **14 threads** against clingo 5.8.2 with
-**one thread**. Both enumerate every answer or every tied optimum. Each value
+**one thread**. Automatic grounding was eager on these cases.
+Both enumerate every answer or every tied optimum. Each value
 is the median of three complete command-line runs, including startup, parsing,
 grounding, solving and captured output; zetesis statistics are enabled.
 
 | Workload | zetesis | clingo | Comparison |
 | --- | ---: | ---: | --- |
-| [Task allocation, larger instance](examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 28.74 ms | 181.34 ms | zetesis 6.31× faster |
-| [Eight queens, variant 2](examples/correctness/standalone/n-queens/variant-02.lp) | 31.58 ms | 118.36 ms | zetesis 3.75× faster |
-| [SEND + MORE = MONEY](examples/correctness/standalone/send-money/send-money.lp) | 12.84 ms | 11.48 ms | clingo 1.12× faster |
-| [Eight queens, variant 1](examples/correctness/standalone/n-queens/variant-01.lp) | 12.81 ms | 5.19 ms | clingo 2.47× faster |
-| **All 94 programs: sum of per-case medians** | **729.179 ms** | **804.916 ms** | **zetesis 1.10× faster on the sum** |
+| [Task allocation, larger instance](examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 30.54 ms | 197.88 ms | zetesis 6.48× faster |
+| [Eight queens, variant 2](examples/correctness/standalone/n-queens/variant-02.lp) | 29.42 ms | 128.31 ms | zetesis 4.36× faster |
+| [SEND + MORE = MONEY](examples/correctness/standalone/send-money/send-money.lp) | 13.86 ms | 12.21 ms | clingo 1.14× faster |
+| [Eight queens, variant 1](examples/correctness/standalone/n-queens/variant-01.lp) | 10.80 ms | 6.21 ms | clingo 1.74× faster |
+| **All 94 programs: sum of per-case medians** | **755.324 ms** | **830.639 ms** | **zetesis 1.10× faster on the sum** |
 
 zetesis is faster on **4 of 94 cases**; clingo is faster on 90. A few
 substantial wins reduce the total; most cases favor clingo. The total sums
@@ -128,7 +130,7 @@ agreed on shown answers and costs, including optimum ties.
 
 These observations depend on the workload and machine; three repetitions do
 not establish a general speedup. clingo's parallel modes and GPU performance
-are outside this comparison. The [complete results](https://gregorygelfond.github.io/zetesis/book/reference/cpu-corpus-20261007.html)
+are outside this comparison. The [complete results](https://gregorygelfond.github.io/zetesis/book/reference/cpu-corpus-20261010.html)
 retain all 94 cases, the measured binary/source identities, limits and
 reproduction commands.
 
@@ -145,6 +147,8 @@ It prepares a bounded task-choice program, streams typed `AnswerSet` values,
 distinguishes full interpretations from `#show`, and checks complete search.
 The [library quickstart](https://gregorygelfond.github.io/zetesis/book/rust/getting-started.html) includes the full
 program and dependency setup for your own application.
+The `zetesis` facade provides CPU enumeration; the native session API also
+supports GPU checking and optimization.
 
 ## Documentation
 
