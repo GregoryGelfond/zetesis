@@ -1,8 +1,8 @@
 {
   "schema": "zetesis.refinement.evaluation.native.check.v1",
-  "checkedOn": "2026-10-07",
+  "checkedOn": "2026-10-10",
   "sourceReplay": {
-    "workspaceVersion": "0.4.0",
+    "workspaceVersion": "0.5.0",
     "command": [
       "sh",
       "native-replay/replay.sh",
@@ -11,13 +11,13 @@
     "workingDirectory": "refinement/evaluation",
     "outputDirectory": "The placeholder denotes the actual new external output directory; its machine-local absolute path is omitted.",
     "exitCode": 0,
-    "combinedOutputSha256": "a10549c8ef4130e453653069d7bbbdd23e73577ee7c8f946315813ad87e9271b",
-    "rawSha256": "5a6ad8a96e417a3bc5e979df003120f7190c5d8777d3b89f191020551a02945e",
-    "normalizedSourceSha256": "91bf2bf73a2a30a3445328c834eb6a9853700123a0f6a31e87a217acdaa62586",
-    "translationInputSha256": "203f6aaf05911572df32080e7ea0a91dab6ebfc1356a63c648382e5908e7878a",
-    "scope": "Replay checked all eight embedded Rust input hashes, restored the complete normalized and parsed raw extraction through the guarded inverse, and reproduced retained Native/Types.lean and provider-free Native/Funs.lean byte-for-byte. Borrowed controls and their conversion replace the owning control inside tight Work; the same external models and providers are retained."
+    "combinedOutputSha256": "9ee9b5f6e4ff1c50f8e60498a36bff974dcb91c477d6605d7f3dbab656a6db39",
+    "rawSha256": "58119c7c74316d3fdedc3b2d136a831c4f1a13ba2a1e8761ede9ee9bbb725033",
+    "normalizedSourceSha256": "30ea8100bdbad05dc5bf8eb90683022c4b75b73a7ed2e4ac5d141a1c45dcc404",
+    "translationInputSha256": "7470dffea8994841b9481f175971ffbac9bacb1251bdccd737a8d33fbb8e61d8",
+    "scope": "Replay checked all eight embedded Rust input hashes, restored the complete normalized and parsed raw extraction through the guarded inverse, and reproduced retained Native/Types.lean and provider-free Native/Funs.lean byte-for-byte. Recorded roots, external models and providers are unchanged."
   },
-  "scope": "Current-source replay of regenerated native operations, full default package build and strict complete native axiom audit. Borrowing conversion and borrowed polling are proved; the owning poll contract and covered endpoints are preserved. Historical Evaluator artifacts and their recorded scope are unchanged.",
+  "scope": "Current-source replay of regenerated native operations, full default package build and strict complete native axiom audit. Source and generated position records are refreshed; recorded semantic endpoints, external models and provider contracts are unchanged. Tight evaluation and arithmetic totality changes remain outside this extracted scope. Historical Evaluator artifacts and their scope are unchanged.",
   "leanVersion": "4.31.0",
   "lakeExecutableSha256": "58261a1a2fa1a362376c71e02ca854a093e71cc5e6ea64b287a931cb2565273d",
   "commandPaths": "Package-relative executable spelling below identifies the actual resident pinned Lake binary by hash; no machine-local path is required.",
@@ -29,7 +29,7 @@
       ],
       "workingDirectory": "refinement/evaluation",
       "exitCode": 0,
-      "stdoutSha256": "22c02f91fb8b2dffa38441e3805afdbc9eff549e47370c26f8019adbde88df3b",
+      "stdoutSha256": "80fc8ac4fda954eff28592bde9748f05f0f3884ff90fda9c732490d86c067ec7",
       "scope": "Incremental full default package build completed successfully against refreshed generated native definitions and authored proofs, reusing the pinned dependency cache. This is not a clean dependency rebuild.",
       "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     },
@@ -50,7 +50,7 @@
     }
   ],
   "artifactInventory": "native-artifacts.sha256",
-  "artifactInventorySha256": "b3a92f1fb2f1c7169af3535a1961ee46ec996f2151525312f09edaad328c5f8b",
+  "artifactInventorySha256": "cb31d18852a4e8df2132043d5009e8527c34c6629c99ff740cc54177db6d6185",
   "auditDeclarations": 351,
   "declarations": [
     "NativeControl.polling_exact",

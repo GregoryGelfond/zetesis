@@ -731,6 +731,10 @@ import Zetesis
 #print axioms Zetesis.IntegerEnvelopes.addition_envelope
 #print axioms Zetesis.IntegerEnvelopes.negation_envelope
 #print axioms Zetesis.IntegerEnvelopes.product_lower_bound
+#print axioms Zetesis.IntegerEnvelopes.constant_product_envelope
+#print axioms Zetesis.IntegerEnvelopes.positive_quotient_envelope
+#print axioms Zetesis.IntegerEnvelopes.negative_quotient_envelope
+#print axioms Zetesis.IntegerEnvelopes.remainder_magnitude
 #print axioms Zetesis.IntegerEnvelopes.sum_lower_bound
 #print axioms Zetesis.IntegerEnvelopes.positive_endpoint
 #print axioms Zetesis.IntegerEnvelopes.negative_endpoint
@@ -1554,6 +1558,12 @@ import Zetesis
 #print axioms Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes
 #print axioms Zetesis.Refinement.TheoryAdmission.self_reference_is_refused
 #print axioms Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked
+#print axioms Zetesis.ThresholdReduct.original
+#print axioms Zetesis.ThresholdReduct.query_original
+#print axioms Zetesis.ThresholdReduct.frozen_formula
+#print axioms Zetesis.ThresholdReduct.frozen
+#print axioms Zetesis.ThresholdReduct.reference_original
+#print axioms Zetesis.ThresholdReduct.reference_frozen
 #print axioms Zetesis.Thresholds.threshold_query_exact
 #print axioms Zetesis.Thresholds.threshold_bound_antitone
 #print axioms Zetesis.Thresholds.threshold_sum_monotone

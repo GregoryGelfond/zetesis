@@ -43,7 +43,8 @@ pub struct TightCheckLimits {
     /// including capacity retained from earlier checks. Vector headers, the
     /// shared theory and allocator overhead are excluded.
     pub max_bytes: u64,
-    /// Charged node evaluations, original-root tests, producers and atom scans.
+    /// Charged node evaluations, visited operands, original-root tests,
+    /// producers and packed candidate-word scans.
     pub max_work: u64,
 }
 

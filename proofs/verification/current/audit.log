@@ -749,6 +749,10 @@
 'Zetesis.IntegerEnvelopes.addition_envelope' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.IntegerEnvelopes.negation_envelope' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.IntegerEnvelopes.product_lower_bound' depends on axioms: [propext, Quot.sound]
+'Zetesis.IntegerEnvelopes.constant_product_envelope' depends on axioms: [propext, Quot.sound]
+'Zetesis.IntegerEnvelopes.positive_quotient_envelope' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.IntegerEnvelopes.negative_quotient_envelope' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.IntegerEnvelopes.remainder_magnitude' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.IntegerEnvelopes.sum_lower_bound' depends on axioms: [propext, Quot.sound]
 'Zetesis.IntegerEnvelopes.positive_endpoint' depends on axioms: [propext, Quot.sound]
 'Zetesis.IntegerEnvelopes.negative_endpoint' depends on axioms: [propext, Quot.sound]
@@ -1630,6 +1634,12 @@
 'Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes' does not depend on any axioms
 'Zetesis.Refinement.TheoryAdmission.self_reference_is_refused' does not depend on any axioms
 'Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked' does not depend on any axioms
+'Zetesis.ThresholdReduct.original' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ThresholdReduct.query_original' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ThresholdReduct.frozen_formula' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ThresholdReduct.frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ThresholdReduct.reference_original' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ThresholdReduct.reference_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Thresholds.threshold_query_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Thresholds.threshold_bound_antitone' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Thresholds.threshold_sum_monotone' depends on axioms: [propext, Classical.choice, Quot.sound]

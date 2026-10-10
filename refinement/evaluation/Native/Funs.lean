@@ -2018,7 +2018,7 @@ def tight.compile.Body.Insts.CoreCmpPartialEqBody.eq
   ok (self1 = other1)
 
 /-- [zetesis_ferraris::tight::reserve::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_cpu::cancellation::Stop> for zetesis_ferraris::tight::reserve::{closure}<T>}::call_once]:
-    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 284:17-284:37 -/
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 292:17-292:37 -/
 def
   tight.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop.call_once
   {T : Type} (c : tight.reserve.closure T)
@@ -2028,7 +2028,7 @@ def
   ok zetesis_cpu.cancellation.Stop.Allocation
 
 /-- Trait implementation: [zetesis_ferraris::tight::reserve::{impl core::ops::function::FnOnce<(alloc::collections::TryReserveError,), zetesis_cpu::cancellation::Stop> for zetesis_ferraris::tight::reserve::{closure}<T>}]
-    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 284:17-284:37 -/
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 292:17-292:37 -/
 @[reducible]
 def tight.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop
   (T : Type) : core.ops.function.FnOnce (tight.reserve.closure T)
@@ -2038,14 +2038,14 @@ def tight.reserve.closure.Insts.CoreOpsFunctionFnOnceTupleTryReserveErrorStop
 }
 
 /-- [zetesis_ferraris::tight::{impl core::convert::From<zetesis_cpu::cancellation::Stop> for zetesis_ferraris::tight::TightError}::from]:
-    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 120:4-122:5
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 125:4-127:5
     Visibility: public -/
 def tight.TightError.Insts.CoreConvertFromStop.from
   (stop : zetesis_cpu.cancellation.Stop) : Result tight.TightError := do
   ok (tight.TightError.Stopped stop)
 
 /-- Trait implementation: [zetesis_ferraris::tight::{impl core::convert::From<zetesis_cpu::cancellation::Stop> for zetesis_ferraris::tight::TightError}]
-    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 119:0-123:1 -/
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 124:0-128:1 -/
 @[reducible]
 def tight.TightError.Insts.CoreConvertFromStop : core.convert.From
   tight.TightError zetesis_cpu.cancellation.Stop := {
@@ -2053,7 +2053,7 @@ def tight.TightError.Insts.CoreConvertFromStop : core.convert.From
 }
 
 /-- [zetesis_ferraris::tight::reserve]:
-    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 280:0-286:1 -/
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 288:0-294:1 -/
 def tight.reserve
   (T : Type) (count : Std.Usize) :
   Result (core.result.Result (alloc.vec.Vec T) tight.TightError)
@@ -2073,7 +2073,7 @@ def tight.reserve
       (alloc.vec.Vec T) tight.TightError.Insts.CoreConvertFromStop residual
 
 /-- [zetesis_ferraris::tight::{zetesis_ferraris::tight::Work<'_0>}::tick]:
-    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 262:4-269:5 -/
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 270:4-277:5 -/
 def tight.Work.tick
   (self : tight.Work) :
   Result ((core.result.Result Unit tight.TightError) × tight.Work)

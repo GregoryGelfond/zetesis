@@ -3655,34 +3655,54 @@
     "line": 79
   },
   {
-    "name": "Zetesis.IntegerEnvelopes.sum_lower_bound",
+    "name": "Zetesis.IntegerEnvelopes.constant_product_envelope",
     "file": "Zetesis/IntegerEnvelopes.lean",
     "line": 90
   },
   {
+    "name": "Zetesis.IntegerEnvelopes.positive_quotient_envelope",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 105
+  },
+  {
+    "name": "Zetesis.IntegerEnvelopes.negative_quotient_envelope",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 112
+  },
+  {
+    "name": "Zetesis.IntegerEnvelopes.remainder_magnitude",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 124
+  },
+  {
+    "name": "Zetesis.IntegerEnvelopes.sum_lower_bound",
+    "file": "Zetesis/IntegerEnvelopes.lean",
+    "line": 143
+  },
+  {
     "name": "Zetesis.IntegerEnvelopes.positive_endpoint",
     "file": "Zetesis/IntegerEnvelopes.lean",
-    "line": 103
+    "line": 156
   },
   {
     "name": "Zetesis.IntegerEnvelopes.negative_endpoint",
     "file": "Zetesis/IntegerEnvelopes.lean",
-    "line": 114
+    "line": 167
   },
   {
     "name": "Zetesis.IntegerEnvelopes.affine_envelope",
     "file": "Zetesis/IntegerEnvelopes.lean",
-    "line": 126
+    "line": 179
   },
   {
     "name": "Zetesis.IntegerEnvelopes.integer_membership",
     "file": "Zetesis/IntegerEnvelopes.lean",
-    "line": 147
+    "line": 200
   },
   {
     "name": "Zetesis.IntegerEnvelopes.filtered_bindings_exact",
     "file": "Zetesis/IntegerEnvelopes.lean",
-    "line": 158
+    "line": 211
   },
   {
     "name": "Zetesis.finiteIter_stage_mono",
@@ -7768,6 +7788,36 @@
     "name": "Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked",
     "file": "Zetesis/TheoryAdmission.lean",
     "line": 368
+  },
+  {
+    "name": "Zetesis.ThresholdReduct.original",
+    "file": "Zetesis/ThresholdReduct.lean",
+    "line": 51
+  },
+  {
+    "name": "Zetesis.ThresholdReduct.query_original",
+    "file": "Zetesis/ThresholdReduct.lean",
+    "line": 73
+  },
+  {
+    "name": "Zetesis.ThresholdReduct.frozen_formula",
+    "file": "Zetesis/ThresholdReduct.lean",
+    "line": 84
+  },
+  {
+    "name": "Zetesis.ThresholdReduct.frozen",
+    "file": "Zetesis/ThresholdReduct.lean",
+    "line": 103
+  },
+  {
+    "name": "Zetesis.ThresholdReduct.reference_original",
+    "file": "Zetesis/ThresholdReduct.lean",
+    "line": 136
+  },
+  {
+    "name": "Zetesis.ThresholdReduct.reference_frozen",
+    "file": "Zetesis/ThresholdReduct.lean",
+    "line": 151
   },
   {
     "name": "Zetesis.Thresholds.threshold_query_exact",

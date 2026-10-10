@@ -195,6 +195,91 @@ fn native_guards_match_lowering_for_every_frozen_world() {
 }
 
 #[test]
+fn nonnegative_sums_match_lowering_for_every_frozen_world() {
+    let theory = prefix();
+    for left in 0..=2 {
+        for right in 0..=2 {
+            for second_condition in [2, 3, 4, 5, 9, 10] {
+                for comparison in COMPARISONS {
+                    for bound in -1..=5 {
+                        let bound = Term::Number(bound);
+                        let group = Group::new(
+                            &theory,
+                            Function::Sum,
+                            tuples(
+                                &[Term::Number(left), Term::Number(right)],
+                                &[2, second_condition],
+                            ),
+                            vec![Guard {
+                                comparison,
+                                bound: Bound::Term(bound.clone()),
+                            }],
+                            native::AdmissionLimits::default(),
+                            &Cancellation::default(),
+                        )
+                        .unwrap();
+                        // Positional tuple keys remain distinct when both
+                        // weights and conditions agree. compare_worlds includes
+                        // every M/J pair, without assuming J is a subset of M.
+                        compare_worlds(&group, &lowered(&group, comparison, &bound));
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn shared_count_conditions_retain_distinct_tuples() {
+    let theory = prefix();
+    for condition in [2, 4, 5, 7, 9, 10] {
+        for comparison in COMPARISONS {
+            for bound in -1..=3 {
+                let bound = Term::Number(bound);
+                let group = Group::new(
+                    &theory,
+                    Function::Count,
+                    tuples(&[Term::Number(1), Term::Number(1)], &[condition; 2]),
+                    vec![Guard {
+                        comparison,
+                        bound: Bound::Term(bound.clone()),
+                    }],
+                    native::AdmissionLimits::default(),
+                    &Cancellation::default(),
+                )
+                .unwrap();
+                compare_worlds(&group, &lowered(&group, comparison, &bound));
+            }
+        }
+    }
+}
+
+#[test]
+fn empty_numeric_families_match_lowering() {
+    let theory = prefix();
+    for function in [Function::Count, Function::Sum, Function::SumPlus] {
+        for comparison in COMPARISONS {
+            for bound in [-1, 0, 1] {
+                let bound = Term::Number(bound);
+                let group = Group::new(
+                    &theory,
+                    function,
+                    vec![],
+                    vec![Guard {
+                        comparison,
+                        bound: Bound::Term(bound.clone()),
+                    }],
+                    native::AdmissionLimits::default(),
+                    &Cancellation::default(),
+                )
+                .unwrap();
+                compare_worlds(&group, &lowered(&group, comparison, &bound));
+            }
+        }
+    }
+}
+
+#[test]
 fn neutral_weights_preserve_lowered_frozen_truth() {
     let theory = prefix();
     let weights = [

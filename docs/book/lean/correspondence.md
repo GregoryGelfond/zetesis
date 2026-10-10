@@ -40,14 +40,31 @@ allocation, interruption or liveness obligations. The policy factory and its
 storage estimates are outside the extracted semantic checkers; this change
 claims neither a proof of total process memory nor end-to-end verification.
 
+## Nonnegative aggregate thresholds
+
+`ThresholdReduct.reference_original` and `reference_frozen` connect the
+nonnegative threshold recurrence to the complete-mask aggregate semantics.
+Conditions may be arbitrary formulas, and the frozen law holds for arbitrary
+interpretations M and J. Direct evaluation retains the original threshold gate
+and reduces the weights of recursively frozen eligible positions. Distinct tuple
+positions retain their contributions even when their conditions are equal.
+This extends the classical law in `Thresholds`; it does not yet verify source
+coalescing, native formula storage, propagation, finite-width arithmetic, Rust
+evaluation or device execution.
+
 ## Tight-body classification
 
-CPU tight membership now retains its truth and support vectors in a worker-local
-`TightWorkspace`. The semantic scan and charged operations are unchanged; all
-truth cells are overwritten and support cells reset before reuse. Existing
-`TightEvaluation` laws still require exact original truth, complete producers
-and valid ranks. Those laws do not prove the Rust workspace's allocation,
-reset or retained-capacity behavior, which has separate regression checks.
+CPU tight membership retains its truth and packed support vectors in a
+worker-local `TightWorkspace`. Every formula node receives fresh truth, while
+conjunctions and disjunctions stop reading operands at the first decisive value.
+All original roots and producers remain covered. Support is reset before reuse;
+the final check intersects each candidate word with the complement of its
+support word, returning the first unsupported atom. Work counts visited operand
+prefixes and support words. Existing `TightEvaluation` laws still require exact
+original truth, complete producers and valid ranks. They do not prove the Rust
+workspace's allocation, packing, reset or retained-capacity behavior; those
+boundaries have regression checks. The separately extracted general evaluator
+still reads every operand, with its recorded N+E correspondence unchanged.
 
 `TightClassification.completed_semantics` connects the retained binary generation's
 tight-body classifier to `TightBodyRecognition`: successful classification covers every
@@ -2610,14 +2627,15 @@ The optional Rust
 adds a separate justification for ordinary row selection. A completed positive
 column covers every full binding's value at that variable, even when it contains
 extra values excluded by another argument or relation. An expression reading one
-variable is evaluated on that whole domain. For sums, differences and negations
-over several variables, the numeric hulls of the covering columns bound every
-intermediate. `IntegerEnvelopes.addition_envelope` and `negation_envelope` supply
-the integer bounds, including subtraction as addition of a negation;
+variable is evaluated on that whole domain. For sums, differences, negations,
+constant products and division or remainder by a literal, the numeric hulls of
+the covering columns bound every intermediate. `IntegerEnvelopes` supplies
+addition, negation, constant-product and signed truncating-quotient bounds, plus
+the remainder's magnitude bound. Subtraction uses addition of a negation;
 `ScalarArithmetic.checked_success` requires the resulting representability.
 Every intermediate must satisfy that requirement, even if the final value fits.
 No scalar guard or relation correlation supplies a premise to this interval
-check. Unknown or mixed domains and possible overflow decline the certificate,
+check. Unknown or mixed domains, zero divisors and possible overflow decline the certificate,
 while owner and resource refusals remain failures. These laws do not prove the
 Rust interval transfer or source-column coverage. The argument establishes
 definedness on full bindings, not on every earlier join prefix.
@@ -2714,7 +2732,7 @@ remain separate executable obligations.
 
 ## Read hypotheses as caller obligations
 
-The tight device checker packs producer support into 32-bit words.
+The CPU and device tight checkers pack producer support into 32-bit words.
 `TightEvaluation.head_support_append` proves that splitting the producer list
 joins each head's support with Boolean OR; `head_support_true` connects that
 support to an enabled original producer. The shader represents this OR by
@@ -2732,13 +2750,15 @@ Candidate export splits each stored 64-bit word into ordered low and high
 32-bit words. Only words covering the declared atom universe are exported;
 unused final bits remain zero. Atom enumeration visits set bits in increasing
 order. Both operations retain the original interpretation's theory identity.
-The tight shader finds unsupported atoms from each candidate word intersected
-with the complement of its support word. Reducing the first set bit of every
-nonempty difference gives the least unsupported atom; an original-root failure
-still takes precedence. `support_true_iff` states the corresponding per-atom
-support obligation. The concrete word conversion, set-bit iterator, witness
-reduction and their resource bounds require separate executable refinement;
-the retained proof of `Interpretation::contains` does not cover these operations.
+Both tight checkers find unsupported atoms from each candidate word intersected
+with the complement of its support word. The CPU visits words in ascending
+order and stops at the first nonempty difference; the shader reduces the first
+set bit of every nonempty difference. Both yield the least unsupported atom;
+an original-root failure still takes precedence. `support_true_iff` states the
+corresponding per-atom support obligation. The concrete word conversion,
+set-bit iterator, witness reduction and their resource bounds require separate
+executable refinement; the retained proof of `Interpretation::contains` does
+not cover these operations.
 
 CPU and device membership can consume the same immutable original-theory
 `TightPlan`; preparation does not itself classify a candidate. A completed

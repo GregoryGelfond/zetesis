@@ -336,12 +336,12 @@ inductive tight.compile.Body where
 | Positive : tight.compile.Body
 
 /-- [zetesis_ferraris::tight::reserve::{closure}]
-    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 284:17-284:37 -/
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 292:17-292:37 -/
 @[reducible]
 def tight.reserve.closure (T : Type) := Unit
 
 /-- [zetesis_ferraris::tight::TightResource]
-    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 57:0-66:1
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 62:0-71:1
     Visibility: public -/
 @[discriminant isize]
 inductive tight.TightResource where
@@ -351,7 +351,7 @@ inductive tight.TightResource where
 | Work : tight.TightResource
 
 /-- [zetesis_ferraris::tight::TightError]
-    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 70:0-99:1
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 75:0-104:1
     Visibility: public -/
 @[discriminant isize]
 inductive tight.TightError where
@@ -364,7 +364,7 @@ inductive tight.TightError where
 | Stopped : zetesis_cpu.cancellation.Stop → tight.TightError
 
 /-- [zetesis_ferraris::tight::Work]
-    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 256:0-260:1 -/
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 264:0-268:1 -/
 structure tight.Work where
   used : Std.U64
   max : Std.U64
@@ -381,7 +381,7 @@ def tight.compile.classify_node.closure_1 := Unit
 def tight.compile.classify_node.closure := Unit
 
 /-- [zetesis_ferraris::tight::TightProducerKind]
-    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 128:0-133:1
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 133:0-138:1
     Visibility: public -/
 @[discriminant isize]
 inductive tight.TightProducerKind where
@@ -389,7 +389,7 @@ inductive tight.TightProducerKind where
 | Choice : tight.TightProducerKind
 
 /-- [zetesis_ferraris::tight::TightProducer]
-    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 137:0-142:1
+    Source: 'crates/zetesis-ferraris/src/tight.rs', lines 142:0-147:1
     Visibility: public -/
 structure tight.TightProducer where
   head : Std.Usize

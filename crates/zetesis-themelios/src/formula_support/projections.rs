@@ -12,6 +12,7 @@
 mod domains;
 mod totality;
 pub(super) use totality::needed as needs_totality;
+pub(crate) use totality::supports_column_totality;
 
 use std::{cmp::Ordering, ops::Deref};
 

@@ -1,4 +1,4 @@
-//! Total addition and subtraction over complete positive source columns.
+//! Total scalar arithmetic over complete positive source columns.
 //!
 //! Each selected column contains every value of its variable in a complete
 //! binding. Its numeric hull may include extra values: proving every arithmetic
@@ -16,21 +16,36 @@ use super::{
 use crate::formula_support::Buffer;
 use crate::scalar_arithmetic::Range;
 
+/// The shared scalar grammar for source-column bounds. A literal multiplication
+/// factor or divisor is checked for numeric value by the certificate itself.
+/// Merely recognizing this syntax establishes neither totality nor source truth.
+pub(super) fn supports(expression: &Expression, operation: &Operation) -> bool {
+    matches!(operation, Operation::Constant(_) | Operation::Variable(_))
+        || arithmetic(expression, operation)
+}
+
+pub(super) fn arithmetic(expression: &Expression, operation: &Operation) -> bool {
+    let constant = |index| matches!(expression.nodes.get(index), Some(Operation::Constant(_)));
+    match operation {
+        Operation::Unary(UnaryOp::Negate, _)
+        | Operation::Binary(BinaryOp::Add | BinaryOp::Sub, _, _) => true,
+        Operation::Binary(BinaryOp::Mul, left, right) => constant(*left) || constant(*right),
+        Operation::Binary(BinaryOp::Div | BinaryOp::Mod, _, right) => constant(*right),
+        _ => false,
+    }
+}
+
 pub(super) fn total(
     expression: &Expression,
     literals: &[LiteralIr],
     support: &Support<'_>,
     context: &mut Context<'_, &mut Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
-    if expression.nodes.iter().any(|node| {
-        !matches!(
-            node,
-            Operation::Constant(_)
-                | Operation::Variable(_)
-                | Operation::Unary(UnaryOp::Negate, _)
-                | Operation::Binary(BinaryOp::Add | BinaryOp::Sub, _, _)
-        )
-    }) {
+    if expression
+        .nodes
+        .iter()
+        .any(|node| !supports(expression, node))
+    {
         return Ok(false);
     }
     let mut values = Buffer::<Range>::new(
@@ -66,11 +81,10 @@ pub(super) fn total(
             Operation::Unary(UnaryOp::Negate, argument) => {
                 values.slice()[*argument].unary(UnaryOp::Negate)
             }
-            Operation::Binary(operator @ (BinaryOp::Add | BinaryOp::Sub), left, right) => {
+            Operation::Binary(operator, left, right) => {
                 values.slice()[*left].binary(*operator, values.slice()[*right])
             }
-            // A larger arithmetic grammar can be admitted separately. In
-            // particular, no division or constructor follows from this proof.
+            // The syntax gate excludes constructors and other unary operations.
             _ => None,
         };
         let Some(bound) = bound else {

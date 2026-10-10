@@ -12,9 +12,9 @@ alone supplies neither a lower nor an upper bound.
 The laws concern mathematical integers and supplied sound comparisons. They do
 not recognize safe source expressions, normalize affine syntax, bound analysis
 work, or prove Rust checked arithmetic and cursor refinement. In particular,
-the divisions below are mathematical floor division by a positive integer,
-not the source language's truncating division operation. Runtime inference must
-establish that its endpoint rounding implements these bounds.
+the affine-inference divisions are mathematical floor division by a positive
+integer. The quotient and remainder envelopes explicitly use truncation toward
+zero. Runtime inference must establish which operation each endpoint implements.
 -/
 
 namespace Zetesis.IntegerEnvelopes
@@ -84,6 +84,59 @@ theorem product_lower_bound (coefficient x lower upper : Int)
   · simpa [nonnegative] using Int.mul_le_mul_of_nonneg_left inside.1 nonnegative
   · have nonpositive : coefficient ≤ 0 := by omega
     simpa [nonnegative] using Int.mul_le_mul_of_nonpos_left nonpositive inside.2
+
+/-- A literal factor maps the complete interval by its sign. Both endpoints
+remain valid when this expression shares variables with another expression. -/
+theorem constant_product_envelope (coefficient x lower upper : Int)
+    (inside : lower ≤ x ∧ x ≤ upper) :
+    (if 0 ≤ coefficient then coefficient * lower else coefficient * upper) ≤
+      coefficient * x ∧
+    coefficient * x ≤
+      (if 0 ≤ coefficient then coefficient * upper else coefficient * lower) := by
+  constructor
+  · exact product_lower_bound coefficient x lower upper inside
+  · by_cases nonnegative : 0 ≤ coefficient
+    · simpa [nonnegative] using Int.mul_le_mul_of_nonneg_left inside.2 nonnegative
+    · have nonpositive : coefficient ≤ 0 := by omega
+      simpa [nonnegative] using Int.mul_le_mul_of_nonpos_left nonpositive inside.1
+
+/-- Truncating division by a positive literal preserves endpoint order, also
+for negative dividends. This is not the floor-division rule used by inference. -/
+theorem positive_quotient_envelope (x lower upper divisor : Int)
+    (inside : lower ≤ x ∧ x ≤ upper) (positive : 0 < divisor) :
+    lower.tdiv divisor ≤ x.tdiv divisor ∧ x.tdiv divisor ≤ upper.tdiv divisor := by
+  exact ⟨Int.tdiv_le_tdiv positive inside.1, Int.tdiv_le_tdiv positive inside.2⟩
+
+/-- A negative literal reverses the two quotient endpoints. Reflection reduces
+the claim to positive truncating division, then negation reverses its bounds. -/
+theorem negative_quotient_envelope (x lower upper divisor : Int)
+    (inside : lower ≤ x ∧ x ≤ upper) (negative : divisor < 0) :
+    upper.tdiv divisor ≤ x.tdiv divisor ∧ x.tdiv divisor ≤ lower.tdiv divisor := by
+  have positive : 0 < -divisor := by omega
+  have bounds : lower.tdiv (-divisor) ≤ x.tdiv (-divisor) ∧
+      x.tdiv (-divisor) ≤ upper.tdiv (-divisor) :=
+    positive_quotient_envelope x lower upper (-divisor) inside positive
+  simp only [Int.tdiv_neg] at bounds
+  omega
+
+/-- A nonzero literal bounds the magnitude of a truncating remainder. The
+dividend may have either sign; a negative divisor has the same remainders. -/
+theorem remainder_magnitude (x divisor : Int) (nonzero : divisor ≠ 0) :
+    -((divisor.natAbs : Int) - 1) ≤ x.tmod divisor ∧
+      x.tmod divisor ≤ (divisor.natAbs : Int) - 1 := by
+  by_cases positive : 0 < divisor
+  · have below : -divisor < x.tmod divisor := Int.lt_tmod_of_pos x positive
+    have above : x.tmod divisor < divisor := Int.tmod_lt_of_pos x positive
+    have magnitude : (divisor.natAbs : Int) = divisor :=
+      Int.natAbs_of_nonneg (show 0 ≤ divisor by omega)
+    omega
+  · have reflected : 0 < -divisor := by omega
+    have below : -(-divisor) < x.tmod (-divisor) := Int.lt_tmod_of_pos x reflected
+    have above : x.tmod (-divisor) < -divisor := Int.tmod_lt_of_pos x reflected
+    simp only [Int.tmod_neg] at below above
+    have magnitude : (divisor.natAbs : Int) = -divisor :=
+      Int.ofNat_natAbs_of_nonpos (show divisor ≤ 0 by omega)
+    omega
 
 /-- Lower bounds compose through a finite linear sum even when variables repeat
 or their values are correlated. The proof adds one valid term bound at a time. -/

@@ -483,7 +483,7 @@ fn tight_check_storage_is_local_to_each_worker() {
     };
     let expected = u128::from(plan.resident_bytes)
         + original.nodes().len() as u128
-        + original.atom_count() as u128;
+        + original.atom_count().div_ceil(32) as u128 * size_of::<u32>() as u128;
     assert_eq!(scalar.tight_check_peak_bytes, Some(expected));
     assert_eq!(parallel.tight_check_peak_bytes, Some(expected));
 }

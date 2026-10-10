@@ -374,8 +374,9 @@ including the delivered prefix, against the current region. Delivery alone is
 insufficient. Any intervening change that could enable a body occurrence
 discards this evidence; ignored units are rediscovered by a full scan.
 These checks use the existing batch and changed-atom information, without
-retaining ground constraint instances. Sums and differences can use the same
-finite totality certificate as ordinary row selection. Every streamed rule must
+retaining ground constraint instances. Sums, differences, constant products and
+division or remainder by a nonzero literal can use the same finite totality
+certificate as ordinary row selection. Every streamed rule must
 have defined scalar expressions; one unproved rule keeps the entire partition
 on the sequential path, preserving its first-result diagnostic order. The
 [batch and dependency laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-consequences.md)
@@ -596,10 +597,12 @@ After source-family validation, a flat constraint can establish finite totality
 from completed positive columns, without constructors, generators, structural
 captures or nested scopes. A smallest covering column supplies all possible
 values of each variable in complete bindings. An expression reading one variable
-is checked on that whole domain. Sums and differences reading several variables
-instead use numeric column intervals: every intermediate must fit the checked
-integer range. This overapproximates correlations and uses no scalar comparison
-as a premise. Unknown or mixed domains and possible overflow decline the
+is checked on that whole domain. Sums, differences, negation, constant products
+and division or remainder by a literal can instead use numeric column intervals
+when several variables occur. Every intermediate must be defined and fit the
+checked integer range; division and remainder retain truncation toward zero.
+This overapproximates correlations and uses no scalar comparison as a premise.
+Unknown or mixed domains, zero divisors and possible overflow decline the
 certificate; no Cartesian table of arithmetic results is retained. The checked
 interval transfers are shared with keyed-rewrite safety. Resource and owner failures
 remain located failures. Only success for every expression permits this

@@ -42,14 +42,16 @@ impl TightPlan {
 ///
 /// Each call recomputes every formula truth and clears support before reading
 /// producers. Capacity survives checks and interruptions; no candidate truth
-/// survives as evidence. Checks remain linear in nodes, operand occurrences,
-/// tested roots, producers and atoms. Storage is linear in the largest admitted
-/// node and atom counts. Each concurrent checker owns an exclusive workspace;
-/// immutable plans may be shared.
+/// survives as evidence. Each conjunction or disjunction reads operands only
+/// through its first decisive value. Checks are bounded by nodes, operand
+/// occurrences, tested roots, producers and packed candidate words. Truth uses
+/// one byte per node; support uses one bit per atom, rounded to 32-bit words.
+/// Each concurrent checker owns an exclusive workspace; immutable plans may be
+/// shared.
 #[derive(Debug, Default)]
 pub struct TightWorkspace {
     values: Vec<u8>,
-    supported: Vec<u8>,
+    supported: Vec<u32>,
 }
 
 impl TightWorkspace {
@@ -57,7 +59,8 @@ impl TightWorkspace {
     /// theory and allocator bookkeeping. A failed check can retain new capacity.
     #[must_use]
     pub fn retained_bytes(&self) -> u128 {
-        self.values.capacity() as u128 + self.supported.capacity() as u128
+        self.values.capacity() as u128
+            + self.supported.capacity() as u128 * size_of::<u32>() as u128
     }
 
     /// Check original satisfaction and ranked support using retained storage.
@@ -118,23 +121,29 @@ impl TightWorkspace {
             }
         }
         self.supported.clear();
+        let words = plan.theory.atom_count().div_ceil(32);
         self.supported
-            .try_reserve_exact(plan.theory.atom_count())
+            .try_reserve_exact(words)
             .map_err(|_| Stop::Allocation)?;
         let logical_bytes = self.admit(plan, limits.max_bytes)?;
-        self.supported.resize(plan.theory.atom_count(), 0);
+        self.supported.resize(words, 0);
         for producer in &plan.producers {
             work.tick()?;
             if producer.body.is_none_or(|body| self.values[body] != 0) {
-                self.supported[producer.head] = 1;
+                self.supported[producer.head / 32] |= 1 << (producer.head % 32);
             }
         }
-        for (atom, &support) in self.supported.iter().enumerate() {
+        let mut present = candidate.words32();
+        for word in 0..words {
             work.tick()?;
-            if candidate.contains(atom) && support == 0 {
+            let missing = present
+                .next()
+                .expect("support and candidate cover the same admitted atom universe")
+                & !self.supported[word];
+            if missing != 0 {
                 return Ok(TightCheck {
                     verdict: TightVerdict::Residual {
-                        unsupported_atom: atom,
+                        unsupported_atom: word * 32 + missing.trailing_zeros() as usize,
                     },
                     work: work.used,
                     logical_bytes,
@@ -152,7 +161,11 @@ impl TightWorkspace {
         bytes(
             u128::from(plan.statistics.resident_bytes)
                 + self.values.capacity().max(plan.theory.nodes().len()) as u128
-                + self.supported.capacity().max(plan.theory.atom_count()) as u128,
+                + self
+                    .supported
+                    .capacity()
+                    .max(plan.theory.atom_count().div_ceil(32)) as u128
+                    * size_of::<u32>() as u128,
             limit,
         )
     }
@@ -193,15 +206,14 @@ fn evaluate_operands(
     conjunction: bool,
     work: &mut Work<'_>,
 ) -> Result<bool, TightError> {
-    let mut value = conjunction;
     for &child in operands {
         work.tick()?;
         let truth = values[child] != 0;
-        value = if conjunction {
-            value & truth
-        } else {
-            value | truth
-        };
+        // A false conjunct or true disjunct determines this node, irrespective
+        // of the remaining operands. Other DAG nodes still get their own truth.
+        if truth != conjunction {
+            return Ok(truth);
+        }
     }
-    Ok(value)
+    Ok(conjunction)
 }

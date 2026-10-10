@@ -3,8 +3,10 @@
 //! Final emission, hybrid capture and admitted hybrid checks share this gate
 //! over the same completed source carrier. Each expression in a flat constraint
 //! is either a leaf, reads one source variable covered by an ordinary positive
-//! atom column, or has checked sums and differences over several numeric column
-//! bounds. Successful evaluation on that entire
+//! atom column, or has checked arithmetic over several numeric column bounds.
+//! Literal multiplication factors and divisors extend sums and differences;
+//! the bounds establish every intermediate and exclude zero divisors.
+//! Successful evaluation on that entire
 //! column domain covers every complete rule binding, including rows a scalar
 //! equality later excludes. An arithmetic failure declines the optimization;
 //! the original complete traversal remains responsible for its diagnostics.
@@ -14,15 +16,14 @@
 //! of candidate selection. Missing frozen values remain errors.
 
 use themelios_program::program::DefaultNegation;
-use themelios_program::term::{BinaryOp, UnaryOp};
 use zetesis_core::TemplateTerm;
 
 use super::{Projections, tick};
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, RuleIr};
 use crate::formula_support::relations::{Postings, RelationRows};
-use crate::formula_support::{Computation, Context, Evaluation, Support};
-use crate::{ExpansionFailure, FormulaFailure};
+use crate::formula_support::{Computation, Context, Counters, Evaluation, Support};
+use crate::{ExpansionFailure, FormulaFailure, FormulaLimits};
 
 mod numeric;
 
@@ -31,13 +32,10 @@ mod numeric;
 /// source families require a defined witness: that remains `family::partial`.
 pub(in crate::formula_support) fn needed(literals: &[LiteralIr]) -> bool {
     let arithmetic = |expression: &Expression| {
-        expression.nodes.iter().any(|operation| {
-            matches!(
-                operation,
-                Operation::Unary(UnaryOp::Negate, _)
-                    | Operation::Binary(BinaryOp::Add | BinaryOp::Sub, _, _)
-            )
-        })
+        expression
+            .nodes
+            .iter()
+            .any(|operation| numeric::arithmetic(expression, operation))
     };
     crate::formula_support::family::partial(literals)
         || literals.iter().any(|literal| match literal {
@@ -45,6 +43,36 @@ pub(in crate::formula_support) fn needed(literals: &[LiteralIr]) -> bool {
             LiteralIr::TupleCompare(left, _, right) => left.iter().chain(right).any(arithmetic),
             _ => false,
         })
+}
+
+/// Whether a flat rule uses the source-column certificate's arithmetic grammar.
+/// This gate changes no binding schedule and supplies no numeric or definedness
+/// premise. Only successful preparation over the completed source does that.
+pub(crate) fn supports_column_totality(
+    rule: &RuleIr,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<bool, FormulaFailure> {
+    for literal in &rule.body {
+        counters.work(limits, rule.location)?;
+        let expressions = match literal {
+            LiteralIr::Atom(..) => continue,
+            LiteralIr::Compare(left, _, right) => std::slice::from_ref(left)
+                .iter()
+                .chain(std::slice::from_ref(right)),
+            LiteralIr::TupleCompare(left, _, right) => left.iter().chain(right),
+            _ => return Ok(false),
+        };
+        for expression in expressions {
+            for node in &expression.nodes {
+                counters.work(limits, rule.location)?;
+                if !numeric::supports(expression, node) {
+                    return Ok(false);
+                }
+            }
+        }
+    }
+    Ok(true)
 }
 
 struct Domain<'source> {

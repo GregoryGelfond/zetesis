@@ -95,3 +95,6 @@ impl Range {
         Self::checked(*corners.iter().min()?, *corners.iter().max()?)
     }
 }
+
+#[cfg(test)]
+mod tests;

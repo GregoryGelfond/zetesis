@@ -59,6 +59,95 @@ fn negated_sums_preserve_numeric_bounds() {
 }
 
 #[test]
+fn constant_products_preserve_numeric_bounds() {
+    check(
+        include_str!(
+            "../../../../../tests/fixtures/streamed-consequences/arithmetic/constant-product.lp"
+        ),
+        true,
+        1,
+    );
+}
+
+#[test]
+fn multiplication_alone_requests_totality() {
+    let source = include_str!(
+        "../../../../../tests/fixtures/streamed-consequences/arithmetic/product-only.lp"
+    );
+    testing::with_completed_source(source, |program, _, _, _| {
+        assert!(needed(&constraints(program).next().unwrap().body));
+    });
+    check(source, true, 1);
+}
+
+#[test]
+fn literal_division_preserves_truncation() {
+    check(
+        include_str!(
+            "../../../../../tests/fixtures/streamed-consequences/arithmetic/quotient-units.lp"
+        ),
+        true,
+        2,
+    );
+}
+
+#[test]
+fn literal_remainder_preserves_dividend_sign() {
+    check(
+        include_str!(
+            "../../../../../tests/fixtures/streamed-consequences/arithmetic/remainder-units.lp"
+        ),
+        true,
+        1,
+    );
+}
+
+#[test]
+fn product_overflow_declines_the_certificate() {
+    // Exact source rows are safe, while their rectangular hull is not.
+    check(
+        include_str!(
+            "../../../../../tests/fixtures/streamed-consequences/arithmetic/correlated-product.lp"
+        ),
+        false,
+        2,
+    );
+}
+
+#[test]
+fn exceptional_quotient_declines_the_certificate() {
+    check(
+        include_str!(
+            "../../../../../tests/fixtures/streamed-consequences/arithmetic/correlated-quotient.lp"
+        ),
+        false,
+        1,
+    );
+}
+
+#[test]
+fn exceptional_remainder_declines_the_certificate() {
+    check(
+        include_str!(
+            "../../../../../tests/fixtures/streamed-consequences/arithmetic/correlated-remainder.lp"
+        ),
+        false,
+        2,
+    );
+}
+
+#[test]
+fn mixed_product_domains_decline_totality() {
+    check(
+        include_str!(
+            "../../../../../tests/fixtures/streamed-consequences/arithmetic/mixed-product.lp"
+        ),
+        false,
+        1,
+    );
+}
+
+#[test]
 fn intermediate_overflow_declines_the_certificate() {
     // The actual correlated rows are defined, but their rectangular hull
     // contains an overflowing intermediate even though the final range fits.

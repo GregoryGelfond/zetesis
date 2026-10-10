@@ -240,14 +240,15 @@ fn complete_certificate_allowances_include_every_operand() {
         let tight = TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
         let positive =
             PositivePlan::compile(&theory, PositivePlanLimits::default(), &cancellation).unwrap();
-        // A=2, N=4, E=width+2 and R=2; tight checking also reads P=2.
+        // A=2, N=4, E=width+2 and R=2. Tight checking reads P=2 and
+        // one candidate word; the positive check compares both atoms.
         for (certificate, expected) in [
             (
                 super::Certification::Tight {
                     plan: Arc::new(tight),
                     max_bytes: u64::MAX,
                 },
-                width + 12,
+                width + 11,
             ),
             (
                 super::Certification::Positive {

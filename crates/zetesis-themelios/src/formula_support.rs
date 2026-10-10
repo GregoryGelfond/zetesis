@@ -50,6 +50,7 @@ mod prepared;
 mod probe_selection;
 mod producers;
 mod projections;
+pub(crate) use projections::supports_column_totality;
 mod queries;
 mod relations;
 mod rows;

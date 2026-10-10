@@ -104,7 +104,7 @@ def step_is_unused:
       | length) == 0;
 
 $inventory[0] as $expected |
-if $expected.raw_sha256 != "316231620304ea5dc4f792f441d4282fee8d1f409d7c2e4903243ef141f15448"
+if $expected.raw_sha256 != "36c844c9f496c7594b5120a278edacb0674b24c3ba05c6a3d245e8af67b68a2d"
 then error("unexpected snapshot identity")
 elif functions_match($expected) | not
 then error("unexpected selected declaration, export order or local debug name")

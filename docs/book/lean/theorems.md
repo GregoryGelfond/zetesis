@@ -195,7 +195,11 @@ the earlier head-element laws is mathematical and does not prescribe a compiler
 rewrite or verify its source key assignment.
 
 `AggregateReduct.direct_reduct` relates the failing-subset formula to original
-and frozen eligibility under complete masks. `AggregateRanges` establishes bounds
+and frozen eligibility under complete masks. `ThresholdReduct.reference_original`
+and `reference_frozen` give the corresponding equivalence for a nonnegative
+weighted threshold recurrence, including repeated conditions at distinct tuple
+positions. They do not yet establish a native runtime replacement.
+`AggregateRanges` establishes bounds
 on mathematical signed partial sums. `AggregateDependencies` composes complete
 predecessor-indexed value families. Its `Reuse.restart_exact` proves full reset
 or direct rebuilding from complete projected inputs under fixed support;

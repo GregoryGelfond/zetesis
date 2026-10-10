@@ -80,18 +80,22 @@ impl Certification {
     }
 
     /// A complete check's work bound in the primitive's charged units:
-    /// tight checking visits every node, operand occurrence, root, producer
-    /// and atom once; deterministic checking compares atoms, then visits nodes,
-    /// operand occurrences and roots. Early
+    /// tight checking visits every node, root, producer and packed candidate
+    /// word, and at most every operand occurrence; deterministic checking
+    /// compares atoms, then visits nodes, operand occurrences and roots. Early
     /// refusals or refutations can consume less, never more.
     pub(super) fn checking_work_bound(&self) -> Result<u64, Incomplete> {
-        let (theory, producers) = match self {
-            Self::Tight { plan, .. } => (plan.theory(), plan.producers().len()),
-            Self::Positive { plan, .. } => (plan.theory(), 0),
-            Self::Stratified { plan, .. } => (plan.theory(), 0),
+        let (theory, producers, membership) = match self {
+            Self::Tight { plan, .. } => (
+                plan.theory(),
+                plan.producers().len(),
+                plan.theory().atom_count().div_ceil(32),
+            ),
+            Self::Positive { plan, .. } => (plan.theory(), 0, plan.theory().atom_count()),
+            Self::Stratified { plan, .. } => (plan.theory(), 0, plan.theory().atom_count()),
         };
         [
-            theory.atom_count(),
+            membership,
             theory.nodes().len(),
             theory.parts().occurrences(),
             theory.roots().len(),

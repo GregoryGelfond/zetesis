@@ -371,7 +371,7 @@ fn certificate_failure_retains_pending_candidates_without_reentering_completion(
         Some(
             u128::from(probe.statistics().resident_bytes)
                 + original.nodes().len() as u128
-                + original.atom_count() as u128
+                + original.atom_count().div_ceil(32) as u128 * size_of::<u32>() as u128
         ),
     );
     assert_eq!(pool.last_statistics(), None);

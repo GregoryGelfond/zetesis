@@ -12,9 +12,10 @@
 use super::{ConstraintConsequence, PreparedConstraints, literal_atom, scan_selected_rule};
 use crate::expansion::Budget;
 use crate::formula_ir::{Expression, LiteralIr, Operation, RuleIr};
-use crate::formula_support::{Computation, Context, Counters, StorageLease, reserve_exact};
+use crate::formula_support::{
+    Computation, Context, Counters, StorageLease, reserve_exact, supports_column_totality,
+};
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
-use themelios_program::term::{BinaryOp, UnaryOp};
 use zetesis_core::catalog::PredicateRef;
 use zetesis_cpu::regions::Region;
 
@@ -34,8 +35,8 @@ type ReadContext<'a, 'b, 'c> = Context<'a, &'a Computation<'b, 'c>>;
 /// partition, not a claim that arbitrary constructor expressions cannot fail.
 ///
 /// Actual construction, owner, work, storage and cancellation checks stay in
-/// place. A rule with sums or differences can additionally use complete source
-/// columns to establish defined arithmetic. Every rule must pass: one partial
+/// place. A rule in the shared arithmetic grammar can additionally use complete
+/// source columns to establish defined arithmetic. Every rule must pass: one partial
 /// rule retains the original first-result order for the entire partition, since
 /// a core consequence can prevent a later exceptional scalar prefix.
 pub(super) fn eligible(
@@ -48,7 +49,7 @@ pub(super) fn eligible(
         if captured_rule(rule, &prepared.limits, counters)? {
             continue;
         }
-        if !bounded_rule(rule, &prepared.limits, counters)? {
+        if !supports_column_totality(rule, &prepared.limits, counters)? {
             return Ok(false);
         }
         // This is the same immutable preparation subsequently borrowed by
@@ -92,41 +93,6 @@ fn captured_rule(
         };
         if !total {
             return Ok(false);
-        }
-    }
-    Ok(true)
-}
-
-/// No new binding schedule, constructed expression or partial operator is
-/// admitted by the column proof. Ordinary comparisons retain their term order.
-fn bounded_rule(
-    rule: &RuleIr,
-    limits: &FormulaLimits,
-    counters: &mut Counters,
-) -> Result<bool, FormulaFailure> {
-    for literal in &rule.body {
-        counters.work(limits, rule.location)?;
-        let expressions = match literal {
-            LiteralIr::Atom(..) => continue,
-            LiteralIr::Compare(left, _, right) => std::slice::from_ref(left)
-                .iter()
-                .chain(std::slice::from_ref(right)),
-            LiteralIr::TupleCompare(left, _, right) => left.iter().chain(right),
-            _ => return Ok(false),
-        };
-        for expression in expressions {
-            for node in &expression.nodes {
-                counters.work(limits, rule.location)?;
-                if !matches!(
-                    node,
-                    Operation::Constant(_)
-                        | Operation::Variable(_)
-                        | Operation::Unary(UnaryOp::Negate, _)
-                        | Operation::Binary(BinaryOp::Add | BinaryOp::Sub, _, _)
-                ) {
-                    return Ok(false);
-                }
-            }
         }
     }
     Ok(true)

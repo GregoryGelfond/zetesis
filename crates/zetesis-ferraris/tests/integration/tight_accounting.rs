@@ -111,27 +111,27 @@ fn mixed_checks_retain_every_exact_work_prefix() {
     let cancellation = run.cancellation();
     let plan = TightPlan::compile(&theory, TightPlanLimits::default(), cancellation).unwrap();
     let mut workspace = TightWorkspace::default();
-    // Every node is evaluated, including the unused final implication. Wide
-    // groups retain repeated operands; the root and producer scans retain the
-    // repeated original root. A complete check charges 11 + 17 + 4 + 4 + 4.
+    // Every node is evaluated, including the unused final implication. Groups
+    // stop at their first decisive operand; repeated roots and producers are
+    // still checked. One packed word covers this four-atom carrier.
     for (atoms, verdict, complete_work) in [
-        (&[][..], TightVerdict::Stable, 40),
-        (&[0][..], TightVerdict::NotModel { root: 8 }, 30),
-        (&[0, 1][..], TightVerdict::NotModel { root: 9 }, 31),
-        (&[0, 1, 2][..], TightVerdict::Stable, 40),
+        (&[][..], TightVerdict::Stable, 34),
+        (&[0][..], TightVerdict::NotModel { root: 8 }, 28),
+        (&[0, 1][..], TightVerdict::NotModel { root: 9 }, 29),
+        (&[0, 1, 2][..], TightVerdict::Stable, 35),
         (
             &[0, 1, 2, 3][..],
             TightVerdict::Residual {
                 unsupported_atom: 3,
             },
-            40,
+            35,
         ),
         (
             &[1, 2][..],
             TightVerdict::Residual {
                 unsupported_atom: 1,
             },
-            38,
+            34,
         ),
     ] {
         let candidate = Interpretation::new(&theory, atoms.iter().copied()).unwrap();
@@ -193,7 +193,10 @@ fn interrupted_scratch_remains_subject_to_storage_limits() {
     let smaller_candidate = Interpretation::new(&smaller, [0]).unwrap();
     let limits = TightCheckLimits {
         max_bytes: smaller_plan.statistics().resident_bytes
-            + u64::try_from(smaller.nodes().len() + smaller.atom_count()).unwrap(),
+            + u64::try_from(
+                smaller.nodes().len() + smaller.atom_count().div_ceil(32) * size_of::<u32>(),
+            )
+            .unwrap(),
         ..Default::default()
     };
     assert!(

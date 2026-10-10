@@ -159,8 +159,11 @@ set; it does not necessarily rule out larger classical models. `TightPlan`
 instead establishes its own acyclicity and supportedness conditions. Neither
 plan changes the definition of membership. CPU tight checks retain exclusive
 `TightWorkspace` scratch in each worker; immutable plans can be shared. Every
-call checks its retained capacity against the current allowance. Interrupted
-or rejected candidates cannot leave truth or support in the next check.
+call checks its retained capacity against the current allowance. Support uses
+one bit per atom in 32-bit words. Each conjunction or disjunction stops reading
+operands once its value is determined, while every formula node receives fresh
+truth. Interrupted or rejected candidates cannot leave truth or support in the
+next check.
 
 `StratifiedPlan` extends direct evaluation to the supported stratified normal
 grammar. It completes positive components in signed dependency order and checks

@@ -1,10 +1,46 @@
 use super::*;
+use themelios_program::term::BinaryOp;
 
 #[test]
 fn total_arithmetic_enables_batched_consequences() {
-    let owner = admit(include_str!(
-        "../../../../../tests/fixtures/streamed-consequences/arithmetic/sum-units.lp"
-    ));
+    batched_units(
+        include_str!("../../../../../tests/fixtures/streamed-consequences/arithmetic/sum-units.lp"),
+        &[[1, 3], [2, 2], [3, 1]],
+    );
+}
+
+#[test]
+fn constant_products_enable_batched_consequences() {
+    batched_units(
+        include_str!(
+            "../../../../../tests/fixtures/streamed-consequences/arithmetic/product-units.lp"
+        ),
+        &[[1, 3], [2, 1]],
+    );
+}
+
+#[test]
+fn literal_quotients_enable_batched_consequences() {
+    batched_units(
+        include_str!(
+            "../../../../../tests/fixtures/streamed-consequences/arithmetic/quotient-units.lp"
+        ),
+        &[[-7, -1], [-7, 1]],
+    );
+}
+
+#[test]
+fn literal_remainders_enable_batched_consequences() {
+    batched_units(
+        include_str!(
+            "../../../../../tests/fixtures/streamed-consequences/arithmetic/remainder-units.lp"
+        ),
+        &[[-7, -1]],
+    );
+}
+
+fn batched_units(source: &str, expected: &[[i32; 2]]) {
+    let owner = admit(source);
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let region = Region::all_open(owner.atom_catalog().atoms().len());
     assert!(matches!(
@@ -15,7 +51,7 @@ fn total_arithmetic_enables_batched_consequences() {
         checker.prepared.as_ref().unwrap().incremental_eligible,
         Some(true)
     );
-    assert_eq!(state(&checker).pending.len(), 3);
+    assert_eq!(state(&checker).pending.len(), expected.len());
     let units = state(&checker)
         .pending
         .iter()
@@ -35,7 +71,40 @@ fn total_arithmetic_enables_batched_consequences() {
             })
         })
         .collect::<std::collections::BTreeSet<_>>();
-    assert_eq!(units, [[1, 3], [2, 2], [3, 1]].into());
+    assert_eq!(units, expected.iter().copied().collect());
+}
+
+#[test]
+fn correlated_products_keep_the_original_scan() {
+    let owner = admit(include_str!(
+        "../../../../../tests/fixtures/streamed-consequences/arithmetic/correlated-product.lp"
+    ));
+    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+    let region = Region::all_open(owner.atom_catalog().atoms().len());
+    assert!(matches!(
+        pass(&mut checker, &region, ConstraintRegionPass::First),
+        ConstraintConsequence::Cut { .. }
+    ));
+    let prepared = checker.prepared.as_ref().unwrap();
+    assert_eq!(prepared.incremental_eligible, Some(false));
+    assert!(prepared.incremental.is_none());
+}
+
+#[test]
+fn variable_products_keep_the_original_scan() {
+    let owner = admit(include_str!(
+        "../../../../../tests/fixtures/streamed-consequences/arithmetic/variable-product.lp"
+    ));
+    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+    let region = Region::all_open(owner.atom_catalog().atoms().len());
+    assert!(matches!(
+        pass(&mut checker, &region, ConstraintRegionPass::First),
+        ConstraintConsequence::Cut { .. }
+    ));
+    assert_eq!(
+        checker.prepared.as_ref().unwrap().incremental_eligible,
+        Some(false)
+    );
 }
 
 #[test]
@@ -104,4 +173,79 @@ fn queens_arithmetic_uses_incremental_scanning() {
             "{name}: diagonal certificates are retained"
         );
     }
+}
+
+#[test]
+fn keyed_send_keeps_generated_binding_scans() {
+    let path =
+        zetesis_test_support::repository::correctness().join("standalone/send-money/send-money.lp");
+    let source = std::fs::read_to_string(path).unwrap();
+    let owner = admit(&source);
+    assert!(owner.keyed_constraints() > 0);
+    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+    let region = Region::all_open(owner.atom_catalog().atoms().len());
+    let _ = pass(&mut checker, &region, ConstraintRegionPass::First);
+    let prepared = checker.prepared.as_ref().unwrap();
+    // The exact-one key rewrite replaces each written carry equation by
+    // demanded atoms. Their computed arguments are generated bindings, which
+    // the complete-column arithmetic certificate deliberately does not cover.
+    assert!(
+        prepared
+            .source
+            .rules
+            .iter()
+            .flat_map(|rule| &rule.body)
+            .any(|literal| {
+                let LiteralIr::Bind { value, .. } = literal else {
+                    return false;
+                };
+                value.nodes.iter().any(|operation| {
+                    matches!(
+                        operation,
+                        Operation::Binary(BinaryOp::Div | BinaryOp::Mod, ..)
+                    )
+                })
+            })
+    );
+    assert_eq!(prepared.incremental_eligible, Some(false));
+    assert!(prepared.incremental.is_none());
+}
+
+#[test]
+fn unrewritten_send_arithmetic_enables_batching() {
+    let path =
+        zetesis_test_support::repository::correctness().join("standalone/send-money/send-money.lp");
+    let source = std::fs::read_to_string(path).unwrap();
+    let owner = crate::prepare_formula(
+        source,
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits {
+            max_key_work: 0,
+            ..FormulaLimits::default()
+        },
+    )
+    .unwrap()
+    .ground_hybrid()
+    .unwrap();
+    assert_eq!(owner.keyed_constraints(), 0);
+    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+    let region = Region::all_open(owner.atom_catalog().atoms().len());
+    let _ = pass(&mut checker, &region, ConstraintRegionPass::First);
+    let prepared = checker
+        .prepared
+        .as_ref()
+        .expect("streamed arithmetic constraints");
+    assert_eq!(prepared.incremental_eligible, Some(true));
+    assert!(prepared.incremental.is_some());
+    assert!(
+        prepared
+            .plans
+            .iter()
+            .flatten()
+            .filter(|plan| plan.has_totality_certificate())
+            .count()
+            >= 4,
+        "the four written carry equations retain their numeric certificates"
+    );
 }
