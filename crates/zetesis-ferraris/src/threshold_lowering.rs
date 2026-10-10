@@ -4,7 +4,9 @@
 //! caller retains the semantic node map and owns the two DP rows. For each
 //! nonzero contribution and target `t`, the recurrence is
 //! `next[t] = previous[t] OR (condition AND previous[t - weight])`, with
-//! saturating subtraction. Repeated conditions retain independent coefficients.
+//! saturating subtraction. Bounds requiring every positive contribution or any
+//! positive contribution instead use a linear connective fold with no DP rows.
+//! Repeated conditions retain independent coefficients.
 
 use crate::Threshold;
 
@@ -17,15 +19,22 @@ pub enum Error {
     Capacity,
 }
 
-/// Exact unsimplified DP gate count and caller-owned temporary value slots.
+/// Exact unsimplified gate count and caller-owned temporary value slots.
 #[derive(Clone, Copy, Debug)]
 pub struct Shape {
     /// Binary AND/OR gate attempts, before backend-specific simplification.
     pub gates: usize,
     /// Value slots required by the two recurrence rows.
     pub scratch: usize,
-    constant: Option<bool>,
-    bound: usize,
+    expansion: Expansion,
+}
+
+#[derive(Clone, Copy, Debug)]
+enum Expansion {
+    Constant(bool),
+    All,
+    Any,
+    Dynamic { bound: usize },
 }
 
 impl Shape {
@@ -44,12 +53,16 @@ impl Shape {
         }
         let mut total = 0_i128;
         let mut nonzero = 0_usize;
+        let mut minimum = i128::MAX;
         for &weight in threshold.weights {
             visit()?;
             total = total
                 .checked_add(i128::from(weight))
                 .ok_or(Error::Invalid)?;
-            nonzero += usize::from(weight != 0);
+            if weight != 0 {
+                nonzero += 1;
+                minimum = minimum.min(i128::from(weight));
+            }
         }
         let constant = if threshold.bound <= 0 {
             Some(true)
@@ -58,12 +71,31 @@ impl Shape {
         } else {
             None
         };
-        if constant.is_some() {
+        if let Some(value) = constant {
             return Ok(Self {
                 gates: 0,
                 scratch: 0,
-                constant,
-                bound: 0,
+                expansion: Expansion::Constant(value),
+            });
+        }
+        // A nonconstant bound implies a positive total and at least one positive
+        // contribution. Dropping any such position loses at least minimum;
+        // selecting any one gains at least minimum. Equal conditions and zero
+        // positions do not change either implication.
+        let boundary = if threshold.bound > total - minimum {
+            Some(Expansion::All)
+        } else if threshold.bound <= minimum {
+            Some(Expansion::Any)
+        } else {
+            None
+        };
+        if let Some(expansion) = boundary {
+            return Ok(Self {
+                // Include the identity gate so even a single condition returns
+                // a newly appended last node in sinks that retain every gate.
+                gates: nonzero,
+                scratch: 0,
+                expansion,
             });
         }
         let bound = usize::try_from(threshold.bound).map_err(|_| Error::Capacity)?;
@@ -78,15 +110,17 @@ impl Shape {
         Ok(Self {
             gates,
             scratch,
-            constant,
-            bound,
+            expansion: Expansion::Dynamic { bound },
         })
     }
 
     /// Whether the validated threshold is independent of all conditions.
     #[must_use]
     pub const fn constant(self) -> Option<bool> {
-        self.constant
+        match self.expansion {
+            Expansion::Constant(value) => Some(value),
+            Expansion::All | Expansion::Any | Expansion::Dynamic { .. } => None,
+        }
     }
 }
 
@@ -130,9 +164,13 @@ pub trait Sink {
 ///
 /// Conditions must belong to an admitted predecessor map, including zero-weight
 /// positions: this numeric operation does not authenticate formula ownership.
-/// The two rows use O(bound) slots and the recurrence attempts exactly
-/// `Shape::gates` gates. Each condition occurrence, initialization slot and DP
-/// cell consumes a `tick`, as does the checked shape scan. All arithmetic is
+/// Boundary bounds use zero scratch and one AND/OR gate per positive occurrence;
+/// interior bounds use two O(bound) rows. Both attempt exactly `Shape::gates`
+/// gates. Each condition occurrence, initialization slot and DP cell consumes a
+/// `tick`, as does the checked shape scan. Every nonconstant expansion requests
+/// true and false constants before emitting gates, retaining the physical layout
+/// and last-node root contract. The caller retains the original-node truth gate
+/// when lowering a frozen query. All arithmetic is
 /// widened before any host-address conversion. No retained semantic nodes or
 /// allocations are created by this operation.
 ///
@@ -145,7 +183,7 @@ pub fn lower<S: Sink>(
 ) -> Result<S::Value, S::Error> {
     sink.tick()?;
     let shape = Shape::new(threshold, || sink.tick())?;
-    if let Some(value) = shape.constant {
+    if let Some(value) = shape.constant() {
         return sink.constant(value);
     }
     if scratch.len() < shape.scratch {
@@ -153,7 +191,13 @@ pub fn lower<S: Sink>(
     }
     let truth = sink.constant(true)?;
     let falsum = sink.constant(false)?;
-    let width = shape.bound + 1;
+    let bound = match shape.expansion {
+        Expansion::All => return boundary(threshold, false, truth, sink),
+        Expansion::Any => return boundary(threshold, true, falsum, sink),
+        Expansion::Dynamic { bound } => bound,
+        Expansion::Constant(_) => unreachable!("constant expansion returned above"),
+    };
+    let width = bound + 1;
     let (mut previous, mut current) = scratch[..shape.scratch].split_at_mut(width);
     for target in 0..width {
         sink.tick()?;
@@ -168,8 +212,8 @@ pub fn lower<S: Sink>(
         let condition = sink.condition(condition)?;
         // Only min(weight, bound) participates in a host index; a u64 weight
         // never narrows through i32 or truncates on a narrower host.
-        let weight = usize::try_from(u128::from(weight).min(shape.bound as u128))
-            .map_err(|_| Error::Capacity)?;
+        let weight =
+            usize::try_from(u128::from(weight).min(bound as u128)).map_err(|_| Error::Capacity)?;
         current[0] = truth;
         for target in 1..width {
             sink.tick()?;
@@ -178,141 +222,27 @@ pub fn lower<S: Sink>(
         }
         std::mem::swap(&mut previous, &mut current);
     }
-    Ok(previous[shape.bound])
+    Ok(previous[bound])
+}
+
+/// Every row position still receives its scan tick, including zero weights.
+/// Conditions keep their original order and repetitions; neither a decided
+/// result nor an identity gate bypasses later reads or their typed failures.
+fn boundary<S: Sink>(
+    threshold: Threshold<'_>,
+    disjunction: bool,
+    mut value: S::Value,
+    sink: &mut S,
+) -> Result<S::Value, S::Error> {
+    for (&condition, &weight) in threshold.conditions.iter().zip(threshold.weights) {
+        sink.tick()?;
+        if weight != 0 {
+            let condition = sink.condition(condition)?;
+            value = sink.gate(disjunction, value, condition)?;
+        }
+    }
+    Ok(value)
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    struct Boolean {
-        mask: usize,
-        gates: usize,
-        visits: usize,
-        limit: usize,
-    }
-
-    impl Sink for Boolean {
-        type Value = bool;
-        type Error = Error;
-        fn tick(&mut self) -> Result<(), Error> {
-            if self.visits == self.limit {
-                return Err(Error::Capacity);
-            }
-            self.visits += 1;
-            Ok(())
-        }
-        fn constant(&mut self, value: bool) -> Result<bool, Error> {
-            Ok(value)
-        }
-        fn condition(&mut self, index: usize) -> Result<bool, Error> {
-            Ok(self.mask & (1 << index) != 0)
-        }
-        fn gate(&mut self, disjunction: bool, left: bool, right: bool) -> Result<bool, Error> {
-            self.gates += 1;
-            Ok(if disjunction {
-                left || right
-            } else {
-                left && right
-            })
-        }
-    }
-
-    #[test]
-    fn physical_recurrence_matches_independent_weighted_sums() {
-        for weights in [[0, 0, 0, 0], [1, 2, 0, 3], [u64::MAX, 1, 2, 0]] {
-            for bound in -1..=8 {
-                let threshold = Threshold {
-                    conditions: &[0, 0, 1, 2],
-                    weights: &weights,
-                    bound,
-                };
-                let shape = Shape::new(threshold, || Ok::<_, Error>(())).unwrap();
-                for mask in 0..8 {
-                    let mut sink = Boolean {
-                        mask,
-                        gates: 0,
-                        visits: 0,
-                        limit: usize::MAX,
-                    };
-                    let actual =
-                        lower(threshold, &mut vec![false; shape.scratch], &mut sink).unwrap();
-                    let total: i128 = threshold
-                        .conditions
-                        .iter()
-                        .zip(weights)
-                        .filter(|(condition, _)| mask & (1 << **condition) != 0)
-                        .map(|(_, weight)| i128::from(weight))
-                        .sum();
-                    assert_eq!(actual, total >= bound);
-                    assert_eq!(sink.gates, shape.gates);
-                }
-            }
-        }
-    }
-
-    #[test]
-    fn empty_thresholds_expand_only_their_constant() {
-        for bound in [i128::MIN, -1, 0, 1, i128::MAX] {
-            let threshold = Threshold {
-                conditions: &[],
-                weights: &[],
-                bound,
-            };
-            let shape = Shape::new(threshold, || Ok::<_, Error>(())).unwrap();
-            assert_eq!((shape.gates, shape.scratch), (0, 0));
-            let mut sink = Boolean {
-                mask: 0,
-                gates: 0,
-                visits: 0,
-                limit: usize::MAX,
-            };
-            assert_eq!(lower(threshold, &mut [], &mut sink).unwrap(), 0 >= bound);
-        }
-    }
-
-    #[test]
-    fn physical_shape_validates_columns_before_constant_simplification() {
-        let threshold = Threshold {
-            conditions: &[0],
-            weights: &[],
-            bound: 0,
-        };
-        assert!(matches!(
-            Shape::new(threshold, || Ok::<_, Error>(())),
-            Err(Error::Invalid)
-        ));
-    }
-
-    #[test]
-    fn physical_shape_refuses_unaddressable_expansion() {
-        let threshold = Threshold {
-            conditions: &[0],
-            weights: &[u64::MAX],
-            bound: i128::from(u64::MAX),
-        };
-        assert!(matches!(
-            Shape::new(threshold, || Ok::<_, Error>(())),
-            Err(Error::Capacity)
-        ));
-    }
-
-    #[test]
-    fn physical_lowering_preserves_control_failure() {
-        let threshold = Threshold {
-            conditions: &[0, 1],
-            weights: &[1, 1],
-            bound: 1,
-        };
-        let mut sink = Boolean {
-            mask: 3,
-            gates: 0,
-            visits: 0,
-            limit: 3,
-        };
-        assert_eq!(
-            lower(threshold, &mut [false; 4], &mut sink),
-            Err(Error::Capacity)
-        );
-    }
-}
+mod tests;

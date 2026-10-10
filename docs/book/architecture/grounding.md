@@ -101,6 +101,19 @@ constant guards still affect that conjunction and exclude optional numeric count
 capture. A false bound never suppresses evaluation of a later bound. The enclosing
 rule retains its source origins.
 
+When a family needs numeric thresholds, its nonconstant boundary guards remain
+on that row as well. This keeps implications between bounds available to
+propagation: a count below two is also below three. Equivalent “any” and “all”
+bounds use common numeric boundaries. A family containing only these Boolean
+cases still simplifies to conjunctions and disjunctions.
+
+Positive weights are divided by their common divisor, and each threshold is
+rounded upward in the new units. For example, weights of two can never total
+three: the requirements “at least three” and “less than four” become opposing
+guards at two. Equality and disequality comparisons normalize both of their
+thresholds separately. Conditions, tuple multiplicity and frozen truth are
+preserved; signed aggregates retain their separate compilation route.
+
 The preservation obligation is pointwise: each grouped guard root must have the
 same original and frozen-reduct truth as its separately compiled counterpart
 over the same completed contributions. Conjunction then preserves the written

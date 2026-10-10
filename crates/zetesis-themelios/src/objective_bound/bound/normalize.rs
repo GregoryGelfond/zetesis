@@ -87,19 +87,24 @@ pub(in crate::objective_bound) fn prepare<'a>(
 
 impl Shape {
     fn fits(&self, shifted: i64, limits: ObjectiveBoundLimits) -> bool {
-        // Lt(k), Eq(k) request G(k), G(k), G(k+1). Extreme thresholds
-        // reduce to constants, conjunctions or disjunctions without numeric
-        // state. Interior thresholds share the two contribution columns.
+        // Lt(k), Eq(k) request G(k), G(k), G(k+1). A family with any
+        // interior threshold keeps all nonconstant guards on its numeric row
+        // so propagation can use their ordering. Pure Boolean families need
+        // no numeric state.
         let minimum = self.minimum.unwrap_or(0);
         let shifted = i128::from(shifted);
-        let thresholds = [shifted, shifted, shifted + 1]
+        let bounds = [shifted, shifted, shifted + 1];
+        let numeric = bounds
             .into_iter()
-            .filter(|&bound| bound > minimum && bound <= self.total - minimum)
+            .any(|bound| bound > minimum && bound <= self.total - minimum);
+        let thresholds = bounds
+            .into_iter()
+            .filter(|&bound| bound > 0 && bound <= self.total)
             .count();
-        let states = if thresholds == 0 {
-            0
-        } else {
+        let states = if numeric {
             2 * self.nonzero as u128 + thresholds as u128
+        } else {
+            0
         };
         // Only representation compatibility decides this choice. Actual node,
         // operand and work admission belongs to the shared builder, so an

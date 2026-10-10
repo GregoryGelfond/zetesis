@@ -1,4 +1,4 @@
-//! Nonnegative comparisons share a row; Boolean boundary cases stay explicit.
+//! Nonnegative comparisons retain one row across numeric and boundary guards.
 
 use super::lower::{Builder, reserve};
 use super::{AggregateComparison, AggregateElement, AggregateErrorKind, AggregateGuard};
@@ -13,6 +13,16 @@ enum Reading {
     All,
     Any,
     Threshold,
+}
+
+impl Reading {
+    fn uses_row(self, numeric: bool) -> bool {
+        match self {
+            Self::Threshold => true,
+            Self::All | Self::Any => numeric,
+            Self::Truth | Self::Falsum => false,
+        }
+    }
 }
 
 struct Shape {
@@ -34,6 +44,56 @@ impl Shape {
             Reading::Threshold
         }
     }
+
+    fn normalized_bound(&self, bound: i128, divisor: u64) -> Result<i128> {
+        // Boundary guards previously shared one Boolean node. Keep their
+        // equivalence visible in both directions after moving them onto a row.
+        let bound = match self.reading(bound) {
+            Reading::All => self.total,
+            Reading::Any => self.minimum,
+            _ => bound,
+        };
+        if divisor == 1 {
+            return Ok(bound);
+        }
+        // Row requests are positive. This ceiling division avoids adding the
+        // divisor to a potentially large bound before division.
+        bound
+            .checked_sub(1)
+            .and_then(|value| value.checked_div(i128::from(divisor)))
+            .and_then(|value| value.checked_add(1))
+            .ok_or(AggregateErrorKind::ArithmeticOverflow)
+    }
+}
+
+fn gcd(builder: &mut Builder<'_, '_>, mut left: u64, mut right: u64) -> Result<u64> {
+    if left == 1 || right == 1 {
+        return Ok(1);
+    }
+    if left == right {
+        return Ok(left);
+    }
+    while right != 0 && left != 1 {
+        builder.tick()?;
+        let remainder = left
+            .checked_rem(right)
+            .ok_or(AggregateErrorKind::ArithmeticOverflow)?;
+        left = right;
+        right = remainder;
+    }
+    Ok(left)
+}
+
+fn divide_weights(builder: &mut Builder<'_, '_>, weights: &mut [u64], divisor: u64) -> Result<()> {
+    if divisor != 1 {
+        for weight in weights {
+            builder.tick()?;
+            *weight = weight
+                .checked_div(divisor)
+                .ok_or(AggregateErrorKind::ArithmeticOverflow)?;
+        }
+    }
+    Ok(())
 }
 
 fn bounds(guard: AggregateGuard) -> impl Iterator<Item = i128> {
@@ -57,7 +117,13 @@ fn bounds(guard: AggregateGuard) -> impl Iterator<Item = i128> {
 
 /// All children precede this family and all weights have been validated.
 /// A row position is a distinct tuple contribution, even when conditions repeat.
-/// Boundary-case replacements hold in the original theory and its frozen reduct.
+/// Pure Boolean families simplify in both the original theory and its reduct.
+/// A numeric family keeps all nonconstant guards on its row: simplifying just
+/// one to conjunction/disjunction would hide ordered-bound implications during
+/// propagation, although it would preserve complete models.
+/// Dividing positive weights by their common divisor preserves every original
+/// and frozen condition valuation: `S = dQ` satisfies `S >= k` iff `Q >= ceil(k/d)`.
+/// Boundary classification uses original units; tuple occurrences are unchanged.
 pub(super) fn compile(
     builder: &mut Builder<'_, '_>,
     elements: &[AggregateElement],
@@ -77,21 +143,25 @@ pub(super) fn compile(
     }
     let shape = Shape { total, minimum };
     let mut count = 0usize;
-    let mut has_row = false;
+    let mut numeric = false;
     for &guard in guards {
         for bound in bounds(guard) {
             builder.tick()?;
             match shape.reading(bound) {
                 Reading::Threshold => {
                     count = count.checked_add(1).ok_or(AggregateErrorKind::StateLimit)?;
-                    has_row = true;
+                    numeric = true;
                 }
-                Reading::All | Reading::Any => has_row = true,
+                Reading::All | Reading::Any => {
+                    count = count.checked_add(1).ok_or(AggregateErrorKind::StateLimit)?;
+                }
                 Reading::Truth | Reading::Falsum => {}
             }
         }
     }
+    let has_row = count != 0;
     let cells = if has_row { nonzero } else { 0 };
+    let count = if numeric { count } else { 0 };
     let states = if count == 0 {
         0
     } else {
@@ -103,32 +173,41 @@ pub(super) fn compile(
     builder.states(states)?;
     let mut conditions = builder.reserve_operands(cells)?;
     let mut weights = reserve(if count == 0 { 0 } else { cells })?;
+    // The minimum is itself a positive coefficient. Seeding with it also skips
+    // every Euclidean step for rows containing a unit weight.
+    let mut divisor = if numeric {
+        u64::try_from(shape.minimum).map_err(|_| AggregateErrorKind::ArithmeticOverflow)?
+    } else {
+        1
+    };
     if has_row {
         for element in elements {
             builder.tick()?;
             if element.weight > 0 {
                 conditions.push(element.condition);
                 if count != 0 {
-                    weights.push(
-                        u64::try_from(element.weight)
-                            .map_err(|_| AggregateErrorKind::ArithmeticOverflow)?,
-                    );
+                    let weight = u64::try_from(element.weight)
+                        .map_err(|_| AggregateErrorKind::ArithmeticOverflow)?;
+                    divisor = gcd(builder, weight, divisor)?;
+                    weights.push(weight);
                 }
             }
         }
     }
+    divide_weights(builder, &mut weights, divisor)?;
     let mut requests = reserve(count)?;
     for &guard in guards {
         for bound in bounds(guard) {
             builder.tick()?;
-            if matches!(shape.reading(bound), Reading::Threshold) {
-                requests.push(bound);
+            if shape.reading(bound).uses_row(numeric) {
+                requests.push(shape.normalized_bound(bound, divisor)?);
             }
         }
     }
     let native = builder.threshold_family(&conditions, &weights, &requests)?;
     let mut family = Family {
         shape,
+        numeric,
         conditions: &conditions,
         native,
         all: None,
@@ -146,6 +225,7 @@ pub(super) fn compile(
 
 struct Family<'a> {
     shape: Shape,
+    numeric: bool,
     conditions: &'a [usize],
     native: std::ops::Range<usize>,
     all: Option<usize>,
@@ -160,7 +240,7 @@ impl Family<'_> {
         match self.shape.reading(bound) {
             Reading::Truth => Ok(self.truth),
             Reading::Falsum => Ok(self.falsum),
-            Reading::All | Reading::Any => {
+            Reading::All | Reading::Any if !self.numeric => {
                 let all = matches!(self.shape.reading(bound), Reading::All);
                 let slot = if all { &mut self.all } else { &mut self.any };
                 if let Some(root) = *slot {
@@ -174,7 +254,7 @@ impl Family<'_> {
                 *slot = Some(root);
                 Ok(root)
             }
-            Reading::Threshold => self
+            Reading::Threshold | Reading::All | Reading::Any => self
                 .native
                 .next()
                 .ok_or(AggregateErrorKind::ArithmeticOverflow),

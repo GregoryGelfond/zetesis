@@ -20,7 +20,7 @@ enum Representation {
 impl Representation {
     fn label(self) -> &'static str {
         match self {
-            Self::CompiledNative => "compiled_native_mixed_boundary",
+            Self::CompiledNative => "compiled_native_boundary_family",
             Self::SharedBooleanDp => "former_shared_boolean_dp",
             Self::AllThresholds => "native_both_numeric_control",
         }

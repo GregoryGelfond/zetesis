@@ -81,7 +81,9 @@ impl AggregateFamilyBuild {
 /// universe. This function checks indices and bounds, not that source premise.
 ///
 /// For nonnegative weights, native threshold nodes share one contribution row.
-/// Constant, conjunction and disjunction bounds retain their simpler formulas.
+/// Constants simplify. Families needing no numeric thresholds also simplify to
+/// conjunctions and disjunctions; mixed families retain all nonconstant guards
+/// on their shared row so propagation can relate their bounds.
 /// Equality uses `G(k) AND NOT G(k+1)`; not-equal retains `G(k) -> G(k+1)`.
 /// Negative weights use the full failing-subset formula separately for each
 /// guard, with shared validation and cumulative work/subset ceilings.

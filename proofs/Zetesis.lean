@@ -27,6 +27,7 @@ import Zetesis.StreamedOptimization
 import Zetesis.QueryCompaction
 import Zetesis.Thresholds
 import Zetesis.ThresholdReduct
+import Zetesis.ThresholdDivision
 import Zetesis.AggregateAssignment
 import Zetesis.DagSharing
 import Zetesis.DependencySchedule

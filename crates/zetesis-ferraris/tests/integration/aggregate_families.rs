@@ -9,12 +9,141 @@ use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison as Comparison, AggregateElement as Element,
     AggregateErrorKind as Error, AggregateFamilyLimits as FamilyLimits, AggregateGuard as Guard,
-    AggregateLimits, AggregateProfile, Interpretation, Limits, Node, Theory, append_aggregate,
-    append_aggregate_family, models, models_reduct,
+    AggregateLimits, AggregateProfile, Interpretation, Limits, Narrower, Narrowing,
+    NarrowingScratch, Node, NodeView, OriginalSubject, Region, RegionLimits, Theory,
+    append_aggregate, append_aggregate_family, models, models_reduct,
 };
 
 // Recursive evaluation is only the small independent test interpreter. It
 // materializes neither the production topological mask nor its witness formula.
+
+fn boundary_consequence(weights: [i32; 3], bounds: &[i64], premise: bool) -> Region {
+    let cancellation = Cancellation::default();
+    let mut nodes = raw((0..4).map(Node::atom).collect());
+    let elements = [0, 1, 2].map(|condition| Element {
+        weight: weights[condition],
+        condition,
+    });
+    let guards: Vec<_> = bounds
+        .iter()
+        .map(|&bound| Guard {
+            comparison: Comparison::Ge,
+            bound,
+        })
+        .collect();
+    let family = append_aggregate_family(
+        &mut nodes,
+        &elements,
+        &guards,
+        FamilyLimits::default(),
+        &cancellation,
+    )
+    .unwrap();
+    let given = family.roots()[0];
+    let consequence = family.roots()[1];
+    // The observer makes an inferred guard truth visible as an atom decision.
+    // Neither premise fixes an individual contribution without that inference.
+    let roots = if premise {
+        vec![given, push(&mut nodes, NodeView::Implies(consequence, 3))]
+    } else {
+        let falsum = push(&mut nodes, NodeView::False);
+        vec![
+            push(&mut nodes, NodeView::Implies(given, falsum)),
+            push(&mut nodes, NodeView::Implies(3, consequence)),
+        ]
+    };
+    let theory = Theory::new(4, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap();
+    let narrower = Narrower::new(&theory);
+    let mut region = Region::all_open(4);
+    let (outcome, _) = narrower
+        .narrow_known(
+            OriginalSubject::new(&theory, None),
+            &mut region,
+            &mut narrower.knowledge(),
+            &mut NarrowingScratch::default(),
+            RegionLimits::default(),
+            &cancellation,
+        )
+        .unwrap();
+    assert_ne!(outcome, Narrowing::Refuted);
+    region
+}
+
+#[test]
+fn false_interior_guard_refutes_a_stronger_boundary_guard() {
+    let region = boundary_consequence([1; 3], &[2, 3], false);
+    assert_eq!(region.decision(3), Some(false));
+    assert!((0..3).all(|atom| region.is_open(atom)));
+}
+
+#[test]
+fn true_interior_guard_implies_a_weaker_boundary_guard() {
+    let region = boundary_consequence([1; 3], &[2, 1], true);
+    assert_eq!(region.decision(3), Some(true));
+    assert!((0..3).all(|atom| region.is_open(atom)));
+}
+
+#[test]
+fn equivalent_all_guards_share_false_consequences() {
+    let region = boundary_consequence([2; 3], &[6, 5, 3], false);
+    assert_eq!(region.decision(3), Some(false));
+    assert!((0..3).all(|atom| region.is_open(atom)));
+}
+
+#[test]
+fn equivalent_any_guards_share_true_consequences() {
+    let region = boundary_consequence([2; 3], &[1, 2, 3], true);
+    assert_eq!(region.decision(3), Some(true));
+    assert!((0..3).all(|atom| region.is_open(atom)));
+}
+
+#[test]
+fn an_interval_between_attainable_sums_is_refuted_without_decisions() {
+    let cancellation = Cancellation::default();
+    let mut nodes = raw((0..3).map(Node::atom).collect());
+    let elements = [0, 1, 2].map(|condition| Element {
+        weight: 2,
+        condition,
+    });
+    let family = append_aggregate_family(
+        &mut nodes,
+        &elements,
+        &[
+            Guard {
+                comparison: Comparison::Ge,
+                bound: 3,
+            },
+            Guard {
+                comparison: Comparison::Lt,
+                bound: 4,
+            },
+        ],
+        FamilyLimits::default(),
+        &cancellation,
+    )
+    .unwrap();
+    let theory = Theory::new(
+        3,
+        nodes.into_parts(),
+        family.roots().to_vec(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let narrower = Narrower::new(&theory);
+    let mut region = Region::all_open(3);
+    let (outcome, _) = narrower
+        .narrow_known(
+            OriginalSubject::new(&theory, None),
+            &mut region,
+            &mut narrower.knowledge(),
+            &mut NarrowingScratch::default(),
+            RegionLimits::default(),
+            &cancellation,
+        )
+        .unwrap();
+    assert_eq!(outcome, Narrowing::Refuted);
+    assert!((0..3).all(|atom| region.is_open(atom)));
+}
 
 fn holds(comparison: Comparison, value: i128, bound: i64) -> bool {
     let bound = i128::from(bound);
@@ -169,6 +298,38 @@ fn exhaustive_families_preserve_each_guards_complete_frozen_reduct() {
     }
 }
 
+#[test]
+fn scaled_guards_preserve_unattainable_bounds_in_every_frozen_reduct() {
+    let guards: Vec<_> = COMPARISONS
+        .into_iter()
+        .flat_map(|comparison| (-1..=13).map(move |bound| Guard { comparison, bound }))
+        .collect();
+    // Repeated and composite conditions do not change the divisibility of any
+    // sum. In particular, equality at an odd bound is false in every reduct,
+    // while inequality retains its implication reading.
+    verify(
+        &[
+            Element {
+                weight: 2,
+                condition: 2,
+            },
+            Element {
+                weight: 4,
+                condition: 9,
+            },
+            Element {
+                weight: 6,
+                condition: 2,
+            },
+            Element {
+                weight: 0,
+                condition: 10,
+            },
+        ],
+        &guards,
+    );
+}
+
 proptest! {
     #![proptest_config(ProptestConfig::with_cases(192))]
     #[test]
@@ -274,7 +435,7 @@ fn ordered_guards_share_one_contribution_row() {
     )
     .unwrap();
     assert_eq!(family.profile(), AggregateProfile::Threshold);
-    assert_eq!(family.statistics().states, 62);
+    assert_eq!(family.statistics().states, 66);
     assert_eq!(nodes.parts().rows().len(), 1);
     assert_eq!(nodes.parts().conditions().len(), 16);
     assert_eq!(family.statistics().subsets, 0);
@@ -324,6 +485,45 @@ fn ordered_guards_share_one_contribution_row() {
     }
 }
 
+#[test]
+fn common_divisors_scale_one_shared_row_and_round_each_bound_up() {
+    let mut nodes = raw((0..3).map(Node::atom).collect());
+    let elements = [6, 10, 14].map(|weight| Element {
+        weight,
+        condition: 0,
+    });
+    let family = append_aggregate_family(
+        &mut nodes,
+        &elements,
+        &[
+            Guard {
+                comparison: Comparison::Ge,
+                bound: 7,
+            },
+            Guard {
+                comparison: Comparison::Ge,
+                bound: 8,
+            },
+        ],
+        FamilyLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    assert_eq!(nodes.parts().rows().len(), 1);
+    assert_eq!(nodes.parts().conditions(), &[0, 0, 0]);
+    assert_eq!(nodes.parts().weights(), &[3, 5, 7]);
+    assert_eq!(
+        nodes
+            .parts()
+            .thresholds()
+            .iter()
+            .map(|threshold| threshold.bound)
+            .collect::<Vec<_>>(),
+        vec![4, 4]
+    );
+    assert_eq!(family.statistics().states, 8);
+}
+
 fn limited(elements: &[Element], guards: &[Guard], limits: FamilyLimits) -> Error {
     let original = prefix();
     let mut nodes = copy(&original);
@@ -345,24 +545,16 @@ fn limited(elements: &[Element], guards: &[Guard], limits: FamilyLimits) -> Erro
 
 #[test]
 fn family_guard_node_work_state_and_element_ceilings_are_inclusive() {
-    let elements = [
-        Element {
-            weight: 1,
-            condition: 2,
-        },
-        Element {
-            weight: 2,
-            condition: 3,
-        },
-    ];
+    let elements =
+        [(6, 2), (10, 3), (14, 4)].map(|(weight, condition)| Element { weight, condition });
     let guards = [
         Guard {
             comparison: Comparison::Eq,
-            bound: 1,
+            bound: 5,
         },
         Guard {
             comparison: Comparison::Ne,
-            bound: 2,
+            bound: 7,
         },
     ];
     let mut nodes = prefix();
@@ -412,7 +604,7 @@ fn family_guard_node_work_state_and_element_ceilings_are_inclusive() {
     for (aggregate, expected) in [
         (
             AggregateLimits {
-                max_elements: 1,
+                max_elements: elements.len() - 1,
                 ..exact.aggregate
             },
             Error::ElementLimit,

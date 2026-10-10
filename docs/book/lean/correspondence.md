@@ -61,6 +61,21 @@ positions retain their contributions even when their conditions are equal.
 with repeated condition identities, and the corresponding formula consequences.
 These are general laws over complete rows and truth bounds.
 
+[`ThresholdDivision.equivalent`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ThresholdDivision.lean)
+proves that dividing every nonnegative weight by a positive common divisor and
+rounding a positive threshold upward as `1 + (bound - 1) / divisor` preserves
+original and arbitrary frozen truth. A zero bound remains zero. Every selected
+sum scales exactly, including repeated condition occurrences, so both original
+and frozen gates retain their meaning. The existing context laws carry the
+result through conjunction, disjunction and implication. Each primitive cut is
+rounded independently: equality and disequality use both `k` and `k + 1`.
+The [reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/threshold-division.md)
+explains why rounding the source comparison bound before forming its successor
+would be incorrect. Computing the divisor, raw-input validation, signed bound
+handling and the Rust compiler's checked arithmetic and work charges remain
+separate obligations. This law does not update or qualify the retained native
+extraction, whose Boolean-generation source boundary remains unchanged.
+
 This extends the classical law in `Thresholds`; it does not yet verify source
 coalescing, native formula storage, propagation, finite-width arithmetic, Rust
 evaluation or device execution.

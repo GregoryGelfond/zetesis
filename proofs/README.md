@@ -23,6 +23,7 @@ conceptual overview.
 | Question | Starting point |
 |---|---|
 | When does a zero-divisor instance require a warning or refusal? | [ArithmeticFamilies](Zetesis/ArithmeticFamilies.lean) requires a defined witness in the same complete family, permits empty joins, preserves fatal refusals and makes outer-binding scope explicit. |
+| When may threshold weights be divided by a common divisor? | [ThresholdDivision](Zetesis/ThresholdDivision.lean) preserves original and arbitrary frozen truth after exact weight division and upward threshold rounding; its [reading guide](guide/threshold-division.md) explains the premises and comparison composition. Executable normalization remains a separate obligation. |
 | What is an answer set under the formula reduct? | [Ferraris](Zetesis/Ferraris.lean) defines truth, the frozen reduct and subset minimality. |
 | Can support guards share a condition? | [SupportTransposition](Zetesis/SupportTransposition.lean) transposes complete head-condition incidences, preserving the whole guard family's original and arbitrary frozen truth and answer-set membership in unchanged context. Compiler coverage, provenance and resource bounds remain separate obligations. |
 | Does computed frozen-DAG truth equal reduct satisfaction? | [ReductEvaluation](Zetesis/ReductEvaluation.lean) derives the frozen mask from original evaluation and proves exact node and root truth for any tested interpretation. |

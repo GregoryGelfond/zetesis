@@ -240,6 +240,35 @@ fn extreme_normalized_bounds_need_no_numeric_states() {
     });
 }
 
+#[test]
+fn mixed_boundary_state_limit_preserves_signed_fallback() {
+    let fixture = Fixture::new(3, vec![(0, -1, 0, 0), (0, -1, 1, 1), (0, -1, 2, 2)]);
+    let limits = ObjectiveBoundLimits {
+        aggregate: AggregateLimits {
+            // G(2), G(2), G(3) share six contribution cells and three guards.
+            // Eight states fit the signed route, but not this numeric family.
+            max_states: 8,
+            ..no_subsets().aggregate
+        },
+        ..no_subsets()
+    };
+    let error = fixture
+        .plan
+        .bound(&fixture.score(1), limits, &Cancellation::default())
+        .unwrap_err();
+    assert!(matches!(
+        error.kind(),
+        Kind::Aggregate(error) if error.kind() == AggregateErrorKind::SubsetLimit
+    ));
+    fixture.compare_all(ObjectiveBoundLimits {
+        aggregate: AggregateLimits {
+            max_subsets: 64,
+            ..limits.aggregate
+        },
+        ..limits
+    });
+}
+
 fn many_negative() -> Fixture {
     Fixture::new(
         20,
@@ -255,7 +284,7 @@ fn a_linear_threshold_family_avoids_exponential_subset_admission() {
     let incumbent = fixture.score((1 << 20) - 2); // Cost -19: at least 19 selected.
     let limits = ObjectiveBoundLimits {
         aggregate: AggregateLimits {
-            max_states: 41,
+            max_states: 43,
             max_nodes: 256,
             max_subsets: 0,
             ..AggregateLimits::default()
@@ -347,7 +376,7 @@ fn normalization_limits_are_inclusive_and_failed_attempts_leave_exact_retry() {
         aggregate: AggregateLimits {
             max_elements: 20,
             max_nodes: parts.nodes().len(),
-            max_states: 41,
+            max_states: 43,
             max_subsets: 0,
             ..AggregateLimits::default()
         },
@@ -384,7 +413,7 @@ fn normalization_limits_are_inclusive_and_failed_attempts_leave_exact_retry() {
         },
         ObjectiveBoundLimits {
             aggregate: AggregateLimits {
-                max_states: 40,
+                max_states: 42,
                 ..exact.aggregate
             },
             ..exact

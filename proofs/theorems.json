@@ -7790,6 +7790,41 @@
     "line": 368
   },
   {
+    "name": "Zetesis.ThresholdDivision.divides_all",
+    "file": "Zetesis/ThresholdDivision.lean",
+    "line": 35
+  },
+  {
+    "name": "Zetesis.ThresholdDivision.rounded_bound_le_iff",
+    "file": "Zetesis/ThresholdDivision.lean",
+    "line": 47
+  },
+  {
+    "name": "Zetesis.ThresholdDivision.masked_sum_divide",
+    "file": "Zetesis/ThresholdDivision.lean",
+    "line": 65
+  },
+  {
+    "name": "Zetesis.ThresholdDivision.masked_threshold_divide",
+    "file": "Zetesis/ThresholdDivision.lean",
+    "line": 93
+  },
+  {
+    "name": "Zetesis.ThresholdDivision.original",
+    "file": "Zetesis/ThresholdDivision.lean",
+    "line": 105
+  },
+  {
+    "name": "Zetesis.ThresholdDivision.frozen",
+    "file": "Zetesis/ThresholdDivision.lean",
+    "line": 124
+  },
+  {
+    "name": "Zetesis.ThresholdDivision.equivalent",
+    "file": "Zetesis/ThresholdDivision.lean",
+    "line": 148
+  },
+  {
     "name": "Zetesis.ThresholdPropagation.masked_sum_mono",
     "file": "Zetesis/ThresholdPropagation.lean",
     "line": 33
