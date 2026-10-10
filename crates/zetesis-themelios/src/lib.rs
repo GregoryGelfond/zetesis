@@ -152,7 +152,7 @@ pub use formula_hybrid::{
 mod formula_count_plan;
 pub use formula_count_plan::{
     CountPlan, CountPlanFailure, CountPlanFailureKind, CountPlanLimits, CountPlanResource,
-    CountPlanStatistics, CountPlanStatus,
+    CountPlanStatistics, CountPlanStatus, RequiredChoices,
 };
 mod formula_domains;
 mod formula_keys;

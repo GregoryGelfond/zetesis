@@ -14,7 +14,7 @@ struct Shape {
     nonzero: usize,
 }
 
-pub(super) fn prepare<'a>(
+pub(in crate::objective_bound) fn prepare<'a>(
     elements: &'a [AggregateElement],
     bound: i64,
     falsum: usize,

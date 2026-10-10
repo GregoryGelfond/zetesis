@@ -118,6 +118,7 @@ struct Run {
 }
 
 mod evidence;
+mod probe_selection;
 
 fn unfiltered(wrapped: bool, max_work: u64) -> Run {
     let mut fixture = Fixture::from_atoms(

@@ -206,6 +206,10 @@ pub(super) struct ModelSelection<'a, 'source> {
 }
 
 impl RowFilter for ModelSelection<'_, '_> {
+    fn immutable_selection(&self) -> bool {
+        true
+    }
+
     fn resolve(
         &self,
         atoms: Atoms<'_>,
@@ -484,6 +488,10 @@ impl<'a, 'source> ConsequenceSelection<'a, 'source> {
 }
 
 impl RowFilter for ConsequenceSelection<'_, '_> {
+    fn immutable_selection(&self) -> bool {
+        true
+    }
+
     fn single_open(&self) -> bool {
         matches!(self.mode, ConsequenceMode::SingleOpen { .. })
     }
@@ -541,6 +549,10 @@ impl RowFilter for ConsequenceSelection<'_, '_> {
 }
 
 impl RowFilter for Selection<'_, '_> {
+    fn immutable_selection(&self) -> bool {
+        true
+    }
+
     fn resolve(
         &self,
         atoms: Atoms<'_>,

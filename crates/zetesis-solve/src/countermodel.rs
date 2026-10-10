@@ -17,6 +17,8 @@ pub(crate) struct Input<'a> {
     /// How the key analysis that asked them ended.
     pub(crate) key_analysis: zetesis_themelios::KeyAnalysis,
     pub(crate) objectives: &'a zetesis_objective::ObjectiveProgram,
+    /// Optional necessary choice facts authenticated to this original theory.
+    pub(crate) required_choices: Option<&'a zetesis_themelios::RequiredChoices>,
     /// Source analysis chooses attempt order; each plan checks the whole theory.
     pub(crate) certificate_order: zetesis_sat::CertificateOrder,
 }

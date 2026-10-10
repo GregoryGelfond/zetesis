@@ -17,6 +17,7 @@ pub(crate) struct Preparation {
     plan: Option<ObjectivePlan>,
     work: u64,
     refusal: Option<ObjectiveBoundError>,
+    choice_refusal: Option<ObjectiveBoundError>,
 }
 
 impl Preparation {
@@ -29,18 +30,12 @@ impl Preparation {
             plan: None,
             work: 0,
             refusal: None,
+            choice_refusal: None,
         };
         if !input.objectives.is_present() || options.max_objective_work == 0 {
             return state;
         }
-        let defaults = ObjectivePlanLimits::default();
-        let limits = ObjectivePlanLimits {
-            max_work: options.max_objective_work.min(defaults.max_work),
-            max_bindings: options.max_objective_bindings,
-            max_keys: options.max_objective_keys,
-            max_key_bytes: options.max_objective_key_bytes,
-            ..defaults
-        };
+        let limits = plan_limits(options, 0);
         match ObjectivePlan::new(
             input.theory,
             input.atoms.atoms(),
@@ -60,6 +55,35 @@ impl Preparation {
         state
     }
 
+    /// Optional necessary bounds supplement the exact plan. A refusal retains
+    /// that plan and charges the attempted work before any diagnostic is sent.
+    pub(crate) fn prepare_choices(
+        &mut self,
+        choices: Option<&zetesis_themelios::RequiredChoices>,
+        options: &SolveConfig,
+        cancellation: &Cancellation,
+    ) {
+        if options.max_objective_bound_work == 0 {
+            return;
+        }
+        let (Some(plan), Some(choices)) = (self.plan.as_mut(), choices) else {
+            return;
+        };
+        let result = plan.prepare_choice_bounds(
+            choices,
+            plan_limits(options, self.work),
+            options.max_candidate_bytes as u128,
+            cancellation,
+        );
+        match result {
+            Ok(statistics) => self.work += statistics.work,
+            Err(error) => {
+                self.work += error.statistics().work;
+                self.choice_refusal = Some(error);
+            }
+        }
+    }
+
     pub(crate) const fn work(&self) -> u64 {
         self.work
     }
@@ -72,7 +96,24 @@ impl Preparation {
         if let Some(error) = self.refusal {
             observations.record(Event::ObjectiveUnavailable(error))?;
         }
+        if let Some(error) = self.choice_refusal {
+            observations.record(Event::ChoiceObjectiveBoundUnavailable(error))?;
+        }
         Ok(())
+    }
+}
+
+fn plan_limits(options: &SolveConfig, spent: u64) -> ObjectivePlanLimits {
+    let defaults = ObjectivePlanLimits::default();
+    ObjectivePlanLimits {
+        max_work: options
+            .max_objective_work
+            .saturating_sub(spent)
+            .min(defaults.max_work),
+        max_bindings: options.max_objective_bindings,
+        max_keys: options.max_objective_keys,
+        max_key_bytes: options.max_objective_key_bytes,
+        ..defaults
     }
 }
 
@@ -120,6 +161,9 @@ impl Bounds {
                 return Ok(());
             }
         };
+        if let Some(error) = bound.choice_failure() {
+            observations.record(Event::ChoiceObjectiveBoundUnavailable(error))?;
+        }
         if !bound.original().same_instance(models.theory()) {
             self.enabled = false;
             observations.record(Event::ObjectiveTheoryMismatch)?;

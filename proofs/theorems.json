@@ -6005,6 +6005,76 @@
     "line": 46
   },
   {
+    "name": "Zetesis.RequiredChoiceCosts.sum_nonnegative",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 41
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.member_le_sum",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 53
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.group_floor_le",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 74
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.sum_append",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 98
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.sum_add",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 105
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.residual_nonnegative",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 122
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.group_residual_le",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 134
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.residuals_le_allocated",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 153
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.partition_residual_bound",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 173
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.floors_le_allocated",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 190
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.partition_lower_bound",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 214
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.lexicographic_lower_bound",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 232
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.lower_bound_preserves_candidates",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 256
+  },
+  {
+    "name": "Zetesis.RequiredChoiceCosts.lower_bound_preserves_answer_sets",
+    "file": "Zetesis/RequiredChoiceCosts.lean",
+    "line": 269
+  },
+  {
     "name": "Zetesis.RowSteps.marks_are_new_atoms",
     "file": "Zetesis/RowSteps.lean",
     "line": 52
@@ -7495,14 +7565,24 @@
     "line": 57
   },
   {
+    "name": "Zetesis.TableBindings.completed_selection_reused",
+    "file": "Zetesis/TableBindings.lean",
+    "line": 109
+  },
+  {
+    "name": "Zetesis.TableBindings.selection_consumer_preserved",
+    "file": "Zetesis/TableBindings.lean",
+    "line": 125
+  },
+  {
     "name": "Zetesis.TableBindings.indexed_matches_preserved",
     "file": "Zetesis/TableBindings.lean",
-    "line": 112
+    "line": 140
   },
   {
     "name": "Zetesis.TableBindings.join_family_preserved",
     "file": "Zetesis/TableBindings.lean",
-    "line": 161
+    "line": 189
   },
   {
     "name": "Zetesis.TerminalDefinitions.satisfies_definition",

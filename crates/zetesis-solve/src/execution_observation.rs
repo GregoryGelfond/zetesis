@@ -170,6 +170,8 @@ pub enum ExecutionObservation<'a> {
     GeneralMembership(zetesis_sat::CertificateError),
     /// Optional objective-plan preparation was refused; exact search remains.
     ObjectiveUnavailable(ObjectiveBoundError),
+    /// Required-choice strengthening declined; the exact objective plan remains usable.
+    ChoiceObjectiveBoundUnavailable(ObjectiveBoundError),
     /// Optional objective-bound construction was refused; exact search remains.
     ObjectiveBoundStopped(ObjectiveBoundError),
     /// A bound failed the original-theory ownership check.

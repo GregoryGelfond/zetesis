@@ -192,8 +192,8 @@ fn ground_with_schedule(
             .admit()
             .map_err(|error| FormulaFailure::Theory { error, location })
     })?;
-    let count_plan = count_plan.map_or(
-        crate::formula_count_plan::Outcome::NotRequested,
+    let (count_plan, required_choices) = count_plan.map_or(
+        (crate::formula_count_plan::Outcome::NotRequested, None),
         |collector| collector.finish(&theory),
     );
     crate::formula::poll_control(cancellation.as_ref(), location)?;
@@ -206,6 +206,7 @@ fn ground_with_schedule(
             analyzed,
             theory,
             count_plan,
+            required_choices,
             atoms,
             origins,
             objectives,
@@ -448,17 +449,30 @@ fn emit<'source>(
         location,
     )?;
     let mut builder = profile.phase(GroundingPhase::FormulaInitialization, None, || {
+        let mut count_plan = match schedule {
+            Schedule::Eager(request) => {
+                request.map(|request| crate::formula_count_plan::Collector::new(request, location))
+            }
+            Schedule::Hybrid | Schedule::Retained | Schedule::HybridRetained => None,
+        };
+        if !prepared.objectives.is_empty() || !prepared.objective_declarations.is_empty() {
+            if let Some(collector) = &mut count_plan {
+                collector.retained = true;
+            } else {
+                count_plan = Some(crate::formula_count_plan::Collector::objective(
+                    limits,
+                    &budget.cancellation().cloned().unwrap_or_default(),
+                    location,
+                ));
+            }
+        }
         let mut builder = Builder::empty(
             computation,
             limits,
             budget,
             counters,
             Purpose::Theory,
-            match schedule {
-                Schedule::Eager(request) => request
-                    .map(|request| crate::formula_count_plan::Collector::new(request, location)),
-                Schedule::Hybrid | Schedule::Retained | Schedule::HybridRetained => None,
-            },
+            count_plan,
             location,
         )?;
         builder.initialize(location)?;
@@ -1547,7 +1561,11 @@ impl Builder<'_, '_, '_> {
             None
         };
         let HeadGroup { eligible, activity } = self.head_group(group, assignment, support, rule)?;
-        let retaining = keys.is_some() && !guards.is_empty();
+        let retaining = keys.is_some()
+            && self
+                .count_plan
+                .as_mut()
+                .is_some_and(|collector| collector.interval_guards(guards, rule.location));
         let mut count_bounds =
             retaining.then(|| crate::formula_count_plan::Bounds::new(eligible.len()));
         let kind = match measure {
@@ -1556,7 +1574,8 @@ impl Builder<'_, '_, '_> {
             _ => None,
         };
         self.choice_permissions(eligible.iter().copied(), body, rule)?;
-        let retained = retaining.then_some(eligible);
+        let captured = self.stage_choice_members(rule, body, &eligible, keys, retaining);
+        drop(eligible);
         if !guards.is_empty() {
             let mut selected = HeadContributions::new(
                 kind,
@@ -1602,27 +1621,39 @@ impl Builder<'_, '_, '_> {
             let violated = self.and(body, outside, rule.location)?;
             let constraint = self.node(Node::Implies(violated, FALSUM), rule.location)?;
             self.root(constraint, rule)?;
-            if let (Some(collector), Some(eligible), Some(keys), Some(bounds)) =
-                (&mut self.count_plan, retained, keys, count_bounds)
+            if let (Some(collector), Some(members), Some(bounds)) =
+                (&mut self.count_plan, captured, count_bounds)
             {
-                collector.capture_group(
-                    &crate::formula_count_plan::Input {
-                        body,
-                        eligible: eligible.slice(),
-                        bijection: keys,
-                        nodes: self.nodes.view(),
-                        atom_count: self.catalog.len(),
-                        bounds,
-                        origins: &rule.origins,
-                        location: rule.location,
-                    },
-                    within,
-                    constraint,
-                );
+                collector.capture_group(members, bounds, within, constraint);
             }
         }
         Ok(())
     }
+    /// Stage optional source evidence before releasing the mandatory head map.
+    /// Exact guards and asserted roots are attached only after lowering succeeds.
+    fn stage_choice_members(
+        &mut self,
+        rule: &RuleIr,
+        body: usize,
+        eligible: &CoordinateMap<usize, usize>,
+        keys: Option<crate::formula_head_aggregate::Bijection>,
+        retaining: bool,
+    ) -> Option<crate::formula_count_plan::Members> {
+        if !retaining {
+            return None;
+        }
+        let collector = self.count_plan.as_mut()?;
+        collector.prepare_group(&crate::formula_count_plan::Input {
+            body,
+            eligible: eligible.slice(),
+            bijection: keys?,
+            nodes: self.nodes.view(),
+            atom_count: self.catalog.len(),
+            origins: &rule.origins,
+            location: rule.location,
+        })
+    }
+
     /// Lower signed truth independently of producer eligibility. A negated
     /// operand remains an implication to falsum, so its reduct is frozen in M.
     fn head_literal(

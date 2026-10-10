@@ -22,6 +22,10 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Use required choices to bound unavoidable objective costs before all choices
+  are decided, preserving optimal ties and the original reduct checks.
+- Reuse completed filtering of short relation lookups during lazy grounding,
+  preserving tuple order and arithmetic diagnostics.
 - Retain CPU tight-checking storage between candidates, with independent
   workspaces for parallel workers.
 - Retain source-checking workspaces between GPU candidate batches and

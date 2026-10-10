@@ -12,7 +12,7 @@ use super::{
     ObjectiveBoundStatistics, ObjectivePlan, ObjectivePlanLimits, Work,
 };
 
-mod normalize;
+pub(super) mod normalize;
 
 pub(super) fn compile(
     plan: &ObjectivePlan,
@@ -96,14 +96,22 @@ pub(super) fn compile(
         },
     )
     .map_err(|error| work.error(Kind::Theory(error)))?;
-    Ok(ObjectiveBound {
+    let exact = ObjectiveBound {
         original: plan.original.clone(),
         theory,
         statistics: work.statistics,
-    })
+        choice_failure: None,
+    };
+    Ok(super::choices::strengthen(
+        plan,
+        exact,
+        incumbent,
+        limits,
+        cancellation,
+    ))
 }
 
-fn family(
+pub(super) fn family(
     nodes: &mut FormulaNodes,
     elements: &[AggregateElement],
     bound: i64,

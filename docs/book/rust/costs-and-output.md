@@ -65,6 +65,41 @@ incumbent. The original theory and reduct remain unchanged.
 [`ObjectiveBounds.replacement_preserves_candidates`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveBounds.lean)
 states the preservation law; it does not verify worker synchronization.
 
+Source admission also retains checked required-choice groups when the program
+has objectives. These are complete positive head groups with a positive numeric
+lower bound; the group's body remains its activation condition. Conditional
+element eligibility still guarantees a true head in an active group. It does
+not justify an upper bound on all true heads, so the separate count-partition
+consumer continues to require unconditional element eligibility. Eager and hybrid admission use the same capture.
+`RequiredChoices` belongs to the exact admitted theory. Capture has its own
+bounded optional work and storage account, reported by `capture_statistics`
+and `capture_failure`; it does not consume the mandatory grounding allowance.
+Failure leaves original admission and exact objective evaluation intact.
+
+For an optimal-selection session, `ObjectivePlan::prepare_choice_bounds` can
+prove that each member of such a group implies an objective contribution. It
+uses original normal-rule implications, facts, conjunctions and disjunctions;
+a cycle or unsupported implication supplies no proof. Complete objective keys
+are already coalesced, and selected groups never share a key. At a priority whose
+contributions all have nonnegative weights, the bound prepays an active group's
+least allocated weight and retains each eligible key's excess over that minimum.
+Unallocated contributions keep their exact weights and conditions. Priorities
+containing negative weights retain the exact bound without this additional
+grouping.
+
+This lower cost gives a necessary candidate condition alongside the exact
+incumbent bound. It cannot replace the original theory, its reduct or exact
+scoring. Equal-cost answers remain eligible. Preparation uses checked vector
+capacities under the candidate-memory allowance, with source premises counted
+once; this account excludes unrelated owners and allocator bookkeeping.
+The fixed activation closure is prepared once in the existing n-ary formula
+representation. Each new incumbent copies only that compact closure; it does
+not rescan unrelated original formulas or add work to exact score evaluation.
+An optional bridge or bound failure leaves the ordinary exact bound available.
+The [required-choice cost laws](../lean/theorems.md) state the partitioned-cost
+and lexicographic preservation arguments; correspondence of the concrete source
+capture and implication search remains a separate proof obligation.
+
 `SolveConfig::max_objective_work` counts one preparation attempt plus every
 score read or detailed fallback, including refused prefixes. Preparation is
 capped by both the remaining objective allowance and the standalone plan's

@@ -770,6 +770,11 @@ impl AdmittedFormula {
     pub fn count_plan(&self) -> crate::CountPlanStatus<'_> {
         self.compiled.count_plan.view()
     }
+    /// Complete source choice premises for optional objective bounds.
+    #[must_use]
+    pub fn required_choices(&self) -> Option<&crate::RequiredChoices> {
+        self.compiled.required_choices.as_ref()
+    }
     /// Semantic atom identities in exactly the theory's dense index order.
     #[must_use]
     pub fn atoms(&self) -> Atoms<'_> {
@@ -907,6 +912,11 @@ impl AdmittedFormulaBundle {
     pub fn count_plan(&self) -> crate::CountPlanStatus<'_> {
         self.compiled.count_plan.view()
     }
+    /// Complete source choice premises for optional objective bounds.
+    #[must_use]
+    pub fn required_choices(&self) -> Option<&crate::RequiredChoices> {
+        self.compiled.required_choices.as_ref()
+    }
     /// Semantic atom identities in theory index order.
     #[must_use]
     pub fn atoms(&self) -> Atoms<'_> {
@@ -1018,6 +1028,7 @@ pub(crate) struct Compiled {
     pub analyzed: SourceProgram,
     pub theory: Theory,
     pub count_plan: crate::formula_count_plan::Outcome,
+    pub required_choices: Option<crate::RequiredChoices>,
     pub atoms: AtomCatalog,
     pub origins: Vec<Vec<ProgramSite>>,
     pub objectives: zetesis_objective::ObjectiveProgram,

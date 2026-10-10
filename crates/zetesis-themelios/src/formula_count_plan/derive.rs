@@ -31,7 +31,7 @@ pub(super) fn plan(
     for (global_index, global) in groups.iter().enumerate() {
         work.location = global.location;
         work.charge(1)?;
-        if global.lower == 0 || global.members.len() < 2 {
+        if !global.unconditional_members || global.lower == 0 || global.members.len() < 2 {
             continue;
         }
         validate_source(global, theory, work)?;
@@ -100,7 +100,8 @@ fn cover(
     let mut count = 0_usize;
     for (index, group) in groups.iter().enumerate() {
         work.charge(1)?;
-        if index == global_index
+        if !group.unconditional_members
+            || index == global_index
             || group.upper == group.members.len()
             || (group.body != 1 && group.body != global.body)
         {

@@ -313,6 +313,12 @@ impl StreamedCore {
         &self.0.compiled
     }
 
+    /// Complete source choice premises for optional objective bounds.
+    #[must_use]
+    pub fn required_choices(&self) -> Option<&crate::RequiredChoices> {
+        self.0.compiled.required_choices.as_ref()
+    }
+
     /// Exact core identity; clones share it.
     #[must_use]
     pub fn same_instance(&self, other: &Self) -> bool {

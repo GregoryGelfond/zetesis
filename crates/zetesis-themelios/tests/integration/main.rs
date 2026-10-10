@@ -83,6 +83,7 @@ mod objective_boundaries;
 mod objective_bounds;
 mod objective_bounds_adversarial;
 mod objective_carrier_composition;
+mod objective_choices;
 mod objective_condition_bounds;
 mod objective_cyclic_producers;
 mod objective_dependency_contracts;

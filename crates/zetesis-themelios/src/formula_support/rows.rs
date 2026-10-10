@@ -22,6 +22,14 @@ use crate::{FormulaFailure, FormulaLimits};
 /// is implied. Unmapped rows may be retained conservatively. Only already
 /// admitted witness scans attach this filter, never source-family validation.
 pub(crate) trait RowFilter {
+    /// Successful selection is fixed for each authenticated source occurrence
+    /// and row during this join's immutable borrow. This permits reusing only
+    /// completed necessary-selection results; matching and scalar diagnostics
+    /// remain live. Filters with interior mutation retain the default path.
+    fn immutable_selection(&self) -> bool {
+        false
+    }
+
     /// Restrict matched positive prefixes to at most one mapped open row.
     /// The default only lends evidence and preserves ordinary row enumeration.
     /// A consequence consumer may request this sufficient-unit query after
@@ -156,8 +164,12 @@ pub(super) struct PositivePrefix {
 }
 
 impl PositivePrefix {
+    pub(super) fn permits_open(&self) -> bool {
+        !self.single_open || self.pivot.is_none()
+    }
+
     pub(super) fn permits(&self, selected: RowSelection) -> bool {
-        !self.single_open || self.pivot.is_none() || !matches!(selected, RowSelection::Open { .. })
+        self.permits_open() || !matches!(selected, RowSelection::Open { .. })
     }
 
     pub(super) fn advance(&mut self, depth: usize, occurrence: usize, selected: RowSelection) {

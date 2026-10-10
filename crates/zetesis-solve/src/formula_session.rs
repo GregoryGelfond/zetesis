@@ -222,7 +222,15 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
         if self.input.objectives.is_present() {
             self.objective_plan =
                 Some(phases.measure(SolvePhase::ObjectiveScoringRetention, || {
-                    Preparation::new(self.input, config, cancellation)
+                    let mut preparation = Preparation::new(self.input, config, cancellation);
+                    if self.selection == AnswerSelection::Optimal {
+                        preparation.prepare_choices(
+                            self.input.required_choices,
+                            config,
+                            cancellation,
+                        );
+                    }
+                    preparation
                 }));
             let preparation = self
                 .objective_plan

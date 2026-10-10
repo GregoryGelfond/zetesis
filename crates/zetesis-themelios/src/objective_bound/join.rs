@@ -93,6 +93,7 @@ pub(super) fn compile(
         objectives: objectives.clone(),
         nodes: compiler.nodes.into_parts(),
         levels,
+        choices: None,
         statistics: compiler.work.statistics,
     })
 }

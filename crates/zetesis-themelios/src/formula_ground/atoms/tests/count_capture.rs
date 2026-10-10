@@ -206,20 +206,20 @@ impl Fixture {
             .unwrap()
             .unwrap()
         };
-        self.collector.capture_group(
-            &Input {
+        let members = self
+            .collector
+            .prepare_group(&Input {
                 body: 1,
                 eligible: &eligible,
                 bijection,
                 nodes: self.nodes.view(),
                 atom_count: self.atoms.len(),
-                bounds,
                 origins: &[origin],
                 location: origin,
-            },
-            within,
-            asserted,
-        );
+            })
+            .unwrap();
+        self.collector
+            .capture_group(members, bounds, within, asserted);
     }
 
     fn assert_atoms(&mut self, expected: &[Atom]) {
@@ -310,7 +310,7 @@ fn captured_members_keep_their_meaning_after_catalog_growth() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let Outcome::Ready(plan) = fixture.collector.finish(&theory) else {
+    let (Outcome::Ready(plan), _) = fixture.collector.finish(&theory) else {
         panic!("the three actual source bounds must produce a count plan");
     };
     assert_eq!(plan.statistics().groups, 3);

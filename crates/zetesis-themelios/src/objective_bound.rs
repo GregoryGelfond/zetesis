@@ -8,6 +8,7 @@
 //! a source, establishes answer-set membership or changes its frozen reduct.
 
 mod bound;
+mod choices;
 mod join;
 mod score;
 pub use score::{ObjectiveScore, ObjectiveScoreError, ObjectiveScoreErrorKind};
@@ -105,6 +106,8 @@ pub enum ObjectiveBoundResource {
     Variables,
     /// Positive body width.
     BodyAtoms,
+    /// Optional choice-proof storage, including source premises and scratch.
+    ChoiceBytes,
     /// Charged work.
     Work,
 }
@@ -133,6 +136,11 @@ pub enum ObjectiveBoundErrorKind {
     Limit(ObjectiveBoundResource),
     /// The atom catalog length differs from the original theory or contains duplicate atoms.
     AtomCatalog,
+    /// Choice premises belong to a different admitted theory.
+    ChoiceOwner,
+    /// Optional source choice capture was incomplete. The complete source
+    /// receipt remains available through [`crate::RequiredChoices::capture_failure`].
+    ChoiceCapture,
     /// An admitted objective variable unexpectedly remained unbound.
     UnboundVariable,
     /// A negated numeric contribution cannot be represented as i32.
@@ -189,9 +197,41 @@ pub struct ObjectivePlan {
     objectives: ObjectiveProgram,
     nodes: FormulaParts,
     levels: BTreeMap<i32, Vec<AggregateElement>>,
+    choices: Option<choices::Costs>,
     statistics: ObjectiveBoundStatistics,
 }
 impl ObjectivePlan {
+    /// Prepare necessary nonnegative choice costs without changing exact scores.
+    ///
+    /// A required group prepays its least certified objective weight under its
+    /// activation; allocated keys retain their excess over that weight. Groups
+    /// never share a coalesced objective key.
+    /// Unsupported bridges remain unproved, not false. The result is optional:
+    /// refusal preserves the exact plan and any preceding successful preparation.
+    /// Success and error statistics count this attempt separately from [`Self::statistics`].
+    /// `max_bytes` bounds source premises, retained group costs and temporary
+    /// proof/index capacities together. It is an independent allowance, not RSS.
+    ///
+    /// # Errors
+    /// Reports foreign premises, cancellation, allocation or preparation limits.
+    pub fn prepare_choice_bounds(
+        &mut self,
+        required: &crate::RequiredChoices,
+        limits: ObjectivePlanLimits,
+        max_bytes: u128,
+        cancellation: &Cancellation,
+    ) -> Result<ObjectiveBoundStatistics, ObjectiveBoundError> {
+        let (costs, statistics) =
+            choices::prepare(self, required, limits, max_bytes, cancellation)?;
+        self.choices = costs;
+        Ok(statistics)
+    }
+
+    /// Source groups whose costs strengthen the optional incumbent bound.
+    #[must_use]
+    pub fn choice_bound_groups(&self) -> usize {
+        self.choices.as_ref().map_or(0, |costs| costs.groups.len())
+    }
     /// Compile all possible numeric objective keys and their exact eligibility.
     /// `atoms` must be the original theory's complete, unique atom
     /// catalog; each catalog index is reused verbatim. This API does not prove
@@ -258,8 +298,14 @@ pub struct ObjectiveBound {
     original: Theory,
     theory: Theory,
     statistics: ObjectiveBoundStatistics,
+    choice_failure: Option<ObjectiveBoundError>,
 }
 impl ObjectiveBound {
+    /// An optional grouped bound stopped; the exact incumbent bound remains.
+    #[must_use]
+    pub const fn choice_failure(&self) -> Option<ObjectiveBoundError> {
+        self.choice_failure
+    }
     /// The immutable semantic theory whose atom indices the constraint uses.
     #[must_use]
     pub fn original(&self) -> &Theory {

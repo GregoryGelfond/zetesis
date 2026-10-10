@@ -47,6 +47,7 @@ mod order;
 #[cfg(test)]
 mod postings;
 mod prepared;
+mod probe_selection;
 mod producers;
 mod projections;
 mod queries;
@@ -1026,6 +1027,9 @@ pub(crate) struct Join<'a, 'source> {
     slots: Vec<Slot>,
     positions: Vec<usize>,
     probes: Vec<Option<Probe<'a, 'source>>>,
+    /// Completed necessary selections of short postings, owned by their fixed
+    /// positive occurrence and used only with an immutable row filter.
+    probe_selections: Vec<probe_selection::Receipt<'a>>,
     /// Borrowed relations are resolved once per occurrence in this snapshot.
     resolutions: Vec<Resolution<'source>>,
     changes: Vec<Vec<usize>>,
@@ -1204,6 +1208,7 @@ impl<'a, 'source> Join<'a, 'source> {
             Self::rule(rule, support, computation, limits, budget, counters)?
         };
         join.row_filter = filter;
+        join.prepare_selections(Context::new(computation, limits, counters, rule.location))?;
         Ok(FilteredRows::new(join))
     }
 
@@ -1597,6 +1602,7 @@ impl<'a, 'source> Join<'a, 'source> {
             slots: Vec::new(),
             positions: Vec::new(),
             probes: Vec::new(),
+            probe_selections: Vec::new(),
             resolutions: Vec::new(),
             changes: Vec::new(),
             pattern_captures: Vec::new(),
@@ -1669,6 +1675,7 @@ impl<'a, 'source> Join<'a, 'source> {
             + self.verdicts.capacity() * size_of::<bool>()
             + self.positions.capacity() * size_of::<usize>()
             + self.probes.capacity() * size_of::<Option<Probe<'_, '_>>>()
+            + self.probe_selections.capacity() * size_of::<probe_selection::Receipt<'_>>()
             + self.resolutions.capacity() * size_of::<Resolution<'_>>()
             + self.changes.capacity() * size_of::<Vec<usize>>()
             + self.pattern_captures.capacity() * size_of::<(usize, TermRef<'_>)>()
@@ -2300,14 +2307,10 @@ impl<'a, 'source> Join<'a, 'source> {
                     .map(Some);
             }
             let pattern = self.plan.patterns[self.depth];
-            self.prepare_probe(
+            let row = self.advance_probe(
                 pattern,
                 Context::new(computation, limits, counters, location),
             )?;
-            let row = self.probes[self.depth]
-                .as_ref()
-                .expect("prepared probe")
-                .next(&mut self.positions[self.depth], limits, counters, location)?;
             let atom = row.and_then(|row| self.resolutions[self.depth].rows()?.row(row));
             let Some(atom) = atom else {
                 self.positions[self.depth] = 0;
@@ -2322,14 +2325,15 @@ impl<'a, 'source> Join<'a, 'source> {
             };
             counters.record(Event::JoinRow);
             let selected = self.permits_row(pattern, atom, limits, counters, location)?;
-            if !selected.permits() {
-                continue;
+            let permitted = selected.permits()
+                && self
+                    .positive_prefix
+                    .as_ref()
+                    .is_none_or(|prefix| prefix.permits(selected));
+            if let Some(selection) = self.probe_selections.get_mut(self.depth) {
+                selection.record(self.positions[self.depth] - 1, permitted);
             }
-            if self
-                .positive_prefix
-                .as_ref()
-                .is_some_and(|prefix| !prefix.permits(selected))
-            {
+            if !permitted {
                 continue;
             }
             let matches = self.match_row(

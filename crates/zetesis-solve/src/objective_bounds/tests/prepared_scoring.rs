@@ -18,6 +18,7 @@ fn input(owner: &AdmittedFormula) -> Input<'_> {
         keyed_constraints: 0,
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,
         objectives: owner.objectives(),
+        required_choices: owner.required_choices(),
         certificate_order: zetesis_sat::CertificateOrder::TightFirst,
     }
 }
@@ -151,4 +152,77 @@ fn zero_scoring_work_skips_optional_preparation() {
     assert_eq!(preparation.work(), 0);
     assert!(preparation.plan().is_none());
     assert!(preparation.refusal.is_none());
+}
+
+#[test]
+fn choice_refusal_retains_exact_scoring() {
+    let owner = admitted(include_str!(
+        "../../../tests/fixtures/required-choice-objective.lp"
+    ));
+    let cancellation = Cancellation::default();
+    let mut preparation = Preparation::new(input(&owner), &SolveConfig::default(), &cancellation);
+    let exact_work = preparation.work();
+    let options = SolveConfig {
+        max_objective_work: exact_work + 1,
+        ..Default::default()
+    };
+    assert!(owner.required_choices().is_some());
+    preparation.prepare_choices(owner.required_choices(), &options, &cancellation);
+    assert!(preparation.refusal.is_none());
+    let refusal = preparation.choice_refusal.unwrap();
+    assert_eq!(preparation.work(), exact_work + refusal.statistics().work);
+    assert!(preparation.work() <= options.max_objective_work);
+    let plan = preparation.plan().unwrap();
+    assert_eq!(plan.choice_bound_groups(), 0);
+
+    let position = owner
+        .atoms()
+        .iter()
+        .position(|atom| atom.predicate().name() == "a")
+        .unwrap();
+    let candidate = Interpretation::new(owner.theory(), [position]).unwrap();
+    let model = Model::from_positions(owner.atom_catalog(), candidate.atoms()).unwrap();
+    let expected = zetesis_objective::evaluate(
+        owner.objectives(),
+        &model,
+        zetesis_objective::Limits::default(),
+        &cancellation,
+    )
+    .unwrap();
+    let score = plan
+        .score(
+            &candidate,
+            zetesis_objective::Limits::default(),
+            &cancellation,
+        )
+        .unwrap()
+        .unwrap();
+    assert_eq!(score.into_score(), *expected.score());
+    let bound = plan
+        .bound(
+            expected.score(),
+            zetesis_themelios::objective_bound::ObjectiveBoundLimits::default(),
+            &cancellation,
+        )
+        .unwrap();
+    assert!(bound.original().same_instance(owner.theory()));
+}
+
+#[test]
+fn disabled_bounds_skip_choice_preparation() {
+    let owner = admitted(include_str!(
+        "../../../tests/fixtures/required-choice-objective.lp"
+    ));
+    let options = SolveConfig {
+        max_objective_bound_work: 0,
+        ..Default::default()
+    };
+    let cancellation = Cancellation::default();
+    let mut preparation = Preparation::new(input(&owner), &options, &cancellation);
+    let exact_work = preparation.work();
+    assert!(owner.required_choices().is_some());
+    preparation.prepare_choices(owner.required_choices(), &options, &cancellation);
+    assert_eq!(preparation.work(), exact_work);
+    assert_eq!(preparation.plan().unwrap().choice_bound_groups(), 0);
+    assert!(preparation.choice_refusal.is_none());
 }

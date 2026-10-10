@@ -100,6 +100,7 @@ fn a_rejected_cheap_proposal_cannot_tighten_the_bound() {
             theory: owner.core_theory(),
             atoms: owner.atom_catalog(),
             objectives: owner.objectives(),
+            required_choices: owner.core().required_choices(),
             gate_atoms: 0,
             keyed_constraints: 0,
             key_analysis: zetesis_themelios::KeyAnalysis::Complete,

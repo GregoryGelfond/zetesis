@@ -13,7 +13,60 @@ use zetesis_ferraris::{AggregateLimits, Theory, partition};
 mod capture;
 mod derive;
 mod emit;
-pub(crate) use capture::{Bounds, Collector, Input};
+pub(crate) use capture::{Bounds, Collector, Group as RequiredGroup, Input, Members};
+
+/// Complete source choice groups retained for optional objective bounds.
+///
+/// Each group preserves its original activation and semantic atom identities.
+/// A positive lower bound guarantees a selected member only when activation is
+/// true. These premises do not establish membership or grounding completeness.
+/// Construction is closed to checked source admission; equal-looking theories
+/// cannot exchange the retained identities.
+#[derive(Debug)]
+pub struct RequiredChoices {
+    pub(crate) original: Theory,
+    pub(crate) groups: Vec<capture::Group>,
+    pub(crate) capture: CountPlanStatistics,
+    pub(crate) failure: Option<CountPlanFailure>,
+}
+
+impl RequiredChoices {
+    /// Whether these source premises belong to this exact admitted theory.
+    #[must_use]
+    pub fn belongs_to(&self, theory: &Theory) -> bool {
+        self.original.same_instance(theory)
+    }
+
+    /// Complete retained source groups; some need not supply a positive bound.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.groups.len()
+    }
+
+    /// Whether no source group was retained.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.groups.is_empty()
+    }
+
+    /// Optional capture work, separate from mandatory source lowering.
+    #[must_use]
+    pub const fn capture_statistics(&self) -> CountPlanStatistics {
+        self.capture
+    }
+
+    /// Incomplete optional source capture; original admission is unchanged.
+    #[must_use]
+    pub const fn capture_failure(&self) -> Option<CountPlanFailure> {
+        self.failure
+    }
+
+    /// Named retained capacities, excluding the shared original theory.
+    #[must_use]
+    pub fn retained_bytes(&self) -> u128 {
+        size_of::<Self>() as u128 + capture::group_bytes(&self.groups)
+    }
+}
 
 /// Independent limits for optional capture, partition selection and emission.
 /// Zero never means unlimited; ordinary source grounding has separate budgets.

@@ -405,6 +405,23 @@ The final candidate check separately selects mapped positive rows present in
 that candidate's own model. It retains unmapped rows and checks every completed
 body against the same model; earlier region decisions supply no authority.
 
+Within one such scan, repeated indexed lookups can reuse a completed row
+selection. The [join](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/probe_selection.rs)
+keeps one packed word for a posting of two to `u64::BITS` rows. Reuse requires
+that exact borrowed posting, the original positive occurrence, an immutable
+filter and the same permission for an open row. Every position must have been
+successfully checked before the selection becomes reusable. Other postings and
+incomplete scans follow ordinary traversal.
+
+Only previously rejected rows are omitted. Retained rows still undergo matching,
+scalar evaluation and current positive-evidence construction; unmapped rows stay
+eligible. Receipt storage belongs to the join's existing allowance, and a capacity
+proposal that does not fit leaves ordinary traversal available. The
+[`TableBindings.completed_selection_reused` and `selection_consumer_preserved` laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/TableBindings.lean)
+preserve ordered rows and any downstream consumer under complete selection and
+an unchanged predicate. These laws state the correspondence obligation; they do
+not certify the Rust cursor or resource handling.
+
 A selected join can lend evidence that every positive occurrence in its current
 body already matched a mapped, held row, or that exactly one matched occurrence
 is open. In the latter case it also lends that occurrence's dense atom identity.

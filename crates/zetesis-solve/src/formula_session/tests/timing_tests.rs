@@ -51,6 +51,7 @@ fn interleaved_sessions_preserve_all_phase_attempts() {
         theory: admitted.theory(),
         atoms: admitted.atom_catalog(),
         objectives: admitted.objectives(),
+        required_choices: admitted.required_choices(),
         gate_atoms: 0,
         keyed_constraints: 0,
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,

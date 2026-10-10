@@ -30,6 +30,7 @@ fn input(owner: &AdmittedFormula) -> Input<'_> {
         theory: owner.theory(),
         atoms: owner.atom_catalog(),
         objectives: owner.objectives(),
+        required_choices: owner.required_choices(),
         gate_atoms: 0,
         keyed_constraints: 0,
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,
@@ -107,6 +108,38 @@ fn cumulative_objective_work_counts_preparation_once() {
             outcome.objective_work()
         );
     }
+}
+
+#[test]
+fn all_answers_skip_required_choice_bounds() {
+    let owner = zetesis_reference_support::formula(include_str!(
+        "../../../tests/fixtures/required-choice-objective.lp"
+    ));
+    let cancellation = Cancellation::default();
+    let exact_work = plan(&owner, &cancellation).statistics().work;
+    let options = SolveConfig {
+        max_objective_bound_work: SolveConfig::default().max_objective_bound_work,
+        ..config()
+    };
+    assert!(owner.required_choices().is_some());
+    let phases = Recorder::new(false);
+    let mut session = FormulaSession::with_selection(
+        input(&owner),
+        Execution::Cpu,
+        &options,
+        &mut Ignore,
+        &cancellation,
+        &phases,
+        AnswerSelection::All,
+    );
+    assert_eq!(session.outcome(&phases).objective_work(), exact_work);
+    let mut answers = 0;
+    while let Some(answer) = session.next(&options, &mut Ignore, &cancellation, &phases) {
+        answer.unwrap();
+        answers += 1;
+    }
+    assert_eq!(answers, 2);
+    assert!(session.outcome(&phases).incumbent().is_none());
 }
 
 #[derive(Default)]

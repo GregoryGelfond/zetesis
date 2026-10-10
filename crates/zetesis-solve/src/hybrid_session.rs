@@ -156,6 +156,7 @@ impl<'a> HybridSession<'a> {
             keyed_constraints: owner.keyed_constraints(),
             key_analysis: owner.key_analysis(),
             objectives: owner.objectives(),
+            required_choices: owner.required_choices(),
             certificate_order: crate::countermodel::certificate_order(
                 owner.analysis(),
                 owner.analysis_basis(),

@@ -46,6 +46,7 @@ pub(super) fn input(owner: &AdmittedFormula) -> super::Input<'_> {
         keyed_constraints: 0,
         key_analysis: zetesis_themelios::KeyAnalysis::Complete,
         objectives: owner.objectives(),
+        required_choices: owner.required_choices(),
         certificate_order: crate::countermodel::certificate_order(
             owner.source_analysis(),
             owner.analysis_basis(),

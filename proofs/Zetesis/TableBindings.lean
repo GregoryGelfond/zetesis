@@ -102,6 +102,34 @@ def matchedRows {Binding : Type} (rows : List Row) (matcher : Row → Option Bin
     List (Row × Binding) :=
   rows.filterMap fun row => (matcher row).map fun binding => (row, binding)
 
+/-- A completed selection can be reused when its necessary filter is unchanged
+    on this exact ordered source. Rechecking retained rows gives the same list,
+    including occurrence order and multiplicity. A partially filled selection
+    does not supply the completed premise. -/
+theorem completed_selection_reused (rows retained : List Row)
+    (recorded current : Row → Bool)
+    (completed : retained = rows.filter recorded)
+    (unchanged : ∀ row ∈ rows, recorded row = current row) :
+    retained.filter current = rows.filter current := by
+  subst retained
+  induction rows with
+  | nil => rfl
+  | cons row rest ih =>
+    have same := unchanged row (by simp)
+    have tail := ih (fun other member => unchanged other (by simp [member]))
+    cases selected : current row <;> simp [same, selected] at tail ⊢ <;> exact tail
+
+/-- Reusing a completed necessary selection changes no subsequent observation
+    of its ordered row list. The consumer may retain errors or other results;
+    neither its matcher nor its scalar evaluation is replaced by this law. -/
+theorem selection_consumer_preserved {Result : Type}
+    (rows retained : List Row) (recorded current : Row → Bool)
+    (completed : retained = rows.filter recorded)
+    (unchanged : ∀ row ∈ rows, recorded row = current row)
+    (consume : List Row → Result) :
+    consume (retained.filter current) = consume (rows.filter current) :=
+  congrArg consume (completed_selection_reused rows retained recorded current completed unchanged)
+
 /-- Exact indexed preselection preserves the ordered positive-match family.
 
 For a successful match, the necessity premise and the existing finite-table law
