@@ -21,7 +21,7 @@ facts. `#show run/1` changes only the displayed channel, not those typed answers
 ## Set up a Rust application
 
 The packages are not published on crates.io. These examples require zetesis
-0.4.0. Use paths in a pinned local checkout of that version. From the directory
+0.5.0. Use paths in a pinned local checkout of that version. From the directory
 containing your `zetesis` checkout, record its revision and create a sibling
 application:
 

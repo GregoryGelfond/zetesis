@@ -4,81 +4,51 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
+## 0.5.0 — 2026-10-10
+
 ### Added
 
-- Extend the Lean laws for preserving completed constraint scans when
-  candidate bounds change.
-- Evaluate eligible stratified normal programs directly, checking all original
-  constraints before publishing their unique answer.
-- Support objectives with lazy formula grounding. Check the original
-  constraints before scoring an answer or updating a bound, and preserve
-  optimal ties and explicit interruption outcomes.
-- Allow GPU checking with hybrid lazy grounding. The selected device checks
-  the retained formula core; host checks establish satisfaction of streamed
-  constraints before an answer is scored or returned.
-- Derive candidate consequences from streamed integrity constraints before
-  splitting. Source deductions and formula propagation share a fixed point;
-  final answer acceptance still checks original satisfaction and the reduct.
+- Optimization with lazy grounding, including all optimal ties and explicit
+  incomplete results when execution is interrupted.
+- GPU execution with hybrid lazy grounding. The device checks the formula core;
+  the host checks streamed constraints before returning or scoring an answer.
+- Direct evaluation of eligible stratified normal programs.
+- Lean laws for retaining completed constraint checks as candidate bounds change,
+  with updated implementation correspondence.
 
 ### Changed
 
-- Store propagation evidence for conjunctions and disjunctions with one count
-  and a packed flag, preserving the order of deductions.
-- Prepare the weights for choice-based objective bounds once and share their
-  compiler with exact bounds, preserving exact fallback and optimal ties.
-- Use checked numeric bounds to enable incremental lazy constraint checks for
-  eligible sums and differences, preserving arithmetic errors.
-- Use required choices to bound unavoidable objective costs before all choices
-  are decided, preserving optimal ties and the original reduct checks.
-- Reuse completed filtering of short relation lookups during lazy grounding,
-  preserving tuple order and arithmetic diagnostics.
-- Retain CPU tight-checking storage between candidates, with independent
-  workspaces for parallel workers.
-- Retain source-checking workspaces between GPU candidate batches and
-  serial answer pulls.
-- Use smaller propagation counters when the program's bounds permit them.
-- Skip propagation rounds that have already reached a shared fixed point.
-- Reuse prepared lazy constraint checks between compatible candidates, and
-  revisit only affected atom occurrences when complete coverage is established.
-  Keep completed checks when affected body literals only become false, and
-  reuse productive scans after confirming that every deduction was applied.
-- Filter structurally impossible or absent positive atoms before constraint
-  joins, while preserving complete body checks and arithmetic diagnostics.
-- Remove repeated witnesses from constraints over fixed fact relations, and
-  construct possible count values directly without changing tuple identity.
-- Reduce repeated formula propagation, support scans and split ranking while
-  preserving candidate coverage and reduct membership.
-- Stop propagation when a region is proved contradictory, without visiting
-  the remaining operands or parent formulas.
-- Store candidate knowledge together and reuse borrowed terms and cancellation
-  flags, reducing allocation and ownership overhead while keeping workers independent.
-- Reconstruct terminal answers from authenticated base identities without
-  repeating tuple lookup or atom ordering; displayed output remains separate.
-- Accumulate constraint-check statistics locally and publish them at preparation
-  and check boundaries, preserving resource limits and accepted failure receipts.
+- Use streamed constraints and required choices to narrow candidate search and
+  bound objective costs, preserving original-program satisfaction and reduct
+  membership.
+- Share objective preparation and retain checking workspaces across candidates,
+  GPU batches and successive answers. Reduce repeated relation scans and answer
+  reconstruction.
+- Compact propagation state and avoid redundant deductions, allocation and
+  statistics synchronization while keeping parallel workers independent.
+- Use checked arithmetic bounds to enable incremental lazy checks for eligible
+  sums and differences, preserving arithmetic diagnostics.
+- Update the manual, API migration guidance and reproducible eager/lazy timing
+  comparisons with clingo.
 
 ### Fixed
 
-- Prepare tight and positive-program certificates within the session's memory
-  and search allowances. Fixed internal size limits no longer force otherwise
-  eligible programs onto general reduct checking.
-- Settle parallel worker statistics before returning a stopped session's
-  report, preserving its original interruption reason and incomplete coverage.
+- Remove fixed internal size ceilings from tight and positive-program certificate
+  preparation; the session's resource allowances govern preparation instead.
+- Settle parallel worker statistics before reporting interrupted execution,
+  preserving its original reason and incomplete status.
 
 ### Compatibility
 
-- The internal `zetesis-sat` callback `RegionFilterWorker` now requires `Send`,
-  allowing a retained checker to move between executor threads. The `zetesis`
-  facade API is unchanged.
-- Remove `HybridFeature::Objectives`: lazy formula grounding now admits
-  objectives. Rust callers matching this former refusal can remove that arm.
-- Remove `SolveError::HybridBackend`, its CLI counterpart and the JSON
-  `hybrid_backend` error kind: hybrid sessions now accept GPU backends.
-  Device availability and resource failures retain their existing typed errors.
-- `ConstraintAllowance::statistics()` now reports settled charges: live readings
-  can omit charges from an active check. Shared totals are exact after all
-  operations settle, up to counter saturation; local and failure receipts remain
-  exact.
+- The `zetesis` facade API is unchanged: it provides CPU enumeration without
+  objective scoring or projection. Optimization and GPU execution remain
+  available through native sessions and the CLI.
+- `RegionFilterWorker` now requires `Send`.
+- Remove the obsolete `HybridFeature::Objectives` and `SolveError::HybridBackend`
+  refusals, including the CLI's JSON `hybrid_backend` error kind.
+- `ConstraintAllowance::statistics()` reports settled charges. Live readings
+  may omit an active check; totals are exact after checks settle, up to counter
+  saturation.
 
 ## 0.4.0 — 2026-10-07
 

@@ -192,7 +192,7 @@ construction and closure against an independent ordered-set reference, tight and
 general formula checking, resource refusal, reusable sessions, and completed
 table joins composed with GPU checking. Formula tests do not replace the
 [static shader tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/tests/integration/hardware.rs).
-The [0.4.0 coverage snapshot](coverage-0.4.0.md) records the selected Metal tests
+The [0.5.0 coverage snapshot](coverage-0.5.0.md) records the selected Metal tests
 within workspace coverage. The [0.3.0 snapshot](coverage-0.3.0.md) retains its
 earlier source and separate physical qualification.
 
@@ -242,7 +242,7 @@ recently qualified source identified below. It is a recorded local measurement,
 not a live hosted-CI status. It does not use the combined portable-plus-Metal
 percentage. A release version does not change the source identity or test
 population of that measurement.
-The [coverage and Metal qualification record](coverage-0.4.0.md) holds the exact
+The [coverage and Metal qualification record](coverage-0.5.0.md) holds the exact
 counts, source-content manifest, qualification scope and reproduction command.
 
 Update the badge and the snapshot record together only after qualification

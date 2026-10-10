@@ -16,11 +16,12 @@ retains input report hashes, timing and memory observations, actual execution
 routes and qualification scope. Non-completed cells retain their reasons.
 These CPU observations do not establish Metal performance or qualification.
 
-The [0.4.0 coverage snapshot](../coverage-0.4.0.md) records portable workspace,
+The [0.5.0 coverage snapshot](../coverage-0.5.0.md) records portable workspace,
 combined portable-plus-Metal workspace and independent CPU-only coverage. Its
-[receipt](coverage-0.4.0.json) retains report and tool identities, the
-[source-content manifest](coverage-0.4.0-sources.json), and all 59 named physical
-tests in 14 passing groups. The [0.3.0 snapshot](../coverage-0.3.0.md) remains a
+[receipt](coverage-0.5.0.json) retains the measured commit, report and tool identities,
+the [source-content manifest](coverage-0.5.0-sources.json), and all 63 named physical
+tests in 14 passing groups. The [0.4.0 snapshot](../coverage-0.4.0.md) retains its
+original source and measurements. The [0.3.0 snapshot](../coverage-0.3.0.md) remains a
 separate historical record.
 
 The earlier [coverage snapshot](../coverage-120fadfb.md) records portable coverage
