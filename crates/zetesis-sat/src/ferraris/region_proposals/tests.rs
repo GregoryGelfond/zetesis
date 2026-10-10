@@ -1,6 +1,13 @@
 use std::mem::size_of;
+use std::num::NonZeroUsize;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use super::{CandidateKnowledge, Frontier, PendingRegion};
+use super::{CandidateKnowledge, Frontier, PendingRegion, Workspace};
+use crate::{
+    Cancellation, Incomplete, Limits, RegionFeasibility, RegionFilter, RegionFilterWorker,
+    StableModels,
+};
 use zetesis_ferraris::{AdmissionLimits, Narrower, Node, Region, Theory};
 
 fn index() -> Narrower {
@@ -78,4 +85,122 @@ fn returning_active_knowledge_counts_its_new_capacity() {
         frontier.statistics.peak_retained_bytes,
         frontier.statistics.retained_bytes
     );
+}
+
+#[derive(Debug)]
+struct PanickingFilter {
+    dropped: AtomicUsize,
+    fail_check: bool,
+}
+
+struct PanickingWorker<'a>(&'a PanickingFilter);
+
+impl Drop for PanickingWorker<'_> {
+    fn drop(&mut self) {
+        self.0.dropped.fetch_add(1, Ordering::SeqCst);
+        panic!("injected checker teardown failure");
+    }
+}
+
+impl RegionFilter for PanickingFilter {
+    fn worker(
+        &self,
+        _: &Theory,
+        _: &Cancellation,
+    ) -> Result<Box<dyn RegionFilterWorker + '_>, Incomplete> {
+        Ok(Box::new(PanickingWorker(self)))
+    }
+}
+
+impl RegionFilterWorker for PanickingWorker<'_> {
+    fn check(
+        &mut self,
+        _: &Theory,
+        _: &Region,
+        _: &Cancellation,
+    ) -> Result<RegionFeasibility, Incomplete> {
+        if self.0.fail_check {
+            Err(Incomplete::RegionFilter)
+        } else {
+            Ok(RegionFeasibility::NotRefuted)
+        }
+    }
+}
+
+fn panicking_search(fail_check: bool) -> (StableModels, Arc<PanickingFilter>) {
+    let theory = Theory::new(
+        0,
+        zetesis_ferraris::FormulaParts::default(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let mut search = StableModels::with_region_producers(
+        &theory,
+        NonZeroUsize::new(2).unwrap(),
+        Limits::default(),
+        Cancellation::default(),
+    )
+    .unwrap();
+    let filter = Arc::new(PanickingFilter {
+        dropped: AtomicUsize::new(0),
+        fail_check,
+    });
+    search.set_region_filter(filter.clone()).unwrap();
+    (search, filter)
+}
+
+/// Prepare both slots directly to make simultaneous teardown obligations
+/// independent of how many Rayon tasks a small candidate round happens to use.
+fn retain_panicking_checkers(search: &mut StableModels) {
+    let crate::ferraris::Proposer::Proposals(proposals) = &mut search.proposer else {
+        panic!("expected joined production");
+    };
+    proposals.workers.with_dependent_mut(|owner, workspaces| {
+        let filter = owner.as_ref().unwrap();
+        for _ in 0..2 {
+            let mut workspace = Workspace::default();
+            filter
+                .check(
+                    &mut workspace.filter,
+                    &search.theory,
+                    &Region::all_open(search.theory.atom_count()),
+                    &search.cancellation,
+                    &mut None,
+                )
+                .unwrap();
+            workspaces.push(workspace);
+        }
+    });
+}
+
+#[test]
+fn teardown_contains_each_checker_panic() {
+    let (mut search, filter) = panicking_search(false);
+    retain_panicking_checkers(&mut search);
+    let receipt = search.statistics();
+    assert_eq!(search.stop(), Err(Incomplete::WorkerPanicked));
+    assert_eq!(filter.dropped.load(Ordering::SeqCst), 2);
+    assert_eq!(search.statistics(), receipt);
+    assert!(!search.exhausted());
+    assert!(search.next().is_none());
+    assert_eq!(search.stop(), Ok(()));
+}
+
+#[test]
+fn iterator_drop_contains_checker_panics() {
+    let (mut search, filter) = panicking_search(false);
+    retain_panicking_checkers(&mut search);
+    drop(search);
+    assert_eq!(filter.dropped.load(Ordering::SeqCst), 2);
+}
+
+#[test]
+fn source_failure_survives_checker_drop_panic() {
+    let (mut search, filter) = panicking_search(true);
+    assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+    assert_eq!(filter.dropped.load(Ordering::SeqCst), 1);
+    assert_eq!(search.statistics().region_filter.unwrap().failed, 1);
+    assert!(!search.exhausted());
+    assert!(search.next().is_none());
 }

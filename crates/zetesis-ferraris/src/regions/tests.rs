@@ -3,17 +3,17 @@ use std::mem::size_of;
 use super::{Counters, Knowledge, Known, KnownMut, Width};
 
 /// The compact-width closure state the test theories' knowledge uses.
-fn compact(knowledge: &Knowledge) -> &Known<u32> {
+fn compact(knowledge: &Knowledge) -> &Known<u16> {
     match &knowledge.width {
-        Width::Compact(known) => known,
-        Width::Native(_) => panic!("the test theories use compact counters"),
+        Width::Compact16(known) => known,
+        Width::Compact32(_) | Width::Native(_) => panic!("the test theories use compact counters"),
     }
 }
 
-fn compact_mut(knowledge: &mut Knowledge) -> KnownMut<'_, u32> {
+fn compact_mut(knowledge: &mut Knowledge) -> KnownMut<'_, u16> {
     match &mut knowledge.width {
-        Width::Compact(known) => known.borrow(),
-        Width::Native(_) => panic!("the test theories use compact counters"),
+        Width::Compact16(known) => known.borrow(),
+        Width::Compact32(_) | Width::Native(_) => panic!("the test theories use compact counters"),
     }
 }
 
@@ -225,7 +225,7 @@ fn compact_adjacency_uses_less_retained_storage() {
 fn retained_bytes_counts_the_seen_mask() {
     // 130 atoms give a three-word seen mask (ceil(130/64) = 3).
     let knowledge = Knowledge {
-        width: Width::Compact(Known::empty(5, 2, Counters::zeros(130))),
+        width: Width::Compact16(Known::empty(5, 2, Counters::zeros(130))),
     };
     let k = compact(&knowledge);
     let expected = size_of::<Knowledge>() as u128

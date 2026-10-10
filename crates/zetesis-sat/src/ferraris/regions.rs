@@ -373,11 +373,13 @@ impl RegionSearch {
     }
 }
 
-/// Narrow a region by the theory and every restriction until none decides
-/// an atom, or one refutes it, each from what the region already knows
-/// under it. Each narrowing runs to its own fixed point, so the joint fixed
-/// point is reached when a full round changes nothing. Every charged read
-/// spends a budget permit reserved in batches of at most `NARROWING_BATCH`,
+/// Narrow a region by the theory and every restriction until all are closed
+/// under the same decisions, or one refutes it, each from what the region
+/// already knows under it. Each narrowing runs to its own fixed point. Only a
+/// later subject's new decisions can invalidate an earlier subject's closure;
+/// when no later subject changes the region, the round has reached their joint
+/// fixed point. Every charged read spends a budget permit reserved in batches
+/// of at most `NARROWING_BATCH`,
 /// unspent permits are refunded, and even a failed narrowing contributes its
 /// admitted prefix to the counts. Streamed original constraints may decide one
 /// open atom, returning to propagation before the next source pass. These passes
@@ -401,7 +403,7 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     let mut changed = false;
     let mut pass = crate::RegionPass::First;
     loop {
-        let mut round = false;
+        let mut revisit = false;
         for (index, (formulas, narrower)) in std::iter::once((theory, narrower))
             .chain(restrictions.permanent.iter().map(|restriction| {
                 let (theory, narrower) = restriction.borrow();
@@ -423,7 +425,10 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
             });
             match account(&attempt, counts)? {
                 Narrowing::Refuted => return Ok(Narrowing::Refuted),
-                Narrowing::Fixed { changed: moved } => round |= moved,
+                Narrowing::Fixed { changed: moved } => {
+                    changed |= moved;
+                    revisit |= index != 0 && moved;
+                }
             }
         }
         if let Some(bound) = &restrictions.bound {
@@ -441,11 +446,13 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
             });
             match account(&attempt, counts)? {
                 Narrowing::Refuted => return Ok(Narrowing::Refuted),
-                Narrowing::Fixed { changed: moved } => round |= moved,
+                Narrowing::Fixed { changed: moved } => {
+                    changed |= moved;
+                    revisit |= moved;
+                }
             }
         }
-        changed |= round;
-        if !round {
+        if !revisit {
             if let Some(filter) = &mut filter {
                 let consequence = filter.consequence(theory, region, budget.cancellation, pass)?;
                 match consequence {
@@ -596,6 +603,8 @@ impl<'b, 'a, Q: Quota> BudgetQuota<'b, 'a, Q> {
         budget: &'b mut Budget<'a, Q>,
         run: impl FnOnce(&Cancellation, &mut dyn NarrowingQuota) -> NarrowingAttempt,
     ) -> NarrowingAttempt<Incomplete> {
+        #[cfg(test)]
+        tests::record_narrowing();
         let cancellation = budget.cancellation;
         let mut quota = Self {
             budget,

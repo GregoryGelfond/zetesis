@@ -143,8 +143,8 @@ fn producer_rounds_borrow_the_core_selection() {
         assert_eq!(models.len(), 5);
         assert!(search.batch_statistics().checker_calls >= 3);
         assert!(
-            filter.workers.load(Ordering::Relaxed) >= 3,
-            "more than one round created actual source workers"
+            (1..=count).contains(&filter.workers.load(Ordering::Relaxed)),
+            "joined rounds retain their source checkers in bounded producer slots"
         );
         assert!(filter.checks.load(Ordering::Relaxed) > 0);
         assert!(filter.parallel_checks.load(Ordering::Relaxed) > 0);

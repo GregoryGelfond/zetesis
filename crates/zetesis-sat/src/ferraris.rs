@@ -715,7 +715,7 @@ impl StableModels {
         match &mut self.proposer {
             Proposer::Clauses(_) => return Err(Incomplete::RegionFilterUnsupported),
             Proposer::Regions(regions) => regions.filter = Some(filter),
-            Proposer::Proposals(proposals) => proposals.filter = Some(filter),
+            Proposer::Proposals(proposals) => proposals.set_filter(filter),
             Proposer::Parallel(parallel) => parallel.set_filter(filter)?,
         }
         Ok(())
@@ -732,6 +732,7 @@ impl StableModels {
     /// All workers are joined even on failure; the stream remains fused.
     pub fn stop(&mut self) -> Result<(), Incomplete> {
         self.terminal = true;
+        let production = self.proposer.finish_production();
         if let Proposer::Parallel(parallel) = &mut self.proposer {
             let result = parallel.stop();
             let joined = parallel.search_statistics();
@@ -742,7 +743,7 @@ impl StableModels {
                 self.statistics.search.decisions.max(joined.decisions);
             return result;
         }
-        Ok(())
+        production
     }
 
     /// True only after successful coverage of every unreturned answer set
@@ -853,16 +854,21 @@ impl Iterator for StableModels {
         }
         if !self.batch.pending.is_empty() {
             self.terminal = true;
+            let _ = self.proposer.finish_production();
             return Some(Err(Incomplete::PendingBatch));
         }
         if let Some(error) = self.pending_error.take() {
             self.terminal = true;
+            let _ = self.proposer.finish_production();
             return Some(Err(error));
         }
         match self.advance() {
             Ok(Some(model)) => Some(Ok(model)),
             Ok(None) => {
                 self.terminal = true;
+                if let Err(error) = self.proposer.finish_production() {
+                    return Some(Err(error));
+                }
                 self.exhausted = true;
                 None
             }
@@ -953,9 +959,18 @@ impl Proposer {
         match self {
             Self::Clauses(_) => None,
             Self::Regions(regions) => regions.filter.as_ref(),
-            Self::Proposals(proposals) => proposals.filter.as_ref(),
+            Self::Proposals(proposals) => proposals.filter(),
             Self::Parallel(parallel) => parallel.filter(),
         }
+    }
+
+    /// Joined producers are idle between pulls. Release their borrowed scratch
+    /// when the stream closes, without changing pending candidate receipts.
+    fn finish_production(&mut self) -> Result<(), Incomplete> {
+        if let Self::Proposals(proposals) = self {
+            return proposals.finish();
+        }
+        Ok(())
     }
 
     /// Record the original index's work, charged when a region walk first

@@ -47,7 +47,8 @@ fn narrowing_keeps_mask_padding_clear() {
             let mut copied = source.clone();
             copied.clone_from(&state);
             let masks = match &copied.width {
-                Width::Compact(known) => known.masks.slices(),
+                Width::Compact16(known) => known.masks.slices(),
+                Width::Compact32(known) => known.masks.slices(),
                 Width::Native(known) => known.masks.slices(),
             };
             let lengths = [theory.view().len(), theory.view().len(), 65, 65, 65];

@@ -35,7 +35,8 @@ impl Arrays {
 
     fn knowledge(knowledge: &Knowledge) -> Self {
         match &knowledge.width {
-            Width::Compact(known) => Self::known(knowledge, known),
+            Width::Compact16(known) => Self::known(knowledge, known),
+            Width::Compact32(known) => Self::known(knowledge, known),
             Width::Native(known) => Self::known(knowledge, known),
         }
     }
@@ -184,7 +185,7 @@ fn traversal_copies_only_live_knowledge_arrays() {
         assert_eq!(selected.nonempty_allocations, 4 * selected.calls);
         assert_eq!(selected.nonempty_allocations, native.nonempty_allocations);
         let counter_values = atoms + 2 * narrower.chains.len();
-        let saved_width = size_of::<usize>() - size_of::<u32>().min(size_of::<usize>());
+        let saved_width = size_of::<usize>() - size_of::<u16>().min(size_of::<usize>());
         assert_eq!(
             native.initialized_bytes - selected.initialized_bytes,
             selected.calls as u128 * counter_values as u128 * saved_width as u128

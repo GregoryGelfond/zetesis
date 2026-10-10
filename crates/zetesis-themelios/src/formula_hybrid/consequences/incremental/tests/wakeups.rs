@@ -1,4 +1,4 @@
-//! Single changed atoms can be outside a completed template's possible reads.
+//! Bounded changed-atom sets can be outside a completed template's possible reads.
 
 use super::super::wakeups::{Change, classify};
 use super::*;
@@ -151,7 +151,7 @@ fn lowered_constructor_slots_conservatively_wake() {
 }
 
 #[test]
-fn several_changes_keep_conservative_invalidation() {
+fn several_nonmatching_changes_keep_completed_evidence() {
     let owner = admit(CONSTRUCTOR);
     let checker = completed(&owner);
     let first = numbered(&owner, "h", 1, 1);
@@ -159,7 +159,7 @@ fn several_changes_keep_conservative_invalidation() {
     for atom in [first, second] {
         assert!(!changed_group(&checker, &[atom], &mut Counters::default()).unwrap());
     }
-    assert!(changed_group(&checker, &[first, second], &mut Counters::default()).unwrap());
+    assert!(!changed_group(&checker, &[first, second], &mut Counters::default()).unwrap());
 }
 
 #[test]

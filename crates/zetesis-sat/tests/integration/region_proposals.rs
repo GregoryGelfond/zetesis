@@ -181,6 +181,8 @@ fn frontier_receipts_include_exact_knowledge_storage() {
     // no knowledge; its first narrowing creates exactly one reserved slot for
     // the original theory. Receipts include its consolidated mask header and
     // complete owned payload; amortized reservation of the slot changes them.
+    // Each knowledge has three atom counters and two counters per choice
+    // chain: nine u16 cells, or 18 bytes, beside its masks and headers.
     let mut search = StableModels::with_region_producers(
         &three_choices(),
         nonzero(2),
@@ -199,9 +201,9 @@ fn frontier_receipts_include_exact_knowledge_storage() {
         retained_bytes,
         peak_regions: 4,
         peak_capacity: 4,
-        peak_retained_bytes: 1160,
+        peak_retained_bytes: 1088,
     };
-    assert_eq!(receipts.first(), Some(&peak(3, 4, 972)));
+    assert_eq!(receipts.first(), Some(&peak(3, 4, 918)));
     assert_eq!(receipts.last(), Some(&peak(0, 4, 408)));
 }
 

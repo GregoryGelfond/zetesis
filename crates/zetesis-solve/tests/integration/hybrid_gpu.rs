@@ -154,6 +154,15 @@ fn complete_scored_families(api: GpuApi) {
                 assert_eq!(receipt.accepted, outcome.verified_models());
                 assert_eq!(receipt.pending, 0);
                 assert!(outcome.formula_execution().unwrap().gpu_candidates > 0);
+                if search == SearchMethod::Regions {
+                    let filters = outcome
+                        .countermodel_statistics()
+                        .unwrap()
+                        .region_filter
+                        .unwrap();
+                    assert!((1..=u64::try_from(workers).unwrap()).contains(&filters.preparations));
+                    assert!(filters.checks > filters.preparations);
+                }
                 if selection == AnswerSelection::Optimal {
                     assert!(outcome.optimum_proved());
                     assert_eq!(outcome.incumbent().unwrap().tied_models, 2);

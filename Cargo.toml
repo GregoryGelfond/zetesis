@@ -48,6 +48,8 @@ themelios-solve = { git = "https://github.com/GregoryGelfond/themelios.git", rev
 themelios-query = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "4c163d0d07cf67180354d9b605e19df2d355529e" }
 themelios-macros = { git = "https://github.com/GregoryGelfond/themelios.git", rev = "4c163d0d07cf67180354d9b605e19df2d355529e" }
 rayon = "1.12"
+# Retained proposal workers borrow the factory held by their owning cell.
+self_cell = { version = "=1.3.0", default-features = false }
 # Borrowed canonical atom queries use Equivalent rather than an owned key copy.
 hashbrown = { version = "0.17.1", default-features = false }
 # zetesis-wgpu adds the one graphics API each target compiles: Metal on Apple

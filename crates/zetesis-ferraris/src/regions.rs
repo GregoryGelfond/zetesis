@@ -430,6 +430,8 @@ pub struct Narrower {
     absorbed: Vec<bool>,
     /// The atoms among a node's operands, for the split ranking.
     atom_operands: Adjacency,
+    /// Largest chain length or initial per-atom parent-occurrence count.
+    counter_bound: usize,
     /// Logical indexing visits: each native node and operand occurrence.
     work: u64,
 }
@@ -603,7 +605,12 @@ impl Clone for Knowledge {
 
     fn clone_from(&mut self, source: &Self) {
         match (&mut self.width, &source.width) {
-            (Width::Compact(destination), Width::Compact(source)) => destination.clone_from(source),
+            (Width::Compact16(destination), Width::Compact16(source)) => {
+                destination.clone_from(source);
+            }
+            (Width::Compact32(destination), Width::Compact32(source)) => {
+                destination.clone_from(source);
+            }
             (Width::Native(destination), Width::Native(source)) => destination.clone_from(source),
             (destination, source) => destination.clone_from(source),
         }
@@ -614,7 +621,8 @@ impl Clone for Knowledge {
 /// closure runs on one concrete width, chosen once.
 #[derive(Clone, Debug)]
 enum Width {
-    Compact(Known<u32>),
+    Compact16(Known<u16>),
+    Compact32(Known<u32>),
     Native(Known<usize>),
 }
 
@@ -661,7 +669,8 @@ impl Knowledge {
 
     fn preferred_atom(&self, region: &Region, work: &mut Work<'_>) -> Result<Option<usize>, Stop> {
         match &self.width {
-            Width::Compact(known) => most_constrained(region, known, work),
+            Width::Compact16(known) => most_constrained(region, known, work),
+            Width::Compact32(known) => most_constrained(region, known, work),
             Width::Native(known) => most_constrained(region, known, work),
         }
     }
@@ -673,7 +682,8 @@ impl Knowledge {
     pub fn retained_bytes(&self) -> u128 {
         size_of::<Self>() as u128
             + match &self.width {
-                Width::Compact(known) => known.retained_bytes(),
+                Width::Compact16(known) => known.retained_bytes(),
+                Width::Compact32(known) => known.retained_bytes(),
                 Width::Native(known) => known.retained_bytes(),
             }
     }
@@ -720,6 +730,28 @@ fn dependencies<'a>(
                 .flatten()
                 .map(move |operand| (operand, index))
         }))
+}
+
+/// Bound each stored count, not the total size of the theory. A chain learns
+/// each collected operand once. An atom's initial unknown count includes every
+/// parent occurrence of every node carrying it; thereafter it only decreases.
+/// Distinct nodes with the same atom therefore contribute separately, even
+/// when they share a parent. The sum is bounded by the allocated parent table.
+/// This visits chain lengths and atom-node rows once during index construction.
+fn counter_bound(chains: &[Chain], parents: &Adjacency, atom_nodes: &Adjacency) -> usize {
+    let chain_bound = chains
+        .iter()
+        .map(|chain| chain.operands.len())
+        .max()
+        .unwrap_or(0);
+    atom_nodes.iter().fold(chain_bound, |bound, nodes| {
+        let occurrences = nodes.iter().fold(0usize, |count, &node| {
+            count
+                .checked_add(parents[node].len())
+                .expect("atom parent occurrences fit their allocated table")
+        });
+        bound.max(occurrences)
+    })
 }
 
 /// Existing one-theory operations choose immediately; composed closure
@@ -778,6 +810,7 @@ impl Narrower {
                 Err(_) => Some(Err(Stop::InvalidProgram)),
             }),
         )?;
+        let counter_bound = counter_bound(&chains, &parents, &atom_nodes);
         Ok(Self {
             parents,
             atom_nodes,
@@ -785,6 +818,7 @@ impl Narrower {
             chain_of,
             absorbed,
             atom_operands,
+            counter_bound,
             work: u64::try_from(nodes.len() as u128 + theory.parts().occurrences() as u128)
                 .map_err(|_| Stop::Allocation)?,
         })
@@ -799,13 +833,11 @@ impl Narrower {
     /// Knowledge of nothing, for the root of a tree over this theory.
     #[must_use]
     pub fn knowledge(&self) -> Knowledge {
-        // Every chain operand and every parent counted for an atom is an
-        // occurrence in this same incidence stream. Its total bounds all
-        // three counter arrays; no theory-size or language cap is imposed.
-        let incidences = self.parents.entry_count();
         Knowledge {
-            width: if compact_fits(incidences) {
-                Width::Compact(self.root_known())
+            width: if compact_fits::<u16>(self.counter_bound) {
+                Width::Compact16(self.root_known())
+            } else if compact_fits::<u32>(self.counter_bound) {
+                Width::Compact32(self.root_known())
             } else {
                 Width::Native(self.root_known())
             },
@@ -990,7 +1022,15 @@ impl Narrower {
         let result = cancellation.poll().and_then(|()| {
             // Select the counter width once for the closure.
             let narrowing = match &mut knowledge.width {
-                Width::Compact(known) => self.narrow_known_width(
+                Width::Compact16(known) => self.narrow_known_width(
+                    subject,
+                    region,
+                    known,
+                    scratch,
+                    &mut work,
+                    &mut statistics,
+                ),
+                Width::Compact32(known) => self.narrow_known_width(
                     subject,
                     region,
                     known,

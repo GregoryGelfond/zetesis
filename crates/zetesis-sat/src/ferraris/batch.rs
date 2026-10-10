@@ -174,6 +174,7 @@ impl StableModels {
         let result = self.batch_step(limits, completion, checker);
         if matches!(result, Err(BatchError::Search(_))) {
             self.terminal = true;
+            let _ = self.proposer.finish_production();
         }
         result
     }

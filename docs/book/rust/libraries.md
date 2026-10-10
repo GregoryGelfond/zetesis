@@ -140,6 +140,7 @@ limits remain available for an explicitly bounded operation.
 | Narrowing with separate theory/producer/truth arguments and per-read callbacks | Pass `OriginalSubject` or `FrozenSubject` and reusable `NarrowingScratch`. Quota variants use `NarrowingQuota`; `narrow_known_metered` and `narrow_frozen_known_metered` are removed. |
 | `AtomTable::index` as an identity-recording operation | It performs structural lookup; the record encoder owns identity recording. `AtomIdentityMap::retain_held` releases unneeded owners. |
 | Native benchmark execution fields for workers, completion, batch and work caps | Use `NativeExecution::{threads, memory_bytes, time_limit_seconds}` with algorithm choices. New records identify the requested ordinary policy; historical report readers retain earlier fields. |
+| Native `zetesis_sat::RegionFilterWorker` with thread-local scratch | The worker must implement `Send`: joined candidate production retains each exclusive checker between batches and can move it between executor threads. This internal callback is not part of the `zetesis` facade. |
 
 Formula work includes logical operand occurrences, even inline pairs. Reused
 validation omits only scans actually avoided; raw input still receives complete

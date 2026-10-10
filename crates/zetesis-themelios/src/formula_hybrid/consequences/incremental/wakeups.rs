@@ -1,13 +1,13 @@
-//! Necessary occurrence reads refine one changed atom, never a dense change set.
+//! Necessary occurrence reads refine a bounded set of changed atoms.
 //!
 //! This replaces the existing per-predicate flag, not the dependency owner.
-//! Multiple changed atoms keep ordinary invalidation. A singleton held atom
-//! may anchor a completed negative scan only after every potentially affected
-//! occurrence has been checked positive. Slots, including repeated
+//! Overflow keeps ordinary invalidation. Held atoms may anchor a completed
+//! negative scan only after every potentially affected occurrence has been
+//! checked positive. Slots, including repeated
 //! names and lowered constructor temporaries, are independent wildcards here:
 //! failing a constant or constructor check excludes a read; passing proves none.
 
-use super::{PreparedConstraints, literal_atom};
+use super::{ChangedAtoms, PreparedConstraints, literal_atom};
 use crate::FormulaFailure;
 use crate::formula_ir::{LiteralIr, RuleIr};
 use crate::formula_pattern::{ArgumentPattern, PatternNode};
@@ -18,15 +18,23 @@ use zetesis_core::{TemplateComponentsRef, TemplateTerm};
 #[derive(Clone, Copy)]
 pub(super) enum Change {
     None,
-    One(usize),
-    Several,
+    Atoms(ChangedAtoms),
+    /// Changes exceeded the bounded set; no complete atom list is retained.
+    Untracked,
 }
 
 impl Change {
     pub(super) fn include(&mut self, atom: usize) {
-        *self = match self {
-            Self::None => Self::One(atom),
-            Self::One(_) | Self::Several => Self::Several,
+        *self = match *self {
+            Self::None => Self::Atoms(ChangedAtoms::one(atom)),
+            Self::Atoms(mut atoms) => {
+                if atoms.include(atom) {
+                    Self::Atoms(atoms)
+                } else {
+                    Self::Untracked
+                }
+            }
+            Self::Untracked => Self::Untracked,
         };
     }
 }
@@ -34,7 +42,7 @@ impl Change {
 /// The ordered dependency row has one group per original atom occurrence.
 /// Both it and the canonical changed IDs belong to this exact prepared core.
 /// Clean means no possible read changed; `PositiveDelta` covers all changed reads
-/// with the same newly held atom. Full declines reuse. Relevant generated frames
+/// with the retained newly held atoms. Full declines reuse. Relevant generated frames
 /// also decline; unchanged generated rules retain their prior clean evidence.
 pub(super) fn classify(
     rule: &RuleIr,
@@ -56,36 +64,37 @@ pub(super) fn classify(
         let &group = groups.next().expect("one group per original occurrence");
         match changes[group] {
             Change::None => {}
-            Change::Several => return Ok(super::Scan::Full),
-            Change::One(position) => {
-                counters.work(&prepared.limits, rule.location)?;
-                let atom = prepared
-                    .index
-                    .expect("prepared source owner")
-                    .catalog()
-                    .atoms()
-                    .at(position)
-                    .expect("authenticated changed atom");
-                let components = prepared
-                    .completed
-                    .components()
-                    .ok_or_else(|| crate::formula_support::components::missing(rule.location))?;
-                if may_read(
-                    literal,
-                    atom,
-                    components,
-                    &mut GroundingWork::new(&prepared.limits, counters, rule.location),
-                )? {
-                    if !matches!(
-                        literal_atom(literal),
-                        Some((themelios_program::program::DefaultNegation::None, _))
-                    ) || region.decision(position) != Some(true)
-                    {
-                        return Ok(super::Scan::Full);
-                    }
-                    required.include(super::Scan::PositiveDelta(position));
-                    if required == super::Scan::Full {
-                        return Ok(required);
+            Change::Untracked => return Ok(super::Scan::Full),
+            Change::Atoms(atoms) => {
+                for &position in atoms.as_slice() {
+                    counters.work(&prepared.limits, rule.location)?;
+                    let atom = prepared
+                        .index
+                        .expect("prepared source owner")
+                        .catalog()
+                        .atoms()
+                        .at(position)
+                        .expect("authenticated changed atom");
+                    let components = prepared.completed.components().ok_or_else(|| {
+                        crate::formula_support::components::missing(rule.location)
+                    })?;
+                    if may_read(
+                        literal,
+                        atom,
+                        components,
+                        &mut GroundingWork::new(&prepared.limits, counters, rule.location),
+                    )? {
+                        if !matches!(
+                            literal_atom(literal),
+                            Some((themelios_program::program::DefaultNegation::None, _))
+                        ) || region.decision(position) != Some(true)
+                        {
+                            return Ok(super::Scan::Full);
+                        }
+                        required.include(super::Scan::PositiveDelta(ChangedAtoms::one(position)));
+                        if required == super::Scan::Full {
+                            return Ok(required);
+                        }
                     }
                 }
             }

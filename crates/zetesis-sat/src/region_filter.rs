@@ -54,9 +54,9 @@ pub enum RegionConsequence {
 /// evidence and return [`Incomplete::RegionFilter`] to identify it.
 ///
 /// A checker is prepared on the first region not refuted by original narrowing.
-/// Each persistent native worker retains that checker, borrowing this factory.
-/// Scalar pulls and joined producer rounds prepare checkers per operation;
-/// preparation is not assumed free or retained between those operations.
+/// Each persistent native worker or joined producer slot retains that checker,
+/// borrowing this factory. Joined slots can move between executor threads;
+/// scalar pulls prepare a checker per operation. Preparation is not assumed free.
 /// The factory owns all external resource limits: shared allowances must be
 /// charged before work across every worker, including failed preparation and
 /// checks. SAT's search-work counters exclude this separately accounted work.
@@ -74,7 +74,11 @@ pub trait RegionFilter: Debug + Send + Sync {
 }
 
 /// Mutable scratch borrowed from one original-program filter factory.
-pub trait RegionFilterWorker {
+///
+/// A checker belongs to one enumeration and is never used concurrently. It must
+/// be transferable between threads: joined candidate production retains its
+/// task-local scratch between batches without fixing a task to an OS thread.
+pub trait RegionFilterWorker: Send {
     /// Read a region after original-theory and candidate-restriction narrowing.
     /// The theory and region are immutable; no learned restriction enters the
     /// reduct. Poll cancellation during bounded work and before a verdict.

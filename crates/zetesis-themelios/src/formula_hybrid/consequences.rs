@@ -80,10 +80,10 @@ impl ConstraintChecker<'_> {
     /// or ordinary model/region check also retires an unfinished closure.
     /// A successful `NoConsequence` retains only completed rule-scan evidence:
     /// the next `First` authenticates monotone masks and rechecks rules whose
-    /// possible reads changed. If every relevant change is one newly held
-    /// positive atom, a completed unproductive total nongenerated rule scans
-    /// the union anchored at each original occurrence of that atom. Negative
-    /// reads, cuts and multiple changed atoms retain a full scan. Deferred
+    /// possible reads changed. If every relevant change is a newly held
+    /// positive atom and the bounded delta fits, a completed unproductive total
+    /// nongenerated rule scans the union anchored at each original occurrence
+    /// of those atoms. Negative reads, cuts and delta overflow retain a full scan. Deferred
     /// deltas accumulate until the rule is scanned. This reuse never carries a pending decision
     /// across closures or renews an active closure's allowance.
     ///
@@ -216,14 +216,14 @@ fn scan_rule(
 }
 
 /// A completed negative premise permits the union of all positive-occurrence
-/// anchors for one newly held atom. Other modes retain the complete rule scan.
+/// anchors for the newly held atoms. Other modes retain the complete rule scan.
 fn scan_selected_rule(
     prepared: &mut PreparedConstraints<'_>,
     budget: &mut Budget,
     counters: &mut Counters,
     region: &Region,
     rule_index: usize,
-    delta: Option<usize>,
+    delta: Option<&[usize]>,
     mut visit: impl FnMut(
         ConstraintConsequence,
         Context<'_, &crate::formula_support::Computation<'_, '_>>,
@@ -255,7 +255,7 @@ fn scan_selected_rule(
         let Some(mode) = mode else {
             return Ok(ConstraintConsequence::NoConsequence);
         };
-        let Some(atom) = delta else {
+        let Some(atoms) = delta else {
             return scan_mode(
                 prepared,
                 budget,
@@ -266,15 +266,21 @@ fn scan_selected_rule(
                 &mut visit,
             );
         };
-        return scan_anchors(
-            prepared,
-            budget,
-            counters,
-            region,
-            rule_index,
-            (mode, atom),
-            &mut visit,
-        );
+        for &atom in atoms {
+            let consequence = scan_anchors(
+                prepared,
+                budget,
+                counters,
+                region,
+                rule_index,
+                (mode, atom),
+                &mut visit,
+            )?;
+            if consequence != ConstraintConsequence::NoConsequence {
+                return Ok(consequence);
+            }
+        }
+        return Ok(ConstraintConsequence::NoConsequence);
     }
     for pivot in std::iter::once(None).chain((0..rule.body.len()).map(Some)) {
         counters.work(&prepared.limits, rule.location)?;

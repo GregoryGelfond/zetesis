@@ -163,7 +163,17 @@ fn attempt(
     }
     let mut work = Work::new(limit);
     let result = match &mut knowledge.width {
-        Width::Compact(known) => call(
+        Width::Compact16(known) => call(
+            &mut Closure {
+                known: known.borrow(),
+                lists: &mut scratch,
+            },
+            index,
+            scanning,
+            &mut work,
+            teaching,
+        ),
+        Width::Compact32(known) => call(
             &mut Closure {
                 known: known.borrow(),
                 lists: &mut scratch,

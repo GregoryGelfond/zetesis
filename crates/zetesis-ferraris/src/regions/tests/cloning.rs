@@ -9,7 +9,7 @@ use crate::{
 
 use super::super::{Known, Width};
 use super::{
-    counters::{native, same_knowledge},
+    counters::{compact32, native, same_knowledge},
     implication_chain, shared_occurrences,
 };
 
@@ -49,7 +49,8 @@ fn flag_addresses(knowledge: &Knowledge) -> [*const u64; 5] {
         known.masks.slices().map(<[u64]>::as_ptr)
     }
     match &knowledge.width {
-        Width::Compact(known) => addresses(known),
+        Width::Compact16(known) => addresses(known),
+        Width::Compact32(known) => addresses(known),
         Width::Native(known) => addresses(known),
     }
 }
@@ -59,7 +60,7 @@ fn compatible_copies_reuse_independent_flag_storage() {
     let theory = shared_occurrences();
     let narrower = Narrower::new(&theory);
     let compact = narrower.knowledge();
-    for source in [compact.clone(), native(&compact)] {
+    for source in [compact.clone(), compact32(&compact), native(&compact)] {
         let mut destination = source.clone();
         let before = flag_addresses(&destination);
         let source_addresses = flag_addresses(&source);
@@ -79,10 +80,11 @@ fn overwriting_refuted_knowledge_restores_fresh_prefixes() {
     let narrower = Narrower::new(&theory);
     let retired = refuted(&theory, &narrower);
     let fresh = narrower.knowledge();
-    for source in [fresh.clone(), native(&fresh)] {
+    for source in [fresh.clone(), compact32(&fresh), native(&fresh)] {
         for max_work in [0, 1, 5, u64::MAX] {
             let mut reused = match &source.width {
-                Width::Compact(_) => retired.clone(),
+                Width::Compact16(_) => retired.clone(),
+                Width::Compact32(_) => compact32(&retired),
                 Width::Native(_) => native(&retired),
             };
             reused.clone_from(&source);
@@ -156,8 +158,9 @@ fn changing_width_or_shape_copies_the_complete_state() {
         .iter()
         .flat_map(|theory| {
             let compact = Narrower::new(theory).knowledge();
+            let middle = compact32(&compact);
             let wide = native(&compact);
-            [compact, wide]
+            [compact, middle, wide]
         })
         .collect();
     for source in &sources {

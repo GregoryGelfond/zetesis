@@ -63,9 +63,10 @@ If a previously checked instance gains a consequence, `consequence_reads_change`
 shows that some occurrence reads changed bounds. Otherwise the unchanged-read
 law would give the same consequence before, contradicting the completed check.
 `positive_changes_cover_consequences` covers the new consequences by positive
-occurrences when all changed reads have that sign. A cursor restricted to a
-changed positive row must still enumerate every such occurrence, including
-aliases, and retain its original scalar and unit tests. The theorem does not
+occurrences when all changed reads have that sign. The changed set may contain
+one atom or several. A cursor restricted to changed positive rows must still
+enumerate every such occurrence, including aliases, and retain its original
+scalar and unit tests. The theorem does not
 identify source rows or prove that a particular changed atom is now held.
 
 These reuse laws do not prove that a concrete dirty list covers every changed

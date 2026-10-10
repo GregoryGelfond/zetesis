@@ -108,11 +108,15 @@ shape: data-parallel work inside a region and share-nothing regions beside
 one another. The node-sure, node-never, atom-sure, atom-never and seen masks
 occupy disjoint spans of one owned word block. Narrowing splits that block once
 into borrowed slices; child copies remain independent and include every span,
-its boundaries, all three counter arrays and the seeded state. Consolidating
-storage changes no propagation rule or work charge. Payload copy volume is
-unchanged; allocation and retained-header costs can differ, including under a
-memory allowance. The arrays retain their existing infallible allocation
-boundary. A candidate-only restriction narrows the regions still to visit
+its boundaries, all three counter arrays and the seeded state. Combining the
+masks changes neither their payload nor propagation rules and work charges.
+The counter arrays choose one width for the lifetime of a knowledge: `u16`,
+`u32` or native width, according to a bound on each cell. That bound includes
+all parent occurrences of all nodes carrying an atom, rather than the total
+size of the theory. Narrow cells reduce the bytes copied with each child;
+allocation and retained-header costs remain part of memory accounting. The
+arrays retain their existing infallible allocation boundary. A candidate-only
+restriction narrows the regions still to visit
 without a restart, and no exclusion index is kept, because a leaf is visited
 once. Propagation under the original theory, permanent restrictions and current
 bound repeats to a shared fixed point before one split ranking. That ranking
@@ -173,6 +177,15 @@ joins before membership begins, so these stages share one cumulative work
 allowance without concurrent resets. This schedule does not overlap production
 with device execution. Pending-byte limits cover candidate transport, not the
 entire region frontier, thread stacks or process memory.
+
+The executor and its producer slots persist between batches. Each slot keeps
+its narrowing worklists and, when needed, one checker for the immutable source.
+Slots are used exclusively, may move between executor threads and number at
+most the requested workers. The retained checker borrows one stable owner;
+stopping or completing production drops the checkers before that owner.
+Candidate truth and support knowledge still travel with each region, so reuse
+does not transfer deductions between unrelated candidates. The coordinator's
+separate singleton validation can still prepare a checker per operation.
 
 The original CPU `with_region_workers` operation remains useful when each
 worker should perform both operations. The two schedules share the original

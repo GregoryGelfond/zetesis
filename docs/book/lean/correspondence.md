@@ -1373,12 +1373,22 @@ not prove the reading rules or knowledge ownership. Prefix tests for original
 and frozen narrowing and a shared one-permit regression exercise the Rust
 admission/receipt boundary.
 
-Candidate composition uses `Narrower::propagate_known_reserved` until a complete
-round changes no region decision, then `Knowledge::preferred_atom_reserved`
-selects once from the last subject: the active bound, latest permanent
-restriction, or original theory, in that precedence. Each subject's propagation
-still completes. The ranking charges each open atom's unknown-parent count,
-retains its charged prefix on refusal and installs no partial preference.
+Candidate composition uses `Narrower::propagate_known_reserved` to close the
+original theory, then each permanent restriction and the active bound. Each
+subject drains its propagation and support queues before returning `Fixed`.
+If no later subject changes the region, all preceding closures remain valid:
+their only shared mutable input is the region's decisions. A later restriction
+or source consequence that decides an atom restarts from the original theory.
+This stopping condition depends on complete per-subject closure, exact changed
+flags and independent knowledge; those remain Rust correspondence obligations.
+The semantic preservation laws do not establish this concrete loop's fixed point
+or its work and interruption prefixes.
+
+At that joint fixed point, `Knowledge::preferred_atom_reserved` selects once
+from the last subject: the active bound, latest permanent restriction, or
+original theory, in that precedence. The ranking charges each open atom's
+unknown-parent count, retains its charged prefix on refusal and installs no
+partial preference.
 Packed enumeration must exclude padding and preserve ascending ties. Selecting
 an open atom retains the split-partition obligation of `Search.CoverageTree`;
 the existing laws do not verify these Rust ordering and accounting operations.
@@ -1431,7 +1441,13 @@ selected width. Splitting the block once into borrowed slices changes no
 `FormulaBounds.Known` judgement or propagation charge. Checked span boundaries,
 complete copying of shape and contents, independent child ownership and truthful
 retained-byte receipts remain Rust obligations; `known_mono` does not verify this
-layout, allocation behavior or performance. The seen snapshot denotes the region
+layout, allocation behavior or performance. Counter widths are chosen from
+`u16`, `u32` and native width using the largest chain length and initial per-atom
+parent count. Rust must establish that this bound includes every parent occurrence
+of every node carrying an atom, including distinct nodes with the same atom.
+Checked updates, unchanged width during propagation and complete independent
+copies must preserve the exact counts. These representation obligations add no
+premise to the semantic propagation laws. The seen snapshot denotes the region
 decisions already incorporated; differencing the
 current decided mask supplies only new decisions, and the completed snapshot
 also includes atoms learned by propagation. `FormulaBounds.known_mono` supplies
@@ -1535,6 +1551,15 @@ an empty delivered batch into a complete negative result. The concrete queue
 ownership, reservation arithmetic, panic/cancellation paths, budget settlement
 before checking and transfer between rounds remain Rust obligations. The two
 abstract laws do not themselves verify that concurrent implementation.
+
+Joined producer slots retain source checkers and narrowing scratch across
+batches. A stable owner outlives every borrowed checker; a slot is used by one
+task at a time and keeps no candidate knowledge. Candidate knowledge remains
+with the frontier entry. Terminal cleanup releases the slots without changing
+pending candidates or failure receipts. These ownership and reuse invariants,
+including the owner/dependent container, remain Rust correspondence obligations;
+they introduce no new answer-set law and are not established by the existing
+batch theorems.
 
 The CPU batched completion and the GPU formula routes share one internal batch
 boundary. Original satisfaction is checked before a route sees a candidate, and
@@ -2117,12 +2142,13 @@ saved evidence. The existing law does not prove that lifecycle, the completion
 marker, cancellation ordering or receipt settlement, and reusable negative scans
 do not establish original satisfaction or reduct minimality.
 
-A single changed atom may be excluded from a template's reads by necessary
+A changed atom may be excluded from a template's reads by necessary
 constant or constructor mismatches at every occurrence of its signed predicate.
 Rust must establish that every full match satisfies these necessary tests, with
 all default-negation polarities retained. Variables, repeated-variable equality
-and lowered temporary slots are conservatively unconstrained; multiple changed
-atoms retain the predicate-level invalidation. This refines the dependency used
+and lowered temporary slots are conservatively unconstrained. The implementation
+checks a bounded set of changed atoms and restores a full scan on overflow.
+This refines the dependency used
 by `completed_template_unchanged`; it adds no semantic law. Canonical atom and
 component ownership, occurrence alignment, charged reads and failure invalidation
 remain implementation obligations. The Lean law does not verify the matcher.
@@ -2130,11 +2156,15 @@ remain implementation obligations. The Lean law does not verify the matcher.
 `consequence_reads_change` proves that a newly available consequence must read a
 changed atom after a completed scan found none. `positive_changes_cover_consequences`
 specializes coverage to positive occurrences when every changed read has that
-sign. Rust can restrict a later scan to one newly held atom only if it retains
-all affected occurrences, accumulates changes since the completed scan, and
-preserves scalar evaluation and the unit test. Multiple changed atoms, cuts,
-negative readers, generated bindings or uncertain completion retain a full
-scan. These laws do not verify the cursor's row coordinates or query schedule.
+sign. The theorem permits an arbitrary set of changed atoms. Rust can restrict
+a later scan to newly held atoms only if it retains all affected occurrences,
+accumulates changes since the completed scan, and preserves scalar evaluation
+and the unit test. Overlapping occurrences must remain covered. The current
+implementation retains up to four distinct atoms per predicate and per pending
+rule. Overflow restores a full scan; this is an implementation bound on reuse,
+not a program resource limit. Relevant cuts, negative readers, generated bindings
+or uncertain completion also retain a full scan. These laws do not verify the
+cursor's row coordinates, bounded change storage or query schedule.
 
 Sharing the immutable rule-to-predicate and atom-to-predicate mappings adds no
 semantic premise. Rust must establish that the published mapping belongs to

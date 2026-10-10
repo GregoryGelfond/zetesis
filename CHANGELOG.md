@@ -22,6 +22,9 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 - Retain CPU tight-checking storage between candidates, with independent
   workspaces for parallel workers.
+- Retain source-checking workspaces between GPU candidate batches.
+- Use smaller propagation counters when the program's bounds permit them.
+- Skip propagation rounds that have already reached a shared fixed point.
 - Reuse prepared lazy constraint checks between compatible candidates, and
   revisit only affected atom occurrences when complete coverage is established.
 - Filter structurally impossible or absent positive atoms before constraint
@@ -49,6 +52,9 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Compatibility
 
+- The internal `zetesis-sat` callback `RegionFilterWorker` now requires `Send`,
+  allowing a retained checker to move between executor threads. The `zetesis`
+  facade API is unchanged.
 - Remove `HybridFeature::Objectives`: lazy formula grounding now admits
   objectives. Rust callers matching this former refusal can remove that arm.
 - Remove `SolveError::HybridBackend`, its CLI counterpart and the JSON

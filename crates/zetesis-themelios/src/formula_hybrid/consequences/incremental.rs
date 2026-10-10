@@ -2,8 +2,8 @@
 //!
 //! A batch contains only unit consequences proved against one immutable region.
 //! It survives only extensions of both masks. A completed rule is clean only
-//! while its possible reads are unchanged. One newly held positive atom can
-//! instead restrict its next scan to every original occurrence of that atom.
+//! while its possible reads are unchanged. A bounded set of newly held positive
+//! atoms can instead restrict its next scan to all their original occurrences.
 //! Pending deltas accumulate until the rule is scanned; a productive scan is
 //! never a negative certificate.
 
@@ -93,6 +93,45 @@ struct Decision {
     site: ProgramSite,
 }
 
+/// Bound the inline metadata and the number of anchored traversals per rule.
+/// Larger changes use the complete scan; this is an execution tradeoff, not
+/// an admission limit. Each atom can still anchor several original occurrences.
+const DELTA_ATOMS: usize = 4;
+
+/// Distinct dense atoms in first-observed order. The unused suffix has no
+/// meaning. Embedding the array keeps each checker's metadata under its existing
+/// storage lease, with no allocation or shared state when a region changes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct ChangedAtoms {
+    atoms: [usize; DELTA_ATOMS],
+    len: usize,
+}
+
+impl ChangedAtoms {
+    fn one(atom: usize) -> Self {
+        let mut atoms = [0; DELTA_ATOMS];
+        atoms[0] = atom;
+        Self { atoms, len: 1 }
+    }
+
+    fn as_slice(&self) -> &[usize] {
+        &self.atoms[..self.len]
+    }
+
+    /// A false result declines bounded reuse without changing this set.
+    fn include(&mut self, atom: usize) -> bool {
+        if self.as_slice().contains(&atom) {
+            return true;
+        }
+        if self.len == self.atoms.len() {
+            return false;
+        }
+        self.atoms[self.len] = atom;
+        self.len += 1;
+        true
+    }
+}
+
 /// Evidence from one completed unproductive rule scan. A positive delta
 /// retains every relevant change since that scan, including across passes that
 /// drain an earlier rule's units before reaching this rule.
@@ -100,7 +139,7 @@ struct Decision {
 enum Scan {
     Full,
     Clean,
-    PositiveDelta(usize),
+    PositiveDelta(ChangedAtoms),
 }
 
 impl Scan {
@@ -109,8 +148,13 @@ impl Scan {
             (Self::Full, _) | (_, Self::Full) => Self::Full,
             (prior, Self::Clean) => prior,
             (Self::Clean, delta) => delta,
-            (Self::PositiveDelta(a), Self::PositiveDelta(b)) if a == b => *self,
-            (Self::PositiveDelta(_), Self::PositiveDelta(_)) => Self::Full,
+            (Self::PositiveDelta(mut prior), Self::PositiveDelta(change)) => {
+                if change.as_slice().iter().all(|&atom| prior.include(atom)) {
+                    Self::PositiveDelta(prior)
+                } else {
+                    Self::Full
+                }
+            }
         };
     }
 }
@@ -641,8 +685,8 @@ impl<'source> Incremental<'source> {
             if self.scans[rule] == Scan::Clean {
                 continue;
             }
-            let delta = match self.scans[rule] {
-                Scan::PositiveDelta(atom) => Some(atom),
+            let atoms = match self.scans[rule] {
+                Scan::PositiveDelta(atoms) => Some(atoms),
                 Scan::Full => None,
                 Scan::Clean => unreachable!("clean rules were skipped"),
             };
@@ -656,7 +700,7 @@ impl<'source> Incremental<'source> {
                 counters,
                 region,
                 rule,
-                delta,
+                atoms.as_ref().map(ChangedAtoms::as_slice),
                 |consequence, context| self.record(consequence, context),
             )?;
             if consequence != ConstraintConsequence::NoConsequence {

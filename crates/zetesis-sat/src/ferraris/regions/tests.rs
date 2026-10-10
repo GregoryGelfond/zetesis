@@ -14,6 +14,15 @@ use crate::{
 use std::sync::Arc;
 use zetesis_ferraris::{AdmissionLimits, Node};
 
+thread_local! {
+    // Counts actual subject invocations, including closures charging no work.
+    static NARROWING_ATTEMPTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+pub(super) fn record_narrowing() {
+    NARROWING_ATTEMPTS.set(NARROWING_ATTEMPTS.get() + 1);
+}
+
 /// `a <- b`, `b <- a`: the classical models are `{}` and `{a, b}`, and only
 /// `{}` is stable, so enumeration runs a proper-subset query on `{a, b}`.
 fn cycle() -> Theory {
@@ -421,4 +430,5 @@ fn a_failed_region_query_records_growth_without_replacing_its_error() {
 }
 
 mod batch_control;
+mod composition;
 mod preference;

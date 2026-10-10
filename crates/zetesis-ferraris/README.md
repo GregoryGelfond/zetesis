@@ -214,24 +214,26 @@ carried and fresh original/frozen closure over 130 atoms and 132 nodes, includin
 descendant conflicts, zero-work refusals and repeated completed closure.
 
 The three mutable occurrence-count arrays use fixed-length storage: two counts
-per chain and one unresolved-parent count per atom. They use `u32` only when it
-is narrower than `usize` and the total number of parent incidences fits `u32`;
-otherwise they keep `usize`. Every chain operand and every parent counted for
-an atom is an occurrence in that same incidence stream, so its length bounds
-every counter. Checked additions and decrements preserve the exact count;
-width never changes while propagating. This adds no theory-size admission cap
-and does not narrow cumulative work statistics. Knowledge clones retain
-independent arrays, with unchanged original/frozen ownership requirements.
+per chain and one unresolved-parent count per atom. Construction bounds each
+cell by the largest chain length or the largest initial parent count of an
+atom. The latter includes every parent occurrence of every node carrying that
+atom; distinct nodes contribute separately even when they share a parent.
+The smallest suitable width is selected once: `u16`, then `u32`, if narrower
+than `usize`, otherwise `usize`. Checked additions and decrements preserve the
+exact count; width never changes while propagating. Large theories can therefore
+use narrow cells when their individual counts fit. This adds no theory-size
+admission cap and does not narrow cumulative work statistics. Knowledge clones
+retain independent arrays, with unchanged original/frozen ownership requirements.
 
-For A atoms and C chains, the counter payload on a 64-bit host decreases from
-8(A + 2C) to 4(A + 2C) bytes when the bound fits. Header layout is counted by
-`Knowledge::retained_bytes`; masks, immutable indexes, scheduler state and
+For A atoms and C chains, the counter payload on a 64-bit host is
+2(A + 2C), 4(A + 2C) or 8(A + 2C) bytes for the selected width. Header layout
+is counted by `Knowledge::retained_bytes`; masks, immutable indexes, scheduler state and
 allocator overhead are separate. A knowledge holds no worklists: they belong
 to the caller's `NarrowingScratch`, which each narrowing empties first and
-whose capacity serves all of a walker's narrowings. Each copied Knowledge carries the
-same payload reduction. This is a storage model, not an RSS or timing result.
+whose capacity serves all of a walker's narrowings. Copies retain the selected
+width. This is a storage model, not an RSS or timing result.
 Construction directly allocates the selected width, with no temporary native
-counter array; the incidence bound is read from the existing compact index.
+counter array; the per-cell bound is computed once from the existing compact index.
 The three nonempty arrays still require three allocations per copied Knowledge.
 All count reads and updates retain the same charged propagation operations;
 storage initialization and copying remain outside that work receipt. Existing

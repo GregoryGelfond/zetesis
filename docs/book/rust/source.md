@@ -486,14 +486,18 @@ rule against the same region. It still returns one deduction per call, allowing
 ordinary formula propagation between them. Reuse checks both held and cut masks;
 an unrelated region discards the saved deductions without renewing the allowance.
 A completed scan that found no deduction can be skipped until a possible atom
-read changes. For a signed predicate with one changed atom, the checker tests
-necessary constants and constructor shapes at every occurrence that reads that
-predicate. Only a mismatch can exclude the changed atom; repeated variables and
-lowered temporary slots remain independent wildcards. Several changed atoms
-retain ordinary predicate-level invalidation. Default negation and double
-negation retain their dependencies, and changes from ordinary propagation count
-too. The existing per-predicate change buffer records the single atom or several
-changes; its capacity and the extra canonical term reads are charged. Successful
+read changes. For each retained changed atom of a signed predicate, the checker
+tests necessary constants and constructor shapes at every occurrence that reads
+that predicate. Only a mismatch can exclude the atom; repeated variables and
+lowered temporary slots remain independent wildcards. When every affected read
+is positive and its atom is newly held, the next scan can enumerate just those
+atoms' occurrences, preserving the ordinary binding, scalar and unit tests.
+Changes accumulate until the rule is scanned. The implementation retains up to
+four distinct atoms per predicate and per pending rule; overflow, a relevant
+cut, a negative reader or generated bindings restores a full scan. This bound
+controls reuse, not program admission. Default negation and double negation
+retain their dependencies, and changes from ordinary propagation count too.
+The retained change buffers and extra canonical term reads are charged. Successful
 `NoConsequence` settles the finished allowance while retaining that completed
 scan evidence. The next `First` gets a new allowance and may reuse the evidence
 after checking both decision masks; a sibling or reopened decision invalidates

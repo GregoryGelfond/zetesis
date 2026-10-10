@@ -7,7 +7,10 @@ use super::{Count, Counters, compact_fits};
 #[test]
 fn compact_width_includes_its_maximum_count() {
     let maximum = usize::try_from(u32::MAX).unwrap();
-    assert_eq!(compact_fits(maximum), size_of::<u32>() < size_of::<usize>());
+    assert_eq!(
+        compact_fits::<u32>(maximum),
+        size_of::<u32>() < size_of::<usize>()
+    );
     let mut counts = Counters::<u32>::zeros(1);
     counts.add(0, maximum);
     counts.decrement(0);
@@ -19,7 +22,7 @@ fn compact_width_includes_its_maximum_count() {
 fn native_width_preserves_its_maximum_count() {
     // On narrower hosts the native representation remains the fallback even
     // though no representable count exceeds u32; no width saves payload there.
-    assert!(!compact_fits(usize::MAX));
+    assert!(!compact_fits::<u32>(usize::MAX));
     let mut counts = Counters::<usize>::zeros(1);
     counts.add(0, usize::MAX);
     counts.decrement(0);
@@ -28,6 +31,8 @@ fn native_width_preserves_its_maximum_count() {
 
 #[test]
 fn empty_counters_have_no_allocated_payload() {
+    let smallest = Counters::<u16>::zeros(0);
+    assert_eq!((smallest.len(), smallest.allocated_bytes()), (0, 0));
     let compact = Counters::<u32>::zeros(0);
     let native = Counters::<usize>::zeros(0);
     assert_eq!((compact.len(), compact.allocated_bytes()), (0, 0));
@@ -46,6 +51,7 @@ fn clones_are_independent<C: Count>() {
 
 #[test]
 fn counter_clones_own_independent_values() {
+    clones_are_independent::<u16>();
     clones_are_independent::<u32>();
     clones_are_independent::<usize>();
 }
@@ -68,6 +74,7 @@ fn reuse<C: Count>() {
 
 #[test]
 fn equal_length_copies_reuse_independent_counter_storage() {
+    reuse::<u16>();
     reuse::<u32>();
     reuse::<usize>();
 }
@@ -95,7 +102,32 @@ proptest! {
     fn stored_counts_match_native_arithmetic(
         operations in prop::collection::vec((0usize..4, any::<bool>()), 0..128),
     ) {
+        follow::<u16>(&operations)?;
         follow::<u32>(&operations)?;
         follow::<usize>(&operations)?;
     }
+}
+
+#[test]
+fn smallest_width_includes_its_maximum_count() {
+    let maximum = usize::from(u16::MAX);
+    assert_eq!(
+        compact_fits::<u16>(maximum),
+        size_of::<u16>() < size_of::<usize>()
+    );
+    assert!(!compact_fits::<u16>(maximum + 1));
+    let mut counts = Counters::<u16>::zeros(1);
+    counts.add(0, maximum);
+    counts.decrement(0);
+    counts.add(0, 1);
+    assert_eq!(counts.get(0), maximum);
+}
+
+#[test]
+fn intermediate_width_refuses_counts_beyond_its_maximum() {
+    let maximum = usize::try_from(u32::MAX).unwrap();
+    if let Some(beyond) = maximum.checked_add(1) {
+        assert!(!compact_fits::<u32>(beyond));
+    }
+    assert!(!compact_fits::<usize>(0));
 }

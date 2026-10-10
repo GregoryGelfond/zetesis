@@ -10,6 +10,9 @@
 //! All workers join before the next stage runs. Their work leases then settle
 //! into the coordinator's cumulative budget, including failed attempts. Retained
 //! frontier regions supply the next round; a stop never establishes coverage.
+//! Each producer slot retains its checker and worklists between rounds. These
+//! are scratch for the same immutable source, not knowledge about a candidate:
+//! the latter travels with its frontier region.
 //! Candidate order depends on scheduling, while identity and coverage do not.
 
 use std::mem::size_of;
@@ -30,6 +33,28 @@ use crate::{Cancellation, Incomplete, SearchStatistics};
 const CONTROL_WAIT: Duration = Duration::from_millis(1);
 
 type PendingRegion = (Region, CandidateKnowledge);
+
+#[derive(Default)]
+struct Workspace<'a> {
+    filter: Option<crate::region_filter::Worker<'a>>,
+    scratch: NarrowingScratch,
+}
+
+type Workspaces<'a> = Vec<Workspace<'a>>;
+
+self_cell::self_cell! {
+    /// The filter remains at a stable address until every borrowed checker has
+    /// been dropped. Exclusive access to the dependent vector lends distinct
+    /// slots to the existing executor; no lock protects a checker's hot path.
+    /// There is at most one slot per configured producer. Slot storage is
+    /// reserved fallibly; the owner's small allocation follows the existing
+    /// infallible boxed-checker contract, not a universal OOM guarantee.
+    struct Workers {
+        owner: Option<crate::region_filter::Filter>,
+        #[not_covariant]
+        dependent: Workspaces,
+    }
+}
 
 /// The same LIFO frontier, with incremental ownership observations. A region's
 /// payload changes only while a worker owns it outside this frontier. Count it
@@ -121,7 +146,7 @@ pub(crate) struct RegionProposals {
     pending: Frontier,
     pool: rayon::ThreadPool,
     statistics: RegionSearchStatistics,
-    pub(super) filter: Option<crate::region_filter::Filter>,
+    workers: Workers,
     /// The worklists of the coordinator's own positive checks.
     scratch: NarrowingScratch,
 }
@@ -170,13 +195,42 @@ impl RegionProposals {
             pending,
             pool,
             statistics,
-            filter: None,
+            workers: Workers::new(None, |_| Vec::new()),
             scratch: NarrowingScratch::default(),
         })
     }
 
     pub(crate) fn counts_mut(&mut self) -> &mut RegionCounts {
         &mut self.statistics.counts
+    }
+
+    pub(super) fn filter(&self) -> Option<&crate::region_filter::Filter> {
+        self.workers.borrow_owner().as_ref()
+    }
+
+    /// The caller permits installation only before traversal, when no slot
+    /// has prepared a checker or retained a worklist.
+    pub(super) fn set_filter(&mut self, filter: crate::region_filter::Filter) {
+        self.workers = Workers::new(Some(filter), |_| Vec::new());
+    }
+
+    /// No producer runs outside a joined round. Discard its retained scratch
+    /// on completion or stop, preserving factory receipts and pending regions.
+    pub(super) fn finish(&mut self) -> Result<(), Incomplete> {
+        self.workers.with_dependent_mut(|_, workspaces| {
+            let mut stopped = None;
+            // Isolate each callback destructor, as the per-round worker catch
+            // did before retention. Clearing the whole vector inside one catch
+            // could abort if a second destructor panicked during unwinding.
+            while let Some(workspace) = workspaces.pop() {
+                if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(workspace)))
+                    .is_err()
+                {
+                    stopped.get_or_insert(Incomplete::WorkerPanicked);
+                }
+            }
+            stopped.map_or(Ok(()), Err)
+        })
     }
 
     pub(crate) const fn statistics(&self) -> RegionSearchStatistics {
@@ -239,7 +293,7 @@ impl RegionProposals {
     ) -> Result<bool, Incomplete> {
         regions::permits(
             &self.restrictions,
-            self.filter.as_ref(),
+            self.workers.borrow_owner().as_ref(),
             candidate,
             &mut self.scratch,
             budget,
@@ -266,54 +320,87 @@ impl RegionProposals {
         debug_assert!(output.is_empty());
         debug_assert!(maximum > 0 && output.capacity() >= maximum);
         let allowance = SharedBudget::new(budget.limits, budget.statistics);
-        let round = Round {
-            theory,
-            filter: self.filter.as_ref(),
-            timed,
-            producers: self.producers.as_ref(),
-            narrower,
-            restrictions: &self.restrictions,
-            allowance: &allowance,
-            limits: budget.limits,
-            cancellation: budget.cancellation,
-            maximum: maximum.min(usize::try_from(remaining).unwrap_or(usize::MAX).max(1)),
-            remaining,
-            changed: Condvar::new(),
-            state: Mutex::new(State {
-                pending: std::mem::take(&mut self.pending),
-                output: std::mem::take(output),
-                active: 0,
-                counts: RegionCounts::default(),
-                stopped: None,
-                original_validation: crate::PhaseMeasurement::default(),
-            }),
-        };
-        self.pool.install(|| {
-            (0..self.pool.current_num_threads())
-                .into_par_iter()
-                .for_each(|_| {
-                    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| round.work()))
-                        .is_err()
+        let state = self.workers.with_dependent_mut(|filter, workspaces| {
+            if workspaces.is_empty() {
+                let count = self.pool.current_num_threads();
+                workspaces
+                    .try_reserve_exact(count)
+                    .map_err(|_| Incomplete::Allocation)?;
+                workspaces.resize_with(count, Workspace::default);
+            }
+            let round = Round {
+                theory,
+                filter: filter.as_ref(),
+                timed,
+                producers: self.producers.as_ref(),
+                narrower,
+                restrictions: &self.restrictions,
+                allowance: &allowance,
+                limits: budget.limits,
+                cancellation: budget.cancellation,
+                maximum: maximum.min(usize::try_from(remaining).unwrap_or(usize::MAX).max(1)),
+                remaining,
+                changed: Condvar::new(),
+                state: Mutex::new(State {
+                    pending: std::mem::take(&mut self.pending),
+                    output: std::mem::take(output),
+                    active: 0,
+                    counts: RegionCounts::default(),
+                    stopped: None,
+                    original_validation: crate::PhaseMeasurement::default(),
+                }),
+            };
+            self.pool.install(|| {
+                workspaces.par_iter_mut().for_each(|workspace| {
+                    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                        round.work(workspace);
+                    }))
+                    .is_err()
                     {
                         round.stop(Incomplete::WorkerPanicked);
                     }
                 });
+            });
+            Ok(round
+                .state
+                .into_inner()
+                .unwrap_or_else(PoisonError::into_inner))
         });
         allowance.record(&mut budget.statistics);
-        let mut state = round
-            .state
-            .into_inner()
-            .unwrap_or_else(PoisonError::into_inner);
+        let mut state = match state {
+            Ok(state) => state,
+            Err(error) => {
+                let _ = self.finish();
+                return Produced {
+                    exhausted: false,
+                    stopped: Some(error),
+                    original_validation: crate::PhaseMeasurement::default(),
+                };
+            }
+        };
         if let Err(error) = self.statistics.counts.add(state.counts) {
             state.stopped.get_or_insert(error);
         }
         self.pending = state.pending;
         *output = state.output;
+        if (state.stopped.is_some() || self.pending.is_empty())
+            && let Err(error) = self.finish()
+        {
+            state.stopped.get_or_insert(error);
+        }
         Produced {
             exhausted: state.stopped.is_none() && self.pending.is_empty(),
             stopped: state.stopped,
             original_validation: state.original_validation,
         }
+    }
+}
+
+impl Drop for RegionProposals {
+    fn drop(&mut self) {
+        // Drop has no result channel. Explicit stop reports a teardown fault;
+        // implicit drop must still dispose of every checker before its owner.
+        let _ = self.finish();
     }
 }
 
@@ -330,9 +417,9 @@ struct State {
 #[cfg(test)]
 mod tests;
 
-struct Round<'a> {
+struct Round<'a, 'filter> {
     theory: &'a Theory,
-    filter: Option<&'a crate::region_filter::Filter>,
+    filter: Option<&'filter crate::region_filter::Filter>,
     timed: bool,
     producers: Option<&'a Producers>,
     narrower: &'a Narrower,
@@ -352,7 +439,7 @@ enum Step {
     Candidate(Interpretation),
 }
 
-impl Round<'_> {
+impl<'filter> Round<'_, 'filter> {
     fn lock(&self) -> MutexGuard<'_, State> {
         self.state.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -390,10 +477,7 @@ impl Round<'_> {
         }
     }
 
-    fn work(&self) {
-        let mut filter = None;
-        // The worklists every narrowing of this producer reuses.
-        let mut scratch = NarrowingScratch::default();
+    fn work(&self, workspace: &mut Workspace<'filter>) {
         let mut timings = self.timed.then(crate::SearchPhaseTimings::default);
         while let Some(mut entry) = self.take() {
             let mut counts = RegionCounts {
@@ -411,10 +495,10 @@ impl Round<'_> {
                 };
                 self.step(
                     &mut entry,
-                    &mut scratch,
+                    &mut workspace.scratch,
                     &mut budget,
                     &mut counts,
-                    &mut filter,
+                    &mut workspace.filter,
                     &mut timings,
                 )
             };
@@ -458,7 +542,7 @@ impl Round<'_> {
         scratch: &mut NarrowingScratch,
         budget: &mut Budget<'a, WorkLease<'a>>,
         counts: &mut RegionCounts,
-        filter: &mut Option<crate::region_filter::Worker<'a>>,
+        filter: &mut Option<crate::region_filter::Worker<'filter>>,
         timings: &mut Option<crate::SearchPhaseTimings>,
     ) -> Result<Step, Incomplete> {
         let mut check = self.filter.map(|factory| crate::region_filter::Check {

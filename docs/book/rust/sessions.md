@@ -315,6 +315,18 @@ receipt. Consequence passes within one closure share its allowance. Additional
 region scans and preparation can cost more than the avoided membership work,
 so the schedule still needs workload-specific measurement.
 
+Joined candidate production retains one source checker per active producer
+slot across device batches, with at most the configured worker count of slots.
+The checker belongs to the exact source owner, has exclusive access to its
+scratch and can move between executor threads. `zetesis_sat::RegionFilterWorker`
+therefore requires `Send`; the callback is never invoked concurrently on one
+checker. Completion or stop releases this scratch while retaining statistics
+and pending candidate receipts. Each callback's teardown is isolated; a panic
+is reported as `Incomplete::WorkerPanicked` when no earlier failure takes
+precedence. Scalar and singleton checks may still prepare
+per operation. These preparation counts do not measure allocations or device
+kernel time.
+
 `SemanticOutcome::hybrid_execution()` reports consumed `core_answers`,
 `accepted`, `rejected`, `pending` and cumulative constraint-check statistics.
 Their invariant is `core_answers = accepted + rejected + pending`. Core answers
