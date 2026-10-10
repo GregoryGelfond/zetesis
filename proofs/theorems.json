@@ -6810,44 +6810,59 @@
     "line": 478
   },
   {
+    "name": "Zetesis.StreamedConsequences.positive_cut_blocks_consequence",
+    "file": "Zetesis/StreamedConsequences.lean",
+    "line": 486
+  },
+  {
+    "name": "Zetesis.StreamedConsequences.completed_template_positive_cuts",
+    "file": "Zetesis/StreamedConsequences.lean",
+    "line": 516
+  },
+  {
+    "name": "Zetesis.StreamedConsequences.positive_holds_cover_consequences",
+    "file": "Zetesis/StreamedConsequences.lean",
+    "line": 544
+  },
+  {
     "name": "Zetesis.StreamedConsequences.falsify_not_fresh",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 483
+    "line": 567
   },
   {
     "name": "Zetesis.StreamedConsequences.open_count_mono",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 497
+    "line": 581
   },
   {
     "name": "Zetesis.StreamedConsequences.falsify_decreases_open",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 507
+    "line": 591
   },
   {
     "name": "Zetesis.StreamedConsequences.steps_preserve",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 552
+    "line": 636
   },
   {
     "name": "Zetesis.StreamedConsequences.steps_bounded",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 571
+    "line": 655
   },
   {
     "name": "Zetesis.StreamedConsequences.no_unbounded_steps",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 585
+    "line": 669
   },
   {
     "name": "Zetesis.StreamedConsequences.no_unit_can_hide_violation",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 595
+    "line": 679
   },
   {
     "name": "Zetesis.StreamedConsequences.pending_after_decision_retains_answer",
     "file": "Zetesis/StreamedConsequences.lean",
-    "line": 607
+    "line": 691
   },
   {
     "name": "Zetesis.StreamedConstraints.clear_append",

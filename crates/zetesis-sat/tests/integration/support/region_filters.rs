@@ -92,6 +92,7 @@ pub enum Condition {
     ForbidPair(usize, usize),
     FailPreparation,
     FailCheck,
+    PanicOnDrop { fail_check: bool },
     Cancel,
 }
 
@@ -117,6 +118,9 @@ struct Worker<'a>(&'a Filter);
 impl Drop for Worker<'_> {
     fn drop(&mut self) {
         self.0.live.fetch_sub(1, Ordering::SeqCst);
+        if matches!(self.0.condition, Condition::PanicOnDrop { .. }) {
+            panic!("injected checker teardown failure");
+        }
     }
 }
 
@@ -148,11 +152,13 @@ impl RegionFilterWorker for Worker<'_> {
         assert!(theory.same_instance(&self.0.subject));
         cancellation.poll()?;
         let refuted = match self.0.condition {
-            Condition::Pass => false,
+            Condition::Pass | Condition::PanicOnDrop { fail_check: false } => false,
             Condition::ForbidHeld(atom) => region.is_held(atom),
             Condition::Require(atom) => region.is_cut(atom),
             Condition::ForbidPair(left, right) => region.is_held(left) && region.is_held(right),
-            Condition::FailCheck => return Err(Incomplete::RegionFilter),
+            Condition::FailCheck | Condition::PanicOnDrop { fail_check: true } => {
+                return Err(Incomplete::RegionFilter);
+            }
             Condition::Cancel => {
                 cancellation.cancel();
                 cancellation.poll()?;

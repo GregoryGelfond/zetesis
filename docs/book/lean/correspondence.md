@@ -1393,19 +1393,20 @@ Packed enumeration must exclude padding and preserve ascending ties. Selecting
 an open atom retains the split-partition obligation of `Search.CoverageTree`;
 the existing laws do not verify these Rust ordering and accounting operations.
 
-An implication parent is decoded once before its upward and downward propagation.
-Both that path and an implication's own event use the same downward rules. A
-chain's indexed operation supplies its complete downward result. These dispatch
-choices preserve the `FormulaBounds` and `FormulaChains` rules; exact Rust queue
-order, contradiction handling, work and interruption prefixes remain refinement
-obligations, exercised by transition and complete-state regressions.
+An implication's child event carries truth already installed in its knowledge.
+A false antecedent or true consequent marks the parent true. Otherwise the
+revisit reads the other operand, then the parent, to apply the remaining upward
+and downward rules. Upward learning precedes downward teaching, and a newly
+learned parent retains its own queued event. The parent's own event keeps the
+ordinary downward operation; chains keep their indexed operation.
 
-A satisfied implication revisit omits downward teaching only after marking the
-parent true succeeds. A false antecedent or true consequent then makes every
-remaining operand update redundant; the parent's queued event remains. A
-contradictory parent follows the complete existing teaching path. The finite
-state regressions cover distinct and aliased operands, but the concrete Rust
-queue correspondence remains an obligation.
+These cases use the existing implication constructors of `FormulaBounds.Known`.
+Rust must establish that the event names an actual operand whose truth bit is
+still present, and that the parent is unmasked in a frozen-reduct query. Complete
+incidences, coalesced aliases, contradiction handling, event order and charged
+prefixes remain Rust obligations. Finite-state regressions cover distinct and
+aliased operands, either queued operand when both are known, and frozen child
+and parent boundaries. They do not formally verify the concrete queue.
 
 ## Candidate generation and query representation
 
@@ -2131,12 +2132,12 @@ not claim completion of the remaining decisions. `completed_template_unchanged`
 permits reuse of a completed negative scan when both truth bounds agree on every
 atom read by every instance. Its premises include complete instance coverage and
 the same successful scalar results. Rust must separately establish that coverage,
-authenticate region lineage, invalidate changed dependencies and preserve fault
+authenticate region lineage, justify reuse after read changes and preserve fault
 handling; equal decided masks alone cannot detect a held/cut reversal.
 Successful `NoConsequence` may preserve this completed evidence across a new
 `First` call while closing the previous allowance. Rust must authenticate the
-same core, compare both masks, invalidate changed dependencies or incompatible
-regions, and start the new allowance independently of evidence reuse. Errors,
+same core, compare both masks, reassess affected reads, discard evidence for
+incompatible regions, and start the new allowance independently of reuse. Errors,
 refutations, ordinary checks and abandoned productive scans invalidate the
 saved evidence. The existing law does not prove that lifecycle, the completion
 marker, cancellation ordering or receipt settlement, and reusable negative scans
@@ -2156,13 +2157,27 @@ remain implementation obligations. The Lean law does not verify the matcher.
 `consequence_reads_change` proves that a newly available consequence must read a
 changed atom after a completed scan found none. `positive_changes_cover_consequences`
 specializes coverage to positive occurrences when every changed read has that
-sign. The theorem permits an arbitrary set of changed atoms. Rust can restrict
+sign. `positive_cut_blocks_consequence` excludes a cut positive occurrence from
+both sure bodies and fresh-pivot unit witnesses in a consistent region.
+`completed_template_positive_cuts` preserves a completed unproductive scan under
+positive cuts. `positive_holds_cover_consequences` permits mixed positive
+changes but covers new consequences through held occurrences alone. These laws
+require fixed complete instances and scalar results, consistent current bounds
+and unchanged bounds outside the changed set; affected signs are checked over
+every grounded occurrence. These laws need no nesting premise; Rust additionally
+authenticates monotone lineage before retaining scan state. They concern newly
+available witnesses, not the validity of previously emitted deductions.
+
+The changed set may be arbitrary. Rust must project all mask changes onto each
+rule's possible reads conservatively; excluded atoms must occur in no covered
+instance. A positive cut cannot conceal a later negative or double-negative
+occurrence of that atom. Rust can restrict
 a later scan to newly held atoms only if it retains all affected occurrences,
 accumulates changes since the completed scan, and preserves scalar evaluation
 and the unit test. Overlapping occurrences must remain covered. The current
 implementation retains up to four distinct atoms per predicate and per pending
 rule. Overflow restores a full scan; this is an implementation bound on reuse,
-not a program resource limit. Relevant cuts, negative readers, generated bindings
+not a program resource limit. Relevant negative readers, generated bindings
 or uncertain completion also retain a full scan. These laws do not verify the
 cursor's row coordinates, bounded change storage or query schedule.
 

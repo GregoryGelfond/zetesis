@@ -80,12 +80,14 @@ impl ConstraintChecker<'_> {
     /// or ordinary model/region check also retires an unfinished closure.
     /// A successful `NoConsequence` retains only completed rule-scan evidence:
     /// the next `First` authenticates monotone masks and rechecks rules whose
-    /// possible reads changed. If every relevant change is a newly held
-    /// positive atom and the bounded delta fits, a completed unproductive total
-    /// nongenerated rule scans the union anchored at each original occurrence
-    /// of those atoms. Negative reads, cuts and delta overflow retain a full scan. Deferred
-    /// deltas accumulate until the rule is scanned. This reuse never carries a pending decision
-    /// across closures or renews an active closure's allowance.
+    /// possible reads changed. For a completed unproductive total nongenerated
+    /// rule, positive cuts cannot create a new consequence. If every affected
+    /// read is positive and the bounded delta fits, only newly held atoms anchor
+    /// the next scan, at each original occurrence; cuts alone retain the completed
+    /// result. Negative reads, generated bindings and delta overflow retain a
+    /// full scan. Deferred held deltas accumulate until the rule is scanned.
+    /// This reuse never carries a pending decision across closures or renews
+    /// an active closure's allowance.
     ///
     /// Total nongenerated rules use one join permitting at most one open
     /// positive occurrence. Other rules use at most m+1 joins for their m

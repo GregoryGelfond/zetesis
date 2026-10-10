@@ -348,17 +348,20 @@ Within the admitted constructor-and-comparison fragment, one rule scan may
 produce a bounded batch of deductions. Each remains valid after the region
 narrows, so the solver consumes them one at a time with formula propagation
 between them. Exact held/cut masks authenticate this reuse; a sibling region
-starts fresh. A completed scan with no deduction is reused only while every
+starts fresh. A completed scan with no deduction is reused while every
 possible atom read has unchanged bounds. For a bounded set of changed atoms,
 fixed constants or constructor shapes can establish that none of a constraint's
 occurrences can read an atom. Variables remain unconstrained for this test.
 These charged checks use the existing packed masks and predicate dependencies,
 without a table of ground constraints. After a completed scan found no deduction,
 newly held atoms can also restrict the next scan to their positive occurrences.
+Positive cuts cannot enable a new consequence: a false body occurrence is neither
+sure nor an open unit pivot. If every affected read is positive, only held changes
+need anchors; cuts alone preserve the completed result.
 Changes accumulate until that rule is scanned. The current implementation keeps
 up to four distinct atoms per predicate and per pending rule; overflow restores
-a full scan, without limiting the program or its answer sets. Relevant cuts,
-negative readers and generated bindings also retain a full scan. Every matching
+a full scan, without limiting the program or its answer sets. Relevant negative
+readers and generated bindings also retain a full scan. Every matching
 occurrence and the ordinary body test remain required, including overlapping
 occurrences. Potentially failing arithmetic retains the sequential scan. The
 [batch and dependency laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-consequences.md)
@@ -412,11 +415,11 @@ publishes it; each checker admits its retained capacity against its own storage
 ceiling. Candidate masks, dirty flags, pending deductions and workspace remain
 local. Predicate references used while building the mapping are temporary.
 
-Native persistent workers and joined producer slots retain their checkers.
-Each joined slot prepares at most once, borrows the same immutable core mappings
-and reuses its worklists across batches; source truth remains specific to each
-checked region. Scalar traversal and separate singleton validation still prepare
-a checker per operation. The indexed query wrapper borrows existing indexes and allocates
+Serial traversal, native persistent workers and joined producer slots retain
+their checkers. Each traversal or slot prepares at most once, borrows the same
+immutable core mappings and reuses its worklists across batches; source truth remains specific to each
+checked region. Separate singleton validation still prepares a checker per
+operation. The indexed query wrapper borrows existing indexes and allocates
 nothing. Ordinary rows remain borrowed,
 and typed candidate lookup copies no atom. The eager builder keeps its bulk
 materialization path. No channel or task is created for each instance.

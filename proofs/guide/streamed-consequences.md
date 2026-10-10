@@ -69,6 +69,25 @@ enumerate every such occurrence, including aliases, and retain its original
 scalar and unit tests. The theorem does not
 identify source rows or prove that a particular changed atom is now held.
 
+Positive cuts need a different argument from unchanged reads. In a consistent
+cube, `positive_cut_blocks_consequence` says that a cut positive occurrence
+cannot make the body sure or remain the fresh pivot of a unit witness.
+`completed_template_positive_cuts` therefore preserves a completed unproductive
+scan when every affected occurrence is positive and cut. The proof reuses change
+coverage: any new witness would need a changed occurrence, but such an occurrence
+blocks it. No nesting premise is needed for this law. Rust still authenticates
+monotone region lineage before retaining its scan state.
+
+For mixed changes, `positive_holds_cover_consequences` covers every new witness
+through a changed held occurrence. Scalars and instance coverage stay fixed;
+both bounds agree outside the changed set, whose affected occurrences are
+positive and whose atoms are now decided. Cuts cannot supply a witness. The set
+can include atoms unrelated to this template: the sign and cut premises concern
+its actual reads. Runtime dependency refinement must justify omitting unrelated
+atoms and must inspect every possibly affected occurrence, including aliases
+with another sign. These laws concern availability after an unproductive scan,
+not a claim that previously emitted consequences remain open or unconsumed.
+
 These reuse laws do not prove that a concrete dirty list covers every changed
 read, that a retained batch belongs to the current owner or region, or that a
 cursor exhausted every required instance. Nor do they license advancing across

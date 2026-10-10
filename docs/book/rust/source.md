@@ -485,16 +485,18 @@ constructor assignments, the checker can collect several deductions from one
 rule against the same region. It still returns one deduction per call, allowing
 ordinary formula propagation between them. Reuse checks both held and cut masks;
 an unrelated region discards the saved deductions without renewing the allowance.
-A completed scan that found no deduction can be skipped until a possible atom
-read changes. For each retained changed atom of a signed predicate, the checker
-tests necessary constants and constructor shapes at every occurrence that reads
+A completed scan that found no deduction can be reused after assessing changes
+to its possible reads. For each retained changed atom of a signed predicate, the
+checker tests necessary constants and constructor shapes at every occurrence that reads
 that predicate. Only a mismatch can exclude the atom; repeated variables and
 lowered temporary slots remain independent wildcards. When every affected read
-is positive and its atom is newly held, the next scan can enumerate just those
-atoms' occurrences, preserving the ordinary binding, scalar and unit tests.
+is positive, cuts alone preserve the completed result; held changes restrict
+the next scan to those atoms' occurrences. A cut positive occurrence cannot
+make a body sure or serve as an open unit pivot. The scan preserves the ordinary
+binding, scalar and unit tests.
 Changes accumulate until the rule is scanned. The implementation retains up to
 four distinct atoms per predicate and per pending rule; overflow, a relevant
-cut, a negative reader or generated bindings restores a full scan. This bound
+negative reader or generated bindings restores a full scan. This bound
 controls reuse, not program admission. Default negation and double negation
 retain their dependencies, and changes from ordinary propagation count too.
 The retained change buffers and extra canonical term reads are charged. Successful

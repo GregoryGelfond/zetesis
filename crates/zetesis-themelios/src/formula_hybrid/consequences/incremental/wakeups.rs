@@ -1,9 +1,10 @@
 //! Necessary occurrence reads refine a bounded set of changed atoms.
 //!
 //! This replaces the existing per-predicate flag, not the dependency owner.
-//! Overflow keeps ordinary invalidation. Held atoms may anchor a completed
-//! negative scan only after every potentially affected occurrence has been
-//! checked positive. Slots, including repeated
+//! Overflow keeps ordinary invalidation. A positive cut only disables body
+//! instances; held atoms may anchor a completed negative scan after every
+//! potentially affected occurrence has been checked positive. Generated rules
+//! still decline either change. Slots, including repeated
 //! names and lowered constructor temporaries, are independent wildcards here:
 //! failing a constant or constructor check excludes a read; passing proves none.
 
@@ -41,9 +42,11 @@ impl Change {
 
 /// The ordered dependency row has one group per original atom occurrence.
 /// Both it and the canonical changed IDs belong to this exact prepared core.
-/// Clean means no possible read changed; `PositiveDelta` covers all changed reads
-/// with the retained newly held atoms. Full declines reuse. Relevant generated frames
-/// also decline; unchanged generated rules retain their prior clean evidence.
+/// Clean means no possible read changed or only positive reads became false.
+/// `PositiveDelta` covers enabling changes with the retained newly held atoms.
+/// Both rely on a completed unproductive scan and monotone, consistent bounds.
+/// Full declines reuse. Relevant generated frames also decline; unchanged
+/// generated rules retain their prior clean evidence.
 pub(super) fn classify(
     rule: &RuleIr,
     dependencies: &[usize],
@@ -55,6 +58,7 @@ pub(super) fn classify(
     let mut groups = dependencies.iter();
     let mut required = super::Scan::Clean;
     let mut generated = false;
+    let mut relevant = false;
     for literal in &rule.body {
         counters.work(&prepared.limits, rule.location)?;
         generated |= crate::formula_binding_cursor::target(literal).is_some();
@@ -84,14 +88,22 @@ pub(super) fn classify(
                         components,
                         &mut GroundingWork::new(&prepared.limits, counters, rule.location),
                     )? {
+                        relevant = true;
                         if !matches!(
                             literal_atom(literal),
                             Some((themelios_program::program::DefaultNegation::None, _))
-                        ) || region.decision(position) != Some(true)
-                        {
+                        ) {
                             return Ok(super::Scan::Full);
                         }
-                        required.include(super::Scan::PositiveDelta(ChangedAtoms::one(position)));
+                        match region.decision(position) {
+                            Some(true) => required
+                                .include(super::Scan::PositiveDelta(ChangedAtoms::one(position))),
+                            // A false body occurrence cannot participate in a
+                            // new violation or unit. Inspect later occurrences:
+                            // the same atom may also have a nonpositive read.
+                            Some(false) => {}
+                            None => return Ok(super::Scan::Full),
+                        }
                         if required == super::Scan::Full {
                             return Ok(required);
                         }
@@ -101,7 +113,7 @@ pub(super) fn classify(
         }
     }
     debug_assert!(groups.next().is_none());
-    Ok(if generated && required != super::Scan::Clean {
+    Ok(if generated && relevant {
         super::Scan::Full
     } else {
         required

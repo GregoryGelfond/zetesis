@@ -94,6 +94,49 @@ impl Consequences {
     }
 }
 
+fn compare_transition(
+    theory: &Theory,
+    index: &Narrower,
+    consequent: usize,
+    values: [Option<bool>; 3],
+    event: Option<(usize, bool)>,
+) {
+    let mut expected = Consequences {
+        values,
+        events: vec![],
+        contradiction: false,
+    };
+    expected.implication(consequent, event.is_some());
+    let mut actual = knowledge(index, values);
+    let mut lists = NarrowingScratch::default();
+    lists.prepare(2);
+    let mut closure = Closure {
+        known: compact_mut(&mut actual),
+        lists: &mut lists,
+    };
+    let result = if let Some((changed, value)) = event {
+        closure.revisit_implication(theory.view(), 2, changed, value)
+    } else {
+        let subject = Subject::from(crate::OriginalSubject::new(theory, None));
+        // Teaching an implication introduces no extra charged visit, even
+        // when it learns an operand or refutes.
+        let mut work = Work::new(0);
+        let result = closure
+            .teach_operands(subject, index, 2, &mut work)
+            .unwrap();
+        assert_eq!(work.spent, 0);
+        result
+    };
+    assert!(
+        result == expected.step(),
+        "{values:?}, b={consequent}, event={event:?}"
+    );
+    same_knowledge(&actual, &knowledge(index, expected.values));
+    assert_eq!(lists.nodes, expected.events);
+    assert!(lists.learned.is_empty() && lists.heads.is_empty());
+    assert!(lists.pending.iter().all(|word| *word == 0));
+}
+
 fn compare_transitions(upward: bool) {
     // A repeated operand is one parent incidence. The unused second atom's
     // state must remain untouched when the consequent is also node zero.
@@ -104,37 +147,24 @@ fn compare_transitions(upward: bool) {
             for second in [None, Some(false), Some(true)] {
                 for parent in [None, Some(false), Some(true)] {
                     let values = [first, second, parent];
-                    let mut expected = Consequences {
-                        values,
-                        events: vec![],
-                        contradiction: false,
-                    };
-                    expected.implication(consequent, upward);
-                    let mut actual = knowledge(&index, values);
-                    let mut lists = NarrowingScratch::default();
-                    lists.prepare(2);
-                    let mut closure = Closure {
-                        known: compact_mut(&mut actual),
-                        lists: &mut lists,
-                    };
-                    let result = if upward {
-                        closure.revisit_implication(theory.view(), 2)
+                    if upward {
+                        // Each event has an established bit. Test either
+                        // operand's event when both are already known, since
+                        // their queue order need not match their learning order.
+                        for changed in 0..=consequent {
+                            if let Some(value) = values[changed] {
+                                compare_transition(
+                                    &theory,
+                                    &index,
+                                    consequent,
+                                    values,
+                                    Some((changed, value)),
+                                );
+                            }
+                        }
                     } else {
-                        let subject = Subject::from(crate::OriginalSubject::new(&theory, None));
-                        // Teaching an implication introduces no extra charged
-                        // visit, even when it learns an operand or refutes.
-                        let mut work = Work::new(0);
-                        let result = closure
-                            .teach_operands(subject, &index, 2, &mut work)
-                            .unwrap();
-                        assert_eq!(work.spent, 0);
-                        result
-                    };
-                    assert!(result == expected.step(), "{values:?}, b={consequent}");
-                    same_knowledge(&actual, &knowledge(&index, expected.values));
-                    assert_eq!(lists.nodes, expected.events);
-                    assert!(lists.learned.is_empty() && lists.heads.is_empty());
-                    assert!(lists.pending.iter().all(|word| *word == 0));
+                        compare_transition(&theory, &index, consequent, values, None);
+                    }
                 }
             }
         }
@@ -219,6 +249,57 @@ fn implication_parent_keeps_two_charged_visits() {
             assert!(lists.heads.is_empty());
             assert!(lists.pending.iter().all(|word| *word == 0));
             assert_eq!(quota.calls, (limit + 1).min(2));
+        }
+    }
+}
+
+#[test]
+fn implication_events_preserve_frozen_boundaries() {
+    let theory = implication(1);
+    let index = Narrower::new(&theory);
+    for masked_child in [false, true] {
+        for masked_parent in [false, true] {
+            let truth = [!masked_child, true, !masked_parent];
+            let subject = Subject::from(crate::FrozenSubject::new(&theory, &truth));
+            let values = [Some(false), None, masked_parent.then_some(false)];
+            let mut actual = knowledge(&index, values);
+            let mut expected = actual.clone();
+            let mut lists = NarrowingScratch::default();
+            lists.prepare(2);
+            let mut work = Work::new(2);
+            let result = Closure {
+                known: compact_mut(&mut actual),
+                lists: &mut lists,
+            }
+            .revisit(subject, &index, 0, false, &mut work)
+            .unwrap();
+            assert_eq!(work.spent, 2);
+            if !masked_child {
+                compact_mut(&mut expected).atom_never[0] |= 1;
+            }
+            if !masked_parent {
+                compact_mut(&mut expected).sure[0] |= 1 << 2;
+            }
+            same_knowledge(&actual, &expected);
+            assert!(
+                result
+                    == if masked_child && masked_parent {
+                        Step::Unchanged
+                    } else {
+                        Step::Changed
+                    }
+            );
+            assert_eq!(lists.learned, if masked_child { vec![] } else { vec![0] });
+            assert_eq!(
+                lists.nodes,
+                if masked_parent {
+                    vec![]
+                } else {
+                    vec![(2, true)]
+                }
+            );
+            assert!(lists.heads.is_empty());
+            assert!(lists.pending.iter().all(|word| *word == 0));
         }
     }
 }

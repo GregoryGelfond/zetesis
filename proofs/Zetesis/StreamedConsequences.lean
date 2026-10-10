@@ -479,6 +479,90 @@ theorem fresh_of_inside {smaller larger : Cube A} (inside : Inside smaller large
     {atom : A} (fresh : smaller.Fresh atom) : larger.Fresh atom :=
   ⟨fun held => fresh.1 (inside.1 atom held), inside.2 atom fresh.2⟩
 
+/-- A cut positive occurrence prevents both sufficient witnesses in a consistent
+cube: it cannot be sure, and it cannot be the fresh pivot of a unit body.
+This concerns a currently available witness, not the validity of a previously
+emitted consequence. Repeated occurrences retain their positions. -/
+theorem positive_cut_blocks_consequence (c : Cube A) (scalarPassed : Bool)
+    (literals : List (Literal A)) (literal : Literal A)
+    (consistent : ∀ atom, c.lower atom → c.upper atom)
+    (member : literal ∈ literals) (positive : literal.sign = .positive)
+    (cut : ¬ c.upper literal.atom) : ¬ HasConsequence c scalarPassed literals := by
+  have notSure : ¬ Sure c literal.formula := by
+    intro sure
+    have held : c.lower literal.atom := by
+      simpa [Literal.formula, positive, Sure, FormulaBounds.read] using sure
+    exact cut (consistent literal.atom held)
+  intro consequence
+  rcases consequence.2 with allSure | ⟨before, pivot, after, shape, unit⟩
+  · exact notSure (allSure literal member)
+  · have occurrence : literal ∈ before ++ pivot :: after := by
+      simpa only [shape] using member
+    rcases List.mem_append.mp occurrence with earlier | remaining
+    · exact notSure (unit.2 literal (List.mem_append_left after earlier))
+    · rcases List.mem_cons.mp remaining with rfl | later
+      · exact cut unit.1.2
+      · exact notSure (unit.2 literal (List.mem_append_right before later))
+
+/-- A completed unproductive template scan remains unproductive after positive
+cuts. Both bounds agree outside the supplied changed set; every affected occurrence
+is positive and its atom is now excluded by the upper bound. The new cube is
+consistent. Scalars and instances are unchanged.
+
+Proof outline: change coverage supplies a positive changed occurrence for any
+new witness, but a cut positive occurrence blocks that witness. No nesting
+premise is needed. Runtime lineage, instance coverage, fault handling and retained
+storage remain separate obligations. -/
+theorem completed_template_positive_cuts {I : Type v} (instances : List I)
+    (scalarPassed : I → Bool) (literals : I → List (Literal A))
+    (left right : Cube A) (changed : Atoms A)
+    (consistent : ∀ atom, right.lower atom → right.upper atom)
+    (same : SameBoundsOn left right (fun atom => ¬ changed atom))
+    (positive : ∀ entry ∈ instances, ∀ literal ∈ literals entry,
+      changed literal.atom → literal.sign = .positive)
+    (cut : ∀ entry ∈ instances, ∀ literal ∈ literals entry,
+      changed literal.atom → ¬ right.upper literal.atom)
+    (complete : ∀ entry ∈ instances,
+      ¬ HasConsequence left (scalarPassed entry) (literals entry)) :
+    ∀ entry ∈ instances, ¬ HasConsequence right (scalarPassed entry) (literals entry) := by
+  intro entry member witness
+  obtain ⟨literal, occurrence, sign, altered⟩ :=
+    positive_changes_cover_consequences instances scalarPassed literals left right changed
+      same positive complete entry member witness
+  exact positive_cut_blocks_consequence right (scalarPassed entry) (literals entry)
+    literal consistent occurrence sign (cut entry member literal occurrence altered) witness
+
+/-- After a completed unproductive scan, positive changed reads that are now
+decided cover each new consequence through a held atom. Cut occurrences cannot
+witness one. The changed set is arbitrary; aliases are not coalesced.
+
+Bounds agree outside that set, scalar results and instances are fixed, and the
+current cube is consistent. The runtime additionally authenticates monotone
+lineage and derives changed IDs from both masks: that makes a retained held ID
+newly held, rather than merely an overapproximation of the possible changes.
+The theorem does not authorize omitting negative or double-negative readers. -/
+theorem positive_holds_cover_consequences {I : Type v} (instances : List I)
+    (scalarPassed : I → Bool) (literals : I → List (Literal A))
+    (left right : Cube A) (changed : Atoms A)
+    (consistent : ∀ atom, right.lower atom → right.upper atom)
+    (same : SameBoundsOn left right (fun atom => ¬ changed atom))
+    (positive : ∀ entry ∈ instances, ∀ literal ∈ literals entry,
+      changed literal.atom → literal.sign = .positive)
+    (decided : ∀ atom, changed atom → right.lower atom ∨ ¬ right.upper atom)
+    (complete : ∀ entry ∈ instances,
+      ¬ HasConsequence left (scalarPassed entry) (literals entry)) :
+    ∀ entry ∈ instances, HasConsequence right (scalarPassed entry) (literals entry) →
+      ∃ literal ∈ literals entry,
+        literal.sign = .positive ∧ changed literal.atom ∧ right.lower literal.atom := by
+  intro entry member consequence
+  obtain ⟨literal, occurrence, sign, altered⟩ :=
+    positive_changes_cover_consequences instances scalarPassed literals left right changed
+      same positive complete entry member consequence
+  rcases decided literal.atom altered with held | cut
+  · exact ⟨literal, occurrence, sign, altered, held⟩
+  · exact (positive_cut_blocks_consequence right (scalarPassed entry) (literals entry)
+      literal consistent occurrence sign cut consequence).elim
+
 /-- A signed decision leaves its own atom decided. -/
 theorem falsify_not_fresh (c : Cube A) (literal : Literal A) :
     ¬ (falsify c literal).Fresh literal.atom := by

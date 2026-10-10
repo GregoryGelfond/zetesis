@@ -54,14 +54,15 @@ pub enum RegionConsequence {
 /// evidence and return [`Incomplete::RegionFilter`] to identify it.
 ///
 /// A checker is prepared on the first region not refuted by original narrowing.
-/// Each persistent native worker or joined producer slot retains that checker,
-/// borrowing this factory. Joined slots can move between executor threads;
-/// scalar pulls prepare a checker per operation. Preparation is not assumed free.
+/// Serial traversal, each persistent native worker and each joined producer
+/// slot retain their checker, borrowing this factory across answer pulls.
+/// Joined slots can move between executor threads. Separate determined-candidate
+/// checks prepare per operation. Preparation is not assumed free.
 /// The factory owns all external resource limits: shared allowances must be
 /// charged before work across every worker, including failed preparation and
 /// checks. SAT's search-work counters exclude this separately accounted work.
 pub trait RegionFilter: Debug + Send + Sync {
-    /// Prepare independent mutable scratch for this worker or scalar operation.
+    /// Prepare independent mutable scratch for this traversal worker or check.
     ///
     /// # Errors
     /// Preserve authentication, cancellation and resource failures as incomplete
@@ -177,7 +178,7 @@ impl Filter {
     }
 
     /// Prepare only for an actual non-refuted original region, then retain
-    /// the borrowed checker in the caller's operation-local worker slot.
+    /// the borrowed checker in the caller's worker slot.
     pub(crate) fn check<'a>(
         &'a self,
         worker: &mut Option<Worker<'a>>,

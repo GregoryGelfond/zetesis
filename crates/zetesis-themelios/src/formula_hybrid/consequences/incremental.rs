@@ -1,9 +1,10 @@
 //! Closure-local consequences and completed rule scans over exact decision masks.
 //!
 //! A batch contains only unit consequences proved against one immutable region.
-//! It survives only extensions of both masks. A completed rule is clean only
-//! while its possible reads are unchanged. A bounded set of newly held positive
-//! atoms can instead restrict its next scan to all their original occurrences.
+//! It survives only extensions of both masks. A completed rule stays clean
+//! while its possible reads are unchanged or only positive reads become false.
+//! A bounded set of newly held positive atoms can instead restrict its next
+//! scan to all their original occurrences. Generated rules decline either change.
 //! Pending deltas accumulate until the rule is scanned; a productive scan is
 //! never a negative certificate.
 
@@ -133,8 +134,9 @@ impl ChangedAtoms {
 }
 
 /// Evidence from one completed unproductive rule scan. A positive delta
-/// retains every relevant change since that scan, including across passes that
-/// drain an earlier rule's units before reaching this rule.
+/// retains every relevant newly held atom since that scan, including across
+/// passes that drain an earlier rule's units before reaching this rule. Positive
+/// cuts only remove witnesses and need no anchor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Scan {
     Full,

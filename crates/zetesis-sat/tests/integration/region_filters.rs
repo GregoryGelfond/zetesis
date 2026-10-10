@@ -61,6 +61,91 @@ fn partial_region_refutations_preserve_the_answer_family() {
 }
 
 #[test]
+fn scalar_pulls_reuse_one_source_checker() {
+    let subject = choices(5);
+    let expected =
+        Route::Scalar.collect(&mut Route::Scalar.search(&subject, Cancellation::default()));
+    let filter = Filter::new(&subject, Condition::Pass);
+    let mut search = Route::Scalar.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    let mut answers = BTreeSet::new();
+    for answer in search.by_ref() {
+        assert!(answers.insert(answer.unwrap().atoms().collect()));
+        assert_eq!(filter.live.load(Ordering::SeqCst), 1);
+    }
+    assert!(search.exhausted());
+    assert_eq!(answers, expected);
+    let receipt = search.statistics().region_filter.unwrap();
+    assert_eq!(receipt.preparations, 1);
+    assert!(receipt.checks > u64::try_from(answers.len()).unwrap());
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn scalar_exhaustion_reports_checker_teardown_failure() {
+    let subject = choices(1);
+    let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
+    let mut search = Route::Scalar.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    let mut answers = BTreeSet::new();
+    for _ in 0..2 {
+        assert!(answers.insert(search.next().unwrap().unwrap().atoms().collect::<Vec<_>>()));
+    }
+    assert_eq!(answers, BTreeSet::from([vec![], vec![0]]));
+    assert!(matches!(
+        search.next(),
+        Some(Err(Incomplete::WorkerPanicked))
+    ));
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    assert_eq!(search.statistics().region_filter.unwrap().preparations, 1);
+    assert!(!search.exhausted());
+    assert!(search.next().is_none());
+}
+
+#[test]
+fn scalar_stop_reports_checker_teardown_failure() {
+    let subject = choices(1);
+    let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
+    let mut search = Route::Scalar.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    search.next().unwrap().unwrap();
+    let receipt = search.statistics();
+    assert!(matches!(search.stop(), Err(Incomplete::WorkerPanicked)));
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    assert_eq!(search.statistics(), receipt);
+    assert!(!search.exhausted());
+    search.stop().unwrap();
+}
+
+#[test]
+fn scalar_drop_contains_checker_teardown_failure() {
+    let subject = choices(1);
+    let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: false });
+    let mut search = Route::Scalar.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    search.next().unwrap().unwrap();
+    assert_eq!(filter.live.load(Ordering::SeqCst), 1);
+    assert!(std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(search))).is_ok());
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+}
+
+#[test]
+fn source_failure_precedes_checker_teardown_failure() {
+    let subject = choices(1);
+    let filter = Filter::new(&subject, Condition::PanicOnDrop { fail_check: true });
+    let mut search = Route::Scalar.search(&subject, Cancellation::default());
+    search.set_region_filter(filter.clone()).unwrap();
+    assert!(matches!(search.next(), Some(Err(Incomplete::RegionFilter))));
+    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    let receipt = search.statistics().region_filter.unwrap();
+    assert_eq!(receipt.preparations, 1);
+    assert_eq!(receipt.checks, 1);
+    assert_eq!(receipt.failed, 1);
+    assert!(!search.exhausted());
+    assert!(search.next().is_none());
+}
+
+#[test]
 fn producer_checkers_are_reused_across_batches() {
     let subject = choices(5);
     let expected =
@@ -85,108 +170,118 @@ fn producer_checkers_are_reused_across_batches() {
 }
 
 #[test]
-fn retained_producer_checkers_move_with_the_stream() {
+fn retained_checkers_move_with_the_stream() {
     let subject = choices(4);
     let expected =
         Route::Scalar.collect(&mut Route::Scalar.search(&subject, Cancellation::default()));
-    let filter = Filter::new(&subject, Condition::Pass);
-    let mut search = Route::Producers.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
-    let first = search.next_batch(batch(1), residual).unwrap();
-    assert_eq!(first.len(), 1);
-    assert!(filter.live.load(Ordering::SeqCst) > 0);
-    let mut answers = std::thread::spawn(move || Route::Producers.collect(&mut search))
-        .join()
-        .unwrap();
-    assert!(answers.insert(first[0].atoms().collect()));
-    assert_eq!(answers, expected);
-    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    for route in [Route::Scalar, Route::Producers] {
+        let filter = Filter::new(&subject, Condition::Pass);
+        let mut search = route.search(&subject, Cancellation::default());
+        search.set_region_filter(filter.clone()).unwrap();
+        let first = search.next_batch(batch(1), residual).unwrap();
+        assert_eq!(first.len(), 1);
+        assert!(filter.live.load(Ordering::SeqCst) > 0);
+        let mut answers = std::thread::spawn(move || route.collect(&mut search))
+            .join()
+            .unwrap();
+        assert!(answers.insert(first[0].atoms().collect()));
+        assert_eq!(answers, expected, "{route:?}");
+        assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    }
 }
 
 #[test]
-fn producer_checkers_belong_to_their_enumeration() {
+fn retained_checkers_belong_to_their_enumeration() {
     let subject = choices(3);
-    let filter = Filter::new(&subject, Condition::Pass);
-    let mut first = Route::Producers.search(&subject, Cancellation::default());
-    first.set_region_filter(filter.clone()).unwrap();
-    assert_eq!(first.next_batch(batch(1), residual).unwrap().len(), 1);
-    let live = filter.live.load(Ordering::SeqCst);
-    assert!(live > 0);
+    for route in [Route::Scalar, Route::Producers] {
+        let filter = Filter::new(&subject, Condition::Pass);
+        let mut first = route.search(&subject, Cancellation::default());
+        first.set_region_filter(filter.clone()).unwrap();
+        assert_eq!(first.next_batch(batch(1), residual).unwrap().len(), 1);
+        let live = filter.live.load(Ordering::SeqCst);
+        assert!(live > 0);
 
-    // Equal coordinates do not confer the original theory's identity. A second
-    // stream must authenticate its own checker even when it shares a factory.
-    let other = choices(3);
-    let mut second = Route::Producers.search(&other, Cancellation::default());
-    second.set_region_filter(filter.clone()).unwrap();
-    assert!(matches!(
-        second.next_batch(batch(1), residual),
-        Err(BatchError::Search(Incomplete::WrongTheory))
-    ));
-    assert_eq!(filter.live.load(Ordering::SeqCst), live);
-    assert!(!second.exhausted());
-    first.stop().unwrap();
-    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+        // Equal coordinates do not confer the original theory's identity. A
+        // second stream authenticates its own checker even with a shared factory.
+        let other = choices(3);
+        let mut second = route.search(&other, Cancellation::default());
+        second.set_region_filter(filter.clone()).unwrap();
+        assert!(matches!(
+            second.next_batch(batch(1), residual),
+            Err(BatchError::Search(Incomplete::WrongTheory))
+        ));
+        assert_eq!(filter.live.load(Ordering::SeqCst), live);
+        assert!(!second.exhausted());
+        first.stop().unwrap();
+        assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    }
 }
 
 #[test]
-fn producer_cancellation_releases_retained_checkers() {
+fn cancellation_releases_retained_checkers() {
     let subject = choices(4);
-    let cancellation = Cancellation::default();
-    let filter = Filter::new(&subject, Condition::Pass);
-    let mut search = Route::Producers.search(&subject, cancellation.clone());
-    search.set_region_filter(filter.clone()).unwrap();
-    assert_eq!(search.next_batch(batch(1), residual).unwrap().len(), 1);
-    assert!(filter.live.load(Ordering::SeqCst) > 0);
-    let receipt = search.statistics();
-    cancellation.cancel();
-    assert!(matches!(
-        search.next_batch(batch(1), residual),
-        Err(BatchError::Search(Incomplete::Cancelled))
-    ));
-    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
-    assert_eq!(search.statistics(), receipt);
-    assert!(!search.exhausted());
-    assert!(search.next().is_none());
+    for route in [Route::Scalar, Route::Producers] {
+        let cancellation = Cancellation::default();
+        let filter = Filter::new(&subject, Condition::Pass);
+        let mut search = route.search(&subject, cancellation.clone());
+        search.set_region_filter(filter.clone()).unwrap();
+        assert_eq!(search.next_batch(batch(1), residual).unwrap().len(), 1);
+        assert!(filter.live.load(Ordering::SeqCst) > 0);
+        let receipt = search.statistics();
+        cancellation.cancel();
+        assert!(matches!(
+            search.next_batch(batch(1), residual),
+            Err(BatchError::Search(Incomplete::Cancelled))
+        ));
+        assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+        assert_eq!(search.statistics(), receipt);
+        assert!(!search.exhausted());
+        assert!(search.next().is_none());
+    }
 }
 
 #[test]
-fn checker_retry_retains_producer_preparation() {
+fn checker_retry_retains_source_preparation() {
     let subject = choices(4);
-    let filter = Filter::new(&subject, Condition::Pass);
-    let mut search = Route::Producers.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
-    assert!(matches!(
-        search.next_batch(batch(1), |_, _| Err::<Vec<_>, _>("retry")),
-        Err(BatchError::Checker("retry"))
-    ));
-    assert!(filter.live.load(Ordering::SeqCst) > 0);
-    assert_eq!(search.batch_statistics().pending, 1);
-    let prepared = search.statistics().region_filter.unwrap().preparations;
-    assert_eq!(search.next_batch(batch(1), residual).unwrap().len(), 1);
-    assert_eq!(
-        search.statistics().region_filter.unwrap().preparations,
-        prepared
-    );
-    search.stop().unwrap();
-    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    for route in [Route::Scalar, Route::Producers] {
+        let filter = Filter::new(&subject, Condition::Pass);
+        let mut search = route.search(&subject, Cancellation::default());
+        search.set_region_filter(filter.clone()).unwrap();
+        assert!(matches!(
+            search.next_batch(batch(1), |_, _| Err::<Vec<_>, _>("retry")),
+            Err(BatchError::Checker("retry"))
+        ));
+        assert!(filter.live.load(Ordering::SeqCst) > 0);
+        assert_eq!(search.batch_statistics().pending, 1);
+        let prepared = search.statistics().region_filter.unwrap().preparations;
+        assert_eq!(search.next_batch(batch(1), residual).unwrap().len(), 1);
+        assert_eq!(
+            search.statistics().region_filter.unwrap().preparations,
+            prepared
+        );
+        search.stop().unwrap();
+        assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+    }
 }
 
 #[test]
-fn terminal_batch_misuse_releases_producer_checkers() {
+fn terminal_batch_misuse_releases_retained_checkers() {
     let subject = choices(4);
-    let filter = Filter::new(&subject, Condition::Pass);
-    let mut search = Route::Producers.search(&subject, Cancellation::default());
-    search.set_region_filter(filter.clone()).unwrap();
-    assert!(matches!(
-        search.next_batch(batch(1), |_, _| Err::<Vec<_>, _>("retry")),
-        Err(BatchError::Checker("retry"))
-    ));
-    let receipt = search.batch_statistics();
-    assert!(filter.live.load(Ordering::SeqCst) > 0);
-    assert!(matches!(search.next(), Some(Err(Incomplete::PendingBatch))));
-    assert_eq!(filter.live.load(Ordering::SeqCst), 0);
-    assert_eq!(search.batch_statistics(), receipt);
-    assert!(!search.exhausted());
+    for route in [Route::Scalar, Route::Producers] {
+        let filter = Filter::new(&subject, Condition::Pass);
+        let mut search = route.search(&subject, Cancellation::default());
+        search.set_region_filter(filter.clone()).unwrap();
+        assert!(matches!(
+            search.next_batch(batch(1), |_, _| Err::<Vec<_>, _>("retry")),
+            Err(BatchError::Checker("retry"))
+        ));
+        let receipt = search.batch_statistics();
+        assert!(filter.live.load(Ordering::SeqCst) > 0);
+        assert!(matches!(search.next(), Some(Err(Incomplete::PendingBatch))));
+        assert_eq!(filter.live.load(Ordering::SeqCst), 0);
+        assert_eq!(search.batch_statistics(), receipt);
+        assert!(!search.exhausted());
+    }
 }
 
 #[test]
@@ -352,7 +447,7 @@ fn certificate_preparation_keeps_filter_installation_open() {
 
 #[test]
 fn explicit_stop_joins_borrowed_checkers_without_cancelling() {
-    for route in [Route::Native, Route::Producers] {
+    for route in ROUTES {
         let subject = choices(10);
         let cancellation = Cancellation::default();
         let filter = Filter::new(&subject, Condition::Pass);

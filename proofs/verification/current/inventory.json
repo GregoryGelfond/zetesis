@@ -6812,42 +6812,57 @@
     },
     {
       "file": "Zetesis/StreamedConsequences.lean",
-      "line": 483,
+      "line": 486,
+      "name": "Zetesis.StreamedConsequences.positive_cut_blocks_consequence"
+    },
+    {
+      "file": "Zetesis/StreamedConsequences.lean",
+      "line": 516,
+      "name": "Zetesis.StreamedConsequences.completed_template_positive_cuts"
+    },
+    {
+      "file": "Zetesis/StreamedConsequences.lean",
+      "line": 544,
+      "name": "Zetesis.StreamedConsequences.positive_holds_cover_consequences"
+    },
+    {
+      "file": "Zetesis/StreamedConsequences.lean",
+      "line": 567,
       "name": "Zetesis.StreamedConsequences.falsify_not_fresh"
     },
     {
       "file": "Zetesis/StreamedConsequences.lean",
-      "line": 497,
+      "line": 581,
       "name": "Zetesis.StreamedConsequences.open_count_mono"
     },
     {
       "file": "Zetesis/StreamedConsequences.lean",
-      "line": 507,
+      "line": 591,
       "name": "Zetesis.StreamedConsequences.falsify_decreases_open"
     },
     {
       "file": "Zetesis/StreamedConsequences.lean",
-      "line": 552,
+      "line": 636,
       "name": "Zetesis.StreamedConsequences.steps_preserve"
     },
     {
       "file": "Zetesis/StreamedConsequences.lean",
-      "line": 571,
+      "line": 655,
       "name": "Zetesis.StreamedConsequences.steps_bounded"
     },
     {
       "file": "Zetesis/StreamedConsequences.lean",
-      "line": 585,
+      "line": 669,
       "name": "Zetesis.StreamedConsequences.no_unbounded_steps"
     },
     {
       "file": "Zetesis/StreamedConsequences.lean",
-      "line": 595,
+      "line": 679,
       "name": "Zetesis.StreamedConsequences.no_unit_can_hide_violation"
     },
     {
       "file": "Zetesis/StreamedConsequences.lean",
-      "line": 607,
+      "line": 691,
       "name": "Zetesis.StreamedConsequences.pending_after_decision_retains_answer"
     },
     {
@@ -8466,7 +8481,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "e58b77d5312089a5f9b61a648ea4eb41f0a07b2a9fc0d6678e65876da698bb4d",
+    "Audit.lean": "e82ff9ab7e829838a478d5281e314022dd504ff7600bf0b80cc40f87038eb724",
     "Zetesis.lean": "50bc2ca597c10b670788e12c1a8e00c185c53ab87f42f95b73b7ea8163a871c6",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
@@ -8614,7 +8629,7 @@
     "Zetesis/SourceSupport.lean": "ee2c6f8e7e3031c667f29a93ddc376f2d4c5b84725cc1a9482b5c636ff232387",
     "Zetesis/StorageOwners.lean": "6319788182043ddcfaf40d79ab7de9a052b1bb719679031042f4002b20d3be22",
     "Zetesis/StratifiedEvaluation.lean": "4cd3e24702fbdb9a466741251bc16ed01f3ebc7081b0151311392410b4f08a00",
-    "Zetesis/StreamedConsequences.lean": "630d1054b65cb65b51fe69c64d0bcc4f5098bb4ea83188efb91d720d4df449bb",
+    "Zetesis/StreamedConsequences.lean": "b7247c5908d30144a45a025d98c2afe073599b03c3f6299fa9d3bd5ec981994e",
     "Zetesis/StreamedConstraints.lean": "5ae15a28881fc4e372d3aaeacbb4b64b48f00cb4e1135ec9ff4f10476e09f233",
     "Zetesis/StreamedOptimization.lean": "589ba2b11810c0f6e86c188a7eab5414de4221b4ad7b9a8356196eb375ffd5fe",
     "Zetesis/StreamedRegions.lean": "648a77fd4c3f85233b869d9b34b875946cca5ada41764418c2b8fbeda0d28386",

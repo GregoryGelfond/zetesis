@@ -1,6 +1,8 @@
 //! A completed negative scan covers unchanged witnesses; the occurrence union
 //! supplies every new witness without changing the conservative unit operation.
 
+mod cuts;
+
 use super::*;
 use crate::GroundingPhase;
 use crate::formula_support::{Accounting, testing::budget};
@@ -324,22 +326,6 @@ fn affected_nonpositive_occurrences_decline_anchors() {
         synchronized(&mut checker, &region);
         assert_eq!(state(&checker).scans, [Scan::Full]);
     }
-}
-
-#[test]
-fn positive_cuts_decline_anchors() {
-    let owner = admit(include_str!(
-        "../../../../../tests/fixtures/streamed-consequences/irrelevant-choice.lp"
-    ));
-    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
-    let mut region = Region::all_open(owner.atom_catalog().atoms().len());
-    assert_eq!(
-        pass(&mut checker, &region, ConstraintRegionPass::First),
-        ConstraintConsequence::NoConsequence
-    );
-    assert!(region.cut(atom(&owner, "p")));
-    synchronized(&mut checker, &region);
-    assert_eq!(state(&checker).scans, [Scan::Full]);
 }
 
 #[test]

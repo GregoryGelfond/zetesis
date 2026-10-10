@@ -688,8 +688,9 @@ impl std::error::Error for ConstraintCheckFailure {
 /// Mutable per-session work and scalar state over an immutable admitted owner.
 /// No grounded constraint instances are retained. Pending consequences belong
 /// to one authenticated closure. Successfully completed no-consequence scans
-/// can survive into another closure when its decision masks authenticate their
-/// unchanged dependencies. Ordinary checks invalidate candidate evidence.
+/// can survive into another closure when both decision masks authenticate a
+/// narrowing and the affected reads permit reuse. Ordinary checks invalidate
+/// candidate evidence.
 /// The checker can move between threads. Grounding observation and each check's
 /// runtime control remain local to the synchronous operation that uses them.
 pub struct ConstraintChecker<'a> {

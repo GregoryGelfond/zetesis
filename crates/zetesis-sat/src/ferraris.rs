@@ -714,7 +714,7 @@ impl StableModels {
         let filter = crate::region_filter::Filter::new(filter);
         match &mut self.proposer {
             Proposer::Clauses(_) => return Err(Incomplete::RegionFilterUnsupported),
-            Proposer::Regions(regions) => regions.filter = Some(filter),
+            Proposer::Regions(regions) => regions.set_filter(filter),
             Proposer::Proposals(proposals) => proposals.set_filter(filter),
             Proposer::Parallel(parallel) => parallel.set_filter(filter)?,
         }
@@ -958,19 +958,20 @@ impl Proposer {
     fn filter(&self) -> Option<&crate::region_filter::Filter> {
         match self {
             Self::Clauses(_) => None,
-            Self::Regions(regions) => regions.filter.as_ref(),
+            Self::Regions(regions) => regions.filter(),
             Self::Proposals(proposals) => proposals.filter(),
             Self::Parallel(parallel) => parallel.filter(),
         }
     }
 
-    /// Joined producers are idle between pulls. Release their borrowed scratch
-    /// when the stream closes, without changing pending candidate receipts.
+    /// Serial and joined producers are idle between pulls. Release their
+    /// borrowed scratch when the stream closes, preserving candidate receipts.
     fn finish_production(&mut self) -> Result<(), Incomplete> {
-        if let Self::Proposals(proposals) = self {
-            return proposals.finish();
+        match self {
+            Self::Regions(regions) => regions.finish(),
+            Self::Proposals(proposals) => proposals.finish(),
+            Self::Clauses(_) | Self::Parallel(_) => Ok(()),
         }
-        Ok(())
     }
 
     /// Record the original index's work, charged when a region walk first

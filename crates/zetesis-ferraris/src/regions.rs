@@ -1478,8 +1478,8 @@ impl<C: Count> Closure<'_, C> {
 
     /// A node that learned something teaches its operands, and lets each
     /// parent learn from it: a chain by one counter step, an implication
-    /// from both its operands and, when already known, by teaching them
-    /// again, since what it leaves them may have narrowed. A node false
+    /// from this event and its other operand. A known implication can then
+    /// teach the remaining open operand. A node false
     /// under a frozen mask is falsum in the reduct, a constant with no
     /// operands: it teaches nothing and learns nothing from them, and a
     /// parent under the mask likewise. A newly false body wakes its heads
@@ -1526,7 +1526,7 @@ impl<C: Count> Closure<'_, C> {
             step = step.join(if let Some(chain) = index.chain_of[parent] {
                 self.operand_changed(index, chain_position(chain), value, work)?
             } else {
-                self.revisit_implication(nodes, parent)
+                self.revisit_implication(nodes, parent, node, value)
             });
             if step == Step::Contradiction {
                 return Ok(step);
@@ -1745,27 +1745,66 @@ impl<C: Count> Closure<'_, C> {
         Ok(step)
     }
 
-    /// A non-chain parent in `dependencies` is an implication. Decode it
-    /// once, learn upward first, then teach with the parent's resulting state.
-    /// A newly learned parent still has its own queued event and wakeups.
-    fn revisit_implication(&mut self, nodes: FormulaView<'_>, node: usize) -> Step {
+    /// An operand event already establishes that operand's truth. An
+    /// antecedent known false or consequent known true satisfies the parent.
+    /// Otherwise its truth is that of the other operand (antecedent true),
+    /// or its negation (consequent false). Learn upward first; if the other
+    /// operand is open, the parent's knowledge teaches it. A newly learned
+    /// parent still has its own queued event and wakeups.
+    fn revisit_implication(
+        &mut self,
+        nodes: FormulaView<'_>,
+        node: usize,
+        changed: usize,
+        value: bool,
+    ) -> Step {
         let NodeView::Implies(a, b) = nodes.node(node).expect("admitted node") else {
             unreachable!("a non-chain parent is an implication");
         };
-        let mut up = Step::Unchanged;
-        if bit(self.known.never, a) || bit(self.known.sure, b) {
-            // A satisfied implication teaches no new operand truth. Its own
-            // event remains queued if the parent just became known; a false
-            // parent refutes immediately without further teaching.
+        debug_assert!(changed == a || changed == b);
+        debug_assert!(if value {
+            bit(self.known.sure, changed)
+        } else {
+            bit(self.known.never, changed)
+        });
+        // An aliased operand a -> a also takes this branch at either truth.
+        if (changed == a && !value) || (changed == b && value) {
             return self.sure(node);
         }
-        if bit(self.known.sure, a) && bit(self.known.never, b) {
-            up = up.join(self.never(node));
-            if up == Step::Contradiction {
-                return up;
-            }
+        let other = if changed == a { b } else { a };
+        let satisfied = if value {
+            bit(self.known.sure, other)
+        } else {
+            bit(self.known.never, other)
+        };
+        if satisfied {
+            return self.sure(node);
         }
-        up.join(self.teach_implication(node, a, b))
+        let refuted = if value {
+            bit(self.known.never, other)
+        } else {
+            bit(self.known.sure, other)
+        };
+        if refuted {
+            return self.never(node);
+        }
+        // The changed operand already has its required bit, and the other
+        // is open. Only the latter can learn from a known parent.
+        if bit(self.known.sure, node) {
+            if value {
+                self.sure(other)
+            } else {
+                self.never(other)
+            }
+        } else if bit(self.known.never, node) {
+            if value {
+                self.never(other)
+            } else {
+                self.sure(other)
+            }
+        } else {
+            Step::Unchanged
+        }
     }
 
     /// An atom none of its producers can support is known to fail, and an

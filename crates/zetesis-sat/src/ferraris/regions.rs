@@ -168,6 +168,29 @@ pub struct RegionSearchStatistics {
     pub frontier: Option<RegionFrontierStatistics>,
 }
 
+type Checker<'a> = Option<crate::region_filter::Worker<'a>>;
+
+self_cell::self_cell! {
+    /// The original-source factory owns the preparation borrowed by this
+    /// enumeration's one serial checker. Moving the stream never moves the
+    /// owner relative to its checker. No checker is shared with another stream,
+    /// source or frozen-reduct query. The cell is allocated only when a filter
+    /// is installed; its small allocation follows the boxed-checker contract.
+    struct RetainedFilter {
+        owner: crate::region_filter::Filter,
+        #[not_covariant]
+        dependent: Checker,
+    }
+}
+
+impl std::fmt::Debug for RetainedFilter {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RetainedFilter")
+            .field("factory", self.borrow_owner())
+            .finish_non_exhaustive()
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct RegionSearch {
     producers: Option<Producers>,
@@ -180,7 +203,7 @@ pub(crate) struct RegionSearch {
     /// The worklists every narrowing of this walk reuses.
     scratch: NarrowingScratch,
     statistics: RegionSearchStatistics,
-    pub(super) filter: Option<crate::region_filter::Filter>,
+    filter: Option<RetainedFilter>,
 }
 
 /// What opening a region search over a theory establishes: its producers,
@@ -251,6 +274,28 @@ impl RegionSearch {
         &mut self.statistics.counts
     }
 
+    pub(super) fn filter(&self) -> Option<&crate::region_filter::Filter> {
+        self.filter.as_ref().map(RetainedFilter::borrow_owner)
+    }
+
+    /// The caller allows installation only before traversal and never replaces
+    /// an installed factory, so no checker can outlive its source identity.
+    pub(super) fn set_filter(&mut self, filter: crate::region_filter::Filter) {
+        self.filter = Some(RetainedFilter::new(filter, |_| None));
+    }
+
+    /// Release the retained checker on completion, failure or explicit stop.
+    /// Keep the factory and its receipts inspectable after the stream closes.
+    pub(super) fn finish(&mut self) -> Result<(), Incomplete> {
+        self.filter.as_mut().map_or(Ok(()), |filter| {
+            filter.with_dependent_mut(|_, worker| {
+                let worker = worker.take();
+                std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(worker)))
+                    .map_err(|_| Incomplete::WorkerPanicked)
+            })
+        })
+    }
+
     pub(crate) fn statistics(&self) -> RegionSearchStatistics {
         let regions = self.traversal.statistics();
         RegionSearchStatistics {
@@ -315,7 +360,7 @@ impl RegionSearch {
     ) -> Result<bool, Incomplete> {
         permits(
             &self.restrictions,
-            self.filter.as_ref(),
+            self.filter.as_ref().map(RetainedFilter::borrow_owner),
             candidate,
             &mut self.scratch,
             budget,
@@ -334,6 +379,27 @@ impl RegionSearch {
         budget: &mut Budget<'_>,
         timings: &mut Option<crate::SearchPhaseTimings>,
     ) -> Result<Option<Interpretation>, Incomplete> {
+        match self.next_leaf(theory, index, budget, timings) {
+            Ok(Some(candidate)) => Ok(Some(candidate)),
+            Ok(None) => {
+                self.finish()?;
+                Ok(None)
+            }
+            Err(error) => {
+                // Teardown cannot replace the failure that stopped this pull.
+                let _ = self.finish();
+                Err(error)
+            }
+        }
+    }
+
+    fn next_leaf(
+        &mut self,
+        theory: &Theory,
+        index: &IndexedTheory,
+        budget: &mut Budget<'_>,
+        timings: &mut Option<crate::SearchPhaseTimings>,
+    ) -> Result<Option<Interpretation>, Incomplete> {
         let Self {
             producers,
             traversal,
@@ -343,25 +409,31 @@ impl RegionSearch {
             filter,
         } = self;
         let (formulas, narrower) = index.subject(theory)?;
-        let factory = filter.as_ref();
-        let mut worker = None;
         let before = traversal.statistics();
-        let visit = traversal.next(|region, knowledge| -> Result<Narrowing, Incomplete> {
-            let mut check = factory.map(|filter| crate::region_filter::Check {
-                filter,
-                worker: &mut worker,
-                timings,
-            });
-            narrow(
-                (formulas, narrower, producers.as_ref()),
-                restrictions,
-                (region, knowledge),
-                scratch,
-                budget,
-                &mut statistics.counts,
-                check.as_mut(),
-            )
-        });
+        let mut advance = |mut check: Option<crate::region_filter::Check<'_, '_>>| {
+            traversal.next(|region, knowledge| -> Result<Narrowing, Incomplete> {
+                narrow(
+                    (formulas, narrower, producers.as_ref()),
+                    restrictions,
+                    (region, knowledge),
+                    scratch,
+                    budget,
+                    &mut statistics.counts,
+                    check.as_mut(),
+                )
+            })
+        };
+        let visit = if let Some(filter) = filter {
+            filter.with_dependent_mut(|filter, worker| {
+                advance(Some(crate::region_filter::Check {
+                    filter,
+                    worker,
+                    timings,
+                }))
+            })
+        } else {
+            advance(None)
+        };
         let after = traversal.statistics();
         for _ in 0..after.splits_since(before) {
             budget.decide()?;
@@ -370,6 +442,13 @@ impl RegionSearch {
             None | Some(Visit::Counted(..)) => Ok(None),
             Some(Visit::Leaf(region, _)) => leaf_interpretation(theory, &region).map(Some),
         }
+    }
+}
+
+impl Drop for RegionSearch {
+    fn drop(&mut self) {
+        // Explicit finish reports teardown failure; Drop has no result channel.
+        let _ = self.finish();
     }
 }
 

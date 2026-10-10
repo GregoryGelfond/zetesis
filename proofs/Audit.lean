@@ -1362,6 +1362,9 @@ import Zetesis
 #print axioms Zetesis.StreamedConsequences.consequence_reads_change
 #print axioms Zetesis.StreamedConsequences.positive_changes_cover_consequences
 #print axioms Zetesis.StreamedConsequences.fresh_of_inside
+#print axioms Zetesis.StreamedConsequences.positive_cut_blocks_consequence
+#print axioms Zetesis.StreamedConsequences.completed_template_positive_cuts
+#print axioms Zetesis.StreamedConsequences.positive_holds_cover_consequences
 #print axioms Zetesis.StreamedConsequences.falsify_not_fresh
 #print axioms Zetesis.StreamedConsequences.open_count_mono
 #print axioms Zetesis.StreamedConsequences.falsify_decreases_open
