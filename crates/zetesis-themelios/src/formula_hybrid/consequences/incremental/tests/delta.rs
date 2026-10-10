@@ -2,6 +2,7 @@
 //! supplies every new witness without changing the conservative unit operation.
 
 mod cuts;
+mod polarities;
 
 use super::*;
 use crate::GroundingPhase;
@@ -306,13 +307,19 @@ fn deferred_distinct_changes_accumulate_anchors() {
 }
 
 #[test]
-fn affected_nonpositive_occurrences_decline_anchors() {
-    for source in [
-        include_str!(
-            "../../../../../tests/fixtures/streamed-consequences/delta/positive-negative-alias.lp"
+fn enabling_nonpositive_occurrences_decline_anchors() {
+    for (source, held) in [
+        (
+            include_str!(
+                "../../../../../tests/fixtures/streamed-consequences/delta/positive-negative-alias.lp"
+            ),
+            false,
         ),
-        include_str!(
-            "../../../../../tests/fixtures/streamed-consequences/delta/positive-double-alias.lp"
+        (
+            include_str!(
+                "../../../../../tests/fixtures/streamed-consequences/delta/positive-double-alias.lp"
+            ),
+            true,
         ),
     ] {
         let owner = admit(source);
@@ -322,7 +329,11 @@ fn affected_nonpositive_occurrences_decline_anchors() {
             pass(&mut checker, &region, ConstraintRegionPass::First),
             ConstraintConsequence::NoConsequence
         );
-        assert!(region.hold(atom(&owner, "p")));
+        assert!(if held {
+            region.hold(atom(&owner, "p"))
+        } else {
+            region.cut(atom(&owner, "p"))
+        });
         synchronized(&mut checker, &region);
         assert_eq!(state(&checker).scans, [Scan::Full]);
     }

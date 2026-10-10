@@ -4,6 +4,7 @@ use clap::Parser;
 use zetesis_cli::{Completion, Options, Report, RunError, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::observation::{ErrorKind, Resource};
+use zetesis_themelios::{AdmissionFailure, ExpansionFailure, ProfileFeature};
 
 fn solve(source: &str, arguments: &[&str]) -> (Result<Report, RunError>, String, String) {
     let options =
@@ -83,20 +84,40 @@ fn hidden_full_models_and_every_optimal_tie_keep_their_multiplicity() {
     }
 }
 #[test]
-fn incompatible_observation_routes_are_refused_without_fallback() {
-    let source = "p(1). #show f(X):p(X).";
-    for arguments in [
-        vec!["--oracle", "closure"],
-        vec!["--backend", "metal", "--grounder", "lazy"],
-        vec!["--backend", "gpu", "--grounder", "lazy"],
-    ] {
-        let (result, output, _) = solve(source, &arguments);
-        assert!(result.is_err(), "{arguments:?}");
-        assert!(
-            crate::support::human::preamble(&output),
-            "no answer from unsupported route: {output}"
-        );
-    }
+fn closure_observation_refuses_the_unsupported_directive() {
+    let (result, output, _) = solve(
+        include_str!("../fixtures/observations/conditional.lp"),
+        &["--oracle", "closure"],
+    );
+    assert!(
+        matches!(
+            result,
+            Err(RunError::Expansion(ExpansionFailure::Admission(
+                AdmissionFailure::Profile {
+                    feature: ProfileFeature::ShowTerm,
+                    ..
+                }
+            )))
+        ),
+        "{result:?}"
+    );
+    assert!(
+        crate::support::human::preamble(&output),
+        "no answer from unsupported route: {output}"
+    );
+}
+
+#[test]
+fn lazy_observation_evaluates_conditional_terms() {
+    let (result, output, _) = solve(
+        include_str!("../fixtures/observations/conditional.lp"),
+        &["--backend", "cpu", "--grounder", "lazy", "--models", "0"],
+    );
+    let report = result.unwrap();
+    assert_eq!(report.completion, Completion::Exhausted);
+    assert_eq!(report.models, 1);
+    assert!(report.hybrid_execution.is_some());
+    assert!(output.contains("Answer: 1\np(1) f(1)\n"), "{output}");
 }
 #[test]
 fn observation_failures_emit_no_partial_answer_or_false_completion() {

@@ -1431,6 +1431,14 @@
 'Zetesis.StreamedConsequences.positive_holds_cover_consequences' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]
+'Zetesis.StreamedConsequences.never_literal_blocks_consequence' depends on axioms: [propext]
+'Zetesis.StreamedConsequences.positive_holds_cover_signed_changes' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'Zetesis.StreamedConsequences.completed_template_disabling_changes' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'Zetesis.StreamedConsequences.completed_template_discharged' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StreamedConsequences.falsify_not_fresh' depends on axioms: [propext]
 'Zetesis.StreamedConsequences.open_count_mono' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.StreamedConsequences.falsify_decreases_open' depends on axioms: [propext, Classical.choice, Quot.sound]

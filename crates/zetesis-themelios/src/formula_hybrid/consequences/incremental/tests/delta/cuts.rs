@@ -89,8 +89,8 @@ fn positive_cuts_leave_held_anchors_available() {
 }
 
 #[test]
-fn positive_cuts_do_not_hide_later_default_reads() {
-    for source in [NEGATIVE_ALIAS, DOUBLE_ALIAS] {
+fn positive_cuts_preserve_later_default_read_effects() {
+    for (source, expected) in [(NEGATIVE_ALIAS, Scan::Full), (DOUBLE_ALIAS, Scan::Clean)] {
         let owner = admit(source);
         let mut checker = completed(&owner);
         let prepared = checker.prepared.as_ref().unwrap();
@@ -123,7 +123,7 @@ fn positive_cuts_do_not_hide_later_default_reads() {
         let mut region = Region::all_open(owner.atom_catalog().atoms().len());
         assert!(region.cut(atom(&owner, "p")));
         synchronized(&mut checker, &region);
-        assert_eq!(state(&checker).scans, [Scan::Full]);
+        assert_eq!(state(&checker).scans, [expected]);
     }
 }
 
@@ -187,11 +187,15 @@ fn region(atoms: usize, mut encoding: usize) -> Region {
 }
 
 #[test]
-fn mixed_decisions_match_complete_region_scans() {
-    let mut clean_cuts = 0;
+fn monotone_decisions_match_complete_region_scans() {
+    let mut clean_changes = 0;
     let mut mixed_deltas = 0;
     for source in [
         SIMPLE,
+        include_str!("../../../../../../tests/fixtures/streamed-consequences/two-negative.lp"),
+        include_str!(
+            "../../../../../../tests/fixtures/streamed-consequences/negative-double-negative.lp"
+        ),
         NEGATIVE_ALIAS,
         DOUBLE_ALIAS,
         include_str!(
@@ -220,7 +224,7 @@ fn mixed_decisions_match_complete_region_scans() {
                     old.decision(atom)
                         .is_none_or(|held| next.decision(atom) == Some(held))
                 }) || !(0..atoms)
-                    .any(|atom| old.decision(atom).is_none() && next.decision(atom) == Some(false))
+                    .any(|atom| old.decision(atom).is_none() && next.decision(atom).is_some())
                 {
                     continue;
                 }
@@ -232,7 +236,7 @@ fn mixed_decisions_match_complete_region_scans() {
                 synchronized(&mut checker, &next);
                 let reused = match state(&checker).scans[0] {
                     Scan::Clean => {
-                        clean_cuts += 1;
+                        clean_changes += 1;
                         Outcome {
                             refuted: false,
                             units: BTreeSet::new(),
@@ -258,7 +262,10 @@ fn mixed_decisions_match_complete_region_scans() {
             }
         }
     }
-    assert!(clean_cuts > 0, "completed scans must survive positive cuts");
+    assert!(
+        clean_changes > 0,
+        "completed scans must survive disabling changes"
+    );
     assert!(
         mixed_deltas > 0,
         "mixed held/cut changes must retain anchors"

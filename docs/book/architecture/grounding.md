@@ -355,15 +355,27 @@ occurrences can read an atom. Variables remain unconstrained for this test.
 These charged checks use the existing packed masks and predicate dependencies,
 without a table of ground constraints. After a completed scan found no deduction,
 newly held atoms can also restrict the next scan to their positive occurrences.
-Positive cuts cannot enable a new consequence: a false body occurrence is neither
-sure nor an open unit pivot. If every affected read is positive, only held changes
-need anchors; cuts alone preserve the completed result.
+Changes that make body occurrences false cannot enable a new consequence:
+a false occurrence is neither sure nor an open unit pivot. Cutting an atom
+disables its positive and double-negated occurrences; holding it disables its
+default-negated occurrences. Every potentially affected occurrence must be
+checked, including aliases with another sign. Newly held positive occurrences
+can supply anchors; enabling default-negated occurrences require a full scan.
 Changes accumulate until that rule is scanned. The current implementation keeps
 up to four distinct atoms per predicate and per pending rule; overflow restores
-a full scan, without limiting the program or its answer sets. Relevant negative
-readers and generated bindings also retain a full scan. Every matching
+a full scan, without limiting the program or its answer sets. Relevant generated
+bindings also retain a full scan. Every matching
 occurrence and the ordinary body test remain required, including overlapping
-occurrences. Potentially failing arithmetic retains the sequential scan. The
+occurrences.
+
+A completed productive scan can also be reused after its batch is applied.
+The checker retains the batch's rule identity and checks every emitted decision,
+including the delivered prefix, against the current region. Delivery alone is
+insufficient. Any intervening change that could enable a body occurrence
+discards this evidence; ignored units are rediscovered by a full scan.
+These checks use the existing batch and changed-atom information, without
+retaining ground constraint instances. Potentially failing arithmetic retains
+the sequential scan. The
 [batch and dependency laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-consequences.md)
 state the semantic premises separately from runtime error and storage handling.
 

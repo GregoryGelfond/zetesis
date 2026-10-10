@@ -29,6 +29,12 @@ region. Exact lower/upper agreement on a template's complete read dependency
 preserves its sufficient witnesses, so a completed negative scan can be reused.
 Neither law grants permission to omit fallible scalar evaluation or to reorder
 faults. Dependency coverage and completed scans are explicit premises.
+
+A signed occurrence that is now never true blocks both sufficient witnesses.
+This permits reuse after changes that only disable body occurrences. A completed
+productive family can become unproductive once every emitted occurrence has
+been falsified and no other change can enable a witness. Applying decisions,
+rather than merely delivering them, is an explicit premise of that result.
 -/
 
 namespace Zetesis.StreamedConsequences
@@ -562,6 +568,147 @@ theorem positive_holds_cover_consequences {I : Type v} (instances : List I)
   · exact ⟨literal, occurrence, sign, altered, held⟩
   · exact (positive_cut_blocks_consequence right (scalarPassed entry) (literals entry)
       literal consistent occurrence sign cut consequence).elim
+
+/-- A signed occurrence that is never true prevents both sufficient witnesses
+in a consistent cube. It cannot be sure or have a fresh atom. A negative
+occurrence is disabled by holding its atom; a positive or double-negative
+occurrence is disabled by cutting its atom. Their reducts are not identified.
+
+Proof outline: the lower bound is an interpretation in the consistent cube,
+so an occurrence cannot be both sure and never. Its sign also excludes
+freshness. Every occurrence is either the unit pivot or one of the sure
+occurrences, and either position therefore blocks a witness. -/
+theorem never_literal_blocks_consequence (c : Cube A) (scalarPassed : Bool)
+    (literals : List (Literal A)) (literal : Literal A)
+    (consistent : ∀ atom, c.lower atom → c.upper atom)
+    (member : literal ∈ literals) (impossible : Never c literal.formula) :
+    ¬ HasConsequence c scalarPassed literals := by
+  have notSure : ¬ Sure c literal.formula := by
+    intro sure
+    have lowerMember : c.Contains c.lower :=
+      ⟨fun _ held => held, consistent⟩
+    exact never_sound c lowerMember impossible (sure_sound c lowerMember sure)
+  have notFresh : ¬ c.Fresh literal.atom := by
+    cases literal with
+    | mk sign atom =>
+      cases sign with
+      | positive =>
+        have cut : ¬ c.upper atom := by
+          simpa [Literal.formula, Never, FormulaBounds.read] using impossible
+        exact fun fresh => cut fresh.2
+      | negative =>
+        have held : c.lower atom := by
+          simpa [Literal.formula, Never, FormulaBounds.read, Ferraris.Neg] using impossible
+        exact fun fresh => fresh.1 held
+      | doubleNegative =>
+        have cut : ¬ c.upper atom := by
+          simpa [Literal.formula, Never, FormulaBounds.read, Ferraris.Neg] using impossible
+        exact fun fresh => cut fresh.2
+  intro consequence
+  rcases consequence.2 with allSure | ⟨before, pivot, after, shape, unit⟩
+  · exact notSure (allSure literal member)
+  · have occurrence : literal ∈ before ++ pivot :: after := by
+      simpa only [shape] using member
+    rcases List.mem_append.mp occurrence with earlier | remaining
+    · exact notSure (unit.2 literal (List.mem_append_left after earlier))
+    · rcases List.mem_cons.mp remaining with rfl | later
+      · exact notFresh unit.1
+      · exact notSure (unit.2 literal (List.mem_append_right before later))
+
+/-- New consequences remain covered by changed positive held occurrences when
+all other changed reads are disabled. Bounds agree outside the changed set;
+instances and scalar results are fixed, and the current cube is consistent.
+The sign condition is checked per occurrence, so aliases with different signs
+remain distinct. Enabling negative or double-negative reads are not admitted.
+
+Proof outline: each new witness must read a changed atom. A disabled occurrence
+would block that witness, leaving a positive held occurrence as its anchor.
+A concrete traversal must still enumerate every matching occurrence and retain
+its scalar and unit tests; this law does not establish cursor completeness. -/
+theorem positive_holds_cover_signed_changes {I : Type v} (instances : List I)
+    (scalarPassed : I → Bool) (literals : I → List (Literal A))
+    (left right : Cube A) (changed : Atoms A)
+    (consistent : ∀ atom, right.lower atom → right.upper atom)
+    (same : SameBoundsOn left right (fun atom => ¬ changed atom))
+    (classified : ∀ entry ∈ instances, ∀ literal ∈ literals entry,
+      changed literal.atom →
+        (literal.sign = .positive ∧ right.lower literal.atom) ∨
+          Never right literal.formula)
+    (complete : ∀ entry ∈ instances,
+      ¬ HasConsequence left (scalarPassed entry) (literals entry)) :
+    ∀ entry ∈ instances, HasConsequence right (scalarPassed entry) (literals entry) →
+      ∃ literal ∈ literals entry,
+        literal.sign = .positive ∧ changed literal.atom ∧ right.lower literal.atom := by
+  intro entry member consequence
+  obtain ⟨literal, occurrence, altered⟩ :=
+    consequence_reads_change left right changed same (scalarPassed entry)
+      (literals entry) (complete entry member) consequence
+  rcases classified entry member literal occurrence altered with enabled | disabled
+  · exact ⟨literal, occurrence, enabled.1, altered, enabled.2⟩
+  · have blocked : ¬ HasConsequence right (scalarPassed entry) (literals entry) :=
+      never_literal_blocks_consequence right (scalarPassed entry) (literals entry)
+        literal consistent occurrence disabled
+    exact (blocked consequence).elim
+
+/-- A completed unproductive family stays unproductive when every changed read
+is now never true. Both bounds agree outside the supplied changed set; the
+current cube is consistent, and instances and scalar results are unchanged.
+
+Proof outline: any new witness must read a changed atom. That occurrence is
+never true by hypothesis, so it blocks the witness. The hypothesis concerns
+every affected signed occurrence, including aliases. It needs no nesting
+premise and establishes no concrete change-history or scan certificate. -/
+theorem completed_template_disabling_changes {I : Type v} (instances : List I)
+    (scalarPassed : I → Bool) (literals : I → List (Literal A))
+    (left right : Cube A) (changed : Atoms A)
+    (consistent : ∀ atom, right.lower atom → right.upper atom)
+    (same : SameBoundsOn left right (fun atom => ¬ changed atom))
+    (disabled : ∀ entry ∈ instances, ∀ literal ∈ literals entry,
+      changed literal.atom → Never right literal.formula)
+    (complete : ∀ entry ∈ instances,
+      ¬ HasConsequence left (scalarPassed entry) (literals entry)) :
+    ∀ entry ∈ instances, ¬ HasConsequence right (scalarPassed entry) (literals entry) := by
+  intro entry member witness
+  obtain ⟨literal, occurrence, altered⟩ :=
+    consequence_reads_change left right changed same (scalarPassed entry)
+      (literals entry) (complete entry member) witness
+  exact never_literal_blocks_consequence right (scalarPassed entry) (literals entry)
+    literal consistent occurrence (disabled entry member literal occurrence altered) witness
+
+/-- A completed family has no remaining sufficient witness after its emitted
+occurrences are falsified, provided every other changed read also disables its
+occurrence. Completion covers each instance: either it had no witness before,
+or it contains an occurrence recorded in the emitted batch. Every recorded
+occurrence is now never true. Instances and scalar results stay fixed.
+
+Proof outline: a previously unproductive instance could gain a witness only
+through a changed read, which is now disabled. An instance represented in the
+batch contains a now-disabled occurrence directly. Neither can have a witness.
+This proves absence of further witnesses, not soundness of the emitted batch;
+the snapshot-consequence and batch-preservation laws supply that separate duty.
+A queue position or a delivered prefix does not establish discharge. -/
+theorem completed_template_discharged {I : Type v} (instances : List I)
+    (scalarPassed : I → Bool) (literals : I → List (Literal A))
+    (left right : Cube A) (changed : Atoms A) (emitted : List (Literal A))
+    (consistent : ∀ atom, right.lower atom → right.upper atom)
+    (same : SameBoundsOn left right (fun atom => ¬ changed atom))
+    (disabled : ∀ entry ∈ instances, ∀ literal ∈ literals entry,
+      changed literal.atom → Never right literal.formula)
+    (complete : ∀ entry ∈ instances,
+      (¬ HasConsequence left (scalarPassed entry) (literals entry)) ∨
+        ∃ literal ∈ literals entry, literal ∈ emitted)
+    (discharged : ∀ literal ∈ emitted, Never right literal.formula) :
+    ∀ entry ∈ instances, ¬ HasConsequence right (scalarPassed entry) (literals entry) := by
+  intro entry member witness
+  rcases complete entry member with absent | represented
+  · obtain ⟨literal, occurrence, altered⟩ :=
+      consequence_reads_change left right changed same (scalarPassed entry)
+        (literals entry) absent witness
+    exact never_literal_blocks_consequence right (scalarPassed entry) (literals entry)
+      literal consistent occurrence (disabled entry member literal occurrence altered) witness
+  · obtain ⟨literal, occurrence, recorded⟩ := represented
+    exact never_literal_blocks_consequence right (scalarPassed entry) (literals entry)
+      literal consistent occurrence (discharged literal recorded) witness
 
 /-- A signed decision leaves its own atom decided. -/
 theorem falsify_not_fresh (c : Cube A) (literal : Literal A) :

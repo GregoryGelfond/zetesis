@@ -2168,6 +2168,40 @@ every grounded occurrence. These laws need no nesting premise; Rust additionally
 authenticates monotone lineage before retaining scan state. They concern newly
 available witnesses, not the validity of previously emitted deductions.
 
+`never_literal_blocks_consequence` extends the blocking argument to all three
+signs. `completed_template_disabling_changes` preserves a completed negative
+scan when every changed occurrence is now never true. Holding an atom disables
+its default-negated occurrence; cutting it disables a positive or double-negated
+occurrence. This original-truth argument does not identify their reducts.
+`positive_holds_cover_signed_changes` covers every new witness through a
+changed positive held occurrence when other changed occurrences are disabled.
+It combines change coverage with the signed blocking law, rather than assuming
+that every changed read is positive.
+`completed_template_discharged` additionally permits a completed productive
+family to become unproductive after every emitted occurrence is falsified.
+Previously unproductive instances remain so, and emitted occurrences block
+their represented instances. The earlier batch laws separately justify the
+deductions' soundness.
+
+For a productive scan restricted to positive anchors, Rust owes both stages of
+coverage. The earlier complete unproductive scan and the signed coverage law
+cover every current witness by a newly held positive occurrence. Exhaustive
+anchor traversal must then either refute the region or record a pivot for every
+witness, preserving scalar evaluation and occurrence identity. This establishes
+the complete-family premise at the scan snapshot, even though the cursor visited
+only anchors. Subsequent disabling changes and verified application of every
+recorded decision supply the remaining premises of
+`completed_template_discharged`. Coalescing identical atom decisions must preserve
+coverage of every represented pivot occurrence. Cursor exhaustion alone is
+insufficient.
+
+Rust retains one optional rule identity for its existing pending batch. Before
+publishing completed negative evidence, it checks all emitted decisions against
+the region, including the delivered prefix, and authenticates every intervening
+change. Any enabling or untracked read discards this receipt. Ignored
+decisions, partial scans, stops and errors cannot establish discharge. The Lean
+laws do not prove those concrete queue and failure boundaries.
+
 The changed set may be arbitrary. Rust must project all mask changes onto each
 rule's possible reads conservatively; excluded atoms must occur in no covered
 instance. A positive cut cannot conceal a later negative or double-negative
@@ -2177,8 +2211,8 @@ accumulates changes since the completed scan, and preserves scalar evaluation
 and the unit test. Overlapping occurrences must remain covered. The current
 implementation retains up to four distinct atoms per predicate and per pending
 rule. Overflow restores a full scan; this is an implementation bound on reuse,
-not a program resource limit. Relevant negative readers, generated bindings
-or uncertain completion also retain a full scan. These laws do not verify the
+not a program resource limit. Enabling default-negated readers, relevant
+generated bindings or uncertain completion also retain a full scan. These laws do not verify the
 cursor's row coordinates, bounded change storage or query schedule.
 
 Sharing the immutable rule-to-predicate and atom-to-predicate mappings adds no

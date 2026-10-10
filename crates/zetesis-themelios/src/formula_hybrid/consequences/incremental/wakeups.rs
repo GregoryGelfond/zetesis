@@ -1,10 +1,11 @@
 //! Necessary occurrence reads refine a bounded set of changed atoms.
 //!
 //! This replaces the existing per-predicate flag, not the dependency owner.
-//! Overflow keeps ordinary invalidation. A positive cut only disables body
-//! instances; held atoms may anchor a completed negative scan after every
-//! potentially affected occurrence has been checked positive. Generated rules
-//! still decline either change. Slots, including repeated
+//! Overflow keeps ordinary invalidation. A change that makes an occurrence
+//! false only disables body instances, regardless of its default negation.
+//! Enabling positive occurrences may anchor a completed negative scan; enabling
+//! default-negated occurrences still require a full scan. Generated rules
+//! decline relevant changes. Slots, including repeated
 //! names and lowered constructor temporaries, are independent wildcards here:
 //! failing a constant or constructor check excludes a read; passing proves none.
 
@@ -13,6 +14,7 @@ use crate::FormulaFailure;
 use crate::formula_ir::{LiteralIr, RuleIr};
 use crate::formula_pattern::{ArgumentPattern, PatternNode};
 use crate::formula_support::{Counters, GroundingWork};
+use themelios_program::program::DefaultNegation;
 use zetesis_core::catalog::{AtomRef, TermRef};
 use zetesis_core::{TemplateComponentsRef, TemplateTerm};
 
@@ -42,9 +44,11 @@ impl Change {
 
 /// The ordered dependency row has one group per original atom occurrence.
 /// Both it and the canonical changed IDs belong to this exact prepared core.
-/// Clean means no possible read changed or only positive reads became false.
-/// `PositiveDelta` covers enabling changes with the retained newly held atoms.
-/// Both rely on a completed unproductive scan and monotone, consistent bounds.
+/// Clean means no possible read changed or every affected occurrence became
+/// false. `PositiveDelta` covers enabling positive occurrences with retained
+/// newly held atoms. Enabling default-negated occurrences require Full.
+/// Reuse requires monotone, consistent bounds and completed negative evidence;
+/// Clean also preserves a completed batch pending application of all its units.
 /// Full declines reuse. Relevant generated frames also decline; unchanged
 /// generated rules retain their prior clean evidence.
 pub(super) fn classify(
@@ -89,20 +93,15 @@ pub(super) fn classify(
                         &mut GroundingWork::new(&prepared.limits, counters, rule.location),
                     )? {
                         relevant = true;
-                        if !matches!(
-                            literal_atom(literal),
-                            Some((themelios_program::program::DefaultNegation::None, _))
-                        ) {
-                            return Ok(super::Scan::Full);
-                        }
+                        let (negation, _) = literal_atom(literal).expect("an atom occurrence");
                         match region.decision(position) {
-                            Some(true) => required
+                            // Disabling one read cannot create a violation or
+                            // unit. Keep inspecting: an alias later in this
+                            // body can read the same atom with another polarity.
+                            Some(held) if held != (negation != DefaultNegation::Not) => {}
+                            Some(true) if negation == DefaultNegation::None => required
                                 .include(super::Scan::PositiveDelta(ChangedAtoms::one(position))),
-                            // A false body occurrence cannot participate in a
-                            // new violation or unit. Inspect later occurrences:
-                            // the same atom may also have a nonpositive read.
-                            Some(false) => {}
-                            None => return Ok(super::Scan::Full),
+                            Some(_) | None => return Ok(super::Scan::Full),
                         }
                         if required == super::Scan::Full {
                             return Ok(required);

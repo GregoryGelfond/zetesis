@@ -2,11 +2,12 @@
 //!
 //! A batch contains only unit consequences proved against one immutable region.
 //! It survives only extensions of both masks. A completed rule stays clean
-//! while its possible reads are unchanged or only positive reads become false.
+//! while its possible reads are unchanged or affected body occurrences become false.
 //! A bounded set of newly held positive atoms can instead restrict its next
 //! scan to all their original occurrences. Generated rules decline either change.
-//! Pending deltas accumulate until the rule is scanned; a productive scan is
-//! never a negative certificate.
+//! Pending deltas accumulate until the rule is scanned. A completed productive
+//! scan becomes negative evidence only after every emitted unit is confirmed
+//! applied and all intervening changes merely disable occurrences.
 
 use super::{ConstraintConsequence, PreparedConstraints, literal_atom, scan_selected_rule};
 use crate::expansion::Budget;
@@ -135,8 +136,8 @@ impl ChangedAtoms {
 
 /// Evidence from one completed unproductive rule scan. A positive delta
 /// retains every relevant newly held atom since that scan, including across
-/// passes that drain an earlier rule's units before reaching this rule. Positive
-/// cuts only remove witnesses and need no anchor.
+/// passes that drain an earlier rule's units before reaching this rule. Signed
+/// disabling changes only remove witnesses and need no anchor.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Scan {
     Full,
@@ -187,6 +188,11 @@ pub(in crate::formula_hybrid) struct Incremental<'source> {
     cut: Vec<u64>,
     queued: Vec<Option<bool>>,
     pending: Vec<Decision>,
+    /// The current batch came from an exhausted rule scan, and every observed
+    /// change since that scan merely disables occurrences. The rule stays Full
+    /// until every emitted decision, including the delivered prefix, is checked
+    /// against the region. Enabling or uncovered changes discard this receipt.
+    completed_batch: Option<usize>,
     next: usize,
     valid: bool,
 }
@@ -427,6 +433,7 @@ impl<'source> Incremental<'source> {
             cut: Vec::new(),
             queued: Vec::new(),
             pending: Vec::new(),
+            completed_batch: None,
             next: 0,
             valid: false,
         };
@@ -505,6 +512,7 @@ impl<'source> Incremental<'source> {
     /// Retained capacities remain in this worker's sole lease.
     pub(in crate::formula_hybrid) fn reset(&mut self) {
         self.valid = false;
+        self.completed_batch = None;
     }
 
     /// Only undelivered entries can still occupy a deduplication slot. Advancing
@@ -514,6 +522,7 @@ impl<'source> Incremental<'source> {
         limits: &FormulaLimits,
         counters: &mut Counters,
     ) -> Result<(), FormulaFailure> {
+        self.completed_batch = None;
         while let Some(decision) = self.pending.get(self.next) {
             counters.work(limits, decision.site)?;
             self.queued[decision.atom] = None;
@@ -571,8 +580,8 @@ impl<'source> Incremental<'source> {
         if monotone {
             for (rule, scan) in self.scans.iter_mut().enumerate() {
                 counters.work(limits, site)?;
-                if *scan != Scan::Full {
-                    scan.include(wakeups::classify(
+                if *scan != Scan::Full || self.completed_batch == Some(rule) {
+                    let change = wakeups::classify(
                         &prepared.source.rules[rule],
                         &self.plan.dependencies
                             [self.plan.offsets[rule]..self.plan.offsets[rule + 1]],
@@ -580,7 +589,14 @@ impl<'source> Incremental<'source> {
                         prepared,
                         region,
                         counters,
-                    )?);
+                    )?;
+                    // A productive receipt does not justify anchored scans:
+                    // every old unit must first be discharged. Retain it only
+                    // across changes that cannot introduce another witness.
+                    if self.completed_batch == Some(rule) && change != Scan::Clean {
+                        self.completed_batch = None;
+                    }
+                    scan.include(change);
                 }
             }
         }
@@ -622,6 +638,20 @@ impl<'source> Incremental<'source> {
                         }
                     }));
                 }
+            }
+        }
+        if let Some(rule) = self.completed_batch.take() {
+            let mut applied = true;
+            for decision in &self.pending {
+                counters.work(limits, decision.site)?;
+                applied &= region.decision(decision.atom) == Some(decision.held);
+            }
+            // Delivery alone proves nothing about the caller's next region.
+            // Authenticate the delivered prefix as well as skipped units before
+            // replacing a full scan with completed negative evidence. A failed
+            // check leaves Full, so ignored or delayed units are rediscovered.
+            if applied {
+                self.scans[rule] = Scan::Clean;
             }
         }
         self.pending.clear();
@@ -692,8 +722,9 @@ impl<'source> Incremental<'source> {
                 Scan::Full => None,
                 Scan::Clean => unreachable!("clean rules were skipped"),
             };
-            // Completion below must establish new evidence. A refusal, panic,
-            // refutation or productive scan cannot retain the old premise.
+            // Completion below must establish new evidence. A refusal, panic
+            // or refutation cannot retain the old premise; a productive scan
+            // additionally needs its emitted units to be applied.
             counters.work(&prepared.limits, prepared.source.rules[rule].location)?;
             self.scans[rule] = Scan::Full;
             let consequence = scan_selected_rule(
@@ -717,14 +748,14 @@ impl<'source> Incremental<'source> {
                 return Ok(ConstraintConsequence::Refuted { site });
             }
             counters.work(&prepared.limits, prepared.source.rules[rule].location)?;
-            // Only a completed scan with no units is a negative certificate.
-            // Productive rules remain dirty even if a caller ignores a returned
-            // decision instead of applying it before Continue.
-            self.scans[rule] = if self.pending.is_empty() {
-                Scan::Clean
+            // A completed batch identifies every unit of this immutable scan.
+            // It is only a conditional receipt: keep Full until all its units
+            // are applied and every intervening read change is disabling.
+            if self.pending.is_empty() {
+                self.scans[rule] = Scan::Clean;
             } else {
-                Scan::Full
-            };
+                self.completed_batch = Some(rule);
+            }
             if let Some(consequence) = self.pop(region, &prepared.limits, counters)? {
                 return Ok(consequence);
             }

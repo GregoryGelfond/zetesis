@@ -78,7 +78,7 @@ coverage: any new witness would need a changed occurrence, but such an occurrenc
 blocks it. No nesting premise is needed for this law. Rust still authenticates
 monotone region lineage before retaining its scan state.
 
-For mixed changes, `positive_holds_cover_consequences` covers every new witness
+For positive held/cut changes, `positive_holds_cover_consequences` covers every new witness
 through a changed held occurrence. Scalars and instance coverage stay fixed;
 both bounds agree outside the changed set, whose affected occurrences are
 positive and whose atoms are now decided. Cuts cannot supply a witness. The set
@@ -87,6 +87,52 @@ its actual reads. Runtime dependency refinement must justify omitting unrelated
 atoms and must inspect every possibly affected occurrence, including aliases
 with another sign. These laws concern availability after an unproductive scan,
 not a claim that previously emitted consequences remain open or unconsumed.
+
+`never_literal_blocks_consequence` extends the disabling argument to all three
+signs. Holding an atom disables its default-negated occurrence. Cutting an atom
+disables its positive and double-negated occurrences. A disabled occurrence
+cannot be sure or remain the fresh pivot. This concerns original truth; positive
+and double-negated reducts remain different.
+
+`completed_template_disabling_changes` preserves a completed unproductive scan
+when every changed read is now disabled. Any new witness would need a changed
+occurrence, and that occurrence blocks it. Every potentially affected occurrence
+must meet this condition. A change that disables one occurrence but enables
+another does not satisfy the premise merely because both read the same atom.
+
+`positive_holds_cover_signed_changes` permits changed positive held occurrences
+alongside disabled occurrences of any sign. Every new witness reads a changed
+occurrence. A disabled occurrence would block it, so a positive held occurrence
+must cover it. The condition applies separately to every occurrence, including
+aliases; an enabled negative or double-negative read requires another argument.
+
+`completed_template_discharged` also covers a completed productive scan. Each
+instance either had no sufficient witness before or contains an occurrence
+recorded in the emitted batch. Every recorded occurrence must now be never true,
+and other changed reads must only disable occurrences. Previously unproductive
+instances stay unproductive; represented instances are blocked by their recorded
+occurrence. The result establishes that this family has no remaining sufficient
+witness. The earlier snapshot and batch laws separately justify why applying
+those decisions preserves answer sets.
+
+A productive scan restricted to newly held positive atoms needs two stages of
+coverage. First, the old complete unproductive scan and
+`positive_holds_cover_signed_changes` show that every current witness occurs in
+one of the positive anchors. Exhausting all those anchors, with unchanged scalar
+and occurrence-based unit tests, must either find a refutation or record a pivot
+for every witness. In the non-refuted case, this establishes the complete-family
+premise of `completed_template_discharged` at the new scan's snapshot. Second,
+once every recorded pivot is falsified and all intervening changes only disable
+reads, that theorem gives a complete unproductive family. Exhausting an anchor
+cursor alone supplies neither the old coverage nor the discharge premise.
+
+Discharge is a fact about current bounds, not delivery or queue position. A
+consumed prefix does not establish it for the complete emitted batch. A Rust
+receipt must authenticate complete instance and scalar coverage, every recorded
+decision including those already delivered, source ownership, monotone lineage
+and all intervening changes. Generated frames, enabling or untracked changes,
+stops and errors need their explicit conservative handling. No runtime receipt
+or cursor implementation is proved by these mathematical laws.
 
 These reuse laws do not prove that a concrete dirty list covers every changed
 read, that a retained batch belongs to the current owner or region, or that a

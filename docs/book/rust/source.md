@@ -489,14 +489,16 @@ A completed scan that found no deduction can be reused after assessing changes
 to its possible reads. For each retained changed atom of a signed predicate, the
 checker tests necessary constants and constructor shapes at every occurrence that reads
 that predicate. Only a mismatch can exclude the atom; repeated variables and
-lowered temporary slots remain independent wildcards. When every affected read
-is positive, cuts alone preserve the completed result; held changes restrict
-the next scan to those atoms' occurrences. A cut positive occurrence cannot
-make a body sure or serve as an open unit pivot. The scan preserves the ordinary
-binding, scalar and unit tests.
+lowered temporary slots remain independent wildcards. A change that disables
+every affected body occurrence preserves the completed result: cutting an atom
+disables positive and double-negated occurrences, while holding it disables
+default-negated occurrences. Newly held positive occurrences can restrict the
+next scan to those atoms' occurrences. Enabling default-negated occurrences
+require a full scan. The scan preserves the ordinary binding, scalar and unit
+tests, and checks every affected occurrence even when signs differ.
 Changes accumulate until the rule is scanned. The implementation retains up to
-four distinct atoms per predicate and per pending rule; overflow, a relevant
-negative reader or generated bindings restores a full scan. This bound
+four distinct atoms per predicate and per pending rule; overflow, an enabling
+default-negated reader or relevant generated bindings restores a full scan. This bound
 controls reuse, not program admission. Default negation and double negation
 retain their dependencies, and changes from ordinary propagation count too.
 The retained change buffers and extra canonical term reads are charged. Successful
@@ -504,8 +506,11 @@ The retained change buffers and extra canonical term reads are charged. Successf
 scan evidence. The next `First` gets a new allowance and may reuse the evidence
 after checking both decision masks; a sibling or reopened decision invalidates
 it. Errors, refutations, ordinary checks and abandoned productive batches also
-invalidate candidate evidence. Productive or interrupted scans do not establish
-a reusable negative result.
+invalidate candidate evidence. A completed productive scan establishes a reusable
+negative result only after every emitted decision is confirmed in the current
+region, including the delivered prefix, and every intervening change is
+irrelevant or disabling. The rule stays eligible for a full scan until those
+conditions hold. Interrupted scans cannot establish this result.
 
 For eligible nongenerated bindings, one join enumerates prefixes with at most
 one mapped open positive occurrence. The remaining mapped positives must be

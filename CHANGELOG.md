@@ -30,7 +30,8 @@ Notable changes by release. Versions follow Semantic Versioning.
 - Skip propagation rounds that have already reached a shared fixed point.
 - Reuse prepared lazy constraint checks between compatible candidates, and
   revisit only affected atom occurrences when complete coverage is established.
-  Keep completed checks when positive body atoms only become false.
+  Keep completed checks when affected body literals only become false, and
+  reuse productive scans after confirming that every deduction was applied.
 - Filter structurally impossible or absent positive atoms before constraint
   joins, while preserving complete body checks and arithmetic diagnostics.
 - Remove repeated witnesses from constraints over fixed fact relations, and

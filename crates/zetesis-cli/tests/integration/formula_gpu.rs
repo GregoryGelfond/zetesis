@@ -439,6 +439,7 @@ mod physical {
 
     fn qualify_hybrid_output(backend: GpuApi) {
         for source in [
+            include_str!("../fixtures/observations/conditional.lp"),
             include_str!("../fixtures/hybrid-gpu/objectives.lp"),
             include_str!("../fixtures/hybrid-gpu/terminal.lp"),
         ] {

@@ -81,11 +81,12 @@ impl ConstraintChecker<'_> {
     /// A successful `NoConsequence` retains only completed rule-scan evidence:
     /// the next `First` authenticates monotone masks and rechecks rules whose
     /// possible reads changed. For a completed unproductive total nongenerated
-    /// rule, positive cuts cannot create a new consequence. If every affected
-    /// read is positive and the bounded delta fits, only newly held atoms anchor
-    /// the next scan, at each original occurrence; cuts alone retain the completed
-    /// result. Negative reads, generated bindings and delta overflow retain a
-    /// full scan. Deferred held deltas accumulate until the rule is scanned.
+    /// rule, changes making body occurrences false cannot create a consequence.
+    /// If every enabling read is positive and the bounded delta fits, newly held
+    /// atoms anchor the next scan at each original occurrence; disabling changes
+    /// alone retain the completed result. Enabling default-negated reads,
+    /// generated bindings and delta overflow retain a full scan. Deferred held
+    /// deltas accumulate until the rule is scanned.
     /// This reuse never carries a pending decision across closures or renews
     /// an active closure's allowance.
     ///
@@ -97,8 +98,10 @@ impl ConstraintChecker<'_> {
     /// no consequence; full original model checking remains mandatory. No ground
     /// instances are retained. For total source partitions, one complete rule
     /// can produce a bounded batch, reused only under authenticated monotone
-    /// decision masks. Fully scanned rules are revisited when their signed
-    /// predicates change. Partial arithmetic keeps the single-result scan.
+    /// decision masks. A completed productive scan can be reused only after
+    /// every emitted unit is confirmed applied and all intervening changes
+    /// merely disable its body occurrences. Ignored units and enabling changes
+    /// keep the full scan. Partial arithmetic keeps the single-result scan.
     /// Retained metadata and batch growth share the support-byte allowance;
     /// all passes still share one closure budget. Resource-limited prefixes may
     /// differ because a batch finishes its rule before publishing decisions.
