@@ -4,13 +4,14 @@ use std::collections::BTreeMap;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, AggregateComparison, AggregateElement, AggregateFamilyBuild,
-    AggregateFamilyLimits, AggregateGuard, FormulaNodes, NodeView, Theory, append_aggregate_family,
+    AggregateFamilyLimits, AggregateGuard, FormulaNodes, FormulaParts, NodeView,
+    append_aggregate_family,
 };
 use zetesis_objective::Score;
 
 use super::{
     ObjectiveBound, ObjectiveBoundError, ObjectiveBoundErrorKind as Kind, ObjectiveBoundLimits,
-    ObjectiveBoundStatistics, ObjectivePlan, ObjectivePlanLimits, Work,
+    ObjectiveBoundResource, ObjectiveBoundStatistics, ObjectivePlan, ObjectivePlanLimits, Work,
 };
 
 pub(super) mod normalize;
@@ -33,15 +34,7 @@ pub(super) fn compile(
         statistics: ObjectiveBoundStatistics::default(),
     };
     work.tick()?;
-    let mut nodes = FormulaNodes::default();
-    for index in 0..plan.nodes.view().len() {
-        let node = plan
-            .nodes
-            .view()
-            .node(index)
-            .map_err(|error| work.error(Kind::Theory(error)))?;
-        work.node(&mut nodes, node)?;
-    }
+    let mut nodes = copy(&plan.nodes, &mut work)?;
     let root = lexicographic(
         &mut nodes,
         plan.levels.keys().copied(),
@@ -54,27 +47,8 @@ pub(super) fn compile(
             ))
         },
     )?;
-    // Account for the admission's independent count and topology passes.
-    for index in 0..nodes.view().len() {
-        work.tick()?;
-        work.tick()?;
-        let node = nodes
-            .view()
-            .node(index)
-            .map_err(|error| work.error(Kind::Theory(error)))?;
-        let occurrences = match node {
-            NodeView::And(row) | NodeView::Or(row) => row.len(),
-            NodeView::Implies(_, _) => 2,
-            NodeView::Atom(_) | NodeView::False => 0,
-        };
-        for _ in 0..occurrences {
-            work.tick()?;
-        }
-    }
-    work.tick()?;
-    let theory = Theory::new(
+    let admission = nodes.prepare_admission(
         plan.original.atom_count(),
-        nodes.into_parts(),
         vec![root],
         AdmissionLimits {
             max_atoms: plan.original.atom_count(),
@@ -82,8 +56,11 @@ pub(super) fn compile(
             max_roots: 1,
             max_operands: limits.aggregate.max_operands,
         },
-    )
-    .map_err(|error| work.error(Kind::Theory(error)))?;
+    );
+    work.charge(u64::try_from(admission.work()).map_err(|_| work.error(Kind::Overflow))?)?;
+    let theory = admission
+        .admit()
+        .map_err(|error| work.error(Kind::Theory(error)))?;
     let exact = ObjectiveBound {
         original: plan.original.clone(),
         theory,
@@ -97,6 +74,41 @@ pub(super) fn compile(
         limits,
         cancellation,
     ))
+}
+
+// Copy the complete owner once: different threshold bounds can share one row.
+// Replaying semantic nodes separately would duplicate that authoritative row.
+fn copy(parts: &FormulaParts, work: &mut Work<'_>) -> Result<FormulaNodes, ObjectiveBoundError> {
+    if [
+        parts.nodes().len(),
+        parts.rows().len(),
+        parts.thresholds().len(),
+    ]
+    .into_iter()
+    .any(|count| count > work.limits.max_nodes)
+    {
+        return Err(work.limit(ObjectiveBoundResource::Nodes));
+    }
+    if [
+        parts.occurrences(),
+        parts.operands().len(),
+        parts.conditions().len(),
+        parts.weights().len(),
+    ]
+    .into_iter()
+    .any(|count| count > work.limits.max_operands)
+    {
+        return Err(work.limit(ObjectiveBoundResource::Operands));
+    }
+    work.charge(u64::try_from(parts.copy_work()).map_err(|_| work.error(Kind::Overflow))?)?;
+    let copied = parts.try_clone().map_err(|error| {
+        work.error(match error {
+            zetesis_ferraris::AdmissionError::Allocation => Kind::Allocation,
+            _ => Kind::Theory(error),
+        })
+    })?;
+    work.statistics.nodes = copied.nodes().len();
+    Ok(FormulaNodes::new(copied))
 }
 
 /// Compile the same non-strict lexicographic comparison for exact costs and
@@ -178,3 +190,6 @@ pub(super) fn family(
     work.statistics.nodes = nodes.view().len();
     Ok(build)
 }
+
+#[cfg(test)]
+mod tests;

@@ -311,7 +311,7 @@ fn incomplete_scans_publish_no_new_frontier() {
 #[test]
 fn malformed_raw_suffix_survives_failed_validation() {
     let input = prefix();
-    let (mut raw, operands) = snapshot(&input);
+    let (mut raw, operands, ..) = snapshot(&input);
     let invalid = raw.len();
     raw.push(Node::and_pair([0, invalid]));
     let mut nodes = FormulaNodes::new(FormulaParts::new(raw, operands).unwrap());

@@ -261,6 +261,16 @@ a count, sum or extremum is taken. A bound tests that result; it does not supply
 support for a head atom. Signed and Boolean operands keep their own activity
 contract throughout this composition.
 
+The formula library also admits a native nonnegative weighted threshold: select
+weights by predecessor truth, reduce them in checked `i128`, then compare the
+bound. A family of bounds shares its condition and weight columns. The frozen
+reading retains the original threshold truth gate. CPU checking consumes those
+rows directly; GPU transport expands them once into its Boolean device format.
+The common source compiler uses this representation for nonnegative count and
+sum guards, including choice bounds. Shared counters propagate their necessary
+consequences. Signed sums and extrema retain their existing exact translations.
+Executable refinement and measured application speed remain separate obligations.
+
 For a count or sum, every possible measure is numeric. Against a nonnumeric
 logical bound, its order is the same for every complete tuple selection.
 [`numeric_comparison`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs)

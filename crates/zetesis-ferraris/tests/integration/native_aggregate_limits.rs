@@ -427,8 +427,7 @@ fn foreign_interpretations_cannot_acquire_eligibility() {
     let actual = Interpretation::new(&theory, []).unwrap();
     let foreign = Theory::new(
         theory.atom_count(),
-        zetesis_ferraris::FormulaParts::new(theory.nodes().to_vec(), theory.operands().to_vec())
-            .unwrap(),
+        theory.parts().try_clone().unwrap(),
         theory.roots().to_vec(),
         AdmissionLimits::default(),
     )

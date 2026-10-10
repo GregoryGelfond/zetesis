@@ -6,6 +6,7 @@ mod scoped_body;
 pub(crate) use scoped_body::source_activity;
 mod aggregate_guards;
 mod appended;
+mod canonical_suffix;
 mod aggregate_order;
 pub(crate) mod atoms;
 mod cache;
@@ -40,7 +41,7 @@ use zetesis_ferraris::{
 };
 
 #[cfg(test)]
-use zetesis_ferraris::{FormulaParts, Theory};
+use zetesis_ferraris::Theory;
 
 use crate::expansion::Budget;
 use crate::formula::{Compiled, ceiling};
@@ -2554,49 +2555,6 @@ impl Builder<'_, '_, '_> {
             }
         }
     }
-    fn intern_appended(
-        &mut self,
-        appended: &FormulaSuffix,
-        location: ProgramSite,
-    ) -> Result<Buffer<usize>, FormulaFailure> {
-        let first = appended.first();
-        let mut canonical =
-            Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
-        for ordinal in 0..appended.view().len() {
-            self.work(location)?;
-            let node = appended
-                .view()
-                .node(ordinal)
-                .map_err(|error| FormulaFailure::Theory { error, location })?;
-            // Preserve shared children; only the complete immediate operand row
-            // is remapped, never flattened through another canonical node.
-            let index = match node {
-                Node::False => FALSUM,
-                Node::Atom(atom) => self.node(Node::Atom(atom), location)?,
-                Node::And(row) | Node::Or(row) => self.mapped_group(
-                    row,
-                    matches!(node, Node::And(_)),
-                    |child| remap(child, first, canonical.slice()),
-                    location,
-                )?,
-                Node::Implies(left, right) => self.node(
-                    Node::Implies(
-                        remap(left, first, canonical.slice()),
-                        remap(right, first, canonical.slice()),
-                    ),
-                    location,
-                )?,
-            };
-            canonical.push(
-                index,
-                self.computation,
-                self.limits,
-                &mut self.counters,
-                location,
-            )?;
-        }
-        Ok(canonical)
-    }
     fn aggregate_limits(&self) -> zetesis_ferraris::AggregateLimits {
         let mut limits = self.limits.aggregate;
         limits.max_nodes = limits.max_nodes.min(self.node_bound().1);
@@ -2779,7 +2737,6 @@ impl Builder<'_, '_, '_> {
         let limits = self.aggregate_limits();
         let first = self.nodes.view().len();
         let cancellation = self.counters.cancellation().cloned().unwrap_or_default();
-        let previous_operands = self.nodes.parts().operands().len();
         let mut transaction = self.nodes.transaction();
         let compiled = transaction.append_aggregate(
             elements,
@@ -2791,7 +2748,6 @@ impl Builder<'_, '_, '_> {
         let build = Self::record_aggregate(&mut self.counters, compiled, location)?;
         let appended = appended::detach(
             transaction,
-            previous_operands,
             self.computation,
             self.limits,
             &mut self.counters,
@@ -2827,7 +2783,6 @@ impl Builder<'_, '_, '_> {
             condition: element.condition,
         });
         let cancellation = self.counters.cancellation().cloned().unwrap_or_default();
-        let previous_operands = self.nodes.parts().operands().len();
         let mut transaction = self.nodes.transaction();
         let result = transaction.append_value_extremum_refs(
             values,
@@ -2840,7 +2795,6 @@ impl Builder<'_, '_, '_> {
         let build = Self::record_aggregate(&mut self.counters, result, location)?;
         let appended = appended::detach(
             transaction,
-            previous_operands,
             self.computation,
             self.limits,
             &mut self.counters,

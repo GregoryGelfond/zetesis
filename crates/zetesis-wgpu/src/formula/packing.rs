@@ -47,6 +47,9 @@ pub(super) struct Shape {
     pub(super) roots: u32,
     pub(super) edges: u32,
     pub(super) wide_words: u32,
+    pub(super) scratch: usize,
+    pub(super) map: usize,
+    pub(super) temporary_bytes: u64,
     pub(super) variables: u32,
     pub(super) words: u32,
     pub(super) node_bytes: u64,
@@ -54,11 +57,20 @@ pub(super) struct Shape {
     pub(super) sweep_work: u32,
 }
 impl Shape {
+    #[cfg(test)]
     pub(super) fn new(theory: &Theory, device: &wgpu::Limits) -> Result<Self, GpuError> {
+        Self::with_control(theory, device, &zetesis_cpu::Cancellation::default())
+    }
+
+    pub(super) fn with_control(
+        theory: &Theory,
+        device: &wgpu::Limits,
+        cancellation: &zetesis_cpu::Cancellation,
+    ) -> Result<Self, GpuError> {
         let atoms = address(theory.atom_count())?;
-        let nodes = address(theory.nodes().len())?;
         let roots = address(theory.roots().len())?;
-        let graph = crate::formula_graph::Shape::new(theory, device)?;
+        let graph = crate::formula_graph::Shape::with_control(theory, device, cancellation)?;
+        let nodes = graph.nodes;
         let auxiliary = graph.auxiliary;
         let variables = atoms
             .checked_add(auxiliary)
@@ -79,6 +91,9 @@ impl Shape {
             roots,
             edges: graph.edges,
             wide_words: graph.wide_words,
+            scratch: graph.scratch,
+            map: graph.map,
+            temporary_bytes: graph.temporary_bytes,
             variables,
             words,
             node_bytes,
@@ -224,6 +239,7 @@ impl Plan {
             seeds,
             host_results,
             if fresh { schedule.bytes } else { 0 },
+            if fresh { shape.temporary_bytes } else { 0 },
         ])?;
         if worlds != 0 && accounted > limits.max_batch_bytes {
             return Err(capacity("formula batch exceeds authored byte ceiling"));

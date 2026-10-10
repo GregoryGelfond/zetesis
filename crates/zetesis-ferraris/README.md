@@ -5,10 +5,10 @@ oracle in `zetesis-cpu` computes a least closure. A general reduct may have
 incomparable minimal models; this kernel checks proper subsets instead.
 
 The input is a bounded, immutable DAG of atoms, falsum, conjunction, disjunction,
-and implication, plus asserted roots. `FormulaParts` owns raw nodes and their
-operand arena together. Conjunction/disjunction pairs are inline; wider groups
+implication and nonnegative weighted thresholds, plus asserted roots.
+`FormulaParts` owns raw nodes and their Boolean and numeric arenas together. Conjunction/disjunction pairs are inline; wider groups
 retain one arena row. `NodeView` exposes every logical child independently of
-that storage. `Theory::new` validates the paired graph and asserted roots.
+that storage. `Theory::new` validates the complete graph and asserted roots.
 Default negation is implication to falsum.
 One pass computes the candidate's classical truth mask. A second transform
 evaluates the frozen reduct in a proposed countermodel: every candidate-false
@@ -34,6 +34,36 @@ reduct for 3,600 two-atom theories, all four candidates, and all four tested
 interpretations, including nested implication and non-Horn reducts. Boundary
 tests cover finite identities, packed words, empty theories, exact limits,
 cancellation, and deadlines.
+
+## Native weighted thresholds
+
+`FormulaNodes::push_threshold_family` appends several lower bounds over one
+shared row of condition IDs and `u64` weights. Bounds and sums use checked
+`i128` arithmetic. Each tuple position contributes independently; repeated
+condition IDs do not merge source tuple identities. All conditions, including
+zero-weight positions, must precede their threshold node.
+
+CPU evaluation reads predecessor truth and reduces the selected weights. Frozen
+evaluation also retains the original threshold truth gate. Tight checking and
+positive closure read the same rows; stratified classification accepts only the
+constant, singleton and conjunction forms its certificate establishes. Region
+narrowing derives lower and upper sums, mandatory contributions and implications
+between bounds over the same row. Processed contribution events update shared
+weighted counters; a queued value cannot advance a counter twice.
+
+Complete storage copies, selection and remapping preserve numeric columns and
+shared rows. Logical occurrence counts charge each threshold reference, while
+retained bytes count shared storage once. Backend transport uses one checked
+Boolean expansion with explicit physical capacity and work bounds. That expansion
+does not replace the original semantic theory.
+
+The common source compiler uses native thresholds for nonnegative count and sum
+guards, including choice bounds. Signed sums retain the full subset translation;
+minimum and maximum retain their exact filtered-connective translation.
+Application performance and physical backend qualification are separate from
+representation support. The retained extracted Lean evaluator describes the
+preceding Boolean representation. `ThresholdReduct` proves the general semantic bridge, but does
+not yet refine this Rust storage, propagation or transport.
 
 ## Reusing original satisfaction work
 
@@ -464,10 +494,11 @@ receipts, not process RSS. Refusal returns its typed cause and accounted prefix.
 ## Finite scalar aggregates
 
 `append_aggregate(nodes, elements, comparison, bound, limits, control)` appends a
-formula to a paired `FormulaNodes` owner. It returns an absolute root index,
+formula to a `FormulaNodes` owner. It returns an absolute root index,
 appended-node and operand counts, translation profile and statistics. The root
-is not asserted and no surrounding rule is added. Every new node is an ordinary connective;
-compilation introduces no semantic atoms or separate support rules.
+is not asserted and no surrounding rule is added. Compilation uses Boolean
+connectives and native nonnegative thresholds; it introduces no semantic atoms
+or separate support rules.
 
 Each `AggregateElement { weight: i32, condition: usize }` represents one distinct
 whole tuple and its existing eligibility formula. Use weight one for `#count` and
@@ -499,13 +530,12 @@ Tuple grouping preserves each tuple's eligibility in both the candidate and the
 frozen reduct because disjunction preserves the union of its alternative supports.
 Grouping does not justify simplifying conditions by classical truth alone.
 
-For nonnegative weights, a dynamic program constructs shared formulas `G(k)` for
-sum ≥ k using only AND/OR and constants. Each cell combines excluding an element
-with including it and the previous row's residual threshold. This is a compact
-factorization of the monotone aggregate formula. `>` shifts the threshold; `<`
-and `<=` negate the corresponding monotone threshold. Equality conjoins `G(k)`
-with `not G(k+1)`. Not-equal uses `G(k) -> G(k+1)`, preserving the implication
-needed at a nonconvex guard.
+For nonnegative weights, a native formula `G(k)` reads one shared contribution
+row and tests whether its selected weights sum to at least k. Bounds at most
+zero or above the total become constants. Bounds equivalent to a conjunction or
+disjunction retain that simpler formula. `>` shifts the threshold; `<` and `<=`
+negate it. Equality conjoins `G(k)` with `not G(k+1)`. Not-equal uses
+`G(k) -> G(k+1)`, preserving the implication needed at a nonconvex guard.
 
 This follows the reduct equivalence and monotone/antimonotone laws in
 [Ferraris, §§3.2–3.3, Propositions 12–13](https://arxiv.org/pdf/0812.1462).
@@ -523,26 +553,28 @@ been refined into Lean.
 
 ## Shared comparison families
 
-`FormulaNodes` owns growing node and operand buffers when compilations share a
-formula. Its scalar, family and extremum methods and the free functions use the
-same paired owner and retain completed topology validation. Raw `FormulaParts`
+`FormulaNodes` owns the node, Boolean operand and numeric contribution arenas
+when compilations share a formula. Its scalar, family and extremum methods and
+the free functions use the same owner and retain completed topology validation. Raw `FormulaParts`
 ingress starts unchecked. Checked appends extend a fully validated prefix;
 they cannot skip an unchecked raw prefix. Read access leaves earlier rows
-immutable. `FormulaTransaction` commits or rolls back both suffixes; detachment
-returns a paired suffix with absolute child IDs and rebased arena spans.
+immutable. `FormulaTransaction` commits or rolls back every arena suffix; detachment
+returns a complete suffix with absolute child IDs and rebased arena spans.
 Rollback and detachment restore the checkpoint's validation frontier as well as
 its buffer lengths. Reserved capacities may remain larger after refusal.
 
 Every call still checks node and operand ceilings, tuple conditions and control.
 A failed compiler reports its spent work without returning a formula. Consuming
-`into_parts()` transfers both buffers and discards validation evidence; a new
-owner validates that raw prefix again. There is no node-only extraction or
+`into_parts()` transfers every arena and discards topology evidence; a new
+owner validates that topology again. A completed numeric-shape check survives
+an exact copy, but remapping or raw construction requires it to be repeated. There is no node-only extraction or
 truncation path. Reuse changes validation work, not aggregate semantics.
 
 `FormulaNodes::prepare_admission(atoms, roots, limits)` instead consumes the owner
 and retains its topology evidence in one opaque `TheoryAdmission`. Its `work()`
-reports the full remaining scan charge of the fixed `admit()` route: `2N + R`
-for completed topology, or `2N + E + R` for raw or incompletely checked input.
+reports the remaining scan charge of the fixed `admit()` route: `2N + R`
+for completed topology. Raw or incompletely checked input additionally charges
+`E` logical edges, numeric rows and their declared entries, and descriptors.
 Both routes independently recount logical occurrences, inspect every node for
 atom-universe validity and check every root. Dimension, arena and padding bounds
 remain unchanged. This is a documented pre-admission scan charge, not elapsed
@@ -559,22 +591,19 @@ duplicate requests. `AggregateFamilyLimits` contains the existing aggregate
 limits plus `max_guards`, which bounds the output-root vector independently.
 The single-guard operation uses the same ownership and accounting contract.
 
-For nonnegative weights, the family constructs one threshold table through the
-largest needed nonconstant threshold. Every requested inequality or equality
-then refers to its final row. Both thresholds of an equality share this table;
-`!=` retains the implication between the corresponding thresholds. Thresholds
-at most zero or above the total weight use constants and do not enlarge the
-table. This preserves the same failing-subset and frozen-reduct semantics as
-individual compilation, while avoiding repeated DP work. The complexity is
-proportional to elements times the largest needed threshold, plus requested
-guards and prefix validation. It remains pseudopolynomial.
+For nonnegative weights, all requested thresholds share one contribution row.
+Construction and retained storage are O(elements + guards), independently of the
+bounds' magnitudes. Each evaluator may read that row for each threshold, so its
+logical occurrence charge remains O(elements × guards). Equality and not-equal
+keep their comparison wrappers. This preserves the same failing-subset and
+frozen-reduct semantics as individual compilation.
 
 Signed families share validation and constants, then compile the full
 failing-subset formula for each guard. Work and subset limits apply cumulatively
 to the whole transaction. A later guard that exhausts a limit rolls back every
 new node; callers never receive a partial root family. Empty families still
 validate the prefix and conditions and poll control, but append no nodes.
-Temporary-state accounting counts DP cells or subset bits, excluding returned
+Temporary-state accounting counts contribution columns and requested bounds, or subset bits, excluding returned
 roots and DAG storage. Root storage is capped by `max_guards`, whose default is
 4,096; existing aggregate defaults are unchanged.
 
@@ -590,7 +619,7 @@ all two-atom candidates and tested reduct interpretations. Further checks cover
 guard order, duplicate guards, extreme bounds, zero weights, inclusive limits,
 empty families, cancellation and rollback after a later signed guard stops.
 A 16-element count family covering every equality and a duplicate request uses
-one threshold table and less than one fifth of the work of separate calls.
+one contribution row; its completed work is compared with separate calls.
 
 ## Numeric minimum and maximum
 
@@ -698,13 +727,12 @@ enumerated subsets. `max_operands` bounds both logical occurrences and raw arena
 length, including the existing prefix; inline pairs and implications each count
 two occurrences. Each temporary connective row obeys that same inclusive bound.
 Complete extrema witness sets retain native disjunctions without DP states.
-The threshold profile uses two rows of threshold indices and takes work proportional to the
-number of elements times the scalar threshold; its arithmetic complexity is
-pseudopolynomial. Large weights or bounds can trigger `StateLimit` even with few
-elements. Signed compilation is exponential and admits the entire subset count
-before enumeration; `max_subsets` includes the empty subset. The threshold profile
-does not enumerate subsets. A 64-element exact-eight count is covered by tests
-with a zero subset budget.
+The threshold profile stores one contribution row and the requested bounds.
+Its construction cost is linear in those populations, rather than in the
+numeric magnitude of a bound. Signed compilation is exponential and admits the
+entire subset count before enumeration; `max_subsets` includes the empty subset.
+The threshold profile does not enumerate subsets. A 64-element exact-eight count
+is covered by tests with a zero subset budget.
 
 Existing edge topology and element indices are checked under the work budget.
 `Theory::new` remains responsible for validating atom-universe indices. Every

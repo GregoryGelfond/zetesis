@@ -103,6 +103,9 @@ impl Tree {
     // expansion per root independently of the DAG's forty-eight-node bound.
     fn expand(nodes: zetesis_ferraris::FormulaView<'_>, root: usize) -> Self {
         match nodes.node(root).unwrap() {
+            zetesis_ferraris::NodeView::Threshold(_) => {
+                unreachable!("this generator emits only Boolean connectives")
+            }
             zetesis_ferraris::NodeView::False => Self::False,
             zetesis_ferraris::NodeView::Atom(atom) => Self::Atom(atom),
             zetesis_ferraris::NodeView::And(operands) => {

@@ -1,7 +1,7 @@
 //! Least consequences of positive producers, checked against original constraints.
 //!
 //! This optional complete-root certificate admits positive cycles and monotone
-//! conjunction/disjunction bodies. It does not translate source or treat a
+//! conjunction/disjunction and nonnegative weighted-threshold bodies. It does not translate source or treat a
 //! dependency projection as the original theory. Construction computes the least
 //! consequences once; no per-candidate propagation graph is retained.
 
@@ -20,7 +20,9 @@ use zetesis_cpu::{Cancellation, Stop};
 #[derive(Clone, Copy, Debug)]
 pub struct PositivePlanLimits {
     /// Forward incidences, counting every ordered child occurrence, including
-    /// repeated IDs in native conjunction and disjunction rows.
+    /// repeated IDs in native conjunction, disjunction and threshold rows.
+    /// Zero-weight threshold entries remain admitted and evaluated but add no
+    /// dependency. Positive weighted entries each carry their whole contribution.
     pub max_dependencies: usize,
     /// Named plan header, construction-vector headers and actual vector capacity.
     /// Excludes the shared theory, allocator overhead and other stack temporaries.

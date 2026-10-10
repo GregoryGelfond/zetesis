@@ -2,11 +2,16 @@
 
 use crate::ProgramSite;
 use zetesis_ferraris::{
-    AggregateComparison, AggregateElement, FormulaNodes, Node, NodeView, Theory, append_aggregate,
+    AggregateComparison, AggregateElement, ContributionRow, FormulaNodes, Node, NodeView, Theory,
+    ThresholdDescriptor, append_aggregate,
 };
 
 use super::derive::Consequence;
 use super::{CountPlanFailureKind as Fault, Work};
+
+mod prefix;
+#[cfg(test)]
+mod tests;
 
 pub(super) fn restriction(
     original: &Theory,
@@ -30,12 +35,7 @@ pub(super) fn restriction(
     if prefix > limit.max_nodes {
         return Err(Fault::Theory(zetesis_ferraris::AdmissionError::Limit));
     }
-    let mut nodes = FormulaNodes::default();
-    for index in 0..prefix {
-        let node = original.view().node(index).map_err(Fault::Theory)?;
-        let copied = push(&mut nodes, node, work)?;
-        debug_assert_eq!(copied, index, "admitted rows keep their original IDs");
-    }
+    let mut nodes = prefix::copy(original, prefix, work)?;
     let mut roots = work.vector(consequences.len())?;
     if consequences.len() > limit.max_roots {
         return Err(Fault::Theory(zetesis_ferraris::AdmissionError::Limit));
@@ -71,11 +71,9 @@ pub(super) fn restriction(
             origins.push(origin);
         }
     }
-    let admission =
-        2 * nodes.view().len() as u128 + nodes.parts().occurrences() as u128 + roots.len() as u128;
-    work.charge(u64::try_from(admission).map_err(|_| Fault::Overflow)?)?;
-    let result = Theory::new(original.atom_count(), nodes.into_parts(), roots, limit)
-        .map_err(Fault::Theory)?;
+    let admission = nodes.prepare_admission(original.atom_count(), roots, limit);
+    work.charge(u64::try_from(admission.work()).map_err(|_| Fault::Overflow)?)?;
+    let result = admission.admit().map_err(Fault::Theory)?;
     work.poll()?;
     Ok((result, origins))
 }
@@ -100,24 +98,22 @@ fn lower(
     limits.max_work = limits
         .max_work
         .min(work.limits.max_work - work.statistics.work);
-    // Positive unit-weight Ge emits two constants and at most two nodes
-    // per member/threshold cell. Its two usize rows have width lower+1.
-    // Preflight that exact algorithm's worst-case logical payload before
-    // calling the separately limited, transactional aggregate constructor.
-    let cells = consequence
-        .lower
-        .checked_add(1)
-        .and_then(|n| n.checked_mul(2))
-        .ok_or(Fault::Overflow)?;
-    let appended = consequence
+    // Positive unit-weight Ge uses at most one shared numeric row and one
+    // threshold, or a cheaper Boolean boundary case. Charge the temporary
+    // columns, requested bound and returned root as well as all output arenas.
+    // This logical payload envelope is independent of the numeric bound.
+    let columns = consequence
         .members
         .len()
-        .checked_mul(consequence.lower)
-        .and_then(|n| n.checked_mul(2))
-        .and_then(|n| n.checked_add(2))
+        .checked_mul(2)
         .ok_or(Fault::Overflow)?;
-    work.payload(super::bytes::<usize>(cells)?)?;
-    work.payload(super::bytes::<Node>(appended)?)?;
+    work.payload(super::bytes::<usize>(columns)?)?;
+    work.payload(super::bytes::<u64>(columns)?)?;
+    work.payload(super::bytes::<i128>(1)?)?;
+    work.payload(super::bytes::<usize>(1)?)?;
+    work.payload(super::bytes::<Node>(3)?)?;
+    work.payload(super::bytes::<ContributionRow>(1)?)?;
+    work.payload(super::bytes::<ThresholdDescriptor>(1)?)?;
     let build = append_aggregate(
         nodes,
         &elements,
@@ -138,15 +134,23 @@ fn lower(
 fn push(nodes: &mut FormulaNodes, node: NodeView<'_>, work: &mut Work) -> Result<usize, Fault> {
     let edges = match node {
         NodeView::And(row) | NodeView::Or(row) => row.len(),
+        NodeView::Threshold(row) => row.conditions.len(),
         NodeView::Implies(_, _) => 2,
         NodeView::Atom(_) | NodeView::False => 0,
     };
     let wide = matches!(node, NodeView::And(row) | NodeView::Or(row) if row.len() >= 3);
-    let copies = if wide { edges } else { 0 };
-    work.charge(
-        u64::try_from(1_usize.saturating_add(edges).saturating_add(copies))
-            .map_err(|_| Fault::Overflow)?,
-    )?;
+    let copies = match node {
+        // The range-returning append copies two columns and two descriptors.
+        NodeView::Threshold(_) => (edges as u128) * 2 + 2,
+        _ if wide => edges as u128,
+        _ => 0,
+    };
+    let pending = if matches!(node, NodeView::Threshold(_)) {
+        nodes.parts().pending_numeric_validation_work()
+    } else {
+        0
+    };
+    work.charge(u64::try_from(1 + edges as u128 + copies + pending).map_err(|_| Fault::Overflow)?)?;
     if nodes.view().len() >= work.limits.theory.max_nodes
         || nodes.parts().occurrences() as u128 + edges as u128
             > work.limits.theory.max_operands as u128
@@ -154,7 +158,16 @@ fn push(nodes: &mut FormulaNodes, node: NodeView<'_>, work: &mut Work) -> Result
         return Err(Fault::Theory(zetesis_ferraris::AdmissionError::Limit));
     }
     work.payload(super::bytes::<Node>(1)?)?;
-    work.payload(super::bytes::<usize>(copies)?)?;
+    match node {
+        NodeView::Threshold(_) => {
+            work.payload(super::bytes::<usize>(edges)?)?;
+            work.payload(super::bytes::<u64>(edges)?)?;
+            work.payload(super::bytes::<ContributionRow>(1)?)?;
+            work.payload(super::bytes::<ThresholdDescriptor>(1)?)?;
+        }
+        _ if wide => work.payload(super::bytes::<usize>(edges)?)?,
+        _ => {}
+    }
     let mut transaction = nodes.transaction();
     let index = transaction
         .push(

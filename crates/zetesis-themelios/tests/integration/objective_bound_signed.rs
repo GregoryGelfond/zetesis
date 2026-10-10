@@ -195,8 +195,8 @@ fn every_interpretation_retains_global_key_coalescing_priorities_and_ties() {
 }
 
 #[test]
-fn tiny_large_magnitude_families_keep_the_bounded_signed_representation() {
-    for weights in [[i32::MIN, 1], [-i32::MAX, i32::MAX], [-100_000, 99_999]] {
+fn small_state_budgets_retain_signed_construction() {
+    for weights in [[i32::MIN, 1], [-100_000, 99_999]] {
         let fixture = Fixture::new(2, vec![(0, weights[0], 0, 0), (0, weights[1], 1, 1)]);
         let limits = ObjectiveBoundLimits {
             aggregate: AggregateLimits {
@@ -209,13 +209,35 @@ fn tiny_large_magnitude_families_keep_the_bounded_signed_representation() {
         fixture.compare_all(limits);
         let error = fixture
             .plan
-            .bound(&fixture.score(0), no_subsets(), &Cancellation::default())
+            .bound(
+                &fixture.score(0),
+                ObjectiveBoundLimits {
+                    aggregate: AggregateLimits {
+                        max_subsets: 0,
+                        ..limits.aggregate
+                    },
+                    ..limits
+                },
+                &Cancellation::default(),
+            )
             .unwrap_err();
         assert!(
             matches!(error.kind(), Kind::Aggregate(error) if error.kind() == AggregateErrorKind::SubsetLimit)
         );
         fixture.compare_all(limits); // An optional refusal cannot poison the plan.
     }
+}
+
+#[test]
+fn extreme_normalized_bounds_need_no_numeric_states() {
+    let fixture = Fixture::new(2, vec![(0, -i32::MAX, 0, 0), (0, i32::MAX, 1, 1)]);
+    fixture.compare_all(ObjectiveBoundLimits {
+        aggregate: AggregateLimits {
+            max_states: 0,
+            ..no_subsets().aggregate
+        },
+        ..no_subsets()
+    });
 }
 
 fn many_negative() -> Fixture {
@@ -233,7 +255,7 @@ fn a_linear_threshold_family_avoids_exponential_subset_admission() {
     let incumbent = fixture.score((1 << 20) - 2); // Cost -19: at least 19 selected.
     let limits = ObjectiveBoundLimits {
         aggregate: AggregateLimits {
-            max_states: 6,
+            max_states: 41,
             max_nodes: 256,
             max_subsets: 0,
             ..AggregateLimits::default()
@@ -318,17 +340,14 @@ fn normalization_limits_are_inclusive_and_failed_attempts_leave_exact_retry() {
         .plan
         .bound(&incumbent, no_subsets(), &Cancellation::default())
         .unwrap();
-    let nodes = (
-        complete.theory().nodes().to_vec(),
-        complete.theory().operands().to_vec(),
-    );
+    let parts = complete.theory().parts();
     let roots = complete.theory().roots().to_vec();
     let exact = ObjectiveBoundLimits {
         max_work: complete.statistics().work,
         aggregate: AggregateLimits {
             max_elements: 20,
-            max_nodes: nodes.0.len(),
-            max_states: 6,
+            max_nodes: parts.nodes().len(),
+            max_states: 41,
             max_subsets: 0,
             ..AggregateLimits::default()
         },
@@ -338,10 +357,7 @@ fn normalization_limits_are_inclusive_and_failed_attempts_leave_exact_retry() {
         .bound(&incumbent, exact, &Cancellation::default())
         .unwrap();
     assert_eq!(retry.statistics(), complete.statistics());
-    assert_eq!(
-        (retry.theory().nodes(), retry.theory().operands()),
-        (nodes.0.as_slice(), nodes.1.as_slice())
-    );
+    assert_same_parts(retry.theory().parts(), parts);
     assert_eq!(retry.theory().roots(), roots);
     for limits in [
         ObjectiveBoundLimits {
@@ -361,14 +377,14 @@ fn normalization_limits_are_inclusive_and_failed_attempts_leave_exact_retry() {
         },
         ObjectiveBoundLimits {
             aggregate: AggregateLimits {
-                max_nodes: nodes.0.len() - 1,
+                max_nodes: parts.nodes().len() - 1,
                 ..exact.aggregate
             },
             ..exact
         },
         ObjectiveBoundLimits {
             aggregate: AggregateLimits {
-                max_states: 5,
+                max_states: 40,
                 ..exact.aggregate
             },
             ..exact
@@ -399,10 +415,7 @@ fn normalization_limits_are_inclusive_and_failed_attempts_leave_exact_retry() {
         .plan
         .bound(&incumbent, exact, &Cancellation::default())
         .unwrap();
-    assert_eq!(
-        (retry.theory().nodes(), retry.theory().operands()),
-        (nodes.0.as_slice(), nodes.1.as_slice())
-    );
+    assert_same_parts(retry.theory().parts(), parts);
     assert_eq!(retry.theory().roots(), roots);
 }
 
@@ -436,4 +449,13 @@ fn nonstrict_normalized_bound_preserves_all_original_stable_optimal_ties() {
         (original_nodes.0.as_slice(), original_nodes.1.as_slice())
     );
     assert!(bound.original().same_instance(&fixture.original));
+}
+
+fn assert_same_parts(a: &zetesis_ferraris::FormulaParts, b: &zetesis_ferraris::FormulaParts) {
+    assert_eq!(a.nodes(), b.nodes());
+    assert_eq!(a.operands(), b.operands());
+    assert_eq!(a.conditions(), b.conditions());
+    assert_eq!(a.weights(), b.weights());
+    assert_eq!(a.rows(), b.rows());
+    assert_eq!(a.thresholds(), b.thresholds());
 }

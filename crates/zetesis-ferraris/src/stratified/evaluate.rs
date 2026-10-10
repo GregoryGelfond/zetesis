@@ -34,8 +34,8 @@ pub(super) fn consequences(
     for &kind in kinds {
         budget.tick()?;
         states.push(match kind {
-            Kind::Atom => State::Awaiting(1),
-            Kind::And(arity) => State::Awaiting(arity),
+            Kind::Atom(_) | Kind::Alias(_) => State::Awaiting(1),
+            Kind::And(arity) | Kind::ThresholdAnd(arity) => State::Awaiting(arity),
             Kind::Unsupported | Kind::False | Kind::True | Kind::Negative(_) => State::Inactive,
         });
     }
@@ -196,7 +196,9 @@ pub(super) fn validate(
             NodeView::Implies(_, head) => {
                 view.node(head).map_err(|_| Stop::InvalidProgram)? == NodeView::False
             }
-            NodeView::Atom(_) | NodeView::And(_) | NodeView::Or(_) => false,
+            NodeView::Atom(_) | NodeView::And(_) | NodeView::Or(_) | NodeView::Threshold(_) => {
+                false
+            }
         };
         if !constraint {
             return Err(StratifiedError::InvalidClosure { root });

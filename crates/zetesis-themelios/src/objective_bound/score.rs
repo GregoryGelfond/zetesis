@@ -4,7 +4,7 @@ use super::{
     ObjectiveBoundError, ObjectiveBoundStatistics, ObjectivePlan, ObjectivePlanLimits, Work,
 };
 use std::fmt;
-use zetesis_cpu::Cancellation;
+use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{Interpretation, NodeView};
 use zetesis_objective::{Limits, Score};
 
@@ -131,6 +131,17 @@ impl ObjectivePlan {
                 NodeView::Atom(atom) => candidate.contains(atom),
                 NodeView::And(row) => evaluate_group(row, &values, true, &mut work)?,
                 NodeView::Or(row) => evaluate_group(row, &values, false, &mut work)?,
+                NodeView::Threshold(threshold) => threshold
+                    .evaluate::<ThresholdReadError>(|child| {
+                        work.tick().map_err(ThresholdReadError::Budget)?;
+                        Ok(values[child])
+                    })
+                    .map_err(|error| match error {
+                        ThresholdReadError::Budget(error) => eligibility_error(error),
+                        ThresholdReadError::Formula(stop) => eligibility_error(
+                            work.error(super::ObjectiveBoundErrorKind::Control(stop)),
+                        ),
+                    })?,
                 NodeView::Implies(left, right) => {
                     work.tick().map_err(eligibility_error)?;
                     let antecedent = values[left];
@@ -161,6 +172,17 @@ impl ObjectivePlan {
             work: work.statistics.work + reduced.work(),
             score: reduced.into_score(),
         }))
+    }
+}
+
+enum ThresholdReadError {
+    Budget(ObjectiveBoundError),
+    Formula(Stop),
+}
+
+impl From<Stop> for ThresholdReadError {
+    fn from(stop: Stop) -> Self {
+        Self::Formula(stop)
     }
 }
 

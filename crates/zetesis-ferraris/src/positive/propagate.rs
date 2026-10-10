@@ -24,10 +24,19 @@ pub(super) fn complete(
         for edge in graph.offsets[vertex]..graph.offsets[vertex + 1] {
             budget.tick()?;
             budget.statistics.propagated_dependencies += 1;
-            let target = graph.targets[edge];
+            let incidence = graph.edges[edge];
+            let target = incidence.target;
             match graph.states[target] {
                 State::Awaiting(1) => activate(target, theory.atom_count(), graph, budget)?,
                 State::Awaiting(remaining) => graph.states[target] = State::Awaiting(remaining - 1),
+                State::Weighted(remaining) => {
+                    let weight = i128::from(incidence.weight);
+                    if weight >= remaining {
+                        activate(target, theory.atom_count(), graph, budget)?;
+                    } else {
+                        graph.states[target] = State::Weighted(remaining - weight);
+                    }
+                }
                 State::Inactive | State::True => {}
             }
         }
@@ -57,11 +66,20 @@ fn activate(
 fn seed(theory: &Theory, graph: &mut Graph, budget: &mut Budget<'_>) -> Result<(), PositiveError> {
     for index in 0..theory.view().len() {
         budget.tick()?;
-        if let NodeView::Implies(a, b) = theory
+        let node = theory
             .view()
             .node(index)
-            .map_err(|_| Stop::InvalidProgram)?
-        {
+            .map_err(|_| Stop::InvalidProgram)?;
+        if let NodeView::Threshold(threshold) = node {
+            if threshold.bound <= 0 {
+                activate(
+                    theory.atom_count() + index,
+                    theory.atom_count(),
+                    graph,
+                    budget,
+                )?;
+            }
+        } else if let NodeView::Implies(a, b) = node {
             budget.tick()?;
             let left = theory.view().node(a).map_err(|_| Stop::InvalidProgram)?;
             budget.tick()?;

@@ -4,10 +4,17 @@
 
 use crate::{GpuError, GpuErrorKind};
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{NodeView, Theory};
+use zetesis_ferraris::{NodeView, Theory, threshold_lowering};
+
+mod lowering;
+pub(crate) use lowering::{pack, translated};
 
 pub(crate) struct Shape {
     pub(crate) bytes: u64,
+    pub(crate) nodes: u32,
+    pub(crate) scratch: usize,
+    pub(crate) map: usize,
+    pub(crate) temporary_bytes: u64,
     pub(crate) edges: u32,
     pub(crate) wide_words: u32,
     pub(crate) auxiliary: u32,
@@ -30,15 +37,63 @@ fn bytes(nodes: u32, wide_words: u32) -> Result<u64, GpuError> {
 }
 
 impl Shape {
+    #[cfg(test)]
     pub(crate) fn new(theory: &Theory, device: &wgpu::Limits) -> Result<Self, GpuError> {
-        let nodes = address(theory.view().len())?;
-        let edges = address(theory.parts().occurrences())?;
+        Self::with_control(theory, device, &Cancellation::default())
+    }
+
+    pub(crate) fn with_control(
+        theory: &Theory,
+        device: &wgpu::Limits,
+        cancellation: &Cancellation,
+    ) -> Result<Self, GpuError> {
+        let mut nodes = 0_u32;
+        let mut edges = 0_u32;
+        let mut scratch = 0;
+        let mut native = false;
         let mut wide_words = 0u32;
         let mut auxiliary = 0u32;
+        cancellation.poll().map_err(GpuError::interrupted)?;
         for index in 0..theory.view().len() {
+            cancellation.poll().map_err(GpuError::interrupted)?;
             let node = theory.view().node(index).expect("admitted formula node");
+            let (added_nodes, added_edges) = match node {
+                NodeView::Threshold(threshold) => {
+                    native = true;
+                    let shape = threshold_lowering::Shape::new(threshold, || {
+                        cancellation.poll().map_err(GpuError::interrupted)
+                    })?;
+                    scratch = scratch.max(shape.scratch);
+                    let constants = if shape.constant() == Some(false) {
+                        1
+                    } else {
+                        2
+                    };
+                    let count = shape
+                        .gates
+                        .checked_add(constants)
+                        .ok_or_else(|| capacity("threshold physical nodes overflow"))?;
+                    let edges = shape
+                        .gates
+                        .checked_mul(2)
+                        .and_then(|n| n.checked_add(if constants == 2 { 2 } else { 0 }))
+                        .ok_or_else(|| capacity("threshold physical edges overflow"))?;
+                    (address(count)?, address(edges)?)
+                }
+                NodeView::And(children) | NodeView::Or(children) => (1, address(children.len())?),
+                NodeView::Implies(..) => (1, 2),
+                NodeView::Atom(_) | NodeView::False => (1, 0),
+            };
+            nodes = nodes
+                .checked_add(added_nodes)
+                .ok_or_else(|| capacity("physical formula node count overflows"))?;
+            edges = edges
+                .checked_add(added_edges)
+                .ok_or_else(|| capacity("physical formula edge count overflows"))?;
             if !matches!(node, NodeView::Atom(_)) {
-                auxiliary += 1;
+                auxiliary = auxiliary
+                    .checked_add(added_nodes)
+                    .ok_or_else(|| capacity("physical formula auxiliary count overflows"))?;
             }
             if let NodeView::And(children) | NodeView::Or(children) = node
                 && children.len() > 2
@@ -52,8 +107,20 @@ impl Shape {
         if bytes > device.max_buffer_size || bytes > device.max_storage_buffer_binding_size {
             return Err(capacity("formula transport exceeds granted device limits"));
         }
+        let map = if native { theory.view().len() } else { 0 };
+        let temporary_bytes = u64::try_from(
+            map.checked_add(scratch)
+                .ok_or_else(|| capacity("formula lowering scratch overflows"))?,
+        )
+        .ok()
+        .and_then(|n| n.checked_mul(4))
+        .ok_or_else(|| capacity("formula lowering bytes overflow"))?;
         Ok(Self {
             bytes,
+            nodes,
+            scratch,
+            map,
+            temporary_bytes,
             edges,
             wide_words,
             auxiliary,
@@ -70,6 +137,9 @@ pub(crate) fn header(node: NodeView<'_>, tail: &mut u32) -> Result<[u32; 4], Gpu
         NodeView::False => [0, 0, 0, 0],
         NodeView::Atom(atom) => [1, address(atom)?, 0, 0],
         NodeView::Implies(left, right) => [4, address(left)?, address(right)?, 0],
+        NodeView::Threshold(_) => {
+            return Err(capacity("native threshold requires physical lowering"));
+        }
         NodeView::And(children) | NodeView::Or(children) => {
             let conjunction = matches!(node, NodeView::And(_));
             if children.len() == 2 {
@@ -119,3 +189,14 @@ pub(crate) fn append_operands(
 
 #[cfg(test)]
 mod tests;
+
+impl From<threshold_lowering::Error> for GpuError {
+    fn from(error: threshold_lowering::Error) -> Self {
+        capacity(match error {
+            threshold_lowering::Error::Invalid => "invalid physical threshold row or scratch",
+            threshold_lowering::Error::Capacity => {
+                "threshold physical expansion exceeds host capacity"
+            }
+        })
+    }
+}

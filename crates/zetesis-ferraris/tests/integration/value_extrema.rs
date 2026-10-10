@@ -349,7 +349,7 @@ fn bad_inputs_and_cancellation_restore_the_existing_prefix() {
     .unwrap_err();
     assert_eq!(error.kind(), Error::InvalidCondition { element: 0 });
     assert_eq!(snapshot(&nodes), snapshot(&prefix()));
-    let (mut raw_nodes, operands) = snapshot(&nodes);
+    let (mut raw_nodes, operands, ..) = snapshot(&nodes);
     raw_nodes.push(Node::and_pair([usize::MAX, 0]));
     nodes = zetesis_ferraris::FormulaNodes::new(
         zetesis_ferraris::FormulaParts::new(raw_nodes, operands).unwrap(),

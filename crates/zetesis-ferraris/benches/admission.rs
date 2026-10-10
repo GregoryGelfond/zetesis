@@ -157,9 +157,7 @@ impl TopologyFixture {
     }
 
     fn input(&self, retained: bool) -> TheoryAdmission {
-        let mut nodes = FormulaNodes::new(
-            FormulaParts::new(self.parts.nodes().to_vec(), self.parts.operands().to_vec()).unwrap(),
-        );
+        let mut nodes = FormulaNodes::new(self.parts.try_clone().unwrap());
         if retained {
             nodes
                 .append_aggregate_family(

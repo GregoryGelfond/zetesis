@@ -139,6 +139,10 @@ fn evaluate_node(
         NodeView::False => Ok(false),
         NodeView::And(operands) => evaluate_operands(operands, values, true, work),
         NodeView::Or(operands) => evaluate_operands(operands, values, false, work),
+        NodeView::Threshold(threshold) => threshold.evaluate(|child| {
+            work.tick()?;
+            Ok(values[child])
+        }),
         NodeView::Implies(a, b) => {
             work.tick()?;
             let antecedent = values[a];

@@ -22,6 +22,15 @@ separate; the two generations are not interchangeable proof records.
 | Machine execution | Checked Rust behavior and qualified WGSL paths | Establish executable refinement, arithmetic and device semantics |
 | Observation | Semantic coverage and delivery laws | Connect actual output writes and counters to the retained semantic evidence |
 
+The current Rust formula representation additionally admits native nonnegative
+weighted thresholds. The retained `Native` extraction predates that constructor;
+its source hashes and replay guard must remain tied to the Boolean generation.
+Its theorems therefore do not yet certify the threshold-aware Rust entrypoints,
+even on Boolean input. Migrating admission, numeric rows, evaluation and their
+composition requires new extracted operations and proofs. The general
+`ThresholdReduct` laws supply the semantic bridge; they are not that executable
+refinement.
+
 ## Ordinary resource policy
 
 `zetesis_solve::Resources` derives ordinary admission, execution and publication
@@ -48,6 +57,10 @@ Conditions may be arbitrary formulas, and the frozen law holds for arbitrary
 interpretations M and J. Direct evaluation retains the original threshold gate
 and reduces the weights of recursively frozen eligible positions. Distinct tuple
 positions retain their contributions even when their conditions are equal.
+`ThresholdPropagation` proves lower/upper sum bounds, mandatory contributions
+with repeated condition identities, and the corresponding formula consequences.
+These are general laws over complete rows and truth bounds.
+
 This extends the classical law in `Thresholds`; it does not yet verify source
 coalescing, native formula storage, propagation, finite-width arithmetic, Rust
 evaluation or device execution.

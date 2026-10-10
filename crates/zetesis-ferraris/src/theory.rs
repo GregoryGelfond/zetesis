@@ -1,7 +1,16 @@
 use std::fmt;
 use std::sync::Arc;
 
-/// A raw consecutive row in the theory's sole operand arena.
+mod copying;
+mod numeric;
+
+#[cfg(test)]
+mod threshold_tests;
+
+use numeric::NumericStorage;
+pub use numeric::{ContributionRow, Threshold, ThresholdDescriptor};
+
+/// A raw consecutive row in the theory's Boolean operand arena.
 /// Admission checks addition, containment, arity and every referenced child.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct OperandSpan {
@@ -20,12 +29,15 @@ enum Storage {
     OrPair([usize; 2]),
     AndSpan(OperandSpan),
     OrSpan(OperandSpan),
+    Threshold(usize),
 }
 
 /// One raw formula node. Child IDs are absolute preceding-node indices.
 ///
 /// A pair stores its two cells inline; a wider conjunction or disjunction stores
-/// a span into the paired owner's arena. Raw constructors do not establish
+/// a span into the owner's Boolean arena. A threshold stores only its numeric
+/// descriptor index; its row and widened bound live in separate owned arenas.
+/// Raw constructors do not establish
 /// admission. Equality compares storage, including span addresses; semantic
 /// interning must compare [`NodeView`], whose slices compare operand contents.
 /// Default negation remains implication to falsum, not a reduct complement.
@@ -34,6 +46,15 @@ enum Storage {
 pub struct Node(Storage);
 
 impl Node {
+    /// Raw threshold descriptor index, when this node stores a threshold.
+    #[must_use]
+    pub const fn threshold_descriptor(self) -> Option<usize> {
+        match self.0 {
+            Storage::Threshold(index) => Some(index),
+            _ => None,
+        }
+    }
+
     /// An unchecked atom in the theory's finite universe.
     #[must_use]
     pub const fn atom(atom: usize) -> Self {
@@ -76,15 +97,26 @@ impl Node {
         Self(Storage::OrSpan(span))
     }
 
-    fn occurrences(self) -> usize {
+    /// A raw index into the owner's threshold descriptor arena.
+    #[must_use]
+    pub const fn threshold(descriptor: usize) -> Self {
+        Self(Storage::Threshold(descriptor))
+    }
+
+    fn occurrences(self, numeric: &NumericStorage) -> usize {
         match self.0 {
             Storage::Atom(_) | Storage::False => 0,
             Storage::Implies(_, _) | Storage::AndPair(_) | Storage::OrPair(_) => 2,
             Storage::AndSpan(span) | Storage::OrSpan(span) => span.length,
+            Storage::Threshold(descriptor) => numeric.declared_width(descriptor),
         }
     }
 
-    fn view<'a>(&'a self, operands: &'a [usize]) -> Result<NodeView<'a>, AdmissionError> {
+    fn view<'a>(
+        &'a self,
+        operands: &'a [usize],
+        numeric: &'a NumericStorage,
+    ) -> Result<NodeView<'a>, AdmissionError> {
         match &self.0 {
             Storage::Atom(atom) => Ok(NodeView::Atom(*atom)),
             Storage::False => Ok(NodeView::False),
@@ -93,10 +125,11 @@ impl Node {
             Storage::OrPair(pair) => Ok(NodeView::Or(pair)),
             Storage::AndSpan(span) => Ok(NodeView::And(read_span(operands, *span)?)),
             Storage::OrSpan(span) => Ok(NodeView::Or(read_span(operands, *span)?)),
+            Storage::Threshold(descriptor) => Ok(NodeView::Threshold(numeric.view(*descriptor)?)),
         }
     }
 
-    fn rebase(self, offset: usize) -> Result<Self, AdmissionError> {
+    fn rebase(self, offset: usize, threshold_offset: usize) -> Result<Self, AdmissionError> {
         let rebase = |span: OperandSpan| -> Result<OperandSpan, AdmissionError> {
             Ok(OperandSpan {
                 start: span.start.checked_sub(offset).ok_or(AdmissionError::Span)?,
@@ -106,6 +139,11 @@ impl Node {
         Ok(match self.0 {
             Storage::AndSpan(span) => Self::and_span(rebase(span)?),
             Storage::OrSpan(span) => Self::or_span(rebase(span)?),
+            Storage::Threshold(descriptor) => Self::threshold(
+                descriptor
+                    .checked_sub(threshold_offset)
+                    .ok_or(AdmissionError::Span)?,
+            ),
             _ => self,
         })
     }
@@ -127,6 +165,8 @@ pub enum NodeView<'a> {
     And(&'a [usize]),
     /// Ordered disjuncts.
     Or(&'a [usize]),
+    /// A nonnegative weighted sum of true conditions at least its bound.
+    Threshold(Threshold<'a>),
 }
 
 impl NodeView<'_> {
@@ -134,17 +174,20 @@ impl NodeView<'_> {
     pub(crate) fn is_false(self) -> bool {
         match self {
             Self::False => true,
-            Self::Atom(_) | Self::Implies(..) | Self::And(_) | Self::Or(_) => false,
+            Self::Atom(_) | Self::Implies(..) | Self::And(_) | Self::Or(_) | Self::Threshold(_) => {
+                false
+            }
         }
     }
 }
 
-/// A borrow of the paired node and operand buffers, without admission evidence.
-/// Both inline and arena-backed rows borrow this same immutable owner.
+/// A borrow of all formula arenas, without admission evidence.
+/// Inline operands, Boolean spans and numeric rows share this immutable owner.
 #[derive(Clone, Copy, Debug)]
 pub struct FormulaView<'a> {
     nodes: &'a [Node],
     operands: &'a [usize],
+    numeric: &'a NumericStorage,
 }
 impl<'a> FormulaView<'a> {
     /// Number of stored nodes; constant time.
@@ -170,16 +213,17 @@ impl<'a> FormulaView<'a> {
         self.nodes
             .get(index)
             .ok_or(AdmissionError::Edge)?
-            .view(self.operands)
+            .view(self.operands, self.numeric)
     }
 }
 
 /// Raw formula buffers that always travel together.
 ///
 /// The cached occurrence total counts every implication/pair edge and every
-/// wide-span occurrence, including overlapping ranges. It is an arithmetic
+/// wide-span and threshold-row occurrence, including overlapping/shared ranges.
+/// A shared row contributes its width once per threshold reference. It is an arithmetic
 /// quantity, not evidence of valid spans, topology or atom IDs. Read-only access
-/// cannot invalidate it. Raw construction transfers both vectors without copying;
+/// cannot invalidate it. Raw constructors transfer their complete buffers without copying;
 /// owned mutation is available only through a scoped append transaction. The
 /// private cache supports bounded construction; theory admission independently
 /// recounts the actual nodes and establishes its own occurrence bound.
@@ -187,6 +231,7 @@ impl<'a> FormulaView<'a> {
 pub struct FormulaParts {
     nodes: Vec<Node>,
     operands: Vec<usize>,
+    numeric: NumericStorage,
     occurrences: usize,
 }
 impl FormulaParts {
@@ -195,22 +240,32 @@ impl FormulaParts {
     /// Unused arena cells and overlapping spans remain representable raw input.
     ///
     /// # Errors
-    /// Refuses overflow in the total declared occurrences. No storage is allocated.
+    /// Refuses occurrence overflow or a threshold without its numeric arenas.
+    /// Use [`Self::from_raw`] for complete raw threshold storage. No allocation occurs.
     pub fn new(nodes: Vec<Node>, operands: Vec<usize>) -> Result<Self, AdmissionError> {
-        let occurrences = count_occurrences(&nodes)?;
+        if nodes
+            .iter()
+            .any(|node| matches!(node.0, Storage::Threshold(_)))
+        {
+            return Err(AdmissionError::Span);
+        }
+        let numeric = NumericStorage::default();
+        let occurrences = count_occurrences(&nodes, &numeric)?;
         Ok(Self {
             nodes,
             operands,
+            numeric,
             occurrences,
         })
     }
 
-    /// Borrow the paired graph, including raw input not yet admitted.
+    /// Borrow the complete graph, including raw input not yet admitted.
     #[must_use]
     pub fn view(&self) -> FormulaView<'_> {
         FormulaView {
             nodes: &self.nodes,
             operands: &self.operands,
+            numeric: &self.numeric,
         }
     }
 
@@ -250,12 +305,15 @@ impl FormulaParts {
 pub struct AdmissionLimits {
     /// Maximum number of propositions, including unsupported atoms.
     pub max_atoms: usize,
-    /// Maximum number of circuit nodes.
+    /// Maximum number of circuit nodes, contribution rows and threshold descriptors
+    /// independently, including unused raw row and descriptor cells.
     pub max_nodes: usize,
     /// Maximum number of asserted root formulas.
     pub max_roots: usize,
     /// Maximum logical child occurrences, including inline pairs and implication.
-    /// Also bounds raw arena length, so unused supplied cells are not free.
+    /// Also bounds each raw operand/condition/weight column length independently,
+    /// so unused supplied cells are not free. Row and descriptor counts each obey
+    /// `max_nodes`. Parallel columns are separate allocations within these bounds.
     /// Overlapping spans count once per referenced occurrence. Vector capacities
     /// remain caller-owned storage and are not bounded by these length ceilings.
     pub max_operands: usize,
@@ -284,6 +342,10 @@ pub enum AdmissionError {
     Arity,
     /// An operand span overflows or falls outside its paired arena.
     Span,
+    /// Threshold condition and weight columns have different lengths.
+    ThresholdShape,
+    /// The sum of nonnegative contribution weights exceeds i128.
+    ThresholdMeasure,
     /// An asserted root is not a circuit node.
     Root,
     /// Formula or interpretation storage could not be reserved.
@@ -297,6 +359,8 @@ impl fmt::Display for AdmissionError {
             Self::Edge => "formula edge must refer to a preceding node",
             Self::Arity => "stored wide formula requires at least three operands",
             Self::Span => "formula operand span is outside its arena",
+            Self::ThresholdShape => "threshold conditions and weights have different lengths",
+            Self::ThresholdMeasure => "threshold contribution total exceeds i128",
             Self::Root => "formula root is outside the circuit",
             Self::Allocation => "formula storage could not be reserved",
         })
@@ -323,7 +387,7 @@ impl FormulaSuffix {
         self.first
     }
 
-    /// Borrow the paired suffix; node positions are local, child IDs absolute.
+    /// Borrow the complete suffix; node positions are local, child IDs absolute.
     #[must_use]
     pub fn view(&self) -> FormulaView<'_> {
         self.parts.view()
@@ -336,12 +400,13 @@ impl FormulaSuffix {
     }
 }
 
-/// An append-only borrow with a private paired checkpoint.
+/// An append-only borrow with a private checkpoint for every arena.
 ///
 /// Callers can append logical nodes and read the graph, but cannot replace the
-/// owner, edit its prefix or inject raw arena spans. Thus every new wide row owns
-/// fresh consecutive cells. Dropping without commit restores both original
-/// lengths, occurrence total and validation frontier; reserved capacities survive.
+/// owner, edit its prefix or inject cross-owner arena spans. Every appended row owns
+/// fresh cells; thresholds within one append may share that new row. Dropping
+/// without commit restores every original arena length, occurrence total and
+/// validation cache; reserved capacities survive.
 /// Validation discovered inside a rolled-back append is discarded because an
 /// unchecked raw prefix can refer to newly appended arena cells. Private offsets cannot be supplied from
 /// another owner, from a future length, or reused after completion.
@@ -355,6 +420,7 @@ pub struct FormulaTransaction<'a> {
     validated: &'a mut usize,
     first: usize,
     operand_start: usize,
+    numeric_start: numeric::Checkpoint,
     initial_validated: usize,
     occurrences: usize,
     completed: bool,
@@ -364,6 +430,7 @@ impl<'a> FormulaTransaction<'a> {
         Self {
             first: parts.nodes.len(),
             operand_start: parts.operands.len(),
+            numeric_start: parts.numeric.checkpoint(),
             initial_validated: *validated,
             occurrences: parts.occurrences,
             parts,
@@ -372,7 +439,7 @@ impl<'a> FormulaTransaction<'a> {
         }
     }
 
-    /// Read the full current paired graph; constant time.
+    /// Read the complete current graph; constant time.
     #[must_use]
     pub fn view(&self) -> FormulaView<'_> {
         self.parts.view()
@@ -404,7 +471,9 @@ impl<'a> FormulaTransaction<'a> {
     /// Costs O(1 + arity) work and at most one node plus arity arena cells, except
     /// the two-node empty conjunction. Bounds cover total nodes and both total
     /// logical occurrences and raw arena length, not just this append's delta.
-    /// The caller's borrowed input row is additional storage.
+    /// Thresholds retain their full numeric row and bound, including constants;
+    /// they delegate to [`Self::push_threshold_family`] and inherit its one-time
+    /// unchecked numeric-prefix validation cost. The borrowed input row is additional storage.
     ///
     /// # Errors
     /// Refuses an invalid child, exhausted inclusive dimension, checked overflow
@@ -416,6 +485,17 @@ impl<'a> FormulaTransaction<'a> {
         max_nodes: usize,
         max_operands: usize,
     ) -> Result<usize, AdmissionError> {
+        if let NodeView::Threshold(threshold) = node {
+            return self
+                .push_threshold_family_range(
+                    threshold.conditions,
+                    threshold.weights,
+                    &[threshold.bound],
+                    max_nodes,
+                    max_operands,
+                )
+                .map(|roots| roots.start);
+        }
         let index = self.parts.nodes.len();
         let checked_prefix = *self.validated == index;
         validate_children(index, node)?;
@@ -427,6 +507,9 @@ impl<'a> FormulaTransaction<'a> {
             }
             NodeView::Implies(_, _) => (1, 0, 2),
             NodeView::Atom(_) | NodeView::False => (1, 0, 0),
+            NodeView::Threshold(_) => {
+                unreachable!("numeric append is validated by its family operation")
+            }
         };
         let node_count = index
             .checked_add(added_nodes)
@@ -442,7 +525,11 @@ impl<'a> FormulaTransaction<'a> {
             .occurrences
             .checked_add(added_edges)
             .ok_or(AdmissionError::Limit)?;
-        if node_count > max_nodes || arena_count > max_operands || occurrences > max_operands {
+        if node_count > max_nodes
+            || arena_count > max_operands
+            || occurrences > max_operands
+            || !self.parts.numeric.within_limits(max_nodes, max_operands)
+        {
             return Err(AdmissionError::Limit);
         }
         self.parts
@@ -454,6 +541,7 @@ impl<'a> FormulaTransaction<'a> {
             .try_reserve(added_arena)
             .map_err(|_| AdmissionError::Allocation)?;
         let stored = match node {
+            NodeView::Threshold(_) => unreachable!("numeric append already handled"),
             NodeView::Atom(atom) => Node::atom(atom),
             NodeView::False | NodeView::Or([]) => Node::falsum(),
             NodeView::Implies(left, right) => Node::implies(left, right),
@@ -502,17 +590,18 @@ impl<'a> FormulaTransaction<'a> {
         self.completed = true;
     }
 
-    /// Detach this transaction's appended paired suffix and restore its prefix.
+    /// Detach this transaction's complete appended suffix and restore its prefix.
     ///
     /// Takes O(new nodes + new arena cells) work and temporary storage, without
-    /// scanning or copying the retained prefix. Both destination reservations
+    /// scanning or copying the retained prefix. All six destination reservations
     /// precede mutation. The old capacities remain retained after detachment, so
     /// enclosing peak accounting must include those plus the returned capacities.
-    /// Child IDs remain absolute; only wide-span offsets are rebased to zero.
+    /// Child IDs remain absolute; only Boolean-span, contribution-row and threshold
+    /// descriptor offsets are rebased to the detached arenas.
     ///
     /// # Errors
     /// Refuses failed reservation or an inconsistent internal span. On refusal
-    /// this consumed transaction rolls back both buffers without publishing a
+    /// this consumed transaction rolls back every arena without publishing a
     /// suffix. The rollback retains actual capacity growth, as usual.
     pub fn detach(mut self) -> Result<FormulaSuffix, AdmissionError> {
         let mut nodes = Vec::new();
@@ -524,9 +613,10 @@ impl<'a> FormulaTransaction<'a> {
             .try_reserve_exact(self.parts.operands.len() - self.operand_start)
             .map_err(|_| AdmissionError::Allocation)?;
         for node in &self.parts.nodes[self.first..] {
-            nodes.push(node.rebase(self.operand_start)?);
+            nodes.push(node.rebase(self.operand_start, self.numeric_start.thresholds)?);
         }
         operands.extend_from_slice(&self.parts.operands[self.operand_start..]);
+        let numeric = self.parts.numeric.copy_suffix(self.numeric_start)?;
         let occurrences = self.parts.occurrences - self.occurrences;
         self.restore();
         self.completed = true;
@@ -535,6 +625,7 @@ impl<'a> FormulaTransaction<'a> {
             parts: FormulaParts {
                 nodes,
                 operands,
+                numeric,
                 occurrences,
             },
         })
@@ -552,6 +643,7 @@ impl<'a> FormulaTransaction<'a> {
     fn restore(&mut self) {
         self.parts.nodes.truncate(self.first);
         self.parts.operands.truncate(self.operand_start);
+        self.parts.numeric.restore(self.numeric_start);
         self.parts.occurrences = self.occurrences;
         *self.validated = self.initial_validated;
     }
@@ -601,7 +693,7 @@ impl TheoryAdmission {
         limits: AdmissionLimits,
         validated: usize,
     ) -> Self {
-        let validation = if validated == parts.nodes.len() {
+        let validation = if validated == parts.nodes.len() && parts.numeric.is_checked() {
             AdmissionValidation::Atoms
         } else {
             AdmissionValidation::Full
@@ -618,8 +710,10 @@ impl TheoryAdmission {
     /// Documented full remaining scan operations for this exact attempt.
     ///
     /// Both routes recount N nodes, inspect N nodes for atom IDs, and inspect R
-    /// roots. The raw route additionally visits every logical child occurrence
-    /// E while validating spans and topology: 2N + E + R rather than 2N + R.
+    /// roots. The raw route additionally visits every logical child occurrence E,
+    /// every numeric row and its declared entries, and every threshold descriptor.
+    /// Shared-row evaluation work remains E: one row referenced G times contributes
+    /// G times its width. Raw numeric construction never supplies checked evidence.
     /// This excludes fixed dimension checks and handle publication. It is a
     /// pre-admission charge, not hardware instructions or actual work after an
     /// early refusal. No work budget or cancellation callback runs here.
@@ -630,7 +724,13 @@ impl TheoryAdmission {
             AdmissionValidation::Full => self.parts.occurrences as u128,
             AdmissionValidation::Atoms => 0,
         };
-        2 * self.parts.nodes.len() as u128 + edges + self.roots.len() as u128
+        2 * self.parts.nodes.len() as u128
+            + edges
+            + self.roots.len() as u128
+            + match self.validation {
+                AdmissionValidation::Full => self.parts.numeric.validation_work(),
+                AdmissionValidation::Atoms => 0,
+            }
     }
 
     /// Complete the fixed admission route and transfer the unchanged buffers.
@@ -660,13 +760,15 @@ impl TheoryAdmission {
 #[derive(Clone, Debug)]
 pub struct Theory(Arc<Data>);
 impl Theory {
-    /// Admit a paired DAG in O(nodes + referenced operands + roots) time.
+    /// Admit a complete DAG in O(nodes + referenced operands + roots + numeric
+    /// rows + their declared entries + threshold descriptors) time.
     ///
     /// Check dimensions first, independently counting logical occurrences from
     /// stored nodes rather than trusting the builder cache; then each node's
     /// canonical storage, complete span,
-    /// atom and backward edges in stored order; then roots. Both vectors and the
-    /// root vector transfer unchanged. Raw overlapping spans are accepted, with
+    /// atom and backward edges in stored order; then all numeric rows and
+    /// descriptors, including unused storage; then roots. Every arena and the root
+    /// vector transfer unchanged. Raw overlapping spans are accepted, with
     /// every occurrence counted; unused arena cells consume the arena ceiling.
     /// A refusal allocates nothing. Success performs the shared handle's one
     /// infallible `Arc` allocation; clones then share the handle in constant time.
@@ -692,7 +794,7 @@ impl Theory {
         self.0.atoms
     }
 
-    /// The authoritative paired storage and its actual capacities.
+    /// The authoritative complete storage and its actual capacities.
     #[must_use]
     pub fn parts(&self) -> &FormulaParts {
         &self.0.parts
@@ -704,7 +806,7 @@ impl Theory {
         self.0.parts.view()
     }
 
-    /// Raw nodes for representation/transport inspection, paired with operands.
+    /// Raw nodes for representation/transport inspection, paired with every arena.
     #[must_use]
     pub fn nodes(&self) -> &[Node] {
         self.0.parts.nodes()
@@ -737,7 +839,9 @@ fn admit(
 ) -> Result<Data, AdmissionError> {
     let occurrences = admit_dimensions(atoms, &parts, &roots, limits)?;
     validate_nodes(atoms, parts.view())?;
+    parts.numeric.validate()?;
     validate_roots(parts.nodes.len(), &roots)?;
+    parts.numeric.mark_checked();
     // Admission establishes the retained count even for an arbitrary extracted
     // FormulaParts record, without a premise that its private cache is correct.
     parts.occurrences = occurrences;
@@ -760,11 +864,14 @@ fn admit_dimensions(
         || parts.nodes.len() > limits.max_nodes
         || roots.len() > limits.max_roots
         || parts.operands.len() > limits.max_operands
+        || !parts
+            .numeric
+            .within_limits(limits.max_nodes, limits.max_operands)
         || atoms.checked_add(63).is_none()
     {
         return Err(AdmissionError::Limit);
     }
-    let occurrences = count_occurrences(&parts.nodes)?;
+    let occurrences = count_occurrences(&parts.nodes, &parts.numeric)?;
     if occurrences > limits.max_operands {
         return Err(AdmissionError::Limit);
     }
@@ -797,11 +904,11 @@ fn admit_checked(
 /// Count declared occurrences without using a cached construction summary.
 /// Malformed spans still contribute their declared length to dimension checks;
 /// complete range and backward-edge checks follow in stored-node order.
-fn count_occurrences(nodes: &[Node]) -> Result<usize, AdmissionError> {
+fn count_occurrences(nodes: &[Node], numeric: &NumericStorage) -> Result<usize, AdmissionError> {
     let mut occurrences = 0usize;
     for node in nodes {
         occurrences = occurrences
-            .checked_add(node.occurrences())
+            .checked_add(node.occurrences(numeric))
             .ok_or(AdmissionError::Limit)?;
     }
     Ok(occurrences)
@@ -843,6 +950,10 @@ fn validate_children(index: usize, node: NodeView<'_>) -> Result<(), AdmissionEr
     match node {
         NodeView::Implies(left, right) if left >= index || right >= index => {
             Err(AdmissionError::Edge)
+        }
+        NodeView::Threshold(threshold) => {
+            numeric::validate_threshold(index, threshold)?;
+            Ok(())
         }
         NodeView::And(row) | NodeView::Or(row) => {
             for &child in row {

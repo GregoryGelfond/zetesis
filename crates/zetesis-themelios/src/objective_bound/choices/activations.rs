@@ -1,11 +1,10 @@
 //! Prepare the fixed activation closure once, independently of any incumbent.
 //!
-//! Compact nodes use the existing formula representation. Group activations
-//! change from original coordinates to this prepared owner's coordinates only
-//! after the complete copy succeeds. Atom identities never change.
+//! Complete-storage copies keep numeric row sharing while condition coordinates
+//! change. Semantic atom identities remain those of the original theory.
 
 use zetesis_ferraris::{
-    AdmissionError, FormulaNodes, FormulaParts, Node, NodeView, OperandSpan, Theory,
+    ContributionRow, FormulaNodes, FormulaParts, Node, NodeView, Theory, ThresholdDescriptor,
 };
 
 use super::{Group, Kind, ObjectiveBoundError, Resource, Storage, Work};
@@ -33,67 +32,84 @@ pub(super) fn prepare(
         if !needed[index] {
             continue;
         }
-        match original
+        let pair;
+        let children = match original
             .view()
             .node(index)
             .map_err(|error| work.error(Kind::Theory(error)))?
         {
-            NodeView::And(row) | NodeView::Or(row) => {
-                for &child in row {
-                    work.tick()?;
-                    needed[child] = true;
-                }
-            }
+            NodeView::And(row) | NodeView::Or(row) => row,
+            NodeView::Threshold(threshold) => threshold.conditions,
             NodeView::Implies(left, right) => {
-                work.charge(2)?;
-                needed[left] = true;
-                needed[right] = true;
+                pair = [left, right];
+                &pair
             }
-            NodeView::Atom(_) | NodeView::False => {}
+            NodeView::Atom(_) | NodeView::False => &[],
+        };
+        for &child in children {
+            work.tick()?;
+            needed[child] = true;
         }
     }
-    let (node_count, arena_count) = sizes(original, &needed, work)?;
-    let mut nodes = memory.reserve(node_count, work)?;
-    let mut operands = memory.reserve(arena_count, work)?;
+    let sizes = sizes(original, &needed, memory, work)?;
+    let mut next = 0;
     for (index, &required) in needed.iter().enumerate() {
         work.tick()?;
-        if !required {
-            continue;
+        if required {
+            copied[index] = Some(next);
+            next += 1;
         }
-        let source = original
-            .view()
-            .node(index)
-            .map_err(|error| work.error(Kind::Theory(error)))?;
-        let mapped = copy_node(source, &copied, &mut operands, work)?;
-        copied[index] = Some(nodes.len());
-        nodes.push(mapped);
     }
-    // FormulaParts recounts logical occurrences without allocating.
-    work.charge(u64::try_from(nodes.len()).map_err(|_| work.error(Kind::Overflow))?)?;
-    let parts =
-        FormulaParts::new(nodes, operands).map_err(|error| work.error(Kind::Theory(error)))?;
+    memory.check(sizes.payload + sizes.minimum_scratch, work)?;
+    work.charge(u64::try_from(sizes.work).map_err(|_| work.error(Kind::Overflow))?)?;
+    let (parts, peak) = original
+        .view()
+        .try_select_with_peak(&copied)
+        .map_err(|error| work.error(Kind::Theory(error)))?;
+    // Admit the observed output plus hidden row/descriptor map capacities while
+    // they coexist. Only the output remains resident after selection returns.
+    memory.check(peak, work)?;
+    memory.bytes += parts.retained_bytes();
     for group in groups {
         work.tick()?;
         group.activation = copied[group.activation].expect("marked activation");
     }
-    // These maps end with preparation; later residual allocation overlaps the
-    // retained closure, not the temporary original-to-compact coordinates.
     memory.retire(&needed);
     memory.retire(&copied);
     work.statistics.nodes = parts.view().len();
     Ok(parts)
 }
 
-/// Count exact vector lengths before allocating the compact closure. Logical
-/// occurrence limits still include inline pairs and implication edges.
+struct Sizes {
+    payload: u128,
+    minimum_scratch: u128,
+    work: u128,
+}
+
+/// Count shared numeric rows and descriptors once while retaining every logical
+/// threshold occurrence for the formula's independent admission ceiling.
 fn sizes(
     original: &Theory,
     needed: &[bool],
+    memory: &mut Storage,
     work: &mut Work<'_>,
-) -> Result<(usize, usize), ObjectiveBoundError> {
+) -> Result<Sizes, ObjectiveBoundError> {
+    let source = original.parts();
+    let mut rows = memory.reserve(source.rows().len(), work)?;
+    let mut descriptors = memory.reserve(source.thresholds().len(), work)?;
+    for _ in source.rows() {
+        work.tick()?;
+        rows.push(false);
+    }
+    for _ in source.thresholds() {
+        work.tick()?;
+        descriptors.push(false);
+    }
     let mut nodes = 0_usize;
-    let mut arena = 0_usize;
     let mut occurrences = 0_usize;
+    let mut payload = 0_u128;
+    let mut copying =
+        needed.len() as u128 * 2 + 2 * (rows.len() as u128 + descriptors.len() as u128);
     for (index, &required) in needed.iter().enumerate() {
         work.tick()?;
         if !required {
@@ -102,6 +118,8 @@ fn sizes(
         nodes = nodes
             .checked_add(1)
             .ok_or_else(|| work.error(Kind::Overflow))?;
+        payload += size_of::<Node>() as u128;
+        copying += 2;
         let edges = match original
             .view()
             .node(index)
@@ -109,13 +127,34 @@ fn sizes(
         {
             NodeView::And(row) | NodeView::Or(row) => {
                 if row.len() >= 3 {
-                    arena = arena
-                        .checked_add(row.len())
-                        .ok_or_else(|| work.error(Kind::Overflow))?;
+                    payload += row.len() as u128 * size_of::<usize>() as u128;
                 }
+                copying += row.len() as u128;
                 row.len()
             }
-            NodeView::Implies(_, _) => 2,
+            NodeView::Threshold(threshold) => {
+                let descriptor = source.nodes()[index]
+                    .threshold_descriptor()
+                    .expect("threshold storage");
+                if !descriptors[descriptor] {
+                    descriptors[descriptor] = true;
+                    payload += size_of::<ThresholdDescriptor>() as u128;
+                    copying += 1;
+                    let row = source.thresholds()[descriptor].row;
+                    if !rows[row] {
+                        rows[row] = true;
+                        payload += size_of::<ContributionRow>() as u128
+                            + threshold.conditions.len() as u128
+                                * (size_of::<usize>() + size_of::<u64>()) as u128;
+                        copying += 1 + threshold.conditions.len() as u128 * 2;
+                    }
+                }
+                threshold.conditions.len()
+            }
+            NodeView::Implies(_, _) => {
+                copying += 2;
+                2
+            }
             NodeView::Atom(_) | NodeView::False => 0,
         };
         occurrences = occurrences
@@ -128,91 +167,76 @@ fn sizes(
     if occurrences > work.limits.max_operands {
         return Err(work.limit(Resource::Operands));
     }
-    Ok((nodes, arena))
-}
-
-/// Copy only admitted shapes, retaining ordered and repeated operands. The
-/// backwards closure and original topology establish every preceding mapping.
-fn copy_node(
-    source: NodeView<'_>,
-    copied: &[Option<usize>],
-    operands: &mut Vec<usize>,
-    work: &mut Work<'_>,
-) -> Result<Node, ObjectiveBoundError> {
-    let mapped = |index: usize| copied[index].expect("marked topological child");
-    Ok(match source {
-        NodeView::Atom(atom) => Node::atom(atom),
-        NodeView::False => Node::falsum(),
-        NodeView::Implies(left, right) => {
-            work.charge(2)?;
-            Node::implies(mapped(left), mapped(right))
-        }
-        NodeView::And(row) | NodeView::Or(row) => {
-            work.charge(u64::try_from(row.len()).map_err(|_| work.error(Kind::Overflow))?)?;
-            if let &[left, right] = row {
-                if matches!(source, NodeView::And(_)) {
-                    Node::and_pair([mapped(left), mapped(right)])
-                } else {
-                    Node::or_pair([mapped(left), mapped(right)])
-                }
-            } else if row.len() >= 3 {
-                let span = OperandSpan {
-                    start: operands.len(),
-                    length: row.len(),
-                };
-                for &child in row {
-                    operands.push(mapped(child));
-                }
-                if matches!(source, NodeView::And(_)) {
-                    Node::and_span(span)
-                } else {
-                    Node::or_span(span)
-                }
-            } else {
-                return Err(work.error(Kind::Theory(AdmissionError::Arity)));
-            }
-        }
+    let minimum_scratch =
+        (rows.len() as u128 + descriptors.len() as u128) * size_of::<Option<usize>>() as u128;
+    memory.retire(&rows);
+    memory.retire(&descriptors);
+    Ok(Sizes {
+        payload,
+        minimum_scratch,
+        work: copying,
     })
 }
 
-/// Append the prepared closure after an exact objective prefix. Its atom nodes
-/// map to the prefix's canonical atom slots; other nodes keep a local mapping.
+/// Append the prepared closure after an exact objective prefix. All compact
+/// formula nodes are copied; atom occurrences retain their semantic identities.
+/// The numeric arenas remain shared across every bound in the prepared owner.
 /// No operation traverses the original program here.
 pub(super) fn append(
     prepared: &FormulaParts,
     nodes: &mut FormulaNodes,
     work: &mut Work<'_>,
 ) -> Result<Vec<usize>, ObjectiveBoundError> {
-    let mut copied = work.reserve(prepared.view().len())?;
-    for index in 0..prepared.view().len() {
-        work.tick()?;
-        let source = prepared
-            .view()
-            .node(index)
-            .map_err(|error| work.error(Kind::Theory(error)))?;
-        let mapped = match source {
-            NodeView::Atom(atom) => atom,
-            NodeView::False => work.node(nodes, NodeView::False)?,
-            NodeView::Implies(left, right) => {
-                work.node(nodes, NodeView::Implies(copied[left], copied[right]))?
-            }
-            NodeView::And(row) | NodeView::Or(row) => {
-                let mut operands = work.reserve(row.len())?;
-                for &child in row {
-                    work.tick()?;
-                    operands.push(copied[child]);
-                }
-                work.node(
-                    nodes,
-                    if matches!(source, NodeView::And(_)) {
-                        NodeView::And(&operands)
-                    } else {
-                        NodeView::Or(&operands)
-                    },
-                )?
-            }
-        };
-        copied.push(mapped);
+    let first = nodes.view().len();
+    let end = first
+        .checked_add(prepared.view().len())
+        .ok_or_else(|| work.error(Kind::Overflow))?;
+    if end > work.limits.max_nodes {
+        return Err(work.limit(Resource::Nodes));
     }
+    let mut copied = work.reserve(prepared.view().len())?;
+    for index in first..end {
+        work.tick()?;
+        copied.push(index);
+    }
+    let cells = prepared.nodes().len() as u128
+        + prepared.operands().len() as u128
+        + prepared.conditions().len() as u128
+        + prepared.weights().len() as u128
+        + prepared.rows().len() as u128
+        + prepared.thresholds().len() as u128;
+    // Complete remapping copy, numeric validation, destination-edge validation
+    // and complete arena append each have their own charged visits.
+    let target = nodes.parts();
+    let prefix_check = if prepared.rows().is_empty() && prepared.thresholds().is_empty() {
+        0
+    } else {
+        target.pending_numeric_validation_work()
+    };
+    let copying = prefix_check
+        + 2 * cells
+        + 4 * prepared.nodes().len() as u128
+        + 2 * prepared.occurrences() as u128
+        + prepared
+            .rows()
+            .iter()
+            .map(|row| 1 + row.length as u128)
+            .sum::<u128>()
+        + prepared.thresholds().len() as u128;
+    work.charge(u64::try_from(copying).map_err(|_| work.error(Kind::Overflow))?)?;
+    let parts = prepared
+        .view()
+        .try_remap(&copied)
+        .map_err(|error| work.error(Kind::Theory(error)))?;
+    let mut transaction = nodes.transaction();
+    transaction
+        .append(
+            parts.view(),
+            work.limits.max_nodes,
+            work.limits.max_operands,
+        )
+        .map_err(|error| work.error(Kind::Theory(error)))?;
+    transaction.commit();
+    work.statistics.nodes = nodes.view().len();
     Ok(copied)
 }

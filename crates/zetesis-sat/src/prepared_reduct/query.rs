@@ -170,7 +170,7 @@ impl PreparedReduct {
     /// Decide original membership using this immutable proper-subset query.
     ///
     /// Original satisfaction is evaluated once and supplies authenticated truth
-    /// for implication parameters. A returned subset is still independently
+    /// for implication and threshold parameters. A returned subset is still independently
     /// checked against the original frozen reduct. This operation preserves
     /// `Limits`' separate search and per-verification work ceilings. Preparation
     /// work is reported only by this owner's construction receipt.
@@ -319,7 +319,7 @@ impl PreparedReduct {
                 truth.interpretation().contains(atom),
             ));
         }
-        for (offset, &node) in self.0.implications.iter().enumerate() {
+        for (offset, &node) in self.0.guarded.iter().enumerate() {
             budget.tick()?;
             let value = truth.node_truth(node).ok_or(Incomplete::InvalidWitness)?;
             parameters.push(Literal::new(2 * atoms + offset, value));
@@ -389,7 +389,7 @@ fn reserve_query(
     let count = prepared
         .theory
         .atom_count()
-        .checked_add(prepared.implications.len())
+        .checked_add(prepared.guarded.len())
         .ok_or(Incomplete::CounterOverflow)?;
     let required = base
         + parameters.capacity().max(count) as u128 * size_of::<Literal>() as u128

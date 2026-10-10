@@ -86,3 +86,71 @@ fn scoped_condition_keeps_the_shared_atom_payload() {
             .any(|node| matches!(node, ConditionNode::Not(_)))
     );
 }
+
+#[test]
+fn scoped_native_threshold_keeps_source_atoms_and_last_root() {
+    use zetesis_ferraris::{FormulaNodes, NodeView, Threshold};
+    let mut fixture = Fixture::default();
+    let atom = Atom::new(Predicate::new("p", 0).unwrap(), vec![]).unwrap();
+    let pattern = fixture.pattern(
+        &AtomPattern::new(atom.predicate().clone(), vec![]).unwrap(),
+        location(),
+    );
+    let pending = fixture.with(location(), |support, computation, counters| {
+        let limits = FormulaLimits::default();
+        let binding = binding(&[], computation, counters, location());
+        let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
+        let mut context = Context {
+            computation,
+            limits: &limits,
+            budget: &mut budget,
+            counters,
+            location: location(),
+        };
+        let mut validated = validate(
+            &[LiteralIr::Atom(DefaultNegation::None, pattern)],
+            &binding,
+            support,
+            &mut context,
+        )
+        .unwrap();
+        let mut nodes = FormulaNodes::new(validated.nodes);
+        let mut transaction = nodes.transaction();
+        validated.root = transaction
+            .push(
+                NodeView::Threshold(Threshold {
+                    conditions: &[validated.root, validated.root],
+                    weights: &[1, 2],
+                    bound: 2,
+                }),
+                usize::MAX,
+                usize::MAX,
+            )
+            .unwrap();
+        transaction.commit();
+        validated.nodes = nodes.into_parts();
+        validated.condition(&mut context).unwrap()
+    });
+    let limits = FormulaLimits::default();
+    let (mut completed, mut counters) = fixture.finish(location());
+    let mut publication = Publication::new(&mut completed, &counters, location()).unwrap();
+    let condition = pending
+        .publish(&mut publication, &limits, &mut counters, location())
+        .unwrap();
+    for present in [false, true] {
+        let mut values: Vec<bool> = Vec::new();
+        for node in condition.nodes() {
+            values.push(match node {
+                ConditionNode::Boolean(value) => value,
+                ConditionNode::Atom(actual) => {
+                    assert_eq!(actual, atom);
+                    present
+                }
+                ConditionNode::Not(child) => !values[child],
+                ConditionNode::And(left, right) => values[left] && values[right],
+                ConditionNode::Or(left, right) => values[left] || values[right],
+            });
+        }
+        assert_eq!(values.last(), Some(&present));
+    }
+}

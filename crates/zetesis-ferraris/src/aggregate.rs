@@ -1,6 +1,7 @@
 //! Finite aggregate compilation with reduct-preserving connectives.
 
 mod lower;
+mod monotone;
 mod nodes;
 mod extremum;
 mod family;
@@ -75,7 +76,8 @@ pub struct AggregateLimits {
     pub max_work: u64,
     /// Maximum simultaneously retained threshold or subset-state cells.
     /// DAG storage and temporary connective operands obey their own ceilings.
-    /// Threshold compilation uses two rows; general compilation uses subset bits.
+    /// Native threshold compilation uses contribution columns and guard bounds;
+    /// general compilation uses subset bits.
     pub max_states: usize,
     /// Maximum subsets for exact general compilation, including the empty set.
     /// Threshold and extremum compilation do not consume this budget.
@@ -97,7 +99,7 @@ impl Default for AggregateLimits {
 /// Chosen exact translation; no profile introduces semantic atoms.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AggregateProfile {
-    /// Nonnegative weighted threshold DAG with sharing of previous-row nodes.
+    /// Nonnegative weighted thresholds sharing complete contribution rows.
     Threshold,
     /// Conjunction of a subset implication for every failing aggregate subset.
     SubsetImplications,

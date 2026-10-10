@@ -27,13 +27,8 @@ fn tuples(weights: &[Term], conditions: &[usize]) -> Vec<Tuple> {
 }
 
 fn lowered(group: &Group, comparison: Comparison, bound: &Term) -> Theory {
-    let mut nodes = zetesis_ferraris::FormulaNodes::new(
-        zetesis_ferraris::FormulaParts::new(
-            group.theory().nodes().to_vec(),
-            group.theory().operands().to_vec(),
-        )
-        .unwrap(),
-    );
+    let mut nodes =
+        zetesis_ferraris::FormulaNodes::new(group.theory().parts().try_clone().unwrap());
     let root = match group.function() {
         Function::Count | Function::Sum | Function::SumPlus => {
             let Term::Number(bound) = bound else {

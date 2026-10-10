@@ -449,7 +449,7 @@ fn remapped_theories(conjunction: bool, codes: &[usize]) -> (Theory, Theory) {
             .mapped_group(codes, conjunction, |code| mapping[code], location())
             .unwrap();
         let parts = std::mem::take(&mut builder.nodes).into_parts();
-        let copy = FormulaParts::new(parts.nodes().to_vec(), parts.operands().to_vec()).unwrap();
+        let copy = parts.try_clone().unwrap();
         (
             Theory::new(2, parts, vec![original], builder.limits.theory).unwrap(),
             Theory::new(2, copy, vec![normalized], builder.limits.theory).unwrap(),

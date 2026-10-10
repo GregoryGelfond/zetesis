@@ -3,7 +3,7 @@
 use std::mem::size_of;
 
 use super::{Budget, StratifiedError, StratifiedPlan, evaluate, order};
-use crate::{Interpretation, NodeView, Theory};
+use crate::{Interpretation, NodeView, Theory, Threshold};
 use zetesis_cpu::Stop;
 
 #[derive(Clone, Copy)]
@@ -11,9 +11,11 @@ pub(super) enum Kind {
     Unsupported,
     False,
     True,
-    Atom,
+    Atom(usize),
     Negative(usize),
     And(usize),
+    ThresholdAnd(usize),
+    Alias(usize),
 }
 
 impl Kind {
@@ -94,7 +96,7 @@ fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, Strat
     for index in 0..view.len() {
         budget.tick()?;
         let kind = match view.node(index).map_err(|_| Stop::InvalidProgram)? {
-            NodeView::Atom(_) => Kind::Atom,
+            NodeView::Atom(atom) => Kind::Atom(atom),
             NodeView::False => Kind::False,
             NodeView::And(operands) => {
                 let mut normal = true;
@@ -110,22 +112,75 @@ fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, Strat
             }
             NodeView::Implies(left, right) => {
                 budget.tick()?;
-                let consequent = view.node(right).map_err(|_| Stop::InvalidProgram)?;
+                let consequent = resolved_kind(&kinds, right, budget)?;
                 budget.tick()?;
-                match (
-                    view.node(left).map_err(|_| Stop::InvalidProgram)?,
-                    consequent,
-                ) {
-                    (NodeView::False, NodeView::False) => Kind::True,
-                    (NodeView::Atom(atom), NodeView::False) => Kind::Negative(atom),
+                match (resolved_kind(&kinds, left, budget)?, consequent) {
+                    (Kind::False, Kind::False) => Kind::True,
+                    (Kind::Atom(atom), Kind::False) => Kind::Negative(atom),
                     _ => Kind::Unsupported,
                 }
             }
+            NodeView::Threshold(threshold) => classify_threshold(threshold, &kinds, budget)?,
             NodeView::Or(_) => Kind::Unsupported,
         };
         kinds.push(kind);
     }
     Ok(kinds)
+}
+
+fn resolved_kind(
+    kinds: &[Kind],
+    mut index: usize,
+    budget: &mut Budget<'_>,
+) -> Result<Kind, StratifiedError> {
+    while let Kind::Alias(child) = kinds[index] {
+        budget.tick()?;
+        index = child;
+    }
+    Ok(kinds[index])
+}
+
+/// Admit only the existing conjunction/literal grammar. Every positive entry
+/// is required when omitting even the smallest contribution misses the bound.
+/// Repeated occurrences of one condition also give a single literal, without
+/// treating general weighted readiness as either conjunction or disjunction.
+fn classify_threshold(
+    threshold: Threshold<'_>,
+    kinds: &[Kind],
+    budget: &mut Budget<'_>,
+) -> Result<Kind, StratifiedError> {
+    let mut total = 0_i128;
+    let mut smallest = i128::MAX;
+    let mut arity = 0;
+    let mut normal = true;
+    let mut first = None;
+    let mut same = true;
+    for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
+        budget.tick()?;
+        total = total
+            .checked_add(i128::from(weight))
+            .ok_or(Stop::InvalidProgram)?;
+        if weight != 0 {
+            smallest = smallest.min(i128::from(weight));
+            arity += 1;
+            normal &= kinds[child].normal();
+            same &= first.is_none_or(|previous| previous == child);
+            first = first.or(Some(child));
+        }
+    }
+    Ok(if threshold.bound <= 0 {
+        Kind::True
+    } else if threshold.bound > total {
+        Kind::False
+    } else if !normal {
+        Kind::Unsupported
+    } else if same {
+        first.map_or(Kind::False, Kind::Alias)
+    } else if total - smallest < threshold.bound {
+        Kind::ThresholdAnd(arity)
+    } else {
+        Kind::Unsupported
+    })
 }
 
 fn graph(
@@ -206,7 +261,7 @@ fn edges(
         budget.tick()?;
         let target = atoms + index;
         match (kind, view.node(index).map_err(|_| Stop::InvalidProgram)?) {
-            (Kind::Atom, NodeView::Atom(atom)) => {
+            (Kind::Atom(_), NodeView::Atom(atom)) => {
                 budget.tick()?;
                 visit(
                     atom,
@@ -239,6 +294,32 @@ fn edges(
                         },
                         budget,
                     )?;
+                }
+            }
+            (Kind::Alias(child), _) => {
+                budget.tick()?;
+                visit(
+                    atoms + child,
+                    Edge {
+                        target,
+                        negative: false,
+                    },
+                    budget,
+                )?;
+            }
+            (Kind::ThresholdAnd(_), NodeView::Threshold(threshold)) => {
+                for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
+                    budget.tick()?;
+                    if weight != 0 {
+                        visit(
+                            atoms + child,
+                            Edge {
+                                target,
+                                negative: false,
+                            },
+                            budget,
+                        )?;
+                    }
                 }
             }
             _ => {}
@@ -283,6 +364,8 @@ fn producer(
                 _ => Err(StratifiedError::UnsupportedRoot { root }),
             }
         }
-        NodeView::And(_) | NodeView::Or(_) => Err(StratifiedError::UnsupportedRoot { root }),
+        NodeView::And(_) | NodeView::Or(_) | NodeView::Threshold(_) => {
+            Err(StratifiedError::UnsupportedRoot { root })
+        }
     }
 }

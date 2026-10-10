@@ -5,7 +5,7 @@ use std::mem::size_of;
 use zetesis_cpu::Stop;
 
 use super::{Budget, PositiveError, PositivePlan, propagate, validation};
-use crate::{Interpretation, NodeView, Theory};
+use crate::{Interpretation, NodeView, Theory, Threshold};
 
 #[derive(Clone, Copy)]
 enum Kind {
@@ -15,6 +15,7 @@ enum Kind {
     Atom,
     And(usize),
     Or,
+    Threshold(i128),
 }
 
 impl Kind {
@@ -25,6 +26,7 @@ impl Kind {
         match self {
             Self::Atom | Self::Or => State::Awaiting(1),
             Self::And(arity) => State::Awaiting(arity),
+            Self::Threshold(bound) => State::Weighted(bound),
             Self::Unsupported | Self::False | Self::True => State::Inactive,
         }
     }
@@ -37,12 +39,19 @@ impl Kind {
 pub(super) enum State {
     Inactive,
     Awaiting(usize),
+    Weighted(i128),
     True,
+}
+
+#[derive(Clone, Copy)]
+pub(super) struct Edge {
+    pub target: usize,
+    pub weight: u64,
 }
 
 pub(super) struct Graph {
     pub offsets: Vec<usize>,
-    pub targets: Vec<usize>,
+    pub edges: Vec<Edge>,
     pub states: Vec<State>,
     pub queue: Vec<usize>,
 }
@@ -80,14 +89,21 @@ pub(super) fn build(
             .checked_add(offsets[index])
             .ok_or(PositiveError::Overflow)?;
     }
-    let mut targets = initialized(budget.statistics.dependencies, 0_usize, budget)?;
+    let mut forward = initialized(
+        budget.statistics.dependencies,
+        Edge {
+            target: 0,
+            weight: 1,
+        },
+        budget,
+    )?;
     let mut cursors = budget.reserve(vertices)?;
     for &offset in &offsets[..vertices] {
         budget.tick()?;
         cursors.push(offset);
     }
-    edges(theory, &kinds, budget, |source, target, _| {
-        targets[cursors[source]] = target;
+    edges(theory, &kinds, budget, |source, edge, _| {
+        forward[cursors[source]] = edge;
         cursors[source] += 1;
         Ok(())
     })?;
@@ -106,7 +122,7 @@ pub(super) fn build(
     let mut words = initialized(theory.atom_count().div_ceil(64), 0_u64, budget)?;
     let mut graph = Graph {
         offsets,
-        targets,
+        edges: forward,
         states,
         queue,
     };
@@ -155,6 +171,7 @@ fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, Posit
                     Kind::Unsupported
                 }
             }
+            NodeView::Threshold(threshold) => classify_threshold(threshold, &kinds, budget)?,
             NodeView::Implies(a, b) => {
                 budget.tick()?;
                 let left = view.node(a).map_err(|_| Stop::InvalidProgram)?;
@@ -169,6 +186,33 @@ fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, Posit
         });
     }
     Ok(kinds)
+}
+
+fn classify_threshold(
+    threshold: Threshold<'_>,
+    kinds: &[Kind],
+    budget: &mut Budget<'_>,
+) -> Result<Kind, PositiveError> {
+    let mut total = 0_i128;
+    let mut monotone = true;
+    for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
+        budget.tick()?;
+        total = total
+            .checked_add(i128::from(weight))
+            .ok_or(Stop::InvalidProgram)?;
+        if weight != 0 {
+            monotone &= kinds[child].monotone();
+        }
+    }
+    Ok(if threshold.bound <= 0 {
+        Kind::True
+    } else if threshold.bound > total {
+        Kind::False
+    } else if monotone {
+        Kind::Threshold(threshold.bound)
+    } else {
+        Kind::Unsupported
+    })
 }
 
 fn monotone_operands(
@@ -192,7 +236,7 @@ fn edges(
     theory: &Theory,
     kinds: &[Kind],
     budget: &mut Budget<'_>,
-    mut visit: impl FnMut(usize, usize, &mut Budget<'_>) -> Result<(), PositiveError>,
+    mut visit: impl FnMut(usize, Edge, &mut Budget<'_>) -> Result<(), PositiveError>,
 ) -> Result<(), PositiveError> {
     let atoms = theory.atom_count();
     for (index, &kind) in kinds.iter().enumerate() {
@@ -206,12 +250,41 @@ fn edges(
         ) {
             (Kind::Atom, NodeView::Atom(atom)) => {
                 budget.tick()?;
-                visit(atom, atoms + index, budget)?;
+                visit(
+                    atom,
+                    Edge {
+                        target: atoms + index,
+                        weight: 1,
+                    },
+                    budget,
+                )?;
             }
             (Kind::And(_), NodeView::And(operands)) | (Kind::Or, NodeView::Or(operands)) => {
                 for &child in operands {
                     budget.tick()?;
-                    visit(atoms + child, atoms + index, budget)?;
+                    visit(
+                        atoms + child,
+                        Edge {
+                            target: atoms + index,
+                            weight: 1,
+                        },
+                        budget,
+                    )?;
+                }
+            }
+            (Kind::Threshold(_), NodeView::Threshold(threshold)) => {
+                for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
+                    budget.tick()?;
+                    if weight != 0 {
+                        visit(
+                            atoms + child,
+                            Edge {
+                                target: atoms + index,
+                                weight,
+                            },
+                            budget,
+                        )?;
+                    }
                 }
             }
             _ => {}
@@ -221,7 +294,14 @@ fn edges(
         budget.tick()?;
         if let Some((body, head)) = producer(theory, root, kinds)? {
             budget.tick()?;
-            visit(atoms + body, head, budget)?;
+            visit(
+                atoms + body,
+                Edge {
+                    target: head,
+                    weight: 1,
+                },
+                budget,
+            )?;
         }
     }
     Ok(())

@@ -39,9 +39,9 @@ pub struct ObjectivePlanLimits {
     pub max_key_bytes: usize,
     /// Explicit scalar tuple width per objective key.
     pub max_tuple_width: usize,
-    /// Eligibility DAG nodes.
+    /// Eligibility DAG nodes, contribution rows and threshold descriptors, each.
     pub max_nodes: usize,
-    /// Logical operand occurrences and retained arena cells.
+    /// Logical child occurrences, Boolean operands, conditions and weights, each.
     pub max_operands: usize,
     /// Local binding slots per lifted objective.
     pub max_variables: usize,
@@ -384,6 +384,7 @@ impl Work<'_> {
             NodeView::And([]) => (2, 2),
             NodeView::And([_]) | NodeView::Or([_]) => (0, 0),
             NodeView::And(row) | NodeView::Or(row) => (1, row.len()),
+            NodeView::Threshold(row) => (1, row.conditions.len()),
             NodeView::Implies(_, _) => (1, 2),
             NodeView::Atom(_) | NodeView::False => (1, 0),
         };
@@ -404,12 +405,26 @@ impl Work<'_> {
             return Err(self.limit(ObjectiveBoundResource::Operands));
         }
         // Charge child validation and copied arena cells before publication.
-        // The builder has no independent execution-work owner.
+        // Numeric copies include both columns and row/threshold descriptors.
+        // The range-returning append allocates no root vector. The builder has
+        // no independent work owner.
         let copies = match node {
             NodeView::And([_]) | NodeView::Or([_]) => 1,
             NodeView::And(row) | NodeView::Or(row) if row.len() >= 3 => row.len(),
+            NodeView::Threshold(row) => row
+                .conditions
+                .len()
+                .checked_mul(2)
+                .and_then(|cells| cells.checked_add(2))
+                .ok_or_else(|| self.error(ObjectiveBoundErrorKind::Overflow))?,
             _ => 0,
         };
+        if matches!(node, NodeView::Threshold(_)) {
+            self.charge(
+                u64::try_from(nodes.parts().pending_numeric_validation_work())
+                    .map_err(|_| self.error(ObjectiveBoundErrorKind::Overflow))?,
+            )?;
+        }
         for _ in 0..edges {
             self.tick()?;
         }

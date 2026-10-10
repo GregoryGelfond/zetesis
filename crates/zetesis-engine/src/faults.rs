@@ -488,7 +488,9 @@ fn theory_class(error: zetesis_ferraris::AdmissionError) -> Class {
         | zetesis_ferraris::AdmissionError::Edge
         | zetesis_ferraris::AdmissionError::Root
         | zetesis_ferraris::AdmissionError::Arity
-        | zetesis_ferraris::AdmissionError::Span => Class::Engine,
+        | zetesis_ferraris::AdmissionError::Span
+        | zetesis_ferraris::AdmissionError::ThresholdShape
+        | zetesis_ferraris::AdmissionError::ThresholdMeasure => Class::Engine,
     }
 }
 

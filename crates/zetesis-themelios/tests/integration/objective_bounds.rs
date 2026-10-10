@@ -310,9 +310,9 @@ fn optional_plan_limits_are_typed() {
 
 #[test]
 fn optional_bound_failures_do_not_poison_the_plan_or_theory() {
-    let input = formula("{p(1);p(2)}.#minimize{-1@0,X:p(X)}.");
+    let input = formula("{p(1..4)}.#minimize{-1@0,X:p(X)}.");
     let plan = plan(&input);
-    let incumbent = score(&input, 0);
+    let incumbent = score(&input, 3);
     let limits = ObjectiveBoundLimits {
         aggregate: zetesis_ferraris::AggregateLimits {
             max_states: 0,

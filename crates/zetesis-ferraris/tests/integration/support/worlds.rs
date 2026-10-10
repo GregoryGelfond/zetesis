@@ -23,6 +23,15 @@ pub fn eval(nodes: FormulaView<'_>, root: usize, world: u8, frozen: Option<u8>) 
         NodeView::Or(operands) => operands
             .iter()
             .any(|&child| eval(nodes, child, world, frozen)),
+        NodeView::Threshold(row) => {
+            row.conditions
+                .iter()
+                .zip(row.weights)
+                .filter(|(condition, _)| eval(nodes, **condition, world, frozen))
+                .map(|(_, weight)| i128::from(*weight))
+                .sum::<i128>()
+                >= row.bound
+        }
         NodeView::Implies(a, b) => !eval(nodes, a, world, frozen) || eval(nodes, b, world, frozen),
     }
 }

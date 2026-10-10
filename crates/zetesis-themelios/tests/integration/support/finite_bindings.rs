@@ -17,6 +17,15 @@ pub(crate) fn values(theory: &Theory, mask: usize, frozen: Option<&[bool]>) -> V
         let node = theory.view().node(index).unwrap();
         let value = match node {
             Node::False => false,
+            Node::Threshold(row) => {
+                row.conditions
+                    .iter()
+                    .zip(row.weights)
+                    .filter(|(child, _)| result[**child])
+                    .map(|(_, weight)| i128::from(*weight))
+                    .sum::<i128>()
+                    >= row.bound
+            }
             Node::Atom(atom) => mask & (1 << atom) != 0,
             Node::And(row) => row.iter().all(|&child| result[child]),
             Node::Or(row) => row.iter().any(|&child| result[child]),

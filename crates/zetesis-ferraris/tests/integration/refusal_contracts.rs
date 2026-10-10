@@ -168,7 +168,17 @@ fn invalid_indices_and_guard_capacity_have_actionable_local_evidence() {
             .to_string()
             .contains("invalid storage or edges at node 0")
     );
-    assert_eq!(snapshot(&malformed), (vec![Node::and_pair([0, 0])], vec![]));
+    assert_eq!(
+        snapshot(&malformed),
+        (
+            vec![Node::and_pair([0, 0])],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![]
+        )
+    );
     let mut nodes = raw(vec![Node::atom(0), Node::atom(1)]);
     let before = copy(&nodes);
     let invalid = [Element {

@@ -1,6 +1,8 @@
 //! Explicit physical API qualification of the partial frozen-query primitive.
 //! No adapter absence or residual query is replaced by a CPU GPU-result claim.
 
+mod native;
+
 use crate::support::physical;
 
 use zetesis_backend::GpuApi;
@@ -46,6 +48,7 @@ fn setup_work(theory: &Theory) -> u32 {
     for index in 0..theory.view().len() {
         depths.push(match theory.view().node(index).unwrap() {
             NodeView::False | NodeView::Atom(_) => 0,
+            NodeView::Threshold(_) => panic!("work-receipt helper requires Boolean fixtures"),
             NodeView::Implies(a, b) => 1 + depths[a].max(depths[b]),
             NodeView::And(children) | NodeView::Or(children) => {
                 1 + children.iter().map(|&child| depths[child]).max().unwrap()
@@ -265,6 +268,7 @@ fn qualify_frozen_queries(backend: GpuApi, projection: GateProjection) {
     assert!(totals.0 > 0 && totals.1 > 0);
     println!("completed refutations={} residuals={}", totals.0, totals.1);
     qualify_subset_strides(&mut oracle);
+    native::qualify(&mut oracle);
 }
 
 fn scheduled_theories() -> [Theory; 2] {

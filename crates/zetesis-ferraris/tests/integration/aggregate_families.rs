@@ -238,12 +238,12 @@ fn empty_zero_signed_and_extreme_guards_have_no_numeric_wraparound() {
         &Cancellation::default(),
     )
     .unwrap();
-    assert_eq!(family.statistics().states, 4);
+    assert_eq!(family.statistics().states, 0);
     assert_eq!(family.statistics().subsets, 0);
 }
 
 #[test]
-fn ordered_duplicate_guards_use_one_threshold_table_without_subsets() {
+fn ordered_guards_share_one_contribution_row() {
     let input = raw((0..16).map(Node::atom).collect());
     let elements: Vec<_> = (0..16)
         .map(|condition| Element {
@@ -274,7 +274,9 @@ fn ordered_duplicate_guards_use_one_threshold_table_without_subsets() {
     )
     .unwrap();
     assert_eq!(family.profile(), AggregateProfile::Threshold);
-    assert_eq!(family.statistics().states, 34);
+    assert_eq!(family.statistics().states, 62);
+    assert_eq!(nodes.parts().rows().len(), 1);
+    assert_eq!(nodes.parts().conditions().len(), 16);
     assert_eq!(family.statistics().subsets, 0);
     let isolated_work: u64 = guards
         .iter()
@@ -574,7 +576,17 @@ fn empty_family_still_validates_and_appends_nothing() {
         .kind(),
         Error::InvalidPrefix { node: 0 }
     );
-    assert_eq!(snapshot(&bad), (vec![Node::and_pair([0, 0])], vec![]));
+    assert_eq!(
+        snapshot(&bad),
+        (
+            vec![Node::and_pair([0, 0])],
+            vec![],
+            vec![],
+            vec![],
+            vec![],
+            vec![]
+        )
+    );
 }
 
 #[test]

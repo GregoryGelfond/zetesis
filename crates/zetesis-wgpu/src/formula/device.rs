@@ -306,12 +306,13 @@ impl GpuFormulaOracle {
             identities(theory, candidates)?;
             (None, plan)
         } else {
-            let preparation = Preparation::new(
+            let preparation = Preparation::with_control(
                 theory,
                 candidates.len(),
                 limits,
                 self.profile.runtime.limits(),
                 epoch,
+                cancellation,
             )?;
             identities(theory, candidates)?;
             self.resident = None;

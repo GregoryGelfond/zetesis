@@ -1634,6 +1634,15 @@
 'Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes' does not depend on any axioms
 'Zetesis.Refinement.TheoryAdmission.self_reference_is_refused' does not depend on any axioms
 'Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked' does not depend on any axioms
+'Zetesis.ThresholdPropagation.masked_sum_mono' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdPropagation.sum_bounds' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdPropagation.threshold_of_lower' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdPropagation.threshold_absent_of_upper' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdPropagation.assigned_sum' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdPropagation.condition_required_true' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdPropagation.condition_required_false' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdPropagation.formula_of_lower' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.ThresholdPropagation.formula_absent_of_upper' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ThresholdReduct.original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ThresholdReduct.query_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ThresholdReduct.frozen_formula' depends on axioms: [propext, Classical.choice, Quot.sound]

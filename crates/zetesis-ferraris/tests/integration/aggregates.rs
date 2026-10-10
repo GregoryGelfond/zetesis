@@ -155,7 +155,7 @@ fn empty_zero_weight_and_extreme_scalar_guards_have_exact_truth_and_reducts() {
 }
 
 #[test]
-fn count_sixty_four_uses_threshold_states_without_subset_enumeration() {
+fn count_guards_share_one_row_without_subset_enumeration() {
     let mut nodes = raw((0..64).map(Node::atom).collect());
     let elements: Vec<_> = (0..64)
         .map(|condition| Element {
@@ -177,8 +177,11 @@ fn count_sixty_four_uses_threshold_states_without_subset_enumeration() {
     .unwrap();
     assert_eq!(built.profile(), AggregateProfile::Threshold);
     assert_eq!(built.statistics().subsets, 0);
-    assert_eq!(built.statistics().states, 20);
-    assert!(built.appended_nodes() < 2_200);
+    assert_eq!(built.statistics().states, 130);
+    assert_eq!(nodes.parts().rows().len(), 1);
+    assert_eq!(nodes.parts().conditions().len(), 64);
+    assert_eq!(nodes.parts().thresholds().len(), 2);
+    assert_eq!(built.appended_nodes(), 6);
     let theory = Theory::new(
         64,
         nodes.into_parts(),
@@ -400,25 +403,31 @@ fn hostile_dimensions_and_edges_are_refused_without_mutation() {
         ),
         Error::SubsetLimit
     );
-    let huge = [Element {
+}
+
+#[test]
+fn large_weights_do_not_require_bound_sized_state() {
+    let elements = [Element {
         weight: i32::MAX,
         condition: 2,
-    }];
+    }; 4];
     let mut nodes = prefix();
-    assert_eq!(
-        append_aggregate(
-            &mut nodes,
-            &huge,
-            Comparison::Ge,
-            i64::from(i32::MAX),
-            AggregateLimits::default(),
-            &Cancellation::default()
-        )
-        .unwrap_err()
-        .kind(),
-        Error::StateLimit
-    );
-    assert_eq!(snapshot(&nodes), snapshot(&prefix()));
+    let build = append_aggregate(
+        &mut nodes,
+        &elements,
+        Comparison::Ge,
+        2 * i64::from(i32::MAX),
+        AggregateLimits {
+            max_states: 9,
+            ..AggregateLimits::default()
+        },
+        &Cancellation::default(),
+    )
+    .unwrap();
+    assert_eq!(build.statistics().states, 9);
+    assert_eq!(nodes.parts().rows().len(), 1);
+    assert_eq!(nodes.parts().conditions().len(), 4);
+    assert_eq!(build.appended_nodes(), 3);
 }
 
 #[test]

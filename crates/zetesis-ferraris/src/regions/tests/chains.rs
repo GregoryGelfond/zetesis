@@ -16,6 +16,7 @@ fn parent_rows(theory: &Theory) -> Vec<Vec<usize>> {
         let pair;
         let operands = match theory.view().node(parent).unwrap() {
             NodeView::And(operands) | NodeView::Or(operands) => operands,
+            NodeView::Threshold(row) => row.conditions,
             NodeView::Implies(a, b) => {
                 pair = [a, b];
                 &pair

@@ -27,7 +27,7 @@ fn builder() -> Builder {
             )
             .unwrap(),
             cnf,
-            implications: Vec::new(),
+            guarded: Vec::new(),
             units: Vec::new(),
             has_empty_clause: false,
             statistics: ReductPreparationStatistics::default(),
@@ -35,6 +35,7 @@ fn builder() -> Builder {
         nodes: Vec::new(),
         gates: HashMap::new(),
         strict: Vec::new(),
+        scratch: Vec::new(),
     }
 }
 
@@ -91,4 +92,69 @@ fn refused_unit_storage_keeps_the_allocated_peak() {
         .initial_clauses(u64::MAX, &mut budget, &mut statistics)
         .unwrap();
     assert_eq!(builder.data.units, [0, 2]);
+}
+
+#[test]
+fn native_threshold_requires_its_original_truth_parameter() {
+    use zetesis_ferraris::{FormulaNodes, NodeView, Threshold};
+    let mut nodes = FormulaNodes::default();
+    let mut transaction = nodes.transaction();
+    transaction.push(NodeView::Atom(0), 10, 10).unwrap();
+    let root = transaction
+        .push(
+            NodeView::Threshold(Threshold {
+                conditions: &[0],
+                weights: &[1],
+                bound: 1,
+            }),
+            10,
+            10,
+        )
+        .unwrap();
+    transaction.commit();
+    let theory = Theory::new(
+        2,
+        nodes.into_parts(),
+        vec![root],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedReduct::prepare(&theory, ReductPreparationLimits::default(), &cancellation)
+            .result
+            .unwrap();
+    assert_eq!(prepared.0.guarded, [root]);
+    assert_eq!(prepared.parameter_count(), 3);
+    let mut search = crate::search::PreparedWorkspace::default();
+    for original in [false, true, false] {
+        let mut budget = Budget {
+            quota: LocalQuota,
+            limits: SearchLimits::default(),
+            cancellation: &cancellation,
+            statistics: SearchStatistics::default(),
+        };
+        // Deliberately bypass the public authenticated mask boundary to inspect
+        // the physical gate: N={p}, M={p,q}, and the threshold guard supplied
+        // independently. Public queries never accept this forged parameter.
+        let result = search.query(
+            &prepared.0.cnf,
+            &prepared.0.units,
+            prepared.0.has_empty_clause,
+            &[
+                Literal::new(0, true),
+                Literal::new(1, false),
+                Literal::new(2, true),
+                Literal::new(3, true),
+                Literal::new(4, original),
+            ],
+            &mut budget,
+        );
+        assert_eq!(
+            matches!(result, crate::Solve::Sat(_)),
+            original,
+            "{result:?}"
+        );
+        assert!(!matches!(result, crate::Solve::Inconclusive(_)));
+    }
 }

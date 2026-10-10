@@ -11,6 +11,9 @@
 mod activations;
 mod residuals;
 
+#[cfg(test)]
+mod tests;
+
 use std::borrow::Cow;
 
 use zetesis_cpu::Cancellation;
@@ -250,6 +253,7 @@ enum Reading {
     Constant(bool),
     All,
     Any,
+    Weighted(i128),
 }
 
 impl<'a> Implications<'a> {
@@ -335,6 +339,7 @@ impl<'a> Implications<'a> {
             NodeView::Atom(_) | NodeView::Or(_) => Reading::Any,
             NodeView::And(_) => Reading::All,
             NodeView::False => Reading::Constant(false),
+            NodeView::Threshold(threshold) => Reading::Weighted(threshold.bound),
             NodeView::Implies(left, right) => {
                 let base = if goal < self.objective {
                     0
@@ -361,7 +366,18 @@ impl<'a> Implications<'a> {
         match self.node(goal) {
             NodeView::Atom(atom) => (position == 0).then_some(self.atoms + atom),
             NodeView::And(row) | NodeView::Or(row) => row.get(position).map(|node| base + node),
+            NodeView::Threshold(threshold) => {
+                threshold.conditions.get(position).map(|node| base + node)
+            }
             NodeView::False | NodeView::Implies(..) => None,
+        }
+    }
+
+    fn weight(&self, goal: usize, position: usize) -> u64 {
+        if let NodeView::Threshold(threshold) = self.node(goal) {
+            threshold.weights[position]
+        } else {
+            0
         }
     }
 
@@ -433,7 +449,24 @@ impl<'a> Implications<'a> {
 struct Proof {
     states: Vec<u8>,
     touched: Vec<usize>,
-    frames: Vec<(usize, usize)>,
+    frames: Vec<Frame>,
+}
+
+#[derive(Clone, Copy)]
+struct Frame {
+    goal: usize,
+    position: usize,
+    sum: i128,
+}
+
+impl Frame {
+    fn new(goal: usize) -> Self {
+        Self {
+            goal,
+            position: 0,
+            sum: 0,
+        }
+    }
 }
 
 impl Proof {
@@ -480,8 +513,8 @@ impl Proof {
         self.clear(work)?;
         self.mark(graph.atoms + member, 3);
         self.mark(activation, 3);
-        self.frames.push((activation, 0));
-        while let Some((node, _)) = self.frames.pop() {
+        self.frames.push(Frame::new(activation));
+        while let Some(Frame { goal: node, .. }) = self.frames.pop() {
             work.tick()?;
             match graph.node(node) {
                 NodeView::Atom(atom) => self.mark(graph.atoms + atom, 3),
@@ -490,7 +523,29 @@ impl Proof {
                         work.tick()?;
                         if self.states[child] != 3 {
                             self.mark(child, 3);
-                            self.frames.push((child, 0));
+                            self.frames.push(Frame::new(child));
+                        }
+                    }
+                }
+                NodeView::Threshold(threshold) => {
+                    let mut total = 0_i128;
+                    for &weight in threshold.weights {
+                        work.tick()?;
+                        total = total
+                            .checked_add(i128::from(weight))
+                            .ok_or_else(|| work.error(Kind::Overflow))?;
+                    }
+                    for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
+                        work.tick()?;
+                        // Omitting this contribution already makes the assumed
+                        // true threshold impossible. Repetitions remain separate
+                        // sufficient tests; no tuple multiplicity is discarded.
+                        if weight != 0
+                            && total - i128::from(weight) < threshold.bound
+                            && self.states[child] != 3
+                        {
+                            self.mark(child, 3);
+                            self.frames.push(Frame::new(child));
                         }
                     }
                 }
@@ -510,15 +565,34 @@ impl Proof {
             return Ok(self.states[goal] == 3);
         }
         self.mark(goal, 1);
-        self.frames.push((goal, 0));
+        self.frames.push(Frame::new(goal));
         let mut result = None;
-        while let Some(&(current, position)) = self.frames.last() {
+        while let Some(&Frame {
+            goal: current,
+            position,
+            ..
+        }) = self.frames.last()
+        {
             work.tick()?;
             let reading = graph.reading(current);
-            let complete = match (reading, result.take()) {
+            let child_result = result.take();
+            if matches!(reading, Reading::Weighted(_)) && child_result == Some(true) {
+                let weight = i128::from(graph.weight(current, position - 1));
+                let frame = self.frames.last_mut().expect("active proof frame");
+                frame.sum = frame
+                    .sum
+                    .checked_add(weight)
+                    .ok_or_else(|| work.error(Kind::Overflow))?;
+            }
+            let complete = match (reading, child_result) {
                 (Reading::Constant(value), _) => Some(value),
                 (Reading::All, Some(false)) => Some(false),
                 (Reading::Any, Some(true)) => Some(true),
+                (Reading::Weighted(bound), _)
+                    if self.frames.last().expect("active proof frame").sum >= bound =>
+                {
+                    Some(true)
+                }
                 _ => None,
             };
             if let Some(value) = complete {
@@ -528,10 +602,10 @@ impl Proof {
                 continue;
             }
             if let Some(child) = graph.child(current, position) {
-                self.frames.last_mut().expect("active proof frame").1 += 1;
+                self.frames.last_mut().expect("active proof frame").position += 1;
                 if self.states[child] == 0 {
                     self.mark(child, 1);
-                    self.frames.push((child, 0));
+                    self.frames.push(Frame::new(child));
                 } else {
                     result = Some(self.states[child] == 3);
                 }
@@ -583,16 +657,13 @@ fn combined(
     limits: ObjectiveBoundLimits,
     work: &mut Work<'_>,
 ) -> Result<Theory, ObjectiveBoundError> {
-    let mut nodes = FormulaNodes::default();
-    for index in 0..exact.view().len() {
-        work.node(
-            &mut nodes,
-            exact
-                .view()
-                .node(index)
-                .map_err(|error| work.error(Kind::Theory(error)))?,
-        )?;
-    }
+    let parts = exact.parts();
+    work.charge(u64::try_from(parts.copy_work()).map_err(|_| work.error(Kind::Overflow))?)?;
+    let mut nodes = FormulaNodes::new(
+        parts
+            .try_clone()
+            .map_err(|error| work.error(Kind::Theory(error)))?,
+    );
     let copied = activations::append(&costs.activations, &mut nodes, work)?;
     // Both priority lists ascend, and every prepared level belongs to the exact
     // plan. Extra incumbent priorities leave this cursor in place.
@@ -631,11 +702,8 @@ fn combined(
         },
     )?;
     let root = work.node(&mut nodes, NodeView::And(&[exact.roots()[0], root]))?;
-    let admission = (nodes.view().len() as u128) * 2 + nodes.parts().occurrences() as u128 + 1;
-    work.charge(u64::try_from(admission).map_err(|_| work.error(Kind::Overflow))?)?;
-    Theory::new(
+    let admission = nodes.prepare_admission(
         plan.original.atom_count(),
-        nodes.into_parts(),
         vec![root],
         zetesis_ferraris::AdmissionLimits {
             max_atoms: plan.original.atom_count(),
@@ -643,8 +711,11 @@ fn combined(
             max_roots: 1,
             max_operands: limits.aggregate.max_operands,
         },
-    )
-    .map_err(|error| work.error(Kind::Theory(error)))
+    );
+    work.charge(u64::try_from(admission.work()).map_err(|_| work.error(Kind::Overflow))?)?;
+    admission
+        .admit()
+        .map_err(|error| work.error(Kind::Theory(error)))
 }
 
 /// Named vector capacities in optional proof preparation. Source premises are
@@ -665,9 +736,7 @@ impl Storage {
         let mut bytes = required.retained_bytes() + size_of::<Costs>() as u128;
         if let Some(previous) = previous {
             bytes += Self::vector_bytes(&previous.groups);
-            bytes += previous.activations.node_capacity() as u128
-                * size_of::<zetesis_ferraris::Node>() as u128;
-            bytes += previous.activations.operand_capacity() as u128 * size_of::<usize>() as u128;
+            bytes += previous.activations.retained_bytes();
             bytes += Self::vector_bytes(&previous.levels);
             for level in &previous.levels {
                 bytes += Self::vector_bytes(&level.residuals);

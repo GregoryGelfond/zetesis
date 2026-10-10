@@ -74,7 +74,7 @@ pub struct ReductPreparationAttempt {
 /// One candidate-parametric CNF bound to an exact immutable original theory.
 ///
 /// The original semantic atoms are the prospective subset N. Separate inputs
-/// represent candidate membership M and original implication truth. The latter
+/// represent candidate membership M and original implication and threshold truth. The latter
 /// are supplied only by a successful, subject-bound formula evaluation. No
 /// arbitrary external mask is accepted. Clones share this owner and its theory.
 /// Each concurrent query requires its own [`ReductWorkspace`].
@@ -84,7 +84,9 @@ pub struct ReductPreparationAttempt {
 /// reducts. This is different from keeping the original classical equivalences
 /// and adding units for false original nodes. All roots and N⊂M are asserted.
 ///
-/// Construction is linear in DAG/atom/root visits plus expected hash lookup
+/// Thresholds use original truth AND their expanded child-reduct threshold.
+/// Construction includes checked physical threshold expansion, DAG/atom/root
+/// visits, plus expected hash lookup
 /// and clause canonicalization work. It retains a larger fixed query than some
 /// individually simplified reducts; reuse does not guarantee faster search.
 /// Search state and witness validation remain per-query operations.
@@ -95,7 +97,7 @@ pub struct PreparedReduct(Arc<Data>);
 struct Data {
     theory: Theory,
     cnf: Cnf,
-    implications: Vec<usize>,
+    guarded: Vec<usize>,
     units: Vec<usize>,
     has_empty_clause: bool,
     statistics: ReductPreparationStatistics,
@@ -104,9 +106,10 @@ struct Data {
 impl PreparedReduct {
     /// Compile a fixed proper-subset query without evaluating any candidate.
     ///
-    /// For A atoms, N DAG nodes, I implication nodes and R roots, construction
-    /// reserves at most 3A+N+2I variables, 3N+3I+4A+R+1 clauses and
-    /// 7N+7I+10A+R literals. CNF reservations are clipped to declared admission
+    /// For A atoms, G physical gates, I guarded implication/threshold nodes and
+    /// R roots, construction reserves at most 3A+G+2I variables,
+    /// 3G+3I+4A+R+1 clauses and 7G+7I+10A+R literals. Threshold DP scratch
+    /// is admitted alongside the semantic-to-physical map. CNF reservations are clipped to declared admission
     /// limits; actual submissions remain checked. Metadata reservations are
     /// finite and byte-admitted before allocation, then checked against actual
     /// capacities. After encoding, a charged scan counts the actual unit clauses
@@ -164,27 +167,33 @@ impl PreparedReduct {
         statistics: &mut ReductPreparationStatistics,
     ) -> Result<Data, Incomplete> {
         budget.tick()?;
-        let mut implications = 0;
+        let mut guarded = 0;
         let mut formula_gates = 0usize;
+        let mut scratch = 0;
         for index in 0..theory.view().len() {
             budget.tick()?;
             let node = theory
                 .view()
                 .node(index)
                 .map_err(|_| Incomplete::InvalidWitness)?;
-            if matches!(node, NodeView::Implies(..)) {
-                implications += 1;
+            if matches!(node, NodeView::Implies(..) | NodeView::Threshold(_)) {
+                guarded += 1;
             }
+            let (gates, slots) = encoding::node_dimensions(node, budget)?;
+            scratch = scratch.max(slots);
             formula_gates = formula_gates
-                .checked_add(encoding::node_gates(node))
+                .checked_add(gates)
                 .ok_or(Incomplete::CounterOverflow)?;
         }
-        let shape = Shape::new(theory, implications, formula_gates, limits.admission)?;
+        if formula_gates as u128 > u128::from(budget.remaining_work()) {
+            return Err(Incomplete::WorkLimit);
+        }
+        let shape = Shape::new(theory, guarded, formula_gates, scratch, limits.admission)?;
         let mut builder = Builder {
             data: Data {
                 theory: theory.clone(),
                 cnf: Cnf::empty(shape.inputs, limits.admission)?,
-                implications: Vec::new(),
+                guarded: Vec::new(),
                 units: Vec::new(),
                 has_empty_clause: false,
                 statistics: ReductPreparationStatistics::default(),
@@ -192,6 +201,7 @@ impl PreparedReduct {
             nodes: Vec::new(),
             gates: HashMap::new(),
             strict: Vec::new(),
+            scratch: Vec::new(),
         };
         let result = builder
             .reserve(&shape, limits, statistics)
@@ -221,7 +231,7 @@ impl PreparedReduct {
     }
 
     pub(crate) fn parameter_count(&self) -> usize {
-        self.0.theory.atom_count() + self.0.implications.len()
+        self.0.theory.atom_count() + self.0.guarded.len()
     }
 
     /// Actual completed construction and retained result storage.
@@ -235,7 +245,7 @@ impl Data {
     fn bytes(&self) -> u128 {
         size_of::<Self>() as u128
             + self.cnf.retained_bytes()
-            + (self.implications.capacity() as u128 + self.units.capacity() as u128)
+            + (self.guarded.capacity() as u128 + self.units.capacity() as u128)
                 * size_of::<usize>() as u128
     }
 }
@@ -243,50 +253,54 @@ impl Data {
 struct Shape {
     inputs: usize,
     nodes: usize,
-    implications: usize,
+    guarded: usize,
     gates: usize,
     atoms: usize,
     clauses: usize,
     literals: usize,
+    scratch: usize,
 }
 
 impl Shape {
     fn new(
         theory: &Theory,
-        implications: usize,
+        guarded: usize,
         formula_gates: usize,
+        scratch: usize,
         limits: AdmissionLimits,
     ) -> Result<Self, Incomplete> {
         let atoms = theory.atom_count() as u128;
         let gates_bound = formula_gates as u128;
         let roots = theory.roots().len() as u128;
-        let imps = implications as u128;
+        let guards = guarded as u128;
         let narrow = |count| usize::try_from(count).map_err(|_| Incomplete::CounterOverflow);
-        let inputs = narrow(2 * atoms + imps)?;
+        let inputs = narrow(2 * atoms + guards)?;
         // A refused fresh variable can still follow a gate-map reservation.
         // Reserve the complete finite gate bound, including that failed attempt.
-        let gates = narrow(gates_bound + imps + atoms)?;
+        let gates = narrow(gates_bound + guards + atoms)?;
         Ok(Self {
             inputs,
             nodes: theory.nodes().len(),
-            implications,
+            guarded,
             gates,
             atoms: theory.atom_count(),
+            scratch,
             clauses: narrow(
-                (3 * gates_bound + 3 * imps + 4 * atoms + roots + 1)
+                (3 * gates_bound + 3 * guards + 4 * atoms + roots + 1)
                     .min(limits.max_clauses as u128),
             )?,
             literals: narrow(
-                (7 * gates_bound + 7 * imps + 10 * atoms + roots).min(limits.max_literals as u128),
+                (7 * gates_bound + 7 * guards + 10 * atoms + roots)
+                    .min(limits.max_literals as u128),
             )?,
         })
     }
 
     fn bytes(&self) -> u128 {
         size_of::<Builder>() as u128
-            + (self.clauses as u128 + self.literals as u128 + self.implications as u128)
+            + (self.clauses as u128 + self.literals as u128 + self.guarded as u128)
                 * size_of::<usize>() as u128
-            + self.nodes as u128 * size_of::<Encoded>() as u128
+            + (self.nodes as u128 + self.scratch as u128) * size_of::<Encoded>() as u128
             + self.gates as u128 * size_of::<((usize, usize), Literal)>() as u128
             + self.atoms as u128 * size_of::<Literal>() as u128
     }
@@ -297,6 +311,7 @@ struct Builder {
     nodes: Vec<Encoded>,
     gates: HashMap<(usize, usize), Literal>,
     strict: Vec<Literal>,
+    scratch: Vec<Encoded>,
 }
 
 impl Builder {
@@ -314,12 +329,16 @@ impl Builder {
             .map_err(|_| Incomplete::Allocation)?;
         self.observe(limits.max_bytes, statistics)?;
         self.data
-            .implications
-            .try_reserve_exact(shape.implications)
+            .guarded
+            .try_reserve_exact(shape.guarded)
             .map_err(|_| Incomplete::Allocation)?;
         self.observe(limits.max_bytes, statistics)?;
         self.strict
             .try_reserve_exact(shape.atoms)
+            .map_err(|_| Incomplete::Allocation)?;
+        self.observe(limits.max_bytes, statistics)?;
+        self.scratch
+            .try_reserve_exact(shape.scratch)
             .map_err(|_| Incomplete::Allocation)?;
         self.observe(limits.max_bytes, statistics)?;
         self.gates
@@ -331,9 +350,10 @@ impl Builder {
     fn bytes(&self) -> u128 {
         size_of::<Self>() as u128
             + self.data.cnf.retained_bytes()
-            + (self.data.implications.capacity() as u128 + self.data.units.capacity() as u128)
+            + (self.data.guarded.capacity() as u128 + self.data.units.capacity() as u128)
                 * size_of::<usize>() as u128
-            + self.nodes.capacity() as u128 * size_of::<Encoded>() as u128
+            + (self.nodes.capacity() as u128 + self.scratch.capacity() as u128)
+                * size_of::<Encoded>() as u128
             + self.strict.capacity() as u128 * size_of::<Literal>() as u128
             + self.gates.capacity() as u128 * size_of::<((usize, usize), Literal)>() as u128
     }
@@ -435,9 +455,22 @@ impl Builder {
                     &self.nodes,
                     budget,
                 )?,
+                NodeView::Threshold(threshold) => {
+                    let parameter = Literal::new(2 * atoms + self.data.guarded.len(), true);
+                    self.data.guarded.push(index);
+                    let value = encoding::gate_threshold(
+                        &mut self.data.cnf,
+                        &mut self.gates,
+                        threshold,
+                        &self.nodes,
+                        &mut self.scratch,
+                        budget,
+                    )?;
+                    self.gate(false, Encoded::Literal(parameter), value, budget)?
+                }
                 NodeView::Implies(left, right) => {
-                    let parameter = Literal::new(2 * atoms + self.data.implications.len(), true);
-                    self.data.implications.push(index);
+                    let parameter = Literal::new(2 * atoms + self.data.guarded.len(), true);
+                    self.data.guarded.push(index);
                     budget.tick()?;
                     let left = self.nodes[left].negated();
                     budget.tick()?;

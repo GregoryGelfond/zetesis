@@ -95,7 +95,7 @@ Multiple written bounds on one completed nonnegative tuple contribution set use
 [`append_aggregate_family`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/aggregate/family.rs).
 The source bridge evaluates every bound in order, retains its numeric or logical
 comparison meaning, then validates the existing DAG and tuple conditions once.
-One threshold table supplies the numeric roots; canonical remapping and the
+One shared contribution row supplies the native threshold roots; canonical remapping and the
 original conjunction retain both original and frozen-reduct truth. Logical
 constant guards still affect that conjunction and exclude optional numeric count
 capture. A false bound never suppresses evaluation of a later bound. The enclosing
@@ -137,16 +137,16 @@ required source warnings and errors. Value, storage, work and cancellation
 checks remain active.
 
 Independent compilations share the ground builder's `FormulaNodes` owner. It
-retains paired node and operand buffers and the extent of committed topology
+retains the node, operand and numeric arenas and the extent of committed topology
 validation; subsequent compilers inspect only the unchecked suffix. Reading
 borrows complete child rows. Checked logical appends extend a fully validated
-prefix; raw ingress remains unchecked. Append transactions own both suffixes. Rollback or
-detachment restores both lengths and the checkpoint's validation frontier;
+prefix; raw ingress remains unchecked. Append transactions own every arena suffix. Rollback or
+detachment restores their lengths and the checkpoint's validation frontier;
 validation discovered through newly appended arena cells is discarded with them.
 Canonical remapping cannot give replacement nodes removed validation. There is
 no second formula representation or cached aggregate result in this mechanism.
 Every call still checks its node and operand ceilings, tuple conditions and
-control. Raw paired constructors retain full validation.
+control. Raw constructors retain full validation.
 
 Final source admission consumes that same owner through
 `FormulaNodes::prepare_admission`, retaining topology evidence until its fixed

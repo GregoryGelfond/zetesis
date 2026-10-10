@@ -79,6 +79,32 @@ impl FormulaNodes {
         self.parts
     }
 
+    /// Append all native nonnegative thresholds over one shared ordered row.
+    /// No tuple or condition deduplication occurs; each supplied position contributes.
+    ///
+    /// # Errors
+    /// Refuses invalid child IDs, unequal columns, arithmetic overflow, dimension
+    /// limits or failed reservations. All graph lengths remain unchanged on error.
+    pub fn push_threshold_family(
+        &mut self,
+        conditions: &[usize],
+        weights: &[u64],
+        bounds: &[i128],
+        max_nodes: usize,
+        max_operands: usize,
+    ) -> Result<Vec<usize>, crate::AdmissionError> {
+        let mut transaction = self.transaction();
+        let roots = transaction.push_threshold_family(
+            conditions,
+            weights,
+            bounds,
+            max_nodes,
+            max_operands,
+        )?;
+        transaction.commit();
+        Ok(roots)
+    }
+
     /// Compile one scalar aggregate, committing both suffixes only on success.
     ///
     /// # Errors

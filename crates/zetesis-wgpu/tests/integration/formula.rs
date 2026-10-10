@@ -36,6 +36,15 @@ fn values(theory: &Theory, bits: usize, frozen: Option<&[bool]>) -> Vec<bool> {
             NodeView::And(children) => children.iter().all(|&child| out[child]),
             NodeView::Or(children) => children.iter().any(|&child| out[child]),
             NodeView::Implies(a, b) => !out[a] || out[b],
+            NodeView::Threshold(row) => {
+                row.conditions
+                    .iter()
+                    .zip(row.weights)
+                    .filter(|(condition, _)| out[**condition])
+                    .map(|(_, &weight)| i128::from(weight))
+                    .sum::<i128>()
+                    >= row.bound
+            }
         };
         out.push(truth && frozen.is_none_or(|mask| mask[index]));
     }

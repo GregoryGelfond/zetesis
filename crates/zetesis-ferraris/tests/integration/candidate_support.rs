@@ -537,9 +537,9 @@ fn shared_head_dags_do_not_expand_into_occurrence_trees() {
             nodes.push(Node::or_pair([previous, previous]));
         }
         let original = theory(1, nodes, vec![depth]);
-        // Every shared node expands once. Including operand visits and final
-        // admission (2N + E + R), each added level costs fifteen operations.
-        let complete_work = 15 * u64::try_from(depth).unwrap() + 82;
+        // Every shared node expands once. Copy/recount visits each inline node
+        // twice; admission still visits 2N + E + R. Each level costs fourteen.
+        let complete_work = 14 * u64::try_from(depth).unwrap() + 83;
         let attempt = support_restriction(
             &original,
             SupportLimits {
@@ -565,4 +565,54 @@ fn shared_head_dags_do_not_expand_into_occurrence_trees() {
             Err(SupportError::Stopped(Stop::WorkLimit))
         ));
     }
+}
+
+#[test]
+fn support_charges_unused_numeric_copy_and_admission() {
+    use zetesis_ferraris::{ContributionRow, FormulaParts, ThresholdDescriptor};
+
+    let nodes = vec![Node::atom(0), Node::atom(1), Node::or_pair([0, 1])];
+    let ordinary = Theory::new(
+        2,
+        FormulaParts::new(nodes.clone(), vec![]).unwrap(),
+        vec![2],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let complete = Theory::new(
+        2,
+        FormulaParts::from_raw(
+            nodes,
+            vec![0; 3],
+            vec![0; 5],
+            vec![7; 5],
+            vec![
+                ContributionRow {
+                    start: 0,
+                    length: 2,
+                },
+                ContributionRow {
+                    start: 2,
+                    length: 1,
+                },
+            ],
+            vec![
+                ThresholdDescriptor { row: 0, bound: 2 },
+                ThresholdDescriptor { row: 0, bound: 3 },
+                ThresholdDescriptor { row: 1, bound: 7 },
+            ],
+        )
+        .unwrap(),
+        vec![2],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let cancellation = Cancellation::default();
+    let baseline = support_restriction(&ordinary, limits(), &cancellation);
+    let measured = support_restriction(&complete, limits(), &cancellation);
+    assert!(baseline.result.unwrap().is_some());
+    assert!(measured.result.unwrap().is_some());
+    // Eighteen extra physical cells are copied; admission visits two rows,
+    // their three declared entries, and three descriptors independently.
+    assert_eq!(measured.work, baseline.work + 18 + 2 + 3 + 3);
 }

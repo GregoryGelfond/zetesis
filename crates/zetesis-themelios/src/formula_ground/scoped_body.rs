@@ -8,6 +8,8 @@
 //! nodes consume the retained query ceiling. No roots, producers, coherence or
 //! support-guard completion from scratch reach the original program.
 
+mod threshold;
+
 use crate::formula_binding::Binding;
 
 use super::{Builder, Node, Purpose, atoms::Catalog};
@@ -132,6 +134,27 @@ impl ValidatedBody {
                     }
                     activity
                 }
+                Node::Threshold(row) => {
+                    let mut lower = 0_i128;
+                    let mut upper = 0_i128;
+                    for (&condition, &weight) in row.conditions.iter().zip(row.weights) {
+                        context.counters.work(context.limits, context.location)?;
+                        let activity = values.slice()[condition];
+                        if activity == Activity::Required {
+                            lower += i128::from(weight);
+                        }
+                        if activity != Activity::Absent {
+                            upper += i128::from(weight);
+                        }
+                    }
+                    if lower >= row.bound {
+                        Activity::Required
+                    } else if upper < row.bound {
+                        Activity::Absent
+                    } else {
+                        Activity::Optional
+                    }
+                }
                 Node::Implies(left, right) => {
                     context
                         .counters
@@ -177,6 +200,7 @@ impl ValidatedBody {
                 let pair;
                 let row = match self.nodes.view().node(index).expect("owned formula node") {
                     Node::And(row) | Node::Or(row) => row,
+                    Node::Threshold(row) => row.conditions,
                     Node::Implies(a, b) => {
                         pair = [a, b];
                         &pair
@@ -233,6 +257,11 @@ impl ValidatedBody {
                     }
                     mapping.slice_mut()[index] =
                         previous.expect("stored groups have at least two children");
+                    continue;
+                }
+                Node::Threshold(row) => {
+                    mapping.slice_mut()[index] =
+                        threshold::lower(row, mapping.slice(), &mut query, context)?;
                     continue;
                 }
                 Node::Implies(left, right) => {

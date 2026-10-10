@@ -10,6 +10,8 @@
 #![forbid(unsafe_code)]
 
 mod theory;
+mod threshold;
+pub mod threshold_lowering;
 mod oracle;
 mod evaluation;
 mod reduct;
@@ -47,8 +49,9 @@ pub use regions::{
     Producers, RegionLimits, producers,
 };
 pub use theory::{
-    AdmissionError, AdmissionLimits, FormulaParts, FormulaSuffix, FormulaTransaction, FormulaView,
-    Interpretation, InterpretationWords, Node, NodeView, OperandSpan, Theory, TheoryAdmission,
+    AdmissionError, AdmissionLimits, ContributionRow, FormulaParts, FormulaSuffix,
+    FormulaTransaction, FormulaView, Interpretation, InterpretationWords, Node, NodeView,
+    OperandSpan, Theory, TheoryAdmission, Threshold, ThresholdDescriptor,
 };
 pub use zetesis_cpu::regions::{Narrowing, Region};
 

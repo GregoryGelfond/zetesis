@@ -850,3 +850,63 @@ fn native_tight_rows_retain_tail_and_complete_scan_allowance() {
         }
     }
 }
+
+#[test]
+fn threshold_producer_bodies_use_physical_result_addresses() {
+    use zetesis_ferraris::{FormulaNodes, FormulaParts, NodeView, Threshold};
+    let mut nodes = FormulaNodes::new(
+        FormulaParts::new(vec![Node::atom(0), Node::atom(1), Node::atom(2)], vec![]).unwrap(),
+    );
+    let mut transaction = nodes.transaction();
+    let mut roots = vec![0];
+    for atom in 0..2 {
+        let body = transaction
+            .push(
+                NodeView::Threshold(Threshold {
+                    conditions: &[atom, atom],
+                    weights: &[1, 2],
+                    bound: 2,
+                }),
+                usize::MAX,
+                usize::MAX,
+            )
+            .unwrap();
+        roots.push(
+            transaction
+                .push(NodeView::Implies(body, atom + 1), usize::MAX, usize::MAX)
+                .unwrap(),
+        );
+    }
+    transaction.commit();
+    let theory = Theory::new(3, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap();
+    let certificate = TightPlan::compile(
+        &theory,
+        TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    for support in [TightSupport::Atomic, TightSupport::Grouped] {
+        let graph = Graph::new(
+            &certificate,
+            Packing {
+                device: &wgpu::Limits::default(),
+                support,
+            },
+        )
+        .unwrap();
+        let packed = graph.pack(&certificate, &Cancellation::default()).unwrap();
+        assert!(graph.nodes as usize > theory.nodes().len());
+        for record in packed
+            .producers
+            .chunks_exact(4)
+            .take(graph.producers as usize)
+        {
+            if record[2] != 0 {
+                let physical = record[1] as usize;
+                assert_eq!(packed.nodes[physical * 4], 3);
+                let root = packed.roots[record[0] as usize];
+                assert_eq!(packed.nodes[root as usize * 4 + 1], record[1]);
+            }
+        }
+    }
+}

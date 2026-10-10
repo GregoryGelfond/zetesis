@@ -175,7 +175,6 @@ impl Builder<'_, '_, '_> {
             max_guards,
         };
         let cancellation = self.counters.cancellation().cloned().unwrap_or_default();
-        let previous_operands = self.nodes.parts().operands().len();
         let mut transaction = self.nodes.transaction();
         let result = transaction.append_aggregate_family(elements, guards, limits, &cancellation);
         let work = match &result {
@@ -187,7 +186,6 @@ impl Builder<'_, '_, '_> {
         let build = result.map_err(|error| FormulaFailure::Aggregate { error, location })?;
         let appended = super::appended::detach(
             transaction,
-            previous_operands,
             self.computation,
             self.limits,
             &mut self.counters,

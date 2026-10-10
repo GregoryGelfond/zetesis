@@ -12,6 +12,7 @@ struct Shape {
     total: i128,
     negative: usize,
     nonzero: usize,
+    minimum: Option<i128>,
 }
 
 pub(in crate::objective_bound) fn prepare<'a>(
@@ -42,7 +43,10 @@ pub(in crate::objective_bound) fn prepare<'a>(
                 .ok_or_else(|| work.error(Kind::Overflow))?;
             shape.negative += 1;
         }
-        shape.nonzero += usize::from(weight != 0);
+        if weight != 0 {
+            shape.nonzero += 1;
+            shape.minimum = Some(shape.minimum.map_or(weight.abs(), |n| n.min(weight.abs())));
+        }
         shape.total = shape
             .total
             .checked_add(weight.abs())
@@ -58,7 +62,7 @@ pub(in crate::objective_bound) fn prepare<'a>(
         return Ok(original());
     };
     work.tick()?;
-    if !shape.fits(elements.len(), shifted, nodes, limits, work) {
+    if !shape.fits(shifted, limits) {
         return Ok(original());
     }
     let mut normalized = work.reserve(elements.len())?;
@@ -82,66 +86,24 @@ pub(in crate::objective_bound) fn prepare<'a>(
 }
 
 impl Shape {
-    fn fits(
-        &self,
-        count: usize,
-        shifted: i64,
-        prefix: &FormulaNodes,
-        limits: ObjectiveBoundLimits,
-        work: &Work<'_>,
-    ) -> bool {
+    fn fits(&self, shifted: i64, limits: ObjectiveBoundLimits) -> bool {
+        // Lt(k), Eq(k) request G(k), G(k), G(k+1). Extreme thresholds
+        // reduce to constants, conjunctions or disjunctions without numeric
+        // state. Interior thresholds share the two contribution columns.
+        let minimum = self.minimum.unwrap_or(0);
         let shifted = i128::from(shifted);
-        // Exact maximum requested by this caller's Lt(k), Eq(k) pair. Widen
-        // before the successor; out-of-range thresholds are Boolean constants.
-        let maximum = if shifted >= 0 && shifted < self.total {
-            shifted + 1
-        } else if shifted > 0 && shifted == self.total {
-            shifted
-        } else {
-            0
-        };
-        let Ok(maximum) = u128::try_from(maximum) else {
-            return false;
-        };
-        let count = count as u128;
-        let negative = self.negative as u128;
-        let prefix_nodes = prefix.view().len() as u128;
-        let prefix_operands = prefix.parts().occurrences() as u128;
-        let cells = maximum * self.nonzero as u128;
-        let states = if maximum == 0 { 0 } else { 2 * (maximum + 1) };
-        // Reject before multiplying the work estimate; selected cell counts
-        // are bounded by the caller's addressable node capacity.
-        if states > limits.aggregate.max_states as u128
-            || cells > limits.aggregate.max_nodes as u128 / 2
-        {
-            return false;
-        }
-        // Two scans of 2^n subsets are mandatory on the signed path, independent
-        // of which subsets fail. Cell count is a scheduling heuristic, not a
-        // runtime guarantee; an unrepresentable subset count is already refused.
-        let subset_visits = u32::try_from(count)
-            .ok()
-            .and_then(|power| 1u128.checked_shl(power))
-            .and_then(|subsets| subsets.checked_mul(2))
-            .unwrap_or(u128::MAX);
-        let nodes = prefix_nodes + negative + 2 * cells + 7;
-        let operands = prefix_operands + 2 * negative + 4 * cells + 12;
-        let row_work = if maximum == 0 {
+        let thresholds = [shifted, shifted, shifted + 1]
+            .into_iter()
+            .filter(|&bound| bound > minimum && bound <= self.total - minimum)
+            .count();
+        let states = if thresholds == 0 {
             0
         } else {
-            maximum + 1 + count + 7 * cells
+            2 * self.nonzero as u128 + thresholds as u128
         };
-        // Checked construction retains prefix validation. Charge input visits,
-        // constants, both guard scans and their connective operand visits.
-        let family_work = 18 + count + row_work;
-        let normalize_work = count + 3 * negative;
-        let remaining = u128::from(limits.max_work - work.statistics.work);
-        cells <= subset_visits
-            && nodes <= limits.aggregate.max_nodes as u128
-            && operands <= limits.aggregate.max_operands as u128
-            && family_work <= u128::from(limits.aggregate.max_work)
-            // Two suffix appends; admission recounts nodes, checks topology
-            // and visits the sole root. Each edge occurrence remains charged.
-            && normalize_work + family_work + 6 + 2 * nodes + operands < remaining
+        // Only representation compatibility decides this choice. Actual node,
+        // operand and work admission belongs to the shared builder, so an
+        // estimate cannot reject a construction at its exact inclusive limit.
+        states <= limits.aggregate.max_states as u128
     }
 }

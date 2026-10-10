@@ -4,7 +4,7 @@ use super::{
     TightAttempt, TightError, TightPlan, TightPlanLimits, TightPlanStatistics, TightProducer,
     TightProducerKind, TightResource, Work, bytes, filled, reserve,
 };
-use crate::{NodeView, Theory};
+use crate::{NodeView, Theory, Threshold};
 use zetesis_cpu::{Cancellation, Stop};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -30,7 +30,9 @@ impl TightPlan {
     /// atomic choices `h ∨ not h` (optionally with a body), falsum and default
     /// negations. Bodies admit atoms, falsum, conjunction, disjunction and
     /// default negation; a negation freezes its whole interior. General
-    /// disjunctions, unnegated body implications and positive cycles fall back.
+    /// Nonnegative thresholds preserve the body classification of their positive
+    /// contributions; zero weights add no rank edge. General head disjunctions,
+    /// unnegated body implications and positive cycles fall back.
     /// Every root is inspected, including constraints and candidate guards.
     ///
     /// # Errors
@@ -136,7 +138,35 @@ fn classify_node(
         NodeView::And(operands) | NodeView::Or(operands) => {
             classify_operands(operands, classes, work)
         }
+        NodeView::Threshold(threshold) => classify_threshold(threshold, classes, work),
     }
+}
+
+fn classify_threshold(
+    threshold: Threshold<'_>,
+    classes: &[Body],
+    work: &mut Work<'_>,
+) -> Result<Body, TightError> {
+    let mut total = 0_i128;
+    let mut class = Body::Frozen;
+    for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
+        work.tick()?;
+        total = total
+            .checked_add(i128::from(weight))
+            .ok_or(Stop::InvalidProgram)?;
+        if weight != 0 {
+            class = match (class, classes[child]) {
+                (Body::Opaque, _) | (_, Body::Opaque) => Body::Opaque,
+                (Body::Frozen, Body::Frozen) => Body::Frozen,
+                _ => Body::Positive,
+            };
+        }
+    }
+    Ok(if threshold.bound <= 0 || threshold.bound > total {
+        Body::Frozen
+    } else {
+        class
+    })
 }
 
 fn classify_operands(
@@ -252,6 +282,14 @@ fn each_dependency(
                 for &child in operands {
                     work.tick()?;
                     if classes[child] == Body::Positive {
+                        visit(offset + child, offset + index, false)?;
+                    }
+                }
+            }
+            NodeView::Threshold(threshold) if classes[index] == Body::Positive => {
+                for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
+                    work.tick()?;
+                    if weight != 0 && classes[child] == Body::Positive {
                         visit(offset + child, offset + index, false)?;
                     }
                 }
@@ -430,6 +468,16 @@ fn validate_ranks(
                 NodeView::Atom(atom) => ranks[atom],
                 NodeView::And(operands) | NodeView::Or(operands) if class == Body::Positive => {
                     maximum_operand(operands, &maximum, work)?
+                }
+                NodeView::Threshold(threshold) if class == Body::Positive => {
+                    let mut value = 0;
+                    for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
+                        work.tick()?;
+                        if weight != 0 && classes[child] == Body::Positive {
+                            value = value.max(maximum[child]);
+                        }
+                    }
+                    value
                 }
                 _ => 0,
             },

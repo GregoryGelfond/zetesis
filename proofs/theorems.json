@@ -7790,6 +7790,51 @@
     "line": 368
   },
   {
+    "name": "Zetesis.ThresholdPropagation.masked_sum_mono",
+    "file": "Zetesis/ThresholdPropagation.lean",
+    "line": 33
+  },
+  {
+    "name": "Zetesis.ThresholdPropagation.sum_bounds",
+    "file": "Zetesis/ThresholdPropagation.lean",
+    "line": 52
+  },
+  {
+    "name": "Zetesis.ThresholdPropagation.threshold_of_lower",
+    "file": "Zetesis/ThresholdPropagation.lean",
+    "line": 60
+  },
+  {
+    "name": "Zetesis.ThresholdPropagation.threshold_absent_of_upper",
+    "file": "Zetesis/ThresholdPropagation.lean",
+    "line": 68
+  },
+  {
+    "name": "Zetesis.ThresholdPropagation.assigned_sum",
+    "file": "Zetesis/ThresholdPropagation.lean",
+    "line": 87
+  },
+  {
+    "name": "Zetesis.ThresholdPropagation.condition_required_true",
+    "file": "Zetesis/ThresholdPropagation.lean",
+    "line": 108
+  },
+  {
+    "name": "Zetesis.ThresholdPropagation.condition_required_false",
+    "file": "Zetesis/ThresholdPropagation.lean",
+    "line": 132
+  },
+  {
+    "name": "Zetesis.ThresholdPropagation.formula_of_lower",
+    "file": "Zetesis/ThresholdPropagation.lean",
+    "line": 155
+  },
+  {
+    "name": "Zetesis.ThresholdPropagation.formula_absent_of_upper",
+    "file": "Zetesis/ThresholdPropagation.lean",
+    "line": 165
+  },
+  {
     "name": "Zetesis.ThresholdReduct.original",
     "file": "Zetesis/ThresholdReduct.lean",
     "line": 51

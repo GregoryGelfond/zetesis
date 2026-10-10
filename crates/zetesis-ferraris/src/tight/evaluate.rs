@@ -44,7 +44,8 @@ impl TightPlan {
 /// producers. Capacity survives checks and interruptions; no candidate truth
 /// survives as evidence. Each conjunction or disjunction reads operands only
 /// through its first decisive value. Checks are bounded by nodes, operand
-/// occurrences, tested roots, producers and packed candidate words. Truth uses
+/// occurrences, tested roots, producers and packed candidate words. Thresholds
+/// read and charge every contribution, including zero weights. Truth uses
 /// one byte per node; support uses one bit per atom, rounded to 32-bit words.
 /// Each concurrent checker owns an exclusive workspace; immutable plans may be
 /// shared.
@@ -187,6 +188,10 @@ fn evaluate_truth(
                 NodeView::False => false,
                 NodeView::And(operands) => evaluate_operands(operands, values, true, work)?,
                 NodeView::Or(operands) => evaluate_operands(operands, values, false, work)?,
+                NodeView::Threshold(threshold) => threshold.evaluate::<TightError>(|child| {
+                    work.tick()?;
+                    Ok(values[child] != 0)
+                })?,
                 NodeView::Implies(a, b) => {
                     work.tick()?;
                     let left = values[a];

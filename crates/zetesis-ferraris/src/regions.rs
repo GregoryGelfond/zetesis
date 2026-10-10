@@ -50,6 +50,7 @@ use crate::{FormulaView, NodeView, Theory};
 mod adjacency;
 mod counters;
 mod masks;
+mod thresholds;
 use adjacency::Adjacency;
 use counters::{Count, Counters, compact_fits};
 use masks::Masks;
@@ -432,6 +433,7 @@ pub struct Narrower {
     atom_operands: Adjacency,
     /// Largest chain length or initial per-atom parent-occurrence count.
     counter_bound: usize,
+    thresholds: thresholds::Thresholds,
     /// Logical indexing visits: each native node and operand occurrence.
     work: u64,
 }
@@ -463,7 +465,9 @@ fn connective_operands(node: NodeView<'_>) -> Option<(bool, &[usize])> {
     match node {
         NodeView::Or(operands) => Some((true, operands)),
         NodeView::And(operands) => Some((false, operands)),
-        NodeView::Atom(_) | NodeView::False | NodeView::Implies(_, _) => None,
+        NodeView::Atom(_) | NodeView::False | NodeView::Implies(_, _) | NodeView::Threshold(_) => {
+            None
+        }
     }
 }
 
@@ -482,6 +486,7 @@ fn absorbed_nodes(theory: &Theory) -> Vec<bool> {
         let operands = match nodes.node(index).expect("admitted node") {
             NodeView::Atom(_) | NodeView::False => continue,
             NodeView::And(operands) | NodeView::Or(operands) => operands,
+            NodeView::Threshold(row) => row.conditions,
             NodeView::Implies(a, b) => {
                 pair = [a, b];
                 &pair
@@ -573,7 +578,8 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>)
 /// value knows nothing and is seeded in full on first use.
 ///
 /// A value is linear in the theory: a bit pair over the nodes and one over
-/// the atoms, a counter and witness bit per chain and a count per atom; the worklists of
+/// the atoms, a counter and witness bit per chain, a count per atom and processed state per
+/// shared threshold row; the worklists of
 /// a narrowing belong to the walker's [`NarrowingScratch`]. Its counters
 /// have one width, chosen when the root value is made.
 /// A split that offers one child to another worker clones it, so the
@@ -694,6 +700,7 @@ impl<C: Count> Known<C> {
     /// [`Knowledge`] header is counted by its owner.
     fn retained_bytes(&self) -> u128 {
         self.masks.words.len() as u128 * size_of::<u64>() as u128
+            + self.thresholds.len() as u128 * size_of::<thresholds::State>() as u128
             + [&self.neutral_operands, &self.unknown]
                 .into_iter()
                 .map(Counters::allocated_bytes)
@@ -738,7 +745,12 @@ fn dependencies<'a>(
 /// Distinct nodes with the same atom therefore contribute separately, even
 /// when they share a parent. The sum is bounded by the allocated parent table.
 /// This visits chain lengths and atom-node rows once during index construction.
-fn counter_bound(chains: &[Chain], parents: &Adjacency, atom_nodes: &Adjacency) -> usize {
+fn counter_bound(
+    chains: &[Chain],
+    parents: &Adjacency,
+    atom_nodes: &Adjacency,
+    thresholds: &thresholds::Thresholds,
+) -> usize {
     let chain_bound = chains
         .iter()
         .map(|chain| chain.operands.len())
@@ -748,6 +760,7 @@ fn counter_bound(chains: &[Chain], parents: &Adjacency, atom_nodes: &Adjacency) 
         let occurrences = nodes.iter().fold(0usize, |count, &node| {
             count
                 .checked_add(parents[node].len())
+                .and_then(|count| count.checked_add(thresholds.parent_count(node)))
                 .expect("atom parent occurrences fit their allocated table")
         });
         bound.max(occurrences)
@@ -791,16 +804,17 @@ impl Narrower {
     pub fn try_new(theory: &Theory) -> Result<Self, Stop> {
         let nodes = theory.view();
         let (chains, chain_of, absorbed) = chains(theory);
+        let thresholds = thresholds::Thresholds::prepare(theory)?;
         let parents = Adjacency::build(nodes.len(), dependencies(nodes, &chains))?;
         let atom_operands = Adjacency::try_build(
             nodes.len(),
-            dependencies(nodes, &chains).filter_map(|(operand, parent)| {
-                match nodes.node(operand) {
+            dependencies(nodes, &chains)
+                .chain(thresholds.dependencies())
+                .filter_map(|(operand, parent)| match nodes.node(operand) {
                     Ok(NodeView::Atom(atom)) => Some(Ok((parent, atom))),
                     Ok(_) => None,
                     Err(_) => Some(Err(Stop::InvalidProgram)),
-                }
-            }),
+                }),
         )?;
         let atom_nodes = Adjacency::try_build(
             theory.atom_count(),
@@ -810,7 +824,7 @@ impl Narrower {
                 Err(_) => Some(Err(Stop::InvalidProgram)),
             }),
         )?;
-        let counter_bound = counter_bound(&chains, &parents, &atom_nodes);
+        let counter_bound = counter_bound(&chains, &parents, &atom_nodes, &thresholds);
         Ok(Self {
             parents,
             atom_nodes,
@@ -819,6 +833,7 @@ impl Narrower {
             absorbed,
             atom_operands,
             counter_bound,
+            thresholds,
             work: u64::try_from(nodes.len() as u128 + theory.parts().occurrences() as u128)
                 .map_err(|_| Stop::Allocation)?,
         })
@@ -849,10 +864,15 @@ impl Narrower {
         let mut unknown = Counters::zeros(self.atom_nodes.len());
         for (atom, nodes) in self.atom_nodes.iter().enumerate() {
             for &node in nodes {
-                unknown.add(atom, self.parents[node].len());
+                unknown.add(
+                    atom,
+                    self.parents[node].len() + self.thresholds.parent_count(node),
+                );
             }
         }
-        Known::empty(self.parents.len(), self.chains.len(), unknown)
+        let mut known = Known::empty(self.parents.len(), self.chains.len(), unknown);
+        known.thresholds = self.thresholds.knowledge();
+        known
     }
 
     /// Narrow the region to the fixed point of the closure's rules from
@@ -1147,6 +1167,8 @@ struct Known<C> {
     /// A parent is counted once here and taken off once when it is
     /// revisited, so the count never goes below zero.
     unknown: Counters<C>,
+    /// Processed sums, required bounds and monotone cursors per shared row.
+    thresholds: Box<[thresholds::State]>,
     /// The roots, falsum and every atom's support have been seeded once;
     /// later closures learn only decisions not yet known.
     seeded: bool,
@@ -1158,6 +1180,7 @@ impl<C: Clone> Clone for Known<C> {
             masks: self.masks.clone(),
             neutral_operands: self.neutral_operands.clone(),
             unknown: self.unknown.clone(),
+            thresholds: self.thresholds.clone(),
             seeded: self.seeded,
         }
     }
@@ -1166,6 +1189,7 @@ impl<C: Clone> Clone for Known<C> {
         self.masks.clone_from(&source.masks);
         self.neutral_operands.clone_from(&source.neutral_operands);
         self.unknown.clone_from(&source.unknown);
+        self.thresholds.clone_from(&source.thresholds);
         self.seeded = source.seeded;
     }
 }
@@ -1256,6 +1280,7 @@ struct KnownMut<'a, C> {
     witnessed: &'a mut [u64],
     neutral_operands: &'a mut Counters<C>,
     unknown: &'a mut Counters<C>,
+    thresholds: &'a mut [thresholds::State],
     seeded: &'a mut bool,
 }
 
@@ -1271,6 +1296,7 @@ impl<C> Known<C> {
             witnessed,
             neutral_operands: &mut self.neutral_operands,
             unknown: &mut self.unknown,
+            thresholds: &mut self.thresholds,
             seeded: &mut self.seeded,
         }
     }
@@ -1328,6 +1354,7 @@ impl<C: Count> Known<C> {
             masks: Masks::empty(nodes, unknown.len(), chains),
             neutral_operands: Counters::zeros(chains),
             unknown,
+            thresholds: Box::default(),
             seeded: false,
         }
     }
@@ -1427,6 +1454,10 @@ impl<C: Count> Closure<'_, C> {
                     }
                 }
             }
+            step = step.join(self.seed_thresholds(index, frozen, work)?);
+            if step == Step::Contradiction {
+                return Ok(step);
+            }
             for &root in theory.roots() {
                 step = step.join(self.sure(root));
                 if step == Step::Contradiction {
@@ -1517,6 +1548,10 @@ impl<C: Count> Closure<'_, C> {
                     }
                 }
             }
+        }
+        step = step.join(self.threshold_condition(index, node, value, frozen, work)?);
+        if step == Step::Contradiction {
+            return Ok(step);
         }
         for &parent in &index.parents[node] {
             work.tick()?;
@@ -1663,6 +1698,9 @@ impl<C: Count> Closure<'_, C> {
             NodeView::False if bit(self.known.sure, node) => Step::Contradiction,
             NodeView::False | NodeView::And(..) | NodeView::Or(..) => Step::Unchanged,
             NodeView::Implies(a, b) => self.teach_implication(node, a, b),
+            NodeView::Threshold(row) => {
+                self.threshold_guard(index, theory, node, row.bound, frozen, work)?
+            }
         })
     }
 

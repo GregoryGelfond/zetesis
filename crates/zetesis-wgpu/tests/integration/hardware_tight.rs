@@ -1,6 +1,8 @@
 //! Explicit physical qualification of complete-theory ranked support checking.
 //! These tests select Metal or Vulkan; adapter absence never silently skips qualification.
 
+mod native;
+
 use crate::support::physical;
 
 use zetesis_backend::GpuApi;
@@ -324,6 +326,7 @@ fn qualify_support_matches_exact_reduct_semantics(backend: GpuApi, support: Tigh
         .sum();
     assert_eq!(compared, 370);
     println!("tight support exact candidate occurrences={compared}");
+    native::qualify(&mut oracle);
 }
 
 #[test]

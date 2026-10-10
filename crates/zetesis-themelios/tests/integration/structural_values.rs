@@ -363,6 +363,15 @@ fn formula_values(
         let node = theory.view().node(index).unwrap();
         let truth = match node {
             zetesis_ferraris::NodeView::False => false,
+            zetesis_ferraris::NodeView::Threshold(row) => {
+                row.conditions
+                    .iter()
+                    .zip(row.weights)
+                    .filter(|(child, _)| result[**child])
+                    .map(|(_, weight)| i128::from(*weight))
+                    .sum::<i128>()
+                    >= row.bound
+            }
             zetesis_ferraris::NodeView::Atom(atom) => bits & (1 << atom) != 0,
             zetesis_ferraris::NodeView::And(row) => row.iter().all(|&child| result[child]),
             zetesis_ferraris::NodeView::Or(row) => row.iter().any(|&child| result[child]),

@@ -172,3 +172,5 @@ import Zetesis.SupportTransposition
 import Zetesis.FactRejection
 import Zetesis.StratifiedEvaluation
 import Zetesis.RequiredChoiceCosts
+
+import Zetesis.ThresholdPropagation

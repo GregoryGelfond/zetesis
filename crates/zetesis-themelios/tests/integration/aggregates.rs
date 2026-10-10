@@ -263,3 +263,21 @@ fn shared_choice_guards_preserve_prefix_origins() {
         source.get(start..end) == Some("1{a;b;c}1.")
     }));
 }
+
+#[test]
+fn source_count_uses_native_storage_and_retains_all_answers() {
+    let source = include_str!("../fixtures/native-count.lp");
+    let input = formula(source);
+    assert!(!input.theory().parts().thresholds().is_empty());
+    assert_eq!(
+        models(&input),
+        expected(&[
+            "p(1).p(2).valid.",
+            "p(1).p(3).valid.",
+            "p(1).p(4).valid.",
+            "p(2).p(3).valid.",
+            "p(2).p(4).valid.",
+            "p(3).p(4).valid.",
+        ])
+    );
+}

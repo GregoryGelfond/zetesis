@@ -164,3 +164,26 @@ fn simultaneously_materialized_source_families_use_memory() {
         0
     );
 }
+
+#[test]
+fn all_formula_arenas_fit_their_dimension_shares() {
+    use zetesis_ferraris::{ContributionRow, Node, ThresholdDescriptor};
+
+    for memory in [0, 1, 63, 1024, Resources::REFERENCE_MEMORY, u64::MAX] {
+        let resources = Resources::new(memory, NonZeroUsize::MIN);
+        let limits = resources.formula_limits().theory;
+        // The library independently admits each arena up to its dimension,
+        // including cells that no semantic node references.
+        let nodes = limits.max_nodes as u128;
+        let operands = limits.max_operands as u128;
+        let allowance = resources.bytes(4) as u128;
+        let descriptors = nodes * size_of::<Node>() as u128
+            + nodes * size_of::<ContributionRow>() as u128
+            + nodes * size_of::<ThresholdDescriptor>() as u128;
+        let columns = operands * size_of::<usize>() as u128
+            + operands * size_of::<usize>() as u128
+            + operands * size_of::<u64>() as u128;
+        assert!(descriptors <= allowance, "memory={memory}");
+        assert!(columns <= allowance, "memory={memory}");
+    }
+}

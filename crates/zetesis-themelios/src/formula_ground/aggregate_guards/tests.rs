@@ -19,18 +19,34 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AggregateErrorKind, AggregateExtremum, Interpretation, Limits, models, models_reduct,
 };
-use zetesis_ferraris::{FormulaNodes, FormulaParts, NodeView as Node, Theory, append_aggregate};
+use zetesis_ferraris::{
+    ContributionRow, FormulaNodes, NodeView as Node, Theory, ThresholdDescriptor, append_aggregate,
+};
 
 fn copy(nodes: &FormulaNodes) -> FormulaNodes {
-    let (nodes, operands) = snapshot(nodes);
-    FormulaNodes::new(FormulaParts::new(nodes, operands).unwrap())
+    FormulaNodes::new(nodes.parts().try_clone().unwrap())
 }
 
-fn snapshot(nodes: &FormulaNodes) -> (Vec<zetesis_ferraris::Node>, Vec<usize>) {
-    (
-        nodes.parts().nodes().to_vec(),
-        nodes.parts().operands().to_vec(),
-    )
+#[derive(Debug, PartialEq, Eq)]
+struct Snapshot {
+    nodes: Vec<zetesis_ferraris::Node>,
+    operands: Vec<usize>,
+    conditions: Vec<usize>,
+    weights: Vec<u64>,
+    rows: Vec<ContributionRow>,
+    thresholds: Vec<ThresholdDescriptor>,
+}
+
+fn snapshot(nodes: &FormulaNodes) -> Snapshot {
+    let parts = nodes.parts();
+    Snapshot {
+        nodes: parts.nodes().to_vec(),
+        operands: parts.operands().to_vec(),
+        conditions: parts.conditions().to_vec(),
+        weights: parts.weights().to_vec(),
+        rows: parts.rows().to_vec(),
+        thresholds: parts.thresholds().to_vec(),
+    }
 }
 
 fn location() -> ProgramSite {
@@ -175,6 +191,7 @@ fn compare_truth(grouped: &Theory, scalar: &Theory) {
 
 #[test]
 fn grouped_guards_preserve_scalar_frozen_truth() {
+    let mut native_cases = 0;
     for guards in [
         sample(),
         [
@@ -233,10 +250,18 @@ fn grouped_guards_preserve_scalar_frozen_truth() {
                     builder.limits.theory,
                 )
                 .unwrap();
+                if !grouped.parts().thresholds().is_empty() {
+                    assert!(!scalar.parts().thresholds().is_empty());
+                    native_cases += 1;
+                }
                 compare_truth(&grouped, &scalar);
             },
         );
     }
+    assert!(
+        native_cases > 0,
+        "the comparison must exercise native storage"
+    );
 }
 
 #[test]

@@ -39,6 +39,10 @@ fn pair(theory: &Theory, positive: usize, negative: usize) -> Option<usize> {
 fn is_atom(node: NodeView<'_>, atom: usize) -> bool {
     match node {
         NodeView::Atom(other) => other == atom,
-        NodeView::False | NodeView::Implies(..) | NodeView::And(_) | NodeView::Or(_) => false,
+        NodeView::False
+        | NodeView::Implies(..)
+        | NodeView::And(_)
+        | NodeView::Or(_)
+        | NodeView::Threshold(_) => false,
     }
 }

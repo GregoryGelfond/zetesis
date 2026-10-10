@@ -27,6 +27,15 @@ and its separate source/artifact inventories identify the refreshed native
 extraction and adaptations. [native-verification.json](native-verification.json) records the package build and
 complete native axiom audit separately from source identity.
 
+The current Rust formula representation additionally admits native nonnegative
+weighted thresholds. The retained `Native` extraction predates that constructor;
+its source hashes and replay guard must remain tied to the Boolean generation.
+Its theorems therefore do not yet certify the threshold-aware Rust entrypoints,
+even on Boolean input. Migrating admission, numeric rows, evaluation and their
+composition requires new extracted operations and proofs. The general
+`ThresholdReduct` laws supply the semantic bridge; they are not that executable
+refinement.
+
 ## Native operand-row getters
 
 [`NativeRows`](NativeRows.lean) proves the actual generated `read_span`,

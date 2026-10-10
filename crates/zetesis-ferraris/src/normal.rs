@@ -2,10 +2,7 @@
 
 use zetesis_core::GroundProgram;
 
-use crate::{
-    AdmissionError, AdmissionLimits, FormulaNodes, FormulaParts, FormulaTransaction, NodeView,
-    Theory,
-};
+use crate::{AdmissionError, AdmissionLimits, FormulaNodes, FormulaTransaction, NodeView, Theory};
 
 /// Translate an already bounded static normal program into Ferraris formulas.
 /// Atom indices remain the input graph's dense indices, including unused atoms.
@@ -124,11 +121,7 @@ pub fn from_ground_program_supported(
         return Err(AdmissionError::Limit);
     }
     let (offsets, bodies) = producers(program, &original)?;
-    let mut raw_nodes = reserve(original.nodes().len())?;
-    raw_nodes.extend_from_slice(original.nodes());
-    let mut operands = reserve(original.operands().len())?;
-    operands.extend_from_slice(original.operands());
-    let mut nodes = FormulaNodes::new(FormulaParts::new(raw_nodes, operands)?);
+    let mut nodes = FormulaNodes::new(original.view().try_to_parts()?);
     let mut roots = reserve(root_count)?;
     roots.extend_from_slice(original.roots());
     let mut transaction = nodes.transaction();

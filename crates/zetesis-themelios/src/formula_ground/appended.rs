@@ -3,7 +3,7 @@
 use crate::formula::ceiling;
 use crate::formula_support::{Computation, Counters, StorageLease};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource, ProgramSite};
-use zetesis_ferraris::{FormulaSuffix, FormulaTransaction, Node};
+use zetesis_ferraris::{FormulaSuffix, FormulaTransaction};
 
 pub(super) struct Detached {
     pub(super) suffix: FormulaSuffix,
@@ -12,19 +12,14 @@ pub(super) struct Detached {
 
 pub(super) fn detach(
     transaction: FormulaTransaction<'_>,
-    previous_operands: usize,
     computation: &Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<Detached, FormulaFailure> {
-    let count = transaction.view().len() - transaction.first();
-    let operands = transaction.parts().operands().len() - previous_operands;
     let mut storage = computation.lease();
     let header = size_of::<FormulaSuffix>();
-    let requested = header as u128
-        + count as u128 * size_of::<Node>() as u128
-        + operands as u128 * size_of::<usize>() as u128;
+    let requested = header as u128 + transaction.appended_payload_bytes();
     let allowance = computation.allowance(&storage, limits, location)?;
     ceiling(
         FormulaResource::SupportBytes,
@@ -32,13 +27,17 @@ pub(super) fn detach(
         limits.max_support_bytes as u128,
         location,
     )?;
-    counters.charge_work(count as u128 + operands as u128, limits, location)?;
+    counters.charge_work(transaction.appended_cells(), limits, location)?;
     let suffix = transaction
         .detach()
         .map_err(|error| FormulaFailure::Theory { error, location })?;
-    let actual = header
-        + suffix.parts().node_capacity() * size_of::<Node>()
-        + suffix.parts().operand_capacity() * size_of::<usize>();
+    let actual =
+        usize::try_from(header as u128 + suffix.parts().retained_bytes()).map_err(|_| {
+            FormulaFailure::Theory {
+                error: zetesis_ferraris::AdmissionError::Allocation,
+                location,
+            }
+        })?;
     storage.observe(actual, location)?;
     computation.storage_observed(&storage, 0, header, limits, counters, location)?;
     Ok(Detached {

@@ -1,9 +1,14 @@
 //! Aggregate-formula truth only; no source admission or stable-model solving.
 //!
 //! Separate populations measure preacquired-mask reduction, acquisition plus
-//! reduction, and existing public lowered-formula calls. The last route invokes
+//! reduction, and existing public compiled-formula calls. The last route invokes
 //! `models` and `models_reduct`, whose API recomputes original truth for the reduct.
 //! Group/lowering construction, worlds, masks and parity checks are outside timers.
+//! `ordinary_thresholds` separately compares the ordinary native representation
+//! with the previous shared Boolean DP on fixed inputs and interpretations.
+
+#[path = "native_aggregates/ordinary_thresholds.rs"]
+mod ordinary_thresholds;
 
 use std::{hint::black_box, time::Duration};
 
@@ -177,13 +182,8 @@ fn world(theory: &Theory, bits: usize) -> Interpretation {
 }
 
 fn lower(group: &Group, bound: i32) -> Theory {
-    let mut nodes = zetesis_ferraris::FormulaNodes::new(
-        zetesis_ferraris::FormulaParts::new(
-            group.theory().nodes().to_vec(),
-            group.theory().operands().to_vec(),
-        )
-        .unwrap(),
-    );
+    let mut nodes =
+        zetesis_ferraris::FormulaNodes::new(group.theory().parts().try_clone().unwrap());
     let root = match group.function() {
         Function::Min | Function::Max => {
             let elements: Vec<_> = group
@@ -347,7 +347,9 @@ fn native_aggregates(criterion: &mut Criterion) {
                 bencher.iter(|| black_box(fixture.acquire()));
             });
             benchmark.bench_function(
-                BenchmarkId::new("lowered_public_calls", &label),
+                // Previously `lowered_public_calls`: append_aggregate now emits
+                // native thresholds, so this is no longer a Boolean-DP baseline.
+                BenchmarkId::new("compiled_formula_public_calls", &label),
                 |bencher| bencher.iter(|| black_box(fixture.lowered())),
             );
         }
@@ -358,5 +360,6 @@ fn native_aggregates(criterion: &mut Criterion) {
 fn main() {
     let mut criterion = Criterion::default().configure_from_args();
     native_aggregates(&mut criterion);
+    ordinary_thresholds::bench(&mut criterion);
     criterion.final_summary();
 }

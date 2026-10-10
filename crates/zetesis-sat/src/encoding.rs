@@ -1,4 +1,4 @@
-use zetesis_ferraris::{Interpretation, NodeView, Theory};
+use zetesis_ferraris::{Interpretation, NodeView, Theory, Threshold, threshold_lowering};
 
 use crate::search::{Budget, Quota, storage};
 use crate::{AdmissionLimits, Assignment, Cnf, Incomplete, Literal};
@@ -34,6 +34,10 @@ fn frozen(
                 NodeView::False => false,
                 NodeView::And(operands) => truth_operands(operands, values, true, budget)?,
                 NodeView::Or(operands) => truth_operands(operands, values, false, budget)?,
+                NodeView::Threshold(threshold) => threshold.evaluate(|child| {
+                    budget.tick()?;
+                    Ok::<_, Incomplete>(values[child])
+                })?,
                 NodeView::Implies(a, b) => {
                     budget.tick()?;
                     let left = values[a];
@@ -85,6 +89,7 @@ pub(crate) struct Workspace {
     strict: Vec<Literal>,
     nodes: Vec<Encoded>,
     gates: HashMap<(usize, usize), Literal>,
+    scratch: Vec<Encoded>,
 }
 
 impl Workspace {
@@ -93,6 +98,7 @@ impl Workspace {
         self.strict.clear();
         self.nodes.clear();
         self.gates.clear();
+        self.scratch.clear();
     }
 
     pub(crate) fn reserve(
@@ -101,7 +107,7 @@ impl Workspace {
         limits: AdmissionLimits,
         budget: &mut Budget<'_, impl Quota>,
     ) -> Result<(), Incomplete> {
-        let gates = gate_count(theory, budget)?;
+        let (gates, scratch) = dimensions(theory, budget)?;
         let cnf = self
             .cnf
             .get_or_insert(Cnf::empty(theory.atom_count(), limits)?);
@@ -111,6 +117,7 @@ impl Workspace {
         reserve(&mut self.mask, theory.nodes().len())?;
         reserve(&mut self.nodes, theory.nodes().len())?;
         reserve(&mut self.strict, theory.atom_count())?;
+        reserve(&mut self.scratch, scratch)?;
         self.gates
             .try_reserve(gates.saturating_sub(self.gates.len()))
             .map_err(|_| Incomplete::Allocation)?;
@@ -124,7 +131,8 @@ impl Workspace {
             + self.cnf.as_ref().map_or(0, Cnf::retained_bytes)
             + self.mask.capacity() as u128 * size_of::<bool>() as u128
             + self.strict.capacity() as u128 * size_of::<Literal>() as u128
-            + self.nodes.capacity() as u128 * size_of::<Encoded>() as u128
+            + (self.nodes.capacity() + self.scratch.capacity()) as u128
+                * size_of::<Encoded>() as u128
             + self.gates.capacity() as u128 * size_of::<((usize, usize), Literal)>() as u128
     }
 
@@ -155,6 +163,7 @@ impl Workspace {
             candidate.map(|_| self.mask.as_slice()),
             &mut self.nodes,
             &mut self.gates,
+            &mut self.scratch,
             budget,
         )?;
         if let Some(candidate) = candidate {
@@ -176,33 +185,65 @@ impl Workspace {
     }
 }
 
-/// Count the exact number of unsimplified binary CNF gates used by native
-/// groups. Only metadata is inspected: every node costs one permit and each
-/// arity is read in constant time from the admitted view.
+/// Count unsimplified physical gates, including checked threshold expansion.
+#[cfg(test)]
 pub(crate) fn gate_count(
     theory: &Theory,
     budget: &mut Budget<'_, impl Quota>,
 ) -> Result<usize, Incomplete> {
-    let mut gates = 0usize;
-    for index in 0..theory.view().len() {
-        budget.tick()?;
-        gates = gates
-            .checked_add(node_gates(
-                theory
-                    .view()
-                    .node(index)
-                    .map_err(|_| Incomplete::InvalidWitness)?,
-            ))
-            .ok_or(Incomplete::CounterOverflow)?;
-    }
-    Ok(gates)
+    dimensions(theory, budget).map(|(gates, _)| gates)
 }
 
-pub(crate) fn node_gates(node: NodeView<'_>) -> usize {
-    match node {
-        NodeView::Atom(_) | NodeView::False => 0,
-        NodeView::Implies(_, _) => 1,
-        NodeView::And(operands) | NodeView::Or(operands) => operands.len().saturating_sub(1),
+fn dimensions(
+    theory: &Theory,
+    budget: &mut Budget<'_, impl Quota>,
+) -> Result<(usize, usize), Incomplete> {
+    let mut gates = 0usize;
+    let mut scratch = 0;
+    for index in 0..theory.view().len() {
+        budget.tick()?;
+        let node = theory
+            .view()
+            .node(index)
+            .map_err(|_| Incomplete::InvalidWitness)?;
+        let (count, temporary) = node_dimensions(node, budget)?;
+        gates = gates
+            .checked_add(count)
+            .ok_or(Incomplete::CounterOverflow)?;
+        if gates as u128 > u128::from(budget.remaining_work()) {
+            return Err(Incomplete::WorkLimit);
+        }
+        scratch = scratch.max(temporary);
+    }
+    Ok((gates, scratch))
+}
+
+pub(crate) fn node_dimensions(
+    node: NodeView<'_>,
+    budget: &mut Budget<'_, impl Quota>,
+) -> Result<(usize, usize), Incomplete> {
+    Ok(match node {
+        NodeView::Atom(_) | NodeView::False => (0, 0),
+        NodeView::Implies(_, _) => (1, 0),
+        NodeView::And(operands) | NodeView::Or(operands) => (operands.len().saturating_sub(1), 0),
+        NodeView::Threshold(threshold) => {
+            let shape = threshold_lowering::Shape::new(threshold, || budget.tick())?;
+            // Every gate attempt consumes work even when its result simplifies.
+            // Refuse before reserving scratch for an impossible construction.
+            if shape.gates as u128 > u128::from(budget.remaining_work()) {
+                return Err(Incomplete::WorkLimit);
+            }
+            (shape.gates, shape.scratch)
+        }
+    })
+}
+
+impl From<threshold_lowering::Error> for Incomplete {
+    fn from(error: threshold_lowering::Error) -> Self {
+        match error {
+            threshold_lowering::Error::Invalid => Self::InvalidWitness,
+            threshold_lowering::Error::Capacity => Self::CounterOverflow,
+        }
     }
 }
 
@@ -246,9 +287,18 @@ pub(crate) fn restrict(
     let checkpoint = cnf.checkpoint();
     let mut nodes = Vec::new();
     let mut gates = HashMap::new();
-    let result = budget
-        .tick()
-        .and_then(|()| append_nodes(cnf, theory, None, &mut nodes, &mut gates, budget));
+    let mut scratch = Vec::new();
+    let result = budget.tick().and_then(|()| {
+        append_nodes(
+            cnf,
+            theory,
+            None,
+            &mut nodes,
+            &mut gates,
+            &mut scratch,
+            budget,
+        )
+    });
     if result.is_err() {
         cnf.rollback(checkpoint);
     }
@@ -261,6 +311,7 @@ fn append_nodes<Q: Quota>(
     mask: Option<&[bool]>,
     nodes: &mut Vec<Encoded>,
     gates: &mut HashMap<(usize, usize), Literal>,
+    scratch: &mut Vec<Encoded>,
     budget: &mut Budget<'_, Q>,
 ) -> Result<(), Incomplete> {
     reserve(nodes, theory.nodes().len())?;
@@ -282,6 +333,9 @@ fn append_nodes<Q: Quota>(
                     gate_operands(cnf, gates, false, operands, nodes, budget)?
                 }
                 NodeView::Or(operands) => gate_operands(cnf, gates, true, operands, nodes, budget)?,
+                NodeView::Threshold(threshold) => {
+                    gate_threshold(cnf, gates, threshold, nodes, scratch, budget)?
+                }
                 NodeView::Implies(a, b) => {
                     budget.tick()?;
                     let left = nodes[a].negated();
@@ -302,6 +356,65 @@ fn append_nodes<Q: Quota>(
         }
     }
     Ok(())
+}
+
+pub(crate) fn gate_threshold(
+    cnf: &mut Cnf,
+    gates: &mut HashMap<(usize, usize), Literal>,
+    threshold: Threshold<'_>,
+    nodes: &[Encoded],
+    scratch: &mut Vec<Encoded>,
+    budget: &mut Budget<'_, impl Quota>,
+) -> Result<Encoded, Incomplete> {
+    let (_, slots) = node_dimensions(NodeView::Threshold(threshold), budget)?;
+    reserve(scratch, slots)?;
+    while scratch.len() < slots {
+        budget.tick()?;
+        scratch.push(Encoded::Constant(false));
+    }
+    threshold_lowering::lower(
+        threshold,
+        scratch,
+        &mut ThresholdSink {
+            cnf,
+            gates,
+            nodes,
+            budget,
+        },
+    )
+}
+
+struct ThresholdSink<'a, 'control, Q> {
+    cnf: &'a mut Cnf,
+    gates: &'a mut HashMap<(usize, usize), Literal>,
+    nodes: &'a [Encoded],
+    budget: &'a mut Budget<'control, Q>,
+}
+
+impl<Q: Quota> threshold_lowering::Sink for ThresholdSink<'_, '_, Q> {
+    type Value = Encoded;
+    type Error = Incomplete;
+
+    fn tick(&mut self) -> Result<(), Incomplete> {
+        self.budget.tick()
+    }
+    fn constant(&mut self, value: bool) -> Result<Encoded, Incomplete> {
+        Ok(Encoded::Constant(value))
+    }
+    fn condition(&mut self, index: usize) -> Result<Encoded, Incomplete> {
+        self.nodes
+            .get(index)
+            .copied()
+            .ok_or(Incomplete::InvalidWitness)
+    }
+    fn gate(
+        &mut self,
+        disjunction: bool,
+        left: Encoded,
+        right: Encoded,
+    ) -> Result<Encoded, Incomplete> {
+        gate(self.cnf, self.gates, disjunction, left, right, self.budget)
+    }
 }
 
 /// Translate a native group through the existing bounded clause-gate builder.
@@ -415,6 +528,8 @@ pub(crate) fn interpretation(
         // constructor refusal invalidates that representation argument.
         zetesis_ferraris::AdmissionError::Atom
         | zetesis_ferraris::AdmissionError::Arity
+        | zetesis_ferraris::AdmissionError::ThresholdShape
+        | zetesis_ferraris::AdmissionError::ThresholdMeasure
         | zetesis_ferraris::AdmissionError::Span
         | zetesis_ferraris::AdmissionError::Edge
         | zetesis_ferraris::AdmissionError::Root

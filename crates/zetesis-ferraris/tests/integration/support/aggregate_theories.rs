@@ -1,6 +1,9 @@
 //! Shared aggregate fixtures retain nodes and native operand rows together.
 
-use zetesis_ferraris::{AggregateExtremum as Extremum, FormulaNodes, FormulaParts, Node, NodeView};
+use zetesis_ferraris::{
+    AggregateExtremum as Extremum, ContributionRow, FormulaNodes, FormulaParts, Node, NodeView,
+    ThresholdDescriptor,
+};
 
 pub use zetesis_theory_support::aggregate::{COMPARISONS, ferraris_prefix as prefix};
 
@@ -9,15 +12,27 @@ pub const EXTREMA: [Extremum; 2] = [Extremum::Min, Extremum::Max];
 
 /// Copies both fixture buffers into a new, unchecked owner.
 pub fn copy(nodes: &FormulaNodes) -> FormulaNodes {
-    let (nodes, operands) = snapshot(nodes);
-    FormulaNodes::new(FormulaParts::new(nodes, operands).unwrap())
+    FormulaNodes::new(nodes.parts().try_clone().unwrap())
 }
 
 /// Captures the complete represented graph, including native operand content.
-pub fn snapshot(nodes: &FormulaNodes) -> (Vec<Node>, Vec<usize>) {
+pub type Snapshot = (
+    Vec<Node>,
+    Vec<usize>,
+    Vec<usize>,
+    Vec<u64>,
+    Vec<ContributionRow>,
+    Vec<ThresholdDescriptor>,
+);
+
+pub fn snapshot(nodes: &FormulaNodes) -> Snapshot {
     (
         nodes.parts().nodes().to_vec(),
         nodes.parts().operands().to_vec(),
+        nodes.parts().conditions().to_vec(),
+        nodes.parts().weights().to_vec(),
+        nodes.parts().rows().to_vec(),
+        nodes.parts().thresholds().to_vec(),
     )
 }
 

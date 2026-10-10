@@ -1558,6 +1558,15 @@ import Zetesis
 #print axioms Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes
 #print axioms Zetesis.Refinement.TheoryAdmission.self_reference_is_refused
 #print axioms Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked
+#print axioms Zetesis.ThresholdPropagation.masked_sum_mono
+#print axioms Zetesis.ThresholdPropagation.sum_bounds
+#print axioms Zetesis.ThresholdPropagation.threshold_of_lower
+#print axioms Zetesis.ThresholdPropagation.threshold_absent_of_upper
+#print axioms Zetesis.ThresholdPropagation.assigned_sum
+#print axioms Zetesis.ThresholdPropagation.condition_required_true
+#print axioms Zetesis.ThresholdPropagation.condition_required_false
+#print axioms Zetesis.ThresholdPropagation.formula_of_lower
+#print axioms Zetesis.ThresholdPropagation.formula_absent_of_upper
 #print axioms Zetesis.ThresholdReduct.original
 #print axioms Zetesis.ThresholdReduct.query_original
 #print axioms Zetesis.ThresholdReduct.frozen_formula

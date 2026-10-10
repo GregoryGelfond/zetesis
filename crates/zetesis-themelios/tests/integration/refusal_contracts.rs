@@ -298,19 +298,26 @@ fn formula_resource_failures_keep_the_actual_nested_admission_cause() {
     );
     assert!(error.to_string().contains("Filters"));
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+    // Two of three contributions is a genuine threshold: neither the empty,
+    // singleton, conjunction nor disjunction boundary can erase its state cost.
+    let source = "{q(1..3)}. p :- #count{X:q(X)}>=2.";
+    let admitted = formula(source, &FormulaLimits::default()).unwrap();
+    assert!(!admitted.theory().parts().thresholds().is_empty());
     let mut aggregate = FormulaLimits::default();
     aggregate.aggregate.max_states = 0;
-    let error = formula("{q}. p :- #count{1:q}=1.", &aggregate).unwrap_err();
+    let error = formula(source, &aggregate).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::Aggregate { .. }),
         "{error:?}"
     );
-    assert!(
+    assert_eq!(
         error
             .source()
             .unwrap()
             .downcast_ref::<zetesis_ferraris::AggregateError>()
-            .is_some()
+            .unwrap()
+            .kind(),
+        zetesis_ferraris::AggregateErrorKind::StateLimit
     );
     assert!(error.to_string().contains("state limit"));
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);

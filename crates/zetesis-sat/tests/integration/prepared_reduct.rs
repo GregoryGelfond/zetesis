@@ -460,3 +460,51 @@ fn prepared_queries_preserve_native_wide_duplicate_groups() {
         compare(&input);
     }
 }
+
+#[test]
+fn native_threshold_queries_match_fresh_and_exhaustive_reducts() {
+    use zetesis_ferraris::{FormulaNodes, FormulaParts, NodeView};
+    for bound in -1..=8 {
+        let mut nodes = FormulaNodes::new(
+            FormulaParts::new(
+                vec![
+                    Node::atom(0),
+                    Node::atom(1),
+                    Node::falsum(),
+                    Node::implies(0, 2),
+                    Node::implies(3, 1),
+                ],
+                vec![],
+            )
+            .unwrap(),
+        );
+        let mut transaction = nodes.transaction();
+        let guards = transaction
+            .push_threshold_family(
+                &[0, 0, 1, 3, 4],
+                &[1, 2, 0, 2, 1],
+                &[bound, bound + 1],
+                usize::MAX,
+                usize::MAX,
+            )
+            .unwrap();
+        // The nonconvex != wrapper exercises both guarded outputs and nested
+        // implication conditions while retaining repeated-position weights.
+        let root = transaction
+            .push(
+                NodeView::Implies(guards[0], guards[1]),
+                usize::MAX,
+                usize::MAX,
+            )
+            .unwrap();
+        transaction.commit();
+        let input = Theory::new(
+            2,
+            nodes.into_parts(),
+            vec![root],
+            zetesis_ferraris::AdmissionLimits::default(),
+        )
+        .unwrap();
+        compare(&input);
+    }
+}

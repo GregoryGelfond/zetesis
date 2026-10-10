@@ -5,7 +5,8 @@ use zetesis_cpu::{Cancellation, Stop};
 
 /// Bounds for constructing a candidate-only support restriction. Formula
 /// dimensions bound retained nodes, roots and atom-indexed scratch. Work counts
-/// original-node/operand/root visits, head traversal, construction and final validation.
+/// all copied arena cells, node recounts, root visits, head traversal,
+/// construction and final validation.
 /// A root visit includes bounded exact atomic-choice recognition.
 #[derive(Clone, Copy, Debug)]
 pub struct SupportLimits {
@@ -78,8 +79,10 @@ pub struct SupportAttempt {
 ///
 /// The returned theory is only an outer-query restriction. It must not replace
 /// the original theory or be frozen in its place. Recognition and construction
-/// are iterative; scratch is linear in original nodes, operand occurrences, atoms and the largest
-/// distinct head. Work is linear in their traversals and constructed nodes.
+/// are iterative; scratch is linear in original nodes, operand occurrences,
+/// atoms and the largest distinct head. The complete original copy also retains
+/// every physical arena cell, including unused numeric storage. Work counts those
+/// copies, their node recount and the final admission's independent scans.
 #[must_use]
 pub fn support_restriction(
     theory: &Theory,
@@ -124,6 +127,11 @@ impl Builder<'_> {
                     self.tick()?;
                 }
             }
+            NodeView::Threshold(row) => {
+                for _ in row.conditions {
+                    self.tick()?;
+                }
+            }
             NodeView::Implies(_, _) => {
                 self.tick()?;
                 self.tick()?;
@@ -160,6 +168,10 @@ impl Builder<'_> {
             || theory.nodes().len() > self.limits.admission.max_nodes
             || theory.parts().occurrences() > self.limits.admission.max_operands
             || theory.operands().len() > self.limits.admission.max_operands
+            || theory.parts().conditions().len() > self.limits.admission.max_operands
+            || theory.parts().weights().len() > self.limits.admission.max_operands
+            || theory.parts().rows().len() > self.limits.admission.max_nodes
+            || theory.parts().thresholds().len() > self.limits.admission.max_nodes
         {
             return Err(AdmissionError::Limit.into());
         }
@@ -193,9 +205,10 @@ impl Builder<'_> {
         if !self.applicable(theory)? {
             return Ok(None);
         }
-        for index in 0..theory.view().len() {
-            self.push(theory.view().node(index)?)?;
+        for _ in 0..theory.parts().copy_work() {
+            self.tick()?;
         }
+        self.nodes = FormulaNodes::new(theory.parts().try_clone()?);
         let falsum = self.push(NodeView::False)?;
         let verum = self.push(NodeView::Implies(falsum, falsum))?;
         let mut support = self.filled(theory.atom_count(), falsum)?;
@@ -269,27 +282,17 @@ impl Builder<'_> {
             let atom = self.push(NodeView::Atom(atom))?;
             roots.push(self.push(NodeView::Implies(atom, body))?);
         }
-        // Theory admission recounts each node, then validates nodes, operands
-        // and roots. Charge that validation
-        // before ownership transfer; a failed attempt retains this work.
-        for _ in 0..self.nodes.parts().nodes().len() {
-            self.tick()?;
-            self.tick()?;
-        }
-        for _ in 0..self.nodes.parts().occurrences() {
-            self.tick()?;
-        }
-        for _ in 0..roots.len() {
-            self.tick()?;
-        }
-        Theory::new(
+        let admission = std::mem::take(&mut self.nodes).prepare_admission(
             theory.atom_count(),
-            std::mem::take(&mut self.nodes).into_parts(),
             roots,
             self.limits.admission,
-        )
-        .map(Some)
-        .map_err(SupportError::from)
+        );
+        // Charge the exact retained validation route, including every numeric
+        // row and descriptor whenever this copy requires full admission.
+        for _ in 0..admission.work() {
+            self.tick()?;
+        }
+        admission.admit().map(Some).map_err(SupportError::from)
     }
 
     fn filled<T: Copy>(&mut self, count: usize, value: T) -> Result<Vec<T>, SupportError> {

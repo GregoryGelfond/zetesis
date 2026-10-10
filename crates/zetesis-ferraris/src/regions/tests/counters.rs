@@ -29,6 +29,7 @@ fn copied_known<A: Count, B: Count>(known: &Known<A>) -> Known<B> {
         masks: known.masks.clone(),
         neutral_operands: copied_counts(&known.neutral_operands),
         unknown: copied_counts(&known.unknown),
+        thresholds: known.thresholds.clone(),
         seeded: known.seeded,
     }
 }
@@ -75,6 +76,7 @@ fn same_known<A: Count, B: Count>(left: &Known<A>, right: &Known<B>) {
     );
     assert_eq!(values(&left.unknown), values(&right.unknown));
     assert_eq!(left.seeded, right.seeded);
+    assert_eq!(left.thresholds, right.thresholds);
 }
 
 pub(super) fn same_knowledge(left: &Knowledge, right: &Knowledge) {
