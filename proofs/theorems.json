@@ -7825,6 +7825,41 @@
     "line": 148
   },
   {
+    "name": "Zetesis.ThresholdPrefixes.masked_sum_append",
+    "file": "Zetesis/ThresholdPrefixes.lean",
+    "line": 29
+  },
+  {
+    "name": "Zetesis.ThresholdPrefixes.masked_sum_prefix_le",
+    "file": "Zetesis/ThresholdPrefixes.lean",
+    "line": 42
+  },
+  {
+    "name": "Zetesis.ThresholdPrefixes.masked_threshold_implies",
+    "file": "Zetesis/ThresholdPrefixes.lean",
+    "line": 50
+  },
+  {
+    "name": "Zetesis.ThresholdPrefixes.original_implies",
+    "file": "Zetesis/ThresholdPrefixes.lean",
+    "line": 61
+  },
+  {
+    "name": "Zetesis.ThresholdPrefixes.original_contrapositive",
+    "file": "Zetesis/ThresholdPrefixes.lean",
+    "line": 75
+  },
+  {
+    "name": "Zetesis.ThresholdPrefixes.frozen_implies",
+    "file": "Zetesis/ThresholdPrefixes.lean",
+    "line": 89
+  },
+  {
+    "name": "Zetesis.ThresholdPrefixes.frozen_contrapositive",
+    "file": "Zetesis/ThresholdPrefixes.lean",
+    "line": 110
+  },
+  {
     "name": "Zetesis.ThresholdPropagation.masked_sum_mono",
     "file": "Zetesis/ThresholdPropagation.lean",
     "line": 33

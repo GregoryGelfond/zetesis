@@ -45,6 +45,9 @@ impl<C: Count> Closure<'_, C> {
             }
             state.upper = Some(bound);
         }
+        if frozen.is_none() && !index.thresholds.related(row).is_empty() {
+            self.lists.queue_threshold(row);
+        }
         self.threshold_row(index, row, frozen, work)
     }
 
@@ -76,7 +79,7 @@ impl<C: Count> Closure<'_, C> {
         Ok(step)
     }
 
-    fn threshold_row(
+    pub(super) fn threshold_row(
         &mut self,
         index: &Narrower,
         row: usize,

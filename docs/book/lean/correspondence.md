@@ -76,6 +76,21 @@ handling and the Rust compiler's checked arithmetic and work charges remain
 separate obligations. This law does not update or qualify the retained native
 extraction, whose Boolean-generation source boundary remains unchanged.
 
+[`ThresholdPrefixes.original_implies` and `original_contrapositive`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ThresholdPrefixes.lean)
+prove that reaching a nonnegative threshold implies reaching an extended-row
+threshold at a no-greater bound, and that failure transfers in the reverse
+direction. The prefix contains complete weight/condition pairs, including
+repeated contributions. Its separate frozen laws hold for arbitrary M and J;
+the [Rust prefix transfer](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/thresholds/prefixes.rs)
+is enabled only for original-candidate narrowing. It passes numeric requirements
+through intermediate rows without matching guards, using immutable index links,
+worker scratch and existing per-region threshold state. It adds no state to
+region copies and leaves original evaluation and reduct construction unchanged.
+Recognition covers exact prefixes in prepared coefficient order, rather than
+arbitrary subsets. Prefix discovery, grouped-row correspondence, queue execution
+and resource accounting remain executable obligations; the law does not qualify
+the retained native extraction.
+
 This extends the classical law in `Thresholds`; it does not yet verify source
 coalescing, native formula storage, propagation, finite-width arithmetic, Rust
 evaluation or device execution.

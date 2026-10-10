@@ -92,6 +92,18 @@ on the open atom the narrowing found most constrained, cut branch first;
 a region with every atom decided is a leaf, and a leaf is a classical model, since at a full decision every
 root is sure or never (`FormulaBounds.decided_leaf_models`). The leaf
 is the candidate the reduct decides.
+
+Native nonnegative threshold rows also share consequences during
+original-candidate narrowing. Preparation links exact prefixes of grouped
+`(condition, weight)` terms. A required lower bound passes from a prefix to its
+extensions; an exclusive upper bound passes from an extension to its prefixes.
+Equal rows pass both requirements. Transfer continues through an intermediate
+row even when it has no guard at that bound. Links stay in the prepared index
+and pending rows in worker scratch; existing per-region threshold state holds
+the requirements, adding no state to child copies. This transfer is disabled
+for frozen-reduct narrowing. Recognition is limited to exact prefixes in
+prepared order; other subset relations can remain undiscovered.
+
 Once a step proves a region contradictory, narrowing discards it without
 visiting the remaining operands, parents or support wakeups. Work accounting
 covers the visited prefix; cleanup still settles worker receipts. Partial

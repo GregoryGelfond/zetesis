@@ -33,7 +33,8 @@
 //! hold and to fail refutes the region. The open atoms known are then
 //! held or cut.
 //!
-//! Work is charged per node read, per root tested and per producer checked,
+//! Work is charged per node read, root test, producer check and threshold row
+//! or relation visit,
 //! against `RegionLimits`, and control is polled once per narrowing. Metered
 //! entry points instead acquire each permit from the caller's quota, which can
 //! also poll control, and retain the admitted prefix on every returned failure.
@@ -56,11 +57,11 @@ use counters::{Count, Counters, compact_fits};
 use masks::Masks;
 
 /// The work ceiling of one narrowing, and of producer extraction. Every
-/// propagation event reads at least one node, so the work bounds the
-/// events too.
+/// propagation event reads at least one node or threshold row, so the work
+/// bounds the events too.
 #[derive(Clone, Copy, Debug)]
 pub struct RegionLimits {
-    /// Charged node reads, root tests and producer checks.
+    /// Charged node reads, root tests, producer checks and threshold transfers.
     pub max_work: u64,
 }
 impl Default for RegionLimits {
@@ -296,10 +297,11 @@ fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, St
 /// The work one narrowing charged.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct NarrowingStatistics {
-    /// Charged node reads, root tests and producer checks.
+    /// Charged node reads, root tests, producer checks and threshold transfers.
     pub work: u64,
     /// Propagation events: nodes and atoms learned and their neighbours
-    /// revisited, and atoms whose support was rechecked.
+    /// revisited, atoms whose support was rechecked, and threshold rows whose
+    /// changed requirements were transported to related rows.
     pub propagations: u64,
     /// Atoms held by the narrowing.
     pub held: u64,
@@ -794,6 +796,11 @@ impl Narrower {
     /// chain prefixes. The logical index receipt is one visit per native node and operand
     /// occurrence; construction passes and
     /// storage initialization are not additional charged propagation reads.
+    /// Native rows also have an exact-prefix forest: sorting borrowed row IDs
+    /// takes O(R log R * K) term comparisons in the worst case for R rows of at most
+    /// K grouped terms; prefix discovery and checked incidence construction take
+    /// O(E + R), where E is the number of grouped terms. This derived index keeps
+    /// at most R - 1 links and does not change the logical index receipt.
     ///
     /// # Errors
     /// Returns [`Stop::Allocation`] for compact-adjacency offset overflow or
@@ -839,7 +846,9 @@ impl Narrower {
         })
     }
 
-    /// The work indexing charged: one visit per node and operand occurrence.
+    /// The logical index receipt: one visit per node and operand occurrence.
+    /// Construction passes, including native-row sorting and prefix discovery,
+    /// are preparation costs rather than additional propagation reads.
     #[must_use]
     pub fn work(&self) -> u64 {
         self.work
@@ -1214,6 +1223,10 @@ pub struct NarrowingScratch {
     /// One bit per atom, set exactly while the atom is in `heads`, so an
     /// atom's recheck is queued once until it runs.
     pending: Vec<u64>,
+    /// Original-subject rows whose numeric requirements need transporting.
+    threshold_rows: Vec<usize>,
+    /// One bit per row, set exactly while it is in `threshold_rows`.
+    pending_thresholds: Vec<u64>,
 }
 
 impl NarrowingScratch {
@@ -1224,6 +1237,8 @@ impl NarrowingScratch {
         (self.learned.capacity() + self.heads.capacity()) as u128 * size_of::<usize>() as u128
             + self.nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
             + self.pending.capacity() as u128 * size_of::<u64>() as u128
+            + self.threshold_rows.capacity() as u128 * size_of::<usize>() as u128
+            + self.pending_thresholds.capacity() as u128 * size_of::<u64>() as u128
     }
 
     /// Discard every entry, keeping the capacity, for a narrowing over
@@ -1232,12 +1247,48 @@ impl NarrowingScratch {
         for &atom in &self.heads {
             self.pending[atom / 64] &= !(1u64 << (atom % 64));
         }
+        for &row in &self.threshold_rows {
+            self.pending_thresholds[row / 64] &= !(1u64 << (row % 64));
+        }
         self.learned.clear();
         self.nodes.clear();
         self.heads.clear();
+        self.threshold_rows.clear();
         if self.pending.len() < flag_words(atoms) {
             self.pending.resize(flag_words(atoms), 0);
         }
+    }
+
+    /// Reserve the bounded original-subject worklist before closure begins.
+    /// At most one entry per row is pending; no allocation is needed to enqueue.
+    /// Frozen subjects never request this additional scratch.
+    fn prepare_thresholds(&mut self, rows: usize) -> Result<(), Stop> {
+        self.threshold_rows
+            .try_reserve_exact(rows.saturating_sub(self.threshold_rows.len()))
+            .map_err(|_| Stop::Allocation)?;
+        let words = flag_words(rows);
+        if self.pending_thresholds.len() < words {
+            self.pending_thresholds
+                .try_reserve_exact(words - self.pending_thresholds.len())
+                .map_err(|_| Stop::Allocation)?;
+            self.pending_thresholds.resize(words, 0);
+        }
+        Ok(())
+    }
+
+    /// Coalesce repeated requirement changes until the row is consumed.
+    fn queue_threshold(&mut self, row: usize) {
+        let (word, flag) = (row / 64, 1u64 << (row % 64));
+        if self.pending_thresholds[word] & flag == 0 {
+            self.pending_thresholds[word] |= flag;
+            self.threshold_rows.push(row);
+        }
+    }
+
+    fn next_threshold(&mut self) -> Option<usize> {
+        let row = self.threshold_rows.pop()?;
+        self.pending_thresholds[row / 64] &= !(1u64 << (row % 64));
+        Some(row)
     }
 
     /// Queue the atom's support recheck unless one is already pending. Its
@@ -1421,8 +1472,9 @@ impl<C: Count> Closure<'_, C> {
     }
 
     /// Close the knowledge from the region's decisions, falsum and the
-    /// roots. Each event on the worklist follows a new bit, or is one of
-    /// the initial seeds, so the events are bounded by the bits.
+    /// roots. Node events follow new bits or initial seeds. Original threshold
+    /// row events follow strictly tighter requirements from the finite set of
+    /// guard bounds, so exact-prefix transport also reaches a fixed point.
     fn close(
         &mut self,
         subject: Subject<'_>,
@@ -1436,6 +1488,9 @@ impl<C: Count> Closure<'_, C> {
             producers,
             frozen,
         } = subject;
+        if frozen.is_none() && index.thresholds.has_relations() {
+            self.lists.prepare_thresholds(index.thresholds.rows.len())?;
+        }
         let nodes = theory.view();
         let mut step = Step::Unchanged;
         if !*self.known.seeded {
@@ -1493,6 +1548,13 @@ impl<C: Count> Closure<'_, C> {
             let step = if let Some((node, value)) = self.lists.nodes.pop() {
                 statistics.propagations += 1;
                 self.revisit(subject, index, node, value, work)?
+            } else if let Some(row) = self.lists.next_threshold() {
+                debug_assert!(
+                    frozen.is_none(),
+                    "only original rows transport requirements"
+                );
+                statistics.propagations += 1;
+                self.threshold_prefixes(index, row, work)?
             } else if let Some(atom) = self.lists.next_recheck() {
                 statistics.propagations += 1;
                 let producers =

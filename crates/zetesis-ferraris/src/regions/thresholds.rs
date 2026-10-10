@@ -12,11 +12,12 @@ use zetesis_cpu::Stop;
 
 use super::adjacency::Adjacency;
 
-mod propagate;
 #[cfg(test)]
 mod frozen_tests;
 #[cfg(test)]
 mod incremental_tests;
+mod prefixes;
+mod propagate;
 
 #[derive(Clone, Debug)]
 pub(super) struct Thresholds {
@@ -24,6 +25,8 @@ pub(super) struct Thresholds {
     by_descriptor: Vec<Option<usize>>,
     by_condition: Option<Adjacency>,
     incidences: Vec<Incidence>,
+    /// Undirected exact-prefix/equality links, used only on original subjects.
+    relations: Option<Adjacency>,
 }
 
 #[derive(Clone, Debug)]
@@ -43,7 +46,8 @@ struct Incidence {
 }
 
 /// Sums include only processed condition events. Required bounds include only
-/// processed, unmasked guard events. Cursors retain completed monotone scans;
+/// processed, unmasked guard events and, on original subjects, transported
+/// exact-prefix requirements. Cursors retain completed monotone scans;
 /// they are cloned with the region and never shared between sibling regions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct State {
@@ -172,11 +176,13 @@ impl Thresholds {
                     .map(|(index, edge)| (edge.condition, index)),
             )?)
         };
+        let relations = prefixes::prepare(&rows)?;
         Ok(Self {
             rows,
             by_descriptor,
             by_condition,
             incidences,
+            relations,
         })
     }
 
@@ -189,6 +195,14 @@ impl Thresholds {
 
     fn condition(&self, node: usize) -> &[usize] {
         self.by_condition.as_ref().map_or(&[], |rows| &rows[node])
+    }
+
+    pub(super) fn has_relations(&self) -> bool {
+        self.relations.is_some()
+    }
+
+    fn related(&self, row: usize) -> &[usize] {
+        self.relations.as_ref().map_or(&[], |links| &links[row])
     }
 
     /// Original threshold parent occurrences still rank atom splits; the

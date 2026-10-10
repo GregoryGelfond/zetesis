@@ -8,6 +8,7 @@ mod aggregate_clingo;
 mod aggregate_consumers;
 mod aggregate_dependencies;
 mod aggregate_objective_observers;
+mod aggregate_prefixes;
 mod aggregates;
 mod anonymous_projection;
 mod arithmetic_validation;

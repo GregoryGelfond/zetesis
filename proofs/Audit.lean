@@ -1565,6 +1565,13 @@ import Zetesis
 #print axioms Zetesis.ThresholdDivision.original
 #print axioms Zetesis.ThresholdDivision.frozen
 #print axioms Zetesis.ThresholdDivision.equivalent
+#print axioms Zetesis.ThresholdPrefixes.masked_sum_append
+#print axioms Zetesis.ThresholdPrefixes.masked_sum_prefix_le
+#print axioms Zetesis.ThresholdPrefixes.masked_threshold_implies
+#print axioms Zetesis.ThresholdPrefixes.original_implies
+#print axioms Zetesis.ThresholdPrefixes.original_contrapositive
+#print axioms Zetesis.ThresholdPrefixes.frozen_implies
+#print axioms Zetesis.ThresholdPrefixes.frozen_contrapositive
 #print axioms Zetesis.ThresholdPropagation.masked_sum_mono
 #print axioms Zetesis.ThresholdPropagation.sum_bounds
 #print axioms Zetesis.ThresholdPropagation.threshold_of_lower

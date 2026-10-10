@@ -4,6 +4,11 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
+### Changed
+
+- Reuse aggregate bounds when one native contribution row extends another,
+  preserving answer sets while narrowing candidates before reduct checking.
+
 ## 0.5.0 — 2026-10-10
 
 ### Added
