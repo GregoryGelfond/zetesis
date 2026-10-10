@@ -839,6 +839,8 @@ import Zetesis
 #print axioms Zetesis.ObjectiveBounds.tighten
 #print axioms Zetesis.ObjectiveBounds.replacement_preserves_candidates
 #print axioms Zetesis.ObjectiveBounds.consequence_survives_tightening
+#print axioms Zetesis.ObjectiveBounds.replacement_preserves_candidates_relative
+#print axioms Zetesis.ObjectiveBounds.consequence_survives_tightening_relative
 #print axioms Zetesis.ObjectiveBounds.optimum_survives
 #print axioms Zetesis.ObjectiveBounds.excluded_is_worse
 #print axioms Zetesis.ObjectiveBounds.bounded_best_is_global

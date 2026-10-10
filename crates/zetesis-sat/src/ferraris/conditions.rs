@@ -1,7 +1,8 @@
 //! Candidate conditions and knowledge with distinct permanent and bound lifetimes.
 //!
-//! Replacing a bound assumes that its classical models are a subset of the
-//! preceding bound's models. Regions already omitted therefore stay omitted.
+//! Replacing a bound assumes that every classical model of the unchanged
+//! original theory and the new bound satisfies the preceding bound. Regions
+//! already omitted therefore contain no newly eligible original models.
 //! Knowledge learned about one bound's DAG never describes another DAG: queued
 //! regions carry only its generation and private knowledge, while active readers
 //! retain the exact immutable index through an `Arc` snapshot.

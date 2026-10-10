@@ -279,6 +279,10 @@ impl ObjectivePlan {
     /// The caller must independently verify the incumbent before using this to
     /// prune a search. Apply the result only to classical candidates, never to
     /// the original theory or its proper-subset reduct query.
+    /// Prepared choice consequences may exclude additional interpretations
+    /// outside the original theory. A better incumbent's bound implies an
+    /// earlier bound under that original theory, including when an optional
+    /// strengthening fails and returns only the exact cost condition.
     ///
     /// # Errors
     /// Refuses bounded exact lowering, cancellation, storage or work limits.

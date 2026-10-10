@@ -4172,52 +4172,62 @@
   {
     "name": "Zetesis.ObjectiveBounds.mem_prune",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 28
+    "line": 30
   },
   {
     "name": "Zetesis.ObjectiveBounds.incumbent_survives",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 32
+    "line": 34
   },
   {
     "name": "Zetesis.ObjectiveBounds.tighten",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 38
+    "line": 40
   },
   {
     "name": "Zetesis.ObjectiveBounds.replacement_preserves_candidates",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 54
+    "line": 56
   },
   {
     "name": "Zetesis.ObjectiveBounds.consequence_survives_tightening",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 69
+    "line": 71
   },
   {
-    "name": "Zetesis.ObjectiveBounds.optimum_survives",
-    "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 80
-  },
-  {
-    "name": "Zetesis.ObjectiveBounds.excluded_is_worse",
+    "name": "Zetesis.ObjectiveBounds.replacement_preserves_candidates_relative",
     "file": "Zetesis/ObjectiveBounds.lean",
     "line": 85
   },
   {
+    "name": "Zetesis.ObjectiveBounds.consequence_survives_tightening_relative",
+    "file": "Zetesis/ObjectiveBounds.lean",
+    "line": 101
+  },
+  {
+    "name": "Zetesis.ObjectiveBounds.optimum_survives",
+    "file": "Zetesis/ObjectiveBounds.lean",
+    "line": 112
+  },
+  {
+    "name": "Zetesis.ObjectiveBounds.excluded_is_worse",
+    "file": "Zetesis/ObjectiveBounds.lean",
+    "line": 117
+  },
+  {
     "name": "Zetesis.ObjectiveBounds.bounded_best_is_global",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 91
+    "line": 123
   },
   {
     "name": "Zetesis.ObjectiveBounds.bounded_ties_exact",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 108
+    "line": 140
   },
   {
     "name": "Zetesis.ObjectiveBounds.bounded_optimum_keeps_original_reduct",
     "file": "Zetesis/ObjectiveBounds.lean",
-    "line": 134
+    "line": 166
   },
   {
     "name": "Zetesis.ObjectiveConditionTable.node_correspondence",

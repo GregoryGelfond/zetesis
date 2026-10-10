@@ -58,11 +58,12 @@ answers also reuses preparation while leaving pruning disabled.
 
 For region search, each improved incumbent replaces the previous optimizer
 bound through `StableModels::tighten_candidate_bound`. Independent caller
-restrictions remain. The caller must establish that the new bound implies the
-previous one; the API does not check that implication. Active workers may finish
+restrictions remain. The caller must establish that the original theory and new
+bound together imply the previous bound; the API does not check that implication.
+Active workers may finish
 under an older bound, so returned answers are still scored against the current
 incumbent. The original theory and reduct remain unchanged.
-[`ObjectiveBounds.replacement_preserves_candidates`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveBounds.lean)
+[`ObjectiveBounds.replacement_preserves_candidates_relative`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ObjectiveBounds.lean)
 states the preservation law; it does not verify worker synchronization.
 
 Source admission also retains checked required-choice groups when the program
@@ -96,6 +97,11 @@ The fixed activation closure is prepared once in the existing n-ary formula
 representation. Each new incumbent copies only that compact closure; it does
 not rescan unrelated original formulas or add work to exact score evaluation.
 An optional bridge or bound failure leaves the ordinary exact bound available.
+After an improved incumbent, that fallback still implies the preceding bound
+on original models: the required-choice lower cost never exceeds their exact
+cost. Interpretations violating the original theory need not obey that
+implication. Bound replacement rebuilds its propagation knowledge; previously
+pruned regions need not reopen.
 The [required-choice cost laws](../lean/theorems.md) state the partitioned-cost
 and lexicographic preservation arguments; correspondence of the concrete source
 capture and implication search remains a separate proof obligation.

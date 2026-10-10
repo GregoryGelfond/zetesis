@@ -18,3 +18,4 @@ fn by_clauses(
 }
 
 mod prepared_scoring;
+mod choice_replacement;

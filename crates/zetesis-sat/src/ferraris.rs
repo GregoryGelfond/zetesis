@@ -623,11 +623,12 @@ impl StableModels {
     ///
     /// # Caller obligation
     /// Each bound must use the original atom count and semantic index meanings.
-    /// Every classical model of this bound must satisfy the previous bound,
-    /// if any. This logical implication is **not checked**. Violating it can
-    /// omit models because regions pruned earlier are not reopened. The first
-    /// bound has no implication obligation. Bounds never support original atoms
-    /// and never change the original theory or its reduct.
+    /// Every classical interpretation satisfying both the original theory and
+    /// this bound must satisfy the previous bound, if any. This implication
+    /// relative to the unchanged original theory is **not checked**. Violating
+    /// it can omit models because regions pruned earlier are not reopened. The
+    /// first bound has no implication obligation. Bounds never support original
+    /// atoms and never change the original theory or its reduct.
     ///
     /// Region search retains only the latest bound separately from permanent
     /// [`Self::restrict_candidates`] constraints. Active worker snapshots may
@@ -636,7 +637,8 @@ impl StableModels {
     /// every returned model with its current incumbent. Exhaustion covers the
     /// remaining constrained family, not the original unrestricted world view.
     /// The optional clauses method appends each bound instead of retiring it;
-    /// the implication obligation makes that conjunction equivalent.
+    /// the implication obligation makes that conjunction equivalent in the
+    /// presence of the original theory.
     ///
     /// # Errors
     /// Refuses a different atom count, a closed iterator, pending blocking error,

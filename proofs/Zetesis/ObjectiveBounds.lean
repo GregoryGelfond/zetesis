@@ -8,8 +8,10 @@ cost. Bounds remain non-strict to retain every optimum tie. The candidate filter
 does not change original Ferraris stability or form a different program reduct.
 
 The cost-filter laws use one unbounded integer cost. The replacement laws use
-arbitrary predicates with an explicit strengthening premise, so they also apply
-to multiple priorities once their bound implication is established. Tuple
+arbitrary predicates with an explicit strengthening premise. The relative laws
+require that implication only under an unchanged permanent predicate, such as
+satisfaction of the original theory. They also apply to multiple priorities once
+their bound implication is established. Tuple
 contributions, priority-vector ordering, the bound-formula compiler, retained
 worker generations, restriction encoding, exact blocking and machine limits
 remain separate obligations.
@@ -73,6 +75,36 @@ theorem consequence_survives_tightening
     ∀ value, region value → permanent value → later value → consequence value := by
   intro value inside restricted bounded
   have earlierBound : earlier value := stronger value bounded
+  exact known value inside restricted earlierBound
+
+/-- An earlier bound is redundant when the new bound implies it under an
+unchanged permanent predicate. That predicate can include satisfaction of the
+original theory: interpretations outside it need not satisfy the implication.
+Retain the permanent predicate and new bound in each direction, then recover the
+earlier bound from those two premises in the reverse direction. -/
+theorem replacement_preserves_candidates_relative (permanent earlier later : β → Prop)
+    (stronger : ∀ value, permanent value → later value → earlier value) (value : β) :
+    (permanent value ∧ earlier value ∧ later value) ↔
+      (permanent value ∧ later value) := by
+  constructor
+  · intro retained
+    exact ⟨retained.1, retained.2.2⟩
+  · intro retained
+    have earlierBound : earlier value := stronger value retained.1 retained.2
+    exact ⟨retained.1, earlierBound, retained.2⟩
+
+/-- A region consequence justified by an earlier bound remains valid when the
+replacement implies it under the same permanent predicate. First recover the
+earlier bound using that predicate, then apply the established consequence.
+This preserves region decisions, not mutable knowledge about a different DAG;
+the new bound still requires independently initialized propagation knowledge. -/
+theorem consequence_survives_tightening_relative
+    (region permanent earlier later consequence : β → Prop)
+    (stronger : ∀ value, permanent value → later value → earlier value)
+    (known : ∀ value, region value → permanent value → earlier value → consequence value) :
+    ∀ value, region value → permanent value → later value → consequence value := by
+  intro value inside restricted bounded
+  have earlierBound : earlier value := stronger value restricted bounded
   exact known value inside restricted earlierBound
 
 /-- An incumbent is a stable model of the original theory, not merely a cheap

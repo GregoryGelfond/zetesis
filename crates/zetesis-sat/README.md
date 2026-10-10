@@ -95,11 +95,12 @@ successful restriction, exhaustion covers only their intersection.
 
 `StableModels::tighten_candidate_bound(&Theory)` keeps one replaceable bound
 separately from these permanent restrictions. The caller must ensure that each
-new bound classically implies its predecessor over the same atom meanings;
-this implication is **not checked**. Otherwise an earlier pruning may have
-removed a model the new bound permits. The first bound has no predecessor.
-Under the implication contract, conjoining all old bounds is equivalent to
-retaining the latest one, also in conjunction with every independent restriction.
+new bound, together with the unchanged original theory, classically implies its
+predecessor over the same atom meanings; this implication is **not checked**.
+Otherwise an earlier pruning may have removed an original model the new bound
+permits. The first bound has no predecessor. Under this contract, conjoining all
+old bounds is equivalent to retaining the latest one in the presence of the
+original theory and every independent restriction.
 Original theory and reduct membership are unchanged. Exhaustion covers the
 constrained candidate family, not the unrestricted world view.
 

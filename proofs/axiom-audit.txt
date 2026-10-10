@@ -861,6 +861,8 @@
 'Zetesis.ObjectiveBounds.tighten' depends on axioms: [propext]
 'Zetesis.ObjectiveBounds.replacement_preserves_candidates' does not depend on any axioms
 'Zetesis.ObjectiveBounds.consequence_survives_tightening' does not depend on any axioms
+'Zetesis.ObjectiveBounds.replacement_preserves_candidates_relative' does not depend on any axioms
+'Zetesis.ObjectiveBounds.consequence_survives_tightening_relative' does not depend on any axioms
 'Zetesis.ObjectiveBounds.optimum_survives' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ObjectiveBounds.excluded_is_worse' depends on axioms: [propext, Quot.sound]
 'Zetesis.ObjectiveBounds.bounded_best_is_global' depends on axioms: [propext, Classical.choice, Quot.sound]
