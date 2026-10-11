@@ -121,6 +121,7 @@ import Zetesis.OrderedBounds
 import Zetesis.ObjectivePriorities
 import Zetesis.AggregateInvariants
 import Zetesis.IntegerEnvelopes
+import Zetesis.BoundedMultiples
 import Zetesis.SourceMeasures
 import Zetesis.ColumnRelations
 import Zetesis.CompactColumns

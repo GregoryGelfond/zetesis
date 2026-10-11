@@ -761,6 +761,16 @@
       "name": "Zetesis.BooleanHeads.guarded_theory_preserves_stable_models"
     },
     {
+      "file": "Zetesis/BoundedMultiples.lean",
+      "line": 33,
+      "name": "Zetesis.BoundedMultiples.bounded_multiple_iff"
+    },
+    {
+      "file": "Zetesis/BoundedMultiples.lean",
+      "line": 60,
+      "name": "Zetesis.BoundedMultiples.multiple_membership"
+    },
+    {
       "file": "Zetesis/Bounds.lean",
       "line": 70,
       "name": "Zetesis.Bounds.gate_sandwich"
@@ -8834,6 +8844,7 @@
     "Zetesis/BindingScopes.lean",
     "Zetesis/BooleanHeadElements.lean",
     "Zetesis/BooleanHeads.lean",
+    "Zetesis/BoundedMultiples.lean",
     "Zetesis/Bounds.lean",
     "Zetesis/CandidateCursor.lean",
     "Zetesis/CanonicalCatalog.lean",
@@ -9001,8 +9012,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "0a034e73003747ba7f3e333ff78f1d2ae2ac8427fb3a266af5b8802177aae240",
-    "Zetesis.lean": "73214e3657bb701dd45cb8723e3c3f3c3f1546ab393118f14ca856a83c2a35d1",
+    "Audit.lean": "86c7d8d43ab76065bd0053dd345c9a85a6dbbf9becce310f3595f8ab6c16d8f1",
+    "Zetesis.lean": "f197dfd785e2d22ebb23b7fb7ad553d697f65565cde04605cf1ae306eb427054",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
@@ -9020,6 +9031,7 @@
     "Zetesis/BindingScopes.lean": "1ccfde0f879702572dbc25ed20531f2b85e04eeedb59fd7eeea45ad7972486a7",
     "Zetesis/BooleanHeadElements.lean": "0303ebacc832d43a30baaf2569c8d4922c24900d0f88dde2f52d33100454631f",
     "Zetesis/BooleanHeads.lean": "6c1bdb43ab5b5a4d5753f9396e89adc2e9c52cfa9a1df56860ad8d54005d4c27",
+    "Zetesis/BoundedMultiples.lean": "f9d6e28fda82ac5155caf99b49f5b02b713eeb899ac79465a8d7506120ddcb82",
     "Zetesis/Bounds.lean": "4d1e698345c77d7a4a07ceda15f5f550f88923fefcac182053610c1e6bf6fd3a",
     "Zetesis/CandidateCursor.lean": "09bba309247ba7b7300dd8f6994ecb8482ac5b14fbfd356ab8c24103fbfe1039",
     "Zetesis/CanonicalCatalog.lean": "39c7a2f525f3f71d39e023d3dbcf8646a49d71b8740ebe5bc3184ac1478639cf",

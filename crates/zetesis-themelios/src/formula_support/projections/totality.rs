@@ -1,9 +1,12 @@
 //! Optional totality over complete positive source-column domains.
 //!
-//! Original-family admission, final emission, hybrid capture and admitted hybrid checks share this gate
-//! over the same completed source carrier. Each expression in an eligible flat normal body
-//! is either a leaf, reads one source variable covered by an ordinary positive
-//! atom column, or has checked arithmetic over several numeric column bounds.
+//! Original-family admission, final emission, hybrid capture and admitted hybrid
+//! checks use this gate over completed support. Possible-head production uses it
+//! only for snapshot-local multiples selection; the proof then covers the full
+//! current columns, not later rounds or completed-family evidence. Each expression
+//! in an eligible flat normal body is either a leaf, reads one source variable
+//! covered by an ordinary positive atom column, or has checked arithmetic over
+//! several numeric column bounds.
 //! Products, quotients and remainders extend sums and differences;
 //! the bounds establish every intermediate and exclude zero divisors.
 //! Successful evaluation on that entire
@@ -77,11 +80,12 @@ struct Domain<'source> {
 }
 
 impl<'a> Projections<'a> {
-    /// Use completed, candidate-independent source columns. Success establishes
-    /// scalar totality for complete positive bindings and permits post-admission
-    /// selection. A separately covered flat original family may omit its scan
-    /// only when all normalized siblings succeed. Evidence cursors themselves
-    /// still traverse complete families; this proof supplies no defined witness.
+    /// Use full, candidate-independent columns of one immutable source snapshot.
+    /// Success establishes scalar totality for complete positive bindings within
+    /// that snapshot. Completed support permits post-admission selection; a
+    /// growing round permits only its separately bounded multiples selector.
+    /// A flat original family may omit its scan only when all normalized siblings
+    /// succeed on completed support. This proof supplies no defined witness.
     pub(in crate::formula_support) fn total_body(
         &mut self,
         rule: &'a RuleIr,

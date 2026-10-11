@@ -267,6 +267,13 @@ Endpoint rounding is mathematical integer division. `filtered_bindings_exact`
 states that complete envelope enumeration followed by the original guard gives
 exact bindings. Source recognition and machine arithmetic remain separate.
 
+[`BoundedMultiples`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/BoundedMultiples.lean)
+identifies bounded values with zero truncating remainder as products of a positive
+divisor and factors from the exact ceiling-to-floor interval.
+`multiple_membership` connects this identity to finite interval enumeration,
+including divisor one and empty intervals. Source totality, checked arithmetic
+and executable posting selection remain separate obligations.
+
 These are useful mathematical components. Their coverage or arithmetic premises
 do not prove that a particular Rust source cursor enumerates the required
 bindings, that whole tuples are coalesced correctly, or that the machine obeys

@@ -714,6 +714,7 @@ fn derive_variants<'source>(
             budget,
             Context::new(computation, limits, counters, rule.location),
         )?;
+        outer.select_round_multiples(rule, computation, limits, counters)?;
         derive_rule(
             rule,
             &mut outer,

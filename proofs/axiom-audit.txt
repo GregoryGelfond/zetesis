@@ -152,6 +152,8 @@
 'Zetesis.BooleanHeads.support_formula_truth' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.BooleanHeads.stable_satisfies_support' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.BooleanHeads.guarded_theory_preserves_stable_models' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BoundedMultiples.bounded_multiple_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.BoundedMultiples.multiple_membership' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Bounds.gate_sandwich' does not depend on any axioms
 'Zetesis.Bounds.selected_consequence_mono' does not depend on any axioms
 'Zetesis.Bounds.selected_consequence_refines' does not depend on any axioms

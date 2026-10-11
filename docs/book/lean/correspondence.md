@@ -1467,6 +1467,24 @@ position across support publication. These choices preserve the same occurrence
 partition. Handle resolution, comparison readiness and admitted work remain
 Rust obligations.
 
+The optional multiples selector composes this partition with necessary row
+selection. Its scalar totality proof covers the full immutable support snapshot;
+it does not establish completed-family evidence. Matching value postings are
+intersected with the interval of the original occurrence before they are offered
+to the cursor. This retains every contributing binding within that partition,
+the premise of `DomainBindings.guarded_continuations_exact`.
+
+`BoundedMultiples.bounded_multiple_iff` supplies the scalar arithmetic identity:
+for a positive divisor `d`, the values in `lower..upper` with zero truncating
+remainder are exactly `d*k` for integer factors between
+`(lower + d - 1) / d` and `upper / d`, using floor division.
+`multiple_membership` composes this identity with finite interval enumeration;
+divisor one and empty intervals need no special premise. The implementation
+must establish the selector's domain and source totality, finite-width arithmetic,
+exact posting and interval intersection, row ordering, snapshot lifetime and
+charged preparation. Neither the arithmetic nor partition laws verify those
+Rust operations or allow generic computed-table selection during a support round.
+
 Parallel exact queries lease bounded work allowances from one shared owner.
 `WorkPermits` partitions the allowance into spent, available and outstanding
 permits. Granting preserves that total; settlement records consumed work and
@@ -2805,12 +2823,14 @@ storage remain Rust obligations, with no refinement claim.
 
 The optional Rust
 [finite totality certificate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/totality.rs)
-adds a separate justification for ordinary row selection. A completed positive
-column covers every full binding's value at that variable, even when it contains
-extra values excluded by another argument or relation. An expression reading one
-variable is evaluated on that whole domain. For sums, differences, negations,
-products and division or remainder with variable operands, Rust checks the
-numeric hull of every intermediate. This applies to eligible flat normal-rule
+adds a separate justification for ordinary row selection. A full positive
+column of the immutable snapshot covers every full binding's value at that
+variable, even when it contains extra values excluded by another argument or
+relation. Completed support is required for post-admission selection; an
+unfinished support round permits only its snapshot-local multiples selector. An
+expression reading one variable is evaluated on that whole domain. For sums,
+differences, negations, products and division or remainder with variable operands,
+Rust checks the numeric hull of every intermediate. This applies to eligible flat normal-rule
 bodies, including constraints, without certifying their heads.
 `IntegerEnvelopes` supplies
 addition, negation, constant-product and signed truncating-quotient bounds, plus
@@ -2824,9 +2844,9 @@ Rust interval transfers, including the variable-product and variable-divisor
 cases, or source-column coverage. The argument establishes
 definedness on full bindings, not on every earlier join prefix.
 One Rust totality attempt reuses successful numeric-column hulls for its fixed
-rule and completed support. Every intermediate remains checked; no hull survives
-the attempt. Evidence lifetime, storage accounting and error-preserving reuse
-remain implementation obligations.
+rule and immutable support snapshot. Every intermediate remains checked; no hull
+survives the attempt. Evidence lifetime, storage accounting and error-preserving
+reuse remain implementation obligations.
 
 Eager emission, hybrid capture and hybrid model/region checks use the same Rust
 preparation and necessary-domain selector. Hybrid capture runs after original

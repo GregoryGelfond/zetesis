@@ -760,6 +760,16 @@
     "line": 160
   },
   {
+    "name": "Zetesis.BoundedMultiples.bounded_multiple_iff",
+    "file": "Zetesis/BoundedMultiples.lean",
+    "line": 33
+  },
+  {
+    "name": "Zetesis.BoundedMultiples.multiple_membership",
+    "file": "Zetesis/BoundedMultiples.lean",
+    "line": 60
+  },
+  {
     "name": "Zetesis.Bounds.gate_sandwich",
     "file": "Zetesis/Bounds.lean",
     "line": 70

@@ -1,4 +1,4 @@
-//! Total scalar arithmetic over complete positive source columns.
+//! Total scalar arithmetic over full positive columns of one immutable snapshot.
 //!
 //! Each selected column contains every value of its variable in a complete
 //! binding. Its numeric hull may include extra values: proving every arithmetic
@@ -34,7 +34,7 @@ pub(super) fn arithmetic(operation: &Operation) -> bool {
     )
 }
 
-/// Temporary numeric evidence for one normal body and its completed source.
+/// Temporary numeric evidence for one normal body and immutable source snapshot.
 ///
 /// A successful hull covers the same complete column throughout this attempt.
 /// Only those hulls are retained; unknown domains still decline the certificate.

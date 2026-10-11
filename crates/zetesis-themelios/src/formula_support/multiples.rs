@@ -1,9 +1,10 @@
 //! Bounded positive multiples over one admitted relation column.
 //!
-//! Completed body totality precedes preparation. One flat remainder equality
-//! supplies a necessary domain; other scalar comparisons remain residual. All atom-key
-//! variables must be supplied by the positive join. Evidence and support-delta
-//! cursors never consume this operation. No row or value is manufactured.
+//! Body totality over the immutable source snapshot precedes publication. One
+//! flat remainder equality supplies a necessary domain; other scalar comparisons
+//! remain residual. All atom-key variables must be supplied by the positive join.
+//! Delta cursors intersect postings with their original first-new occurrence
+//! interval. Evidence cursors never select; no row or value is manufactured.
 //!
 //! Bounds name the target column, not another occurrence of the same variable.
 //! A fixed plan must bind the divisor before the dividend. Each query generates
@@ -49,8 +50,9 @@ pub(super) struct Prepared<'source> {
 }
 
 impl<'source> Prepared<'source> {
-    /// Called only after complete body totality on this same rule and support.
-    /// Decline means no selection was published; typed refusals propagate.
+    /// Prepare a private candidate over this rule, plan and immutable support.
+    /// The caller must prove body totality on that same snapshot before publishing
+    /// it to a cursor. Decline publishes nothing; typed refusals propagate.
     pub(super) fn new(
         rule: &RuleIr,
         plan: &order::Plan<'_>,
@@ -199,6 +201,52 @@ fn number(
 }
 
 impl<'a, 'source> Join<'a, 'source> {
+    /// Select only multiples during possible-head production. The proof covers
+    /// this immutable round, not completed support; it supplies neither family
+    /// evidence nor permission for generic computed-domain/table selection.
+    pub(super) fn select_round_multiples(
+        &mut self,
+        rule: &'a RuleIr,
+        computation: &mut Computation<'_, '_>,
+        limits: &crate::FormulaLimits,
+        counters: &mut super::Counters,
+    ) -> Result<bool, FormulaFailure> {
+        counters.work(limits, rule.location)?;
+        if self.source_evidence || self.delta.is_none() {
+            return Ok(false);
+        }
+        if !std::ptr::eq(self.literals, rule.body.as_slice()) {
+            return Err(FormulaFailure::SupportRelation {
+                error: zetesis_core::relation::Failure::Owner,
+                location: rule.location,
+            });
+        }
+        let Some(prepared) = Prepared::new(
+            rule,
+            &self.plan,
+            self.support,
+            Context::new(&*computation, limits, counters, rule.location),
+        )?
+        else {
+            return Ok(false);
+        };
+        let total = self.projections.total_body(
+            rule,
+            self.support,
+            &mut self.evaluation,
+            Context::new(computation, limits, counters, rule.location),
+        );
+        self.evaluation.clear_zero_divisor();
+        if !total? {
+            return Ok(false);
+        }
+        // Publication follows the last charged/cancellable boundary. The
+        // descriptor never escapes this cursor or changes its coverage mode.
+        counters.work(limits, rule.location)?;
+        self.multiples = Some(prepared);
+        Ok(true)
+    }
+
     /// Selection is useful only at the authenticated target depth. The ordinary
     /// posting remains preferable if it offers no more rows than generation.
     pub(super) fn multiples_probe(
@@ -212,7 +260,7 @@ impl<'a, 'source> Join<'a, 'source> {
         else {
             return Ok(None);
         };
-        if !self.certified_total || self.source_evidence || self.delta.is_some() {
+        if self.source_evidence {
             return Ok(None);
         }
         tick(&mut context)?;
@@ -270,7 +318,22 @@ impl<'a, 'source> Join<'a, 'source> {
             Probe::Indexed(delta::Rows::Posting(rows)) => rows.len(),
             Probe::Table(_) | Probe::Owned(_) => unreachable!("indexed_probe returns indexed rows"),
         };
-        match prepared.posting(source, divisor, offered, self.support, context)? {
+        let interval = self.delta.map(|_| {
+            delta::interval(
+                self.delta,
+                pattern.source,
+                source.old_rows(),
+                source.row_count(),
+            )
+        });
+        match prepared.posting(
+            source,
+            divisor,
+            offered,
+            interval.as_ref(),
+            self.support,
+            context,
+        )? {
             Some(rows) => Ok(Some(Probe::Owned(rows))),
             None => Ok(Some(ordinary)),
         }
@@ -283,6 +346,7 @@ impl Prepared<'_> {
         source: &'source RelationRows<'source>,
         divisor: i32,
         offered: usize,
+        interval: Option<&std::ops::Range<usize>>,
         support: &Support<'source>,
         mut context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Option<Buffer<usize>>, FormulaFailure> {
@@ -317,10 +381,27 @@ impl Prepared<'_> {
                     ),
                 )?
                 .expect("prepared target retains its column posting");
+            let rows = if let Some(interval) = interval {
+                let delta::Rows::Posting(rows) = delta::Rows::within(
+                    Some(rows),
+                    interval.clone(),
+                    context.work.limits,
+                    context.work.counters,
+                    context.work.location,
+                )?
+                else {
+                    unreachable!("a supplied posting remains a borrowed posting")
+                };
+                rows
+            } else {
+                rows
+            };
             tick(&mut context)?;
             // Distinct values have disjoint postings, but one value can occur
-            // in many full tuples. Avoid retaining/sorting a union no smaller
-            // than the ordinary posting. Earlier lookup work stays charged.
+            // in many full tuples. Delta clipping precedes both the fanout test
+            // and retention, preserving the first-new partition. Avoid retaining
+            // and sorting a union no smaller than the ordinary posting. Earlier
+            // lookup work stays charged.
             if rows.len() >= offered - selected.len() {
                 return Ok(None);
             }

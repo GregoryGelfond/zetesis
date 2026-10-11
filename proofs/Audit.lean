@@ -152,6 +152,8 @@ import Zetesis
 #print axioms Zetesis.BooleanHeads.support_formula_truth
 #print axioms Zetesis.BooleanHeads.stable_satisfies_support
 #print axioms Zetesis.BooleanHeads.guarded_theory_preserves_stable_models
+#print axioms Zetesis.BoundedMultiples.bounded_multiple_iff
+#print axioms Zetesis.BoundedMultiples.multiple_membership
 #print axioms Zetesis.Bounds.gate_sandwich
 #print axioms Zetesis.Bounds.selected_consequence_mono
 #print axioms Zetesis.Bounds.selected_consequence_refines

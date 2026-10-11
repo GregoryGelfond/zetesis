@@ -7,6 +7,7 @@ use crate::{FormulaLimits, GroundingPhase, GroundingWork as ObservedWork};
 use zetesis_core::ValueLimits;
 
 mod accounting;
+mod delta;
 mod prepared;
 
 const DENSE: &str = include_str!("../../../tests/fixtures/divisibility-join/dense.lp");
@@ -281,13 +282,13 @@ fn negative_keys_require_positive_binding_coverage() {
 }
 
 #[test]
-fn delta_cursors_cannot_acquire_the_selection() {
+fn delta_cursors_cannot_use_completed_source_selection() {
     testing::with_completed_source(DENSE, |program, support, computation, counters| {
         let rule = rule(program);
         let limits = FormulaLimits::default();
         let mut join = Join::variant_rule(
             rule,
-            delta::Variant::Delta(0),
+            crate::formula_support::delta::Variant::Delta(0),
             support,
             None,
             &mut testing::budget(),
