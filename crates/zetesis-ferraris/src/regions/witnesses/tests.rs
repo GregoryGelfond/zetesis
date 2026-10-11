@@ -1,6 +1,7 @@
 //! Shared associative views retain model soundness and the scalar witnesses.
 
 mod coverage;
+mod marking;
 mod notifications;
 mod parents;
 mod streaming;

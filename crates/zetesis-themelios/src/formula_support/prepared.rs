@@ -21,6 +21,7 @@ pub(crate) struct PreparedRule<'source> {
     completion: &'source Completion,
     pub(super) plan: order::Plan<'source>,
     pub(super) total: Option<ProjectionValues<'source>>,
+    pub(super) multiples: Option<super::multiples::Prepared<'source>>,
     pub(super) pattern_rows: Option<PatternRows<'source>>,
 }
 
@@ -146,6 +147,16 @@ impl<'source> PreparedRule<'source> {
         } else {
             None
         };
+        let multiples = if total.is_some() {
+            super::multiples::Prepared::new(
+                rule,
+                &plan,
+                &completed.relations,
+                Context::new(&computation, limits, counters, rule.location),
+            )?
+        } else {
+            None
+        };
         let pattern_rows = PatternRows::prepare(
             &plan,
             &completed.relations,
@@ -163,6 +174,7 @@ impl<'source> PreparedRule<'source> {
             completion: completed.completion,
             plan,
             total,
+            multiples,
             pattern_rows,
         })
     }

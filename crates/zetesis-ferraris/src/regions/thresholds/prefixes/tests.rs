@@ -384,6 +384,7 @@ fn every_refused_prefix_discards_scratch_authority() {
             assert_eq!(snapshot(&knowledge), snapshot(&expected));
             assert!(scratch.threshold_rows.is_empty());
             assert!(scratch.pending_thresholds.iter().all(|&word| word == 0));
+            assert!(scratch.threshold_transfers.iter().all(|&word| word == 0));
         }
     }
 }

@@ -47,6 +47,7 @@ mod order;
 #[cfg(test)]
 mod postings;
 mod prepared;
+mod multiples;
 mod probe_selection;
 mod producers;
 mod projections;
@@ -994,6 +995,7 @@ pub(crate) struct Join<'a, 'source> {
     source_evidence: bool,
     /// All flat constraint expressions succeeded over completed source domains.
     certified_total: bool,
+    multiples: Option<multiples::Prepared<'a>>,
     family: family::Evidence,
     head_bounds: &'a [crate::formula_ir::AggregateGuard],
     checked_guard: Option<&'a crate::formula_guard::Guard>,
@@ -1057,6 +1059,7 @@ pub(crate) struct Row<'a> {
 enum Probe<'a, 'source> {
     Indexed(delta::Rows<'a>),
     Table(queries::Rows<'a, 'source>),
+    Owned(Buffer<usize>),
 }
 
 #[derive(Clone, Copy)]
@@ -1096,6 +1099,13 @@ impl Probe<'_, '_> {
         let row = match self {
             Self::Indexed(rows) => {
                 let row = rows.get(*position);
+                if row.is_some() {
+                    *position += 1;
+                }
+                row
+            }
+            Self::Owned(rows) => {
+                let row = rows.slice().get(*position).copied();
                 if row.is_some() {
                     *position += 1;
                 }
@@ -1202,6 +1212,7 @@ impl<'a, 'source> Join<'a, 'source> {
             join.pattern_rows = prepared.pattern_rows.as_ref();
             if prepared.total.is_some() {
                 join.certified_total = true;
+                join.multiples = prepared.multiples;
                 join.coverage = Coverage::Selected;
             }
             join
@@ -1303,6 +1314,13 @@ impl<'a, 'source> Join<'a, 'source> {
         )?;
         self.evaluation.clear_zero_divisor();
         if total {
+            let multiples = multiples::Prepared::new(
+                rule,
+                &self.plan,
+                self.support,
+                Context::new(&*computation, limits, counters, rule.location),
+            )?;
+            self.multiples = multiples;
             self.certified_total = true;
             self.coverage = Coverage::Selected;
         }
@@ -1580,6 +1598,7 @@ impl<'a, 'source> Join<'a, 'source> {
             coverage,
             source_evidence: false,
             certified_total: false,
+            multiples: None,
             family: family::Evidence::default(),
             head_bounds: &[],
             checked_guard: None,
@@ -1806,6 +1825,7 @@ impl<'a, 'source> Join<'a, 'source> {
     pub(crate) fn evidence(&mut self) {
         self.source_evidence = true;
         self.certified_total = false;
+        self.multiples = None;
         self.coverage = Coverage::Complete;
         self.domains = None;
     }
@@ -2362,21 +2382,19 @@ impl<'a, 'source> Join<'a, 'source> {
             }
         }
     }
-    /// Resolve the selected source's probe before its cursor advances.
-    fn prepare_probe(
+    /// Authenticate this depth's relation and filter as one immutable pair.
+    /// A refused authentication publishes neither half; backtracking reuses a
+    /// successfully resolved pair independently of the chosen probe strategy.
+    fn resolve_probe_source(
         &mut self,
         pattern: PatternOccurrence<'a>,
-        context: Context<'_, &mut Computation<'_, '_>>,
+        work: GroundingWork<'_>,
     ) -> Result<(), FormulaFailure> {
-        let Context {
-            computation,
-            work:
-                GroundingWork {
-                    limits,
-                    counters,
-                    location,
-                },
-        } = context;
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
         // Relation ownership is independent of how the row source was prepared.
         // A preselected probe still needs this snapshot's owner before row access.
         if matches!(self.resolutions[self.depth], Resolution::Unresolved) {
@@ -2396,6 +2414,25 @@ impl<'a, 'source> Join<'a, 'source> {
                 filter_source,
             };
         }
+        Ok(())
+    }
+
+    /// Resolve the selected source's probe before its cursor advances.
+    fn prepare_probe(
+        &mut self,
+        pattern: PatternOccurrence<'a>,
+        context: Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        let Context {
+            computation,
+            work:
+                GroundingWork {
+                    limits,
+                    counters,
+                    location,
+                },
+        } = context;
+        self.resolve_probe_source(pattern, GroundingWork::new(limits, counters, location))?;
         if self.probes[self.depth].is_none() {
             let source = self.resolutions[self.depth].rows();
             if let Some(anchor) = &mut self.anchor
@@ -2457,6 +2494,11 @@ impl<'a, 'source> Join<'a, 'source> {
                     location,
                 )? {
                     Probe::Table(rows)
+                } else if let Some(probe) = self.multiples_probe(
+                    source,
+                    Context::new(&*computation, limits, counters, location),
+                )? {
+                    probe
                 } else {
                     let posting = self.support.probe_at(
                         source,

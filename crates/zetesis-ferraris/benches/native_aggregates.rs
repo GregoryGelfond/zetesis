@@ -10,6 +10,8 @@
 //! ordinal families, with separate preparation and fixed-world evaluation.
 //! `tight_numeric` isolates reused tight checking over one fixed large Boolean
 //! DAG with zero or one live numeric operator; preparation is outside timers.
+//! `residual_sums` isolates original-region weighted-row narrowing, including
+//! missing residues and dense/unit controls; it does not measure enumeration.
 
 #[path = "native_aggregates/extremum_families.rs"]
 mod extremum_families;
@@ -19,6 +21,9 @@ mod ordinary_thresholds;
 
 #[path = "native_aggregates/tight_numeric.rs"]
 mod tight_numeric;
+
+#[path = "native_aggregates/residual_sums.rs"]
+mod residual_sums;
 
 use std::{hint::black_box, time::Duration};
 
@@ -373,5 +378,6 @@ fn main() {
     ordinary_thresholds::bench(&mut criterion);
     extremum_families::bench(&mut criterion);
     tight_numeric::bench(&mut criterion);
+    residual_sums::bench(&mut criterion);
     criterion.final_summary();
 }

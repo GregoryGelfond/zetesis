@@ -8125,6 +8125,31 @@
     "line": 151
   },
   {
+    "name": "Zetesis.ThresholdResidues.sum_decomposition",
+    "file": "Zetesis/ThresholdResidues.lean",
+    "line": 35
+  },
+  {
+    "name": "Zetesis.ThresholdResidues.sum_residue",
+    "file": "Zetesis/ThresholdResidues.lean",
+    "line": 57
+  },
+  {
+    "name": "Zetesis.ThresholdResidues.residual_divisible",
+    "file": "Zetesis/ThresholdResidues.lean",
+    "line": 73
+  },
+  {
+    "name": "Zetesis.ThresholdResidues.interval_refuted",
+    "file": "Zetesis/ThresholdResidues.lean",
+    "line": 89
+  },
+  {
+    "name": "Zetesis.ThresholdResidues.formula_interval_refuted",
+    "file": "Zetesis/ThresholdResidues.lean",
+    "line": 111
+  },
+  {
     "name": "Zetesis.Thresholds.threshold_query_exact",
     "file": "Zetesis/Thresholds.lean",
     "line": 37

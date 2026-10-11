@@ -180,3 +180,4 @@ import Zetesis.StratifiedEvaluation
 import Zetesis.RequiredChoiceCosts
 
 import Zetesis.ThresholdPropagation
+import Zetesis.ThresholdResidues

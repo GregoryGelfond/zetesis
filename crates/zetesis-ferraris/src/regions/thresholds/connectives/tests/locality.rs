@@ -241,3 +241,50 @@ fn ordinal_parents_keep_their_discovery_order() {
         .unwrap()
     );
 }
+
+#[test]
+fn native_requirement_authentication_collects_no_cone_result() {
+    use crate::regions::{Closure, Step, Width, Work, witnesses};
+
+    for disjunction in [false, true] {
+        let (theory, _) = connected(disjunction);
+        let index = Narrower::new(&theory);
+        assert_eq!(index.thresholds.rows.len(), 1);
+        let mut without = index.clone();
+        without.thresholds.connectives = None;
+        let mut region = Region::all_open(5);
+        let mut knowledge = without.knowledge();
+        close(
+            &theory,
+            &without,
+            &mut region,
+            &mut knowledge,
+            &mut NarrowingScratch::default(),
+        );
+        assert!((0..5).all(|atom| region.is_open(atom)));
+        let Width::Compact16(known) = &mut knowledge.width else {
+            panic!("the small witness uses compact counters");
+        };
+        let mut scratch = NarrowingScratch::default();
+        scratch
+            .prepare_thresholds(index.thresholds.rows.len())
+            .unwrap();
+        let result = Closure {
+            known: known.borrow(),
+            lists: &mut scratch,
+        }
+        .threshold_requirements(&index, 0, &mut Work::new(u64::MAX))
+        .unwrap();
+        assert!(result == Step::Changed);
+        assert!(
+            scratch
+                .witnesses
+                .candidates()
+                .iter()
+                .any(|&chain| witnesses::expands(&index, chain))
+        );
+        // This operation consumes membership marks only. Replacing its adapter
+        // with the collecting cone preserves truth but fails this route check.
+        assert!(scratch.witnesses.prepared().is_empty());
+    }
+}

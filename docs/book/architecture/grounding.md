@@ -562,6 +562,24 @@ checks, tuple comparisons and guards are validated on the substitutions the
 comparisons leave. The order decides how early an exclusion is decided,
 never whether it is.
 
+After complete source admission, an eligible `X \ D = 0` comparison can select
+existing rows by generating positive multiples of an already-bound divisor.
+The target column must have a complete positive numeric range, every body
+expression must be proved defined, and all atom-key variables must be supplied
+by the positive join. Other comparisons remain residual filters. The operation
+looks up canonical values without inserting new terms, then sorts the matching
+row IDs to retain ordinary traversal order and complete tuple identity.
+
+Existing structural, computed-domain and table probes retain priority. Multiple
+generation must offer fewer values and retained rows than the ordinary indexed
+probe; otherwise the existing probe is used and spent work remains charged.
+This bounds the selected population, not total runtime: dictionary lookups and
+sorting can still cost more than an ordinary scan. Source-evidence and support
+delta passes remain unchanged. The fixed join order must already bind the divisor
+first; this operation does not reorder a rule or make every divisibility join
+sieve-like. Unknown, mixed or nonpositive target domains retain checked scalar
+evaluation.
+
 Source-family evidence is finalized over completed support and the original
 source occurrence, not one support round or normalized fragment. Evaluated
 numeric division or remainder by zero omits an instance only when the same

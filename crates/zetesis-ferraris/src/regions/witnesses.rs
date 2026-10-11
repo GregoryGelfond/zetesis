@@ -324,6 +324,20 @@ impl Scratch {
         result.map(|_| ())
     }
 
+    /// Mark the complete same-kind cone without collecting a node sequence.
+    /// Membership-only consumers use the same traversal, generation marks and
+    /// node/edge receipt as `cone`; no result-vector capacity is requested.
+    /// The next walk invalidates these marks, including after a refused prefix.
+    pub(super) fn mark_cone(
+        &mut self,
+        index: &Narrower,
+        chain: usize,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        self.visit_nodes(index, chain, None, work, |_, _, _| Ok(Visit::Descend))
+            .map(|_| ())
+    }
+
     pub(super) fn visited(&self, node: usize) -> bool {
         self.seen[node] == self.generation
     }

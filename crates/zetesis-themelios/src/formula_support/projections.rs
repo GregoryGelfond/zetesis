@@ -11,8 +11,8 @@
 
 mod domains;
 mod totality;
-pub(super) use totality::needed as needs_totality;
 pub(crate) use totality::supports_column_totality;
+pub(super) use totality::{needed as needs_totality, positive_bounds};
 
 use std::{cmp::Ordering, ops::Deref};
 

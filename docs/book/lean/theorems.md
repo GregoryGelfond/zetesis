@@ -199,6 +199,11 @@ and frozen eligibility under complete masks. `ThresholdReduct.reference_original
 and `reference_frozen` give the corresponding equivalence for a nonnegative
 weighted threshold recurrence, including repeated conditions at distinct tuple
 positions. They do not yet establish a native runtime replacement.
+`ThresholdResidues` separates the known and undecided contributions and proves
+that every compatible remainder is divisible by a common divisor of the
+undecided weights. An interval missed by that progression has no compatible
+reading. Runtime grouping, divisor computation and event scheduling remain
+separate obligations; the law does not claim every progression point is possible.
 `AggregateRanges` establishes bounds
 on mathematical signed partial sums. `AggregateDependencies` composes complete
 predecessor-indexed value families. Its `Reuse.restart_exact` proves full reset

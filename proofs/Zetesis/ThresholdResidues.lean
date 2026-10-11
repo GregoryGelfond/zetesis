@@ -1,0 +1,131 @@
+import Zetesis.ThresholdDivision
+import Zetesis.ThresholdPropagation
+
+/-!
+# Necessary divisibility of a partially selected sum
+
+A compatible complete reading consists of the known contribution plus a
+selection from the undecided conditions. A common divisor of their coefficients
+therefore divides every possible remainder. If that arithmetic progression
+misses the required interval, no compatible reading satisfies the interval.
+
+The condition formulas may be correlated. The progression contains all possible
+sums; its points need not be realizable. These laws concern original truth and
+do not replace the reduct. Grouping equal conditions, computing the divisor,
+finite-width arithmetic, processed-event snapshots and Rust queue execution
+remain separate obligations.
+-/
+
+namespace Zetesis.ThresholdResidues
+
+open Ferraris ThresholdReduct ThresholdPropagation
+
+universe u v
+variable {α : Type u} {β : Type v}
+
+/-- Retain every occurrence whose condition is neither known true nor known
+    false. Repeated positions keep their weights. -/
+def remaining (lower upper : β → Bool) (inputs : List (Nat × β)) :
+    List (Nat × β) :=
+  inputs.filter (fun entry => upper entry.2 && !lower entry.2)
+
+/-- Every compatible sum is the known contribution plus the selected undecided
+    contribution. Induction distinguishes known true, known false and undecided
+    conditions; compatibility fixes the complete reading in the first two cases. -/
+theorem sum_decomposition (lower upper actual : β → Bool)
+    (inputs : List (Nat × β)) (compatible : Compatible lower upper actual) :
+    maskedSum actual inputs = maskedSum lower inputs +
+      maskedSum actual (remaining lower upper inputs) := by
+  induction inputs with
+  | nil => simp [remaining, maskedSum, queries, Thresholds.enabledSum]
+  | cons input rest ih =>
+    obtain ⟨weight, index⟩ := input
+    have reading (mask : β → Bool) (tail : List (Nat × β)) :
+        maskedSum mask ((weight, index) :: tail) =
+          (if mask index then weight else 0) + maskedSum mask tail := by
+      rfl
+    have lowerTruth : lower index = true → actual index = true := compatible.1 index
+    have upperTruth : actual index = true → upper index = true := compatible.2 index
+    cases low : lower index <;>
+      cases high : upper index <;>
+      cases truth : actual index <;>
+      simp_all [remaining, Nat.add_assoc, Nat.add_left_comm]
+
+/-- Dividing the undecided weights gives a witness for the complete sum's
+    arithmetic progression. The divisor need not be greatest or positive: the
+    weight-divisibility premise and exact sum decomposition suffice. -/
+theorem sum_residue (lower upper actual : β → Bool)
+    (inputs : List (Nat × β)) (divisor : Nat)
+    (compatible : Compatible lower upper actual)
+    (divides : ∀ entry ∈ remaining lower upper inputs, divisor ∣ entry.1) :
+    maskedSum actual inputs = maskedSum lower inputs + divisor *
+      maskedSum actual (ThresholdDivision.divide divisor (remaining lower upper inputs)) := by
+  have decomposed : maskedSum actual inputs = maskedSum lower inputs +
+      maskedSum actual (remaining lower upper inputs) :=
+    sum_decomposition lower upper actual inputs compatible
+  have scaled : maskedSum actual (remaining lower upper inputs) = divisor *
+      maskedSum actual (ThresholdDivision.divide divisor (remaining lower upper inputs)) :=
+    ThresholdDivision.masked_sum_divide divisor actual (remaining lower upper inputs) divides
+  exact decomposed.trans (congrArg (fun value => maskedSum lower inputs + value) scaled)
+
+/-- The common divisor divides every compatible remainder after subtracting
+    the known contribution. The scaled undecided sum is the divisibility witness. -/
+theorem residual_divisible (lower upper actual : β → Bool)
+    (inputs : List (Nat × β)) (divisor : Nat)
+    (compatible : Compatible lower upper actual)
+    (divides : ∀ entry ∈ remaining lower upper inputs, divisor ∣ entry.1) :
+    divisor ∣ maskedSum actual inputs - maskedSum lower inputs := by
+  have residue : maskedSum actual inputs = maskedSum lower inputs + divisor *
+      maskedSum actual (ThresholdDivision.divide divisor (remaining lower upper inputs)) :=
+    sum_residue lower upper actual inputs divisor compatible divides
+  refine ⟨maskedSum actual
+    (ThresholdDivision.divide divisor (remaining lower upper inputs)), ?_⟩
+  omega
+
+/-- An interval containing no point of the residual progression cannot contain
+    a compatible sum. The argument uses the exact witness above, not an assumption
+    that undecided conditions can be chosen independently. The upper bound is
+    exclusive, matching the conjunction of a required and a forbidden threshold. -/
+theorem interval_refuted (lower upper actual : β → Bool)
+    (inputs : List (Nat × β)) (divisor low high : Nat)
+    (compatible : Compatible lower upper actual)
+    (divides : ∀ entry ∈ remaining lower upper inputs, divisor ∣ entry.1)
+    (excluded : ∀ remainder : Nat,
+      ¬ (low ≤ maskedSum lower inputs + divisor * remainder ∧
+        maskedSum lower inputs + divisor * remainder < high)) :
+    ¬ (low ≤ maskedSum actual inputs ∧ maskedSum actual inputs < high) := by
+  have residue : maskedSum actual inputs = maskedSum lower inputs + divisor *
+      maskedSum actual (ThresholdDivision.divide divisor (remaining lower upper inputs)) :=
+    sum_residue lower upper actual inputs divisor compatible divides
+  intro within
+  have progressionPoint : ¬ (low ≤ maskedSum lower inputs + divisor *
+      maskedSum actual (ThresholdDivision.divide divisor (remaining lower upper inputs)) ∧
+      maskedSum lower inputs + divisor *
+        maskedSum actual (ThresholdDivision.divide divisor (remaining lower upper inputs)) < high) :=
+    excluded (maskedSum actual (ThresholdDivision.divide divisor (remaining lower upper inputs)))
+  exact progressionPoint (by simpa only [← residue] using within)
+
+/-- The arithmetic exclusion rules out satisfaction of a lower threshold
+    together with failure of an upper threshold, for arbitrary condition formulas.
+    This is a necessary original-truth restriction, not an answer-set test. -/
+theorem formula_interval_refuted (M : Atoms α) (conditions : β → Formula α)
+    (lower upper : β → Bool) (inputs : List (Nat × β)) (divisor low high : Nat)
+    (compatible : Compatible lower upper (active M conditions))
+    (divides : ∀ entry ∈ remaining lower upper inputs, divisor ∣ entry.1)
+    (excluded : ∀ remainder : Nat,
+      ¬ (low ≤ maskedSum lower inputs + divisor * remainder ∧
+        maskedSum lower inputs + divisor * remainder < high)) :
+    ¬ (Satisfies M (formula conditions inputs low) ∧
+      ¬ Satisfies M (formula conditions inputs high)) := by
+  intro satisfied
+  have below : low ≤ maskedSum (active M conditions) inputs :=
+    (ThresholdReduct.original M conditions inputs low).mp satisfied.1
+  have above : maskedSum (active M conditions) inputs < high := by
+    have absent : ¬ high ≤ maskedSum (active M conditions) inputs := by
+      intro reached
+      exact satisfied.2 ((ThresholdReduct.original M conditions inputs high).mpr reached)
+    omega
+  exact interval_refuted lower upper (active M conditions) inputs divisor low high
+    compatible divides excluded ⟨below, above⟩
+
+end Zetesis.ThresholdResidues

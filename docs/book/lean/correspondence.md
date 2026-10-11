@@ -88,6 +88,24 @@ positions retain their contributions even when their conditions are equal.
 with repeated condition identities, and the corresponding formula consequences.
 These are general laws over complete rows and truth bounds.
 
+[`ThresholdResidues`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ThresholdResidues.lean)
+separates a compatible sum into known and undecided contributions. A common
+divisor of the undecided coefficients confines every completion to one arithmetic
+progression; `interval_refuted` and `formula_interval_refuted` exclude a required
+interval when that progression misses it. Correlated conditions may make further
+values unreachable, so a nonempty intersection is not a satisfaction certificate.
+The [reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/threshold-residues.md)
+distinguishes this restriction from full attainable-sum computation.
+
+The original-only Rust check uses existing grouped rows after node events drain.
+A packed reason mask distinguishes arithmetic notifications from bound transport
+on the shared row queue. The check refutes regions without publishing bounds;
+its notifications arise only from processed conditions or existing stricter
+requirements. Grouping, the gcd computation and remainder-based interval test,
+finite-width arithmetic, snapshot consistency, queue termination and resource
+accounting remain executable correspondence obligations. These laws do not
+qualify the retained native extraction or frozen-reduct propagation.
+
 [`ThresholdDivision.equivalent`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ThresholdDivision.lean)
 proves that dividing every nonnegative weight by a positive common divisor and
 rounding a positive threshold upward as `1 + (bound - 1) / divisor` preserves

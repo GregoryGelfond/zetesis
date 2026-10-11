@@ -31,6 +31,16 @@ impl Range {
         self.high = self.high.max(i64::from(value));
     }
 
+    /// Checked positive bounds, without changing scalar arithmetic semantics.
+    pub(crate) fn positive_bounds(self) -> Option<(i32, i32)> {
+        (self.low > 0).then(|| {
+            (
+                i32::try_from(self.low).expect("checked i32 lower bound"),
+                i32::try_from(self.high).expect("checked i32 upper bound"),
+            )
+        })
+    }
+
     pub(crate) fn absolute(self) -> Option<Self> {
         let low = if self.low <= 0 && self.high >= 0 {
             0

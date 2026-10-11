@@ -17,6 +17,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   Boolean conditions, with corresponding Lean laws.
 - Reuse numeric row evaluations and checked domain bounds, and stop propagation
   scans and notifications once their result is settled.
+- Use divisibility to narrow eligible numeric joins and reject unreachable
+  aggregate sums, retaining checked arithmetic and complete answer sets.
 
 ## 0.5.0 — 2026-10-10
 

@@ -349,6 +349,9 @@ Child edges are visited only when reached, so these stops also avoid preparing
 remaining siblings. Complete walks retain distinct first-visit order. Visit-mark
 initialization and every reached node and edge remain charged. Frames use
 space proportional to active depth, with their actual capacity accounted.
+Native-to-Boolean containment checks retain only those visit marks. They share
+the traversal with callers that collect nodes, without constructing an unused
+result vector.
 Formula storage, atom support and each frozen node's truth gate retain their
 existing meanings.
 This candidate pruning does not rewrite the answer-set theory.

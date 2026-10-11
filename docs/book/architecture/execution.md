@@ -104,6 +104,22 @@ the requirements, adding no state to child copies. This transfer is disabled
 for frozen-reduct narrowing. Recognition is limited to exact prefixes in
 prepared order; other subset relations can remain undiscovered.
 
+For a required finite sum interval, original-candidate narrowing also checks
+divisibility of the remaining coefficients. If `B` is already known true and
+`d` divides every undecided coefficient, every completion has sum `B + d*k`.
+An interval containing none of those values refutes the region, even when its
+ordinary lower and upper readings overlap. Coefficients sharing one condition
+are grouped first. Unit rows cannot gain from this test and skip it.
+
+This check reads processed sums only after pending node events drain. It shares
+the row queue, distinguishing a changed sum from a request to transfer bounds,
+so arithmetic notifications do not repeat Boolean or prefix transport. It
+publishes no new bounds and adds no state to child copies. Work includes visited
+coefficients and Euclidean remainder steps; repeated event waves can rescan a row.
+Frozen-reduct narrowing is unchanged. The
+[residual-sum laws](../lean/correspondence.md#nonnegative-aggregate-thresholds)
+state the necessary condition and the remaining implementation obligations.
+
 Once a step proves a region contradictory, narrowing discards it without
 visiting the remaining operands, parents or support wakeups. Work accounting
 covers the visited prefix; cleanup still settles worker receipts. Partial

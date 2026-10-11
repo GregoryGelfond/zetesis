@@ -1625,6 +1625,11 @@ import Zetesis
 #print axioms Zetesis.ThresholdReduct.frozen
 #print axioms Zetesis.ThresholdReduct.reference_original
 #print axioms Zetesis.ThresholdReduct.reference_frozen
+#print axioms Zetesis.ThresholdResidues.sum_decomposition
+#print axioms Zetesis.ThresholdResidues.sum_residue
+#print axioms Zetesis.ThresholdResidues.residual_divisible
+#print axioms Zetesis.ThresholdResidues.interval_refuted
+#print axioms Zetesis.ThresholdResidues.formula_interval_refuted
 #print axioms Zetesis.Thresholds.threshold_query_exact
 #print axioms Zetesis.Thresholds.threshold_bound_antitone
 #print axioms Zetesis.Thresholds.threshold_sum_monotone

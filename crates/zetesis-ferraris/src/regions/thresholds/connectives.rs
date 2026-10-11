@@ -463,7 +463,7 @@ impl<C: Count> Closure<'_, C> {
             }
             let expanded = crate::regions::witnesses::expands(index, chain_index);
             let authenticated = if expanded {
-                self.lists.witnesses.cone(index, chain_index, work)?;
+                self.lists.witnesses.mark_cone(index, chain_index, work)?;
                 let mut contained = 0;
                 for &(condition, _) in &data.terms {
                     work.tick()?;

@@ -34,7 +34,7 @@
 //! held or cut.
 //!
 //! Work is charged per node read, root test, producer check and threshold row
-//! or relation visit,
+//! or relation visit, and residual coefficient or Euclidean step,
 //! against `RegionLimits`, and control is polled once per narrowing. Metered
 //! entry points instead acquire each permit from the caller's quota, which can
 //! also poll control, and retain the admitted prefix on every returned failure.
@@ -63,7 +63,7 @@ use masks::Masks;
 /// bounds the events too.
 #[derive(Clone, Copy, Debug)]
 pub struct RegionLimits {
-    /// Charged node reads, root tests, producer checks and threshold transfers.
+    /// Charged node reads, root tests, producer checks and threshold operations.
     pub max_work: u64,
 }
 impl Default for RegionLimits {
@@ -299,11 +299,11 @@ fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, St
 /// The work one narrowing charged.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct NarrowingStatistics {
-    /// Charged node reads, root tests, producer checks and threshold transfers.
+    /// Charged node reads, root tests, producer checks and threshold operations.
     pub work: u64,
     /// Propagation events: nodes and atoms learned and their neighbours
     /// revisited, atoms whose support was rechecked, and threshold rows whose
-    /// changed requirements were transported to related rows.
+    /// residual divisibility or changed requirements were checked.
     pub propagations: u64,
     /// Atoms held by the narrowing.
     pub held: u64,
@@ -1338,10 +1338,12 @@ pub struct NarrowingScratch {
     /// One bit per atom, set exactly while the atom is in `heads`, so an
     /// atom's recheck is queued once until it runs.
     pending: Vec<u64>,
-    /// Original-subject rows whose numeric requirements need transporting.
+    /// Original-subject rows awaiting residual checks or requirement transport.
     threshold_rows: Vec<usize>,
     /// One bit per row, set exactly while it is in `threshold_rows`.
     pending_thresholds: Vec<u64>,
+    /// Pending rows that also need prefix/Boolean requirement transport.
+    threshold_transfers: Vec<u64>,
     /// Shared connective views and dirty worklists belong to the walker.
     witnesses: witnesses::Scratch,
 }
@@ -1355,7 +1357,8 @@ impl NarrowingScratch {
             + self.nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
             + self.pending.capacity() as u128 * size_of::<u64>() as u128
             + self.threshold_rows.capacity() as u128 * size_of::<usize>() as u128
-            + self.pending_thresholds.capacity() as u128 * size_of::<u64>() as u128
+            + (self.pending_thresholds.capacity() + self.threshold_transfers.capacity()) as u128
+                * size_of::<u64>() as u128
             + self.witnesses.retained_bytes()
     }
 
@@ -1368,6 +1371,7 @@ impl NarrowingScratch {
         }
         for &row in &self.threshold_rows {
             self.pending_thresholds[row / 64] &= !(1u64 << (row % 64));
+            self.threshold_transfers[row / 64] &= !(1u64 << (row % 64));
         }
         self.learned.clear();
         self.nodes.clear();
@@ -1386,17 +1390,26 @@ impl NarrowingScratch {
             .try_reserve_exact(rows.saturating_sub(self.threshold_rows.len()))
             .map_err(|_| Stop::Allocation)?;
         let words = flag_words(rows);
-        if self.pending_thresholds.len() < words {
-            self.pending_thresholds
-                .try_reserve_exact(words - self.pending_thresholds.len())
-                .map_err(|_| Stop::Allocation)?;
-            self.pending_thresholds.resize(words, 0);
+        for flags in [&mut self.pending_thresholds, &mut self.threshold_transfers] {
+            if flags.len() < words {
+                flags
+                    .try_reserve_exact(words - flags.len())
+                    .map_err(|_| Stop::Allocation)?;
+                flags.resize(words, 0);
+            }
         }
         Ok(())
     }
 
-    /// Coalesce repeated requirement changes until the row is consumed.
+    /// Requirement changes also request a residual check. Condition changes
+    /// request only arithmetic: they must not repeat prefix or bridge walks.
     fn queue_threshold(&mut self, row: usize) {
+        self.threshold_transfers[row / 64] |= 1u64 << (row % 64);
+        self.queue_residual(row);
+    }
+
+    /// One queue entry represents all outstanding reasons for this row.
+    fn queue_residual(&mut self, row: usize) {
         let (word, flag) = (row / 64, 1u64 << (row % 64));
         if self.pending_thresholds[word] & flag == 0 {
             self.pending_thresholds[word] |= flag;
@@ -1404,10 +1417,13 @@ impl NarrowingScratch {
         }
     }
 
-    fn next_threshold(&mut self) -> Option<usize> {
+    fn next_threshold(&mut self) -> Option<(usize, bool)> {
         let row = self.threshold_rows.pop()?;
-        self.pending_thresholds[row / 64] &= !(1u64 << (row % 64));
-        Some(row)
+        let (word, flag) = (row / 64, 1u64 << (row % 64));
+        self.pending_thresholds[word] &= !flag;
+        let transfer = self.threshold_transfers[word] & flag != 0;
+        self.threshold_transfers[word] &= !flag;
+        Some((row, transfer))
     }
 
     /// Queue the atom's support recheck unless one is already pending. Its
@@ -1593,8 +1609,9 @@ impl<C: Count> Closure<'_, C> {
     /// Close the knowledge from the region's decisions, falsum and the
     /// roots. Node events follow new bits or initial seeds. Original threshold
     /// row events follow strictly tighter requirements from the finite set of
-    /// native and linked Boolean bounds, so exact-prefix transport also reaches
-    /// a fixed point. Boolean chains retain their existing operand counters.
+    /// native and linked Boolean bounds, or processed condition events. A
+    /// residual divisibility check only refutes: it adds no bounds or events.
+    /// Thus both row routes terminate; Boolean chains retain their counters.
     fn close(
         &mut self,
         subject: Subject<'_>,
@@ -1608,7 +1625,7 @@ impl<C: Count> Closure<'_, C> {
             producers,
             frozen,
         } = subject;
-        if frozen.is_none() && index.thresholds.has_relations() {
+        if frozen.is_none() && index.thresholds.needs_row_queue() {
             self.lists.prepare_thresholds(index.thresholds.rows.len())?;
         }
         if !index.witness_chains.is_empty() && (frozen.is_none() || !index.extrema.is_empty()) {
@@ -1675,13 +1692,13 @@ impl<C: Count> Closure<'_, C> {
             let step = if let Some((node, value)) = self.lists.nodes.pop() {
                 statistics.propagations += 1;
                 self.revisit(subject, index, node, value, work)?
-            } else if let Some(row) = self.lists.next_threshold() {
+            } else if let Some((row, transfer)) = self.lists.next_threshold() {
                 debug_assert!(
                     frozen.is_none(),
                     "only original rows transport requirements"
                 );
                 statistics.propagations += 1;
-                self.threshold_requirements(index, row, work)?
+                self.threshold_event(index, row, transfer, work)?
             } else if let Some(chain) = self.lists.witnesses.next_dirty() {
                 statistics.propagations += 1;
                 self.witness_changed(index, chain, frozen, work)?

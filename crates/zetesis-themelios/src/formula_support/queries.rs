@@ -189,6 +189,25 @@ impl<'source> Support<'source> {
         )
     }
 
+    /// Read a generated scalar through this query's existing relation owner.
+    pub(super) fn probe_value(
+        &self,
+        rows: &'source RelationRows<'source>,
+        column: usize,
+        value: TermRef<'_>,
+        work: GroundingWork<'_>,
+    ) -> Result<Option<&'source [usize]>, FormulaFailure> {
+        Self::admit(self.live_bytes(), work.limits, work.counters, work.location)?;
+        work.counters.record(Event::IndexedProbe);
+        self.relations.probe_value(
+            rows,
+            column,
+            value,
+            self.live_bytes() - self.relations.current_bytes(),
+            work,
+        )
+    }
+
     /// Probe resolved structural arguments through the same equality indexes.
     pub(super) fn probe_arguments_at(
         &self,

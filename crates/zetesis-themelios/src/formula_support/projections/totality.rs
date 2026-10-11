@@ -26,6 +26,7 @@ use crate::formula_support::{Computation, Context, Counters, Evaluation, Support
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits};
 
 mod numeric;
+pub(in crate::formula_support) use numeric::positive_bounds;
 
 /// Preparation serves either partial scalar families or total arithmetic whose
 /// certificate admits incremental source checking. This does not redefine which

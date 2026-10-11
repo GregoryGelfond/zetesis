@@ -947,6 +947,71 @@ impl<'source> Relations<'source> {
         })
     }
 
+    /// One generated query value uses the same dictionary and failure receipt
+    /// as ordinary bound-column probes. No term or row is inserted.
+    pub(super) fn probe_value(
+        &self,
+        rows: &RelationRows<'source>,
+        column: usize,
+        value: TermRef<'_>,
+        outer_bytes: usize,
+        work: GroundingWork<'_>,
+    ) -> Result<Option<&'source [usize]>, FormulaFailure> {
+        let mut memory = Memory::new(
+            self.current_bytes(),
+            outer_bytes as u128,
+            work.limits,
+            work.counters,
+            work.location,
+        );
+        memory.add(0)?;
+        work.counters.record(Event::JoinProbe);
+        let equality = Self::column_equality(rows, column, value, &memory, work)?;
+        let Postings::Indexed(postings) = rows.postings(column) else {
+            return Ok(None);
+        };
+        Ok(Some(equality.map_or(&[][..], |equality| {
+            postings
+                .get(&equality.value_id())
+                .map_or(&[][..], Vec::as_slice)
+        })))
+    }
+
+    fn column_equality(
+        rows: &RelationRows<'source>,
+        column: usize,
+        value: TermRef<'_>,
+        memory: &Memory<'_>,
+        work: GroundingWork<'_>,
+    ) -> Result<Option<zetesis_core::relation::Equality>, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        let outside = memory.outside(rows.relation.storage().retained_bytes)?;
+        let base_work = counters.accounting.work;
+        let checked = relation_limits(
+            limits,
+            counters,
+            rows.relation.predicate().arity(),
+            rows.relation.storage().retained_bytes + memory.remaining()?,
+        );
+        let attempt = rows
+            .relation
+            .equality_attempt_with(column, value, checked, || counters.work(limits, location));
+        counters.record(Event::SupportPeakBytes(
+            outside as u128 + attempt.peak_bytes as u128,
+        ));
+        let equality = attempt.result.map_err(|error| match error {
+            zetesis_core::relation::QueryFailure::Relation(error) => {
+                relation_failure(error, limits, base_work, outside, location)
+            }
+            zetesis_core::relation::QueryFailure::Stopped(error) => error,
+        })?;
+        Ok(equality)
+    }
+
     fn probe_columns<'rows, 'value>(
         &self,
         rows: Option<&'rows RelationRows<'source>>,
@@ -978,28 +1043,13 @@ impl<'source> Relations<'source> {
             counters.work(limits, location)?;
             let value = value_at(column)?;
             if let Some(value) = value {
-                let outside = memory.outside(rows.relation.storage().retained_bytes)?;
-                let base_work = counters.accounting.work;
-                let checked = relation_limits(
-                    limits,
-                    counters,
-                    pattern.predicate().arity(),
-                    rows.relation.storage().retained_bytes + memory.remaining()?,
-                );
-                let attempt = rows
-                    .relation
-                    .equality_attempt_with(column, value, checked, || {
-                        counters.work(limits, location)
-                    });
-                counters.record(Event::SupportPeakBytes(
-                    outside as u128 + attempt.peak_bytes as u128,
-                ));
-                let equality = attempt.result.map_err(|error| match error {
-                    zetesis_core::relation::QueryFailure::Relation(error) => {
-                        relation_failure(error, limits, base_work, outside, location)
-                    }
-                    zetesis_core::relation::QueryFailure::Stopped(error) => error,
-                })?;
+                let equality = Self::column_equality(
+                    rows,
+                    column,
+                    value,
+                    &memory,
+                    GroundingWork::new(limits, counters, location),
+                )?;
                 if let Some(equality) = equality {
                     match rows.postings(equality.column()) {
                         Postings::Indexed(postings) => {

@@ -54,6 +54,15 @@ impl<T> Buffer<T> {
             Context::new(computation, limits, counters, location),
         )
     }
+    /// An enclosing already-accounted cell owns this header after publication.
+    /// The returned buffer may be read or dropped, never grown again. Until
+    /// this transfer its temporary header and payload are both live receipts.
+    pub(super) fn embedded(mut self, location: ProgramSite) -> Result<Self, FormulaFailure> {
+        self.lease
+            .observe(self.lease.bytes() - size_of::<Self>(), location)?;
+        Ok(self)
+    }
+
     pub(crate) fn clear(&mut self) {
         self.values.clear();
     }

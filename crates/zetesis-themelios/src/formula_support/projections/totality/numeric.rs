@@ -190,18 +190,35 @@ fn numeric_domain(
     let Some(domain) = domain(slot, literals, support, context)? else {
         return Ok(None);
     };
-    let Postings::Indexed(postings) = domain.rows.postings(domain.column) else {
-        unreachable!("a selected domain column keeps postings");
+    column_range(domain.rows, domain.column, context)
+}
+
+/// A target-column hull, distinct from the smallest covering variable domain.
+/// The caller retains the exact immutable row owner, never a bare variable ID.
+pub(in crate::formula_support) fn positive_bounds<C>(
+    rows: &crate::formula_support::relations::RelationRows<'_>,
+    column: usize,
+    context: &mut Context<'_, C>,
+) -> Result<Option<(i32, i32)>, FormulaFailure> {
+    Ok(column_range(rows, column, context)?.and_then(Range::positive_bounds))
+}
+
+fn column_range<C>(
+    rows: &crate::formula_support::relations::RelationRows<'_>,
+    column: usize,
+    context: &mut Context<'_, C>,
+) -> Result<Option<Range>, FormulaFailure> {
+    let Postings::Indexed(postings) = rows.postings(column) else {
+        return Ok(None);
     };
     let mut bound: Option<Range> = None;
     for posting in postings.values() {
         tick(context)?;
         let position = *posting.first().expect("a distinct input has a source row");
-        let value = domain
-            .rows
+        let value = rows
             .row(position)
             .expect("retained source row")
-            .value(domain.column)
+            .value(column)
             .expect("checked source column");
         let ValueNodeRef::Number(value) = value.descriptor() else {
             return Ok(None);
