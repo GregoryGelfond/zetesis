@@ -136,7 +136,10 @@ the runtime traversal or frozen propagation.
 The original-candidate bridge reuses existing Boolean chain leaves and counters.
 Flat chains use least-condition anchor postings and exact prefix authentication.
 Shared chains discover candidates through existing links and authenticate
-associative witnesses. Bounds filter candidates before those checks. Local parent
+associative witnesses. Expanded discovery filters bound proposals before retaining
+candidates, then checks usefulness again before authentication. Its Rust argument
+requires monotonic bounds: a redundant proposal stays redundant through closure.
+This does not change the coverage or containment premises. Local parent
 roles select ancestor discovery, conservatively retaining compound anchors and
 ordinal parents on that route; unrelated sharing does not change flat discovery.
 This local eligibility argument remains a Rust obligation. The bridge keeps no
@@ -150,7 +153,10 @@ checks stream distinct leaves and stop at an absorbing witness or two open leave
 Forcing a sole open leaf or detecting none requires a complete walk. Runtime visits
 and comparisons consume propagation work; resumable frames read only reached
 child edges, retaining distinct-leaf order and abandoning partial walks on refusal.
-Each frozen node keeps its truth gate.
+Coverage checks share that traversal, stopping below an accepted compound
+condition or at the first uncovered leaf. Preserving the exact coverage verdict,
+visit order, charged reads and reusable scratch on refusal remains a Rust
+obligation. Each frozen node keeps its truth gate.
 Denoting a chain root by its distinct leaves, authenticating canonical condition
 IDs, recognizing unit-row relationships, and
 implementing checked bounds, event scheduling and resource accounting remain
@@ -2751,7 +2757,7 @@ filtering a finite input carrier by a sound, completely populated success map
 selects exactly carrier inputs evaluating to a fixed wanted value. Cache coverage
 of that carrier is distinct from the source proof that it covers every complete
 binding. The Rust projection's covered prefix records the former only after the
-whole constraint passes totality preparation; its completed positive column
+whole eligible body passes totality preparation; its completed positive column
 supplies the latter. A missing known-side key declines the optional restriction.
 
 The derived input domains use `FiniteTables.indexed_survival_exact` through the
@@ -2769,8 +2775,10 @@ adds a separate justification for ordinary row selection. A completed positive
 column covers every full binding's value at that variable, even when it contains
 extra values excluded by another argument or relation. An expression reading one
 variable is evaluated on that whole domain. For sums, differences, negations,
-constant products and division or remainder by a literal, the numeric hulls of
-the covering columns bound every intermediate. `IntegerEnvelopes` supplies
+products and division or remainder with variable operands, Rust checks the
+numeric hull of every intermediate. This applies to eligible flat normal-rule
+bodies, including constraints, without certifying their heads.
+`IntegerEnvelopes` supplies
 addition, negation, constant-product and signed truncating-quotient bounds, plus
 the remainder's magnitude bound. Subtraction uses addition of a negation;
 `ScalarArithmetic.checked_success` requires the resulting representability.
@@ -2778,7 +2786,8 @@ Every intermediate must satisfy that requirement, even if the final value fits.
 No scalar guard or relation correlation supplies a premise to this interval
 check. Unknown or mixed domains, zero divisors and possible overflow decline the certificate,
 while owner and resource refusals remain failures. These laws do not prove the
-Rust interval transfer or source-column coverage. The argument establishes
+Rust interval transfers, including the variable-product and variable-divisor
+cases, or source-column coverage. The argument establishes
 definedness on full bindings, not on every earlier join prefix.
 One Rust totality attempt reuses successful numeric-column hulls for its fixed
 rule and completed support. Every intermediate remains checked; no hull survives
@@ -2833,8 +2842,8 @@ Its correspondence must cover the union of those queries, including the
 all-held case, without lending truth across an unmapped row or stale binding.
 The first matched open occurrence still limits traversal beyond an unmapped
 gap, and backtracking must remove that restriction at its recorded depth.
-The retained rule's complete totality certificate may admit sums and differences
-to that route. Every rule in the streamed partition must be eligible; one
+The retained rule's complete totality certificate may admit checked scalar
+arithmetic to that route. Every rule in the streamed partition must be eligible; one
 unproved arithmetic rule retains the sequential first-result schedule for the
 whole partition. A sound later unit alone would not authorize bypassing an
 earlier rule whose diagnostics could change after propagation. Partial
@@ -2845,14 +2854,21 @@ batch laws.
 After that obligation is established, `GroundGuards.guard_original` and
 `guard_frozen` identify each evaluated comparison with the same Boolean in both
 worlds. Together with `RuleFactorization.reduct_conj` and `reduct_imp`, a false
-body comparison makes that ground constraint true in both the original theory
-and every frozen reduct. Omitting such instances preserves the semantic theory.
+body comparison makes that ground rule implication true in both the original
+theory and every frozen reduct. Omitting such instances preserves the semantic theory.
 This is a direct application of existing guard and reduct laws; those laws do
 not establish the Rust column coverage, arithmetic totality or prefix schedule.
 Speculative prefix failures retain the ordinary fallback, typed owner/resource
 refusals remain failures, and arithmetic-family evidence still traverses complete
 rows, including defined false witnesses. The success-cache laws above justify
 reusing successful preparation results without changing their values.
+
+For rejected flat rows, Rust shares atom-key validation between ordinary bodies
+and streamed constraints instead of constructing discarded formulas. This relies
+on the caller having completed the join and authoritative source-family checks;
+generators and nested scopes retain complete scoped validation. Preservation of
+binding errors, source locations, independent arithmetic faults and false-body
+head suppression remains a Rust obligation, separate from the omission law.
 
 [`ProjectedConditionals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ProjectedConditionals.lean)
 separates anonymous witness disjunctions, signed source alternatives and

@@ -1,6 +1,7 @@
 //! Unit-connective consequences preserve original models and leave frozen closure alone.
 
 mod locality;
+mod selection;
 
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaNodes, FormulaParts,

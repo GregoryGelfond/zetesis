@@ -3,7 +3,8 @@
 //! A transient builder borrows complete Support and selects the shared source
 //! authority while owning its node table and aggregate cache. Objective rows use their explicit scratch
 //! ceilings even when filters or numeric selection later discard them. Rejected
-//! rule rows use the theory ceilings for their discarded validation scratch.
+//! rule rows with nested scopes or generators use the theory ceilings for
+//! their discarded validation scratch; flat rejected rows validate atom keys.
 //! Both share cumulative source work. Only final reachable objective Condition
 //! nodes consume the retained query ceiling. No roots, producers, coherence or
 //! support-guard completion from scratch reach the original program.

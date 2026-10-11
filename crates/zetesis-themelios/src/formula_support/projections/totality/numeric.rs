@@ -16,26 +16,25 @@ use super::{
 use crate::formula_support::Buffer;
 use crate::scalar_arithmetic::Range;
 
-/// The shared scalar grammar for source-column bounds. A literal multiplication
-/// factor or divisor is checked for numeric value by the certificate itself.
-/// Merely recognizing this syntax establishes neither totality nor source truth.
-pub(super) fn supports(expression: &Expression, operation: &Operation) -> bool {
-    matches!(operation, Operation::Constant(_) | Operation::Variable(_))
-        || arithmetic(expression, operation)
+/// The shared scalar grammar for source-column bounds. Recognition establishes
+/// neither numeric inputs nor totality; checked ranges certify each intermediate.
+pub(super) fn supports(operation: &Operation) -> bool {
+    matches!(operation, Operation::Constant(_) | Operation::Variable(_)) || arithmetic(operation)
 }
 
-pub(super) fn arithmetic(expression: &Expression, operation: &Operation) -> bool {
-    let constant = |index| matches!(expression.nodes.get(index), Some(Operation::Constant(_)));
-    match operation {
+pub(super) fn arithmetic(operation: &Operation) -> bool {
+    matches!(
+        operation,
         Operation::Unary(UnaryOp::Negate, _)
-        | Operation::Binary(BinaryOp::Add | BinaryOp::Sub, _, _) => true,
-        Operation::Binary(BinaryOp::Mul, left, right) => constant(*left) || constant(*right),
-        Operation::Binary(BinaryOp::Div | BinaryOp::Mod, _, right) => constant(*right),
-        _ => false,
-    }
+            | Operation::Binary(
+                BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div | BinaryOp::Mod,
+                _,
+                _
+            )
+    )
 }
 
-/// Temporary numeric evidence for one constraint and its completed source.
+/// Temporary numeric evidence for one normal body and its completed source.
 ///
 /// A successful hull covers the same complete column throughout this attempt.
 /// Only those hulls are retained; unknown domains still decline the certificate.
@@ -79,11 +78,7 @@ impl<'input, 'source> Preparation<'input, 'source> {
         expression: &Expression,
         context: &mut Context<'_, &mut Computation<'_, '_>>,
     ) -> Result<bool, FormulaFailure> {
-        if expression
-            .nodes
-            .iter()
-            .any(|node| !supports(expression, node))
-        {
+        if expression.nodes.iter().any(|node| !supports(node)) {
             return Ok(false);
         }
         if self.workspace.is_none() {

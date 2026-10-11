@@ -15,6 +15,7 @@ mod metadata;
 mod nodes;
 mod producer;
 mod projection;
+mod rejected;
 mod retained;
 mod support_guards;
 use retained::RetainedState;
@@ -687,7 +688,7 @@ impl Builder<'_, '_, '_> {
         // The same complete-column attempt precedes frozen checker scans.
         // Admit even speculative successful values here: a covering column can
         // include rows excluded by another argument of this source pattern.
-        join.select_total_constraint(rule, self.computation, self.limits, &mut self.counters)?;
+        join.select_total_body(rule, self.computation, self.limits, &mut self.counters)?;
         while let Some(row) = join.next_row(
             self.computation,
             self.limits,
@@ -695,38 +696,26 @@ impl Builder<'_, '_, '_> {
             &mut self.counters,
             rule.location,
         )? {
-            if row.passes {
-                // Every retained count is bounded by the charged substitution cap.
-                *instances += 1;
+            if !row.passes {
+                // The completed join and source-family admission already
+                // checked the scalar operations of this flat streamed body.
+                self.validate_atom_keys(
+                    &rule.body,
+                    &row.values,
+                    rule.location,
+                    |variable, location| FormulaFailure::UnsafeVariable { variable, location },
+                )?;
+                continue;
             }
+            // Every retained count is bounded by the charged substitution cap.
+            *instances += 1;
             for literal in &rule.body {
                 let pattern = match literal {
                     LiteralIr::Atom(_, pattern) => pattern,
                     LiteralIr::PatternAtom(pattern) => &pattern.atom,
                     _ => continue,
                 };
-                if row.passes {
-                    self.atom(*pattern, &row.values, rule.location)?;
-                } else {
-                    // Eager discarded-body validation checks these bindings but
-                    // publishes no atoms. All scalar operations were checked by
-                    // the shared family admission and join; no local scopes are
-                    // eligible here, so atom-key validation completes that duty.
-                    self.work(rule.location)?;
-                    let view = row.values.view(
-                        self.computation.read(),
-                        self.limits,
-                        &mut self.counters,
-                        rule.location,
-                    )?;
-                    self.computation
-                        .static_pattern(*pattern, self.limits, &mut self.counters, rule.location)?
-                        .key(view)
-                        .map_err(|error| FormulaFailure::UnsafeVariable {
-                            variable: error.variable,
-                            location: rule.location,
-                        })?;
-                }
+                self.atom(*pattern, &row.values, rule.location)?;
             }
         }
         Ok(())
@@ -762,7 +751,7 @@ impl Builder<'_, '_, '_> {
             self.budget,
             &mut self.counters,
         )?;
-        outer.select_total_constraint(rule, self.computation, self.limits, &mut self.counters)?;
+        outer.select_total_body(rule, self.computation, self.limits, &mut self.counters)?;
         if crate::formula_factor::continuations(self, rule, &mut outer, support)? {
             return Ok(());
         }
@@ -1175,8 +1164,10 @@ impl Builder<'_, '_, '_> {
         self.node(Node::Atom(index), location)
     }
     /// Validate a rejected complete row without changing the original atom/node
-    /// catalog, caches, roots or producer tables. Scratch uses the existing
-    /// theory ceilings; cumulative source work and scalar copying remain shared.
+    /// catalog, caches, roots or producer tables. Flat rows reuse atom-key
+    /// validation after the join's scalar checks. Nested or generated bodies
+    /// keep scoped scratch under the existing theory ceilings. Cumulative
+    /// source work and scalar copying remain shared in both routes.
     pub(super) fn validate_body(
         &mut self,
         literals: &[LiteralIr],
@@ -1184,6 +1175,9 @@ impl Builder<'_, '_, '_> {
         support: &Support<'_>,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
+        if self.validate_flat_body(literals, binding, location)? {
+            return Ok(());
+        }
         let mut context = crate::formula_source_activity::Context {
             computation: self.computation,
             limits: self.limits,

@@ -319,9 +319,12 @@ whether the native conditions cover a Boolean witness or occur within it.
 Local parent roles select that discovery; an unrelated shared component does
 not send a flat anchor through an ancestor walk. Compound anchors and ordinal
 parents conservatively retain their existing discovery route.
-Compound conditions remain valid stopping points. Numeric bounds reject
-unhelpful candidates before authentication. Non-unit coefficients do not
-qualify for this Boolean bridge. The
+Compound conditions remain valid stopping points. Expanded discovery reads each
+anchor posting but retains a row only if the proposed bound can strengthen it.
+The same check runs before authentication; bounds only tighten during closure,
+so a discarded proposal cannot become useful later. Exact coverage and
+containment checks remain required. Non-unit coefficients do not qualify for
+this Boolean bridge. The
 [connective laws](../lean/correspondence.md#nonnegative-aggregate-thresholds)
 state the original-truth meaning and the remaining representation obligations.
 
@@ -340,8 +343,10 @@ notices after their ordinary truth events have informed parents and forced
 required descendants. Their required-witness checks use the same distinct-leaf
 traversal as collected associative views. A check stops at an absorbing witness
 or a second open leaf; forcing a sole open leaf or detecting none requires a
-complete walk. Resumable ancestor frames visit child edges only when reached,
-so an early stop also avoids preparing the remaining siblings. Visit-mark
+complete walk. Structural coverage uses the same resumable traversal: a covered
+compound condition skips its descendants, and an uncovered leaf ends the check.
+Child edges are visited only when reached, so these stops also avoid preparing
+remaining siblings. Complete walks retain distinct first-visit order. Visit-mark
 initialization and every reached node and edge remain charged. Frames use
 space proportional to active depth, with their actual capacity accounted.
 Formula storage, atom support and each frozen node's truth gate retain their

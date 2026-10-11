@@ -91,19 +91,12 @@ fn correlated_products_keep_the_original_scan() {
 }
 
 #[test]
-fn variable_products_keep_the_original_scan() {
-    let owner = admit(include_str!(
-        "../../../../../tests/fixtures/streamed-consequences/arithmetic/variable-product.lp"
-    ));
-    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
-    let region = Region::all_open(owner.atom_catalog().atoms().len());
-    assert!(matches!(
-        pass(&mut checker, &region, ConstraintRegionPass::First),
-        ConstraintConsequence::Cut { .. }
-    ));
-    assert_eq!(
-        checker.prepared.as_ref().unwrap().incremental_eligible,
-        Some(false)
+fn variable_products_enable_batched_consequences() {
+    batched_units(
+        include_str!(
+            "../../../../../tests/fixtures/streamed-consequences/arithmetic/variable-product.lp"
+        ),
+        &[[1, 2]],
     );
 }
 
@@ -248,4 +241,43 @@ fn unrewritten_send_arithmetic_enables_batching() {
             >= 4,
         "the four written carry equations retain their numeric certificates"
     );
+}
+
+#[test]
+fn variable_quotients_enable_batched_consequences() {
+    batched_units(
+        include_str!("../../../../../tests/fixtures/column-totality/positive-quotient.lp"),
+        &[[4, 2], [5, 2]],
+    );
+    batched_units(
+        include_str!("../../../../../tests/fixtures/column-totality/negative-quotient.lp"),
+        &[[-4, -2], [-5, -2]],
+    );
+}
+
+#[test]
+fn variable_remainders_enable_batched_consequences() {
+    batched_units(
+        include_str!("../../../../../tests/fixtures/column-totality/negative-remainder.lp"),
+        &[[-5, -2], [-7, -3]],
+    );
+}
+
+#[test]
+fn zero_containing_hulls_keep_the_original_scan() {
+    for source in [
+        include_str!("../../../../../tests/fixtures/column-totality/zero-hull-quotient.lp"),
+        include_str!("../../../../../tests/fixtures/column-totality/zero-hull-remainder.lp"),
+    ] {
+        let owner = admit(source);
+        let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+        let region = Region::all_open(owner.atom_catalog().atoms().len());
+        assert!(matches!(
+            pass(&mut checker, &region, ConstraintRegionPass::First),
+            ConstraintConsequence::Cut { .. }
+        ));
+        let prepared = checker.prepared.as_ref().unwrap();
+        assert_eq!(prepared.incremental_eligible, Some(false));
+        assert!(prepared.incremental.is_none());
+    }
 }

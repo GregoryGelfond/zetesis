@@ -41,7 +41,7 @@ use zetesis_cpu::Stop;
 
 use crate::regions::{Chain, Closure, Count, Narrower, Step, Work, bit};
 
-use super::{Adjacency, Row, Thresholds, reserve};
+use super::{Adjacency, Row, State, Thresholds, reserve};
 
 #[cfg(test)]
 mod anchors_tests;
@@ -261,6 +261,17 @@ fn bound(disjunction: bool, leaves: &[usize]) -> i128 {
     if disjunction { 1 } else { leaves.len() as i128 }
 }
 
+/// Lower requirements only rise and exclusive upper requirements only fall.
+/// A proposal already implied now cannot become useful later in this closure.
+/// Keep the same predicate at discovery and before authenticated transport.
+fn useful_bound(state: &State, value: bool, bound: i128) -> bool {
+    if value {
+        state.lower < bound
+    } else {
+        state.upper.is_none_or(|upper| bound < upper)
+    }
+}
+
 impl Thresholds {
     pub(super) fn has_requirement_links(&self, row: usize) -> bool {
         !self.related(row).is_empty()
@@ -300,7 +311,18 @@ impl<C: Count> Closure<'_, C> {
                 let node = self.lists.witnesses.prepared()[position];
                 for &row in anchors.rows_at(node, work)? {
                     work.tick()?;
-                    self.lists.witnesses.push_candidate(row)?;
+                    let proposed = if value {
+                        1
+                    } else {
+                        index.thresholds.rows[row].terms.len() as i128
+                    };
+                    // Discovery still visits every posting. Charge this extra
+                    // state read before retaining only potentially useful IDs;
+                    // authentication and its later recheck keep survivor order.
+                    work.tick()?;
+                    if useful_bound(&self.known.thresholds[row], value, proposed) {
+                        self.lists.witnesses.push_candidate(row)?;
+                    }
                 }
             }
             &[][..]
@@ -326,18 +348,12 @@ impl<C: Count> Closure<'_, C> {
             work.tick()?;
             let data = &index.thresholds.rows[row];
             let length = data.terms.len();
-            let state = self.known.thresholds[row];
             let bound = if expanded && !source.disjunction {
                 length as i128
             } else {
                 bound(source.disjunction, source.leaves(&index.extrema))
             };
-            let useful = if value {
-                state.lower < bound
-            } else {
-                state.upper.is_none_or(|upper| bound < upper)
-            };
-            if !useful {
+            if !useful_bound(&self.known.thresholds[row], value, bound) {
                 continue;
             }
             let authenticated = if expanded {

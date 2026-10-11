@@ -387,9 +387,9 @@ including the delivered prefix, against the current region. Delivery alone is
 insufficient. Any intervening change that could enable a body occurrence
 discards this evidence; ignored units are rediscovered by a full scan.
 These checks use the existing batch and changed-atom information, without
-retaining ground constraint instances. Sums, differences, constant products and
-division or remainder by a nonzero literal can use the same finite totality
-certificate as ordinary row selection. Every streamed rule must
+retaining ground constraint instances. Checked arithmetic can use the same
+finite totality certificate as ordinary row selection, including products and
+division or remainder with variable operands. Every streamed rule must
 have defined scalar expressions; one unproved rule keeps the entire partition
 on the sequential path, preserving its first-result diagnostic order. The
 [batch and dependency laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/streamed-consequences.md)
@@ -606,18 +606,20 @@ cumulative grounding work, while retained metadata uses `SupportBytes`. The
 [projection regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/tests.rs)
 check value reuse, owner boundaries, arithmetic failures and inclusive limits.
 
-After source-family validation, a flat constraint can establish finite totality
-from completed positive columns, without constructors, generators, structural
-captures or nested scopes. A smallest covering column supplies all possible
-values of each variable in complete bindings. An expression reading one variable
-is checked on that whole domain. Sums, differences, negation, constant products
-and division or remainder by a literal can instead use numeric column intervals
-when several variables occur. Every intermediate must be defined and fit the
-checked integer range; division and remainder retain truncation toward zero.
-This overapproximates correlations and uses no scalar comparison as a premise.
-Unknown or mixed domains, zero divisors and possible overflow decline the
-certificate; no Cartesian table of arithmetic results is retained. Within one
-constraint’s totality attempt, repeated variable occurrences share the completed
+After source-family validation, a flat normal-rule body can establish finite
+totality from completed positive columns. Constraints qualify too; constructors,
+generators, structural captures, nested scopes and additional head variables do
+not. A smallest covering column supplies all possible values of each variable
+in complete bindings. An expression reading one variable is checked on that
+whole domain. Sums, differences, negation, products and division or remainder
+with variable operands can instead use numeric column intervals when several
+variables occur. Every intermediate must be defined and fit the checked integer
+range; division and remainder retain truncation toward zero. This
+overapproximates correlations and uses no scalar comparison as a premise.
+Unknown or mixed numeric domains, divisor intervals containing zero and possible
+overflow decline the certificate, including `i32::MIN / -1` and its remainder
+counterpart. No Cartesian table of arithmetic results is retained. Within one
+body’s totality attempt, repeated variable occurrences share the completed
 numeric column’s bounds, and expressions reuse one temporary range buffer. This
 leased workspace is created only for multi-input arithmetic and is released at
 the end of the attempt; evidence never crosses rules or source snapshots. Every
@@ -626,7 +628,16 @@ shared with keyed-rewrite safety. Resource and owner failures
 remain located failures. Only success for every expression permits this
 certified selection. A reached prefix may still contain a value absent from its
 later covering column; its arithmetic failures retain the ordinary deferred handling.
-Evidence cursors always traverse complete rows.
+Evidence cursors always traverse complete rows. The certificate concerns body
+expressions, not head evaluation or candidate truth; mixed-type ASP comparisons
+retain their ordinary ordering.
+
+After complete join and source-family checks, a rejected flat body validates
+atom keys without interning atoms or constructing a discarded
+formula. Ordinary rules and streamed constraints share that validation, retaining
+their typed binding errors, source locations and work charges. Generated bindings
+and nested scopes still use complete scoped lowering. A false body does not
+trigger head evaluation, and this shortcut does not skip source-family diagnostics.
 
 Hybrid capture and later model/region checks use this same preparation and
 selector. Capture runs after original family admission, with the completed

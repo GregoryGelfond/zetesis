@@ -23,7 +23,7 @@ fn with_join(
         let mut join =
             Join::rule(rule, support, computation, &limits, &mut budget(), counters).unwrap();
         assert!(
-            join.select_total_constraint(rule, computation, &limits, counters)
+            join.select_total_body(rule, computation, &limits, counters)
                 .unwrap()
         );
         assert!(join.certified_total);

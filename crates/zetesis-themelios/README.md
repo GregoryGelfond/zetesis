@@ -221,10 +221,14 @@ Closed-term preparation and post-solve observations retain strict checks. See
 for the binding and phase boundaries.
 
 Final formula materialization and hybrid capture can certify total arithmetic
-for a flat constraint from completed positive argument columns. Every checked expression
-must be a leaf or depend on one variable covered by a whole column domain;
-generated scopes, nested scopes and constructors remain outside this gate.
-Successful preparation permits ordinary comparison selection. An arithmetic
+for eligible flat normal-rule bodies, including constraints, from completed
+positive argument columns. Expressions reading one variable are checked over a
+whole column; expressions with several variables can use checked numeric intervals for
+addition, subtraction, negation, multiplication, division and remainder.
+Every intermediate must be defined and representable. Generated bindings,
+nested scopes, constructors and additional head variables remain outside this
+gate. Successful preparation permits ordinary comparison selection without
+certifying heads or changing mixed-type ASP comparison order. An arithmetic
 failure in that possibly larger domain declines the optimization without
 creating a source diagnostic; resource and owner failures remain typed refusals.
 Source-family evidence always retains complete traversal. Each reached hybrid
@@ -235,6 +239,11 @@ optional attempt. Errors publish no prepared rule. Capture has already admitted
 the speculative successful values, so frozen checking needs no new term
 admission. Retained maps authenticate their completed carrier and accounting
 workspace; they establish no candidate truth.
+
+After complete join and source-family checks, rejected flat bodies share atom-key
+validation with streamed constraints instead of constructing temporary formulas.
+Binding errors and source locations remain intact; generated bindings and nested
+scopes retain complete scoped validation. Rejected bodies do not evaluate heads.
 
 Descending or nonnumeric interval endpoints yield no rows in facts and generated
 bindings.

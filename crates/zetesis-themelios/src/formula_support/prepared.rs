@@ -130,7 +130,7 @@ impl<'source> PreparedRule<'source> {
         let total = if needs_totality(&rule.body) {
             let mut projections =
                 Projections::new(&Context::new(&computation, limits, counters, rule.location))?;
-            if projections.total_constraint(
+            if projections.total_body(
                 rule,
                 queries.support(),
                 &mut Evaluation::default(),

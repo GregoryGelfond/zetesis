@@ -33,7 +33,7 @@ fn unreachable_bad_domain_value_declines_without_source_failure() {
             .unwrap();
             assert!(
                 !join
-                    .select_total_constraint(rule, computation, &limits, counters)
+                    .select_total_body(rule, computation, &limits, counters)
                     .unwrap()
             );
             assert!(join.coverage == Coverage::Complete);
@@ -74,7 +74,7 @@ fn reached_independent_overflow_remains_fatal() {
             .unwrap();
             assert!(
                 !join
-                    .select_total_constraint(rule, computation, &limits, counters)
+                    .select_total_body(rule, computation, &limits, counters)
                     .unwrap()
             );
             assert!(matches!(
@@ -116,7 +116,7 @@ fn each_comparison_form_requires_total_expressions() {
                 )
                 .unwrap();
                 assert_eq!(
-                    join.select_total_constraint(rule, computation, &limits, counters)
+                    join.select_total_body(rule, computation, &limits, counters)
                         .unwrap(),
                     expected,
                     "{source}"
@@ -145,7 +145,7 @@ fn later_column_certificate_does_not_diagnose_an_incomplete_prefix() {
             )
             .unwrap();
             assert!(
-                join.select_total_constraint(rule, computation, &limits, counters)
+                join.select_total_body(rule, computation, &limits, counters)
                     .unwrap()
             );
             let mut rows = 0;
@@ -189,7 +189,7 @@ fn evidence_keeps_false_defined_rows_of_same_location_siblings() {
                 )
                 .unwrap();
                 certificates += usize::from(
-                    join.select_total_constraint(rule, computation, &limits, counters)
+                    join.select_total_body(rule, computation, &limits, counters)
                         .unwrap(),
                 );
                 join.evidence();
@@ -234,7 +234,7 @@ fn constructor_expressions_decline_numeric_totality() {
             .unwrap();
             assert!(
                 !join
-                    .select_total_constraint(rule, computation, &limits, counters)
+                    .select_total_body(rule, computation, &limits, counters)
                     .unwrap()
             );
             assert!(join.coverage == Coverage::Complete);
@@ -260,7 +260,7 @@ fn another_rule_cannot_certify_this_join() {
             )
             .unwrap();
             assert!(matches!(
-                join.select_total_constraint(rules[1], computation, &limits, counters),
+                join.select_total_body(rules[1], computation, &limits, counters),
                 Err(FormulaFailure::SupportRelation {
                     error: zetesis_core::relation::Failure::Owner,
                     ..
@@ -292,7 +292,7 @@ fn a_column_only_the_comparison_reads_remains_a_domain() {
             )
             .unwrap();
             assert!(
-                join.select_total_constraint(rule, computation, &limits, counters)
+                join.select_total_body(rule, computation, &limits, counters)
                     .unwrap()
             );
         },

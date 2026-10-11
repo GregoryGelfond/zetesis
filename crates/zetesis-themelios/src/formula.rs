@@ -1141,11 +1141,13 @@ pub(crate) struct Compiled {
 /// and range selection. Negative gates and aggregate truth remain formulas and
 /// do not select this stage. Closed-term syntax and arithmetic validation still
 /// occur during source preparation. Substitutions a binder, interval check,
-/// tuple comparison or guard rejects still validate their bodies through
-/// isolated formula scratch before being discarded; that scratch supplies no
-/// atoms, roots, producers or objective keys to the admitted program. Rule-body
-/// scratch uses the existing theory atom/node ceilings; objective-body scratch
-/// retains its independent ceilings. Cumulative source work still applies.
+/// tuple comparison or guard rejects still validate their bodies. After complete
+/// join and source-family checks, eligible flat bodies validate atom keys without
+/// constructing formulas. Generated bindings and nested scopes retain isolated
+/// formula scratch; it supplies no atoms, roots, producers or objective keys to
+/// the admitted program. Rule-body scratch uses the existing theory atom/node
+/// ceilings; objective-body scratch retains its independent ceilings. Cumulative
+/// source work still applies, including atom-key argument scans.
 /// Only evaluated numeric division or remainder by zero may omit a source
 /// instance. Admission requires a jointly defined instance in that same complete
 /// original family; a defined but false instance is a witness. An empty positive

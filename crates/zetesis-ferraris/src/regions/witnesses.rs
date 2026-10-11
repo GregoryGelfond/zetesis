@@ -7,7 +7,9 @@
 //!
 //! Preparation marks affected chains in O(C + L), with C chain roots and L
 //! existing chain leaves. A requested view costs O(V + E) for its reachable
-//! same-kind cone, using generation marks, an explicit stack and one leaf vector.
+//! same-kind cone, using generation marks, continuation frames and an optional
+//! collected node/leaf vector. Cover authentication stops at its first failure;
+//! neither it nor a witness fold schedules unread sibling edges.
 //! Retained walker scratch is O(N + E + C), with N theory nodes. Reservations are
 //! fallible, each initialized mark and visited node/edge is charged, and the
 //! caller's normal work quota/cancellation contract applies. The scratch never
@@ -92,6 +94,14 @@ pub(super) fn participates(index: &Narrower, chain: usize) -> bool {
 struct Frame {
     chain: usize,
     next_child: usize,
+}
+
+/// A visitor either descends, prunes this node's children, or stops the walk.
+/// Pruning a covered compound is different from stopping at an uncovered leaf.
+enum Visit {
+    Descend,
+    Prune,
+    Stop,
 }
 
 #[derive(Debug, Default)]
@@ -202,25 +212,55 @@ impl Scratch {
         work: &mut Work<'_>,
         mut leaf: impl FnMut(usize, &mut Work<'_>) -> Result<ControlFlow<()>, Stop>,
     ) -> Result<ControlFlow<()>, Stop> {
+        self.visit_nodes(index, chain, frozen, work, |node, branch, work| {
+            if branch {
+                Ok(Visit::Descend)
+            } else {
+                leaf(node, work).map(|flow| match flow {
+                    ControlFlow::Continue(()) => Visit::Prune,
+                    ControlFlow::Break(()) => Visit::Stop,
+                })
+            }
+        })
+    }
+
+    /// Visit distinct nodes in first-occurrence depth-first order. A branch is
+    /// an active same-kind chain; the visitor may prune it before any child edge
+    /// is read. Generation marks coalesce repeated paths. The one frame stack
+    /// serves witness folds, cover authentication and complete cone collection.
+    /// Every encountered node and consumed edge is charged, including duplicate
+    /// node encounters. Failure leaves only scratch; the next begin discards it.
+    fn visit_nodes(
+        &mut self,
+        index: &Narrower,
+        chain: usize,
+        frozen: Option<&[bool]>,
+        work: &mut Work<'_>,
+        mut visit: impl FnMut(usize, bool, &mut Work<'_>) -> Result<Visit, Stop>,
+    ) -> Result<ControlFlow<()>, Stop> {
         self.begin(index.parents.len(), work)?;
         let mut node = index.chains[chain].root;
         let disjunction = index.chains[chain].disjunction;
         loop {
             work.tick()?;
-            if self.seen[node] != self.generation {
+            if !self.visited(node) {
                 self.seen[node] = self.generation;
-                let inner = index.chain_of[node].map(chain_position);
-                if let Some(inner) = inner.filter(|&inner| {
+                let inner = index.chain_of[node].map(chain_position).filter(|&inner| {
                     index.chains[inner].disjunction == disjunction
                         && frozen.is_none_or(|truth| truth[node])
-                }) {
-                    self.frames.try_reserve(1).map_err(|_| Stop::Allocation)?;
-                    self.frames.push(Frame {
-                        chain: inner,
-                        next_child: 0,
-                    });
-                } else if let ControlFlow::Break(()) = leaf(node, work)? {
-                    return Ok(ControlFlow::Break(()));
+                });
+                match visit(node, inner.is_some(), work)? {
+                    Visit::Descend => {
+                        if let Some(inner) = inner {
+                            self.frames.try_reserve(1).map_err(|_| Stop::Allocation)?;
+                            self.frames.push(Frame {
+                                chain: inner,
+                                next_child: 0,
+                            });
+                        }
+                    }
+                    Visit::Prune => {}
+                    Visit::Stop => return Ok(ControlFlow::Break(())),
                 }
             }
             let Some(next) = self.next_child(index, work)? else {
@@ -273,8 +313,15 @@ impl Scratch {
         chain: usize,
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
-        self.walk(index, chain, work, |_, _| Ok(false), true)?;
-        Ok(())
+        // Keep the collecting allocation observable even after a refused walk.
+        let mut nodes = std::mem::take(&mut self.leaves);
+        nodes.clear();
+        let result = self.visit_nodes(index, chain, None, work, |node, _, _| {
+            push(&mut nodes, node)?;
+            Ok(Visit::Descend)
+        });
+        self.leaves = nodes;
+        result.map(|_| ())
     }
 
     pub(super) fn visited(&self, node: usize) -> bool {
@@ -283,56 +330,26 @@ impl Scratch {
 
     /// Every terminal path must meet a caller-approved condition. Stop at such
     /// a condition before unfolding it: a row may name a compound condition.
-    /// Failure at an opaque endpoint refutes this structural implication only.
+    /// An uncovered opaque endpoint refutes this structural implication only.
+    /// Its unread siblings are neither scheduled nor charged. Complete coverage
+    /// retains the previous node/edge receipt and first-occurrence callback order.
     pub(super) fn covered_by(
         &mut self,
         index: &Narrower,
         chain: usize,
         work: &mut Work<'_>,
-        covers: impl FnMut(usize, &mut Work<'_>) -> Result<bool, Stop>,
-    ) -> Result<bool, Stop> {
-        self.walk(index, chain, work, covers, false)
-    }
-
-    /// Iterative same-kind traversal shared by cone discovery and cut
-    /// authentication. Generation marks coalesce repeated paths. A cover walk
-    /// stops at accepted nodes; a cone walk records every distinct visited node.
-    fn walk(
-        &mut self,
-        index: &Narrower,
-        chain: usize,
-        work: &mut Work<'_>,
         mut covers: impl FnMut(usize, &mut Work<'_>) -> Result<bool, Stop>,
-        collect: bool,
     ) -> Result<bool, Stop> {
-        self.begin(index.parents.len(), work)?;
-        push(&mut self.stack, index.chains[chain].root)?;
-        let disjunction = index.chains[chain].disjunction;
-        while let Some(node) = self.stack.pop() {
-            work.tick()?;
-            if self.visited(node) {
-                continue;
-            }
-            self.seen[node] = self.generation;
-            if collect {
-                push(&mut self.leaves, node)?;
-            }
-            if covers(node, work)? {
-                continue;
-            }
-            let inner = index.chain_of[node].map(chain_position);
-            if let Some(inner) =
-                inner.filter(|&inner| index.chains[inner].disjunction == disjunction)
-            {
-                for &child in index.chains[inner].leaves(&index.extrema).iter().rev() {
-                    work.tick()?;
-                    push(&mut self.stack, child)?;
-                }
-            } else if !collect {
-                return Ok(false);
-            }
-        }
-        Ok(true)
+        self.visit_nodes(index, chain, None, work, |node, branch, work| {
+            Ok(if covers(node, work)? {
+                Visit::Prune
+            } else if branch {
+                Visit::Descend
+            } else {
+                Visit::Stop
+            })
+        })
+        .map(|flow| flow.is_continue())
     }
 
     /// Discover candidate chain roots from one row anchor using the existing

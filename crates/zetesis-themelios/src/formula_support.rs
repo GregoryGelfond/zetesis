@@ -1276,7 +1276,7 @@ impl<'a, 'source> Join<'a, 'source> {
     /// before a frozen checker prepares its retained immutable rule and carrier.
     /// This includes successful speculative values before a declined attempt;
     /// a missing frozen term remains an error. Evidence cursors stay complete.
-    pub(super) fn select_total_constraint(
+    pub(super) fn select_total_body(
         &mut self,
         rule: &'a crate::formula_ir::RuleIr,
         computation: &mut Computation<'_, '_>,
@@ -1295,7 +1295,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 location: rule.location,
             });
         }
-        let total = self.projections.total_constraint(
+        let total = self.projections.total_body(
             rule,
             self.support,
             &mut self.evaluation,

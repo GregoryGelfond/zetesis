@@ -834,3 +834,5 @@ fn refused_checks_publish_before_returning() {
     assert_eq!(allowance.statistics(), failure.statistics);
     assert_eq!(checker.statistics(), failure.statistics);
 }
+
+mod numeric_totality;

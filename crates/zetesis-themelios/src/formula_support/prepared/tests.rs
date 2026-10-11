@@ -272,7 +272,7 @@ fn computed_fixture(source: &str) -> (CompletedCatalog, crate::formula_ir::Prepa
         )
         .unwrap();
         assert!(
-            join.select_total_constraint(rule, &mut computation, &limits, &mut counters)
+            join.select_total_body(rule, &mut computation, &limits, &mut counters)
                 .unwrap()
         );
     }
@@ -369,7 +369,7 @@ fn retained_domains_avoid_repeated_preparation_work() {
         fresh.configure_rule(rule, &limits, &mut counters).unwrap();
         assert!(
             fresh
-                .select_total_constraint(rule, &mut computation, &limits, &mut counters)
+                .select_total_body(rule, &mut computation, &limits, &mut counters)
                 .unwrap()
         );
         let mut expected = Vec::new();

@@ -79,9 +79,12 @@ uses sorted witness columns and the existing connective counters. Exact
 associative witness equality is checked once in the propagation index; each
 formula keeps its own truth and frozen gate. Required-witness checks stream
 distinct leaves and stop at an absorbing witness or two open leaves. Resumable
-frames avoid preparing unread siblings. Enqueue sites share one eligibility
-predicate to omit settled obligations; later root events seed any new demand.
-Local anchor roles keep unrelated shared formulas off the dynamic bridge route.
+frames also serve structural coverage, skipping covered subtrees and unread
+siblings. Enqueue sites share one eligibility predicate to omit settled
+obligations; later root events seed any new demand. Local anchor roles keep
+unrelated shared formulas off the dynamic bridge route. Expanded discovery
+retains only proposals that can tighten a row's bounds, then authenticates their
+exact witness relationship before transport.
 GPU and clause
 transport still lower cuts to Boolean formulas; native CPU reduction does not
 establish native device reduction. The [manual's aggregate account](../../docs/book/architecture/alignment.md)

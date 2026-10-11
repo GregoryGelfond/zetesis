@@ -1,10 +1,10 @@
 //! Optional totality over complete positive source-column domains.
 //!
 //! Final emission, hybrid capture and admitted hybrid checks share this gate
-//! over the same completed source carrier. Each expression in a flat constraint
+//! over the same completed source carrier. Each expression in an eligible flat normal body
 //! is either a leaf, reads one source variable covered by an ordinary positive
 //! atom column, or has checked arithmetic over several numeric column bounds.
-//! Literal multiplication factors and divisors extend sums and differences;
+//! Products, quotients and remainders extend sums and differences;
 //! the bounds establish every intermediate and exclude zero divisors.
 //! Successful evaluation on that entire
 //! column domain covers every complete rule binding, including rows a scalar
@@ -31,12 +31,7 @@ mod numeric;
 /// certificate admits incremental source checking. This does not redefine which
 /// source families require a defined witness: that remains `family::partial`.
 pub(in crate::formula_support) fn needed(literals: &[LiteralIr]) -> bool {
-    let arithmetic = |expression: &Expression| {
-        expression
-            .nodes
-            .iter()
-            .any(|operation| numeric::arithmetic(expression, operation))
-    };
+    let arithmetic = |expression: &Expression| expression.nodes.iter().any(numeric::arithmetic);
     crate::formula_support::family::partial(literals)
         || literals.iter().any(|literal| match literal {
             LiteralIr::Compare(left, _, right) => arithmetic(left) || arithmetic(right),
@@ -66,7 +61,7 @@ pub(crate) fn supports_column_totality(
         for expression in expressions {
             for node in &expression.nodes {
                 counters.work(limits, rule.location)?;
-                if !numeric::supports(expression, node) {
+                if !numeric::supports(node) {
                     return Ok(false);
                 }
             }
@@ -85,7 +80,7 @@ impl<'a> Projections<'a> {
     /// scalar totality for complete positive bindings and permits post-admission
     /// selection. Source-family evidence cursors must still traverse their
     /// complete families.
-    pub(in crate::formula_support) fn total_constraint(
+    pub(in crate::formula_support) fn total_body(
         &mut self,
         rule: &'a RuleIr,
         support: &Support<'_>,
@@ -165,7 +160,7 @@ impl<'a> Projections<'a> {
                     }
                 }
                 LiteralIr::Atom(..) => {}
-                _ => unreachable!("eligible flat constraint checked above"),
+                _ => unreachable!("eligible flat normal body checked above"),
             }
         }
         let Self::Local(values) = self else {
@@ -270,14 +265,14 @@ impl<'a> Projections<'a> {
     }
 }
 
-/// The finite column argument covers only a flat constraint over ordinary
+/// The finite column argument covers only a flat normal body over ordinary
 /// positive source rows. Empty relations need no speculative arithmetic.
 fn eligible(
     rule: &RuleIr,
     support: &Support<'_>,
     context: &mut Context<'_, &mut Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
-    if !matches!(rule.head, HeadIr::Normal(None)) || rule.variables != rule.body_variables {
+    if !matches!(rule.head, HeadIr::Normal(_)) || rule.variables != rule.body_variables {
         return Ok(false);
     }
     for literal in &rule.body {

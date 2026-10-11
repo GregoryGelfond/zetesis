@@ -240,7 +240,7 @@ fn successful_hulls_do_not_hide_later_intermediate_overflow() {
             .unwrap();
             assert!(
                 !join
-                    .select_total_constraint(rule, computation, &limits, counters)
+                    .select_total_body(rule, computation, &limits, counters)
                     .unwrap()
             );
             assert!(matches!(
