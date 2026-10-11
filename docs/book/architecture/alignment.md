@@ -273,17 +273,22 @@ Executable refinement and measured application speed remain separate obligations
 
 Original-candidate narrowing also relates native unit rows to existing Boolean
 chains. A conjunction of n distinct leaves requires n unit contributions; a
-disjunction requires one. Existing condition postings find possible related
-rows. Numeric bounds first reject unhelpful candidates; complete equality or
-prefix checks then authenticate the remaining consequences. Other grouped
+disjunction requires one. Immutable anchor postings group each eligible native
+row and Boolean chain by its least condition. A chain's minimum is read once
+during preparation, while its operand order is preserved. Numeric bounds first
+reject unhelpful candidates; complete equality or prefix checks then authenticate
+the remaining consequences. Other grouped
 coefficients and arbitrary overlapping rows do not qualify. The
 [connective laws](../lean/correspondence.md#nonnegative-aggregate-thresholds)
 state the original-truth meaning and the remaining representation obligations.
 
 The bridge borrows chain leaves and reuses their counters and the native row
-worklist. It retains no row/chain pair table or additional per-region state.
-Repeated searches consume propagation work and remain cancellable; dense inputs
-can still require many comparisons. Formula storage, atom support and frozen
+worklist. Anchor keys, sparse reverse chain lookup and compact owner postings
+retain linear space in eligible rows and matching chains. There is no row/chain
+pair table or additional per-region state. With no eligible native row, anchor
+preparation allocates nothing and reads no chains. Runtime lookups and repeated
+prefix checks consume propagation work and remain cancellable; dense anchor
+buckets can still require many comparisons. Formula storage, atom support and frozen
 propagation retain their existing meanings. This candidate pruning does not
 rewrite the answer-set theory.
 

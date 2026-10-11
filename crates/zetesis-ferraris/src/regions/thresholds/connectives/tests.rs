@@ -395,7 +395,6 @@ fn discovery_authenticates_complete_unit_prefixes() {
             let Some(first) = super::unit_first(row) else {
                 continue;
             };
-            assert!(index.thresholds.connectives.is_some());
             for chain in &index.chains {
                 if super::exact_prefix(
                     &row.terms,
@@ -404,6 +403,7 @@ fn discovery_authenticates_complete_unit_prefixes() {
                 )
                 .unwrap()
                 {
+                    assert!(index.thresholds.connectives.is_some());
                     assert_eq!(chain.operands.iter().min(), Some(&first));
                     assert_eq!(
                         index.parents[first]

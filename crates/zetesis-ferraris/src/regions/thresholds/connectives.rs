@@ -7,49 +7,156 @@
 //!
 //! A nonempty native row is eligible exactly when its greatest grouped weight
 //! is one. Its terms are then distinct conditions in ascending order. Every
-//! nonempty exact prefix or extension has the same first condition. A dirty
-//! native row probes that condition's existing Boolean parent posting; a
-//! Boolean event finds its least leaf and probes the existing native condition
-//! posting. Distinct chain leaves and grouped row terms give one posting per
-//! candidate. Empty rows and chains keep their local constant rules.
+//! nonempty exact prefix or extension has the same least condition, its anchor.
+//! Immutable projections associate each unit row and each matching nonempty
+//! chain with one anchor. They select candidates, never establish a prefix.
+//! Empty rows and chains keep their local constant rules. Borrowed chain leaves
+//! retain their order, and each posting retains the original row or chain order.
 //!
-//! Preparation records only whether any eligible row exists, taking O(R)
-//! constant-time row checks and constant retained space. It neither inspects
-//! chains nor retains row/chain pairs. With no eligible row, Boolean events
-//! perform no bridge scans. A Boolean event otherwise scans its m leaves for
-//! the minimum; each event or dirty row then visits P posting entries and
-//! authenticates candidate pairs in O(sum(m log(k + 1))) comparisons, where k
-//! is the shorter row length. Every leaf visit, posting entry and membership
-//! comparison consumes propagation work before inspection. Searches repeat
-//! when a row's requirements tighten; no hidden preparation allowance pays
-//! for them. The existing coalesced dirty-row worklist is the only scratch.
+//! For R native rows, U eligible rows, C Boolean chains, L total chain leaves
+//! and A distinct native anchors, preparation takes O(R + U log U + L +
+//! C log(A + 1) + R log(A + 1)) work. Each chain computes its minimum once.
+//! With B matching chains, retained logical storage is A anchor keys, two
+//! A + 1 offset vectors, U row IDs, B chain IDs and B reverse (chain,anchor)
+//! entries: O(U + B) words including bounded vector spare capacity. Compact
+//! construction adds O(A) cursors; every added reservation is fallible. No
+//! row/chain pairs, node-sized offsets or per-region state are added. With no
+//! eligible native row, preparation allocates nothing and never reads chains.
 //!
-//! Bounds tighten monotonically; only processed Boolean truth events introduce
-//! their fixed endpoint bound. Frozen subjects skip the bridge. Atom ranking,
-//! mutable knowledge and the logical index receipt are unchanged.
+//! A Boolean event looks up its reverse entry in O(log(B + 1)); a dirty native
+//! row looks up its anchor in O(log(A + 1)). Each then visits only that anchor's
+//! opposite posting. Cheap truth, bound and length filters precede exact-prefix
+//! authentication, which costs O(sum(m log(k + 1))) for candidate chain lengths
+//! m and shorter row lengths k. Every runtime lookup comparison, posting entry,
+//! leaf visit and membership comparison consumes propagation work. Dense anchor
+//! buckets can still be expensive, but no product is retained. Requirements
+//! tighten monotonically; the existing coalesced row worklist is the only scratch.
+//!
+//! Frozen subjects skip the bridge. Atom ranking, mutable knowledge and the
+//! logical index receipt are unchanged. Anchor construction, like native row
+//! sorting, is explicit preparation rather than charged propagation work.
 
 use std::cmp::Ordering;
 
 use zetesis_cpu::Stop;
 
-use crate::regions::{Chain, Closure, Count, Narrower, Step, Work, bit, chain_position};
+use crate::regions::{Chain, Closure, Count, Narrower, Step, Work, bit};
 
-use super::{Row, Thresholds};
+use super::{Adjacency, Row, Thresholds, reserve};
 
+#[cfg(test)]
+mod anchors_tests;
 #[cfg(test)]
 mod tests;
 
-/// Presence means that at least one grouped row can denote a Boolean unit sum.
-/// Candidate discovery is deferred to charged original-subject events.
+/// One immutable anchor relation projected to native rows and Boolean chains.
+/// Anchor slots cover only distinct first conditions of grouped unit rows;
+/// no node-sized offsets or authenticated row/chain pairs are stored.
 #[derive(Clone, Debug)]
-pub(super) struct Connectives;
+pub(super) struct Connectives {
+    anchors: Vec<usize>,
+    rows: Adjacency,
+    chains: Adjacency,
+    /// Sparse reverse projection, ordered by original chain ID.
+    by_chain: Vec<(usize, usize)>,
+}
 
 impl Connectives {
-    pub(super) fn prepare(rows: &[Row]) -> Option<Self> {
-        rows.iter()
-            .any(|row| unit_first(row).is_some())
-            .then_some(Self)
+    pub(super) fn prepare(rows: &[Row], chains: &[Chain]) -> Result<Option<Self>, Stop> {
+        let anchors = anchor_keys(rows)?;
+        if anchors.is_empty() {
+            // In particular, a Boolean-only theory does not inspect chains.
+            return Ok(None);
+        }
+        let by_chain = chain_anchors(chains, &anchors)?;
+        if by_chain.is_empty() {
+            return Ok(None);
+        }
+        let row_postings = Adjacency::build(
+            anchors.len(),
+            rows.iter().enumerate().filter_map(|(row, data)| {
+                unit_first(data).map(|first| {
+                    let anchor = anchors.binary_search(&first).expect("prepared row anchor");
+                    (anchor, row)
+                })
+            }),
+        )?;
+        let chain_postings = Adjacency::build(
+            anchors.len(),
+            by_chain.iter().map(|&(chain, anchor)| (anchor, chain)),
+        )?;
+        Ok(Some(Self {
+            anchors,
+            rows: row_postings,
+            chains: chain_postings,
+            by_chain,
+        }))
     }
+
+    /// Find a processed chain's one anchor, charging each reverse-index probe.
+    fn rows(&self, chain: usize, work: &mut Work<'_>) -> Result<&[usize], Stop> {
+        let Some(position) = find(&self.by_chain, chain, |&(chain, _)| chain, work)? else {
+            return Ok(&[]);
+        };
+        Ok(&self.rows[self.by_chain[position].1])
+    }
+
+    /// Find a native row's anchor, charging each immutable key probe.
+    fn chains(&self, first: usize, work: &mut Work<'_>) -> Result<&[usize], Stop> {
+        let Some(anchor) = find(&self.anchors, first, |&condition| condition, work)? else {
+            return Ok(&[]);
+        };
+        Ok(&self.chains[anchor])
+    }
+}
+
+/// Allocate only after finding a native unit row. Sorting and deduplication
+/// retain one key per distinct anchor; the allocation is bounded by unit rows.
+fn anchor_keys(rows: &[Row]) -> Result<Vec<usize>, Stop> {
+    let count = rows.iter().filter(|row| unit_first(row).is_some()).count();
+    let mut anchors = reserve(count)?;
+    anchors.extend(rows.iter().filter_map(unit_first));
+    anchors.sort_unstable();
+    anchors.dedup();
+    Ok(anchors)
+}
+
+/// Scan each nonempty chain's borrowed leaves once, without reordering them.
+/// Only a minimum shared with some native unit row receives a reverse entry.
+/// Increasing chain IDs preserve the old parent-posting order at every anchor.
+fn chain_anchors(chains: &[Chain], anchors: &[usize]) -> Result<Vec<(usize, usize)>, Stop> {
+    let mut reverse = Vec::new();
+    for (chain, data) in chains.iter().enumerate() {
+        let Some(first) = data.operands.iter().min() else {
+            continue;
+        };
+        if let Ok(anchor) = anchors.binary_search(first) {
+            reverse.try_reserve(1).map_err(|_| Stop::Allocation)?;
+            reverse.push((chain, anchor));
+        }
+    }
+    Ok(reverse)
+}
+
+/// A shrinking binary-search interval; charge before reading each candidate.
+fn find<T>(
+    values: &[T],
+    wanted: usize,
+    key: impl Fn(&T) -> usize,
+    work: &mut Work<'_>,
+) -> Result<Option<usize>, Stop> {
+    let mut start = 0;
+    let mut end = values.len();
+    while start < end {
+        work.tick()?;
+        let middle = start + (end - start) / 2;
+        match key(&values[middle]).cmp(&wanted) {
+            Ordering::Less => start = middle + 1,
+            Ordering::Equal => return Ok(Some(middle)),
+            Ordering::Greater => end = middle,
+        }
+    }
+    Ok(None)
 }
 
 fn unit_first(row: &Row) -> Option<usize> {
@@ -88,18 +195,7 @@ fn exact_prefix(
 /// The candidate interval shrinks on every comparison. Each actual term read
 /// consumes work, including the comparison that finds or rejects membership.
 fn contains(terms: &[(usize, i128)], leaf: usize, work: &mut Work<'_>) -> Result<bool, Stop> {
-    let mut start = 0;
-    let mut end = terms.len();
-    while start < end {
-        work.tick()?;
-        let middle = start + (end - start) / 2;
-        match terms[middle].0.cmp(&leaf) {
-            Ordering::Less => start = middle + 1,
-            Ordering::Equal => return Ok(true),
-            Ordering::Greater => end = middle,
-        }
-    }
-    Ok(false)
+    Ok(find(terms, leaf, |&(condition, _)| condition, work)?.is_some())
 }
 
 fn bound(chain: &Chain) -> i128 {
@@ -129,30 +225,21 @@ impl<C: Count> Closure<'_, C> {
         work: &mut Work<'_>,
     ) -> Result<Step, Stop> {
         let source = &index.chains[chain];
-        if index.thresholds.connectives.is_none() || value != source.disjunction {
+        if value != source.disjunction {
             // teach_chain already forced every leaf of a true And or false Or.
             // Processed condition events establish the same lower bound (all
             // prefix leaves true) or a stronger upper bound (all terms false)
             // wherever that Boolean requirement could be transported.
             return Ok(Step::Unchanged);
         }
-        let mut first = None;
-        for &leaf in &source.operands {
-            work.tick()?;
-            first = Some(first.map_or(leaf, |prior: usize| prior.min(leaf)));
-        }
-        let Some(first) = first else {
+        let Some(anchors) = &index.thresholds.connectives else {
             return Ok(Step::Unchanged);
         };
         let bound = bound(source);
         let mut step = Step::Unchanged;
-        for &edge in index.thresholds.condition(first) {
+        for &row in anchors.rows(chain, work)? {
             work.tick()?;
-            let row = index.thresholds.incidences[edge].row;
             let data = &index.thresholds.rows[row];
-            if unit_first(data) != Some(first) {
-                continue;
-            }
             let length = data.terms.len();
             let state = self.known.thresholds[row];
             let lower = value && source.operands.len() <= length && state.lower < bound;
@@ -188,9 +275,12 @@ impl<C: Count> Closure<'_, C> {
         work: &mut Work<'_>,
     ) -> Result<Step, Stop> {
         let mut step = self.threshold_prefixes(index, row, work)?;
-        if step == Step::Contradiction || index.thresholds.connectives.is_none() {
+        if step == Step::Contradiction {
             return Ok(step);
         }
+        let Some(anchors) = &index.thresholds.connectives else {
+            return Ok(step);
+        };
         let data = &index.thresholds.rows[row];
         let Some(first) = unit_first(data) else {
             return Ok(step);
@@ -200,12 +290,9 @@ impl<C: Count> Closure<'_, C> {
         if source.lower < 1 && source.upper.is_none_or(|upper| upper > length as i128) {
             return Ok(step);
         }
-        for &parent in &index.parents[first] {
+        for &chain in anchors.chains(first, work)? {
             work.tick()?;
-            let Some(chain) = index.chain_of[parent] else {
-                continue;
-            };
-            let chain = &index.chains[chain_position(chain)];
+            let chain = &index.chains[chain];
             let bound = bound(chain);
             // Full lower bounds and zero upper bounds already force every
             // leaf through threshold_row. Ordinary chain events therefore

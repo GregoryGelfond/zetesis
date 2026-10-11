@@ -99,13 +99,14 @@ empty lists and repeated conditions need no extra premise. These laws justify
 Boolean sorting and deduplication, not removal of weighted aggregate occurrences.
 They are original-satisfaction laws, not a proof of a frozen rewrite.
 
-The original-candidate bridge reuses existing Boolean chain leaves, counters and
-condition postings. Nonempty native rows with grouped coefficient one join
-candidate chains through their first condition; Boolean events use their least
-leaf to find native rows. Bounds filter candidates before exact prefix or
-equality checks authenticate a consequence. The bridge retains no pair table
-or additional per-region state. Repeated comparisons consume propagation work;
-frozen propagation is unchanged. Denoting a chain root by its distinct leaves,
+The original-candidate bridge reuses existing Boolean chain leaves and counters.
+Immutable anchor postings associate each nonempty grouped unit row and each
+matching Boolean chain with its least condition, read once per chain during
+preparation. Equal anchors select candidates; they do not establish a prefix.
+Bounds filter candidates before exact prefix or equality checks authenticate a
+consequence. Anchor projections retain linear space in eligible rows and matching
+chains, with no pair table or additional per-region state. Runtime lookups and
+repeated comparisons consume propagation work; frozen propagation is unchanged. Denoting a chain root by its distinct leaves,
 authenticating canonical condition IDs, recognizing unit-row relationships, and
 implementing checked bounds, event scheduling and resource accounting remain
 Rust obligations. The five laws do not establish those correspondences or

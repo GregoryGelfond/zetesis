@@ -113,7 +113,7 @@ impl Row {
 }
 
 impl Thresholds {
-    pub(super) fn prepare(theory: &Theory) -> Result<Self, Stop> {
+    pub(super) fn prepare(theory: &Theory, chains: &[super::Chain]) -> Result<Self, Stop> {
         let nodes = theory.view();
         let mut rows: Vec<Row> = Vec::new();
         let mut shared = HashMap::new();
@@ -180,7 +180,7 @@ impl Thresholds {
             )?)
         };
         let relations = prefixes::prepare(&rows)?;
-        let connectives = connectives::Connectives::prepare(&rows);
+        let connectives = connectives::Connectives::prepare(&rows, chains)?;
         Ok(Self {
             rows,
             by_descriptor,

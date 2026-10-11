@@ -801,12 +801,15 @@ impl Narrower {
     /// K grouped terms; prefix discovery and checked incidence construction take
     /// O(E + R), where E is the number of grouped terms. This derived index keeps
     /// at most R - 1 links and does not change the logical index receipt.
-    /// One O(R) scan records whether any nonempty grouped unit row exists.
-    /// Boolean/native exact-prefix candidates are discovered during original
-    /// narrowing through existing parent and condition postings. Minimum-leaf
-    /// scans, posting visits and membership comparisons consume propagation
-    /// work on every attempt. Preparation retains no row/chain pairs and does
-    /// no Boolean scan; no per-Boolean mutable state is added.
+    /// When unit rows exist, immutable anchor projections retain one entry per
+    /// eligible row and matching Boolean chain, with sparse reverse chain
+    /// lookup. Chain minima are read once; their operand order is unchanged.
+    /// For U unit rows, C chains, L chain leaves and A anchors, this adds
+    /// O(R + U log U + L + (R + C) log(A + 1)) preparation work and O(U + C)
+    /// storage, with fallible reservations. There are no row/chain pairs or
+    /// node-sized offsets. With no unit row there is no allocation or chain
+    /// scan. Runtime anchor lookups, posting visits and exact-prefix comparisons
+    /// consume propagation work; no per-Boolean mutable state is added.
     ///
     /// # Errors
     /// Returns [`Stop::Allocation`] for compact-adjacency offset overflow or
@@ -817,7 +820,7 @@ impl Narrower {
     pub fn try_new(theory: &Theory) -> Result<Self, Stop> {
         let nodes = theory.view();
         let (chains, chain_of, absorbed) = chains(theory);
-        let thresholds = thresholds::Thresholds::prepare(theory)?;
+        let thresholds = thresholds::Thresholds::prepare(theory, &chains)?;
         let parents = Adjacency::build(nodes.len(), dependencies(nodes, &chains))?;
         let atom_operands = Adjacency::try_build(
             nodes.len(),
