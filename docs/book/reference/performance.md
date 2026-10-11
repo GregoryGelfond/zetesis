@@ -132,11 +132,13 @@ zetesis-bench run --suite scalability --grounder eager \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 ```
 
-Both use fourteen workloads: authored queens at n=8/9/10, pigeonhole at h=5/6/7,
+Both use twenty workloads: authored queens at n=8/9/10, pigeonhole at h=5/6/7,
 Mastermind at colors=5/6/8, nested Mastermind at colors=8,
 three unchanged corpus cases (queens variant 02,
-SEND+MORE=MONEY and task allocation), and the authored Sudoku grid.
-`--include-einstein` adds the unchanged riddle as a fifteenth workload. The test runs complete-family
+SEND+MORE=MONEY and task allocation), and the authored Sudoku grid, followed by
+prime sieve at n=30/100/300 and subset sum at n=12/20/30. The first fourteen keep
+their established order; the separate 94-case corpus is unchanged.
+`--include-einstein` adds the unchanged riddle as a twenty-first workload. The test runs complete-family
 qualifications only. The benchmark qualifies clingo once per case, then measures
 each native thread profile separately. Reports retain all refusals and limits;
 the workload's inclusion is not a scaling claim. `--memory` sets a common native

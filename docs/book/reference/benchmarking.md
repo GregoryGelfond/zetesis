@@ -60,7 +60,7 @@ inputs.
 | `baseline` | SEND, queens variant 02 and task allocation |
 | `queens` | The six unchanged eight-queens encodings |
 | `series` | The maintained 22 generated, constant-amended and original workloads |
-| `scalability` | Fourteen authored and corpus workloads, with indexed formula joins and region search |
+| `scalability` | Twenty authored and corpus workloads, with indexed formula joins and region search |
 
 `--case PATH` measures one case of the suite, named relative to the corpus
 directory; repeat it to measure several, in the order given. For `series`, use
@@ -70,7 +70,9 @@ cells in their series order. A case outside the suite is refused before anything
 launches. The scalability suite measures its
 own workloads and accepts no `--case`; it alone accepts `--examples`, its
 authored root, which defaults to `examples`, and `--include-einstein`, which
-adds the unchanged Einstein riddle as a fifteenth workload. The maintained
+adds the unchanged Einstein riddle as a twenty-first workload. Prime sieve at
+n=30/100/300 and subset sum at n=12/20/30 follow the established fourteen
+workloads; the separate 94-case corpus is unchanged. The maintained
 Sudoku case has eight givens per row: it tests grounding and language handling,
 not difficult Sudoku search. The series suite raises the per-invocation,
 capture, evidence and native-decoder ceilings to the sizes of its records.

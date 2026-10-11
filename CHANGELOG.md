@@ -4,6 +4,11 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
+### Added
+
+- Prime-sieve and subset-sum examples in the maintained correctness and scaling
+  comparisons, with complete-answer checks against clingo.
+
 ### Changed
 
 - Reuse aggregate bounds when one native contribution row extends another,

@@ -287,19 +287,21 @@ Corpus and backend checks accept every backend: `--backend cpu` (the default),
 route. Decoding a Vulkan route awaits qualification on a Vulkan host. An
 unavailable GPU remains a nonpass; it does not trigger CPU fallback.
 
-`test scalability` uses the same fourteen workloads as `zetesis-bench run --suite
+`test scalability` uses the same twenty workloads as `zetesis-bench run --suite
 scalability`: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
 authored Mastermind at colors=5/6/8, nested Mastermind at colors=8,
 unchanged queens variant 02, SEND+MORE=MONEY, task allocation and the authored
-Sudoku grid. It checks one
-complete clingo family and one native family per requested thread count, with
+Sudoku grid, followed by prime sieve at n=30/100/300 and subset sum at n=12/20/30.
+The arithmetic cases retain complete output: prime sieve has one answer set at
+each size, and subset sum has 15/64/296. It checks one complete clingo family and
+one native family per requested thread count, with
 no warmup, timed or RSS rounds. Native profiles request CPU eager grounding,
 indexed formula joins, region search and one exact completion worker. Thread
 counts default to `1,2,4,8,14`; one through eight profiles, each at most 256
 threads, are admitted. The positional corpus root defaults to
 `examples/correctness`, and `--examples` defaults to `examples`. Both must come
 from the maintained checkout. `--include-einstein` adds the unchanged Einstein
-riddle as a fifteenth workload. `--memory` applies one native memory allowance
+riddle as a twenty-first workload. `--memory` applies one native memory allowance
 to each requested thread profile.
 All workload contracts, original/derived source digests, executable identities,
 observations and failed or unlaunched positions remain in `--report NEW.json`.

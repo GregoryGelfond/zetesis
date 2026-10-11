@@ -202,7 +202,7 @@ mod campaigns {
         );
         assert_eq!(
             qualified["report"]["workloads"].as_array().unwrap().len(),
-            14
+            20
         );
         assert!(
             qualified["report"]["samples"]
@@ -325,7 +325,7 @@ mod campaigns {
             .enumerate()
             .filter(|(_, check)| check["slot"]["producer"]["solver"] == "native")
             .collect::<Vec<_>>();
-        assert_eq!(native.len(), 14);
+        assert_eq!(native.len(), 20);
         // Other workloads can fail to publish their larger diagnostic footer.
         // That remains an invalid report, never a qualified memory refusal.
         // Require retained evidence of this exact publication cause; malformed

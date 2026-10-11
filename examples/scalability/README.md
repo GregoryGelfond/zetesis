@@ -17,6 +17,8 @@ identity; increasing a parameter can instead reach a solver or campaign limit.
 | `pigeonhole.lp` | unsatisfiability | `#const h` (holes; `h+1` pigeons) | `h=7`: UNSAT |
 | `mastermind.lp` | many-answer enumeration | `#const colors` (6 pegs) | `colors=6`: 6080 answer sets |
 | `mastermind-nested.lp` | nested aggregate assignments | `#const colors` (6 pegs, seven guesses) | `colors=8`: one answer set |
+| `prime-sieve.lp` | divisibility joins | `#const n` (inclusive upper bound) | `n=30`: one answer set displaying ten primes |
+| `subset-sum.lp` | weighted-choice enumeration | `#const n` (weights `1..n`, target `n`) | `n=12`: 15 answer sets |
 
 `n-queens.lp` grows steeply (n=12 → 14200 answer sets, n=13 → 73712), exercising
 both region enumeration and grounding as `n` rises. `pigeonhole.lp` is
@@ -34,6 +36,23 @@ Its unique secret is `8,5,8,5,3,4`. Repeated guess positions exercise whether
 grounding shares an aggregate's unchanged inputs. The source is authored for
 this corpus.
 
+`prime-sieve.lp` marks numbers with a positive proper divisor and displays the
+remaining primes. This declarative divisibility sieve exercises variable-divisor
+remainder tests and joins; it does not prescribe a procedural sieve algorithm.
+The maintained sizes `n=30/100/300` each have one answer set, displaying
+10/25/62 primes respectively.
+
+`subset-sum.lp` selects distinct items with weights `1..n` and constrains their
+sum to `n`. The maintained sizes `n=12/20/30` have 15/64/296 answer sets. These
+sizes keep complete output bounded while exercising weighted choices and an
+equality aggregate. Larger sizes can still require substantial search.
+The default contract lists every selected subset, not just the count.
+
+Inspection of Joshua Guerin's *Answer-Set-Programming-Algorithms* examples
+motivated adding these two classical problems. The programs and comments here
+were independently authored from their mathematical specifications; no upstream
+source was copied.
+
 ## Run an example
 
 From the repository root, using the installed solver:
@@ -42,14 +61,15 @@ From the repository root, using the installed solver:
 zetesis solve examples/scalability/n-queens.lp --all
 zetesis solve examples/scalability/pigeonhole.lp --stats
 zetesis solve examples/scalability/mastermind.lp --all
+zetesis solve examples/scalability/prime-sieve.lp --all
+zetesis solve examples/scalability/subset-sum.lp --all
 zetesis solve examples/einstein-riddle.lp --all
 ```
 
 Einstein uses automatic grounding and ordinary resource defaults. The solver
 can defer eligible terminal definitions until it has checked each base answer;
 it then reconstructs the complete answer before displaying it. Explicit eager
-grounding instead materializes the entire program and can require a larger
-grounding allowance.
+grounding instead materializes the entire program and can use more memory.
 
 The recorded contracts apply to the default `#const` values shown above. To select
 a different size for an experiment, the maintained matrix runner performs a
@@ -59,13 +79,16 @@ the unchanged source hash, edit and resulting source hash.
 ## Check and measure thread scaling
 
 The maintained `zetesis test scalability` and `zetesis-bench run --suite
-scalability` commands use one library-owned population of fourteen workloads:
+scalability` commands use one library-owned population of twenty workloads:
 queens at n=8/9/10, pigeonhole at h=5/6/7, Mastermind at colors=5/6/8,
 nested Mastermind at colors=8, the established correctness queens variant
 02, SEND+MORE=MONEY and task-allocation cases, and the authored
-[Sudoku grid](../sudoku.lp). Sudoku has eight givens per row and exercises
-grounding and language handling. Test qualifications request CPU eager/indexed
-region search at 1, 2, 4, 8 and 14 threads with one completion worker by default.
+[Sudoku grid](../sudoku.lp), followed by prime sieve at n=30/100/300 and subset
+sum at n=12/20/30. The first fourteen workloads keep their established order.
+The separate pinned correctness corpus remains 94 cases. Sudoku has eight givens
+per row and exercises grounding and language handling. Test qualifications
+request CPU eager/indexed region search at 1, 2, 4, 8 and 14 threads with one
+completion worker by default.
 
 From the repository root, with zetesis and clingo installed:
 
@@ -76,9 +99,9 @@ zetesis-bench run --suite scalability --grounder eager \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 ```
 
-`--include-einstein` adds the unchanged Einstein riddle as a fifteenth workload.
-An explicit `--max-expansion-work 300000000` can be supplied when studying that input; the
-override is retained in every native profile. No limit is raised silently.
+`--include-einstein` adds the unchanged Einstein riddle as a twenty-first workload.
+`--memory` sets the native memory allowance for each requested thread profile;
+ordinary resource defaults apply when it is omitted.
 
 The test runs one complete-family qualification per producer and workload, with
 no warmup, timed or RSS rounds. Clingo establishes each complete displayed family;
