@@ -18,6 +18,9 @@ impl Threshold<'_> {
     /// # Errors
     /// Propagates callback errors. A mismatched row or an unrepresentable sum
     /// returns [`Stop::InvalidProgram`]; admitted formula rows exclude both.
+    // Expose the callback to callers' hot loops so work and cancellation state
+    // need not spill across a separate reduction call.
+    #[inline]
     pub fn evaluate<E: From<Stop>>(
         self,
         mut read: impl FnMut(usize) -> Result<bool, E>,
