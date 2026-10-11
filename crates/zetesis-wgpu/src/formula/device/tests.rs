@@ -150,14 +150,25 @@ fn cold_preparation_refusals(
         .propagate_batch(old, candidates, FormulaLimits::default())
         .unwrap();
     assert!(oracle.last_batch_stats().unwrap().theory_uploaded);
+    cancelled_shape_preserves_residency(oracle, old, &next, candidates, &inputs);
+}
+
+fn cancelled_shape_preserves_residency(
+    oracle: &mut GpuFormulaOracle,
+    old: &Theory,
+    next: &Theory,
+    candidates: &[Interpretation],
+    inputs: &[Interpretation],
+) {
     let cancelled = Cancellation::default();
     cancelled.cancel();
     let epoch = oracle.epoch;
-    // Directly enter the host preparation phase, after the public pre-poll.
+    // Shape admission observes cancellation before releasing the old residency.
+    // Enter preparation directly to bypass the public pre-poll.
     let error = oracle
         .prepare(
-            &next,
-            &inputs,
+            next,
+            inputs,
             FormulaLimits::default(),
             &cancelled,
             epoch + 1,
@@ -165,10 +176,32 @@ fn cold_preparation_refusals(
         .err()
         .unwrap();
     assert_eq!(error.interruption(), Some(zetesis_cpu::Stop::Cancelled));
-    assert!(oracle.resident.is_none());
+    assert!(
+        oracle
+            .resident
+            .as_ref()
+            .unwrap()
+            .graph
+            .shape
+            .theory
+            .same_instance(old)
+    );
     assert_eq!(oracle.epoch, epoch);
     oracle.context().check_health().unwrap();
-    println!("formula minimum/identity preserve residency; late preparation leaves healthy-cold");
+    let checks = oracle
+        .propagate_batch(old, candidates, FormulaLimits::default())
+        .unwrap();
+    assert_eq!(
+        checks[0].verdict(),
+        super::super::FormulaVerdict::NoProperSubset
+    );
+    assert_eq!(oracle.epoch, epoch + 1);
+    let stats = oracle.last_batch_stats().unwrap();
+    assert!(!stats.theory_uploaded);
+    assert!(!stats.transport_allocated);
+    println!(
+        "formula minimum/identity/early cancellation preserve residency; late preparation leaves healthy-cold"
+    );
 }
 
 #[test]
