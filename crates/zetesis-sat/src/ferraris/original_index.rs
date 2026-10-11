@@ -10,6 +10,7 @@
 
 use std::sync::Arc;
 
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Narrower, Theory};
 
 use super::regions::stopped;
@@ -49,14 +50,16 @@ impl IndexedTheory {
 pub(crate) struct OriginalIndex {
     theory: Theory,
     index: Option<Arc<IndexedTheory>>,
+    native_byte_limit: u64,
 }
 
 impl OriginalIndex {
     /// An owner of the theory's index, not yet built.
-    pub(crate) fn new(theory: &Theory) -> Self {
+    pub(crate) fn new(theory: &Theory, native_byte_limit: u64) -> Self {
         Self {
             theory: theory.clone(),
             index: None,
+            native_byte_limit,
         }
     }
 
@@ -77,11 +80,16 @@ impl OriginalIndex {
     /// every exit. A built index is returned without calling `charge` again.
     ///
     /// # Errors
-    /// The charge's refusal, or the build's allocation refusal.
+    /// Cancellation, the charge or native-storage refusal, or allocation failure.
     pub(crate) fn ensure(
         &mut self,
+        cancellation: &Cancellation,
         charge: impl FnOnce(u64) -> Result<(), Incomplete>,
     ) -> Result<&Arc<IndexedTheory>, Incomplete> {
+        cancellation.poll()?;
+        if let Some(index) = &self.index {
+            admit(&index.narrower, self.native_byte_limit)?;
+        }
         let index = if let Some(index) = self.index.take() {
             index
         } else {
@@ -90,7 +98,7 @@ impl OriginalIndex {
             )
             .map_err(|_| Incomplete::CounterOverflow)?;
             charge(work)?;
-            let narrower = build(&self.theory)?;
+            let narrower = prepare(&self.theory, self.native_byte_limit, cancellation)?;
             debug_assert_eq!(narrower.work(), work, "the charge is the index's work");
             Arc::new(IndexedTheory {
                 theory: self.theory.clone(),
@@ -101,11 +109,54 @@ impl OriginalIndex {
     }
 }
 
-/// The one construction site of an original-theory narrower.
-fn build(theory: &Theory) -> Result<Narrower, Incomplete> {
+/// Construct an original, restriction or objective-bound index under the same
+/// additional native-storage policy. The original owner retains its own logical
+/// work receipt; restrictions and bounds preserve their existing work contract.
+///
+/// The check bounds retained publication, not peak construction memory. Legacy
+/// Boolean index storage and constructor-internal cancellation are unchanged.
+pub(super) fn prepare(
+    theory: &Theory,
+    native_byte_limit: u64,
+    cancellation: &Cancellation,
+) -> Result<Narrower, Incomplete> {
+    cancellation.poll()?;
+    // Every live native cut retains at least its original node identity, even
+    // when it becomes constant. Unused numeric descriptors imply no index.
+    let mut minimum = 0u128;
+    if !theory.parts().extremum_cuts().is_empty() {
+        for &node in theory.nodes() {
+            cancellation.poll()?;
+            if node.extremum_cut_descriptor().is_some() {
+                minimum += size_of::<usize>() as u128;
+            }
+        }
+    }
+    check_bytes(minimum, native_byte_limit)?;
     #[cfg(test)]
     hooks::observe(theory)?;
-    Narrower::try_new(theory).map_err(stopped)
+    // Allocation failure remains Allocation, not a fabricated storage receipt.
+    // The limit bounds retained publication; temporary construction allocations
+    // and allocator excess can precede the final actual-capacity check.
+    let narrower = Narrower::try_new(theory).map_err(stopped)?;
+    cancellation.poll()?;
+    admit(&narrower, native_byte_limit)?;
+    Ok(narrower)
+}
+
+pub(super) fn admit(narrower: &Narrower, native_byte_limit: u64) -> Result<(), Incomplete> {
+    check_bytes(narrower.extremum_index_bytes(), native_byte_limit)
+}
+
+fn check_bytes(required: u128, limit: u64) -> Result<(), Incomplete> {
+    if required > u128::from(limit) {
+        Err(Incomplete::NativeNarrowingStorage {
+            required,
+            limit: u128::from(limit),
+        })
+    } else {
+        Ok(())
+    }
 }
 
 /// Test-only observation of the construction site: a count of builds per
@@ -158,3 +209,6 @@ pub(crate) mod hooks {
         FAIL.with(|fail| fail.set(true));
     }
 }
+
+#[cfg(test)]
+mod storage_tests;

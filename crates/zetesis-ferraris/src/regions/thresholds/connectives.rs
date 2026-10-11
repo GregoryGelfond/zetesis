@@ -1,40 +1,37 @@
-//! Exact-prefix transport between native unit rows and live Boolean chains.
+//! Unit-count bounds across Boolean witnesses.
 //!
-//! A chain's distinct leaves denote a unit sum: its conjunction has the leaf
-//! count as bound, and its disjunction has bound one. Existing chain counters
-//! still perform all local Boolean propagation. Only authenticated exact
-//! prefixes exchange original-subject requirements with native row state.
+//! Flat theories use the sparse least-condition anchor join and exact-prefix
+//! authentication. Its preparation is O(R + U log U + L + (R + C) log(A + 1))
+//! for R native rows, U unit rows, C chains, L chain leaves and A distinct row
+//! anchors. Retained storage is O(U + C); there is no row-by-chain table. With
+//! no unit row, preparation allocates nothing and never examines chains.
 //!
-//! A nonempty native row is eligible exactly when its greatest grouped weight
-//! is one. Its terms are then distinct conditions in ascending order. Every
-//! nonempty exact prefix or extension has the same least condition, its anchor.
-//! Immutable projections associate each unit row and each matching nonempty
-//! chain with one anchor. They select candidates, never establish a prefix.
-//! Empty rows and chains keep their local constant rules. Borrowed chain leaves
-//! retain their order, and each posting retains the original row or chain order.
+//! A shared associative DAG can hide an intermediate cut such as [C,b,d]
+//! inside ((C or b) or d). Opaque and fully unfolded minima do not identify
+//! every such cut. For a nested Boolean event, walk its same-kind cone and
+//! filter its distinct node IDs against the existing row anchors. For a native
+//! event, follow the anchor's existing immediate parent edges through same-kind
+//! chains. Both discoveries are temporary joins, without an ancestor table.
 //!
-//! For R native rows, U eligible rows, C Boolean chains, L total chain leaves
-//! and A distinct native anchors, preparation takes O(R + U log U + L +
-//! C log(A + 1) + R log(A + 1)) work. Each chain computes its minimum once.
-//! With B matching chains, retained logical storage is A anchor keys, two
-//! A + 1 offset vectors, U row IDs, B chain IDs and B reverse (chain,anchor)
-//! entries: O(U + B) words including bounded vector spare capacity. Compact
-//! construction adds O(A) cursors; every added reservation is fallible. No
-//! row/chain pairs, node-sized offsets or per-region state are added. With no
-//! eligible native row, preparation allocates nothing and never reads chains.
+//! Candidates are then authenticated in their actual direction. A Boolean
+//! witness implies a row witness when every terminal path meets a row condition;
+//! stop at those conditions, including compounds. A row witness implies a
+//! OR witness when every row condition occurs in its same-kind cone. A true
+//! AND entails all k contained conditions, so a native exclusive upper bound
+//! at most k refutes that AND, even when the row has additional terms.
+//! For OR the witness is truth; for AND it is falsity. These implications do
+//! not require independent conditions. Native rows remain distinct unit terms.
 //!
-//! A Boolean event looks up its reverse entry in O(log(B + 1)); a dirty native
-//! row looks up its anchor in O(log(A + 1)). Each then visits only that anchor's
-//! opposite posting. Cheap truth, bound and length filters precede exact-prefix
-//! authentication, which costs O(sum(m log(k + 1))) for candidate chain lengths
-//! m and shorter row lengths k. Every runtime lookup comparison, posting entry,
-//! leaf visit and membership comparison consumes propagation work. Dense anchor
-//! buckets can still be expensive, but no product is retained. Requirements
-//! tighten monotonically; the existing coalesced row worklist is the only scratch.
+//! One requested cone or ancestor walk visits O(V + E) reachable nodes/edges.
+//! Cover authentication adds O(V log(Ur + 1)) comparisons for Ur row terms;
+//! containment adds O(Ur) marked-node reads. Discovery adds anchor searches and
+//! posting visits. All runtime visits/comparisons are metered and cancellable.
+//! Dense buckets may still be expensive. Worker scratch is O(N + E + R + C),
+//! reserved lazily with checked allocation and actual-capacity accounting;
+//! cloned region knowledge and the flat counter path remain unchanged.
 //!
-//! Frozen subjects skip the bridge. Atom ranking, mutable knowledge and the
-//! logical index receipt are unchanged. Anchor construction, like native row
-//! sorting, is explicit preparation rather than charged propagation work.
+//! Frozen subjects skip this bridge: these are original-subject consequences,
+//! never an assumption about arbitrary frozen-reduct interpretations.
 
 use std::cmp::Ordering;
 
@@ -62,14 +59,27 @@ pub(super) struct Connectives {
 }
 
 impl Connectives {
-    pub(super) fn prepare(rows: &[Row], chains: &[Chain]) -> Result<Option<Self>, Stop> {
+    /// Retained anchor projections; the enclosing Thresholds owns the header.
+    pub(super) fn retained_bytes(&self) -> u128 {
+        self.rows.retained_bytes()
+            + self.chains.retained_bytes()
+            + self.anchors.capacity() as u128 * size_of::<usize>() as u128
+            + self.by_chain.capacity() as u128 * size_of::<(usize, usize)>() as u128
+    }
+
+    pub(super) fn prepare(
+        rows: &[Row],
+        chains: &[Chain],
+        extrema: &crate::regions::extrema::Extrema,
+        shared_connectives: bool,
+    ) -> Result<Option<Self>, Stop> {
         let anchors = anchor_keys(rows)?;
         if anchors.is_empty() {
             // In particular, a Boolean-only theory does not inspect chains.
             return Ok(None);
         }
-        let by_chain = chain_anchors(chains, &anchors)?;
-        if by_chain.is_empty() {
+        let by_chain = chain_anchors(chains, extrema, &anchors)?;
+        if by_chain.is_empty() && !shared_connectives {
             return Ok(None);
         }
         let row_postings = Adjacency::build(
@@ -101,6 +111,14 @@ impl Connectives {
         Ok(&self.rows[self.by_chain[position].1])
     }
 
+    /// A cone node is only a discovery key, not proof of a row relation.
+    fn rows_at(&self, node: usize, work: &mut Work<'_>) -> Result<&[usize], Stop> {
+        let Some(anchor) = find(&self.anchors, node, |&condition| condition, work)? else {
+            return Ok(&[]);
+        };
+        Ok(&self.rows[anchor])
+    }
+
     /// Find a native row's anchor, charging each immutable key probe.
     fn chains(&self, first: usize, work: &mut Work<'_>) -> Result<&[usize], Stop> {
         let Some(anchor) = find(&self.anchors, first, |&condition| condition, work)? else {
@@ -124,10 +142,14 @@ fn anchor_keys(rows: &[Row]) -> Result<Vec<usize>, Stop> {
 /// Scan each nonempty chain's borrowed leaves once, without reordering them.
 /// Only a minimum shared with some native unit row receives a reverse entry.
 /// Increasing chain IDs preserve the old parent-posting order at every anchor.
-fn chain_anchors(chains: &[Chain], anchors: &[usize]) -> Result<Vec<(usize, usize)>, Stop> {
+fn chain_anchors(
+    chains: &[Chain],
+    extrema: &crate::regions::extrema::Extrema,
+    anchors: &[usize],
+) -> Result<Vec<(usize, usize)>, Stop> {
     let mut reverse = Vec::new();
     for (chain, data) in chains.iter().enumerate() {
-        let Some(first) = data.operands.iter().min() else {
+        let Some(first) = data.leaves(extrema).iter().min() else {
             continue;
         };
         if let Ok(anchor) = anchors.binary_search(first) {
@@ -198,12 +220,8 @@ fn contains(terms: &[(usize, i128)], leaf: usize, work: &mut Work<'_>) -> Result
     Ok(find(terms, leaf, |&(condition, _)| condition, work)?.is_some())
 }
 
-fn bound(chain: &Chain) -> i128 {
-    if chain.disjunction {
-        1
-    } else {
-        chain.operands.len() as i128
-    }
+fn bound(disjunction: bool, leaves: &[usize]) -> i128 {
+    if disjunction { 1 } else { leaves.len() as i128 }
 }
 
 impl Thresholds {
@@ -235,22 +253,75 @@ impl<C: Count> Closure<'_, C> {
         let Some(anchors) = &index.thresholds.connectives else {
             return Ok(Step::Unchanged);
         };
-        let bound = bound(source);
+        let expanded = crate::regions::witnesses::expands(index, chain);
+        let rows = if expanded {
+            // Each distinct cone node has at most one anchor slot, and each
+            // row has one anchor. Thus this temporary join emits no row twice.
+            self.lists.witnesses.cone(index, chain, work)?;
+            self.lists.witnesses.clear_candidates();
+            for position in 0..self.lists.witnesses.prepared().len() {
+                let node = self.lists.witnesses.prepared()[position];
+                for &row in anchors.rows_at(node, work)? {
+                    work.tick()?;
+                    self.lists.witnesses.push_candidate(row)?;
+                }
+            }
+            &[][..]
+        } else {
+            anchors.rows(chain, work)?
+        };
+        let count = if expanded {
+            self.lists.witnesses.candidates().len()
+        } else {
+            rows.len()
+        };
         let mut step = Step::Unchanged;
-        for &row in anchors.rows(chain, work)? {
+        // Authentication reuses witness scratch, so release each candidate
+        // borrow before walking its cone. Candidate IDs remain unchanged.
+        let mut position = 0;
+        while position < count {
+            let row = if expanded {
+                self.lists.witnesses.candidates()[position]
+            } else {
+                rows[position]
+            };
+            position += 1;
             work.tick()?;
             let data = &index.thresholds.rows[row];
             let length = data.terms.len();
             let state = self.known.thresholds[row];
-            let lower = value && source.operands.len() <= length && state.lower < bound;
-            let upper = !value
-                && source.operands.len() >= length
-                && state.upper.is_none_or(|upper| bound < upper);
-            if !(lower || upper) || !exact_prefix(&data.terms, &source.operands, work)? {
+            let bound = if expanded && !source.disjunction {
+                length as i128
+            } else {
+                bound(source.disjunction, source.leaves(&index.extrema))
+            };
+            let useful = if value {
+                state.lower < bound
+            } else {
+                state.upper.is_none_or(|upper| bound < upper)
+            };
+            if !useful {
+                continue;
+            }
+            let authenticated = if expanded {
+                self.lists
+                    .witnesses
+                    .covered_by(index, chain, work, |node, work| {
+                        contains(&data.terms, node, work)
+                    })?
+            } else {
+                let compatible = if value {
+                    source.leaves(&index.extrema).len() <= length
+                } else {
+                    source.leaves(&index.extrema).len() >= length
+                };
+                compatible && exact_prefix(&data.terms, source.leaves(&index.extrema), work)?
+            };
+            if !authenticated {
                 continue;
             }
             let state = &mut self.known.thresholds[row];
-            if lower {
+            if value {
                 state.lower = bound;
             } else {
                 state.upper = Some(bound);
@@ -290,35 +361,88 @@ impl<C: Count> Closure<'_, C> {
         if source.lower < 1 && source.upper.is_none_or(|upper| upper > length as i128) {
             return Ok(step);
         }
-        for &chain in anchors.chains(first, work)? {
+        let shared = !index.witness_chains.is_empty();
+        let chains = if shared {
+            // Discovery follows one connective per branch. An irrelevant
+            // polarity stays irrelevant along that branch. A known absorbing
+            // truth (OR sure / AND never) already entails that same truth at
+            // every ancestor; ordinary node events complete it if still pending.
+            // Keep the opposite-known polarity: authentication may refute it.
+            let sure = &*self.known.sure;
+            let never = &*self.known.never;
+            self.lists
+                .witnesses
+                .parent_chains(index, first, work, |chain| {
+                    if chain.disjunction {
+                        source.lower >= 1 && !bit(sure, chain.root)
+                    } else {
+                        source.upper.is_some_and(|upper| upper <= length as i128)
+                            && !bit(never, chain.root)
+                    }
+                })?;
+            &[][..]
+        } else {
+            anchors.chains(first, work)?
+        };
+        let count = if shared {
+            self.lists.witnesses.candidates().len()
+        } else {
+            chains.len()
+        };
+        // Cone walks mutate scratch without changing this candidate sequence.
+        let mut position = 0;
+        while position < count {
+            let chain_index = if shared {
+                self.lists.witnesses.candidates()[position]
+            } else {
+                chains[position]
+            };
+            position += 1;
             work.tick()?;
-            let chain = &index.chains[chain];
-            let bound = bound(chain);
-            // Full lower bounds and zero upper bounds already force every
-            // leaf through threshold_row. Ordinary chain events therefore
-            // establish true And and false Or without another prefix join.
-            let sure = chain.disjunction
-                && length <= chain.operands.len()
-                && source.lower >= bound
-                && !bit(self.known.sure, chain.root);
+            let chain = &index.chains[chain_index];
+            // Keep the cheap truth and bound filters before any cone walk.
+            let sure = chain.disjunction && source.lower >= 1 && !bit(self.known.sure, chain.root);
             let never = !chain.disjunction
-                && length >= chain.operands.len()
-                && source.upper.is_some_and(|upper| upper <= bound)
+                && source.upper.is_some_and(|upper| upper <= length as i128)
                 && !bit(self.known.never, chain.root);
-            if !(sure || never) || !exact_prefix(&data.terms, &chain.operands, work)? {
+            if !(sure || never) {
                 continue;
             }
-            if sure {
-                step = step.join(self.sure(chain.root));
-                if step == Step::Contradiction {
-                    return Ok(step);
+            let expanded = crate::regions::witnesses::expands(index, chain_index);
+            let authenticated = if expanded {
+                self.lists.witnesses.cone(index, chain_index, work)?;
+                let mut contained = 0;
+                for &(condition, _) in &data.terms {
+                    work.tick()?;
+                    contained += usize::from(self.lists.witnesses.visited(condition));
                 }
+                if sure {
+                    contained == length
+                } else {
+                    // A true AND makes every contained row condition true.
+                    // Retain the exact-prefix inference when this native row
+                    // has extra terms but its exclusive upper bound is tight.
+                    source.upper.is_some_and(|upper| upper <= contained as i128)
+                }
+            } else {
+                let bound = bound(chain.disjunction, chain.leaves(&index.extrema));
+                let compatible =
+                    (sure && length <= chain.leaves(&index.extrema).len() && source.lower >= bound)
+                        || (never
+                            && length >= chain.leaves(&index.extrema).len()
+                            && source.upper.is_some_and(|upper| upper <= bound));
+                compatible && exact_prefix(&data.terms, chain.leaves(&index.extrema), work)?
+            };
+            if !authenticated {
+                continue;
             }
-            if never {
-                step = step.join(self.never(chain.root));
-                if step == Step::Contradiction {
-                    return Ok(step);
-                }
+            step = step.join(if sure {
+                self.sure(chain.root)
+            } else {
+                self.never(chain.root)
+            });
+            if step == Step::Contradiction {
+                return Ok(step);
             }
         }
         Ok(step)

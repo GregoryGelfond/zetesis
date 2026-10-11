@@ -1,7 +1,7 @@
 //! Least consequences of positive producers, checked against original constraints.
 //!
 //! This optional complete-root certificate admits positive cycles and monotone
-//! conjunction/disjunction and nonnegative weighted-threshold bodies. It does not translate source or treat a
+//! conjunction/disjunction, nonnegative weighted-threshold and ordinal-cut bodies. It does not translate source or treat a
 //! dependency projection as the original theory. Construction computes the least
 //! consequences once; no per-candidate propagation graph is retained.
 
@@ -23,6 +23,8 @@ pub struct PositivePlanLimits {
     /// repeated IDs in native conjunction, disjunction and threshold rows.
     /// Zero-weight threshold entries remain admitted and evaluated but add no
     /// dependency. Positive weighted entries each carry their whole contribution.
+    /// Ordinal cuts add only qualifying witness incidences; endpoint-bound
+    /// constants add none. Physical rows are still fully read during evaluation.
     pub max_dependencies: usize,
     /// Named plan header, construction-vector headers and actual vector capacity.
     /// Excludes the shared theory, allocator overhead and other stack temporaries.
@@ -193,7 +195,8 @@ impl PositivePlan {
 
     /// Inspect all original roots and compute least consequences with forward
     /// incidences. Producer bodies admit atoms, falsum, And, Or and exactly
-    /// False→False truth. Roots admit atomic facts, positive body→atom,
+    /// False→False truth, nonnegative thresholds and ordinal cuts over positive
+    /// qualifying witnesses. Roots admit atomic facts, positive body→atom,
     /// arbitrary body→False and False. Other producer implication bodies,
     /// default negation in producers and choice heads are refused.
     ///

@@ -79,6 +79,15 @@ fn seed(theory: &Theory, graph: &mut Graph, budget: &mut Budget<'_>) -> Result<(
                     budget,
                 )?;
             }
+        } else if let NodeView::ExtremumCut(cut) = node {
+            if cut.endpoint_truth() == Some(true) {
+                activate(
+                    theory.atom_count() + index,
+                    theory.atom_count(),
+                    graph,
+                    budget,
+                )?;
+            }
         } else if let NodeView::Implies(a, b) = node {
             budget.tick()?;
             let left = theory.view().node(a).map_err(|_| Stop::InvalidProgram)?;

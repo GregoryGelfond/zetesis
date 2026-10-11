@@ -48,7 +48,9 @@ fn setup_work(theory: &Theory) -> u32 {
     for index in 0..theory.view().len() {
         depths.push(match theory.view().node(index).unwrap() {
             NodeView::False | NodeView::Atom(_) => 0,
-            NodeView::Threshold(_) => panic!("work-receipt helper requires Boolean fixtures"),
+            NodeView::Threshold(_) | NodeView::ExtremumCut(_) => {
+                panic!("work-receipt helper requires Boolean fixtures")
+            }
             NodeView::Implies(a, b) => 1 + depths[a].max(depths[b]),
             NodeView::And(children) | NodeView::Or(children) => {
                 1 + children.iter().map(|&child| depths[child]).max().unwrap()

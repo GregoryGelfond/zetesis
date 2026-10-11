@@ -4,8 +4,12 @@ use super::*;
 
 /// The original index the enumeration would build and hand the workers.
 fn original(theory: &Theory) -> Arc<IndexedTheory> {
-    let mut owner = super::super::OriginalIndex::new(theory);
-    Arc::clone(owner.ensure(|_| Ok(())).unwrap())
+    let mut owner = super::super::OriginalIndex::new(theory, u64::MAX);
+    Arc::clone(
+        owner
+            .ensure(&crate::Cancellation::default(), |_| Ok(()))
+            .unwrap(),
+    )
 }
 
 #[test]
@@ -176,6 +180,6 @@ fn a_refused_certificate_refunds_its_reserved_work() {
     assert!(!search.exhausted);
 }
 
+mod cancellation_tests;
 mod coordination_tests;
 mod timing_tests;
-mod cancellation_tests;

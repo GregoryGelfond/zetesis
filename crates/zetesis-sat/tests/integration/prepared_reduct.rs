@@ -508,3 +508,91 @@ fn native_threshold_queries_match_fresh_and_exhaustive_reducts() {
         compare(&input);
     }
 }
+
+#[test]
+fn ordinal_cut_comparisons_match_fresh_and_exhaustive_reducts() {
+    use zetesis_ferraris::{ExtremumCutRule, ExtremumRow, FormulaNodes, FormulaParts, NodeView};
+    for empty in [false, true] {
+        for prefix in [false, true] {
+            for boundary in 0..5 {
+                for wrapper in 0..6 {
+                    let mut nodes = FormulaNodes::new(
+                        FormulaParts::new(
+                            vec![
+                                Node::atom(0),
+                                Node::atom(1),
+                                Node::falsum(),
+                                Node::implies(0, 2),
+                                Node::implies(3, 1),
+                            ],
+                            vec![],
+                        )
+                        .unwrap(),
+                    );
+                    let mut transaction = nodes.transaction();
+                    let rule = |bound| {
+                        if prefix {
+                            ExtremumCutRule::Prefix(bound)
+                        } else {
+                            ExtremumCutRule::Suffix(bound)
+                        }
+                    };
+                    let (conditions, ranks): (&[usize], &[u64]) = if empty {
+                        (&[], &[])
+                    } else {
+                        (&[0, 0, 1, 3, 4], &[0, 4, 2, 3, 1])
+                    };
+                    let cuts = transaction
+                        .push_extremum_cut_family_range(
+                            ExtremumRow {
+                                conditions,
+                                ranks,
+                                rank_count: 5,
+                            },
+                            &[rule(boundary), rule(boundary + 1)],
+                            usize::MAX,
+                            usize::MAX,
+                        )
+                        .unwrap();
+                    // Ordered G/H cuts plus the existing Eq/Ne outer grammar
+                    // cover all six comparison polarities for either extremum.
+                    let (g, h) = if prefix {
+                        (cuts.start + 1, cuts.start)
+                    } else {
+                        (cuts.start, cuts.start + 1)
+                    };
+                    let root = match wrapper {
+                        0 => g,
+                        1 => h,
+                        2 => transaction
+                            .push(NodeView::Implies(g, 2), usize::MAX, usize::MAX)
+                            .unwrap(),
+                        3 => transaction
+                            .push(NodeView::Implies(h, 2), usize::MAX, usize::MAX)
+                            .unwrap(),
+                        4 => {
+                            let negative = transaction
+                                .push(NodeView::Implies(h, 2), usize::MAX, usize::MAX)
+                                .unwrap();
+                            transaction
+                                .push(NodeView::And(&[g, negative]), usize::MAX, usize::MAX)
+                                .unwrap()
+                        }
+                        _ => transaction
+                            .push(NodeView::Implies(g, h), usize::MAX, usize::MAX)
+                            .unwrap(),
+                    };
+                    transaction.commit();
+                    let input = Theory::new(
+                        2,
+                        nodes.into_parts(),
+                        vec![root],
+                        zetesis_ferraris::AdmissionLimits::default(),
+                    )
+                    .unwrap();
+                    compare(&input);
+                }
+            }
+        }
+    }
+}

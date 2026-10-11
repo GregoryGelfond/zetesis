@@ -41,12 +41,13 @@ fn family_shares_one_row_without_coalescing_positions() {
         .unwrap();
     assert_eq!(roots, [2, 3, 4]);
     assert_eq!(nodes.parts().conditions(), [0, 0, 1]);
-    assert_eq!(nodes.parts().weights(), [2, 3, 0]);
+    assert_eq!(nodes.parts().numeric_values(), [2, 3, 0]);
     assert_eq!(
         nodes.parts().rows(),
-        [ContributionRow {
+        [NumericRow {
             start: 0,
-            length: 3
+            length: 3,
+            domain: NumericDomain::Weights,
         }]
     );
     assert_eq!(nodes.parts().occurrences(), 9);
@@ -101,7 +102,7 @@ fn single_threshold_push_copies_the_complete_row() {
         )
         .unwrap();
     transaction.commit();
-    assert_eq!(nodes.parts().weights(), &[u64::MAX, 0]);
+    assert_eq!(nodes.parts().numeric_values(), &[u64::MAX, 0]);
     assert_eq!(nodes.parts().thresholds().len(), 1);
 }
 
@@ -159,7 +160,7 @@ fn family_occurrence_refusal_preserves_all_arenas() {
     assert_eq!(transaction.parts().occurrences(), 3);
     assert_eq!(transaction.parts().operands(), &[0, 1, 0]);
     assert!(transaction.parts().rows().is_empty());
-    assert!(transaction.parts().weights().is_empty());
+    assert!(transaction.parts().numeric_values().is_empty());
     transaction.commit();
 }
 
@@ -198,9 +199,10 @@ fn detachment_rebases_numeric_rows_without_changing_children() {
     assert_eq!(suffix.parts().payload_bytes(), expected_bytes);
     assert_eq!(
         suffix.parts().rows(),
-        &[ContributionRow {
+        &[NumericRow {
             start: 0,
-            length: 2
+            length: 2,
+            domain: NumericDomain::Weights,
         }]
     );
     assert_eq!(
@@ -235,7 +237,7 @@ fn raw_admission_rejects_incomplete_numeric_columns() {
     .unwrap();
     assert_eq!(
         Theory::new(0, parts, vec![], limits(1, 1)).unwrap_err(),
-        AdmissionError::ThresholdShape
+        AdmissionError::NumericShape
     );
 }
 
@@ -523,9 +525,10 @@ fn appended_shared_storage_detaches_without_prefix_rows() {
     let suffix = append.detach().unwrap();
     assert_eq!(
         suffix.parts().rows(),
-        &[ContributionRow {
+        &[NumericRow {
             start: 0,
-            length: 1
+            length: 1,
+            domain: NumericDomain::Weights,
         }]
     );
     assert_eq!(suffix.parts().conditions(), &[3]);

@@ -149,6 +149,7 @@ pub(crate) struct RegionProposals {
     workers: Workers,
     /// The worklists of the coordinator's own positive checks.
     scratch: NarrowingScratch,
+    native_byte_limit: u64,
 }
 
 impl std::fmt::Debug for RegionProposals {
@@ -174,6 +175,7 @@ impl RegionProposals {
     pub(crate) fn new(
         theory: &Theory,
         workers: NonZeroUsize,
+        native_byte_limit: u64,
         budget: &mut Budget<'_>,
     ) -> Result<Self, Incomplete> {
         let regions::Opened {
@@ -197,6 +199,7 @@ impl RegionProposals {
             statistics,
             workers: Workers::new(None, |_| Vec::new()),
             scratch: NarrowingScratch::default(),
+            native_byte_limit,
         })
     }
 
@@ -249,7 +252,11 @@ impl RegionProposals {
             .permanent
             .try_reserve(1)
             .map_err(|_| Incomplete::Allocation)?;
-        let narrower = Narrower::try_new(restriction).map_err(super::regions::stopped)?;
+        let narrower = super::original_index::prepare(
+            restriction,
+            self.native_byte_limit,
+            budget.cancellation,
+        )?;
         budget.charge(narrower.work())?;
         self.statistics.counts.work = self
             .statistics
@@ -271,7 +278,12 @@ impl RegionProposals {
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
         budget.cancellation.poll()?;
-        let bound = Bound::prepare(restriction, generation)?;
+        let bound = Bound::prepare(
+            restriction,
+            generation,
+            self.native_byte_limit,
+            budget.cancellation,
+        )?;
         budget.charge(bound.work())?;
         let work = self
             .statistics

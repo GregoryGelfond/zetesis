@@ -124,6 +124,13 @@ fn countermodel_stops_have_distinct_machine_codes() {
             },
             "reduct_storage",
         ),
+        (
+            Incomplete::NativeNarrowingStorage {
+                required: 65,
+                limit: 64,
+            },
+            "native_narrowing_storage",
+        ),
         (Incomplete::BatchCandidateLimit, "batch_candidate_limit"),
         (Incomplete::PendingBatch, "pending_batch"),
         (Incomplete::Allocation, "allocation"),

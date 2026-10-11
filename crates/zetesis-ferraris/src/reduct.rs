@@ -2,6 +2,7 @@
 
 use zetesis_cpu::{Cancellation, Stop};
 
+use crate::extremum_cut::ExtremaScratch;
 use crate::oracle::{Work, evaluate, failed_root, identities, reserve};
 use crate::{Interpretation, Limits, Statistics, Theory};
 
@@ -33,9 +34,12 @@ pub struct FrozenReduct<'a> {
 impl<'a> FrozenReduct<'a> {
     /// Freeze the candidate's own theory with one topological evaluation.
     ///
-    /// For N DAG nodes and E logical child occurrences, this charges exactly
-    /// N + E operations and retains N Boolean values: O(N + E) work and O(N)
-    /// storage. Repeated children count separately. The candidate's packed words
+    /// For N DAG nodes, this retains N Boolean values. Each Boolean/threshold
+    /// child occurrence is read; each referenced ordinal row is read once.
+    /// Repeated positions within that row still count separately. If cuts exist,
+    /// temporary dense measures cover R numeric rows with ceil(R/64) validity
+    /// words; initialization and each validity-word reset are charged. The
+    /// temporary cache is released after freezing; it is not part of the mask. The candidate's packed words
     /// and theory are borrowed, not cloned. No root or proper subset is tested;
     /// `limits.max_subsets` has no effect. Even an empty DAG polls control.
     ///
@@ -54,7 +58,9 @@ impl<'a> FrozenReduct<'a> {
             cancellation,
             statistics: Statistics::default(),
         };
-        Self::freeze(candidate, &mut work)
+        let mut extrema = ExtremaScratch::default();
+        extrema.reserve(candidate.theory())?;
+        Self::freeze(candidate, &mut extrema, &mut work)
     }
 
     /// The exact interpretation determining this reduct, without allocation.
@@ -75,10 +81,11 @@ impl<'a> FrozenReduct<'a> {
     /// it need not be a subset of the candidate. An independently admitted equal
     /// theory has a different identity and is refused before control is polled.
     ///
-    /// For N DAG nodes, E child occurrences and R asserted roots, a query charges
-    /// N + E evaluations and then one test per root through the first failure,
-    /// at most N + E + R work.
-    /// It uses N temporary Boolean values, released on completion or stop. The
+    /// A query charges every node, Boolean/threshold child occurrence, and each
+    /// referenced ordinal row once, then roots through the first failure. It
+    /// also charges fresh dense-measure initialization and packed-validity reset
+    /// when cuts exist, as freezing does. Temporary truth and row-cache storage
+    /// are released on completion or stop. The
     /// freeze is reused unchanged. This is a fresh per-query budget, excluding
     /// construction and previous queries; `limits.max_subsets` has no effect.
     ///
@@ -99,15 +106,28 @@ impl<'a> FrozenReduct<'a> {
             statistics: Statistics::default(),
         };
         let mut values = reserve(self.truth.len())?;
-        self.satisfied_by(tested, &mut values, &mut work)
+        let mut extrema = ExtremaScratch::default();
+        extrema.reserve(self.theory())?;
+        self.satisfied_by(tested, &mut values, &mut extrema, &mut work)
     }
 
     // The one-shot wrapper reserves an equally sized tested workspace first,
     // keeping both fallible reservations before candidate evaluation. Sharing
     // Work preserves its combined freeze/query ceiling and stop precedence.
-    pub(super) fn freeze(candidate: &'a Interpretation, work: &mut Work<'_>) -> Result<Self, Stop> {
+    pub(super) fn freeze(
+        candidate: &'a Interpretation,
+        extrema: &mut ExtremaScratch,
+        work: &mut Work<'_>,
+    ) -> Result<Self, Stop> {
         let mut truth = reserve(candidate.theory().nodes().len())?;
-        evaluate(candidate.theory(), candidate, None, &mut truth, work)?;
+        evaluate(
+            candidate.theory(),
+            candidate,
+            None,
+            &mut truth,
+            extrema,
+            work,
+        )?;
         Ok(Self { candidate, truth })
     }
 
@@ -117,9 +137,17 @@ impl<'a> FrozenReduct<'a> {
         &self,
         tested: &Interpretation,
         values: &mut Vec<bool>,
+        extrema: &mut ExtremaScratch,
         work: &mut Work<'_>,
     ) -> Result<bool, Stop> {
-        evaluate(self.theory(), tested, Some(&self.truth), values, work)?;
+        evaluate(
+            self.theory(),
+            tested,
+            Some(&self.truth),
+            values,
+            extrema,
+            work,
+        )?;
         Ok(failed_root(self.theory(), values, work)?.is_none())
     }
 }

@@ -5,17 +5,18 @@ mod objectives;
 mod scoped_body;
 pub(crate) use scoped_body::source_activity;
 mod aggregate_guards;
-mod appended;
-mod canonical_suffix;
 mod aggregate_order;
+mod appended;
 pub(crate) mod atoms;
 mod cache;
+mod canonical_suffix;
+mod extremum_guards;
 mod metadata;
-mod support_guards;
 mod nodes;
 mod producer;
 mod projection;
 mod retained;
+mod support_guards;
 use retained::RetainedState;
 pub(crate) use retained::{RetainedGrounding, ground_retained};
 #[cfg(test)]
@@ -2182,29 +2183,7 @@ impl Builder<'_, '_, '_> {
         )?;
         if let GroundAggregate::Extrema(elements) = elements {
             let kind = extremum(function).expect("value aggregate is min/max");
-            for slot in 0..values.len() {
-                self.work(location)?;
-                let key = values.key(slot, location)?;
-                let value = self.term(&key, location)?;
-                let root = self.extremum_root(
-                    elements.slice(),
-                    kind,
-                    AggregateComparison::Eq,
-                    &key,
-                    location,
-                )?;
-                roots.insert(
-                    value,
-                    root,
-                    None,
-                    Context::new(
-                        &*self.computation,
-                        self.limits,
-                        &mut self.counters,
-                        location,
-                    ),
-                )?;
-            }
+            self.extremum_assignment_roots(elements.slice(), kind, &values, &mut roots, location)?;
         } else {
             let GroundAggregate::Numeric(elements) = elements else {
                 unreachable!("handled extrema");
@@ -2765,6 +2744,9 @@ impl Builder<'_, '_, '_> {
         bound: &TermKey,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
+        if self.shares_extremum_family(elements.len(), 1, location)? {
+            return self.native_extremum_root(elements, kind, comparison, bound, location);
+        }
         let read = self.computation.read();
         let bound = read.term(bound).map_err(|error| {
             crate::formula_binding::assignment(

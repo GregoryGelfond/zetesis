@@ -19,7 +19,7 @@ fn chain(leaves: &[usize]) -> Chain {
     Chain {
         disjunction: false,
         root: 0,
-        operands: leaves.to_vec(),
+        operands: crate::regions::ChainOperands::Owned(leaves.to_vec()),
     }
 }
 
@@ -31,11 +31,69 @@ fn no_unit_rows_have_no_anchor_storage() {
         assert_eq!(keys.capacity(), 0);
         // The prepare branch returns before calling chain_anchors.
         assert!(
-            Connectives::prepare(&rows, &[chain(&[1, 0])])
-                .unwrap()
-                .is_none()
+            Connectives::prepare(
+                &rows,
+                &[chain(&[1, 0])],
+                &crate::regions::extrema::Extrema::default(),
+                false
+            )
+            .unwrap()
+            .is_none()
         );
     }
+}
+
+#[test]
+fn native_receipt_includes_shared_anchor_storage() {
+    use crate::{
+        AdmissionLimits, ExtremumCut, ExtremumCutRule, ExtremumRow, FormulaNodes, FormulaParts,
+        Narrower, Node, NodeView, Theory,
+    };
+    let mut nodes =
+        FormulaNodes::new(FormulaParts::new(vec![Node::atom(0), Node::atom(1)], vec![]).unwrap());
+    let mut transaction = nodes.transaction();
+    transaction
+        .push(
+            NodeView::Threshold(Threshold {
+                conditions: &[0, 1],
+                weights: &[1, 1],
+                bound: 1,
+            }),
+            10,
+            10,
+        )
+        .unwrap();
+    transaction
+        .push(
+            NodeView::ExtremumCut(ExtremumCut {
+                row: ExtremumRow {
+                    conditions: &[0, 1],
+                    ranks: &[1, 2],
+                    rank_count: 4,
+                },
+                rule: &ExtremumCutRule::Prefix(3),
+            }),
+            10,
+            10,
+        )
+        .unwrap();
+    transaction.commit();
+    let theory = Theory::new(2, nodes.into_parts(), vec![], AdmissionLimits::default()).unwrap();
+    let mut index = Narrower::new(&theory);
+    let before = index.extremum_index_bytes();
+    let anchors = index.thresholds.connectives.take().unwrap();
+    assert!(
+        anchors
+            .by_chain
+            .iter()
+            .any(|&(chain, _)| index.chains[chain].ordinal())
+    );
+    let payload = anchors.rows.retained_bytes()
+        + anchors.chains.retained_bytes()
+        + anchors.anchors.capacity() as u128 * size_of::<usize>() as u128
+        + anchors.by_chain.capacity() as u128 * size_of::<(usize, usize)>() as u128;
+    assert!(payload > 0);
+    assert_eq!(before - index.extremum_index_bytes(), payload);
 }
 
 #[test]
@@ -43,7 +101,14 @@ fn compact_postings_record_each_owner_once() {
     let count = 128;
     let rows: Vec<_> = (0..count).map(|_| row(&[0, 1], &[1, 1])).collect();
     let chains: Vec<_> = (0..count).map(|_| chain(&[1, 0])).collect();
-    let anchors = Connectives::prepare(&rows, &chains).unwrap().unwrap();
+    let anchors = Connectives::prepare(
+        &rows,
+        &chains,
+        &crate::regions::extrema::Extrema::default(),
+        false,
+    )
+    .unwrap()
+    .unwrap();
     assert_eq!(anchors.anchors, [0]);
     assert_eq!(anchors.rows.len(), 1);
     assert_eq!(anchors.chains.len(), 1);
@@ -74,15 +139,22 @@ fn compact_postings_record_each_owner_once() {
 fn a_shared_parent_with_a_different_minimum_is_excluded() {
     let rows = [row(&[1, 2], &[1, 1])];
     let chains = [chain(&[0, 2, 1]), chain(&[2, 1])];
-    let anchors = Connectives::prepare(&rows, &chains).unwrap().unwrap();
+    let anchors = Connectives::prepare(
+        &rows,
+        &chains,
+        &crate::regions::extrema::Extrema::default(),
+        false,
+    )
+    .unwrap()
+    .unwrap();
     let mut work = Work::new(u64::MAX);
     // Both chains contain condition 1, but only the second may be an exact
     // prefix or extension. Exclusion occurs before exact_prefix is called.
     assert_eq!(anchors.chains(1, &mut work).unwrap(), [1]);
     assert!(anchors.rows(0, &mut work).unwrap().is_empty());
     assert_eq!(anchors.rows(1, &mut work).unwrap(), [0]);
-    assert_eq!(chains[0].operands, [0, 2, 1]);
-    assert_eq!(chains[1].operands, [2, 1]);
+    assert_eq!(chains[0].ordinary_leaves(), [0, 2, 1]);
+    assert_eq!(chains[1].ordinary_leaves(), [2, 1]);
 }
 
 #[test]
@@ -100,7 +172,14 @@ fn repeated_anchors_preserve_both_owner_orders() {
         chain(&[42, 40]),
         chain(&[9]),
     ];
-    let anchors = Connectives::prepare(&rows, &chains).unwrap().unwrap();
+    let anchors = Connectives::prepare(
+        &rows,
+        &chains,
+        &crate::regions::extrema::Extrema::default(),
+        false,
+    )
+    .unwrap()
+    .unwrap();
     let mut work = Work::new(u64::MAX);
     assert_eq!(anchors.anchors, [3, 40]);
     assert_eq!(anchors.rows(0, &mut work).unwrap(), [1]);
@@ -115,12 +194,22 @@ fn repeated_anchors_preserve_both_owner_orders() {
 
 #[test]
 fn rebuilding_does_not_reuse_another_owners_chain_anchor() {
-    let first = Connectives::prepare(&[row(&[3, 5], &[1, 1])], &[chain(&[5, 3])])
-        .unwrap()
-        .unwrap();
-    let second = Connectives::prepare(&[row(&[40, 42], &[1, 1])], &[chain(&[42, 40])])
-        .unwrap()
-        .unwrap();
+    let first = Connectives::prepare(
+        &[row(&[3, 5], &[1, 1])],
+        &[chain(&[5, 3])],
+        &crate::regions::extrema::Extrema::default(),
+        false,
+    )
+    .unwrap()
+    .unwrap();
+    let second = Connectives::prepare(
+        &[row(&[40, 42], &[1, 1])],
+        &[chain(&[42, 40])],
+        &crate::regions::extrema::Extrema::default(),
+        false,
+    )
+    .unwrap()
+    .unwrap();
     let mut work = Work::new(u64::MAX);
     assert_eq!(first.chains(3, &mut work).unwrap(), [0]);
     assert!(first.chains(40, &mut work).unwrap().is_empty());
@@ -134,7 +223,14 @@ fn rebuilding_does_not_reuse_another_owners_chain_anchor() {
 fn sparse_lookup_charges_every_attempted_comparison() {
     let rows = [row(&[1, 2], &[1, 1]), row(&[4, 5], &[1, 1])];
     let chains = [chain(&[2, 1]), chain(&[0, 3]), chain(&[5, 4])];
-    let anchors = Connectives::prepare(&rows, &chains).unwrap().unwrap();
+    let anchors = Connectives::prepare(
+        &rows,
+        &chains,
+        &crate::regions::extrema::Extrema::default(),
+        false,
+    )
+    .unwrap()
+    .unwrap();
     for reverse in [false, true] {
         for key in 0..7 {
             let query = |work: &mut Work<'_>| {

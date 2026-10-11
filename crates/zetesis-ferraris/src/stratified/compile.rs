@@ -3,7 +3,7 @@
 use std::mem::size_of;
 
 use super::{Budget, StratifiedError, StratifiedPlan, evaluate, order};
-use crate::{Interpretation, NodeView, Theory, Threshold};
+use crate::{ExtremumCut, Interpretation, NodeView, Theory, Threshold};
 use zetesis_cpu::Stop;
 
 #[derive(Clone, Copy)]
@@ -121,6 +121,7 @@ fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, Strat
                 }
             }
             NodeView::Threshold(threshold) => classify_threshold(threshold, &kinds, budget)?,
+            NodeView::ExtremumCut(cut) => classify_cut(cut, &kinds, budget)?,
             NodeView::Or(_) => Kind::Unsupported,
         };
         kinds.push(kind);
@@ -138,6 +139,32 @@ fn resolved_kind(
         index = child;
     }
     Ok(kinds[index])
+}
+
+/// An interior cut is a disjunction of qualifying witnesses. Only no witness
+/// or repetitions of one normal child fit the existing conjunction grammar.
+fn classify_cut(
+    cut: ExtremumCut<'_>,
+    kinds: &[Kind],
+    budget: &mut Budget<'_>,
+) -> Result<Kind, StratifiedError> {
+    if let Some(truth) = cut.endpoint_truth() {
+        return Ok(if truth { Kind::True } else { Kind::False });
+    }
+    let mut first = None;
+    let mut same = true;
+    for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+        budget.tick()?;
+        if cut.qualifies(rank) {
+            same &= first.is_none_or(|previous| previous == child);
+            first = first.or(Some(child));
+        }
+    }
+    Ok(match first {
+        None => Kind::False,
+        Some(child) if same && kinds[child].normal() => Kind::Alias(child),
+        Some(_) => Kind::Unsupported,
+    })
 }
 
 /// Admit only the existing conjunction/literal grammar. Every positive entry
@@ -364,7 +391,7 @@ fn producer(
                 _ => Err(StratifiedError::UnsupportedRoot { root }),
             }
         }
-        NodeView::And(_) | NodeView::Or(_) | NodeView::Threshold(_) => {
+        NodeView::And(_) | NodeView::Or(_) | NodeView::Threshold(_) | NodeView::ExtremumCut(_) => {
             Err(StratifiedError::UnsupportedRoot { root })
         }
     }

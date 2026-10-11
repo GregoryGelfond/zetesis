@@ -83,7 +83,11 @@ fn extraction(theory: &Theory) -> u64 {
 }
 
 fn built(theory: &Theory) -> Arc<IndexedTheory> {
-    Arc::clone(OriginalIndex::new(theory).ensure(|_| Ok(())).unwrap())
+    Arc::clone(
+        OriginalIndex::new(theory, u64::MAX)
+            .ensure(&crate::Cancellation::default(), |_| Ok(()))
+            .unwrap(),
+    )
 }
 
 /// Every region route, by name: scalar, parallel workers and producers.
@@ -252,11 +256,11 @@ fn a_build_failing_after_its_charge_keeps_the_charge_in_both_receipts() {
 #[test]
 fn a_refused_charge_leaves_the_owner_unbuilt() {
     let theory = cycle();
-    let mut owner = OriginalIndex::new(&theory);
+    let mut owner = OriginalIndex::new(&theory, u64::MAX);
     let mut asked = None;
     assert_eq!(
         owner
-            .ensure(|work| {
+            .ensure(&crate::Cancellation::default(), |work| {
                 asked = Some(work);
                 Err(Incomplete::WorkLimit)
             })
@@ -314,14 +318,18 @@ fn a_built_index_needs_no_second_grant() {
     let theory = cycle();
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
-    let mut owner = OriginalIndex::new(&theory);
-    owner.ensure(|work| budget.charge(work)).unwrap();
+    let mut owner = OriginalIndex::new(&theory, u64::MAX);
+    owner
+        .ensure(&crate::Cancellation::default(), |work| budget.charge(work))
+        .unwrap();
     let paid = budget.statistics;
     assert_eq!(paid.work, indexing_work(&theory));
     budget.limits.max_work = paid.work;
     let index = Arc::clone(
         owner
-            .ensure(|_| panic!("a built index is never charged again"))
+            .ensure(&crate::Cancellation::default(), |_| {
+                panic!("a built index is never charged again")
+            })
             .unwrap(),
     );
     assert_eq!(hooks::builds(&theory), 1);

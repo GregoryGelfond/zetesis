@@ -27,6 +27,14 @@ pub enum Incomplete {
         /// Inclusive ceiling for this preparation or query owner.
         limit: u128,
     },
+    /// Additional native-extrema narrowing index capacity exceeds its owner allowance.
+    /// Legacy Boolean index capacity and transient construction peak are excluded.
+    NativeNarrowingStorage {
+        /// Actual retained capacity, or a guaranteed lower bound before construction.
+        required: u128,
+        /// Inclusive allowance for this prepared index owner.
+        limit: u128,
+    },
     /// A retained batch exceeds the current call's candidate ceiling.
     BatchCandidateLimit,
     /// Scalar iteration cannot discard an outstanding candidate batch.
@@ -107,6 +115,10 @@ impl fmt::Display for Incomplete {
             Self::ReductStorage { required, limit } => write!(
                 f,
                 "prepared reduct storage requires {required} bytes; limit is {limit}"
+            ),
+            Self::NativeNarrowingStorage { required, limit } => write!(
+                f,
+                "native aggregate search index needs {required} bytes; limit is {limit}"
             ),
             Self::PendingBytes => f.write_str("pending candidate byte limit reached"),
             Self::BatchCandidateLimit => f.write_str("pending batch candidate limit reached"),

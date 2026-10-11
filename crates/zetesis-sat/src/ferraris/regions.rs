@@ -204,6 +204,7 @@ pub(crate) struct RegionSearch {
     scratch: NarrowingScratch,
     statistics: RegionSearchStatistics,
     filter: Option<RetainedFilter>,
+    native_byte_limit: u64,
 }
 
 /// What opening a region search over a theory establishes: its producers,
@@ -251,7 +252,11 @@ pub(crate) fn leaf_interpretation(
 impl RegionSearch {
     /// Extract the producers and queue the root region with no knowledge;
     /// its first narrowing creates each knowledge slot.
-    pub(crate) fn new(theory: &Theory, budget: &mut Budget<'_>) -> Result<Self, Incomplete> {
+    pub(crate) fn new(
+        theory: &Theory,
+        native_byte_limit: u64,
+        budget: &mut Budget<'_>,
+    ) -> Result<Self, Incomplete> {
         let Opened {
             producers,
             statistics,
@@ -267,6 +272,7 @@ impl RegionSearch {
             restrictions: Conditions::default(),
             scratch: NarrowingScratch::default(),
             filter: None,
+            native_byte_limit,
         })
     }
 
@@ -321,7 +327,11 @@ impl RegionSearch {
             .permanent
             .try_reserve(1)
             .map_err(|_| Incomplete::Allocation)?;
-        let narrower = Narrower::try_new(restriction).map_err(stopped)?;
+        let narrower = super::original_index::prepare(
+            restriction,
+            self.native_byte_limit,
+            budget.cancellation,
+        )?;
         budget.charge(narrower.work())?;
         self.statistics.counts.work += narrower.work();
         self.restrictions
@@ -338,7 +348,12 @@ impl RegionSearch {
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
         budget.cancellation.poll()?;
-        let bound = Bound::prepare(restriction, generation)?;
+        let bound = Bound::prepare(
+            restriction,
+            generation,
+            self.native_byte_limit,
+            budget.cancellation,
+        )?;
         budget.charge(bound.work())?;
         let work = self
             .statistics
@@ -407,6 +422,7 @@ impl RegionSearch {
             scratch,
             statistics,
             filter,
+            native_byte_limit: _,
         } = self;
         let (formulas, narrower) = index.subject(theory)?;
         let before = traversal.statistics();

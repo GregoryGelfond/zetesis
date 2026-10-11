@@ -23,6 +23,27 @@ pub fn eval(nodes: FormulaView<'_>, root: usize, world: u8, frozen: Option<u8>) 
         NodeView::Or(operands) => operands
             .iter()
             .any(|&child| eval(nodes, child, world, frozen)),
+        NodeView::ExtremumCut(cut) => {
+            use zetesis_ferraris::ExtremumCutRule::{Prefix, Suffix};
+            match *cut.rule {
+                Prefix(0) => false,
+                Prefix(boundary) if boundary == cut.row.rank_count => true,
+                Suffix(0) => true,
+                Suffix(boundary) if boundary == cut.row.rank_count => false,
+                rule => cut
+                    .row
+                    .conditions
+                    .iter()
+                    .zip(cut.row.ranks)
+                    .any(|(&child, &rank)| {
+                        let qualifies = match rule {
+                            Prefix(boundary) => rank < boundary,
+                            Suffix(boundary) => rank >= boundary,
+                        };
+                        qualifies && eval(nodes, child, world, frozen)
+                    }),
+            }
+        }
         NodeView::Threshold(row) => {
             row.conditions
                 .iter()

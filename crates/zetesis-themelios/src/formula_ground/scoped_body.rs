@@ -155,6 +155,21 @@ impl ValidatedBody {
                         Activity::Optional
                     }
                 }
+                Node::ExtremumCut(cut) => {
+                    let mut activity = match cut.endpoint_truth() {
+                        Some(true) => Activity::Required,
+                        Some(false) | None => Activity::Absent,
+                    };
+                    if cut.endpoint_truth().is_none() {
+                        for (&condition, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+                            context.counters.work(context.limits, context.location)?;
+                            if cut.qualifies(rank) {
+                                activity = activity.max(values.slice()[condition]);
+                            }
+                        }
+                    }
+                    activity
+                }
                 Node::Implies(left, right) => {
                     context
                         .counters
@@ -173,10 +188,12 @@ impl ValidatedBody {
     }
     /// Boolean implication is translated only for a complete original model.
     /// The same rewrite is invalid for frozen Ferraris reducts.
-    pub(super) fn condition(
-        self,
+    /// Select the complete backward-closed formula slice before translating it.
+    /// Physical numeric children remain selected even when a guard is constant.
+    fn ancestor_mask(
+        &self,
         context: &mut Context<'_, '_, '_>,
-    ) -> Result<PendingCondition, FormulaFailure> {
+    ) -> Result<Buffer<bool>, FormulaFailure> {
         let mut needed = Buffer::new(
             context.computation,
             context.limits,
@@ -201,6 +218,7 @@ impl ValidatedBody {
                 let row = match self.nodes.view().node(index).expect("owned formula node") {
                     Node::And(row) | Node::Or(row) => row,
                     Node::Threshold(row) => row.conditions,
+                    Node::ExtremumCut(cut) => cut.row.conditions,
                     Node::Implies(a, b) => {
                         pair = [a, b];
                         &pair
@@ -213,6 +231,14 @@ impl ValidatedBody {
                 }
             }
         }
+        Ok(needed)
+    }
+
+    pub(super) fn condition(
+        self,
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<PendingCondition, FormulaFailure> {
+        let needed = self.ancestor_mask(context)?;
         let mut mapping = Buffer::new(
             context.computation,
             context.limits,
@@ -262,6 +288,11 @@ impl ValidatedBody {
                 Node::Threshold(row) => {
                     mapping.slice_mut()[index] =
                         threshold::lower(row, mapping.slice(), &mut query, context)?;
+                    continue;
+                }
+                Node::ExtremumCut(cut) => {
+                    mapping.slice_mut()[index] =
+                        threshold::lower_extremum(cut, mapping.slice(), &mut query, context)?;
                     continue;
                 }
                 Node::Implies(left, right) => {

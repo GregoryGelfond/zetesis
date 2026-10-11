@@ -10,6 +10,8 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 | --- | --- |
 | When may an arithmetic-undefined substitution be omitted? | [ArithmeticFamilies](../Zetesis/ArithmeticFamilies.lean) specifies completed-family admission and warnings, distinguishes empty joins from zero divisors, and shows why prefixes and flattened outer bindings cannot justify the verdict. Concrete classification and family coverage remain implementation obligations. |
 | Can an aggregate be evaluated directly through the reduct? | [AggregateReduct](../Zetesis/AggregateReduct.lean) formalizes Ferraris Proposition 7: retain the original guard and evaluate the same guard over frozen eligibility. Whole-tuple grouping and concrete arithmetic remain separate obligations. |
+| When can extrema use integer ranks? | [Ranked extrema](ranked-extrema.md) preserves every declared guard under an order-preserving finite quotient, including empty endpoints and arbitrary frozen interpretations. Typed comparison and partition construction remain separate obligations. |
+| How can one row serve many min/max guards? | [Ordinal extrema](ordinal-extrema.md) proves the paired reduction and its witness cuts, including empty endpoints. |
 | Can a weighted threshold replace its expanded formula? | [ThresholdReduct](../Zetesis/ThresholdReduct.lean) connects the nonnegative threshold recurrence to direct sums and complete-mask aggregate semantics, for original truth and arbitrary frozen interpretations. Concrete storage and propagation remain separate obligations. |
 | When may threshold weights be divided by a common divisor? | [Threshold division](threshold-division.md) proves that dividing every weight by a positive common divisor and rounding each primitive threshold upward preserves original and arbitrary frozen truth. Signed bounds, finite-width arithmetic and executable normalization remain separate obligations. |
 | When does one aggregate threshold imply another? | [Threshold prefixes](threshold-prefixes.md) proves implication and contraposition for exact nonnegative prefix rows, in the original interpretation and its frozen reduct. These are consequences, not replacements of one formula by another. |
@@ -129,6 +131,12 @@ Aggregate-producing source bounds and tuple-count heads connect
 original equality, and complete tuple/head correspondence retains every eligibility
 formula. These are source-to-formula obligations, not permission to substitute
 possible-support membership for logical truth.
+
+[AssociativeWitnesses](../Zetesis/AssociativeWitnesses.lean) gives the original
+satisfaction laws for shared conjunction and disjunction witnesses. A cut may
+stop at compound conditions; repeated leaves do not weaken a unique remaining
+witness. Coverage and containment transfer the corresponding row requirements.
+The Rust traversal, identity checks and worklist remain separate obligations.
 
 [CountHeadActivity](../Zetesis/CountHeadActivity.lean) removes the tuple/head
 bijection premise from the semantic row-table description. Head permission

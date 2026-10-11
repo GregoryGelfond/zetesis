@@ -20,7 +20,8 @@ use zetesis_ferraris::{
     AggregateErrorKind, AggregateExtremum, Interpretation, Limits, models, models_reduct,
 };
 use zetesis_ferraris::{
-    ContributionRow, FormulaNodes, NodeView as Node, Theory, ThresholdDescriptor, append_aggregate,
+    ExtremumCutDescriptor, FormulaNodes, NodeView as Node, NumericRow, Theory, ThresholdDescriptor,
+    append_aggregate,
 };
 
 fn copy(nodes: &FormulaNodes) -> FormulaNodes {
@@ -33,8 +34,9 @@ struct Snapshot {
     operands: Vec<usize>,
     conditions: Vec<usize>,
     weights: Vec<u64>,
-    rows: Vec<ContributionRow>,
+    rows: Vec<NumericRow>,
     thresholds: Vec<ThresholdDescriptor>,
+    cuts: Vec<ExtremumCutDescriptor>,
 }
 
 fn snapshot(nodes: &FormulaNodes) -> Snapshot {
@@ -43,9 +45,10 @@ fn snapshot(nodes: &FormulaNodes) -> Snapshot {
         nodes: parts.nodes().to_vec(),
         operands: parts.operands().to_vec(),
         conditions: parts.conditions().to_vec(),
-        weights: parts.weights().to_vec(),
+        weights: parts.numeric_values().to_vec(),
         rows: parts.rows().to_vec(),
         thresholds: parts.thresholds().to_vec(),
+        cuts: parts.extremum_cuts().to_vec(),
     }
 }
 
@@ -757,8 +760,10 @@ fn extrema_use_the_preparation_token() {
                         location(),
                     )
                     .unwrap_err();
-                assert!(matches!(error, FormulaFailure::Aggregate { error, .. }
-                    if error.kind() == AggregateErrorKind::Control(zetesis_cpu::Stop::Cancelled)));
+                // Native preparation may observe the same token before the
+                // aggregate publisher is entered. Preserve its typed cause.
+                assert_eq!(error.interruption(), Some(zetesis_cpu::Stop::Cancelled));
+                assert_eq!(error.site(), Some(location()));
                 assert_eq!(snapshot(&builder.nodes), snapshot(&before));
             }
         },

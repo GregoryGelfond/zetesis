@@ -2,10 +2,11 @@
 
 `zetesis-ferraris` accepts an already finite formula DAG. Every edge refers to a
 preceding node. Roots are the formulas asserted by the theory; their conjunction
-is the semantic input. `FormulaParts` owns the node vector and operand arena
-as one pair. Two-child conjunctions and disjunctions use inline pairs; wider
-rows refer to the arena. `Theory::new` checks the complete shape and transfers
-both buffers with the roots, without grounding or searching. Semantic inspection
+is the semantic input. `FormulaParts` owns the nodes and their Boolean and numeric
+arenas together. Two-child conjunctions and disjunctions use inline pairs; wider
+rows refer to the operand arena. Weighted bounds and ordinal min/max cuts share
+numeric contribution rows. `Theory::new` checks the complete shape and transfers
+those buffers with the roots, without grounding or searching. Semantic inspection
 uses `theory.view().node(index)` to borrow the entire `NodeView` operand row.
 
 Here atom indices `0` and `1` denote `a` and `b`. The theory is `a | b.`.

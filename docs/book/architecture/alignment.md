@@ -268,27 +268,54 @@ reading retains the original threshold truth gate. CPU checking consumes those
 rows directly; GPU transport expands them once into its Boolean device format.
 The common source compiler uses this representation for nonnegative count and
 sum guards, including choice bounds. Shared counters propagate their necessary
-consequences. Signed sums and extrema retain their existing exact translations.
-Executable refinement and measured application speed remain separate obligations.
+consequences. Signed sums retain their existing exact translation.
+
+Min/max comparisons use an ordered integer representation of their typed values.
+The compiler sorts one dictionary per contribution row, including `#inf` and
+`#sup`, and preserves every complete tuple's eligibility condition. Each guard
+then names a cut in that dictionary. These ranks describe ASP value order; they
+are not atom or term IDs. Assignment families share the same row across all
+proposed values. Single comparisons use the same preparation when its temporary
+storage fits; the scalar library operation retains its zero-state Boolean
+compilation contract.
+
+CPU evaluation reduces both extrema once per row and interpretation, then tests
+its guards. Packed validity bits prevent reuse across interpretations or theory
+owners; each frozen cut also retains its own original-truth gate. Candidate
+propagation borrows prefixes of sorted distinct-condition columns and uses the
+existing connective counters. The authoritative row still retains every tuple
+occurrence. GPU transport currently lowers cuts to Boolean device formulas;
+this is not a native device min/max reduction and may require work proportional
+to the row width times its guard count.
+The [ordinal laws](../lean/correspondence.md#ordinal-extrema) describe the
+semantic contract. Runtime refinement and application speed remain separate
+obligations.
+
+The native propagation index is admitted under the existing candidate-memory
+allowance. Dedicated arrays report their retained capacity; new entries and spare
+capacity in shared arrays are conservatively attributed to the native index.
+This bounds publication of that index, not peak memory during construction or
+the solver's total memory use. A refusal remains an incomplete result.
 
 Original-candidate narrowing also relates native unit rows to existing Boolean
 chains. A conjunction of n distinct leaves requires n unit contributions; a
-disjunction requires one. Immutable anchor postings group each eligible native
-row and Boolean chain by its least condition. A chain's minimum is read once
-during preparation, while its operand order is preserved. Numeric bounds first
-reject unhelpful candidates; complete equality or prefix checks then authenticate
-the remaining consequences. Other grouped
-coefficients and arbitrary overlapping rows do not qualify. The
+disjunction requires one. Flat chains use immutable postings keyed by their
+least condition, followed by an exact prefix check. Shared chains can require
+a view across several nodes. The bridge follows existing links and checks
+whether the native conditions cover a Boolean witness or occur within it.
+Compound conditions remain valid stopping points. Numeric bounds reject
+unhelpful candidates before authentication. Non-unit coefficients do not
+qualify for this Boolean bridge. The
 [connective laws](../lean/correspondence.md#nonnegative-aggregate-thresholds)
 state the original-truth meaning and the remaining representation obligations.
 
 The bridge borrows chain leaves and reuses their counters and the native row
-worklist. Anchor keys, sparse reverse chain lookup and compact owner postings
-retain linear space in eligible rows and matching chains. There is no row/chain
-pair table or additional per-region state. With no eligible native row, anchor
-preparation allocates nothing and reads no chains. Runtime lookups and repeated
-prefix checks consume propagation work and remain cancellable; dense anchor
-buckets can still require many comparisons. Formula storage, atom support and frozen
+worklist. Shared associative views use reusable worker scratch with 32-bit visit
+marks; it is not copied with each region. No table of all row/chain pairs or
+all descendants is retained. With no eligible native row, anchor preparation
+allocates nothing and reads no chains. Runtime walks and comparisons consume
+propagation work and remain cancellable; shared paths and dense anchor buckets
+can still require repeated visits. Formula storage, atom support and frozen
 propagation retain their existing meanings. This candidate pruning does not
 rewrite the answer-set theory.
 

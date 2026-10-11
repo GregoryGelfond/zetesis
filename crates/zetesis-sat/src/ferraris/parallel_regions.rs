@@ -621,7 +621,11 @@ impl ParallelRegions {
         if !self.started {
             self.synchronize_budget(budget.statistics)?;
         }
-        let narrower = Narrower::try_new(restriction).map_err(super::regions::stopped)?;
+        let narrower = super::original_index::prepare(
+            restriction,
+            self.shared.limits.max_native_narrowing_bytes,
+            budget.cancellation,
+        )?;
         self.shared.budget.charge(narrower.work())?;
         self.account(budget);
         self.statistics.counts.work += narrower.work();
@@ -652,7 +656,12 @@ impl ParallelRegions {
         if !self.started {
             self.synchronize_budget(budget.statistics)?;
         }
-        let bound = Bound::prepare(restriction, generation)?;
+        let bound = Bound::prepare(
+            restriction,
+            generation,
+            self.shared.limits.max_native_narrowing_bytes,
+            budget.cancellation,
+        )?;
         let charged = self.shared.budget.charge(bound.work());
         self.account(budget);
         charged?;

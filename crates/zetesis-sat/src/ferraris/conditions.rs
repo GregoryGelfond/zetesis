@@ -22,8 +22,13 @@ pub(super) struct Bound {
 }
 
 impl Bound {
-    pub(super) fn prepare(theory: &Theory, generation: u64) -> Result<Self, Incomplete> {
-        let narrower = Narrower::try_new(theory).map_err(super::regions::stopped)?;
+    pub(super) fn prepare(
+        theory: &Theory,
+        generation: u64,
+        native_byte_limit: u64,
+        cancellation: &crate::Cancellation,
+    ) -> Result<Self, Incomplete> {
+        let narrower = super::original_index::prepare(theory, native_byte_limit, cancellation)?;
         Ok(Self {
             generation,
             index: Arc::new((theory.clone(), narrower)),

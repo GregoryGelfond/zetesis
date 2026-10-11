@@ -4,7 +4,9 @@ use super::{
     AggregateBuild, AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind,
     AggregateLimits, AggregateProfile, AggregateStatistics,
 };
-use crate::{AdmissionError, FormulaNodes, FormulaTransaction, NodeView};
+use crate::{
+    AdmissionError, ExtremumCutRule, ExtremumRow, FormulaNodes, FormulaTransaction, NodeView,
+};
 
 type Result<T> = std::result::Result<T, AggregateErrorKind>;
 
@@ -79,6 +81,72 @@ impl Builder<'_, '_> {
         Ok(roots)
     }
 
+    /// Publish an ordinal row once with all inclusive/strict cut descriptors.
+    /// Charge shape/rank/child validation, both copied columns, the row cell,
+    /// and cut validation/descriptor/node writes before transactional publication.
+    pub(super) fn extremum_family(
+        &mut self,
+        row: ExtremumRow<'_>,
+        cuts: &[ExtremumCutRule],
+    ) -> Result<std::ops::Range<usize>> {
+        if cuts.is_empty() {
+            return Ok(self.nodes.view().len()..self.nodes.view().len());
+        }
+        let parts = self.nodes.parts();
+        let over_nodes = |count: usize, added| {
+            count
+                .checked_add(added)
+                .is_none_or(|total| total > self.limits.max_nodes)
+        };
+        if over_nodes(parts.nodes().len(), cuts.len())
+            || over_nodes(parts.rows().len(), 1)
+            || over_nodes(parts.extremum_cuts().len(), cuts.len())
+        {
+            return Err(AggregateErrorKind::NodeLimit);
+        }
+        let edges = row
+            .conditions
+            .len()
+            .checked_mul(cuts.len())
+            .ok_or(AggregateErrorKind::OperandLimit)?;
+        let over_operands = |count: usize, added| {
+            count
+                .checked_add(added)
+                .is_none_or(|total| total > self.limits.max_operands)
+        };
+        if over_operands(parts.occurrences(), edges)
+            || over_operands(parts.conditions().len(), row.conditions.len())
+            || over_operands(parts.numeric_values().len(), row.ranks.len())
+        {
+            return Err(AggregateErrorKind::OperandLimit);
+        }
+        let work = self.nodes.parts().pending_numeric_validation_work()
+            + row.conditions.len() as u128 * 4
+            + cuts.len() as u128 * 3
+            + 1;
+        for _ in 0..work {
+            self.tick()?;
+        }
+        let roots = self
+            .nodes
+            .push_extremum_cut_family_range(
+                row,
+                cuts,
+                self.limits.max_nodes,
+                self.limits.max_operands,
+            )
+            .map_err(|error| match error {
+                AdmissionError::Allocation => AggregateErrorKind::Allocation,
+                AdmissionError::Limit => AggregateErrorKind::OperandLimit,
+                _ => AggregateErrorKind::InvalidPrefix {
+                    node: self.nodes.view().len(),
+                },
+            })?;
+        self.statistics.nodes += cuts.len();
+        self.statistics.operands += edges;
+        Ok(roots)
+    }
+
     pub(super) fn push(&mut self, node: NodeView<'_>) -> Result<usize> {
         self.tick()?;
         let (added, edges, copies) = match node {
@@ -92,6 +160,11 @@ impl Builder<'_, '_> {
                 row.conditions.len(),
                 row.conditions.len().saturating_mul(2),
             ),
+            NodeView::ExtremumCut(cut) => {
+                return self
+                    .extremum_family(cut.row, &[*cut.rule])
+                    .map(|range| range.start);
+            }
             NodeView::Implies(_, _) => (1, 2, 0),
             NodeView::Atom(_) | NodeView::False => (1, 0, 0),
         };
@@ -125,6 +198,12 @@ impl Builder<'_, '_> {
             return Err(AggregateErrorKind::OperandLimit);
         }
         reserve(count)
+    }
+
+    /// Retain actual scratch capacity before checking its ceiling, including
+    /// allocator excess that makes a subsequent state-limit check refuse.
+    pub(super) fn allocated_states(&mut self, count: usize) {
+        self.statistics.states = self.statistics.states.max(count);
     }
 
     pub(super) fn states(&mut self, count: usize) -> Result<()> {
@@ -322,13 +401,14 @@ pub(super) fn validate_prefix(builder: &mut Builder<'_, '_>) -> Result<usize> {
     if parts.nodes().len() > builder.limits.max_nodes
         || parts.rows().len() > builder.limits.max_nodes
         || parts.thresholds().len() > builder.limits.max_nodes
+        || parts.extremum_cuts().len() > builder.limits.max_nodes
     {
         return Err(AggregateErrorKind::NodeLimit);
     }
     if parts.occurrences() > builder.limits.max_operands
         || parts.operands().len() > builder.limits.max_operands
         || parts.conditions().len() > builder.limits.max_operands
-        || parts.weights().len() > builder.limits.max_operands
+        || parts.numeric_values().len() > builder.limits.max_operands
     {
         return Err(AggregateErrorKind::OperandLimit);
     }
@@ -341,6 +421,7 @@ pub(super) fn validate_prefix(builder: &mut Builder<'_, '_>) -> Result<usize> {
         let children = match node {
             NodeView::And(row) | NodeView::Or(row) => row,
             NodeView::Threshold(row) => row.conditions,
+            NodeView::ExtremumCut(cut) => cut.row.conditions,
             NodeView::Implies(left, right) => {
                 pair = [left, right];
                 &pair

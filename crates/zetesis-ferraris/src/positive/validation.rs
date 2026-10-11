@@ -66,9 +66,11 @@ pub(super) fn complete(
                     .map_err(|_| Stop::InvalidProgram)?
                     == NodeView::False
             }
-            NodeView::Atom(_) | NodeView::And(..) | NodeView::Or(..) | NodeView::Threshold(_) => {
-                false
-            }
+            NodeView::Atom(_)
+            | NodeView::And(..)
+            | NodeView::Or(..)
+            | NodeView::Threshold(_)
+            | NodeView::ExtremumCut(_) => false,
         };
         if !constraint {
             return Err(PositiveError::InvalidClosure { root });

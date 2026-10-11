@@ -200,14 +200,15 @@ impl Resources {
         }
     }
 
-    // One dimension independently bounds three physical arenas. Use their sum
+    // One dimension independently bounds four physical arenas. Use their sum
     // as its cell envelope, including raw unused cells admitted by the library.
     // These are logical payload ceilings, not actual-capacity or RSS limits;
     // a Boolean-only owner also receives this representation-independent bound.
     fn theory_limits(self) -> zetesis_ferraris::AdmissionLimits {
         let node_bytes = size_of::<zetesis_ferraris::Node>()
-            + size_of::<zetesis_ferraris::ContributionRow>()
-            + size_of::<zetesis_ferraris::ThresholdDescriptor>();
+            + size_of::<zetesis_ferraris::NumericRow>()
+            + size_of::<zetesis_ferraris::ThresholdDescriptor>()
+            + size_of::<zetesis_ferraris::ExtremumCutDescriptor>();
         let operand_bytes = 2 * size_of::<usize>() + size_of::<u64>();
         zetesis_ferraris::AdmissionLimits {
             max_atoms: self.cells(8, 32),

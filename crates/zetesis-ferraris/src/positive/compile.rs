@@ -5,7 +5,7 @@ use std::mem::size_of;
 use zetesis_cpu::Stop;
 
 use super::{Budget, PositiveError, PositivePlan, propagate, validation};
-use crate::{Interpretation, NodeView, Theory, Threshold};
+use crate::{ExtremumCut, Interpretation, NodeView, Theory, Threshold};
 
 #[derive(Clone, Copy)]
 enum Kind {
@@ -172,6 +172,7 @@ fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, Posit
                 }
             }
             NodeView::Threshold(threshold) => classify_threshold(threshold, &kinds, budget)?,
+            NodeView::ExtremumCut(cut) => classify_cut(cut, &kinds, budget)?,
             NodeView::Implies(a, b) => {
                 budget.tick()?;
                 let left = view.node(a).map_err(|_| Stop::InvalidProgram)?;
@@ -186,6 +187,28 @@ fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, Posit
         });
     }
     Ok(kinds)
+}
+
+fn classify_cut(
+    cut: ExtremumCut<'_>,
+    kinds: &[Kind],
+    budget: &mut Budget<'_>,
+) -> Result<Kind, PositiveError> {
+    if let Some(truth) = cut.endpoint_truth() {
+        return Ok(if truth { Kind::True } else { Kind::False });
+    }
+    let mut monotone = true;
+    for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+        budget.tick()?;
+        if cut.qualifies(rank) {
+            monotone &= kinds[child].monotone();
+        }
+    }
+    Ok(if monotone {
+        Kind::Or
+    } else {
+        Kind::Unsupported
+    })
 }
 
 fn classify_threshold(
@@ -281,6 +304,21 @@ fn edges(
                             Edge {
                                 target: atoms + index,
                                 weight,
+                            },
+                            budget,
+                        )?;
+                    }
+                }
+            }
+            (Kind::Or, NodeView::ExtremumCut(cut)) => {
+                for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+                    budget.tick()?;
+                    if cut.qualifies(rank) {
+                        visit(
+                            atoms + child,
+                            Edge {
+                                target: atoms + index,
+                                weight: 1,
                             },
                             budget,
                         )?;

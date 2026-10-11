@@ -54,18 +54,20 @@ impl Counts {
         }
         Ok(match (chain.disjunction, value) {
             (true, true) => closure.sure(chain.root),
-            (true, false) if self.never == chain.operands.len() => closure.never(chain.root),
+            (true, false) if self.never == chain.ordinary_leaves().len() => {
+                closure.never(chain.root)
+            }
             (true, false)
                 if bit(closure.known.sure, chain.root)
-                    && self.never + 1 == chain.operands.len() =>
+                    && self.never + 1 == chain.ordinary_leaves().len() =>
             {
                 self.unit(closure, index, work)?
             }
             (false, false) => closure.never(chain.root),
-            (false, true) if self.sure == chain.operands.len() => closure.sure(chain.root),
+            (false, true) if self.sure == chain.ordinary_leaves().len() => closure.sure(chain.root),
             (false, true)
                 if bit(closure.known.never, chain.root)
-                    && self.sure + 1 == chain.operands.len() =>
+                    && self.sure + 1 == chain.ordinary_leaves().len() =>
             {
                 self.unit(closure, index, work)?
             }
@@ -82,18 +84,18 @@ impl Counts {
         let chain = &index.chains[0];
         if bit(closure.known.sure, chain.root) {
             if chain.disjunction {
-                if self.never + 1 == chain.operands.len() {
+                if self.never + 1 == chain.ordinary_leaves().len() {
                     return self.unit(closure, index, work);
                 }
-            } else if self.sure != chain.operands.len() {
+            } else if self.sure != chain.ordinary_leaves().len() {
                 return Self::force(closure, index, true, work);
             }
         } else if bit(closure.known.never, chain.root) {
             if chain.disjunction {
-                if self.never != chain.operands.len() {
+                if self.never != chain.ordinary_leaves().len() {
                     return Self::force(closure, index, false, work);
                 }
-            } else if self.sure + 1 == chain.operands.len() {
+            } else if self.sure + 1 == chain.ordinary_leaves().len() {
                 return self.unit(closure, index, work);
             }
         }
@@ -107,7 +109,7 @@ impl Counts {
         work: &mut Work<'_>,
     ) -> Result<Step, Stop> {
         let mut step = Step::Unchanged;
-        for &operand in &index.chains[0].operands {
+        for &operand in index.chains[0].ordinary_leaves() {
             work.tick()?;
             step = step.join(if value {
                 closure.sure(operand)
@@ -193,7 +195,7 @@ fn processed_events_preserve_two_count_transitions() {
         // The repeated node 1 is coalesced, but distinct nodes 1 and 2 both
         // denote atom 1 and contribute separate processed operand events.
         assert_eq!(index.chains.len(), 1);
-        assert_eq!(index.chains[0].operands, [0, 1, 2, 3]);
+        assert_eq!(index.chains[0].ordinary_leaves(), [0, 1, 2, 3]);
         for values in (0..5usize.pow(4)).map(values) {
             for root in [None, Some(false), Some(true)] {
                 for (operand, value) in values

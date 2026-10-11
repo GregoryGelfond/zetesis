@@ -23,6 +23,20 @@ pub(super) struct GuardFamily {
     _storage: StorageLease,
 }
 
+impl GuardFamily {
+    pub(super) fn new(
+        build: AggregateFamilyBuild,
+        appended: super::appended::Detached,
+        storage: StorageLease,
+    ) -> Self {
+        Self {
+            build,
+            appended,
+            _storage: storage,
+        }
+    }
+}
+
 impl Builder<'_, '_, '_> {
     /// Signed contributions retain scalar compilation: its subset ceiling is
     /// per guard, whereas the family primitive's subset ceiling is cumulative.

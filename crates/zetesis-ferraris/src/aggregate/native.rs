@@ -180,13 +180,14 @@ pub struct Statistics {
     /// Planned simultaneous retained and temporary payload; allocation may fail.
     pub peak_bytes: u64,
     /// Named capacity retained at the last canonical admission observation;
-    /// external borrowed catalogs are excluded. Acquisition and reduction leave
-    /// this field zero and use their existing logical payload fields.
+    /// external borrowed catalogs are excluded. Eligibility acquisition reports
+    /// actual retained output-mask capacity here; reduction leaves it zero.
     pub storage_bytes: u64,
     /// Greatest observed canonical admission capacity, including simultaneous
     /// replacement, scratch and successful publication envelopes. A refused
-    /// reservation is not reported as allocated capacity. Zero for acquisition
-    /// and reduction.
+    /// reservation is not reported as allocated capacity. Eligibility acquisition
+    /// reports simultaneous actual node/mask/ordinal-scratch payload here;
+    /// reduction leaves it zero. Headers and allocator metadata remain excluded.
     pub storage_peak_bytes: u64,
 }
 

@@ -4,7 +4,9 @@ use crate::formula_source_activity::Context;
 use crate::formula_source_activity::model_query::Query;
 use crate::formula_support::Buffer;
 use crate::{FormulaFailure, ProgramSite};
-use zetesis_ferraris::{AdmissionError, Threshold, threshold_lowering};
+use zetesis_ferraris::{
+    AdmissionError, ExtremumCut, Threshold, extremum_lowering, threshold_lowering,
+};
 use zetesis_objective::ConditionNode;
 
 enum Failure {
@@ -19,12 +21,12 @@ impl From<threshold_lowering::Error> for Failure {
 }
 
 impl Failure {
-    fn located(self, location: ProgramSite) -> FormulaFailure {
+    fn located(self, location: ProgramSite, malformed: AdmissionError) -> FormulaFailure {
         match self {
             Self::Formula(error) => error,
             Self::Physical(error) => FormulaFailure::Theory {
                 error: match error {
-                    threshold_lowering::Error::Invalid => AdmissionError::ThresholdShape,
+                    threshold_lowering::Error::Invalid => malformed,
                     threshold_lowering::Error::Capacity => AdmissionError::Limit,
                 },
                 location,
@@ -45,21 +47,9 @@ pub(super) fn lower(
             .work(context.limits, context.location)
             .map_err(Failure::Formula)
     })
-    .map_err(|error: Failure| error.located(context.location))?;
+    .map_err(|error: Failure| error.located(context.location, AdmissionError::ThresholdShape))?;
     let constants = if shape.constant().is_some() { 1 } else { 2 };
-    let actual = query.len() as u128 + shape.gates as u128 + constants;
-    let limit = context.limits.objective.max_condition_nodes;
-    if actual > limit as u128 {
-        return Err(FormulaFailure::Objective {
-            error: zetesis_objective::AdmissionError::Limit {
-                resource: zetesis_objective::AdmissionResource::ConditionNodes,
-                template: None,
-                actual: usize::try_from(actual).unwrap_or(usize::MAX),
-                limit,
-            },
-            location: context.location,
-        });
-    }
+    admit_output(query.len(), shape.gates, constants, context)?;
     let mut scratch = Buffer::new(
         context.computation,
         context.limits,
@@ -83,7 +73,54 @@ pub(super) fn lower(
             context,
         },
     )
-    .map_err(|error| error.located(context.location))
+    .map_err(|error| error.located(context.location, AdmissionError::ThresholdShape))
+}
+
+fn admit_output(
+    length: usize,
+    gates: usize,
+    constants: u128,
+    context: &Context<'_, '_, '_>,
+) -> Result<(), FormulaFailure> {
+    let actual = length as u128 + gates as u128 + constants;
+    let limit = context.limits.objective.max_condition_nodes;
+    if actual > limit as u128 {
+        return Err(FormulaFailure::Objective {
+            error: zetesis_objective::AdmissionError::Limit {
+                resource: zetesis_objective::AdmissionResource::ConditionNodes,
+                template: None,
+                actual: usize::try_from(actual).unwrap_or(usize::MAX),
+                limit,
+            },
+            location: context.location,
+        });
+    }
+    Ok(())
+}
+
+pub(super) fn lower_extremum(
+    cut: ExtremumCut<'_>,
+    mapping: &[usize],
+    query: &mut Query,
+    context: &mut Context<'_, '_, '_>,
+) -> Result<usize, FormulaFailure> {
+    let shape = extremum_lowering::Shape::new(cut, || {
+        context
+            .counters
+            .work(context.limits, context.location)
+            .map_err(Failure::Formula)
+    })
+    .map_err(|error: Failure| error.located(context.location, AdmissionError::OrdinalCut))?;
+    admit_output(query.len(), shape.gates, 1, context)?;
+    extremum_lowering::lower(
+        cut,
+        &mut Sink {
+            query,
+            mapping,
+            context,
+        },
+    )
+    .map_err(|error| error.located(context.location, AdmissionError::OrdinalCut))
 }
 
 struct Sink<'a, 'scope, 'terms, 'source> {

@@ -23,13 +23,33 @@ separate; the two generations are not interchangeable proof records.
 | Observation | Semantic coverage and delivery laws | Connect actual output writes and counters to the retained semantic evidence |
 
 The current Rust formula representation additionally admits native nonnegative
-weighted thresholds. The retained `Native` extraction predates that constructor;
+weighted thresholds and ordinal min/max cuts. The retained `Native` extraction
+predates those constructors;
 its source hashes and replay guard must remain tied to the Boolean generation.
-Its theorems therefore do not yet certify the threshold-aware Rust entrypoints,
+Its theorems therefore do not yet certify the numeric-row Rust entrypoints,
 even on Boolean input. Migrating admission, numeric rows, evaluation and their
 composition requires new extracted operations and proofs. The general
 `ThresholdReduct` laws supply the semantic bridge; they are not that executable
 refinement.
+
+## Ordinal extrema
+
+[`OrdinalExtrema`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/OrdinalExtrema.lean)
+proves one paired min/max fold, its agreement with selected extrema, carrier
+bounds and the prefix/suffix witness laws. The empty minimum is the greatest
+rank and the empty maximum is zero. Interior cuts are disjunctions of qualifying
+contributions; cuts at zero or immediately above the carrier have explicit
+constant meanings. [`RankedExtrema`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RankedExtrema.lean)
+supplies the separate source-order and arbitrary frozen-interpretation laws.
+
+The Rust family compiler uses a guard-independent dictionary of typed values
+and both endpoints. Evaluation retains one pair of extrema per row for a single
+topological pass. Reuse requires completed predecessor truth and is invalidated
+between passes; every cut separately applies its original truth gate. The
+[reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/ordinal-extrema.md)
+distinguishes these mathematical facts from the remaining proof of the Rust
+sort, row identity, packed validity, traversal, memory accounting and device
+lowering. The retained extracted evaluator does not yet cover ordinal nodes.
 
 ## Ordinary resource policy
 
@@ -99,22 +119,46 @@ empty lists and repeated conditions need no extra premise. These laws justify
 Boolean sorting and deduplication, not removal of weighted aggregate occurrences.
 They are original-satisfaction laws, not a proof of a frozen rewrite.
 
+[`AssociativeWitnesses`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AssociativeWitnesses.lean)
+proves the original truth of associative cuts, distinct-leaf unit consequences,
+and witness transfer under explicit coverage or containment premises. A cut may
+stop at a compound condition, and separate row conditions may occur in different
+cuts of the same formula. These are semantic implications, not certificates for
+the runtime traversal or frozen propagation.
+
 The original-candidate bridge reuses existing Boolean chain leaves and counters.
-Immutable anchor postings associate each nonempty grouped unit row and each
-matching Boolean chain with its least condition, read once per chain during
-preparation. Equal anchors select candidates; they do not establish a prefix.
-Bounds filter candidates before exact prefix or equality checks authenticate a
-consequence. Anchor projections retain linear space in eligible rows and matching
-chains, with no pair table or additional per-region state. Runtime lookups and
-repeated comparisons consume propagation work; frozen propagation is unchanged. Denoting a chain root by its distinct leaves,
+Flat chains use least-condition anchor postings and exact prefix authentication.
+Shared chains discover candidates through existing links and authenticate
+associative witnesses. Bounds filter candidates before those checks. The bridge
+keeps no table of all row/chain pairs and adds no state to region copies; its
+temporary walks use accounted worker scratch. Runtime visits and comparisons
+consume propagation work; frozen propagation is unchanged. Denoting a chain root by its distinct leaves,
 authenticating canonical condition IDs, recognizing unit-row relationships, and
 implementing checked bounds, event scheduling and resource accounting remain
-Rust obligations. The five laws do not establish those correspondences or
+Rust obligations. The semantic laws do not establish those correspondences or
 qualify the retained native extraction.
 
 This extends the classical law in `Thresholds`; it does not yet verify source
 coalescing, native formula storage, propagation, finite-width arithmetic, Rust
 evaluation or device execution.
+
+## Typed extrema families
+
+[`RankedExtrema`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RankedExtrema.lean)
+shows when minimum and maximum can operate on finite integer ranks. Weak order
+preservation permits values in an unobserved interval to share a rank; each
+declared guard must also preserve its strict and inclusive cuts. The actual
+empty endpoint participates in that agreement. `original` and `frozen` derive
+aggregate truth for original and arbitrary frozen interpretations, keeping both
+the original guard and the guard over recursively frozen eligibility.
+
+The typed compiler uses a stronger condition: its dictionary preserves every
+distinct value in the complete row and includes both empty endpoints. Guards
+read cuts in that row's order. Ranks remain local to the row; they are not
+canonical term IDs. Typed comparison, dictionary construction, shared native
+storage and resource accounting remain Rust correspondence obligations. The
+ordinal laws above connect the selected ranks with witness cuts; they do not
+qualify runtime propagation or GPU execution.
 
 ## Tight-body classification
 

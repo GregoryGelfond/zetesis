@@ -61,6 +61,10 @@ pub struct Limits {
     /// each bounded independently. Aggregate completion also admits the shared
     /// prepared owner once alongside all worker/transient/result storage.
     pub max_reduct_bytes: u64,
+    /// Additional retained native-extrema narrowing index bytes per owner.
+    /// This excludes legacy Boolean indexes and transient construction peak.
+    /// Successful preparation admits actual capacity before publishing an index.
+    pub max_native_narrowing_bytes: u64,
 }
 impl Default for Limits {
     fn default() -> Self {
@@ -72,6 +76,7 @@ impl Default for Limits {
             max_candidates: 1_000_000,
             max_verification_work: 100_000_000,
             max_reduct_bytes: crate::ReductPreparationLimits::DEFAULT_BYTES,
+            max_native_narrowing_bytes: u64::MAX,
         }
     }
 }
@@ -225,9 +230,9 @@ fn fresh_membership(
         SearchMethod::Regions => {
             // The one standalone holder: its index is built here, inside the
             // reduct phase, and charged to the reduct's region counts.
-            let mut original = OriginalIndex::new(theory);
+            let mut original = OriginalIndex::new(theory, limits.max_native_narrowing_bytes);
             original
-                .ensure(|work| {
+                .ensure(budget.cancellation, |work| {
                     budget.charge(work)?;
                     statistics.reduct.regions.work = statistics
                         .reduct
@@ -439,7 +444,7 @@ impl StableModels {
             determined_candidates: None,
             bound_generation: 0,
             reduct: crate::prepared_reduct::State::new(SearchMethod::Regions),
-            index: OriginalIndex::new(theory),
+            index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
         })
     }
 
@@ -471,7 +476,12 @@ impl StableModels {
             cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
-        let proposals = RegionProposals::new(theory, workers, &mut budget)?;
+        let proposals = RegionProposals::new(
+            theory,
+            workers,
+            limits.max_native_narrowing_bytes,
+            &mut budget,
+        )?;
         let statistics = Statistics {
             search: budget.statistics,
             ..Default::default()
@@ -491,7 +501,7 @@ impl StableModels {
             determined_candidates: None,
             bound_generation: 0,
             reduct: crate::prepared_reduct::State::new(SearchMethod::Regions),
-            index: OriginalIndex::new(theory),
+            index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
         })
     }
 
@@ -529,7 +539,11 @@ impl StableModels {
                 )
             }
             SearchMethod::Regions => (
-                Proposer::Regions(Box::new(RegionSearch::new(theory, &mut budget)?)),
+                Proposer::Regions(Box::new(RegionSearch::new(
+                    theory,
+                    limits.max_native_narrowing_bytes,
+                    &mut budget,
+                )?)),
                 None,
             ),
         };
@@ -553,7 +567,7 @@ impl StableModels {
             determined_candidates: None,
             bound_generation: 0,
             reduct: crate::prepared_reduct::State::new(method),
-            index: OriginalIndex::new(theory),
+            index: OriginalIndex::new(theory, limits.max_native_narrowing_bytes),
         })
     }
     /// Enable coarse host timing from this point onward. Repeated calls retain
@@ -1225,7 +1239,7 @@ fn walk_index<'i>(
         return Ok(original.get());
     }
     let started = timing::start(timings.as_ref());
-    let built = original.ensure(|work| {
+    let built = original.ensure(budget.cancellation, |work| {
         budget.charge(work)?;
         proposer.record_index_work(work)
     });

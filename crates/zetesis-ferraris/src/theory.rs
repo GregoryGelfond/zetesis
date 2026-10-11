@@ -5,10 +5,16 @@ mod copying;
 mod numeric;
 
 #[cfg(test)]
+mod extremum_tests;
+#[cfg(test)]
 mod threshold_tests;
 
+use crate::ExtremumCut;
 use numeric::NumericStorage;
-pub use numeric::{ContributionRow, Threshold, ThresholdDescriptor};
+pub use numeric::{
+    ContributionRow, ExtremumCutDescriptor, NumericDomain, NumericRow, Threshold,
+    ThresholdDescriptor,
+};
 
 /// A raw consecutive row in the theory's Boolean operand arena.
 /// Admission checks addition, containment, arity and every referenced child.
@@ -30,13 +36,14 @@ enum Storage {
     AndSpan(OperandSpan),
     OrSpan(OperandSpan),
     Threshold(usize),
+    ExtremumCut(usize),
 }
 
 /// One raw formula node. Child IDs are absolute preceding-node indices.
 ///
 /// A pair stores its two cells inline; a wider conjunction or disjunction stores
-/// a span into the owner's Boolean arena. A threshold stores only its numeric
-/// descriptor index; its row and widened bound live in separate owned arenas.
+/// a span into the owner's Boolean arena. Each numeric node stores only a descriptor
+/// index; its typed row and bound or cut live in separate owned arenas.
 /// Raw constructors do not establish
 /// admission. Equality compares storage, including span addresses; semantic
 /// interning must compare [`NodeView`], whose slices compare operand contents.
@@ -53,6 +60,21 @@ impl Node {
             Storage::Threshold(index) => Some(index),
             _ => None,
         }
+    }
+
+    /// Raw ordinal-cut descriptor index, when this node stores a cut.
+    #[must_use]
+    pub const fn extremum_cut_descriptor(self) -> Option<usize> {
+        match self.0 {
+            Storage::ExtremumCut(index) => Some(index),
+            _ => None,
+        }
+    }
+
+    /// A raw index into the owner's ordinal-cut descriptor arena.
+    #[must_use]
+    pub const fn extremum_cut(descriptor: usize) -> Self {
+        Self(Storage::ExtremumCut(descriptor))
     }
 
     /// An unchecked atom in the theory's finite universe.
@@ -109,6 +131,7 @@ impl Node {
             Storage::Implies(_, _) | Storage::AndPair(_) | Storage::OrPair(_) => 2,
             Storage::AndSpan(span) | Storage::OrSpan(span) => span.length,
             Storage::Threshold(descriptor) => numeric.declared_width(descriptor),
+            Storage::ExtremumCut(descriptor) => numeric.declared_cut_width(descriptor),
         }
     }
 
@@ -126,10 +149,18 @@ impl Node {
             Storage::AndSpan(span) => Ok(NodeView::And(read_span(operands, *span)?)),
             Storage::OrSpan(span) => Ok(NodeView::Or(read_span(operands, *span)?)),
             Storage::Threshold(descriptor) => Ok(NodeView::Threshold(numeric.view(*descriptor)?)),
+            Storage::ExtremumCut(descriptor) => {
+                Ok(NodeView::ExtremumCut(numeric.cut_view(*descriptor)?))
+            }
         }
     }
 
-    fn rebase(self, offset: usize, threshold_offset: usize) -> Result<Self, AdmissionError> {
+    fn rebase(
+        self,
+        offset: usize,
+        threshold_offset: usize,
+        cut_offset: usize,
+    ) -> Result<Self, AdmissionError> {
         let rebase = |span: OperandSpan| -> Result<OperandSpan, AdmissionError> {
             Ok(OperandSpan {
                 start: span.start.checked_sub(offset).ok_or(AdmissionError::Span)?,
@@ -142,6 +173,11 @@ impl Node {
             Storage::Threshold(descriptor) => Self::threshold(
                 descriptor
                     .checked_sub(threshold_offset)
+                    .ok_or(AdmissionError::Span)?,
+            ),
+            Storage::ExtremumCut(descriptor) => Self::extremum_cut(
+                descriptor
+                    .checked_sub(cut_offset)
                     .ok_or(AdmissionError::Span)?,
             ),
             _ => self,
@@ -167,6 +203,8 @@ pub enum NodeView<'a> {
     Or(&'a [usize]),
     /// A nonnegative weighted sum of true conditions at least its bound.
     Threshold(Threshold<'a>),
+    /// A prefix/minimum or suffix/maximum cut over an ordinal row.
+    ExtremumCut(ExtremumCut<'a>),
 }
 
 impl NodeView<'_> {
@@ -174,9 +212,12 @@ impl NodeView<'_> {
     pub(crate) fn is_false(self) -> bool {
         match self {
             Self::False => true,
-            Self::Atom(_) | Self::Implies(..) | Self::And(_) | Self::Or(_) | Self::Threshold(_) => {
-                false
-            }
+            Self::Atom(_)
+            | Self::Implies(..)
+            | Self::And(_)
+            | Self::Or(_)
+            | Self::Threshold(_)
+            | Self::ExtremumCut(_) => false,
         }
     }
 }
@@ -240,12 +281,12 @@ impl FormulaParts {
     /// Unused arena cells and overlapping spans remain representable raw input.
     ///
     /// # Errors
-    /// Refuses occurrence overflow or a threshold without its numeric arenas.
-    /// Use [`Self::from_raw`] for complete raw threshold storage. No allocation occurs.
+    /// Refuses occurrence overflow or a numeric node without its numeric arenas.
+    /// Use [`Self::from_numeric_raw`] for complete raw storage. No allocation occurs.
     pub fn new(nodes: Vec<Node>, operands: Vec<usize>) -> Result<Self, AdmissionError> {
         if nodes
             .iter()
-            .any(|node| matches!(node.0, Storage::Threshold(_)))
+            .any(|node| matches!(node.0, Storage::Threshold(_) | Storage::ExtremumCut(_)))
         {
             return Err(AdmissionError::Span);
         }
@@ -305,7 +346,7 @@ impl FormulaParts {
 pub struct AdmissionLimits {
     /// Maximum number of propositions, including unsupported atoms.
     pub max_atoms: usize,
-    /// Maximum number of circuit nodes, contribution rows and threshold descriptors
+    /// Maximum number of circuit nodes, numeric rows and each descriptor arena
     /// independently, including unused raw row and descriptor cells.
     pub max_nodes: usize,
     /// Maximum number of asserted root formulas.
@@ -344,6 +385,14 @@ pub enum AdmissionError {
     Span,
     /// Threshold condition and weight columns have different lengths.
     ThresholdShape,
+    /// Parallel numeric condition and value columns have different lengths.
+    NumericShape,
+    /// A descriptor uses a row from the wrong numeric domain.
+    NumericDomain,
+    /// An ordinal carrier omits an endpoint or contains an out-of-carrier rank.
+    OrdinalRank,
+    /// An ordinal cut exceeds its row's carrier boundary.
+    OrdinalCut,
     /// The sum of nonnegative contribution weights exceeds i128.
     ThresholdMeasure,
     /// An asserted root is not a circuit node.
@@ -360,6 +409,10 @@ impl fmt::Display for AdmissionError {
             Self::Arity => "stored wide formula requires at least three operands",
             Self::Span => "formula operand span is outside its arena",
             Self::ThresholdShape => "threshold conditions and weights have different lengths",
+            Self::NumericShape => "numeric conditions and values have different lengths",
+            Self::NumericDomain => "numeric descriptor uses the wrong row domain",
+            Self::OrdinalRank => "ordinal carrier or rank is invalid",
+            Self::OrdinalCut => "ordinal cut exceeds its carrier boundary",
             Self::ThresholdMeasure => "threshold contribution total exceeds i128",
             Self::Root => "formula root is outside the circuit",
             Self::Allocation => "formula storage could not be reserved",
@@ -404,7 +457,7 @@ impl FormulaSuffix {
 ///
 /// Callers can append logical nodes and read the graph, but cannot replace the
 /// owner, edit its prefix or inject cross-owner arena spans. Every appended row owns
-/// fresh cells; thresholds within one append may share that new row. Dropping
+/// fresh cells; numeric nodes within one family may share that new row. Dropping
 /// without commit restores every original arena length, occurrence total and
 /// validation cache; reserved capacities survive.
 /// Validation discovered inside a rolled-back append is discarded because an
@@ -471,8 +524,8 @@ impl<'a> FormulaTransaction<'a> {
     /// Costs O(1 + arity) work and at most one node plus arity arena cells, except
     /// the two-node empty conjunction. Bounds cover total nodes and both total
     /// logical occurrences and raw arena length, not just this append's delta.
-    /// Thresholds retain their full numeric row and bound, including constants;
-    /// they delegate to [`Self::push_threshold_family`] and inherit its one-time
+    /// Numeric nodes retain their full row and bound or cut, including constants.
+    /// They delegate to their shared-family operation and inherit its one-time
     /// unchecked numeric-prefix validation cost. The borrowed input row is additional storage.
     ///
     /// # Errors
@@ -485,16 +538,8 @@ impl<'a> FormulaTransaction<'a> {
         max_nodes: usize,
         max_operands: usize,
     ) -> Result<usize, AdmissionError> {
-        if let NodeView::Threshold(threshold) = node {
-            return self
-                .push_threshold_family_range(
-                    threshold.conditions,
-                    threshold.weights,
-                    &[threshold.bound],
-                    max_nodes,
-                    max_operands,
-                )
-                .map(|roots| roots.start);
+        if let Some(result) = numeric::append_view(self, node, max_nodes, max_operands) {
+            return result;
         }
         let index = self.parts.nodes.len();
         let checked_prefix = *self.validated == index;
@@ -507,7 +552,7 @@ impl<'a> FormulaTransaction<'a> {
             }
             NodeView::Implies(_, _) => (1, 0, 2),
             NodeView::Atom(_) | NodeView::False => (1, 0, 0),
-            NodeView::Threshold(_) => {
+            NodeView::Threshold(_) | NodeView::ExtremumCut(_) => {
                 unreachable!("numeric append is validated by its family operation")
             }
         };
@@ -541,7 +586,9 @@ impl<'a> FormulaTransaction<'a> {
             .try_reserve(added_arena)
             .map_err(|_| AdmissionError::Allocation)?;
         let stored = match node {
-            NodeView::Threshold(_) => unreachable!("numeric append already handled"),
+            NodeView::Threshold(_) | NodeView::ExtremumCut(_) => {
+                unreachable!("numeric append already handled")
+            }
             NodeView::Atom(atom) => Node::atom(atom),
             NodeView::False | NodeView::Or([]) => Node::falsum(),
             NodeView::Implies(left, right) => Node::implies(left, right),
@@ -593,10 +640,10 @@ impl<'a> FormulaTransaction<'a> {
     /// Detach this transaction's complete appended suffix and restore its prefix.
     ///
     /// Takes O(new nodes + new arena cells) work and temporary storage, without
-    /// scanning or copying the retained prefix. All six destination reservations
+    /// scanning or copying the retained prefix. All seven destination reservations
     /// precede mutation. The old capacities remain retained after detachment, so
     /// enclosing peak accounting must include those plus the returned capacities.
-    /// Child IDs remain absolute; only Boolean-span, contribution-row and threshold
+    /// Child IDs remain absolute; only Boolean-span, numeric-row and numeric
     /// descriptor offsets are rebased to the detached arenas.
     ///
     /// # Errors
@@ -613,7 +660,11 @@ impl<'a> FormulaTransaction<'a> {
             .try_reserve_exact(self.parts.operands.len() - self.operand_start)
             .map_err(|_| AdmissionError::Allocation)?;
         for node in &self.parts.nodes[self.first..] {
-            nodes.push(node.rebase(self.operand_start, self.numeric_start.thresholds)?);
+            nodes.push(node.rebase(
+                self.operand_start,
+                self.numeric_start.thresholds,
+                self.numeric_start.cuts,
+            )?);
         }
         operands.extend_from_slice(&self.parts.operands[self.operand_start..]);
         let numeric = self.parts.numeric.copy_suffix(self.numeric_start)?;
@@ -711,7 +762,7 @@ impl TheoryAdmission {
     ///
     /// Both routes recount N nodes, inspect N nodes for atom IDs, and inspect R
     /// roots. The raw route additionally visits every logical child occurrence E,
-    /// every numeric row and its declared entries, and every threshold descriptor.
+    /// every numeric row and its declared entries, and every numeric descriptor.
     /// Shared-row evaluation work remains E: one row referenced G times contributes
     /// G times its width. Raw numeric construction never supplies checked evidence.
     /// This excludes fixed dimension checks and handle publication. It is a
@@ -761,7 +812,7 @@ impl TheoryAdmission {
 pub struct Theory(Arc<Data>);
 impl Theory {
     /// Admit a complete DAG in O(nodes + referenced operands + roots + numeric
-    /// rows + their declared entries + threshold descriptors) time.
+    /// rows + their declared entries + numeric descriptors) time.
     ///
     /// Check dimensions first, independently counting logical occurrences from
     /// stored nodes rather than trusting the builder cache; then each node's
@@ -955,6 +1006,7 @@ fn validate_children(index: usize, node: NodeView<'_>) -> Result<(), AdmissionEr
             numeric::validate_threshold(index, threshold)?;
             Ok(())
         }
+        NodeView::ExtremumCut(cut) => numeric::validate_extremum_cut(index, cut),
         NodeView::And(row) | NodeView::Or(row) => {
             for &child in row {
                 if child >= index {

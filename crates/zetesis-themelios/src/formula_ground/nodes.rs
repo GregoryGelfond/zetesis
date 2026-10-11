@@ -14,7 +14,9 @@ use crate::{FormulaFailure, FormulaResource};
 use zetesis_ferraris::{FormulaNodes, NodeView};
 
 mod family;
-pub(super) use family::{Entry, Family, intern as intern_family};
+mod numeric;
+pub(super) use family::{Entry, Family, Pending, intern as intern_family};
+pub(super) use numeric::{Row, Rule};
 
 const END: usize = usize::MAX;
 
@@ -60,6 +62,7 @@ pub(super) fn intern<S: BuildHasher>(
     let occurrences = match node {
         NodeView::And(row) | NodeView::Or(row) => row.len(),
         NodeView::Threshold(row) => row.conditions.len(),
+        NodeView::ExtremumCut(cut) => cut.row.conditions.len(),
         NodeView::Implies(_, _) => 2,
         NodeView::Atom(_) | NodeView::False => 0,
     };
@@ -73,13 +76,15 @@ pub(super) fn intern<S: BuildHasher>(
     // their growth. Both reservations precede authoritative graph publication.
     let copies: usize = match node {
         NodeView::And(row) | NodeView::Or(row) if row.len() >= 3 => 1,
-        NodeView::Threshold(_) => 2,
+        NodeView::Threshold(_) | NodeView::ExtremumCut(_) => 2,
         _ => 0,
     };
     let growth = usize::from(index.links.len() == index.links.capacity()) * index.links.len()
         + usize::from(index.buckets.len() == index.buckets.capacity()) * index.buckets.len();
-    let mut publication = occurrences as u128 * (1 + copies) as u128 + growth as u128;
-    if matches!(node, NodeView::Threshold(_)) {
+    let mut publication = occurrences as u128 * (1 + copies) as u128
+        + growth as u128
+        + u128::from(matches!(node, NodeView::ExtremumCut(_)));
+    if matches!(node, NodeView::Threshold(_) | NodeView::ExtremumCut(_)) {
         publication += nodes.parts().pending_numeric_validation_work();
     }
     for _ in 0..publication {
@@ -112,9 +117,9 @@ fn hash<S: BuildHasher>(
     node: NodeView<'_>,
     work: &mut impl FnMut() -> Result<(), FormulaFailure>,
 ) -> Result<u64, FormulaFailure> {
-    if let NodeView::Threshold(row) = node {
-        let row_hash = row_hash(builder, row.conditions, row.weights, work)?;
-        return threshold_hash(builder, row_hash, row.bound, work);
+    if let Some((row, rule)) = Row::read(node) {
+        let row_hash = row.hash(builder, work)?;
+        return numeric::hash(builder, row_hash, rule, work);
     }
     let mut hasher = builder.build_hasher();
     visit(node, |word| {
@@ -122,42 +127,6 @@ fn hash<S: BuildHasher>(
         word.hash(&mut hasher);
         Ok(())
     })?;
-    Ok(hasher.finish())
-}
-
-fn row_hash<S: BuildHasher>(
-    builder: &S,
-    conditions: &[usize],
-    weights: &[u64],
-    work: &mut impl FnMut() -> Result<(), FormulaFailure>,
-) -> Result<u64, FormulaFailure> {
-    let mut hasher = builder.build_hasher();
-    work()?;
-    conditions.len().hash(&mut hasher);
-    work()?;
-    weights.len().hash(&mut hasher);
-    for (&condition, &weight) in conditions.iter().zip(weights) {
-        work()?;
-        condition.hash(&mut hasher);
-        work()?;
-        weight.hash(&mut hasher);
-    }
-    Ok(hasher.finish())
-}
-
-fn threshold_hash<S: BuildHasher>(
-    builder: &S,
-    row_hash: u64,
-    bound: i128,
-    work: &mut impl FnMut() -> Result<(), FormulaFailure>,
-) -> Result<u64, FormulaFailure> {
-    let mut hasher = builder.build_hasher();
-    work()?;
-    5_usize.hash(&mut hasher);
-    work()?;
-    row_hash.hash(&mut hasher);
-    work()?;
-    bound.hash(&mut hasher);
     Ok(hasher.finish())
 }
 
@@ -178,7 +147,9 @@ fn visit(
             pair = [left, right];
             (4, &pair[..])
         }
-        NodeView::Threshold(_) => unreachable!("numeric identity was visited above"),
+        NodeView::Threshold(_) | NodeView::ExtremumCut(_) => {
+            unreachable!("numeric identity was visited above")
+        }
     };
     word(kind)?;
     word(operands.len())?;
@@ -193,27 +164,14 @@ fn equal(
     right: NodeView<'_>,
     work: &mut impl FnMut() -> Result<(), FormulaFailure>,
 ) -> Result<bool, FormulaFailure> {
+    if let (Some((a, ar)), Some((b, br))) = (Row::read(left), Row::read(right)) {
+        return if ar == br {
+            a.equal(b, work)
+        } else {
+            Ok(false)
+        };
+    }
     match (left, right) {
-        (NodeView::Threshold(a), NodeView::Threshold(b)) => {
-            if a.bound != b.bound
-                || a.conditions.len() != b.conditions.len()
-                || a.weights.len() != b.weights.len()
-            {
-                return Ok(false);
-            }
-            for ((a, aw), (b, bw)) in a
-                .conditions
-                .iter()
-                .zip(a.weights)
-                .zip(b.conditions.iter().zip(b.weights))
-            {
-                work()?;
-                if a != b || aw != bw {
-                    return Ok(false);
-                }
-            }
-            Ok(true)
-        }
         (NodeView::And(a), NodeView::And(b)) | (NodeView::Or(a), NodeView::Or(b)) => {
             if a.len() != b.len() {
                 return Ok(false);

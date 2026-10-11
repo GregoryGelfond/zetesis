@@ -5,7 +5,7 @@ oracle in `zetesis-cpu` computes a least closure. A general reduct may have
 incomparable minimal models; this kernel checks proper subsets instead.
 
 The input is a bounded, immutable DAG of atoms, falsum, conjunction, disjunction,
-implication and nonnegative weighted thresholds, plus asserted roots.
+implication, nonnegative weighted thresholds and ordinal min/max cuts, plus asserted roots.
 `FormulaParts` owns raw nodes and their Boolean and numeric arenas together. Conjunction/disjunction pairs are inline; wider groups
 retain one arena row. `NodeView` exposes every logical child independently of
 that storage. `Theory::new` validates the complete graph and asserted roots.
@@ -58,12 +58,27 @@ Boolean expansion with explicit physical capacity and work bounds. That expansio
 does not replace the original semantic theory.
 
 The common source compiler uses native thresholds for nonnegative count and sum
-guards, including choice bounds. Signed sums retain the full subset translation;
-minimum and maximum retain their exact filtered-connective translation.
+guards, including choice bounds. Signed sums retain the full subset translation.
+Typed minimum and maximum use the ordinal representation below.
 Application performance and physical backend qualification are separate from
 representation support. The retained extracted Lean evaluator describes the
 preceding Boolean representation. `ThresholdReduct` proves the general semantic bridge, but does
 not yet refine this Rust storage, propagation or transport.
+
+## Native ordinal extrema
+
+`append_value_extremum_family_refs` orders typed values once and appends one
+condition/rank row shared by the requested comparisons. The dictionary includes
+`#inf` and `#sup`; ranks express ASP value order, not canonical term identity.
+Every tuple occurrence keeps its eligibility condition. Ordinary source guards
+and assignment families share this mechanism when its preparation fits.
+
+CPU evaluation reduces min and max once per row and interpretation. Each cut
+retains its own original-truth gate when read in the reduct. Candidate propagation
+uses sorted witness columns and the existing connective counters. GPU and clause
+transport still lower cuts to Boolean formulas; native CPU reduction does not
+establish native device reduction. The [manual's aggregate account](../../docs/book/architecture/alignment.md)
+describes the storage, propagation and proof boundaries.
 
 ## Reusing original satisfaction work
 
@@ -75,8 +90,12 @@ view from unverified bits or retain it while overwriting the workspace. A
 successful evaluation can report a nonmodel. It does not establish an answer set.
 
 The workspace retains capacity across candidates and independently admitted
-theories, recomputing all values on every call. Work counts nodes, every logical
-child occurrence and root visits; bytes include its header and actual Boolean-vector capacity. A lowered byte
+theories, recomputing all values on every call. Work counts node and operand
+visits, root tests, and ordinal scratch initialization and resets. Shared ordinal
+rows are reduced once per pass. Bytes include the header and actual truth and
+ordinal-cache capacities. `work_bound` gives a conservative complete-evaluation
+allowance; `requested_payload_bytes` supplies fresh storage requirements, which
+callers must replace with observed capacities after reservation. A lowered byte
 ceiling includes capacity retained by earlier calls. Cancellation, deadlines,
 allocation and resource failures expose no truth view and retain their consumed
 work and storage receipt. Borrowed inputs and allocator bookkeeping are excluded.
@@ -94,10 +113,10 @@ No candidate words or original DAG are copied; `candidate()` and `theory()`
 expose the bound subject. A frozen value is neither a model certificate nor an
 answer set. Use the checked membership API for that conclusion.
 
-Construction charges one visit per DAG node and per logical child occurrence,
-including repeated children, and retains one Boolean per node. Each query
-allocates its own temporary Boolean workspace and charges the same node and
-operand visits, followed by root tests through the first failure. The value
+Construction charges node and operand visits plus ordinal scratch initialization,
+reducing shared extrema rows once per pass, and retains one Boolean per node.
+Each query allocates temporary truth and ordinal workspace and charges the same
+operations, followed by root tests through the first failure. The value
 is immutable and can be shared between independent callers. Construction and
 each query have separate work budgets; these operations perform no subset search.
 Cancellation, deadlines, foreign identity, allocation failure and exhausted

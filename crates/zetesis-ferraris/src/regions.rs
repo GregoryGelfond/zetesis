@@ -50,8 +50,10 @@ use crate::{FormulaView, NodeView, Theory};
 
 mod adjacency;
 mod counters;
+mod extrema;
 mod masks;
 mod thresholds;
+mod witnesses;
 use adjacency::Adjacency;
 use counters::{Count, Counters, compact_fits};
 use masks::Masks;
@@ -436,6 +438,10 @@ pub struct Narrower {
     /// Largest chain length or initial per-atom parent-occurrence count.
     counter_bound: usize,
     thresholds: thresholds::Thresholds,
+    extrema: extrema::Extrema,
+    equal_extrema: extrema::EqualWitnesses,
+    /// Roles in shared same-connective edges; empty when no such edge exists.
+    witness_chains: Vec<u8>,
     /// Logical indexing visits: each native node and operand occurrence.
     work: u64,
 }
@@ -446,7 +452,36 @@ struct Chain {
     disjunction: bool,
     root: usize,
     /// The leaves, distinct nodes, in operand order.
-    operands: Vec<usize>,
+    operands: ChainOperands,
+}
+
+/// Ordinary chains own their leaves; ordinal cuts borrow a prepared row column.
+/// This is an index view, never another formula or authoritative tuple store.
+#[derive(Clone, Debug)]
+enum ChainOperands {
+    Owned(Vec<usize>),
+    Ordinal { column: usize, length: usize },
+}
+
+impl Chain {
+    fn leaves<'a>(&'a self, extrema: &'a extrema::Extrema) -> &'a [usize] {
+        match &self.operands {
+            ChainOperands::Owned(values) => values,
+            ChainOperands::Ordinal { column, length } => extrema.leaves(*column, *length),
+        }
+    }
+
+    fn ordinal(&self) -> bool {
+        matches!(self.operands, ChainOperands::Ordinal { .. })
+    }
+
+    #[cfg(test)]
+    fn ordinary_leaves(&self) -> &[usize] {
+        match &self.operands {
+            ChainOperands::Owned(leaves) => leaves,
+            ChainOperands::Ordinal { .. } => panic!("ordinary-chain test fixture"),
+        }
+    }
 }
 
 /// A one-based chain link. Both construction maps point into allocated chain
@@ -467,9 +502,11 @@ fn connective_operands(node: NodeView<'_>) -> Option<(bool, &[usize])> {
     match node {
         NodeView::Or(operands) => Some((true, operands)),
         NodeView::And(operands) => Some((false, operands)),
-        NodeView::Atom(_) | NodeView::False | NodeView::Implies(_, _) | NodeView::Threshold(_) => {
-            None
-        }
+        NodeView::Atom(_)
+        | NodeView::False
+        | NodeView::Implies(_, _)
+        | NodeView::Threshold(_)
+        | NodeView::ExtremumCut(_) => None,
     }
 }
 
@@ -489,6 +526,17 @@ fn absorbed_nodes(theory: &Theory) -> Vec<bool> {
             NodeView::Atom(_) | NodeView::False => continue,
             NodeView::And(operands) | NodeView::Or(operands) => operands,
             NodeView::Threshold(row) => row.conditions,
+            NodeView::ExtremumCut(cut) => {
+                if cut.endpoint_truth().is_none() {
+                    for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+                        if cut.qualifies(rank) && last_parent[child] != Some(index) {
+                            last_parent[child] = Some(index);
+                            parent_count[child] += 1;
+                        }
+                    }
+                }
+                continue;
+            }
             NodeView::Implies(a, b) => {
                 pair = [a, b];
                 &pair
@@ -567,7 +615,7 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>)
         chains.push(Chain {
             disjunction,
             root,
-            operands,
+            operands: ChainOperands::Owned(operands),
         });
     }
     (chains, chain_of, absorbed)
@@ -723,12 +771,11 @@ fn dependencies<'a>(
 ) -> impl Iterator<Item = (usize, usize)> + Clone + 'a {
     chains
         .iter()
-        .flat_map(|chain| {
-            chain
-                .operands
-                .iter()
-                .map(move |&operand| (operand, chain.root))
+        .filter_map(|chain| match &chain.operands {
+            ChainOperands::Owned(operands) => Some((chain, operands)),
+            ChainOperands::Ordinal { .. } => None,
         })
+        .flat_map(|(chain, operands)| operands.iter().map(move |&operand| (operand, chain.root)))
         .chain((0..nodes.len()).flat_map(move |index| {
             let operands = match nodes.node(index).expect("admitted node") {
                 NodeView::Implies(a, b) => [Some(a), (b != a).then_some(b)],
@@ -752,10 +799,11 @@ fn counter_bound(
     parents: &Adjacency,
     atom_nodes: &Adjacency,
     thresholds: &thresholds::Thresholds,
+    extrema: &extrema::Extrema,
 ) -> usize {
     let chain_bound = chains
         .iter()
-        .map(|chain| chain.operands.len())
+        .map(|chain| chain.leaves(extrema).len())
         .max()
         .unwrap_or(0);
     atom_nodes.iter().fold(chain_bound, |bound, nodes| {
@@ -763,6 +811,7 @@ fn counter_bound(
             count
                 .checked_add(parents[node].len())
                 .and_then(|count| count.checked_add(thresholds.parent_count(node)))
+                .and_then(|count| count.checked_add(extrema.parent_count(node)))
                 .expect("atom parent occurrences fit their allocated table")
         });
         bound.max(occurrences)
@@ -819,8 +868,12 @@ impl Narrower {
     /// This constructor has no independent cancellation contract.
     pub fn try_new(theory: &Theory) -> Result<Self, Stop> {
         let nodes = theory.view();
-        let (chains, chain_of, absorbed) = chains(theory);
-        let thresholds = thresholds::Thresholds::prepare(theory, &chains)?;
+        let (mut chains, mut chain_of, absorbed) = chains(theory);
+        let extrema = extrema::Extrema::prepare(theory)?;
+        extrema.append_chains(&mut chains, &mut chain_of)?;
+        let witness_chains = witnesses::nested(&chains, &chain_of, &extrema)?;
+        let thresholds =
+            thresholds::Thresholds::prepare(theory, &chains, &extrema, !witness_chains.is_empty())?;
         let parents = Adjacency::build(nodes.len(), dependencies(nodes, &chains))?;
         let atom_operands = Adjacency::try_build(
             nodes.len(),
@@ -840,8 +893,8 @@ impl Narrower {
                 Err(_) => Some(Err(Stop::InvalidProgram)),
             }),
         )?;
-        let counter_bound = counter_bound(&chains, &parents, &atom_nodes, &thresholds);
-        Ok(Self {
+        let counter_bound = counter_bound(&chains, &parents, &atom_nodes, &thresholds, &extrema);
+        let mut result = Self {
             parents,
             atom_nodes,
             chains,
@@ -850,9 +903,58 @@ impl Narrower {
             atom_operands,
             counter_bound,
             thresholds,
+            extrema,
+            equal_extrema: extrema::EqualWitnesses::default(),
+            witness_chains,
             work: u64::try_from(nodes.len() as u128 + theory.parts().occurrences() as u128)
                 .map_err(|_| Stop::Allocation)?,
-        })
+        };
+        result.equal_extrema = extrema::EqualWitnesses::prepare(&result)?;
+        Ok(result)
+    }
+
+    /// Additional retained native-extrema index capacity. Dedicated owners use
+    /// their actual headers and vector capacities. For shared containers, native
+    /// Chain slots plus unused capacity and the whole witness-role and anchor
+    /// projection payloads are
+    /// conservatively attributed to native cuts; live ordinary Chain slots are
+    /// excluded. Zero-cut theories report zero. Temporary preparation and
+    /// per-chain counters already in knowledge accounting are excluded.
+    #[must_use]
+    pub fn extremum_index_bytes(&self) -> u128 {
+        if self.extrema.is_empty() {
+            return 0;
+        }
+        let native_chains = self.extrema.chain_count();
+        let shared = if native_chains == 0 {
+            0
+        } else {
+            (native_chains as u128 + (self.chains.capacity() - self.chains.len()) as u128)
+                * size_of::<Chain>() as u128
+                + self.witness_chains.capacity() as u128 * size_of::<u8>() as u128
+                + self.thresholds.connective_storage_bytes()
+        };
+        size_of::<extrema::Extrema>() as u128
+            + size_of::<extrema::EqualWitnesses>() as u128
+            + self.extrema.retained_bytes()
+            + self.equal_extrema.retained_bytes()
+            + shared
+    }
+
+    /// Metered associative reads used to prepare native-cut equality candidates.
+    /// Sorting, allocation and other index setup remain constructor preparation.
+    #[must_use]
+    pub fn extremum_witness_preparation_work(&self) -> u64 {
+        self.equal_extrema.preparation_work()
+    }
+
+    /// Direct Boolean parents followed by ordinal-cut parents. The ordinal
+    /// incidences are streamed from compact row postings, never materialized.
+    fn logical_parents(&self, node: usize) -> impl DoubleEndedIterator<Item = usize> + Clone + '_ {
+        self.parents[node]
+            .iter()
+            .copied()
+            .chain(self.extrema.parents(node))
     }
 
     /// The logical index receipt: one visit per node and operand occurrence.
@@ -884,7 +986,9 @@ impl Narrower {
             for &node in nodes {
                 unknown.add(
                     atom,
-                    self.parents[node].len() + self.thresholds.parent_count(node),
+                    self.parents[node].len()
+                        + self.thresholds.parent_count(node)
+                        + self.extrema.parent_count(node),
                 );
             }
         }
@@ -1236,6 +1340,8 @@ pub struct NarrowingScratch {
     threshold_rows: Vec<usize>,
     /// One bit per row, set exactly while it is in `threshold_rows`.
     pending_thresholds: Vec<u64>,
+    /// Shared connective views and dirty worklists belong to the walker.
+    witnesses: witnesses::Scratch,
 }
 
 impl NarrowingScratch {
@@ -1248,11 +1354,13 @@ impl NarrowingScratch {
             + self.pending.capacity() as u128 * size_of::<u64>() as u128
             + self.threshold_rows.capacity() as u128 * size_of::<usize>() as u128
             + self.pending_thresholds.capacity() as u128 * size_of::<u64>() as u128
+            + self.witnesses.retained_bytes()
     }
 
     /// Discard every entry, keeping the capacity, for a narrowing over
     /// `atoms` atoms.
     fn prepare(&mut self, atoms: usize) {
+        self.witnesses.clear();
         for &atom in &self.heads {
             self.pending[atom / 64] &= !(1u64 << (atom % 64));
         }
@@ -1501,6 +1609,9 @@ impl<C: Count> Closure<'_, C> {
         if frozen.is_none() && index.thresholds.has_relations() {
             self.lists.prepare_thresholds(index.thresholds.rows.len())?;
         }
+        if !index.witness_chains.is_empty() && (frozen.is_none() || !index.extrema.is_empty()) {
+            self.lists.witnesses.prepare_dirty(index.chains.len())?;
+        }
         let nodes = theory.view();
         let mut step = Step::Unchanged;
         if !*self.known.seeded {
@@ -1518,6 +1629,10 @@ impl<C: Count> Closure<'_, C> {
                         return Ok(step);
                     }
                 }
+            }
+            step = step.join(self.seed_extrema(index, frozen, work)?);
+            if step == Step::Contradiction {
+                return Ok(step);
             }
             step = step.join(self.seed_thresholds(index, frozen, work)?);
             if step == Step::Contradiction {
@@ -1565,6 +1680,9 @@ impl<C: Count> Closure<'_, C> {
                 );
                 statistics.propagations += 1;
                 self.threshold_requirements(index, row, work)?
+            } else if let Some(chain) = self.lists.witnesses.next_dirty() {
+                statistics.propagations += 1;
+                self.witness_changed(index, chain, frozen, work)?
             } else if let Some(atom) = self.lists.next_recheck() {
                 statistics.propagations += 1;
                 let producers =
@@ -1607,6 +1725,19 @@ impl<C: Count> Closure<'_, C> {
         for &atom in &index.atom_operands[node] {
             self.known.unknown.decrement(atom);
         }
+        if let Some(chain) = index.chain_of[node] {
+            let chain = &index.chains[chain_position(chain)];
+            if chain.ordinal() {
+                for &operand in chain.leaves(&index.extrema) {
+                    work.tick()?;
+                    if let NodeView::Atom(atom) =
+                        nodes.node(operand).map_err(|_| Stop::InvalidProgram)?
+                    {
+                        self.known.unknown.decrement(atom);
+                    }
+                }
+            }
+        }
         let mut step = Step::Unchanged;
         if !masked(node) {
             step = step.join(self.teach_operands(subject, index, node, work)?);
@@ -1625,13 +1756,19 @@ impl<C: Count> Closure<'_, C> {
         if step == Step::Contradiction {
             return Ok(step);
         }
-        for &parent in &index.parents[node] {
+        for parent in index.logical_parents(node) {
             work.tick()?;
             if masked(parent) {
                 continue;
             }
             step = step.join(if let Some(chain) = index.chain_of[parent] {
-                self.operand_changed(index, chain_position(chain), value, work)?
+                let chain = chain_position(chain);
+                if (frozen.is_none() || !index.extrema.is_empty())
+                    && witnesses::participates(index, chain)
+                {
+                    self.lists.witnesses.queue_dirty(chain);
+                }
+                self.operand_changed(index, chain, value, work)?
             } else {
                 self.revisit_implication(nodes, parent, node, value)
             });
@@ -1654,11 +1791,9 @@ impl<C: Count> Closure<'_, C> {
         value: bool,
         work: &mut Work<'_>,
     ) -> Result<Step, Stop> {
-        let Chain {
-            disjunction,
-            root,
-            ref operands,
-        } = index.chains[chain];
+        let source = &index.chains[chain];
+        let (disjunction, root) = (source.disjunction, source.root);
+        let operands = source.leaves(&index.extrema);
         let total = operands.len();
         if value == disjunction {
             self.known.witnessed[chain / 64] |= 1u64 << (chain % 64);
@@ -1693,11 +1828,9 @@ impl<C: Count> Closure<'_, C> {
     /// may find none, every operand being known with one count pending,
     /// and then the pending step decides the chain.
     fn unit(&mut self, index: &Narrower, chain: usize, work: &mut Work<'_>) -> Result<Step, Stop> {
-        let Chain {
-            disjunction,
-            ref operands,
-            ..
-        } = index.chains[chain];
+        let source = &index.chains[chain];
+        let disjunction = source.disjunction;
+        let operands = source.leaves(&index.extrema);
         // Callers have counted all but one operand at the opposite polarity.
         // A processed witness is therefore the sole possible target, already
         // known as required. Bits precede their events, but counts never do.
@@ -1744,7 +1877,18 @@ impl<C: Count> Closure<'_, C> {
             // A chain link identifies an And/Or root. Its complete downward
             // rule is the chain's; the generic connective arms teach nothing.
             let chain = chain_position(chain);
+            if (frozen.is_none() || !index.extrema.is_empty()) && witnesses::expands(index, chain) {
+                self.lists.witnesses.queue_dirty(chain);
+            }
             let step = self.teach_chain(index, chain, work)?;
+            if step == Step::Contradiction {
+                return Ok(step);
+            }
+            let step = step.join(self.extremum_order(index, chain, frozen, work)?);
+            if step == Step::Contradiction {
+                return Ok(step);
+            }
+            let step = step.join(self.equal_extremum_witnesses(index, chain, frozen, work)?);
             if step == Step::Contradiction || frozen.is_some() {
                 return Ok(step);
             }
@@ -1778,7 +1922,9 @@ impl<C: Count> Closure<'_, C> {
                 }
             }
             NodeView::False if bit(self.known.sure, node) => Step::Contradiction,
-            NodeView::False | NodeView::And(..) | NodeView::Or(..) => Step::Unchanged,
+            NodeView::False | NodeView::And(..) | NodeView::Or(..) | NodeView::ExtremumCut(_) => {
+                Step::Unchanged
+            }
             NodeView::Implies(a, b) => self.teach_implication(node, a, b),
             NodeView::Threshold(row) => {
                 self.threshold_guard(index, theory, node, row.bound, frozen, work)?
@@ -1820,11 +1966,9 @@ impl<C: Count> Closure<'_, C> {
         chain: usize,
         work: &mut Work<'_>,
     ) -> Result<Step, Stop> {
-        let Chain {
-            disjunction,
-            root,
-            ref operands,
-        } = index.chains[chain];
+        let source = &index.chains[chain];
+        let (disjunction, root) = (source.disjunction, source.root);
+        let operands = source.leaves(&index.extrema);
         let total = operands.len();
         let mut step = Step::Unchanged;
         if bit(self.known.sure, root) {

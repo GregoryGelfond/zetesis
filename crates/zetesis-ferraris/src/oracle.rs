@@ -1,3 +1,4 @@
+use crate::extremum_cut::ExtremaScratch;
 use crate::{
     EvaluationError, EvaluationLimits, EvaluationWorkspace, FrozenReduct, Interpretation, NodeView,
     Theory,
@@ -8,7 +9,9 @@ use zetesis_cpu::{Cancellation, Stop};
 /// never a proof of stability or nonminimality.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
-    /// Charged node and operand evaluations, root tests, atom scans and subset-bit operations.
+    /// Charged node/operand evaluations, ordinal-cache initialization/reset,
+    /// root tests, atom scans and subset-bit operations. A shared ordinal row
+    /// is reduced once per complete evaluation pass.
     pub max_work: u64,
     /// Maximum number of proper subsets checked against a frozen reduct.
     pub max_subsets: u64,
@@ -111,14 +114,16 @@ pub(super) fn evaluate(
     interpretation: &Interpretation,
     frozen: Option<&[bool]>,
     output: &mut Vec<bool>,
+    extrema: &mut ExtremaScratch,
     work: &mut Work<'_>,
 ) -> Result<(), Stop> {
     output.clear();
+    extrema.reset(theory, || work.tick())?;
     let view = theory.view();
     for index in 0..view.len() {
         work.tick()?;
         let node = view.node(index).map_err(|_| Stop::InvalidProgram)?;
-        let value = evaluate_node(node, interpretation, output, work)?;
+        let value = evaluate_node(index, node, interpretation, output, extrema, work)?;
         // A maximal M-false subformula becomes falsum. Masking every M-false
         // node has the same root meaning and avoids materializing a new DAG.
         output.push(value && frozen.is_none_or(|mask| mask[index]));
@@ -129,9 +134,11 @@ pub(super) fn evaluate(
 /// Compute one node from its complete predecessor values. The caller publishes
 /// its result only after this read-only phase finishes, including all child work.
 fn evaluate_node(
+    index: usize,
     node: NodeView<'_>,
     interpretation: &Interpretation,
     values: &[bool],
+    extrema: &mut ExtremaScratch,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
     match node {
@@ -143,6 +150,12 @@ fn evaluate_node(
             work.tick()?;
             Ok(values[child])
         }),
+        NodeView::ExtremumCut(cut) => extrema
+            .measure(interpretation.theory(), index, cut, |child| {
+                work.tick()?;
+                Ok(values[child])
+            })
+            .map(|measure| cut.rule.holds(measure)),
         NodeView::Implies(a, b) => {
             work.tick()?;
             let antecedent = values[a];
@@ -242,8 +255,10 @@ pub fn models_reduct(
         statistics: Statistics::default(),
     };
     let mut values = reserve(theory.nodes().len())?;
-    let reduct = FrozenReduct::freeze(candidate, &mut work)?;
-    reduct.satisfied_by(tested, &mut values, &mut work)
+    let mut extrema = ExtremaScratch::default();
+    extrema.reserve(theory)?;
+    let reduct = FrozenReduct::freeze(candidate, &mut extrema, &mut work)?;
+    reduct.satisfied_by(tested, &mut values, &mut extrema, &mut work)
 }
 
 /// Append the candidate's atom coordinates in increasing order. The caller has
@@ -299,6 +314,7 @@ fn check_subset(
     subset: &Interpretation,
     frozen: &[bool],
     values: &mut Vec<bool>,
+    extrema: &mut ExtremaScratch,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
     work.cancellation.poll()?;
@@ -306,7 +322,7 @@ fn check_subset(
         return Err(Stop::CandidateLimit);
     }
     work.statistics.subsets += 1;
-    evaluate(theory, subset, Some(frozen), values, work)?;
+    evaluate(theory, subset, Some(frozen), values, extrema, work)?;
     Ok(failed_root(theory, values, work)?.is_none())
 }
 
@@ -322,6 +338,7 @@ fn find_countermodel(
     selected: &[usize],
     subset: &mut Interpretation,
     values: &mut Vec<bool>,
+    extrema: &mut ExtremaScratch,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
     // Empty is the first proper subset unless M itself is empty. Incrementing
@@ -329,7 +346,7 @@ fn find_countermodel(
     let mut present = 0;
     let mut countermodel = Ok(false);
     while present < selected.len() {
-        countermodel = check_subset(theory, subset, frozen, values, work);
+        countermodel = check_subset(theory, subset, frozen, values, extrema, work);
         match countermodel {
             Ok(false) => {
                 if let Err(stop) = advance_subset(selected, subset, &mut present, work) {
@@ -365,7 +382,16 @@ pub fn check(
         statistics: Statistics::default(),
     };
     let mut frozen = reserve(theory.nodes().len())?;
-    evaluate(theory, candidate, None, &mut frozen, &mut work)?;
+    let mut extrema = ExtremaScratch::default();
+    extrema.reserve(theory)?;
+    evaluate(
+        theory,
+        candidate,
+        None,
+        &mut frozen,
+        &mut extrema,
+        &mut work,
+    )?;
     if let Some(root) = failed_root(theory, &frozen, &mut work)? {
         return Ok(Check {
             verdict: Verdict::NotModel { root },
@@ -387,6 +413,7 @@ pub fn check(
         &selected,
         &mut subset,
         &mut values,
+        &mut extrema,
         &mut work,
     )? {
         Verdict::NonMinimal { witness: subset }

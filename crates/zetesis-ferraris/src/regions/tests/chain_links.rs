@@ -98,7 +98,7 @@ fn live_chain_links_follow_dissolved_chain_removal() {
         narrower
             .chains
             .iter()
-            .map(|chain| (chain.root, chain.disjunction, chain.operands.as_slice()))
+            .map(|chain| (chain.root, chain.disjunction, chain.ordinary_leaves()))
             .collect::<Vec<_>>(),
         [
             (5, true, &[0, 1, 2][..]),
@@ -129,6 +129,7 @@ fn compare_closures(theory: &Theory, frozen: Option<&[bool]>) {
     let original = Narrower::new(theory);
     let mut reordered = original.clone();
     reordered.chains.reverse();
+    reordered.witness_chains.reverse();
     reordered.chain_of.fill(None);
     // Reconstruct links from each chain's authoritative root. The consumer
     // comparison must not obtain its reference links by decoding the original.

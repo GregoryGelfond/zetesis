@@ -275,7 +275,11 @@ fn json_preserves_complete_optimum_answers() {
                 &Cancellation::default(),
             )
             .unwrap();
-            assert_eq!(report.completion, Completion::Exhausted);
+            assert_eq!(
+                report.completion,
+                Completion::Exhausted,
+                "{source}: {report:?}"
+            );
             let answers = zetesis_validation::answers::native_json::parse(
                 &output,
                 zetesis_validation::answers::native_json::Limits::default(),

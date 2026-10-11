@@ -369,6 +369,7 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::PendingBytes => "pending_bytes",
                 Incomplete::CompletionScratch => "completion_scratch",
                 Incomplete::ReductStorage { .. } => "reduct_storage",
+                Incomplete::NativeNarrowingStorage { .. } => "native_narrowing_storage",
                 Incomplete::BatchCandidateLimit => "batch_candidate_limit",
                 Incomplete::PendingBatch => "pending_batch",
                 Incomplete::Allocation => "allocation",

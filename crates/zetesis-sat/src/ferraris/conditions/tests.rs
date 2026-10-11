@@ -28,7 +28,9 @@ fn a_new_generation_discards_old_dag_knowledge() {
     let narrower = Narrower::new(&original);
     let mut knowledge = CandidateKnowledge::default();
     let mut conditions = Conditions::<(Theory, Narrower)> {
-        bound: Some(Bound::prepare(&guard(false), 1).unwrap()),
+        bound: Some(
+            Bound::prepare(&guard(false), 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
+        ),
         ..Conditions::default()
     };
     let mut region = Region::all_open(2);
@@ -53,7 +55,8 @@ fn a_new_generation_discards_old_dag_knowledge() {
     assert!(!region.is_held(0) && !region.is_held(1));
     // Equal node counts and coordinates are insufficient: OR and AND learn
     // different consequences even though both have already asserted root 2.
-    conditions.bound = Some(Bound::prepare(&guard(true), 2).unwrap());
+    conditions.bound =
+        Some(Bound::prepare(&guard(true), 2, u64::MAX, &crate::Cancellation::default()).unwrap());
     assert_ne!(
         super::super::regions::narrow(
             (&original, &narrower, None),
@@ -72,7 +75,8 @@ fn a_new_generation_discards_old_dag_knowledge() {
 
 #[test]
 fn only_active_snapshots_retain_a_superseded_bound() {
-    let bound = Bound::prepare(&guard(false), 1).unwrap();
+    let bound =
+        Bound::prepare(&guard(false), 1, u64::MAX, &crate::Cancellation::default()).unwrap();
     let retired = Arc::downgrade(&bound.index);
     let mut knowledge = CandidateKnowledge::default();
     knowledge.bound(&bound).unwrap();
@@ -81,7 +85,8 @@ fn only_active_snapshots_retain_a_superseded_bound() {
         ..Conditions::default()
     };
     let active = conditions.clone();
-    conditions.bound = Some(Bound::prepare(&guard(true), 2).unwrap());
+    conditions.bound =
+        Some(Bound::prepare(&guard(true), 2, u64::MAX, &crate::Cancellation::default()).unwrap());
     assert!(retired.upgrade().is_some());
     drop(active);
     assert!(retired.upgrade().is_none());
@@ -91,7 +96,8 @@ fn only_active_snapshots_retain_a_superseded_bound() {
 
 #[test]
 fn bound_knowledge_allocations_are_included_once() {
-    let bound = Bound::prepare(&guard(false), 1).unwrap();
+    let bound =
+        Bound::prepare(&guard(false), 1, u64::MAX, &crate::Cancellation::default()).unwrap();
     let mut knowledge = CandidateKnowledge::default();
     let payload =
         knowledge.bound(&bound).unwrap().retained_bytes() - size_of::<Knowledge>() as u128;
@@ -202,7 +208,9 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     let narrower = Narrower::new(&original);
     let mut knowledge = CandidateKnowledge::default();
     let mut conditions = Conditions::<(Theory, Narrower)> {
-        bound: Some(Bound::prepare(&guard(false), 1).unwrap()),
+        bound: Some(
+            Bound::prepare(&guard(false), 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
+        ),
         ..Conditions::default()
     };
     let mut region = Region::all_open(2);
@@ -246,7 +254,8 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
 
 #[test]
 fn allocated_bytes_include_unused_knowledge_slots() {
-    let bound = Bound::prepare(&guard(false), 1).unwrap();
+    let bound =
+        Bound::prepare(&guard(false), 1, u64::MAX, &crate::Cancellation::default()).unwrap();
     let mut knowledge = CandidateKnowledge::default();
     knowledge.permanent(0, &bound.index.1).unwrap();
     knowledge.entries.reserve_exact(7);
@@ -274,12 +283,13 @@ fn the_first_knowledge_slot_is_reserved_exactly() {
 
 #[test]
 fn copying_knowledge_replaces_the_bound_generation() {
-    let bound = Bound::prepare(&guard(false), 1).unwrap();
+    let bound =
+        Bound::prepare(&guard(false), 1, u64::MAX, &crate::Cancellation::default()).unwrap();
     let mut source = CandidateKnowledge::default();
     source.bound(&bound).unwrap();
     let mut destination = CandidateKnowledge::default();
     destination
-        .bound(&Bound::prepare(&guard(true), 2).unwrap())
+        .bound(&Bound::prepare(&guard(true), 2, u64::MAX, &crate::Cancellation::default()).unwrap())
         .unwrap();
     destination.clone_from(&source);
     assert_eq!(destination.bound_generation, source.bound_generation);

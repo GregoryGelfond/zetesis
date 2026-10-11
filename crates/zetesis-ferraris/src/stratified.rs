@@ -157,6 +157,9 @@ pub struct StratifiedPlanStatistics {
 /// Each original producer has one atomic head and a conjunction of atoms,
 /// single default-negated atoms, falsum or canonical truth. Positive recursion
 /// is permitted; recursion through default negation and choice heads are not.
+/// Ordinal cuts fit this grammar only as endpoint constants, an empty witness
+/// set, or repetitions of one qualifying normal child. Distinct disjunctive
+/// witnesses remain outside the certificate.
 /// Arbitrary original constraints filter the result after all strata complete.
 /// With no failed constraint, the result is the unique answer set of this
 /// grammar. This certificate does not establish source grounding completeness

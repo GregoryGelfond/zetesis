@@ -1,7 +1,8 @@
 use super::{
     TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightVerdict, Work, bytes,
 };
-use crate::{FormulaView, Interpretation, NodeView};
+use crate::extremum_cut::ExtremaScratch;
+use crate::{Interpretation, NodeView, Theory};
 use zetesis_cpu::{Cancellation, Stop};
 
 #[cfg(test)]
@@ -45,7 +46,10 @@ impl TightPlan {
 /// survives as evidence. Each conjunction or disjunction reads operands only
 /// through its first decisive value. Checks are bounded by nodes, operand
 /// occurrences, tested roots, producers and packed candidate words. Thresholds
-/// read and charge every contribution, including zero weights. Truth uses
+/// read and charge every contribution, including zero weights. Ordinal cuts
+/// read every physical occurrence once per authoritative row and pass, even
+/// for endpoint constants. Dense measure growth and packed-validity resets are
+/// charged; old measures are inaccessible until completed in the current pass. Truth uses
 /// one byte per node; support uses one bit per atom, rounded to 32-bit words.
 /// Each concurrent checker owns an exclusive workspace; immutable plans may be
 /// shared.
@@ -53,6 +57,7 @@ impl TightPlan {
 pub struct TightWorkspace {
     values: Vec<u8>,
     supported: Vec<u32>,
+    extrema: ExtremaScratch,
 }
 
 impl TightWorkspace {
@@ -62,6 +67,7 @@ impl TightWorkspace {
     pub fn retained_bytes(&self) -> u128 {
         self.values.capacity() as u128
             + self.supported.capacity() as u128 * size_of::<u32>() as u128
+            + self.extrema.retained_bytes()
     }
 
     /// Check original satisfaction and ranked support using retained storage.
@@ -109,8 +115,19 @@ impl TightWorkspace {
         self.values
             .try_reserve_exact(plan.theory.nodes().len())
             .map_err(|_| Stop::Allocation)?;
+        self.admit(plan, limits.max_bytes)?;
+        let base = self.truth_support_bytes(plan);
+        self.extrema.reserve_observed(&plan.theory, |actual| {
+            bytes(base + actual, limits.max_bytes).map(|_| ())
+        })?;
         let logical_bytes = self.admit(plan, limits.max_bytes)?;
-        evaluate_truth(plan.theory.view(), candidate, &mut self.values, work)?;
+        evaluate_truth(
+            &plan.theory,
+            candidate,
+            &mut self.values,
+            &mut self.extrema,
+            work,
+        )?;
         for &root in plan.theory.roots() {
             work.tick()?;
             if self.values[root] == 0 {
@@ -160,26 +177,33 @@ impl TightWorkspace {
 
     fn admit(&self, plan: &TightPlan, limit: u64) -> Result<u64, TightError> {
         bytes(
-            u128::from(plan.statistics.resident_bytes)
-                + self.values.capacity().max(plan.theory.nodes().len()) as u128
-                + self
-                    .supported
-                    .capacity()
-                    .max(plan.theory.atom_count().div_ceil(32)) as u128
-                    * size_of::<u32>() as u128,
+            self.truth_support_bytes(plan) + self.extrema.required_bytes(&plan.theory),
             limit,
         )
+    }
+
+    fn truth_support_bytes(&self, plan: &TightPlan) -> u128 {
+        u128::from(plan.statistics.resident_bytes)
+            + self.values.capacity().max(plan.theory.nodes().len()) as u128
+            + self
+                .supported
+                .capacity()
+                .max(plan.theory.atom_count().div_ceil(32)) as u128
+                * size_of::<u32>() as u128
     }
 }
 
 /// Write each formula truth in admitted topological order. The caller clears
 /// and reserves the target first; a stopped prefix is never membership evidence.
 fn evaluate_truth(
-    view: FormulaView<'_>,
+    theory: &Theory,
     candidate: &Interpretation,
     values: &mut Vec<u8>,
+    extrema: &mut ExtremaScratch,
     work: &mut Work<'_>,
 ) -> Result<(), TightError> {
+    extrema.reset(theory, || work.tick())?;
+    let view = theory.view();
     for index in 0..view.len() {
         work.tick()?;
         values.push(u8::from(
@@ -192,6 +216,13 @@ fn evaluate_truth(
                     work.tick()?;
                     Ok(values[child] != 0)
                 })?,
+                NodeView::ExtremumCut(cut) => {
+                    cut.rule
+                        .holds(extrema.measure::<TightError>(theory, index, cut, |child| {
+                            work.tick()?;
+                            Ok(values[child] != 0)
+                        })?)
+                }
                 NodeView::Implies(a, b) => {
                     work.tick()?;
                     let left = values[a];

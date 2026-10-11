@@ -4,7 +4,8 @@
 //! change. Semantic atom identities remain those of the original theory.
 
 use zetesis_ferraris::{
-    ContributionRow, FormulaNodes, FormulaParts, Node, NodeView, Theory, ThresholdDescriptor,
+    ExtremumCutDescriptor, FormulaNodes, FormulaParts, Node, NodeView, NumericRow, Theory,
+    ThresholdDescriptor,
 };
 
 use super::{Group, Kind, ObjectiveBoundError, Resource, Storage, Work};
@@ -40,6 +41,7 @@ pub(super) fn prepare(
         {
             NodeView::And(row) | NodeView::Or(row) => row,
             NodeView::Threshold(threshold) => threshold.conditions,
+            NodeView::ExtremumCut(cut) => cut.row.conditions,
             NodeView::Implies(left, right) => {
                 pair = [left, right];
                 &pair
@@ -86,6 +88,20 @@ struct Sizes {
     work: u128,
 }
 
+/// Initialize one charged descriptor-selection column under the same owner.
+fn unseen(
+    length: usize,
+    memory: &mut Storage,
+    work: &mut Work<'_>,
+) -> Result<Vec<bool>, ObjectiveBoundError> {
+    let mut selected = memory.reserve(length, work)?;
+    for _ in 0..length {
+        work.tick()?;
+        selected.push(false);
+    }
+    Ok(selected)
+}
+
 /// Count shared numeric rows and descriptors once while retaining every logical
 /// threshold occurrence for the formula's independent admission ceiling.
 fn sizes(
@@ -95,21 +111,14 @@ fn sizes(
     work: &mut Work<'_>,
 ) -> Result<Sizes, ObjectiveBoundError> {
     let source = original.parts();
-    let mut rows = memory.reserve(source.rows().len(), work)?;
-    let mut descriptors = memory.reserve(source.thresholds().len(), work)?;
-    for _ in source.rows() {
-        work.tick()?;
-        rows.push(false);
-    }
-    for _ in source.thresholds() {
-        work.tick()?;
-        descriptors.push(false);
-    }
+    let mut rows = unseen(source.rows().len(), memory, work)?;
+    let mut descriptors = unseen(source.thresholds().len(), memory, work)?;
+    let mut cuts = unseen(source.extremum_cuts().len(), memory, work)?;
     let mut nodes = 0_usize;
     let mut occurrences = 0_usize;
     let mut payload = 0_u128;
-    let mut copying =
-        needed.len() as u128 * 2 + 2 * (rows.len() as u128 + descriptors.len() as u128);
+    let mut copying = needed.len() as u128 * 2
+        + 2 * (rows.len() as u128 + descriptors.len() as u128 + cuts.len() as u128);
     for (index, &required) in needed.iter().enumerate() {
         work.tick()?;
         if !required {
@@ -143,13 +152,32 @@ fn sizes(
                     let row = source.thresholds()[descriptor].row;
                     if !rows[row] {
                         rows[row] = true;
-                        payload += size_of::<ContributionRow>() as u128
+                        payload += size_of::<NumericRow>() as u128
                             + threshold.conditions.len() as u128
                                 * (size_of::<usize>() + size_of::<u64>()) as u128;
                         copying += 1 + threshold.conditions.len() as u128 * 2;
                     }
                 }
                 threshold.conditions.len()
+            }
+            NodeView::ExtremumCut(cut) => {
+                let descriptor = source.nodes()[index]
+                    .extremum_cut_descriptor()
+                    .expect("extremum cut storage");
+                if !cuts[descriptor] {
+                    cuts[descriptor] = true;
+                    payload += size_of::<ExtremumCutDescriptor>() as u128;
+                    copying += 1;
+                    let row = source.extremum_cuts()[descriptor].row;
+                    if !rows[row] {
+                        rows[row] = true;
+                        payload += size_of::<NumericRow>() as u128
+                            + cut.row.conditions.len() as u128
+                                * (size_of::<usize>() + size_of::<u64>()) as u128;
+                        copying += 1 + cut.row.conditions.len() as u128 * 2;
+                    }
+                }
+                cut.row.conditions.len()
             }
             NodeView::Implies(_, _) => {
                 copying += 2;
@@ -167,10 +195,11 @@ fn sizes(
     if occurrences > work.limits.max_operands {
         return Err(work.limit(Resource::Operands));
     }
-    let minimum_scratch =
-        (rows.len() as u128 + descriptors.len() as u128) * size_of::<Option<usize>>() as u128;
+    let minimum_scratch = (rows.len() as u128 + descriptors.len() as u128 + cuts.len() as u128)
+        * size_of::<Option<usize>>() as u128;
     memory.retire(&rows);
     memory.retire(&descriptors);
+    memory.retire(&cuts);
     Ok(Sizes {
         payload,
         minimum_scratch,
@@ -195,25 +224,34 @@ pub(super) fn append(
         return Err(work.limit(Resource::Nodes));
     }
     let mut copied = work.reserve(prepared.view().len())?;
-    for index in first..end {
+    let mut cut_checks = 0_u128;
+    for (index, node) in prepared.nodes().iter().enumerate() {
         work.tick()?;
-        copied.push(index);
+        copied.push(first + index);
+        cut_checks += u128::from(node.extremum_cut_descriptor().is_some());
     }
     let cells = prepared.nodes().len() as u128
         + prepared.operands().len() as u128
         + prepared.conditions().len() as u128
-        + prepared.weights().len() as u128
+        + prepared.numeric_values().len() as u128
         + prepared.rows().len() as u128
-        + prepared.thresholds().len() as u128;
+        + prepared.thresholds().len() as u128
+        + prepared.extremum_cuts().len() as u128;
     // Complete remapping copy, numeric validation, destination-edge validation
-    // and complete arena append each have their own charged visits.
+    // and complete arena append each have their own charged visits. Every cut
+    // node also validates its rule during destination topology validation; this
+    // differs from the once-per-descriptor complete numeric validation below.
     let target = nodes.parts();
-    let prefix_check = if prepared.rows().is_empty() && prepared.thresholds().is_empty() {
+    let prefix_check = if prepared.rows().is_empty()
+        && prepared.thresholds().is_empty()
+        && prepared.extremum_cuts().is_empty()
+    {
         0
     } else {
         target.pending_numeric_validation_work()
     };
     let copying = prefix_check
+        + cut_checks
         + 2 * cells
         + 4 * prepared.nodes().len() as u128
         + 2 * prepared.occurrences() as u128
@@ -222,7 +260,8 @@ pub(super) fn append(
             .iter()
             .map(|row| 1 + row.length as u128)
             .sum::<u128>()
-        + prepared.thresholds().len() as u128;
+        + prepared.thresholds().len() as u128
+        + prepared.extremum_cuts().len() as u128;
     work.charge(u64::try_from(copying).map_err(|_| work.error(Kind::Overflow))?)?;
     let parts = prepared
         .view()

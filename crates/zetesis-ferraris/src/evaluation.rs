@@ -1,7 +1,8 @@
 //! Subject-bound original truth with reusable, bounded workspace.
 
-use std::fmt;
+use std::{fmt, mem::size_of_val};
 
+use crate::extremum_cut::ExtremaScratch;
 use crate::oracle::{Work, evaluate, failed_root};
 use crate::{Interpretation, Limits, Statistics, Theory};
 use zetesis_cpu::{Cancellation, Stop};
@@ -9,9 +10,11 @@ use zetesis_cpu::{Cancellation, Stop};
 /// Per-evaluation bounds, including storage retained from earlier evaluations.
 #[derive(Clone, Copy, Debug)]
 pub struct EvaluationLimits {
-    /// One unit per formula node, operand occurrence and tested asserted root.
+    /// One unit per formula node, read operand and tested asserted root, plus
+    /// ordinal-cache initialization and validity-word resets. Each authoritative
+    /// ordinal row is read once per pass, even when several cuts share it.
     pub max_work: u64,
-    /// Workspace header plus actual truth-vector capacity, in bytes.
+    /// Workspace header plus actual truth and ordinal-cache capacities, in bytes.
     /// The borrowed interpretation and theory are excluded.
     pub max_bytes: usize,
 }
@@ -29,25 +32,66 @@ impl Default for EvaluationLimits {
 ///
 /// Each evaluation visits every node in topological order, then asserted roots
 /// through the first false root. Work is linear in those visits; retained space
-/// is linear in the largest admitted node count. Reuse preserves capacity, not
-/// truth: every node is recomputed for the supplied interpretation. A returned
+/// is linear in the largest admitted node and numeric-row counts. Reuse preserves
+/// capacity, not truth: every node is recomputed for the supplied interpretation. Ordinal
+/// measures are reused only within that pass, indexed by authoritative row IDs.
+/// Scratch includes dense measures and packed validity for all numeric rows
+/// when cuts exist, including weight and unused rows. A returned
 /// [`FormulaEvaluation`] borrows both inputs and prevents workspace mutation
 /// while its truth values remain observable.
 #[derive(Debug, Default)]
 pub struct EvaluationWorkspace {
     values: Vec<bool>,
+    extrema: ExtremaScratch,
 }
 
 impl EvaluationWorkspace {
-    /// Header and actual truth capacity, excluding allocator bookkeeping.
+    /// Conservative work allowance for one complete original evaluation.
+    ///
+    /// This allocation-free, constant-time bound covers every node, every logical
+    /// operand occurrence and every asserted root, plus fresh ordinal-cache cell
+    /// initialization and validity-word resets. Shared ordinal rows can consume
+    /// less than their repeated logical occurrences, and reused cells require no
+    /// initialization. The bound therefore covers either a fresh or reused
+    /// workspace, independently of the interpretation and earlier subjects.
+    ///
+    /// Numeric rows contribute cache work only when the owner has cut descriptors;
+    /// then all rows count, including unused rows and rows of the weight domain.
+    /// A theory without cuts retains the node/occurrence/root bound. This is a
+    /// work allowance, not a storage, cancellation or membership guarantee.
+    #[must_use]
+    pub fn work_bound(theory: &Theory) -> u128 {
+        theory.nodes().len() as u128
+            + theory.parts().occurrences() as u128
+            + theory.roots().len() as u128
+            + ExtremaScratch::reset_work_bound(theory)
+    }
+
+    /// Requested vector payload for a fresh evaluation workspace.
+    ///
+    /// This allocation-free, constant-time count includes one truth cell per node
+    /// and the dense ordinal measure and validity columns whenever cut descriptors
+    /// exist. Then all authoritative numeric rows count, including unused and
+    /// weight-domain rows. With no cuts this is the truth column alone.
+    ///
+    /// Workspace headers, retained capacity from earlier subjects and allocator
+    /// excess are excluded. Reservations may return larger capacities; consumers
+    /// must observe [`Self::retained_bytes`] before admitting actual workspace use.
+    #[must_use]
+    pub fn requested_payload_bytes(theory: &Theory) -> u128 {
+        theory.nodes().len() as u128 * size_of::<bool>() as u128
+            + ExtremaScratch::requested_bytes(theory)
+    }
+
+    /// Header and actual truth/cache capacities, excluding allocator bookkeeping.
     #[must_use]
     pub fn retained_bytes(&self) -> u128 {
-        Self::bytes(self.values.capacity())
+        self.bytes(self.values.capacity(), self.extrema.retained_bytes())
     }
 
     /// Reserve workspace for a theory without evaluating an interpretation.
-    /// Clears previous scratch values, keeps existing capacity and establishes
-    /// no subject or truth capability. A batch coordinator can use this to
+    /// Clears previous truth values, reserves ordinal columns without initializing
+    /// them, keeps existing capacity and establishes no subject or truth capability. A batch coordinator can use this to
     /// inspect actual worker capacity before admitting candidate work.
     ///
     /// # Errors
@@ -61,12 +105,26 @@ impl EvaluationWorkspace {
         cancellation: &Cancellation,
     ) -> Result<(), EvaluationError> {
         cancellation.poll()?;
-        Self::check_storage(theory.nodes().len().max(self.values.capacity()), max_bytes)?;
+        self.check_storage(
+            theory.nodes().len().max(self.values.capacity()),
+            self.extrema.required_bytes(theory),
+            max_bytes,
+        )?;
         self.values.clear();
-        self.values
+        let reservation = self
+            .values
             .try_reserve_exact(theory.nodes().len())
-            .map_err(|_| Stop::Allocation)?;
-        Self::check_storage(self.values.capacity(), max_bytes)
+            .map_err(|_| EvaluationError::Stopped(Stop::Allocation));
+        let observed = self.check_storage(
+            self.values.capacity(),
+            self.extrema.retained_bytes(),
+            max_bytes,
+        );
+        reservation?;
+        observed?;
+        let base = self.bytes(self.values.capacity(), 0);
+        self.extrema
+            .reserve_observed(theory, |actual| Self::check_bytes(base + actual, max_bytes))
     }
 
     /// Evaluate original satisfaction and retain the truth of every node.
@@ -112,12 +170,27 @@ impl EvaluationWorkspace {
     ) -> Result<Option<usize>, EvaluationError> {
         let theory = interpretation.theory();
         self.reserve(theory, max_bytes, work.cancellation)?;
-        evaluate(theory, interpretation, None, &mut self.values, work)?;
+        evaluate(
+            theory,
+            interpretation,
+            None,
+            &mut self.values,
+            &mut self.extrema,
+            work,
+        )?;
         Ok(failed_root(theory, &self.values, work)?)
     }
 
-    fn check_storage(capacity: usize, limit: usize) -> Result<(), EvaluationError> {
-        let required = Self::bytes(capacity);
+    fn check_storage(
+        &self,
+        capacity: usize,
+        extrema_bytes: u128,
+        limit: usize,
+    ) -> Result<(), EvaluationError> {
+        Self::check_bytes(self.bytes(capacity, extrema_bytes), limit)
+    }
+
+    fn check_bytes(required: u128, limit: usize) -> Result<(), EvaluationError> {
         if required > limit as u128 {
             Err(EvaluationError::Storage { required, limit })
         } else {
@@ -125,8 +198,8 @@ impl EvaluationWorkspace {
         }
     }
 
-    fn bytes(capacity: usize) -> u128 {
-        size_of::<Self>() as u128 + capacity as u128 * size_of::<bool>() as u128
+    fn bytes(&self, capacity: usize, extrema_bytes: u128) -> u128 {
+        size_of_val(self) as u128 + capacity as u128 * size_of::<bool>() as u128 + extrema_bytes
     }
 }
 

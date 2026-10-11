@@ -15,9 +15,10 @@ use crate::timing::{self, Phase};
 use crate::{AdmissionError, Cancellation, Incomplete, Limits, SearchStatistics};
 use std::sync::Arc;
 use zetesis_ferraris::{
-    Interpretation, PositiveError, PositivePlan, PositivePlanLimits, PositiveResource,
-    StratifiedError, StratifiedPlan, StratifiedPlanLimits, StratifiedResource, TightCheckLimits,
-    TightError, TightPlan, TightPlanLimits, TightResource, TightVerdict, TightWorkspace,
+    EvaluationWorkspace, Interpretation, PositiveError, PositivePlan, PositivePlanLimits,
+    PositiveResource, StratifiedError, StratifiedPlan, StratifiedPlanLimits, StratifiedResource,
+    TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightResource, TightVerdict,
+    TightWorkspace,
 };
 
 /// Exclusive scratch retained by one membership checker, never by a shared plan.
@@ -82,8 +83,9 @@ impl Certification {
     /// A complete check's work bound in the primitive's charged units:
     /// tight checking visits every node, root, producer and packed candidate
     /// word, and at most every operand occurrence; deterministic checking
-    /// compares atoms, then visits nodes, operand occurrences and roots. Early
-    /// refusals or refutations can consume less, never more.
+    /// compares atoms, then evaluates the original formula. Both include fresh
+    /// ordinal-cache initialization and validity resets through the primitive's
+    /// evaluation bound. Reuse, early refusal or refutation can consume less.
     pub(super) fn checking_work_bound(&self) -> Result<u64, Incomplete> {
         let (theory, producers, membership) = match self {
             Self::Tight { plan, .. } => (
@@ -94,18 +96,10 @@ impl Certification {
             Self::Positive { plan, .. } => (plan.theory(), 0, plan.theory().atom_count()),
             Self::Stratified { plan, .. } => (plan.theory(), 0, plan.theory().atom_count()),
         };
-        [
-            membership,
-            theory.nodes().len(),
-            theory.parts().occurrences(),
-            theory.roots().len(),
-            producers,
-        ]
-        .into_iter()
-        .try_fold(0u64, |sum, count| {
-            sum.checked_add(u64::try_from(count).map_err(|_| Incomplete::CounterOverflow)?)
-                .ok_or(Incomplete::CounterOverflow)
-        })
+        u64::try_from(
+            EvaluationWorkspace::work_bound(theory) + membership as u128 + producers as u128,
+        )
+        .map_err(|_| Incomplete::CounterOverflow)
     }
 }
 

@@ -211,6 +211,7 @@ fn sat_class(error: zetesis_sat::Incomplete) -> Class {
         | E::PendingBytes
         | E::CompletionScratch
         | E::ReductStorage { .. }
+        | E::NativeNarrowingStorage { .. }
         | E::BatchCandidateLimit
         | E::Allocation
         | E::ProjectionLimit { .. }
@@ -489,6 +490,10 @@ fn theory_class(error: zetesis_ferraris::AdmissionError) -> Class {
         | zetesis_ferraris::AdmissionError::Root
         | zetesis_ferraris::AdmissionError::Arity
         | zetesis_ferraris::AdmissionError::Span
+        | zetesis_ferraris::AdmissionError::NumericShape
+        | zetesis_ferraris::AdmissionError::NumericDomain
+        | zetesis_ferraris::AdmissionError::OrdinalRank
+        | zetesis_ferraris::AdmissionError::OrdinalCut
         | zetesis_ferraris::AdmissionError::ThresholdShape
         | zetesis_ferraris::AdmissionError::ThresholdMeasure => Class::Engine,
     }

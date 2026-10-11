@@ -1,6 +1,6 @@
 //! Necessary support for complete mixed ordinary/atomic-choice theories.
 
-use crate::{AdmissionError, AdmissionLimits, FormulaNodes, NodeView, Theory};
+use crate::{AdmissionError, AdmissionLimits, ExtremumCut, FormulaNodes, NodeView, Theory};
 use zetesis_cpu::{Cancellation, Stop};
 
 /// Bounds for constructing a candidate-only support restriction. Formula
@@ -47,7 +47,7 @@ impl From<Stop> for SupportError {
 
 /// A complete construction or conservative refusal, with work retained on every
 /// path. `None` means an asserted head lies outside the certified grammar, or
-/// no ordinary asserted head contains a syntactic disjunction. Choices alone
+/// no ordinary asserted head contains a disjunction or an ordinal witness cut. Choices alone
 /// do not trigger this optional construction.
 #[derive(Debug)]
 pub struct SupportAttempt {
@@ -61,12 +61,13 @@ pub struct SupportAttempt {
 /// Construct necessary supportedness for a complete mixed disjunctive theory.
 ///
 /// Every asserted root must be a disjunction of atoms (possibly with falsum),
+/// including an ordinal cut's qualifying witnesses,
 /// an exact atomic choice `a or not a`, an implication with either consequent,
 /// a default negation, or falsum. Bodies may be arbitrary formulas. Choices
 /// accept either operand order and separate occurrences of the same semantic
 /// atom; richer or cross-atom alternatives decline the complete certificate.
 /// Repeated ordinary head atoms count once, including shared DAGs. A theory
-/// without an ordinary syntactic disjunction in a head also declines; choices
+/// without an ordinary disjunction or ordinal witness cut in a head also declines; choices
 /// alone do not introduce this extra construction path.
 ///
 /// For each atom `a`, require a rule whose body is true and whose other distinct
@@ -132,6 +133,11 @@ impl Builder<'_> {
                     self.tick()?;
                 }
             }
+            NodeView::ExtremumCut(cut) => {
+                for _ in cut.row.conditions {
+                    self.tick()?;
+                }
+            }
             NodeView::Implies(_, _) => {
                 self.tick()?;
                 self.tick()?;
@@ -161,6 +167,24 @@ impl Builder<'_> {
         Ok(all)
     }
 
+    fn ordinary_cut(
+        &mut self,
+        cut: ExtremumCut<'_>,
+        ordinary: &[bool],
+    ) -> Result<bool, SupportError> {
+        if let Some(truth) = cut.endpoint_truth() {
+            return Ok(!truth);
+        }
+        let mut all = true;
+        for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+            self.tick()?;
+            if cut.qualifies(rank) {
+                all &= ordinary[child];
+            }
+        }
+        Ok(all)
+    }
+
     fn applicable(&mut self, theory: &Theory) -> Result<bool, SupportError> {
         self.cancellation.poll()?;
         if theory.atom_count() > self.limits.admission.max_atoms
@@ -169,9 +193,10 @@ impl Builder<'_> {
             || theory.parts().occurrences() > self.limits.admission.max_operands
             || theory.operands().len() > self.limits.admission.max_operands
             || theory.parts().conditions().len() > self.limits.admission.max_operands
-            || theory.parts().weights().len() > self.limits.admission.max_operands
+            || theory.parts().numeric_values().len() > self.limits.admission.max_operands
             || theory.parts().rows().len() > self.limits.admission.max_nodes
             || theory.parts().thresholds().len() > self.limits.admission.max_nodes
+            || theory.parts().extremum_cuts().len() > self.limits.admission.max_nodes
         {
             return Err(AdmissionError::Limit.into());
         }
@@ -181,6 +206,7 @@ impl Builder<'_> {
             ordinary.push(match theory.view().node(index)? {
                 NodeView::Atom(_) | NodeView::False => true,
                 NodeView::Or(operands) => self.ordinary_operands(operands, &ordinary)?,
+                NodeView::ExtremumCut(cut) => self.ordinary_cut(cut, &ordinary)?,
                 _ => false,
             });
         }
@@ -196,7 +222,11 @@ impl Builder<'_> {
             if !ordinary[head] && crate::atomic_choice::atom(theory, head).is_none() {
                 return Ok(false);
             }
-            disjunctive |= ordinary[head] && matches!(theory.view().node(head)?, NodeView::Or(_));
+            disjunctive |= ordinary[head]
+                && matches!(
+                    theory.view().node(head)?,
+                    NodeView::Or(_) | NodeView::ExtremumCut(_)
+                );
         }
         Ok(disjunctive)
     }
@@ -252,6 +282,17 @@ impl Builder<'_> {
                         for &child in operands.iter().rev() {
                             self.tick()?;
                             stack.push(child);
+                        }
+                    }
+                    NodeView::ExtremumCut(cut) if cut.endpoint_truth().is_none() => {
+                        stack
+                            .try_reserve(cut.row.conditions.len())
+                            .map_err(|_| AdmissionError::Allocation)?;
+                        for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks).rev() {
+                            self.tick()?;
+                            if cut.qualifies(rank) {
+                                stack.push(child);
+                            }
                         }
                     }
                     _ => {}

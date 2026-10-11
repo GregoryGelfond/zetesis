@@ -116,3 +116,78 @@ fn encoding_reuses_the_reserved_vector_allocations() {
         );
     }
 }
+
+fn ordinal_input() -> Theory {
+    use zetesis_ferraris::{ExtremumCutRule, ExtremumRow, FormulaNodes, FormulaParts};
+    let mut nodes = FormulaNodes::new(
+        FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::falsum(),
+                Node::implies(0, 2),
+            ],
+            vec![],
+        )
+        .unwrap(),
+    );
+    let mut transaction = nodes.transaction();
+    let cuts = transaction
+        .push_extremum_cut_family_range(
+            ExtremumRow {
+                conditions: &[0, 1, 3, 0],
+                ranks: &[1, 2, 0, 3],
+                rank_count: 4,
+            },
+            &[ExtremumCutRule::Prefix(2), ExtremumCutRule::Suffix(2)],
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
+    let root = transaction
+        .push(
+            NodeView::Implies(cuts.start, cuts.start + 1),
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
+    transaction.commit();
+    Theory::new(
+        2,
+        nodes.into_parts(),
+        vec![root],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn ordinal_encoding_retries_without_candidate_state_or_scratch() {
+    let theory = ordinal_input();
+    let cancellation = Cancellation::default();
+    let limits = AdmissionLimits::default();
+    let mut workspace = Workspace::default();
+    workspace
+        .reserve(&theory, limits, &mut budget(&cancellation, u64::MAX))
+        .unwrap();
+    let retained = workspace.retained_bytes();
+    assert_eq!(workspace.scratch.capacity(), 0);
+    for mask in [3, 0, 2, 1, 3] {
+        let candidate =
+            Interpretation::new(&theory, (0..2).filter(|atom| mask & (1 << atom) != 0)).unwrap();
+        let mut complete = budget(&cancellation, u64::MAX);
+        encode(&theory, Some(&candidate), limits, &mut complete).unwrap();
+        for ceiling in [0, 1, complete.statistics.work - 1, complete.statistics.work] {
+            let mut fresh = budget(&cancellation, ceiling);
+            let expected =
+                encode(&theory, Some(&candidate), limits, &mut fresh).map(|cnf| contents(&cnf));
+            let mut reused = budget(&cancellation, ceiling);
+            let actual = workspace
+                .encode(&theory, Some(&candidate), limits, &mut reused)
+                .map(contents);
+            assert_eq!(actual, expected, "mask={mask}, ceiling={ceiling}");
+            assert_eq!(reused.statistics, fresh.statistics);
+            assert_eq!(workspace.retained_bytes(), retained);
+        }
+    }
+}

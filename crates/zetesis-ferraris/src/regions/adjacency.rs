@@ -83,7 +83,7 @@ impl Adjacency {
             .map(|range| &self.entries[range[0]..range[1]])
     }
 
-    #[cfg(test)]
+    /// Owned header and actual vector capacity, without allocator metadata.
     pub(super) fn retained_bytes(&self) -> u128 {
         std::mem::size_of::<Self>() as u128
             + (self.offsets.capacity() as u128 + self.entries.capacity() as u128)

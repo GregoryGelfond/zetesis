@@ -8,6 +8,8 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 - Reuse aggregate bounds when one native contribution row extends another,
   preserving answer sets while narrowing candidates before reduct checking.
+- Share native min/max rows across comparisons and retain deductions across shared
+  Boolean conditions, with corresponding Lean laws.
 
 ## 0.5.0 — 2026-10-10
 

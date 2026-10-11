@@ -151,7 +151,9 @@ fn original_decisions_do_not_repeat_closed_subjects() {
     let tautology = theory(vec![Node::atom(0), Node::implies(0, 0)], vec![1]);
     let conditions = Conditions {
         permanent: vec![],
-        bound: Some(Bound::prepare(&tautology, 1).unwrap()),
+        bound: Some(
+            Bound::prepare(&tautology, 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
+        ),
     };
     let (region, attempts) = close(&original, &conditions);
     // The old joint loop invoked original and bound twice. Neither invocation
@@ -171,7 +173,9 @@ fn later_decisions_reclose_earlier_subjects() {
         },
         Conditions {
             permanent: vec![],
-            bound: Some(Bound::prepare(&held_a, 1).unwrap()),
+            bound: Some(
+                Bound::prepare(&held_a, 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
+            ),
         },
     ] {
         let (region, attempts) = close(&original, &conditions);

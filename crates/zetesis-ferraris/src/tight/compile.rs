@@ -4,7 +4,7 @@ use super::{
     TightAttempt, TightError, TightPlan, TightPlanLimits, TightPlanStatistics, TightProducer,
     TightProducerKind, TightResource, Work, bytes, filled, reserve,
 };
-use crate::{NodeView, Theory, Threshold};
+use crate::{ExtremumCut, NodeView, Theory, Threshold};
 use zetesis_cpu::{Cancellation, Stop};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -31,7 +31,9 @@ impl TightPlan {
     /// negations. Bodies admit atoms, falsum, conjunction, disjunction and
     /// default negation; a negation freezes its whole interior. General
     /// Nonnegative thresholds preserve the body classification of their positive
-    /// contributions; zero weights add no rank edge. General head disjunctions,
+    /// contributions; zero weights add no rank edge. Ordinal cuts use only
+    /// qualifying witnesses, and endpoint-bound constants add no rank edge.
+    /// General head disjunctions,
     /// unnegated body implications and positive cycles fall back.
     /// Every root is inspected, including constraints and candidate guards.
     ///
@@ -139,7 +141,30 @@ fn classify_node(
             classify_operands(operands, classes, work)
         }
         NodeView::Threshold(threshold) => classify_threshold(threshold, classes, work),
+        NodeView::ExtremumCut(cut) => classify_cut(cut, classes, work),
     }
+}
+
+fn classify_cut(
+    cut: ExtremumCut<'_>,
+    classes: &[Body],
+    work: &mut Work<'_>,
+) -> Result<Body, TightError> {
+    if cut.endpoint_truth().is_some() {
+        return Ok(Body::Frozen);
+    }
+    let mut class = Body::Frozen;
+    for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+        work.tick()?;
+        if cut.qualifies(rank) {
+            class = match (class, classes[child]) {
+                (Body::Opaque, _) | (_, Body::Opaque) => Body::Opaque,
+                (Body::Frozen, Body::Frozen) => Body::Frozen,
+                _ => Body::Positive,
+            };
+        }
+    }
+    Ok(class)
 }
 
 fn classify_threshold(
@@ -290,6 +315,14 @@ fn each_dependency(
                 for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
                     work.tick()?;
                     if weight != 0 && classes[child] == Body::Positive {
+                        visit(offset + child, offset + index, false)?;
+                    }
+                }
+            }
+            NodeView::ExtremumCut(cut) if classes[index] == Body::Positive => {
+                for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+                    work.tick()?;
+                    if cut.qualifies(rank) && classes[child] == Body::Positive {
                         visit(offset + child, offset + index, false)?;
                     }
                 }
@@ -474,6 +507,16 @@ fn validate_ranks(
                     for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
                         work.tick()?;
                         if weight != 0 && classes[child] == Body::Positive {
+                            value = value.max(maximum[child]);
+                        }
+                    }
+                    value
+                }
+                NodeView::ExtremumCut(cut) if class == Body::Positive => {
+                    let mut value = 0;
+                    for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+                        work.tick()?;
+                        if cut.qualifies(rank) && classes[child] == Body::Positive {
                             value = value.max(maximum[child]);
                         }
                     }

@@ -43,6 +43,7 @@ fn is_atom(node: NodeView<'_>, atom: usize) -> bool {
         | NodeView::Implies(..)
         | NodeView::And(_)
         | NodeView::Or(_)
-        | NodeView::Threshold(_) => false,
+        | NodeView::Threshold(_)
+        | NodeView::ExtremumCut(_) => false,
     }
 }

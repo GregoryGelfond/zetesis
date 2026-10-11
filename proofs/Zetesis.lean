@@ -30,6 +30,7 @@ import Zetesis.ThresholdReduct
 import Zetesis.ThresholdDivision
 import Zetesis.ThresholdPrefixes
 import Zetesis.ThresholdConnectives
+import Zetesis.AssociativeWitnesses
 import Zetesis.AggregateAssignment
 import Zetesis.DagSharing
 import Zetesis.DependencySchedule
@@ -57,6 +58,8 @@ import Zetesis.CountHeads
 import Zetesis.TightPlans
 import Zetesis.CertifiedExecution
 import Zetesis.ValueExtrema
+import Zetesis.RankedExtrema
+import Zetesis.OrdinalExtrema
 import Zetesis.FinitePools
 import Zetesis.Outcomes
 import Zetesis.WorldViews

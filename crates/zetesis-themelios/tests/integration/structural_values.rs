@@ -363,6 +363,27 @@ fn formula_values(
         let node = theory.view().node(index).unwrap();
         let truth = match node {
             zetesis_ferraris::NodeView::False => false,
+            zetesis_ferraris::NodeView::ExtremumCut(cut) => {
+                use zetesis_ferraris::ExtremumCutRule::{Prefix, Suffix};
+                match *cut.rule {
+                    Prefix(0) => false,
+                    Prefix(boundary) if boundary == cut.row.rank_count => true,
+                    Suffix(0) => true,
+                    Suffix(boundary) if boundary == cut.row.rank_count => false,
+                    rule => cut
+                        .row
+                        .conditions
+                        .iter()
+                        .zip(cut.row.ranks)
+                        .any(|(&child, &rank)| {
+                            let qualifies = match rule {
+                                Prefix(boundary) => rank < boundary,
+                                Suffix(boundary) => rank >= boundary,
+                            };
+                            qualifies && result[child]
+                        }),
+                }
+            }
             zetesis_ferraris::NodeView::Threshold(row) => {
                 row.conditions
                     .iter()

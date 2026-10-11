@@ -511,7 +511,7 @@ fn common_divisors_scale_one_shared_row_and_round_each_bound_up() {
     .unwrap();
     assert_eq!(nodes.parts().rows().len(), 1);
     assert_eq!(nodes.parts().conditions(), &[0, 0, 0]);
-    assert_eq!(nodes.parts().weights(), &[3, 5, 7]);
+    assert_eq!(nodes.parts().numeric_values(), &[3, 5, 7]);
     assert_eq!(
         nodes
             .parts()
@@ -772,6 +772,7 @@ fn empty_family_still_validates_and_appends_nothing() {
         snapshot(&bad),
         (
             vec![Node::and_pair([0, 0])],
+            vec![],
             vec![],
             vec![],
             vec![],

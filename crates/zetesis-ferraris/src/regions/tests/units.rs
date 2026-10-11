@@ -51,7 +51,7 @@ fn scan<C: Count>(
     work: &mut Work<'_>,
 ) -> Result<Step, Stop> {
     let chain = &index.chains[0];
-    for &operand in &chain.operands {
+    for &operand in chain.ordinary_leaves() {
         work.tick()?;
         let opposite: &[u64] = if chain.disjunction {
             closure.known.never
@@ -77,7 +77,7 @@ fn scan_operands<C: Count>(
 ) -> Result<Step, Stop> {
     let chain = &index.chains[0];
     let mut step = Step::Unchanged;
-    for &operand in &chain.operands {
+    for &operand in chain.ordinary_leaves() {
         work.tick()?;
         step = step.join(if chain.disjunction {
             closure.never(operand)
@@ -225,7 +225,7 @@ fn processed_totals_preserve_downward_teaching() {
         let index = Narrower::new(&chain(disjunction));
         // The fixture repeats node 1 in the syntax and gives atom 1 two
         // separate nodes. Counters follow the four distinct chain leaves.
-        assert_eq!(index.chains[0].operands, [0, 1, 2, 3]);
+        assert_eq!(index.chains[0].ordinary_leaves(), [0, 1, 2, 3]);
         let counted = if disjunction { 2 } else { 4 };
         for mut code in 0..5usize.pow(4) {
             let values = std::array::from_fn(|_| {
@@ -295,7 +295,7 @@ fn counted_and_pending_states_match_the_unit_scan() {
         let index = Narrower::new(&chain(disjunction));
         // Repeated node 1 is counted once; distinct nodes 1 and 2 naming the
         // same atom remain distinct operands with independently pending events.
-        assert_eq!(index.chains[0].operands, [0, 1, 2, 3]);
+        assert_eq!(index.chains[0].ordinary_leaves(), [0, 1, 2, 3]);
         for mut code in 0..5usize.pow(4) {
             let values = std::array::from_fn(|_| {
                 let value = code % 5;
@@ -465,7 +465,7 @@ fn chain_body(disjunction: bool) -> Theory {
 /// to a region: these tests exercise the event before that boundary.
 fn processed_body(index: &Narrower) -> (Knowledge, NarrowingScratch) {
     assert_eq!(index.chains[0].root, 2);
-    assert_eq!(index.chains[0].operands, [0, 1]);
+    assert_eq!(index.chains[0].ordinary_leaves(), [0, 1]);
     let mut knowledge = index.knowledge();
     let known = compact_mut(&mut knowledge);
     if index.chains[0].disjunction {

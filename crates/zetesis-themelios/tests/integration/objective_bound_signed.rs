@@ -484,7 +484,7 @@ fn assert_same_parts(a: &zetesis_ferraris::FormulaParts, b: &zetesis_ferraris::F
     assert_eq!(a.nodes(), b.nodes());
     assert_eq!(a.operands(), b.operands());
     assert_eq!(a.conditions(), b.conditions());
-    assert_eq!(a.weights(), b.weights());
+    assert_eq!(a.numeric_values(), b.numeric_values());
     assert_eq!(a.rows(), b.rows());
     assert_eq!(a.thresholds(), b.thresholds());
 }

@@ -170,7 +170,7 @@ impl PreparedReduct {
     /// Decide original membership using this immutable proper-subset query.
     ///
     /// Original satisfaction is evaluated once and supplies authenticated truth
-    /// for implication and threshold parameters. A returned subset is still independently
+    /// for implication and numeric-node parameters. A returned subset is still independently
     /// checked against the original frozen reduct. This operation preserves
     /// `Limits`' separate search and per-verification work ceilings. Preparation
     /// work is reported only by this owner's construction receipt.

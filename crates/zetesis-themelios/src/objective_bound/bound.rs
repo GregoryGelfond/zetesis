@@ -83,6 +83,7 @@ fn copy(parts: &FormulaParts, work: &mut Work<'_>) -> Result<FormulaNodes, Objec
         parts.nodes().len(),
         parts.rows().len(),
         parts.thresholds().len(),
+        parts.extremum_cuts().len(),
     ]
     .into_iter()
     .any(|count| count > work.limits.max_nodes)
@@ -93,7 +94,7 @@ fn copy(parts: &FormulaParts, work: &mut Work<'_>) -> Result<FormulaNodes, Objec
         parts.occurrences(),
         parts.operands().len(),
         parts.conditions().len(),
-        parts.weights().len(),
+        parts.numeric_values().len(),
     ]
     .into_iter()
     .any(|count| count > work.limits.max_operands)

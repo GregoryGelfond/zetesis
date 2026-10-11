@@ -113,7 +113,19 @@ impl Row {
 }
 
 impl Thresholds {
-    pub(super) fn prepare(theory: &Theory, chains: &[super::Chain]) -> Result<Self, Stop> {
+    /// Shared anchor projection capacity, including any ordinal-chain postings.
+    pub(super) fn connective_storage_bytes(&self) -> u128 {
+        self.connectives
+            .as_ref()
+            .map_or(0, connectives::Connectives::retained_bytes)
+    }
+
+    pub(super) fn prepare(
+        theory: &Theory,
+        chains: &[super::Chain],
+        extrema: &super::extrema::Extrema,
+        shared_connectives: bool,
+    ) -> Result<Self, Stop> {
         let nodes = theory.view();
         let mut rows: Vec<Row> = Vec::new();
         let mut shared = HashMap::new();
@@ -180,7 +192,8 @@ impl Thresholds {
             )?)
         };
         let relations = prefixes::prepare(&rows)?;
-        let connectives = connectives::Connectives::prepare(&rows, chains)?;
+        let connectives =
+            connectives::Connectives::prepare(&rows, chains, extrema, shared_connectives)?;
         Ok(Self {
             rows,
             by_descriptor,

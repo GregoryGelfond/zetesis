@@ -1,3 +1,11 @@
+mod family;
+mod ranked;
+pub(super) use family::append as append_family;
+pub use family::{
+    ValueExtremumFamilyAttempt, ValueExtremumFamilySpace, ValueExtremumGuard,
+    append_value_extremum_family_refs,
+};
+
 use zetesis_core::{Value, catalog::TermRef};
 use zetesis_cpu::Cancellation;
 

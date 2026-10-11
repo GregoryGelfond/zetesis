@@ -106,7 +106,9 @@ fn the_original_theory_supplies_an_unrestricted_preference() {
 fn a_zero_score_bound_prefers_the_lowest_open_atom() {
     let conditions = Conditions {
         permanent: vec![permanent(prefer_c())],
-        bound: Some(Bound::prepare(&tautology(), 1).unwrap()),
+        bound: Some(
+            Bound::prepare(&tautology(), 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
+        ),
     };
     let (result, region, _, _) = closed(&conditions, u64::MAX);
     assert_eq!(result.unwrap(), Narrowing::Fixed { changed: false });
@@ -130,7 +132,9 @@ fn the_current_bound_supplies_the_preference() {
     // branch of the bound/permanent/original policy.
     let conditions = Conditions {
         permanent: vec![permanent(prefer_a())],
-        bound: Some(Bound::prepare(&prefer_c(), 1).unwrap()),
+        bound: Some(
+            Bound::prepare(&prefer_c(), 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
+        ),
     };
     let (result, region, _, _) = closed(&conditions, u64::MAX);
     assert_eq!(result.unwrap(), Narrowing::Fixed { changed: false });
@@ -171,7 +175,7 @@ fn joint_closure_charges_one_preference_scan() {
     }
     let conditions = Conditions {
         permanent: vec![],
-        bound: Some(Bound::prepare(&bound, 1).unwrap()),
+        bound: Some(Bound::prepare(&bound, 1, u64::MAX, &crate::Cancellation::default()).unwrap()),
     };
     let (result, _, counts, work) = closed(&conditions, u64::MAX);
     result.unwrap();
@@ -204,7 +208,9 @@ fn a_selector_refusal_retains_the_shared_budget_prefix() {
 fn a_bound_selector_refusal_retains_the_shared_budget_prefix() {
     let conditions = Conditions {
         permanent: vec![],
-        bound: Some(Bound::prepare(&tautology(), 1).unwrap()),
+        bound: Some(
+            Bound::prepare(&tautology(), 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
+        ),
     };
     let (result, _, complete, work) = closed(&conditions, u64::MAX);
     result.unwrap();

@@ -381,7 +381,7 @@ fn discovery_authenticates_complete_unit_prefixes() {
                 && index.chains.iter().any(|chain| {
                     super::exact_prefix(
                         &row.terms,
-                        &chain.operands,
+                        chain.ordinary_leaves(),
                         &mut crate::regions::Work::new(u64::MAX),
                     )
                     .unwrap()
@@ -398,13 +398,13 @@ fn discovery_authenticates_complete_unit_prefixes() {
             for chain in &index.chains {
                 if super::exact_prefix(
                     &row.terms,
-                    &chain.operands,
+                    chain.ordinary_leaves(),
                     &mut crate::regions::Work::new(u64::MAX),
                 )
                 .unwrap()
                 {
                     assert!(index.thresholds.connectives.is_some());
-                    assert_eq!(chain.operands.iter().min(), Some(&first));
+                    assert_eq!(chain.ordinary_leaves().iter().min(), Some(&first));
                     assert_eq!(
                         index.parents[first]
                             .iter()

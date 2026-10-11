@@ -142,6 +142,19 @@ impl ObjectivePlan {
                             work.error(super::ObjectiveBoundErrorKind::Control(stop)),
                         ),
                     })?,
+                NodeView::ExtremumCut(cut) => cut
+                    .row
+                    .reduce::<ThresholdReadError>(|child| {
+                        work.tick().map_err(ThresholdReadError::Budget)?;
+                        Ok(values[child])
+                    })
+                    .map(|measure| cut.rule.holds(measure))
+                    .map_err(|error| match error {
+                        ThresholdReadError::Budget(error) => eligibility_error(error),
+                        ThresholdReadError::Formula(stop) => eligibility_error(
+                            work.error(super::ObjectiveBoundErrorKind::Control(stop)),
+                        ),
+                    })?,
                 NodeView::Implies(left, right) => {
                     work.tick().map_err(eligibility_error)?;
                     let antecedent = values[left];

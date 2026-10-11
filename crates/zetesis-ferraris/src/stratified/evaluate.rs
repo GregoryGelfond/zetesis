@@ -196,9 +196,11 @@ pub(super) fn validate(
             NodeView::Implies(_, head) => {
                 view.node(head).map_err(|_| Stop::InvalidProgram)? == NodeView::False
             }
-            NodeView::Atom(_) | NodeView::And(_) | NodeView::Or(_) | NodeView::Threshold(_) => {
-                false
-            }
+            NodeView::Atom(_)
+            | NodeView::And(_)
+            | NodeView::Or(_)
+            | NodeView::Threshold(_)
+            | NodeView::ExtremumCut(_) => false,
         };
         if !constraint {
             return Err(StratifiedError::InvalidClosure { root });

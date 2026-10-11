@@ -6,6 +6,11 @@
 //! Group/lowering construction, worlds, masks and parity checks are outside timers.
 //! `ordinary_thresholds` separately compares the ordinary native representation
 //! with the previous shared Boolean DP on fixed inputs and interpretations.
+//! `extremum_families` measures typed shared witness preparation and its resulting
+//! fixed-world evaluation; it introduces no native extremum formula node.
+
+#[path = "native_aggregates/extremum_families.rs"]
+mod extremum_families;
 
 #[path = "native_aggregates/ordinary_thresholds.rs"]
 mod ordinary_thresholds;
@@ -361,5 +366,6 @@ fn main() {
     let mut criterion = Criterion::default().configure_from_args();
     native_aggregates(&mut criterion);
     ordinary_thresholds::bench(&mut criterion);
+    extremum_families::bench(&mut criterion);
     criterion.final_summary();
 }

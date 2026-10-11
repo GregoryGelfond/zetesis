@@ -1,8 +1,8 @@
 //! Shared aggregate fixtures retain nodes and native operand rows together.
 
 use zetesis_ferraris::{
-    AggregateExtremum as Extremum, ContributionRow, FormulaNodes, FormulaParts, Node, NodeView,
-    ThresholdDescriptor,
+    AggregateExtremum as Extremum, ExtremumCutDescriptor, FormulaNodes, FormulaParts, Node,
+    NodeView, NumericRow, ThresholdDescriptor,
 };
 
 pub use zetesis_theory_support::aggregate::{COMPARISONS, ferraris_prefix as prefix};
@@ -21,8 +21,9 @@ pub type Snapshot = (
     Vec<usize>,
     Vec<usize>,
     Vec<u64>,
-    Vec<ContributionRow>,
+    Vec<NumericRow>,
     Vec<ThresholdDescriptor>,
+    Vec<ExtremumCutDescriptor>,
 );
 
 pub fn snapshot(nodes: &FormulaNodes) -> Snapshot {
@@ -30,9 +31,10 @@ pub fn snapshot(nodes: &FormulaNodes) -> Snapshot {
         nodes.parts().nodes().to_vec(),
         nodes.parts().operands().to_vec(),
         nodes.parts().conditions().to_vec(),
-        nodes.parts().weights().to_vec(),
+        nodes.parts().numeric_values().to_vec(),
         nodes.parts().rows().to_vec(),
         nodes.parts().thresholds().to_vec(),
+        nodes.parts().extremum_cuts().to_vec(),
     )
 }
 

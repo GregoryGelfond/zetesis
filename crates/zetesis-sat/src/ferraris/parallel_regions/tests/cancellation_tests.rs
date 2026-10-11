@@ -24,7 +24,10 @@ fn cancellation_preserves_settled_interruption() {
     .unwrap();
     // Prepare the empty index before cancellation so the next pull reaches
     // the coordinator's cancellation check, not index construction.
-    models.index.ensure(|_| Ok(())).unwrap();
+    models
+        .index
+        .ensure(&crate::Cancellation::default(), |_| Ok(()))
+        .unwrap();
     let before = models.statistics.search;
     let Proposer::Parallel(search) = &mut models.proposer else {
         panic!("parallel region workers were not selected")
