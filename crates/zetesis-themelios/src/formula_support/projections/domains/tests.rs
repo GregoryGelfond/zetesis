@@ -175,10 +175,102 @@ fn all_allowed_groups_keep_indexed_probes() {
     with_join(
         "p(4;5).q(2). :-p(X),q(Y),X/2=Y.",
         |join, computation, counters, location| {
+            let values = binding(
+                &[None, Some(Value::Number(2))],
+                computation,
+                counters,
+                location,
+            );
+            let limits = FormulaLimits::default();
+            let witness = computation.lease();
+            let admitted = limits.max_support_bytes
+                - computation.allowance(&witness, &limits, location).unwrap();
+            let bounded = FormulaLimits {
+                max_support_bytes: admitted,
+                ..limits
+            };
+            // No spare storage is available for even a temporary domain header.
+            assert!(
+                join.projections
+                    .domains(
+                        join.literals,
+                        target(join, "p"),
+                        &values,
+                        Context::new(&*computation, &bounded, counters, location),
+                    )
+                    .unwrap()
+                    .is_none()
+            );
             let (rows, work) = collect(join, computation, counters, location);
             assert_eq!(rows, vec![numbers(&[4, 2]), numbers(&[5, 2])]);
             assert_eq!(work.table_preparations, Some(0));
             assert_eq!(work.table_probes, Some(0));
+        },
+    );
+}
+
+#[test]
+fn matching_prefix_is_not_compared_twice() {
+    with_join(
+        "p(0..63).q(0;1). :-p(X),q(Y),X/32=Y.",
+        |join, computation, counters, location| {
+            let limits = FormulaLimits::default();
+            assert_eq!(join.projections.values.len(), 1);
+            let projection = &join.projections.values[0];
+            assert_eq!(projection.covered, Some(64));
+            let zero = computation.number(0, &limits, counters, location).unwrap();
+            let zero = computation.read().term(&zero).unwrap();
+            // Establish the actual covered order, not merely the source order:
+            // one query has a long matching prefix, the other none at all.
+            for position in 0..64 {
+                assert_eq!(
+                    projection
+                        .matches(
+                            position,
+                            zero,
+                            &mut Context::new(&*computation, &limits, counters, location),
+                        )
+                        .unwrap(),
+                    position < 32,
+                );
+            }
+            let mut work = Vec::new();
+            for wanted in 0..2 {
+                let values = binding(
+                    &[None, Some(Value::Number(wanted))],
+                    computation,
+                    counters,
+                    location,
+                );
+                let live = counters.workspace_bytes();
+                let before = counters.accounting.work;
+                let domains = join
+                    .projections
+                    .domains(
+                        join.literals,
+                        target(join, "p"),
+                        &values,
+                        Context::new(&*computation, &limits, counters, location),
+                    )
+                    .unwrap()
+                    .unwrap();
+                work.push(counters.accounting.work - before);
+                let actual: Vec<_> = domains
+                    .borrowed()
+                    .values
+                    .iter()
+                    .map(|value| value.to_value(ValueLimits::default()).unwrap())
+                    .collect();
+                let expected: Vec<_> = (wanted * 32..(wanted + 1) * 32)
+                    .map(Value::Number)
+                    .collect();
+                assert_eq!(actual, expected);
+                drop(domains);
+                assert_eq!(counters.workspace_bytes(), live);
+            }
+            // Both queries compare every covered output once and emit 32 inputs.
+            // Repeating the checked prefix makes the first receipt larger.
+            assert_eq!(work[0], work[1]);
         },
     );
 }
@@ -266,10 +358,10 @@ fn foreign_known_values_cannot_select_local_rows() {
 #[test]
 fn domain_work_cutoffs_are_inclusive() {
     with_join(
-        "p(1..6).q(2). :-p(X),q(Y),X/2=Y.",
+        "p(0..6).q(0). :-p(X),q(Y),X/6=Y.",
         |join, computation, counters, location| {
             let values = binding(
-                &[None, Some(Value::Number(2))],
+                &[None, Some(Value::Number(0))],
                 computation,
                 counters,
                 location,
@@ -287,7 +379,7 @@ fn domain_work_cutoffs_are_inclusive() {
                 )
                 .unwrap()
                 .unwrap();
-            assert_eq!(domains.borrowed().values.len(), 2);
+            assert_eq!(domains.borrowed().values.len(), 6);
             drop(domains);
             let required = counters.accounting.work - before;
             assert!(required > 0);
@@ -304,14 +396,15 @@ fn domain_work_cutoffs_are_inclusive() {
                     Context::new(&*computation, &bounded, counters, location),
                 );
                 if cutoff == required {
-                    assert_eq!(result.unwrap().unwrap().borrowed().values.len(), 2);
+                    assert_eq!(result.unwrap().unwrap().borrowed().values.len(), 6);
                 } else {
                     assert!(matches!(
                         result,
                         Err(FormulaFailure::Limit {
                             resource: FormulaResource::Work,
+                            location: actual,
                             ..
-                        })
+                        }) if actual == location
                     ));
                 }
                 assert!(counters.accounting.work <= bounded.max_work);

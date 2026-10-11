@@ -689,7 +689,10 @@ allowed or the opposite operand is unavailable. An empty derived domain uses an
 empty probe directly.
 
 Domain derivation scans the existing input/result coordinates, without another
-value dictionary or reverse-result cache. Two transient leased buffers hold
+value dictionary or reverse-result cache. The first scan locates a rejected
+input before allocating a domain; the collector reuses its already-matched
+prefix and checks only the remaining suffix. Input reads and retained values
+remain charged in their original order. Two transient leased buffers hold
 borrowed input references and their variable ranges. Preparation, domain scans,
 mask construction and all refused prefixes spend the same cumulative grounding
 work; tables, masks and lists share `SupportBytes`. Numerical work cutoffs can

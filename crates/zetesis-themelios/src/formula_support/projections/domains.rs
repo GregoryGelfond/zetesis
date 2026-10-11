@@ -129,9 +129,9 @@ impl ProjectionValues<'_> {
             let wanted = context.computation.read().term(&wanted).map_err(|error| {
                 crate::formula_binding::assignment(error.into(), context.work.location)
             })?;
-            if !projection.restricts(wanted, &mut context)? {
+            let Some(excluded) = projection.first_mismatch(wanted, &mut context)? else {
                 continue;
-            }
+            };
             if domains.is_none() {
                 domains = Some(Domains {
                     values: Buffer::new(
@@ -153,7 +153,13 @@ impl ProjectionValues<'_> {
                 .expect("a restricting equality owns its lists");
             let start = domains.values.len();
             for position in 0..projection.covered.expect("covered projection checked") {
-                if projection.matches(position, wanted, &mut context)? {
+                // The first scan established the matching prefix and its first
+                // exclusion before any domain allocation. Reuse that evidence;
+                // checked input reads and charged pushes still occur in order.
+                if position < excluded
+                    || (position > excluded
+                        && projection.matches(position, wanted, &mut context)?)
+                {
                     let input = projection.inputs.value(
                         position,
                         context.computation.read(),
@@ -238,19 +244,20 @@ impl ProjectionValues<'_> {
 }
 
 impl Projection<'_> {
-    /// If every covered input is allowed, keep the ordinary probe and avoid
-    /// constructing a table merely because source totality was established.
-    fn restricts(
+    /// Every input before this position matches the immutable wanted value.
+    /// If all covered inputs match, keep the ordinary probe without constructing
+    /// a domain merely because source totality was established.
+    fn first_mismatch(
         &self,
         wanted: TermRef<'_>,
         context: &mut Context<'_, &Computation<'_, '_>>,
-    ) -> Result<bool, FormulaFailure> {
+    ) -> Result<Option<usize>, FormulaFailure> {
         for position in 0..self.covered.expect("covered projection checked") {
             if !self.matches(position, wanted, context)? {
-                return Ok(true);
+                return Ok(Some(position));
             }
         }
-        Ok(false)
+        Ok(None)
     }
 
     fn matches(
