@@ -1558,6 +1558,11 @@ import Zetesis
 #print axioms Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes
 #print axioms Zetesis.Refinement.TheoryAdmission.self_reference_is_refused
 #print axioms Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked
+#print axioms Zetesis.ThresholdConnectives.masked_unit_sum_le_length
+#print axioms Zetesis.ThresholdConnectives.masked_unit_sum_full
+#print axioms Zetesis.ThresholdConnectives.masked_unit_sum_positive
+#print axioms Zetesis.ThresholdConnectives.conjunction_original
+#print axioms Zetesis.ThresholdConnectives.disjunction_original
 #print axioms Zetesis.ThresholdDivision.divides_all
 #print axioms Zetesis.ThresholdDivision.rounded_bound_le_iff
 #print axioms Zetesis.ThresholdDivision.masked_sum_divide

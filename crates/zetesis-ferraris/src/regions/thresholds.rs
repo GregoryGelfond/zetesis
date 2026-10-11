@@ -12,6 +12,7 @@ use zetesis_cpu::Stop;
 
 use super::adjacency::Adjacency;
 
+mod connectives;
 #[cfg(test)]
 mod frozen_tests;
 #[cfg(test)]
@@ -27,6 +28,8 @@ pub(super) struct Thresholds {
     incidences: Vec<Incidence>,
     /// Undirected exact-prefix/equality links, used only on original subjects.
     relations: Option<Adjacency>,
+    /// Whether unit rows may exchange requirements with live Boolean chains.
+    connectives: Option<connectives::Connectives>,
 }
 
 #[derive(Clone, Debug)]
@@ -177,12 +180,14 @@ impl Thresholds {
             )?)
         };
         let relations = prefixes::prepare(&rows)?;
+        let connectives = connectives::Connectives::prepare(&rows);
         Ok(Self {
             rows,
             by_descriptor,
             by_condition,
             incidences,
             relations,
+            connectives,
         })
     }
 
@@ -198,7 +203,7 @@ impl Thresholds {
     }
 
     pub(super) fn has_relations(&self) -> bool {
-        self.relations.is_some()
+        self.relations.is_some() || self.connectives.is_some()
     }
 
     fn related(&self, row: usize) -> &[usize] {

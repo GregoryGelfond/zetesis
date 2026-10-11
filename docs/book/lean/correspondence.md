@@ -91,6 +91,26 @@ arbitrary subsets. Prefix discovery, grouped-row correspondence, queue execution
 and resource accounting remain executable obligations; the law does not qualify
 the retained native extraction.
 
+[`ThresholdConnectives.conjunction_original` and `disjunction_original`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ThresholdConnectives.lean)
+identify finite Boolean connectives with unit-weight thresholds: conjunction
+requires the normalized list's length, and disjunction requires one. The caller
+supplies exact membership equivalence between the source and normalized lists;
+empty lists and repeated conditions need no extra premise. These laws justify
+Boolean sorting and deduplication, not removal of weighted aggregate occurrences.
+They are original-satisfaction laws, not a proof of a frozen rewrite.
+
+The original-candidate bridge reuses existing Boolean chain leaves, counters and
+condition postings. Nonempty native rows with grouped coefficient one join
+candidate chains through their first condition; Boolean events use their least
+leaf to find native rows. Bounds filter candidates before exact prefix or
+equality checks authenticate a consequence. The bridge retains no pair table
+or additional per-region state. Repeated comparisons consume propagation work;
+frozen propagation is unchanged. Denoting a chain root by its distinct leaves,
+authenticating canonical condition IDs, recognizing unit-row relationships, and
+implementing checked bounds, event scheduling and resource accounting remain
+Rust obligations. The five laws do not establish those correspondences or
+qualify the retained native extraction.
+
 This extends the classical law in `Thresholds`; it does not yet verify source
 coalescing, native formula storage, propagation, finite-width arithmetic, Rust
 evaluation or device execution.

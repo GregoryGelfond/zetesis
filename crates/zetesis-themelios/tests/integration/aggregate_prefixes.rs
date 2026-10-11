@@ -8,11 +8,11 @@ use zetesis_ferraris::{
 };
 use zetesis_reference_support::formula;
 
-fn observer(source: &str) -> Option<bool> {
+fn observer(source: &str, native_guards: usize) -> Option<bool> {
     let program = formula(source);
-    // Both guards must reach the native path. Boolean expansion could otherwise
-    // satisfy this regression through connective propagation alone.
-    assert_eq!(program.theory().parts().thresholds().len(), 2);
+    // The expected guards must reach the native path. Boolean expansion could
+    // otherwise satisfy this regression through connective propagation alone.
+    assert_eq!(program.theory().parts().thresholds().len(), native_guards);
     let narrower = Narrower::new(program.theory());
     let mut region = Region::all_open(program.atoms().len());
     let (outcome, _) = narrower
@@ -43,7 +43,8 @@ fn false_extended_count_excludes_prefix_count() {
         observer(
             "{a;b;c;d;z}. \
              :- #count{1:a;2:b;3:c;4:d} >= 2. \
-             :- z, not #count{1:a;2:b;3:c} >= 2."
+             :- z, not #count{1:a;2:b;3:c} >= 2.",
+            2
         ),
         Some(false)
     );
@@ -55,8 +56,21 @@ fn true_prefix_count_requires_extended_count() {
         observer(
             "{a;b;c;d;z}. \
              :- #count{1:a;2:b;3:c} < 2. \
-             :- not z, #count{1:a;2:b;3:c;4:d} >= 2."
+             :- not z, #count{1:a;2:b;3:c;4:d} >= 2.",
+            2
         ),
         Some(true)
+    );
+}
+
+#[test]
+fn false_native_count_excludes_boolean_endpoint() {
+    assert_eq!(
+        observer(
+            "{a;b;c;z}. :- #count{1:a;2:b;3:c} >= 2. \
+         :- z, not #count{1:a;2:b} >= 2.",
+            1
+        ),
+        Some(false)
     );
 }

@@ -7790,6 +7790,31 @@
     "line": 368
   },
   {
+    "name": "Zetesis.ThresholdConnectives.masked_unit_sum_le_length",
+    "file": "Zetesis/ThresholdConnectives.lean",
+    "line": 34
+  },
+  {
+    "name": "Zetesis.ThresholdConnectives.masked_unit_sum_full",
+    "file": "Zetesis/ThresholdConnectives.lean",
+    "line": 49
+  },
+  {
+    "name": "Zetesis.ThresholdConnectives.masked_unit_sum_positive",
+    "file": "Zetesis/ThresholdConnectives.lean",
+    "line": 70
+  },
+  {
+    "name": "Zetesis.ThresholdConnectives.conjunction_original",
+    "file": "Zetesis/ThresholdConnectives.lean",
+    "line": 89
+  },
+  {
+    "name": "Zetesis.ThresholdConnectives.disjunction_original",
+    "file": "Zetesis/ThresholdConnectives.lean",
+    "line": 118
+  },
+  {
     "name": "Zetesis.ThresholdDivision.divides_all",
     "file": "Zetesis/ThresholdDivision.lean",
     "line": 35

@@ -7791,6 +7791,31 @@
       "name": "Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked"
     },
     {
+      "file": "Zetesis/ThresholdConnectives.lean",
+      "line": 34,
+      "name": "Zetesis.ThresholdConnectives.masked_unit_sum_le_length"
+    },
+    {
+      "file": "Zetesis/ThresholdConnectives.lean",
+      "line": 49,
+      "name": "Zetesis.ThresholdConnectives.masked_unit_sum_full"
+    },
+    {
+      "file": "Zetesis/ThresholdConnectives.lean",
+      "line": 70,
+      "name": "Zetesis.ThresholdConnectives.masked_unit_sum_positive"
+    },
+    {
+      "file": "Zetesis/ThresholdConnectives.lean",
+      "line": 89,
+      "name": "Zetesis.ThresholdConnectives.conjunction_original"
+    },
+    {
+      "file": "Zetesis/ThresholdConnectives.lean",
+      "line": 118,
+      "name": "Zetesis.ThresholdConnectives.disjunction_original"
+    },
+    {
       "file": "Zetesis/ThresholdDivision.lean",
       "line": 35,
       "name": "Zetesis.ThresholdDivision.divides_all"
@@ -8757,6 +8782,7 @@
     "Zetesis/TerminalDefinitions.lean",
     "Zetesis/TernaryWatch.lean",
     "Zetesis/TheoryAdmission.lean",
+    "Zetesis/ThresholdConnectives.lean",
     "Zetesis/ThresholdDivision.lean",
     "Zetesis/ThresholdPrefixes.lean",
     "Zetesis/ThresholdPropagation.lean",
@@ -8776,8 +8802,8 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "566e32185c84f216b82eed2a06710fd390c1da7532cf775ea77c190053a4a338",
-    "Zetesis.lean": "6bd1e43e3e4aabc3904f3ff5f66b470d35c738d703f84c6cb3d0780067d2db70",
+    "Audit.lean": "7873db40561a6822028cc303d2fc31a1a267e53b9759675878ec7f3bb9a483ca",
+    "Zetesis.lean": "6104fe26e605acdb52cf2ddf3d487109b9d0f574e17d4603980fa7a513fd1929",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
@@ -8938,6 +8964,7 @@
     "Zetesis/TerminalDefinitions.lean": "5d58652ba9c73381248f195e2d416dad03953a059854b87a82d78fa964da0513",
     "Zetesis/TernaryWatch.lean": "ff2f1d1a4a02522b2646b0a54fff3e7c08e64bbd5661cf4c3631518aa41ba57e",
     "Zetesis/TheoryAdmission.lean": "4a0e96734f7771ea907af99a4cc1739f1e1e7732d0e15f11a192b74dea5b2143",
+    "Zetesis/ThresholdConnectives.lean": "028b2e70451d6018406b2bfc7d1b79df23045aca1ec12a84d5f5b66154098be9",
     "Zetesis/ThresholdDivision.lean": "ef3471d8771e00b7fb9847964943b01c7027ddafa696950b970f1556d5f792d9",
     "Zetesis/ThresholdPrefixes.lean": "a7741e66b7dd983b727bee98e1d37a504b818aefd24a3851df45fcc2ababdf44",
     "Zetesis/ThresholdPropagation.lean": "c2d637283903b1f7f653390e1c939452168b86fb2ed7f582bfc5c502f89dca75",

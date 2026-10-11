@@ -271,6 +271,22 @@ sum guards, including choice bounds. Shared counters propagate their necessary
 consequences. Signed sums and extrema retain their existing exact translations.
 Executable refinement and measured application speed remain separate obligations.
 
+Original-candidate narrowing also relates native unit rows to existing Boolean
+chains. A conjunction of n distinct leaves requires n unit contributions; a
+disjunction requires one. Existing condition postings find possible related
+rows. Numeric bounds first reject unhelpful candidates; complete equality or
+prefix checks then authenticate the remaining consequences. Other grouped
+coefficients and arbitrary overlapping rows do not qualify. The
+[connective laws](../lean/correspondence.md#nonnegative-aggregate-thresholds)
+state the original-truth meaning and the remaining representation obligations.
+
+The bridge borrows chain leaves and reuses their counters and the native row
+worklist. It retains no row/chain pair table or additional per-region state.
+Repeated searches consume propagation work and remain cancellable; dense inputs
+can still require many comparisons. Formula storage, atom support and frozen
+propagation retain their existing meanings. This candidate pruning does not
+rewrite the answer-set theory.
+
 For a count or sum, every possible measure is numeric. Against a nonnumeric
 logical bound, its order is the same for every complete tuple selection.
 [`numeric_comparison`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground.rs)

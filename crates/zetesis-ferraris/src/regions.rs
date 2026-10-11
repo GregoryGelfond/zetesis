@@ -801,6 +801,12 @@ impl Narrower {
     /// K grouped terms; prefix discovery and checked incidence construction take
     /// O(E + R), where E is the number of grouped terms. This derived index keeps
     /// at most R - 1 links and does not change the logical index receipt.
+    /// One O(R) scan records whether any nonempty grouped unit row exists.
+    /// Boolean/native exact-prefix candidates are discovered during original
+    /// narrowing through existing parent and condition postings. Minimum-leaf
+    /// scans, posting visits and membership comparisons consume propagation
+    /// work on every attempt. Preparation retains no row/chain pairs and does
+    /// no Boolean scan; no per-Boolean mutable state is added.
     ///
     /// # Errors
     /// Returns [`Stop::Allocation`] for compact-adjacency offset overflow or
@@ -1474,7 +1480,8 @@ impl<C: Count> Closure<'_, C> {
     /// Close the knowledge from the region's decisions, falsum and the
     /// roots. Node events follow new bits or initial seeds. Original threshold
     /// row events follow strictly tighter requirements from the finite set of
-    /// guard bounds, so exact-prefix transport also reaches a fixed point.
+    /// native and linked Boolean bounds, so exact-prefix transport also reaches
+    /// a fixed point. Boolean chains retain their existing operand counters.
     fn close(
         &mut self,
         subject: Subject<'_>,
@@ -1554,7 +1561,7 @@ impl<C: Count> Closure<'_, C> {
                     "only original rows transport requirements"
                 );
                 statistics.propagations += 1;
-                self.threshold_prefixes(index, row, work)?
+                self.threshold_requirements(index, row, work)?
             } else if let Some(atom) = self.lists.next_recheck() {
                 statistics.propagations += 1;
                 let producers =
@@ -1733,7 +1740,17 @@ impl<C: Count> Closure<'_, C> {
         if let Some(chain) = index.chain_of[node] {
             // A chain link identifies an And/Or root. Its complete downward
             // rule is the chain's; the generic connective arms teach nothing.
-            return self.teach_chain(index, chain_position(chain), work);
+            let chain = chain_position(chain);
+            let step = self.teach_chain(index, chain, work)?;
+            if step == Step::Contradiction || frozen.is_some() {
+                return Ok(step);
+            }
+            return Ok(step.join(self.threshold_connective(
+                index,
+                chain,
+                bit(self.known.sure, node),
+                work,
+            )?));
         }
         Ok(match nodes.node(node).expect("admitted node") {
             NodeView::Atom(atom) => {

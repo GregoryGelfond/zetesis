@@ -45,7 +45,7 @@ impl<C: Count> Closure<'_, C> {
             }
             state.upper = Some(bound);
         }
-        if frozen.is_none() && !index.thresholds.related(row).is_empty() {
+        if frozen.is_none() && index.thresholds.has_requirement_links(row) {
             self.lists.queue_threshold(row);
         }
         self.threshold_row(index, row, frozen, work)
