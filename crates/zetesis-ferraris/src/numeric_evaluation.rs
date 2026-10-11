@@ -118,6 +118,7 @@ impl NumericRowScratch {
     /// Compare a guard with its row's one complete sum for this pass. Each
     /// occurrence, including zero weights and repeats, is read on the first
     /// guard only. The caller applies this node's own frozen truth gate.
+    #[inline]
     pub(crate) fn threshold<E: From<Stop>>(
         &mut self,
         theory: &Theory,
@@ -145,6 +146,7 @@ impl NumericRowScratch {
 
     /// Reduce an ordinal row once per pass. The node and borrowed view come
     /// from this exact admitted theory; repeated guards use the same row ID.
+    #[inline]
     pub(crate) fn extremum<E: From<Stop>>(
         &mut self,
         theory: &Theory,
@@ -177,6 +179,7 @@ impl NumericRowScratch {
     /// call. Reset cleared validity for this exact pass. All children precede
     /// the first referencing guard, so its complete measure remains valid for
     /// later guards even when unrelated rows are evaluated between them.
+    #[inline]
     fn cached<E: From<Stop>>(
         &mut self,
         row: usize,

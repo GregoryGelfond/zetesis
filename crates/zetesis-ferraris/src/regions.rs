@@ -1765,12 +1765,17 @@ impl<C: Count> Closure<'_, C> {
             }
             step = step.join(if let Some(chain) = index.chain_of[parent] {
                 let chain = chain_position(chain);
-                if (frozen.is_none() || !index.extrema.is_empty())
+                let step = self.operand_changed(index, chain, value, work)?;
+                // An absorbing operand supplies a witness and settles its root.
+                // Neither relay nor an expanded unit obligation remains.
+                if step != Step::Contradiction
+                    && value != index.chains[chain].disjunction
                     && witnesses::participates(index, chain)
+                    && self.needs_witness_notification(index, chain, frozen)
                 {
                     self.lists.witnesses.queue_dirty(chain);
                 }
-                self.operand_changed(index, chain, value, work)?
+                step
             } else {
                 self.revisit_implication(nodes, parent, node, value)
             });
@@ -1879,12 +1884,16 @@ impl<C: Count> Closure<'_, C> {
             // A chain link identifies an And/Or root. Its complete downward
             // rule is the chain's; the generic connective arms teach nothing.
             let chain = chain_position(chain);
-            if (frozen.is_none() || !index.extrema.is_empty()) && witnesses::expands(index, chain) {
-                self.lists.witnesses.queue_dirty(chain);
-            }
             let step = self.teach_chain(index, chain, work)?;
             if step == Step::Contradiction {
                 return Ok(step);
+            }
+            // This event already fixes the root, so only an expanded unit
+            // obligation can remain; relay-only chains have nothing to teach.
+            if witnesses::expands(index, chain)
+                && self.needs_witness_notification(index, chain, frozen)
+            {
+                self.lists.witnesses.queue_dirty(chain);
             }
             let step = step.join(self.extremum_order(index, chain, frozen, work)?);
             if step == Step::Contradiction {

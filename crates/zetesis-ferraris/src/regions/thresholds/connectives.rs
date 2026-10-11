@@ -11,7 +11,9 @@
 //! every such cut. For a nested Boolean event, walk its same-kind cone and
 //! filter its distinct node IDs against the existing row anchors. For a native
 //! event, follow the anchor's existing immediate parent edges through same-kind
-//! chains. Both discoveries are temporary joins, without an ancestor table.
+//! chains. Row discovery uses existing local edge roles: an unrelated shared
+//! component does not move a flat anchor off its immutable posting route.
+//! Both discoveries are temporary joins, without an ancestor table.
 //!
 //! Candidates are then authenticated in their actual direction. A Boolean
 //! witness implies a row witness when every terminal path meets a row condition;
@@ -220,6 +222,41 @@ fn contains(terms: &[(usize, i128)], leaf: usize, work: &mut Work<'_>) -> Result
     Ok(find(terms, leaf, |&(condition, _)| condition, work)?.is_some())
 }
 
+/// A row anchor needs ancestor discovery only if it can enter a shared
+/// same-kind path. A connective anchor is kept conservatively because it can
+/// itself be a candidate. Otherwise, any longer path begins at an immediate
+/// chain parent marked as participating in a same-kind edge. Ordinal parents
+/// conservatively keep their existing streamed candidate order. Otherwise,
+/// all candidates are immediate flat chains; an authenticated exact prefix must
+/// have the same least condition and is already in the immutable postings.
+///
+/// This is a metered read of existing geometry, not a retained reachability
+/// index. It allocates nothing and leaves coverage/containment authentication
+/// unchanged. An interrupted applicability query changes no logical state.
+fn needs_ancestor_discovery(
+    index: &Narrower,
+    anchor: usize,
+    work: &mut Work<'_>,
+) -> Result<bool, Stop> {
+    if index.witness_chains.is_empty() {
+        return Ok(false);
+    }
+    work.tick()?;
+    if index.chain_of[anchor].is_some() {
+        return Ok(true);
+    }
+    for parent in index.logical_parents(anchor) {
+        work.tick()?;
+        if index.chain_of[parent].is_some_and(|link| {
+            let chain = crate::regions::chain_position(link);
+            index.chains[chain].ordinal() || crate::regions::witnesses::participates(index, chain)
+        }) {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 fn bound(disjunction: bool, leaves: &[usize]) -> i128 {
     if disjunction { 1 } else { leaves.len() as i128 }
 }
@@ -361,7 +398,7 @@ impl<C: Count> Closure<'_, C> {
         if source.lower < 1 && source.upper.is_none_or(|upper| upper > length as i128) {
             return Ok(step);
         }
-        let shared = !index.witness_chains.is_empty();
+        let shared = needs_ancestor_discovery(index, first, work)?;
         let chains = if shared {
             // Discovery follows one connective per branch. An irrelevant
             // polarity stays irrelevant along that branch. A known absorbing

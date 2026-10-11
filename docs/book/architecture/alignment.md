@@ -316,6 +316,9 @@ disjunction requires one. Flat chains use immutable postings keyed by their
 least condition, followed by an exact prefix check. Shared chains can require
 a view across several nodes. The bridge follows existing links and checks
 whether the native conditions cover a Boolean witness or occur within it.
+Local parent roles select that discovery; an unrelated shared component does
+not send a flat anchor through an ancestor walk. Compound anchors and ordinal
+parents conservatively retain their existing discovery route.
 Compound conditions remain valid stopping points. Numeric bounds reject
 unhelpful candidates before authentication. Non-unit coefficients do not
 qualify for this Boolean bridge. The
@@ -328,12 +331,19 @@ marks; it is not copied with each region. No table of all row/chain pairs or
 all descendants is retained. With no eligible native row, anchor preparation
 allocates nothing and reads no chains. Runtime walks and comparisons consume
 propagation work and remain cancellable; shared paths and dense anchor buckets
-can still require repeated visits. Settled roots do not forward possibility
+can still require repeated visits. Enqueue sites select participating chains
+before one shared predicate checks whether a notification can still help. After
+operand counters are updated, only unknown roots or remaining expanded-witness
+obligations enter the existing queue. A later root truth event seeds a new obligation;
+frozen-false roots stay inactive. Settled roots do not forward possibility
 notices after their ordinary truth events have informed parents and forced
 required descendants. Their required-witness checks use the same distinct-leaf
 traversal as collected associative views. A check stops at an absorbing witness
 or a second open leaf; forcing a sole open leaf or detecting none requires a
-complete walk. Visit-mark initialization and already queued edges remain charged.
+complete walk. Resumable ancestor frames visit child edges only when reached,
+so an early stop also avoids preparing the remaining siblings. Visit-mark
+initialization and every reached node and edge remain charged. Frames use
+space proportional to active depth, with their actual capacity accounted.
 Formula storage, atom support and each frozen node's truth gate retain their
 existing meanings.
 This candidate pruning does not rewrite the answer-set theory.

@@ -136,13 +136,21 @@ the runtime traversal or frozen propagation.
 The original-candidate bridge reuses existing Boolean chain leaves and counters.
 Flat chains use least-condition anchor postings and exact prefix authentication.
 Shared chains discover candidates through existing links and authenticate
-associative witnesses. Bounds filter candidates before those checks. The bridge
-keeps no table of all row/chain pairs and adds no state to region copies; its
-temporary walks use accounted worker scratch. Settled roots omit further
-possibility notices only after ordinary truth events have drained. Required-witness
+associative witnesses. Bounds filter candidates before those checks. Local parent
+roles select ancestor discovery, conservatively retaining compound anchors and
+ordinal parents on that route; unrelated sharing does not change flat discovery.
+This local eligibility argument remains a Rust obligation. The bridge keeps no
+table of all row/chain pairs and adds no state to region copies; its temporary
+walks use accounted worker scratch. Enqueueing uses processed operand counters
+and frozen gates: unknown roots may relay changes, while a settled root needs
+a remaining expanded-witness obligation. Later ordinary root events seed new
+obligations. Settled roots omit further possibility notices after those events
+have drained. Required-witness
 checks stream distinct leaves and stop at an absorbing witness or two open leaves.
 Forcing a sole open leaf or detecting none requires a complete walk. Runtime visits
-and comparisons consume propagation work; each frozen node keeps its truth gate.
+and comparisons consume propagation work; resumable frames read only reached
+child edges, retaining distinct-leaf order and abandoning partial walks on refusal.
+Each frozen node keeps its truth gate.
 Denoting a chain root by its distinct leaves, authenticating canonical condition
 IDs, recognizing unit-row relationships, and
 implementing checked bounds, event scheduling and resource accounting remain

@@ -220,3 +220,145 @@ fn a_stopped_visitor_cannot_leak_traversal_marks_into_collection() {
         &(0..16).collect::<Vec<_>>()
     );
 }
+
+fn wide_witnesses(disjunction: bool, length: usize) -> (Theory, usize) {
+    let mut nodes = FormulaNodes::new(
+        FormulaParts::new((0..length).map(Node::atom).collect(), Vec::new()).unwrap(),
+    );
+    let group = |nodes: &mut FormulaNodes, children: &[usize]| {
+        push(
+            nodes,
+            if disjunction {
+                NodeView::Or(children)
+            } else {
+                NodeView::And(children)
+            },
+        )
+    };
+    let first = group(&mut nodes, &[0, 1]);
+    let children: Vec<_> = std::iter::once(first).chain(2..length).collect();
+    let root = group(&mut nodes, &children);
+    // Keep the initial child shared rather than absorbed into the root chain.
+    push(&mut nodes, NodeView::Implies(first, 0));
+    (
+        Theory::new(
+            length,
+            nodes.into_parts(),
+            vec![],
+            AdmissionLimits::default(),
+        )
+        .unwrap(),
+        root,
+    )
+}
+
+#[test]
+fn early_open_witnesses_do_not_read_later_sibling_edges() {
+    for disjunction in [false, true] {
+        for width in [16, 1024] {
+            let (theory, root) = wide_witnesses(disjunction, width);
+            let index = Narrower::new(&theory);
+            let chain = chain_position(index.chain_of[root].unwrap());
+            assert!(expands(&index, chain));
+            assert_eq!(index.chains[chain].leaves(&index.extrema).len(), width - 1);
+            let mut scratch = Scratch::default();
+            scratch
+                .begin(index.parents.len(), &mut Work::new(u64::MAX))
+                .unwrap();
+            let mut work = Work::new(u64::MAX);
+            stop_after_two(&mut scratch, &index, chain, &mut work);
+            // Four nodes, three reached child edges and two visitor reads.
+            // The eager sibling stack instead reads every root edge first.
+            assert_eq!(work.spent, 9, "width={width}");
+            assert!(scratch.visited(0) && scratch.visited(1));
+            assert!(!scratch.visited(2));
+            assert_eq!(scratch.stack.capacity(), 0);
+            assert_eq!(scratch.leaves.capacity(), 0);
+        }
+    }
+}
+
+#[test]
+fn a_late_second_open_witness_still_reads_the_tail() {
+    let width = 128;
+    let (theory, root) = wide_witnesses(true, width);
+    let index = Narrower::new(&theory);
+    let chain = chain_position(index.chain_of[root].unwrap());
+    let mut scratch = Scratch::default();
+    scratch
+        .begin(index.parents.len(), &mut Work::new(u64::MAX))
+        .unwrap();
+    let mut work = Work::new(u64::MAX);
+    let mut candidate = None;
+    let mut visited = Vec::new();
+    let outcome = scratch
+        .visit_expanded(&index, chain, None, &mut work, |leaf, work| {
+            work.tick()?;
+            visited.push(leaf);
+            // All other leaves are neutral, so two open witnesses are not
+            // established until the final sibling has actually been read.
+            if leaf == 0 || leaf == width - 1 {
+                if candidate.is_some() {
+                    return Ok(ControlFlow::Break(()));
+                }
+                candidate = Some(leaf);
+            }
+            Ok(ControlFlow::Continue(()))
+        })
+        .unwrap();
+    assert!(outcome.is_break());
+    assert_eq!(visited, (0..width).collect::<Vec<_>>());
+    // width+2 nodes, width+1 edges, width visitor reads: full old receipt.
+    assert_eq!(work.spent, (3 * width + 3) as u64);
+}
+
+#[test]
+fn continuation_capacity_is_included_in_scratch_bytes() {
+    let (theory, root) = wide_witnesses(true, 128);
+    let index = Narrower::new(&theory);
+    let chain = chain_position(index.chain_of[root].unwrap());
+    let mut scratch = Scratch::default();
+    stop_after_two(&mut scratch, &index, chain, &mut Work::new(u64::MAX));
+    assert_eq!(scratch.frames.len(), 2);
+    assert_eq!(scratch.stack.capacity(), 0);
+    assert_eq!(scratch.leaves.capacity(), 0);
+    let expected = scratch.seen.capacity() * size_of::<u32>()
+        + scratch.frames.capacity() * size_of::<super::super::Frame>();
+    assert_eq!(scratch.retained_bytes(), expected as u128);
+    scratch.clear();
+    assert!(scratch.frames.is_empty());
+    assert_eq!(scratch.retained_bytes(), expected as u128);
+}
+
+#[test]
+fn refused_continuations_restart_without_skipping_edges() {
+    let (theory, root) = wide_witnesses(true, 16);
+    let index = Narrower::new(&theory);
+    let chain = chain_position(index.chain_of[root].unwrap());
+    for limit in 0..9 {
+        let mut scratch = Scratch::default();
+        scratch
+            .begin(index.parents.len(), &mut Work::new(u64::MAX))
+            .unwrap();
+        let mut count = 0;
+        let mut work = Work::new(limit);
+        let result = scratch.visit_expanded(&index, chain, None, &mut work, |_, work| {
+            work.tick()?;
+            count += 1;
+            Ok(if count == 2 {
+                ControlFlow::Break(())
+            } else {
+                ControlFlow::Continue(())
+            })
+        });
+        assert_eq!(result, Err(Stop::WorkLimit));
+        assert_eq!(work.spent, limit);
+        assert_eq!(
+            scratch
+                .read(&index, chain, None, &mut Work::new(u64::MAX))
+                .unwrap(),
+            &(0..16).collect::<Vec<_>>()
+        );
+        assert!(scratch.frames.is_empty());
+    }
+}

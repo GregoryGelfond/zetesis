@@ -21,6 +21,9 @@
 //! Settled roots do not relay possibility notices: ordinary truth events have
 //! already informed their parents and forced any required descendants. Their own
 //! required witness check remains independent of that notification rule.
+//! Enqueue sites apply the same relevance rule after updating operand counters.
+//! A settled root enters the queue only for a remaining expanded unit obligation;
+//! a later root truth event seeds that obligation if it becomes required later.
 //! Frozen closure enables associative witness views for native extrema too;
 //! a masked same-kind child is an opaque falsum. Numeric bound bridges remain
 //! original-only and are never transplanted into a frozen reduct.
@@ -82,11 +85,21 @@ pub(super) fn participates(index: &Narrower, chain: usize) -> bool {
         .is_some_and(|role| role & DIRTY != 0)
 }
 
+/// A suspended same-kind chain: children before `next_child` were scheduled in
+/// order; the remaining borrowed operands have not been read. Only IDs and an
+/// offset persist, so no borrow or formula authority enters worker scratch.
+#[derive(Debug)]
+struct Frame {
+    chain: usize,
+    next_child: usize,
+}
+
 #[derive(Debug, Default)]
 pub(super) struct Scratch {
     seen: Vec<u32>,
     generation: u32,
     stack: Vec<usize>,
+    frames: Vec<Frame>,
     leaves: Vec<usize>,
     candidates: Vec<usize>,
     dirty: Vec<usize>,
@@ -100,6 +113,7 @@ impl Scratch {
             + self.candidates.capacity()
             + self.dirty.capacity()) as u128
             * size_of::<usize>() as u128
+            + self.frames.capacity() as u128 * size_of::<Frame>() as u128
             + self.seen.capacity() as u128 * size_of::<u32>() as u128
             + self.pending.capacity() as u128 * size_of::<u64>() as u128
     }
@@ -111,6 +125,7 @@ impl Scratch {
         self.dirty.clear();
         self.candidates.clear();
         self.stack.clear();
+        self.frames.clear();
         self.leaves.clear();
     }
 
@@ -170,12 +185,15 @@ impl Scratch {
     }
 
     /// Fold distinct witnesses in the collecting view's traversal order.
-    /// The caller has selected an expanding chain. A break leaves the stack
-    /// tail unread; the next expanded walk clears it
-    /// and advances the same generation marks. Node and edge visits are charged
-    /// here, while the visitor charges its own reads of each emitted leaf.
-    /// Already queued sibling edges and first-use marks still cost work even
-    /// when the fold stops early. No leaf-result vector is allocated by a fold.
+    /// The caller has selected an expanding chain. One continuation frame per
+    /// active same-kind ancestor reads child edges only as they are reached;
+    /// stopping after a witness or two open leaves does not prepare later siblings.
+    /// Node and edge visits are charged here, while the visitor charges its own
+    /// leaf reads. A complete walk retains its node/edge receipt; an early stop
+    /// omits unread edges as well as nodes. First-use marks still cost O(N).
+    /// Frames use O(D) scratch for active depth D, counted at actual capacity.
+    /// Breaks and errors may leave frames; the next walk clears them and advances
+    /// the same generation marks. A fold never allocates a leaf-result vector.
     fn visit_expanded(
         &mut self,
         index: &Narrower,
@@ -185,28 +203,49 @@ impl Scratch {
         mut leaf: impl FnMut(usize, &mut Work<'_>) -> Result<ControlFlow<()>, Stop>,
     ) -> Result<ControlFlow<()>, Stop> {
         self.begin(index.parents.len(), work)?;
-        push(&mut self.stack, index.chains[chain].root)?;
+        let mut node = index.chains[chain].root;
         let disjunction = index.chains[chain].disjunction;
-        while let Some(node) = self.stack.pop() {
+        loop {
             work.tick()?;
-            if self.seen[node] == self.generation {
+            if self.seen[node] != self.generation {
+                self.seen[node] = self.generation;
+                let inner = index.chain_of[node].map(chain_position);
+                if let Some(inner) = inner.filter(|&inner| {
+                    index.chains[inner].disjunction == disjunction
+                        && frozen.is_none_or(|truth| truth[node])
+                }) {
+                    self.frames.try_reserve(1).map_err(|_| Stop::Allocation)?;
+                    self.frames.push(Frame {
+                        chain: inner,
+                        next_child: 0,
+                    });
+                } else if let ControlFlow::Break(()) = leaf(node, work)? {
+                    return Ok(ControlFlow::Break(()));
+                }
+            }
+            let Some(next) = self.next_child(index, work)? else {
+                return Ok(ControlFlow::Continue(()));
+            };
+            node = next;
+        }
+    }
+
+    /// Resume the deepest unfinished chain, discarding completed frames.
+    /// Each advance consumes one previously unread edge; a completed frame is
+    /// popped once. A refusal precedes the edge read and leaves its cursor intact.
+    fn next_child(&mut self, index: &Narrower, work: &mut Work<'_>) -> Result<Option<usize>, Stop> {
+        while let Some(frame) = self.frames.last_mut() {
+            let children = index.chains[frame.chain].leaves(&index.extrema);
+            if frame.next_child == children.len() {
+                self.frames.pop();
                 continue;
             }
-            self.seen[node] = self.generation;
-            let inner = index.chain_of[node].map(chain_position);
-            if let Some(inner) = inner.filter(|&inner| {
-                index.chains[inner].disjunction == disjunction
-                    && frozen.is_none_or(|truth| truth[node])
-            }) {
-                for &child in index.chains[inner].leaves(&index.extrema).iter().rev() {
-                    work.tick()?;
-                    push(&mut self.stack, child)?;
-                }
-            } else if let ControlFlow::Break(()) = leaf(node, work)? {
-                return Ok(ControlFlow::Break(()));
-            }
+            work.tick()?;
+            let child = children[frame.next_child];
+            frame.next_child += 1;
+            return Ok(Some(child));
         }
-        Ok(ControlFlow::Continue(()))
+        Ok(None)
     }
 
     pub(super) fn prepared(&self) -> &[usize] {
@@ -348,6 +387,7 @@ impl Scratch {
 
     fn begin(&mut self, nodes: usize, work: &mut Work<'_>) -> Result<(), Stop> {
         self.stack.clear();
+        self.frames.clear();
         self.leaves.clear();
         self.seen
             .try_reserve_exact(nodes.saturating_sub(self.seen.len()))
@@ -375,6 +415,44 @@ fn push(values: &mut Vec<usize>, value: usize) -> Result<(), Stop> {
 }
 
 impl<C: Count> Closure<'_, C> {
+    /// Select a change that can still inform a shared ancestor or establish
+    /// an expanded unit consequence. Counts describe processed events, so callers
+    /// first account for a changed operand. Truth bits may precede their events:
+    /// a newly required root also reaches this operation from `teach_operands`.
+    /// The caller has selected a participating shared chain before consulting
+    /// dynamic truth: `participates`, `expands` or a shared same-kind edge
+    /// establishes that immutable role. Unrelated chains never need this test.
+    /// Frozen falsum roots and unrelated chains have no associative obligation.
+    #[inline]
+    pub(super) fn needs_witness_notification(
+        &self,
+        index: &Narrower,
+        chain: usize,
+        frozen: Option<&[bool]>,
+    ) -> bool {
+        if frozen.is_some() && index.extrema.is_empty() {
+            return false;
+        }
+        debug_assert!(participates(index, chain));
+        let role = index.witness_chains[chain];
+        // A processed witness establishes the required root truth in the same
+        // operand event. Contradictory events stop before reaching this helper;
+        // otherwise that truth persists, so neither relay nor unit work remains.
+        if bit(self.known.witnessed, chain) {
+            return false;
+        }
+        let source = &index.chains[chain];
+        if frozen.is_some_and(|truth| !truth[source.root]) {
+            return false;
+        }
+        let (required, neutral) = if source.disjunction {
+            (&self.known.sure, &self.known.never)
+        } else {
+            (&self.known.never, &self.known.sure)
+        };
+        !bit(neutral, source.root) && (role & EXPAND != 0 || !bit(required, source.root))
+    }
+
     pub(super) fn witness_changed(
         &mut self,
         index: &Narrower,
@@ -397,7 +475,7 @@ impl<C: Count> Closure<'_, C> {
                 if let Some(link) = index.chain_of[parent] {
                     let parent = chain_position(link);
                     if index.chains[parent].disjunction == source.disjunction
-                        && frozen.is_none_or(|truth| truth[index.chains[parent].root])
+                        && self.needs_witness_notification(index, parent, frozen)
                     {
                         self.lists.witnesses.queue_dirty(parent);
                     }
