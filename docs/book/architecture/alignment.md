@@ -38,6 +38,14 @@ Sparse joins, bitwise operations and integer reductions often preserve the
 problem's structure more directly. Efficient scheduling follows the representation
 and its dependencies; it does not change the answer-set definition.
 
+Domain analysis supplies evidence for those operations: possible typed values,
+numeric bounds and conditions under which arithmetic is defined. Consumers can
+use that evidence to avoid impossible bindings or repeated checks. Reuse must
+retain its program and interpretation scope, and preserve arithmetic errors.
+The totality check reuses complete numeric-column bounds within one fixed rule
+and support attempt, while checking every arithmetic intermediate. Ordinary ASP
+comparisons between mixed values retain their existing order.
+
 The pseudocode below exposes those compositions before discussing scheduling.
 `Bind`, `Filter`, `Gate` and `Project` are actual definitions in the lifted Lean
 model. Names such as `FoldDAG` and `RootValues` describe operations in the Rust
@@ -51,7 +59,7 @@ different types of value.
 | Determine the normal reduct | Evaluate positive/negative gates against one immutable seed | [`check_static`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/static_oracle.rs) |
 | Derive positive consequences | Test enabled bodies, union their heads, repeat until closed | [`check_static`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/static_oracle.rs); [lazy batches](../rust/parallel.md) |
 | Reconstruct terminal positive definitions | Join true rows from a verified base answer, project heads, union with that answer | [`TerminalReconstruction`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_terminal/reconstruct.rs); [applicability and extension law](grounding.md#terminal-definition-analysis) |
-| Test formula satisfaction | Evaluate an acyclic Boolean graph; require every asserted root | [`models`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/oracle.rs) |
+| Test formula satisfaction | Evaluate an acyclic formula graph; require every asserted root | [`models`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/oracle.rs) |
 | Compute least consequences of positive atomic-head formulas | Propagate newly true atom/body vertices through sparse incidences; check original constraints on the completed interpretation | [`PositivePlan`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/positive.rs) |
 | Construct and reuse a formula reduct | Freeze candidate truth at every graph node; mask candidate-false nodes during later queries | [`FrozenReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/reduct.rs) |
 | Reuse reduct structure across candidates | Under the clauses method, compile one parameterized graph and refresh authenticated candidate truth and membership inputs; under the regions method, read the original graph under each candidate's mask | [`PreparedReduct`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/prepared_reduct.rs); [`ReductQuery`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/src/ferraris/regions.rs) |
@@ -70,8 +78,8 @@ backend. Explicit GPU execution with automatic membership policy uses complete
 tight certificates when available; other formulas use GPU propagation and exact
 host completion.
 With multiple workers, joined Rayon rounds produce bounded candidate batches
-before device checking. Native aggregate reduction remains an explicit library
-capability rather than an automatic formula-dispatch operation.
+before device checking. Device-native aggregate reduction remains an explicit
+library capability; ordinary GPU formula execution still uses Boolean lowering.
 
 ## Positive inference is a composition with a fixed point
 
@@ -264,25 +272,30 @@ contract throughout this composition.
 The formula library also admits a native nonnegative weighted threshold: select
 weights by predecessor truth, reduce them in checked `i128`, then compare the
 bound. A family of bounds shares its condition and weight columns. The frozen
-reading retains the original threshold truth gate. CPU checking consumes those
-rows directly; GPU transport expands them once into its Boolean device format.
+reading retains the original threshold truth gate. Admitted whole-theory CPU
+passes reduce a shared weighted row once, then compare each bound separately;
+GPU transport expands the row's guards into its Boolean device format.
 The common source compiler uses this representation for nonnegative count and
 sum guards, including choice bounds. Shared counters propagate their necessary
 consequences. Signed sums retain their existing exact translation.
 
 Min/max comparisons use an ordered integer representation of their typed values.
-The compiler sorts one dictionary per contribution row, including `#inf` and
-`#sup`, and preserves every complete tuple's eligibility condition. Each guard
-then names a cut in that dictionary. These ranks describe ASP value order; they
+The compiler prepares one ordered dictionary per contribution row, including
+`#inf` and `#sup`, and preserves every complete tuple's eligibility condition.
+It checks and reuses ordered input; an inversion selects the typed sorting path.
+Each guard then names a cut in that dictionary. These ranks describe ASP value order; they
 are not atom or term IDs. Assignment families share the same row across all
 proposed values. Single comparisons use the same preparation when its temporary
 storage fits; the scalar library operation retains its zero-state Boolean
 compilation contract.
 
-CPU evaluation reduces both extrema once per row and interpretation, then tests
-its guards. Packed validity bits prevent reuse across interpretations or theory
-owners; each frozen cut also retains its own original-truth gate. Candidate
-propagation borrows prefixes of sorted distinct-condition columns and uses the
+The same CPU numeric workspace reduces both extrema once per row and
+interpretation, then tests its guards. One compact slot holds either an exact
+sum or the two extrema, as specified by the authoritative row's domain. Packed
+validity bits prevent reuse across passes or theory owners; each frozen guard
+also retains its own original-truth gate. An admission-derived flag avoids row
+scratch when no numeric node is present. Fresh initialization, resets, physical
+row reads and actual retained capacities remain charged. Candidate propagation borrows prefixes of sorted distinct-condition columns and uses the
 existing connective counters. The authoritative row still retains every tuple
 occurrence. GPU transport currently lowers cuts to Boolean device formulas;
 this is not a native device min/max reduction and may require work proportional
@@ -315,9 +328,22 @@ marks; it is not copied with each region. No table of all row/chain pairs or
 all descendants is retained. With no eligible native row, anchor preparation
 allocates nothing and reads no chains. Runtime walks and comparisons consume
 propagation work and remain cancellable; shared paths and dense anchor buckets
-can still require repeated visits. Formula storage, atom support and frozen
-propagation retain their existing meanings. This candidate pruning does not
-rewrite the answer-set theory.
+can still require repeated visits. Settled roots do not forward possibility
+notices after their ordinary truth events have informed parents and forced
+required descendants. Their required-witness checks use the same distinct-leaf
+traversal as collected associative views. A check stops at an absorbing witness
+or a second open leaf; forcing a sole open leaf or detecting none requires a
+complete walk. Visit-mark initialization and already queued edges remain charged.
+Formula storage, atom support and each frozen node's truth gate retain their
+existing meanings.
+This candidate pruning does not rewrite the answer-set theory.
+
+Exact equality between native-cut and Boolean disjunction witnesses is checked
+once in the immutable propagation index. Fingerprints select candidates; complete
+distinct-leaf equality establishes each class. Runtime visits its members while
+retaining each formula's counter and frozen gate. The index stores memberships,
+not expanded leaf sets or all pairs. Preparation can revisit large cones and
+compare colliding fingerprints; it has no unconditional linear-time bound.
 
 For a count or sum, every possible measure is numeric. Against a nonnumeric
 logical bound, its order is the same for every complete tuple selection.

@@ -263,3 +263,40 @@ fn scalar_source_extrema_use_native_cuts() {
         }
     }
 }
+
+fn assert_source_ranks(source: &str, expected: &[u64], rank_count: u64) {
+    let admitted = ground(testing::prepare(source), None, None).unwrap();
+    let mut rows = 0;
+    for index in 0..admitted.theory.nodes().len() {
+        if let NodeView::ExtremumCut(cut) = admitted.theory.view().node(index).unwrap() {
+            rows += 1;
+            assert_eq!(cut.row.ranks, expected, "{source}");
+            assert_eq!(cut.row.rank_count, rank_count);
+            assert_eq!(cut.row.conditions.len(), expected.len());
+        }
+    }
+    assert!(rows > 0, "the fixture must retain ordinary native cuts");
+}
+
+#[test]
+fn coalesced_mixed_extrema_keep_storage_order_and_asp_ranks() {
+    // Contribution tuple order uses typed storage identity: String precedes
+    // Symbol. ASP extrema order reverses those classes, so the checked reuse
+    // probe must reject this order. Distinct tuples still retain equal ranks.
+    for kind in ["min", "max"] {
+        let source = format!(
+            "{{a;b}}. q :- #{kind} {{\"a\",x:a;z,z:b;1,b:a;#sup,s:a;1,a:b;#inf,i:b}} != z."
+        );
+        assert_source_ranks(&source, &[0, 1, 1, 3, 2, 4], 5);
+    }
+}
+
+#[test]
+fn coalesced_numeric_extrema_arrive_in_asp_order() {
+    // Numeric storage and ASP order agree. The source's completed tuple sort
+    // supplies the order which native preparation can check and reuse.
+    for kind in ["min", "max"] {
+        let source = format!("{{a;b}}. q :- #{kind} {{3,x:a;1,y:a;2,z:b;1,b:b}} != 2.");
+        assert_source_ranks(&source, &[1, 1, 2, 3], 5);
+    }
+}

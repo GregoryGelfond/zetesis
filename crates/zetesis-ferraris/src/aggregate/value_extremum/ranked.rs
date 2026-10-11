@@ -20,6 +20,10 @@ pub(super) fn prepare(
     ranks: &mut [u64],
     elements: &[ValueExtremumElement<TermRef<'_>>],
 ) -> Result<usize> {
+    if let Some(distinct) = ordered_ranks(builder, ranks, elements)? {
+        compact_ordered(builder, order, ranks, elements.len(), distinct)?;
+        return Ok(distinct);
+    }
     sort(builder, order, elements)?;
     let mut distinct = 0;
     for position in 0..order.len() {
@@ -64,27 +68,88 @@ fn compare(
     left.compare_terms_with(right, || builder.tick())
 }
 
-/// Lower/upper insertion point in the complete dictionary. Guard bounds need
-/// not occur in the row; all comparisons use their existing typed authority.
-pub(super) fn insertion(
+/// Check ASP term order while assigning complete ranks. Numeric contribution
+/// order already agrees; mixed storage-identity order can differ. The public
+/// family API verifies every comparison rather than trusting the input order.
+/// An inversion leaves the dictionary untouched and its incomplete ranks are
+/// overwritten by the ordinary sorting path before anything is published.
+fn ordered_ranks(
+    builder: &mut Builder<'_, '_>,
+    ranks: &mut [u64],
+    elements: &[ValueExtremumElement<TermRef<'_>>],
+) -> Result<Option<usize>> {
+    let mut previous = (&INFIMUM).into();
+    let mut distinct = 1usize;
+    for (rank, element) in ranks.iter_mut().zip(elements) {
+        match compare(builder, previous, element.value)? {
+            Ordering::Greater => return Ok(None),
+            Ordering::Less => distinct += 1,
+            Ordering::Equal => {}
+        }
+        builder.tick()?;
+        *rank = u64::try_from(distinct - 1).map_err(|_| AggregateErrorKind::ArithmeticOverflow)?;
+        previous = element.value;
+    }
+    if !compare(builder, previous, (&SUPREMUM).into())?.is_eq() {
+        distinct += 1;
+    }
+    Ok(Some(distinct))
+}
+
+/// Reuse the checked ranks to compact the dictionary without comparing typed
+/// values again. Rank zero and the last rank include the virtual endpoints;
+/// repeated first values still retain every original condition occurrence.
+fn compact_ordered(
+    builder: &mut Builder<'_, '_>,
+    order: &mut [usize],
+    ranks: &[u64],
+    elements: usize,
+    distinct: usize,
+) -> Result<()> {
+    builder.tick()?;
+    order[0] = elements;
+    let mut retained = 1usize;
+    for (index, &rank) in ranks.iter().enumerate() {
+        builder.tick()?;
+        if rank == u64::try_from(retained).map_err(|_| AggregateErrorKind::ArithmeticOverflow)? {
+            builder.tick()?;
+            order[retained] = index;
+            retained += 1;
+        }
+    }
+    if retained < distinct {
+        builder.tick()?;
+        order[retained] = elements + 1;
+    }
+    Ok(())
+}
+
+/// Both insertion points in one search of the unique complete dictionary.
+/// Equality has exactly one position; an absent bound has identical lower and
+/// upper positions. Guard bounds keep their own typed authority and need not
+/// occur in the row.
+pub(super) fn cuts(
     builder: &mut Builder<'_, '_>,
     bound: TermRef<'_>,
     order: &[usize],
     elements: &[ValueExtremumElement<TermRef<'_>>],
-    inclusive: bool,
-) -> Result<u64> {
+) -> Result<(u64, u64)> {
     let mut low = 0;
     let mut high = order.len();
     while low < high {
         let middle = low + (high - low) / 2;
-        let compared = compare(builder, value(order[middle], elements), bound)?;
-        if compared.is_lt() || (inclusive && compared.is_eq()) {
-            low = middle + 1;
-        } else {
-            high = middle;
+        match compare(builder, value(order[middle], elements), bound)? {
+            Ordering::Less => low = middle + 1,
+            Ordering::Greater => high = middle,
+            Ordering::Equal => {
+                let lower =
+                    u64::try_from(middle).map_err(|_| AggregateErrorKind::ArithmeticOverflow)?;
+                return Ok((lower, lower + 1));
+            }
         }
     }
-    u64::try_from(low).map_err(|_| AggregateErrorKind::ArithmeticOverflow)
+    let boundary = u64::try_from(low).map_err(|_| AggregateErrorKind::ArithmeticOverflow)?;
+    Ok((boundary, boundary))
 }
 
 /// In-place heap sorting charges every fallible comparison and swap before its

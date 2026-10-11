@@ -6,8 +6,8 @@
 //! Group/lowering construction, worlds, masks and parity checks are outside timers.
 //! `ordinary_thresholds` separately compares the ordinary native representation
 //! with the previous shared Boolean DP on fixed inputs and interpretations.
-//! `extremum_families` measures typed shared witness preparation and its resulting
-//! fixed-world evaluation; it introduces no native extremum formula node.
+//! `extremum_families` measures scalar Boolean witnesses versus ordinary native
+//! ordinal families, with separate preparation and fixed-world evaluation.
 
 #[path = "native_aggregates/extremum_families.rs"]
 mod extremum_families;

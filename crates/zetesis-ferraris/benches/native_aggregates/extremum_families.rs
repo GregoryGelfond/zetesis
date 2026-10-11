@@ -76,6 +76,12 @@ impl Preparation {
     }
 }
 
+#[derive(Clone, Copy)]
+enum InputOrder {
+    Discovery,
+    Contribution,
+}
+
 struct Input {
     catalog: AtomCatalog,
     count: usize,
@@ -117,7 +123,7 @@ impl Input {
         }
     }
 
-    fn borrow(&self) -> Borrowed<'_> {
+    fn borrow(&self, order: InputOrder) -> Borrowed<'_> {
         let term = |index| {
             self.catalog
                 .atoms()
@@ -127,7 +133,7 @@ impl Input {
                 .at(0)
                 .unwrap()
         };
-        Borrowed {
+        let mut borrowed = Borrowed {
             elements: (0..self.count)
                 .map(|condition| ValueExtremumElement {
                     value: term(condition),
@@ -141,7 +147,19 @@ impl Input {
                     bound: term(self.count + index),
                 })
                 .collect(),
+        };
+        if matches!(order, InputOrder::Contribution) {
+            // Source tuple contributions compare first values by storage
+            // identity, which can differ from ASP extrema order. Keep each
+            // value paired with its original condition; this input preparation
+            // is outside the native/scalar compiler timers.
+            borrowed.elements.sort_by(|left, right| {
+                left.value
+                    .compare_ref_with(right.value, || Ok::<_, std::convert::Infallible>(()))
+                    .unwrap()
+            });
         }
+        borrowed
     }
 
     fn prefix(&self) -> FormulaParts {
@@ -355,6 +373,7 @@ struct Fixture {
     prefix: FormulaParts,
     scalar: Compiled,
     shared: Compiled,
+    order: InputOrder,
 }
 
 impl Fixture {
@@ -364,10 +383,11 @@ impl Fixture {
         guards: usize,
         kind: AggregateExtremum,
         label: &str,
+        order: InputOrder,
     ) -> Self {
         let control = Cancellation::default();
         let input = Input::new(terms, count, guards);
-        let borrowed = input.borrow();
+        let borrowed = input.borrow(order);
         let scalar = prepare(
             input.prefix(),
             &borrowed,
@@ -400,6 +420,7 @@ impl Fixture {
             prefix,
             scalar,
             shared,
+            order,
         }
     }
 
@@ -431,9 +452,17 @@ pub(super) fn bench(criterion: &mut Criterion) {
                         let id = format!("{label}/{}", preparation.label());
                         benchmark.throughput(Throughput::Elements(u64::try_from(guards).unwrap()));
                         benchmark.bench_function(BenchmarkId::new("prepare", &id), |bencher| {
-                            let fixture = fixture
-                                .get_or_init(|| Fixture::new(terms, count, guards, kind, &label));
-                            let input = fixture.input.borrow();
+                            let fixture = fixture.get_or_init(|| {
+                                Fixture::new(
+                                    terms,
+                                    count,
+                                    guards,
+                                    kind,
+                                    &label,
+                                    InputOrder::Discovery,
+                                )
+                            });
+                            let input = fixture.input.borrow(fixture.order);
                             bencher.iter_batched(
                                 || fixture.prefix.try_clone().unwrap(),
                                 |prefix| {
@@ -452,7 +481,7 @@ pub(super) fn bench(criterion: &mut Criterion) {
                             u64::try_from(WORLDS * guards).unwrap(),
                         ));
                         benchmark.bench_function(BenchmarkId::new("original_all_guards", &id), |bencher| {
-                            let fixture = fixture.get_or_init(|| Fixture::new(terms, count, guards, kind, &label));
+                            let fixture = fixture.get_or_init(|| Fixture::new(terms, count, guards, kind, &label, InputOrder::Discovery));
                             let compiled = fixture.compiled(preparation);
                             let worlds = worlds(&compiled.theory);
                             let mut workspace = EvaluationWorkspace::default();
@@ -466,6 +495,57 @@ pub(super) fn bench(criterion: &mut Criterion) {
                         });
                     }
                 }
+            }
+        }
+    }
+    benchmark.finish();
+    contribution_preparation(criterion);
+}
+
+/// The historical group above retains discovery-order inputs and names. This
+/// focused population supplies source storage-identity contribution order,
+/// without claiming that mixed first values are in ASP extrema order. The input
+/// sort is outside both compiler timers. Fixed-world and arbitrary
+/// M/J parity checks still run outside the preparation timer.
+fn contribution_preparation(criterion: &mut Criterion) {
+    let mut benchmark = criterion.benchmark_group("typed_extremum_contribution_preparation");
+    benchmark.sample_size(10);
+    benchmark.warm_up_time(Duration::from_millis(250));
+    benchmark.measurement_time(Duration::from_millis(500));
+    let control = Cancellation::default();
+    for terms in [Terms::Numeric, Terms::Mixed] {
+        for count in [8, 64] {
+            let label = format!("min-{}-E{count}-G1", terms.label());
+            let fixture = OnceCell::new();
+            for preparation in [Preparation::Scalar, Preparation::Shared] {
+                let id = format!("{label}/{}", preparation.label());
+                benchmark.throughput(Throughput::Elements(1));
+                benchmark.bench_function(BenchmarkId::new("prepare", &id), |bencher| {
+                    let fixture = fixture.get_or_init(|| {
+                        Fixture::new(
+                            terms,
+                            count,
+                            1,
+                            AggregateExtremum::Min,
+                            &label,
+                            InputOrder::Contribution,
+                        )
+                    });
+                    let input = fixture.input.borrow(fixture.order);
+                    bencher.iter_batched(
+                        || fixture.prefix.try_clone().unwrap(),
+                        |prefix| {
+                            black_box(prepare(
+                                prefix,
+                                black_box(&input),
+                                AggregateExtremum::Min,
+                                preparation,
+                                &control,
+                            ))
+                        },
+                        BatchSize::LargeInput,
+                    );
+                });
             }
         }
     }

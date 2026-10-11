@@ -28,13 +28,17 @@ extraction and adaptations. [native-verification.json](native-verification.json)
 complete native axiom audit separately from source identity.
 
 The current Rust formula representation additionally admits native nonnegative
-weighted thresholds. The retained `Native` extraction predates that constructor;
-its source hashes and replay guard must remain tied to the Boolean generation.
-Its theorems therefore do not yet certify the threshold-aware Rust entrypoints,
-even on Boolean input. Migrating admission, numeric rows, evaluation and their
+weighted thresholds and ordinal min/max cuts. The retained `Native` extraction
+predates those constructors; its source hashes and replay guard must remain tied
+to the Boolean generation. Its theorems therefore do not yet certify the current
+numeric-row Rust entrypoints, even on Boolean input. Migrating admission, numeric rows, evaluation and their
 composition requires new extracted operations and proofs. The general
-`ThresholdReduct` laws supply the semantic bridge; they are not that executable
-refinement.
+`ThresholdReduct` and ordinal-extrema laws supply semantic bridges; they are not
+that executable refinement. The current admission-derived numeric shape flag
+also changes `Theory` data, and the shared sum/extrema workspace changes the
+original and frozen evaluator call graph. Its row-domain interpretation,
+completed-only publication, reset and resource receipts need new correspondence;
+refreshing historical source hashes would not establish it.
 
 ## Native operand-row getters
 

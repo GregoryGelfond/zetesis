@@ -43,9 +43,16 @@ constant meanings. [`RankedExtrema`](https://github.com/GregoryGelfond/zetesis/b
 supplies the separate source-order and arbitrary frozen-interpretation laws.
 
 The Rust family compiler uses a guard-independent dictionary of typed values
-and both endpoints. Evaluation retains one pair of extrema per row for a single
-topological pass. Reuse requires completed predecessor truth and is invalidated
-between passes; every cut separately applies its original truth gate. The
+and both endpoints. The shared
+[numeric workspace](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/numeric_evaluation.rs)
+retains one completed reduction per authoritative row during a whole-theory CPU
+pass: either a checked weighted sum or a pair of extrema, interpreted by the
+row's domain. Reuse requires completed predecessor truth and is invalidated
+between passes; every frozen guard separately applies its original truth gate.
+Admission records whether any numeric node is present, so unused raw descriptors
+alone require no workspace. This shape flag, compact slot encoding, completed-only
+publication and reset/work/storage receipts are additional Rust obligations;
+the laws do not verify them or the changed `Theory` data layout. The
 [reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/ordinal-extrema.md)
 distinguishes these mathematical facts from the remaining proof of the Rust
 sort, row identity, packed validity, traversal, memory accounting and device
@@ -131,12 +138,23 @@ Flat chains use least-condition anchor postings and exact prefix authentication.
 Shared chains discover candidates through existing links and authenticate
 associative witnesses. Bounds filter candidates before those checks. The bridge
 keeps no table of all row/chain pairs and adds no state to region copies; its
-temporary walks use accounted worker scratch. Runtime visits and comparisons
-consume propagation work; frozen propagation is unchanged. Denoting a chain root by its distinct leaves,
-authenticating canonical condition IDs, recognizing unit-row relationships, and
+temporary walks use accounted worker scratch. Settled roots omit further
+possibility notices only after ordinary truth events have drained. Required-witness
+checks stream distinct leaves and stop at an absorbing witness or two open leaves.
+Forcing a sole open leaf or detecting none requires a complete walk. Runtime visits
+and comparisons consume propagation work; each frozen node keeps its truth gate.
+Denoting a chain root by its distinct leaves, authenticating canonical condition
+IDs, recognizing unit-row relationships, and
 implementing checked bounds, event scheduling and resource accounting remain
 Rust obligations. The semantic laws do not establish those correspondences or
 qualify the retained native extraction.
+
+Exact disjunction-witness equality is established once in the immutable index.
+Fingerprints select candidates for complete equality checks; runtime transfers
+truth through the resulting classes, retaining each formula's frozen gate.
+Partitioning, member lookup, traversal order, duplicate suppression, interruption
+cleanup and storage receipts remain Rust correspondence obligations. The
+original-only coverage and containment laws do not establish those properties.
 
 This extends the classical law in `Thresholds`; it does not yet verify source
 coalescing, native formula storage, propagation, finite-width arithmetic, Rust
@@ -154,8 +172,13 @@ the original guard and the guard over recursively frozen eligibility.
 
 The typed compiler uses a stronger condition: its dictionary preserves every
 distinct value in the complete row and includes both empty endpoints. Guards
-read cuts in that row's order. Ranks remain local to the row; they are not
-canonical term IDs. Typed comparison, dictionary construction, shared native
+read cuts in that row's order. Preparation checks and reuses nondecreasing input
+ASP term order; rows that fail this check use the same typed sorting boundary.
+Numeric source contribution order agrees with ASP order, while mixed
+storage-identity contribution order can differ. Each guard obtains
+both cuts from one search in the unique dictionary. These steps reuse the
+existing rank and dictionary buffers. Ranks remain local to the row; they are
+not canonical term IDs. Typed comparison, dictionary construction, shared native
 storage and resource accounting remain Rust correspondence obligations. The
 ordinal laws above connect the selected ranks with witness cuts; they do not
 qualify runtime propagation or GPU execution.
@@ -2066,9 +2089,10 @@ a previously admitted prefix remains unchanged, and each additional node names
 only earlier children. `DagSharing.stored_meaning` then explains why extending
 the table cannot change a prior formula's meaning. The Rust owner must keep
 that paired prefix immutable and check every replacement suffix. Rollback and
-detachment restore the checkpoint's validation frontier as well as both buffer
-lengths: an unchecked raw span can temporarily borrow newly appended arena
-cells, so validation discovered inside that append cannot survive their removal.
+detachment restore the checkpoint's validation frontier and numeric validation
+evidence, as well as every owned arena length: an unchecked raw span can
+temporarily borrow newly appended arena cells, so validation discovered inside
+that append cannot survive their removal.
 A checked logical append extends a fully validated prefix because it checks every
 child and constructs canonical storage; it cannot skip an unchecked raw prefix.
 This establishes topology only, leaving atom-universe admission separate. Its scalar, family and extremum methods reuse the
@@ -2080,10 +2104,11 @@ rollback accounting. Raw paired constructors retain their full-prefix checks.
 `FormulaEvaluation`. Rust's ownership boundary ties that view to the exact
 interpretation and prevents reuse of its backing workspace while the view lives.
 The denotational satisfaction relation supplies the mathematical specification.
-The native generated-code laws above establish the inner admission, evaluation
-and root scans under their stated library-value and observation contracts.
-`EvaluationWorkspace`'s reservation, borrowed-view and retained-capacity wrapper,
-and its composition with changing runtime observations, remain refinement
+The retained Boolean-generation laws establish its generated inner admission,
+evaluation and root scans under their stated library-value and observation
+contracts. They do not establish today's numeric-row evaluator, even on Boolean
+input. `EvaluationWorkspace`'s row reuse, reservation, borrowed-view and
+retained-capacity wrapper, and its composition with changing runtime observations, remain refinement
 obligations. Independent syntax-tree controls also check satisfaction and
 asserted-root truth across a finite test family; those tests do not extend the
 generated-code proof boundary.
@@ -2747,6 +2772,10 @@ check. Unknown or mixed domains, zero divisors and possible overflow decline the
 while owner and resource refusals remain failures. These laws do not prove the
 Rust interval transfer or source-column coverage. The argument establishes
 definedness on full bindings, not on every earlier join prefix.
+One Rust totality attempt reuses successful numeric-column hulls for its fixed
+rule and completed support. Every intermediate remains checked; no hull survives
+the attempt. Evidence lifetime, storage accounting and error-preserving reuse
+remain implementation obligations.
 
 Eager emission, hybrid capture and hybrid model/region checks use the same Rust
 preparation and necessary-domain selector. Hybrid capture runs after original

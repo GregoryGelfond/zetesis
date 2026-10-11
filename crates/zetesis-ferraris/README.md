@@ -75,7 +75,10 @@ and assignment families share this mechanism when its preparation fits.
 
 CPU evaluation reduces min and max once per row and interpretation. Each cut
 retains its own original-truth gate when read in the reduct. Candidate propagation
-uses sorted witness columns and the existing connective counters. GPU and clause
+uses sorted witness columns and the existing connective counters. Exact
+associative witness equality is checked once in the propagation index; each
+formula keeps its own truth and frozen gate. Required-witness checks stream
+distinct leaves and stop at an absorbing witness or two open leaves. GPU and clause
 transport still lower cuts to Boolean formulas; native CPU reduction does not
 establish native device reduction. The [manual's aggregate account](../../docs/book/architecture/alignment.md)
 describes the storage, propagation and proof boundaries.
@@ -91,16 +94,29 @@ successful evaluation can report a nonmodel. It does not establish an answer set
 
 The workspace retains capacity across candidates and independently admitted
 theories, recomputing all values on every call. Work counts node and operand
-visits, root tests, and ordinal scratch initialization and resets. Shared ordinal
-rows are reduced once per pass. Bytes include the header and actual truth and
-ordinal-cache capacities. `work_bound` gives a conservative complete-evaluation
+visits, root tests, and numeric scratch initialization and resets. Each shared
+weighted or ordinal row is reduced once per pass. One 16-byte measure slot holds
+either its checked sum or its minimum and maximum ranks, with packed validity
+bits; the admitted row domain determines the reading. Bytes include the header
+and actual truth and numeric-cache capacities. `work_bound` gives a conservative complete-evaluation
 allowance; `requested_payload_bytes` supplies fresh storage requirements, which
 callers must replace with observed capacities after reservation. A lowered byte
 ceiling includes capacity retained by earlier calls. Cancellation, deadlines,
 allocation and resource failures expose no truth view and retain their consumed
 work and storage receipt. Borrowed inputs and allocator bookkeeping are excluded.
 The `models` convenience operation uses this evaluator with a fresh workspace;
-its theory-identity check and original work-limit behavior are preserved.
+its theory-identity check and stop semantics are preserved.
+
+An admitted theory records whether any node uses a numeric operator. If none do,
+unused raw numeric rows and descriptors request no scratch or reset work. Otherwise
+scratch uses every authoritative row ID, including unused rows: R rows request
+16R measure bytes plus 8 ceil(R/64) validity bytes, initialize R cells on first use,
+and reset ceil(R/64) words per pass. A weighted family with one guard therefore
+adds one 16-byte slot and one validity word; sharing saves reads when several guards
+reference that row. Public `Threshold::evaluate` and `ExtremumRow::reduce` keep
+reading every input occurrence in order on each call, including repeated conditions
+and zero weights. Whole-theory evaluation shares only completed measures within
+its one original or frozen pass; every frozen node retains its own truth gate.
 
 ## Reusing a candidate's reduct
 
@@ -113,9 +129,9 @@ No candidate words or original DAG are copied; `candidate()` and `theory()`
 expose the bound subject. A frozen value is neither a model certificate nor an
 answer set. Use the checked membership API for that conclusion.
 
-Construction charges node and operand visits plus ordinal scratch initialization,
-reducing shared extrema rows once per pass, and retains one Boolean per node.
-Each query allocates temporary truth and ordinal workspace and charges the same
+Construction charges node and operand visits plus numeric scratch initialization,
+reducing shared weighted and ordinal rows once per pass, and retains one Boolean per node.
+Each query allocates temporary truth and numeric workspace and charges the same
 operations, followed by root tests through the first failure. The value
 is immutable and can be shared between independent callers. Construction and
 each query have separate work budgets; these operations perform no subset search.
@@ -196,8 +212,9 @@ the region survives the narrowing, and a refuted region holds none.
 
 The result is `Refuted`, or `Fixed` with whether any atom was decided; the
 statistics count charged node visits and producer checks, the propagation
-events, and the atoms held and cut. Every event follows a newly learned bit,
-so the events are bounded by the bits. A `Narrower` indexes the theory once
+events, and the atoms held and cut. Ordinary node events follow newly learned truth bits.
+Threshold-row events follow stricter bounds; coalesced witness notices track
+changes in unresolved possibilities. A `Narrower` indexes the theory once
 and narrows any region of it, the root from knowledge of nothing and a child
 from its parent's knowledge. The index
 reads each maximal tree of one connective, a clause or a body, as one node

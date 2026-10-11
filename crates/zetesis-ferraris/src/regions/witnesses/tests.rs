@@ -1,6 +1,8 @@
 //! Shared associative views retain model soundness and the scalar witnesses.
 
+mod notifications;
 mod parents;
+mod streaming;
 
 use crate::{
     AdmissionLimits, AggregateComparison, AggregateExtremum, AggregateFamilyLimits,

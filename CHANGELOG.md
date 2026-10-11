@@ -10,6 +10,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   preserving answer sets while narrowing candidates before reduct checking.
 - Share native min/max rows across comparisons and retain deductions across shared
   Boolean conditions, with corresponding Lean laws.
+- Reuse numeric row evaluations and checked domain bounds, and stop propagation
+  scans and notifications once their result is settled.
 
 ## 0.5.0 — 2026-10-10
 

@@ -1,3 +1,5 @@
+mod preparation;
+
 use super::*;
 
 fn check(source: &str, certified: bool, passing: usize) {

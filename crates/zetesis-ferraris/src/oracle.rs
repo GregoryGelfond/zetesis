@@ -1,4 +1,4 @@
-use crate::extremum_cut::ExtremaScratch;
+use crate::numeric_evaluation::NumericRowScratch;
 use crate::{
     EvaluationError, EvaluationLimits, EvaluationWorkspace, FrozenReduct, Interpretation, NodeView,
     Theory,
@@ -9,8 +9,8 @@ use zetesis_cpu::{Cancellation, Stop};
 /// never a proof of stability or nonminimality.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
-    /// Charged node/operand evaluations, ordinal-cache initialization/reset,
-    /// root tests, atom scans and subset-bit operations. A shared ordinal row
+    /// Charged node/operand evaluations, numeric-cache initialization/reset,
+    /// root tests, atom scans and subset-bit operations. A shared numeric row
     /// is reduced once per complete evaluation pass.
     pub max_work: u64,
     /// Maximum number of proper subsets checked against a frozen reduct.
@@ -114,16 +114,16 @@ pub(super) fn evaluate(
     interpretation: &Interpretation,
     frozen: Option<&[bool]>,
     output: &mut Vec<bool>,
-    extrema: &mut ExtremaScratch,
+    numeric: &mut NumericRowScratch,
     work: &mut Work<'_>,
 ) -> Result<(), Stop> {
     output.clear();
-    extrema.reset(theory, || work.tick())?;
+    numeric.reset(theory, || work.tick())?;
     let view = theory.view();
     for index in 0..view.len() {
         work.tick()?;
         let node = view.node(index).map_err(|_| Stop::InvalidProgram)?;
-        let value = evaluate_node(index, node, interpretation, output, extrema, work)?;
+        let value = evaluate_node(index, node, interpretation, output, numeric, work)?;
         // A maximal M-false subformula becomes falsum. Masking every M-false
         // node has the same root meaning and avoids materializing a new DAG.
         output.push(value && frozen.is_none_or(|mask| mask[index]));
@@ -138,7 +138,7 @@ fn evaluate_node(
     node: NodeView<'_>,
     interpretation: &Interpretation,
     values: &[bool],
-    extrema: &mut ExtremaScratch,
+    numeric: &mut NumericRowScratch,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
     match node {
@@ -146,12 +146,14 @@ fn evaluate_node(
         NodeView::False => Ok(false),
         NodeView::And(operands) => evaluate_operands(operands, values, true, work),
         NodeView::Or(operands) => evaluate_operands(operands, values, false, work),
-        NodeView::Threshold(threshold) => threshold.evaluate(|child| {
-            work.tick()?;
-            Ok(values[child])
-        }),
-        NodeView::ExtremumCut(cut) => extrema
-            .measure(interpretation.theory(), index, cut, |child| {
+        NodeView::Threshold(threshold) => {
+            numeric.threshold(interpretation.theory(), index, threshold, |child| {
+                work.tick()?;
+                Ok(values[child])
+            })
+        }
+        NodeView::ExtremumCut(cut) => numeric
+            .extremum(interpretation.theory(), index, cut, |child| {
                 work.tick()?;
                 Ok(values[child])
             })
@@ -255,10 +257,10 @@ pub fn models_reduct(
         statistics: Statistics::default(),
     };
     let mut values = reserve(theory.nodes().len())?;
-    let mut extrema = ExtremaScratch::default();
-    extrema.reserve(theory)?;
-    let reduct = FrozenReduct::freeze(candidate, &mut extrema, &mut work)?;
-    reduct.satisfied_by(tested, &mut values, &mut extrema, &mut work)
+    let mut numeric = NumericRowScratch::default();
+    numeric.reserve(theory)?;
+    let reduct = FrozenReduct::freeze(candidate, &mut numeric, &mut work)?;
+    reduct.satisfied_by(tested, &mut values, &mut numeric, &mut work)
 }
 
 /// Append the candidate's atom coordinates in increasing order. The caller has
@@ -314,7 +316,7 @@ fn check_subset(
     subset: &Interpretation,
     frozen: &[bool],
     values: &mut Vec<bool>,
-    extrema: &mut ExtremaScratch,
+    numeric: &mut NumericRowScratch,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
     work.cancellation.poll()?;
@@ -322,7 +324,7 @@ fn check_subset(
         return Err(Stop::CandidateLimit);
     }
     work.statistics.subsets += 1;
-    evaluate(theory, subset, Some(frozen), values, extrema, work)?;
+    evaluate(theory, subset, Some(frozen), values, numeric, work)?;
     Ok(failed_root(theory, values, work)?.is_none())
 }
 
@@ -338,7 +340,7 @@ fn find_countermodel(
     selected: &[usize],
     subset: &mut Interpretation,
     values: &mut Vec<bool>,
-    extrema: &mut ExtremaScratch,
+    numeric: &mut NumericRowScratch,
     work: &mut Work<'_>,
 ) -> Result<bool, Stop> {
     // Empty is the first proper subset unless M itself is empty. Incrementing
@@ -346,7 +348,7 @@ fn find_countermodel(
     let mut present = 0;
     let mut countermodel = Ok(false);
     while present < selected.len() {
-        countermodel = check_subset(theory, subset, frozen, values, extrema, work);
+        countermodel = check_subset(theory, subset, frozen, values, numeric, work);
         match countermodel {
             Ok(false) => {
                 if let Err(stop) = advance_subset(selected, subset, &mut present, work) {
@@ -382,14 +384,14 @@ pub fn check(
         statistics: Statistics::default(),
     };
     let mut frozen = reserve(theory.nodes().len())?;
-    let mut extrema = ExtremaScratch::default();
-    extrema.reserve(theory)?;
+    let mut numeric = NumericRowScratch::default();
+    numeric.reserve(theory)?;
     evaluate(
         theory,
         candidate,
         None,
         &mut frozen,
-        &mut extrema,
+        &mut numeric,
         &mut work,
     )?;
     if let Some(root) = failed_root(theory, &frozen, &mut work)? {
@@ -413,7 +415,7 @@ pub fn check(
         &selected,
         &mut subset,
         &mut values,
-        &mut extrema,
+        &mut numeric,
         &mut work,
     )? {
         Verdict::NonMinimal { witness: subset }

@@ -616,8 +616,13 @@ when several variables occur. Every intermediate must be defined and fit the
 checked integer range; division and remainder retain truncation toward zero.
 This overapproximates correlations and uses no scalar comparison as a premise.
 Unknown or mixed domains, zero divisors and possible overflow decline the
-certificate; no Cartesian table of arithmetic results is retained. The checked
-interval transfers are shared with keyed-rewrite safety. Resource and owner failures
+certificate; no Cartesian table of arithmetic results is retained. Within one
+constraint’s totality attempt, repeated variable occurrences share the completed
+numeric column’s bounds, and expressions reuse one temporary range buffer. This
+leased workspace is created only for multi-input arithmetic and is released at
+the end of the attempt; evidence never crosses rules or source snapshots. Every
+intermediate remains checked independently. The checked interval transfers are
+shared with keyed-rewrite safety. Resource and owner failures
 remain located failures. Only success for every expression permits this
 certified selection. A reached prefix may still contain a value absent from its
 later covering column; its arithmetic failures retain the ordinary deferred handling.

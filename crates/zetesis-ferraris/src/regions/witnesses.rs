@@ -18,11 +18,15 @@
 //! pending queue by C. Only a required nested witness scans its distinct leaves;
 //! no unrelated flat chain changes its counter algorithm. Repeated notices can
 //! revisit cones, so this trades runtime work for compact retained storage.
+//! Settled roots do not relay possibility notices: ordinary truth events have
+//! already informed their parents and forced any required descendants. Their own
+//! required witness check remains independent of that notification rule.
 //! Frozen closure enables associative witness views for native extrema too;
 //! a masked same-kind child is an opaque falsum. Numeric bound bridges remain
 //! original-only and are never transplanted into a frozen reduct.
 
 use std::num::NonZeroUsize;
+use std::ops::ControlFlow;
 
 use zetesis_cpu::Stop;
 
@@ -85,8 +89,6 @@ pub(super) struct Scratch {
     stack: Vec<usize>,
     leaves: Vec<usize>,
     candidates: Vec<usize>,
-    reference: Vec<usize>,
-    equality: Vec<u64>,
     dirty: Vec<usize>,
     pending: Vec<u64>,
 }
@@ -96,12 +98,10 @@ impl Scratch {
         (self.stack.capacity()
             + self.leaves.capacity()
             + self.candidates.capacity()
-            + self.dirty.capacity()
-            + self.reference.capacity()) as u128
+            + self.dirty.capacity()) as u128
             * size_of::<usize>() as u128
             + self.seen.capacity() as u128 * size_of::<u32>() as u128
-            + (self.pending.capacity() + self.equality.capacity()) as u128
-                * size_of::<u64>() as u128
+            + self.pending.capacity() as u128 * size_of::<u64>() as u128
     }
 
     pub(super) fn clear(&mut self) {
@@ -155,6 +155,35 @@ impl Scratch {
         if !expands(index, chain) {
             return Ok(index.chains[chain].leaves(&index.extrema));
         }
+        // The visitor's begin clears the scratch's leaf vector. Lend its
+        // reusable allocation to the collecting adapter, then restore it on
+        // every outcome, including a refused walk or fallible leaf push.
+        let mut leaves = std::mem::take(&mut self.leaves);
+        leaves.clear();
+        let result = self.visit_expanded(index, chain, frozen, work, |leaf, _| {
+            push(&mut leaves, leaf)?;
+            Ok(ControlFlow::Continue(()))
+        });
+        self.leaves = leaves;
+        result.map(|_| ())?;
+        Ok(&self.leaves)
+    }
+
+    /// Fold distinct witnesses in the collecting view's traversal order.
+    /// The caller has selected an expanding chain. A break leaves the stack
+    /// tail unread; the next expanded walk clears it
+    /// and advances the same generation marks. Node and edge visits are charged
+    /// here, while the visitor charges its own reads of each emitted leaf.
+    /// Already queued sibling edges and first-use marks still cost work even
+    /// when the fold stops early. No leaf-result vector is allocated by a fold.
+    fn visit_expanded(
+        &mut self,
+        index: &Narrower,
+        chain: usize,
+        frozen: Option<&[bool]>,
+        work: &mut Work<'_>,
+        mut leaf: impl FnMut(usize, &mut Work<'_>) -> Result<ControlFlow<()>, Stop>,
+    ) -> Result<ControlFlow<()>, Stop> {
         self.begin(index.parents.len(), work)?;
         push(&mut self.stack, index.chains[chain].root)?;
         let disjunction = index.chains[chain].disjunction;
@@ -173,66 +202,11 @@ impl Scratch {
                     work.tick()?;
                     push(&mut self.stack, child)?;
                 }
-            } else {
-                push(&mut self.leaves, node)?;
+            } else if let ControlFlow::Break(()) = leaf(node, work)? {
+                return Ok(ControlFlow::Break(()));
             }
         }
-        Ok(&self.leaves)
-    }
-
-    /// Authenticate an equality candidate without retaining expanded rows.
-    /// A temporary packed membership mask and one touched-leaf vector are
-    /// reused by the worker. Both views are distinct, so equal lengths and
-    /// membership establish equality in linear work after each view is read.
-    /// Setting a membership bit pays for its unconditional cleanup, including
-    /// an interrupted comparison; cleanup never changes logical knowledge.
-    pub(super) fn equal_leaves(
-        &mut self,
-        index: &Narrower,
-        left: usize,
-        right: usize,
-        work: &mut Work<'_>,
-    ) -> Result<bool, Stop> {
-        let mut reference = std::mem::take(&mut self.reference);
-        let mut equality = std::mem::take(&mut self.equality);
-        reference.clear();
-        let result = (|| {
-            let words = flag_words(index.parents.len());
-            equality
-                .try_reserve(words.saturating_sub(equality.len()))
-                .map_err(|_| Stop::Allocation)?;
-            while equality.len() < words {
-                work.tick()?;
-                equality.push(0);
-            }
-            let leaves = self.read(index, left, None, work)?;
-            reference
-                .try_reserve(leaves.len())
-                .map_err(|_| Stop::Allocation)?;
-            for &leaf in leaves {
-                work.tick()?;
-                work.tick()?;
-                equality[leaf / 64] |= 1u64 << (leaf % 64);
-                reference.push(leaf);
-            }
-            let leaves = self.read(index, right, None, work)?;
-            if leaves.len() != reference.len() {
-                return Ok(false);
-            }
-            for &leaf in leaves {
-                work.tick()?;
-                if equality[leaf / 64] & (1u64 << (leaf % 64)) == 0 {
-                    return Ok(false);
-                }
-            }
-            Ok(true)
-        })();
-        for &leaf in &reference {
-            equality[leaf / 64] &= !(1u64 << (leaf % 64));
-        }
-        self.reference = reference;
-        self.equality = equality;
-        result
+        Ok(ControlFlow::Continue(()))
     }
 
     pub(super) fn prepared(&self) -> &[usize] {
@@ -413,16 +387,20 @@ impl<C: Count> Closure<'_, C> {
         if frozen.is_some_and(|truth| !truth[source.root]) {
             return Ok(Step::Unchanged);
         }
-        // A possibility change can matter to an enclosing union even while this
-        // node remains undecided. Forward only across the same connective.
-        for parent in index.logical_parents(source.root) {
-            work.tick()?;
-            if let Some(link) = index.chain_of[parent] {
-                let parent = chain_position(link);
-                if index.chains[parent].disjunction == source.disjunction
-                    && frozen.is_none_or(|truth| truth[index.chains[parent].root])
-                {
-                    self.lists.witnesses.queue_dirty(parent);
+        // Ordinary node events drain first. A settled source has therefore
+        // already informed its parents: an absorbing value settles them, and a
+        // neutral value forces this source's operands. Only an unknown source
+        // must relay a change in its possible witnesses through the shared DAG.
+        if !bit(self.known.sure, source.root) && !bit(self.known.never, source.root) {
+            for parent in index.logical_parents(source.root) {
+                work.tick()?;
+                if let Some(link) = index.chain_of[parent] {
+                    let parent = chain_position(link);
+                    if index.chains[parent].disjunction == source.disjunction
+                        && frozen.is_none_or(|truth| truth[index.chains[parent].root])
+                    {
+                        self.lists.witnesses.queue_dirty(parent);
+                    }
                 }
             }
         }
@@ -437,22 +415,30 @@ impl<C: Count> Closure<'_, C> {
             return Ok(Step::Unchanged);
         }
         let mut candidate = None;
-        for &leaf in self.lists.witnesses.read(index, chain, frozen, work)? {
-            work.tick()?;
-            let (witness, neutral) = if source.disjunction {
-                (bit(self.known.sure, leaf), bit(self.known.never, leaf))
-            } else {
-                (bit(self.known.never, leaf), bit(self.known.sure, leaf))
-            };
-            if witness {
-                return Ok(Step::Unchanged);
-            }
-            if !neutral {
-                if candidate.is_some() {
-                    return Ok(Step::Unchanged);
-                }
-                candidate = Some(leaf);
-            }
+        let known = &self.known;
+        let outcome =
+            self.lists
+                .witnesses
+                .visit_expanded(index, chain, frozen, work, |leaf, work| {
+                    work.tick()?;
+                    let (witness, neutral) = if source.disjunction {
+                        (bit(known.sure, leaf), bit(known.never, leaf))
+                    } else {
+                        (bit(known.never, leaf), bit(known.sure, leaf))
+                    };
+                    if witness {
+                        return Ok(ControlFlow::Break(()));
+                    }
+                    if !neutral {
+                        if candidate.is_some() {
+                            return Ok(ControlFlow::Break(()));
+                        }
+                        candidate = Some(leaf);
+                    }
+                    Ok(ControlFlow::Continue(()))
+                })?;
+        if outcome.is_break() {
+            return Ok(Step::Unchanged);
         }
         Ok(match candidate {
             None => Step::Contradiction,

@@ -1,4 +1,4 @@
-//! Certificate reservations cover the complete fresh ordinal workspace.
+//! Certificate reservations cover the complete fresh numeric workspace.
 
 use std::sync::Arc;
 
@@ -7,7 +7,7 @@ use crate::{Cancellation, Incomplete, SearchLimits, SearchStatistics};
 use zetesis_ferraris::{
     AdmissionLimits, ExtremumCutDescriptor, ExtremumCutRule, FormulaParts, Interpretation, Node,
     NumericDomain, NumericRow, PositivePlan, PositivePlanLimits, StratifiedPlan,
-    StratifiedPlanLimits, Theory, TightPlan, TightPlanLimits,
+    StratifiedPlanLimits, Theory, ThresholdDescriptor, TightPlan, TightPlanLimits,
 };
 
 fn theory(rows: usize, empty: bool) -> Theory {
@@ -163,6 +163,70 @@ fn reused_checks_fit_the_fresh_reservation() {
             };
             // Determined validation owns a fresh EvaluationWorkspace each time.
             assert_eq!(work, bound - initialized);
+        }
+    }
+}
+
+/// A live weighted guard after unused rows of both domains. Its single guard
+/// makes the canonical conservative work reservation exact.
+fn weighted(rows: usize) -> Theory {
+    let mut numeric = (0..rows)
+        .map(|index| NumericRow {
+            start: 0,
+            length: 0,
+            domain: if index % 2 == 0 {
+                NumericDomain::Weights
+            } else {
+                NumericDomain::Ordinal { rank_count: 3 }
+            },
+        })
+        .collect::<Vec<_>>();
+    numeric[rows - 1] = NumericRow {
+        start: 0,
+        length: 1,
+        domain: NumericDomain::Weights,
+    };
+    let parts = FormulaParts::from_numeric_raw(
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::threshold(0),
+            Node::implies(2, 1),
+        ],
+        vec![],
+        vec![0],
+        vec![2],
+        numeric,
+        vec![ThresholdDescriptor {
+            row: rows - 1,
+            bound: 2,
+        }],
+        vec![],
+    )
+    .unwrap();
+    Theory::new(2, parts, vec![0, 3], AdmissionLimits::default()).unwrap()
+}
+
+#[test]
+fn weighted_checks_reserve_numeric_initialization() {
+    for rows in [1_usize, 65] {
+        let theory = weighted(rows);
+        let candidate = Interpretation::new(&theory, [0, 1]).unwrap();
+        for certificate in certificates(&theory) {
+            let bound = certificate.checking_work_bound().unwrap();
+            let mut workspace = Workspace::default();
+            let (result, work) =
+                classify_with_allowance(&certificate, &mut workspace, &candidate, bound);
+            assert!(matches!(result, Ok(Verdict::Stable)));
+            assert_eq!(work, bound);
+            let (result, work) = classify_with_allowance(
+                &certificate,
+                &mut Workspace::default(),
+                &candidate,
+                bound - 1,
+            );
+            assert!(matches!(result, Err(Incomplete::WorkLimit)));
+            assert_eq!(work, bound - 1);
         }
     }
 }

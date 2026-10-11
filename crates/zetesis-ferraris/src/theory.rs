@@ -710,6 +710,7 @@ impl Drop for FormulaTransaction<'_> {
 #[derive(Debug)]
 struct Data {
     atoms: usize,
+    numeric_nodes: bool,
     parts: FormulaParts,
     roots: Vec<usize>,
 }
@@ -845,6 +846,17 @@ impl Theory {
         self.0.atoms
     }
 
+    /// Dense row slots needed by a complete numeric evaluation pass. Raw unused
+    /// descriptors alone do not request a cache. Admission derived this flag
+    /// alongside its existing node recount, so no evaluation scans for it.
+    pub(crate) fn evaluation_rows(&self) -> usize {
+        if self.0.numeric_nodes {
+            self.0.parts.rows().len()
+        } else {
+            0
+        }
+    }
+
     /// The authoritative complete storage and its actual capacities.
     #[must_use]
     pub fn parts(&self) -> &FormulaParts {
@@ -888,7 +900,7 @@ fn admit(
     roots: Vec<usize>,
     limits: AdmissionLimits,
 ) -> Result<Data, AdmissionError> {
-    let occurrences = admit_dimensions(atoms, &parts, &roots, limits)?;
+    let (occurrences, numeric_nodes) = admit_dimensions(atoms, &parts, &roots, limits)?;
     validate_nodes(atoms, parts.view())?;
     parts.numeric.validate()?;
     validate_roots(parts.nodes.len(), &roots)?;
@@ -898,6 +910,7 @@ fn admit(
     parts.occurrences = occurrences;
     Ok(Data {
         atoms,
+        numeric_nodes,
         parts,
         roots,
     })
@@ -910,7 +923,7 @@ fn admit_dimensions(
     parts: &FormulaParts,
     roots: &[usize],
     limits: AdmissionLimits,
-) -> Result<usize, AdmissionError> {
+) -> Result<(usize, bool), AdmissionError> {
     if atoms > limits.max_atoms
         || parts.nodes.len() > limits.max_nodes
         || roots.len() > limits.max_roots
@@ -922,11 +935,11 @@ fn admit_dimensions(
     {
         return Err(AdmissionError::Limit);
     }
-    let occurrences = count_occurrences(&parts.nodes, &parts.numeric)?;
+    let (occurrences, numeric_nodes) = count_shape(&parts.nodes, &parts.numeric)?;
     if occurrences > limits.max_operands {
         return Err(AdmissionError::Limit);
     }
-    Ok(occurrences)
+    Ok((occurrences, numeric_nodes))
 }
 
 /// The consumed owner's completed frontier establishes canonical spans and
@@ -937,7 +950,7 @@ fn admit_checked(
     roots: Vec<usize>,
     limits: AdmissionLimits,
 ) -> Result<Data, AdmissionError> {
-    let occurrences = admit_dimensions(atoms, &parts, &roots, limits)?;
+    let (occurrences, numeric_nodes) = admit_dimensions(atoms, &parts, &roots, limits)?;
     for (index, node) in parts.nodes.iter().enumerate() {
         if let Storage::Atom(atom) = node.0 {
             validate_node(atoms, index, NodeView::Atom(atom))?;
@@ -947,6 +960,7 @@ fn admit_checked(
     parts.occurrences = occurrences;
     Ok(Data {
         atoms,
+        numeric_nodes,
         parts,
         roots,
     })
@@ -956,13 +970,19 @@ fn admit_checked(
 /// Malformed spans still contribute their declared length to dimension checks;
 /// complete range and backward-edge checks follow in stored-node order.
 fn count_occurrences(nodes: &[Node], numeric: &NumericStorage) -> Result<usize, AdmissionError> {
+    count_shape(nodes, numeric).map(|(occurrences, _)| occurrences)
+}
+
+fn count_shape(nodes: &[Node], numeric: &NumericStorage) -> Result<(usize, bool), AdmissionError> {
     let mut occurrences = 0usize;
+    let mut numeric_nodes = false;
     for node in nodes {
+        numeric_nodes |= matches!(node.0, Storage::Threshold(_) | Storage::ExtremumCut(_));
         occurrences = occurrences
             .checked_add(node.occurrences(numeric))
             .ok_or(AdmissionError::Limit)?;
     }
-    Ok(occurrences)
+    Ok((occurrences, numeric_nodes))
 }
 
 fn read_span(operands: &[usize], span: OperandSpan) -> Result<&[usize], AdmissionError> {

@@ -1,7 +1,7 @@
 use super::{
     TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightVerdict, Work, bytes,
 };
-use crate::extremum_cut::ExtremaScratch;
+use crate::numeric_evaluation::NumericRowScratch;
 use crate::{Interpretation, NodeView, Theory};
 use zetesis_cpu::{Cancellation, Stop};
 
@@ -45,9 +45,9 @@ impl TightPlan {
 /// producers. Capacity survives checks and interruptions; no candidate truth
 /// survives as evidence. Each conjunction or disjunction reads operands only
 /// through its first decisive value. Checks are bounded by nodes, operand
-/// occurrences, tested roots, producers and packed candidate words. Thresholds
-/// read and charge every contribution, including zero weights. Ordinal cuts
-/// read every physical occurrence once per authoritative row and pass, even
+/// occurrences, tested roots, producers and packed candidate words. Numeric nodes
+/// read and charge every physical occurrence once per authoritative row and pass,
+/// including repeats and zero weights, even
 /// for endpoint constants. Dense measure growth and packed-validity resets are
 /// charged; old measures are inaccessible until completed in the current pass. Truth uses
 /// one byte per node; support uses one bit per atom, rounded to 32-bit words.
@@ -57,7 +57,7 @@ impl TightPlan {
 pub struct TightWorkspace {
     values: Vec<u8>,
     supported: Vec<u32>,
-    extrema: ExtremaScratch,
+    numeric: NumericRowScratch,
 }
 
 impl TightWorkspace {
@@ -67,7 +67,7 @@ impl TightWorkspace {
     pub fn retained_bytes(&self) -> u128 {
         self.values.capacity() as u128
             + self.supported.capacity() as u128 * size_of::<u32>() as u128
-            + self.extrema.retained_bytes()
+            + self.numeric.retained_bytes()
     }
 
     /// Check original satisfaction and ranked support using retained storage.
@@ -117,7 +117,7 @@ impl TightWorkspace {
             .map_err(|_| Stop::Allocation)?;
         self.admit(plan, limits.max_bytes)?;
         let base = self.truth_support_bytes(plan);
-        self.extrema.reserve_observed(&plan.theory, |actual| {
+        self.numeric.reserve_observed(&plan.theory, |actual| {
             bytes(base + actual, limits.max_bytes).map(|_| ())
         })?;
         let logical_bytes = self.admit(plan, limits.max_bytes)?;
@@ -125,7 +125,7 @@ impl TightWorkspace {
             &plan.theory,
             candidate,
             &mut self.values,
-            &mut self.extrema,
+            &mut self.numeric,
             work,
         )?;
         for &root in plan.theory.roots() {
@@ -177,7 +177,7 @@ impl TightWorkspace {
 
     fn admit(&self, plan: &TightPlan, limit: u64) -> Result<u64, TightError> {
         bytes(
-            self.truth_support_bytes(plan) + self.extrema.required_bytes(&plan.theory),
+            self.truth_support_bytes(plan) + self.numeric.required_bytes(&plan.theory),
             limit,
         )
     }
@@ -199,10 +199,10 @@ fn evaluate_truth(
     theory: &Theory,
     candidate: &Interpretation,
     values: &mut Vec<u8>,
-    extrema: &mut ExtremaScratch,
+    numeric: &mut NumericRowScratch,
     work: &mut Work<'_>,
 ) -> Result<(), TightError> {
-    extrema.reset(theory, || work.tick())?;
+    numeric.reset(theory, || work.tick())?;
     let view = theory.view();
     for index in 0..view.len() {
         work.tick()?;
@@ -212,13 +212,15 @@ fn evaluate_truth(
                 NodeView::False => false,
                 NodeView::And(operands) => evaluate_operands(operands, values, true, work)?,
                 NodeView::Or(operands) => evaluate_operands(operands, values, false, work)?,
-                NodeView::Threshold(threshold) => threshold.evaluate::<TightError>(|child| {
-                    work.tick()?;
-                    Ok(values[child] != 0)
-                })?,
+                NodeView::Threshold(threshold) => {
+                    numeric.threshold::<TightError>(theory, index, threshold, |child| {
+                        work.tick()?;
+                        Ok(values[child] != 0)
+                    })?
+                }
                 NodeView::ExtremumCut(cut) => {
                     cut.rule
-                        .holds(extrema.measure::<TightError>(theory, index, cut, |child| {
+                        .holds(numeric.extremum::<TightError>(theory, index, cut, |child| {
                             work.tick()?;
                             Ok(values[child] != 0)
                         })?)

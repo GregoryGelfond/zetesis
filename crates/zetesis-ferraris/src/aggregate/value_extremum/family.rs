@@ -101,7 +101,9 @@ impl ValueExtremumFamilySpace {
 ///
 /// The caller coalesces equal complete tuples and establishes row independence
 /// from the changing guard. Borrowed term authorities stay unchanged. Preparation
-/// uses O(E log E + G log E) comparisons and O(E + G) auxiliary cells. All
+/// checks and reuses nondecreasing input order in O(E + G log E) comparisons;
+/// otherwise its existing in-place sort uses O(E log E + G log E). Both use
+/// O(E + G) auxiliary cells. Guard cut pairs share one dictionary search. All
 /// conditions are validated even with no guards. Work, state, guard and graph
 /// ceilings apply to the whole family; refusal rolls back the entire suffix.
 /// Scalar extrema retain their separate zero-state compilation contract.
@@ -239,20 +241,8 @@ impl Preparation {
         }
         let distinct = ranked::prepare(builder, &mut self.dictionary, &mut self.ranks, elements)?;
         for guard in guards {
-            let lower = ranked::insertion(
-                builder,
-                guard.bound,
-                &self.dictionary[..distinct],
-                elements,
-                false,
-            )?;
-            let upper = ranked::insertion(
-                builder,
-                guard.bound,
-                &self.dictionary[..distinct],
-                elements,
-                true,
-            )?;
+            let (lower, upper) =
+                ranked::cuts(builder, guard.bound, &self.dictionary[..distinct], elements)?;
             let (inclusive, strict) = match extremum {
                 AggregateExtremum::Min => (
                     ExtremumCutRule::Prefix(upper),
@@ -317,3 +307,6 @@ impl Preparation {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod ordering_tests;

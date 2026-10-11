@@ -84,7 +84,7 @@ impl Certification {
     /// tight checking visits every node, root, producer and packed candidate
     /// word, and at most every operand occurrence; deterministic checking
     /// compares atoms, then evaluates the original formula. Both include fresh
-    /// ordinal-cache initialization and validity resets through the primitive's
+    /// numeric-cache initialization and validity resets through the primitive's
     /// evaluation bound. Reuse, early refusal or refutation can consume less.
     pub(super) fn checking_work_bound(&self) -> Result<u64, Incomplete> {
         let (theory, producers, membership) = match self {

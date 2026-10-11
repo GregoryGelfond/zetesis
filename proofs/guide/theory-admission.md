@@ -4,10 +4,13 @@
 dimension, node and root checks into the structural premises used by the reduct
 evaluator. It belongs to `Zetesis.Refinement.TheoryAdmission`.
 
-`validate` follows the ordering of `Theory::new` in
-`crates/zetesis-ferraris/src/theory.rs`: dimensions and padded atom count first,
-all nodes in their construction order second, asserted roots last. It reports
-limit, atom, edge and root errors separately. A failure prevents subsequent
+`validate` models the Boolean-generation ordering of `Theory::new`:
+dimensions and padded atom count first, all nodes in their construction order
+second, asserted roots last. Current
+[`theory.rs`](../../crates/zetesis-ferraris/src/theory.rs) additionally validates
+numeric rows and descriptors and records whether numeric evaluation is needed;
+those operations are outside this model. The model reports limit, atom, edge and
+root errors separately. A failure prevents subsequent
 checks. Passing admission makes no claim of satisfaction or answer-set membership.
 
 ## Constructing the structural certificate
@@ -54,7 +57,7 @@ is an oracle assumption.
 
 This is an authored validation algorithm. It models already represented input
 lengths using natural numbers. The refinement package proves the generated
-admission step that `Theory::new` runs before allocating: `AdmissionValidation`
+retained Boolean-generation admission step before allocation: `AdmissionValidation`
 shows that its node and root validators compute `scan` and `rootScan` exactly,
 including their iteration over the stored slices, and `AdmittedData` shows that
 the whole step computes `validate` with the host's `Usize.max`, including Rust's
@@ -71,3 +74,8 @@ refused node is identified exactly. Error kinds and check ordering are
 represented, but this module does not prove source spans, rendered diagnostics
 or the complete Rust failure trace. Grounding must still establish that the
 proposed theory means the intended source program.
+
+The retained `Native` extraction separately covers its Boolean inline/span
+representation. It also predates numeric operators and the current shared row
+workspace. Neither generation's record qualifies the changed `Theory` layout or
+current entrypoints; see the [implementation boundary](../../docs/book/lean/correspondence.md).

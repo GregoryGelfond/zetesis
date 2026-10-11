@@ -7,9 +7,6 @@
 
 use zetesis_cpu::Stop;
 
-mod scratch;
-pub(crate) use scratch::ExtremaScratch;
-
 #[cfg(test)]
 mod tests;
 

@@ -5,16 +5,16 @@ use zetesis_cpu::{Cancellation, Stop};
 use super::{
     Error, ErrorKind, Group, GroupRef, Reduction, ReductionLimits, Resource, Statistics, add, bytes,
 };
-use crate::extremum_cut::ExtremaScratch;
+use crate::numeric_evaluation::NumericRowScratch;
 use crate::{Interpretation, Theory, oracle};
 
 /// Bounds for formula-prefix evaluation and retained tuple occurrence masks.
 #[derive(Clone, Copy, Debug)]
 pub struct EligibilityLimits {
-    /// Original/frozen node and operand visits, ordinal-cache initialization and
+    /// Original/frozen node and operand visits, numeric-cache initialization and
     /// packed-validity resets, plus copied tuple observations.
     pub max_work: u64,
-    /// Simultaneous node truth, ordinal scratch and output masks; borrowed theory, group,
+    /// Simultaneous node truth, numeric scratch and output masks; borrowed theory, group,
     /// interpretations, stack and allocator metadata are excluded.
     pub max_bytes: u64,
 }
@@ -169,7 +169,7 @@ impl<'a> GroupRef<'a> {
         )?;
         statistics.peak_bytes = add(
             statistics.peak_bytes,
-            u64::try_from(ExtremaScratch::default().required_bytes(&self.data.theory))
+            u64::try_from(NumericRowScratch::default().required_bytes(&self.data.theory))
                 .map_err(|_| ErrorKind::Overflow)?,
         )?;
         if statistics.peak_bytes > limits.max_bytes {
@@ -206,7 +206,7 @@ struct Observations {
     frozen_nodes: Vec<bool>,
     original: Vec<bool>,
     frozen: Vec<bool>,
-    extrema: ExtremaScratch,
+    numeric: NumericRowScratch,
 }
 
 impl Observations {
@@ -215,7 +215,7 @@ impl Observations {
             + self.frozen_nodes.capacity() as u128
             + self.original.capacity() as u128
             + self.frozen.capacity() as u128
-            + self.extrema.retained_bytes()
+            + self.numeric.retained_bytes()
     }
 
     fn observe(
@@ -237,8 +237,8 @@ impl Observations {
     ) -> Result<(), ErrorKind> {
         let result = reserve_mask(&mut self.original_nodes, theory.nodes().len());
         self.observe(result, limit, statistics)?;
-        let base = self.bytes() - self.extrema.retained_bytes();
-        self.extrema
+        let base = self.bytes() - self.numeric.retained_bytes();
+        self.numeric
             .reserve_observed(theory, |actual| {
                 observe_capacity(base + actual, Ok(()), limit, statistics).map_err(Observed)
             })
@@ -308,7 +308,7 @@ fn observations(
         candidate,
         None,
         &mut buffers.original_nodes,
-        &mut buffers.extrema,
+        &mut buffers.numeric,
         work,
     )
     .map_err(stopped)?;
@@ -319,7 +319,7 @@ fn observations(
             tested,
             Some(&buffers.original_nodes),
             &mut buffers.frozen_nodes,
-            &mut buffers.extrema,
+            &mut buffers.numeric,
             work,
         )
         .map_err(stopped)?;

@@ -2,7 +2,7 @@
 
 use zetesis_cpu::{Cancellation, Stop};
 
-use crate::extremum_cut::ExtremaScratch;
+use crate::numeric_evaluation::NumericRowScratch;
 use crate::oracle::{Work, evaluate, failed_root, identities, reserve};
 use crate::{Interpretation, Limits, Statistics, Theory};
 
@@ -34,9 +34,9 @@ pub struct FrozenReduct<'a> {
 impl<'a> FrozenReduct<'a> {
     /// Freeze the candidate's own theory with one topological evaluation.
     ///
-    /// For N DAG nodes, this retains N Boolean values. Each Boolean/threshold
-    /// child occurrence is read; each referenced ordinal row is read once.
-    /// Repeated positions within that row still count separately. If cuts exist,
+    /// For N DAG nodes, this retains N Boolean values. Each Boolean
+    /// child occurrence is read; each referenced numeric row is read once.
+    /// Repeated positions within that row still count separately. If numeric nodes exist,
     /// temporary dense measures cover R numeric rows with ceil(R/64) validity
     /// words; initialization and each validity-word reset are charged. The
     /// temporary cache is released after freezing; it is not part of the mask. The candidate's packed words
@@ -58,9 +58,9 @@ impl<'a> FrozenReduct<'a> {
             cancellation,
             statistics: Statistics::default(),
         };
-        let mut extrema = ExtremaScratch::default();
-        extrema.reserve(candidate.theory())?;
-        Self::freeze(candidate, &mut extrema, &mut work)
+        let mut numeric = NumericRowScratch::default();
+        numeric.reserve(candidate.theory())?;
+        Self::freeze(candidate, &mut numeric, &mut work)
     }
 
     /// The exact interpretation determining this reduct, without allocation.
@@ -81,10 +81,10 @@ impl<'a> FrozenReduct<'a> {
     /// it need not be a subset of the candidate. An independently admitted equal
     /// theory has a different identity and is refused before control is polled.
     ///
-    /// A query charges every node, Boolean/threshold child occurrence, and each
-    /// referenced ordinal row once, then roots through the first failure. It
+    /// A query charges every node, Boolean child occurrence, and each
+    /// referenced numeric row once, then roots through the first failure. It
     /// also charges fresh dense-measure initialization and packed-validity reset
-    /// when cuts exist, as freezing does. Temporary truth and row-cache storage
+    /// when numeric nodes exist, as freezing does. Temporary truth and row-cache storage
     /// are released on completion or stop. The
     /// freeze is reused unchanged. This is a fresh per-query budget, excluding
     /// construction and previous queries; `limits.max_subsets` has no effect.
@@ -106,9 +106,9 @@ impl<'a> FrozenReduct<'a> {
             statistics: Statistics::default(),
         };
         let mut values = reserve(self.truth.len())?;
-        let mut extrema = ExtremaScratch::default();
-        extrema.reserve(self.theory())?;
-        self.satisfied_by(tested, &mut values, &mut extrema, &mut work)
+        let mut numeric = NumericRowScratch::default();
+        numeric.reserve(self.theory())?;
+        self.satisfied_by(tested, &mut values, &mut numeric, &mut work)
     }
 
     // The one-shot wrapper reserves an equally sized tested workspace first,
@@ -116,7 +116,7 @@ impl<'a> FrozenReduct<'a> {
     // Work preserves its combined freeze/query ceiling and stop precedence.
     pub(super) fn freeze(
         candidate: &'a Interpretation,
-        extrema: &mut ExtremaScratch,
+        numeric: &mut NumericRowScratch,
         work: &mut Work<'_>,
     ) -> Result<Self, Stop> {
         let mut truth = reserve(candidate.theory().nodes().len())?;
@@ -125,7 +125,7 @@ impl<'a> FrozenReduct<'a> {
             candidate,
             None,
             &mut truth,
-            extrema,
+            numeric,
             work,
         )?;
         Ok(Self { candidate, truth })
@@ -137,7 +137,7 @@ impl<'a> FrozenReduct<'a> {
         &self,
         tested: &Interpretation,
         values: &mut Vec<bool>,
-        extrema: &mut ExtremaScratch,
+        numeric: &mut NumericRowScratch,
         work: &mut Work<'_>,
     ) -> Result<bool, Stop> {
         evaluate(
@@ -145,7 +145,7 @@ impl<'a> FrozenReduct<'a> {
             tested,
             Some(&self.truth),
             values,
-            extrema,
+            numeric,
             work,
         )?;
         Ok(failed_root(self.theory(), values, work)?.is_none())

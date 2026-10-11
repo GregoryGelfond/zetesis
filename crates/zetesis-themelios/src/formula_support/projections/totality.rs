@@ -121,6 +121,7 @@ impl<'a> Projections<'a> {
             context.work.counters,
             context.work.location,
         )?;
+        let mut numeric = numeric::Preparation::new(rule, support);
         for (index, literal) in rule.body.iter().enumerate() {
             tick(&mut context)?;
             match literal {
@@ -128,8 +129,7 @@ impl<'a> Projections<'a> {
                     for (side, expression) in [left, right].into_iter().enumerate() {
                         if !self.total_expression(
                             (Some((index, side)), expression),
-                            &rule.body,
-                            support,
+                            &mut numeric,
                             &mut binding,
                             evaluation,
                             &mut context,
@@ -142,8 +142,7 @@ impl<'a> Projections<'a> {
                     for expression in left.iter().chain(right) {
                         if !self.total_expression(
                             (None, expression),
-                            &rule.body,
-                            support,
+                            &mut numeric,
                             &mut binding,
                             evaluation,
                             &mut context,
@@ -156,8 +155,7 @@ impl<'a> Projections<'a> {
                     for expression in guard.expressions() {
                         if !self.total_expression(
                             (None, expression),
-                            &rule.body,
-                            support,
+                            &mut numeric,
                             &mut binding,
                             evaluation,
                             &mut context,
@@ -183,8 +181,7 @@ impl<'a> Projections<'a> {
     fn total_expression(
         &mut self,
         (source, expression): (Option<(usize, usize)>, &Expression),
-        literals: &[LiteralIr],
-        support: &Support<'_>,
+        numeric: &mut numeric::Preparation<'_, '_>,
         binding: &mut Binding<'static>,
         evaluation: &mut Evaluation,
         context: &mut Context<'_, &mut Computation<'_, '_>>,
@@ -218,9 +215,9 @@ impl<'a> Projections<'a> {
             return Ok(false);
         };
         if !inputs.all(|input| input == slot) {
-            return numeric::total(expression, literals, support, context);
+            return numeric.total(expression, context);
         }
-        let Some(domain) = domain(slot, literals, support, context)? else {
+        let Some(domain) = numeric.domain(slot, context)? else {
             return Ok(false);
         };
         if matches!(expression.nodes.as_slice(), [Operation::Variable(_)]) {

@@ -149,9 +149,10 @@ fn every_threshold_occurrence_consumes_work() {
         vec![threshold(transaction, &[0, 0, 1, 2], &[2, 3, 0, 1], 1)]
     });
     let candidate = world(&owner, 7);
-    let mut workspace = EvaluationWorkspace::default();
-    // Three atoms, one threshold, four occurrences (including zero), one root.
-    for max_work in 0..9 {
+    // Three atoms, one threshold, four occurrences (including zero), one root,
+    // one fresh measure cell and one validity word.
+    for max_work in 0..11 {
+        let mut workspace = EvaluationWorkspace::default();
         let attempt = workspace.evaluate(
             &candidate,
             EvaluationLimits {
@@ -166,16 +167,17 @@ fn every_threshold_occurrence_consumes_work() {
         );
         assert_eq!(attempt.work, max_work);
     }
+    let mut workspace = EvaluationWorkspace::default();
     let attempt = workspace.evaluate(
         &candidate,
         EvaluationLimits {
-            max_work: 9,
+            max_work: 11,
             ..EvaluationLimits::default()
         },
         &Cancellation::default(),
     );
     assert!(attempt.result.unwrap().is_model());
-    assert_eq!(attempt.work, 9);
+    assert_eq!(attempt.work, 11);
 }
 
 #[test]

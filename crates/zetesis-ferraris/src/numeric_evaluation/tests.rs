@@ -1,10 +1,10 @@
-use super::ExtremaScratch;
+use super::NumericRowScratch;
 use crate::{
     AdmissionLimits, EvaluationError, EvaluationLimits, EvaluationWorkspace, ExtremaMeasure,
     ExtremumCut, ExtremumCutDescriptor, ExtremumCutRule, ExtremumRow, FormulaNodes, FormulaParts,
     FrozenReduct, Interpretation, Limits, Node, NodeView, NumericDomain, NumericRow, Theory,
-    TightCheckLimits, TightPlan, TightPlanLimits, TightVerdict, TightWorkspace, check,
-    models_reduct, native_aggregate as native,
+    ThresholdDescriptor, TightCheckLimits, TightPlan, TightPlanLimits, TightVerdict,
+    TightWorkspace, check, models_reduct, native_aggregate as native,
 };
 use zetesis_core::Value;
 use zetesis_cpu::{Cancellation, Stop};
@@ -195,11 +195,11 @@ fn interrupted_passes_do_not_retain_truth() {
 #[test]
 fn failed_reductions_publish_no_valid_bit() {
     let owner = family(vec![], false);
-    let mut scratch = ExtremaScratch::default();
+    let mut scratch = NumericRowScratch::default();
     scratch.reserve(&owner).unwrap();
     scratch.reset(&owner, || Ok::<_, Stop>(())).unwrap();
     let mut reads = 0;
-    let result = scratch.measure(&owner, 2, view(&owner, 2), |_| {
+    let result = scratch.extremum(&owner, 2, view(&owner, 2), |_| {
         reads += 1;
         if reads == 2 {
             Err(Stop::Cancelled)
@@ -211,7 +211,7 @@ fn failed_reductions_publish_no_valid_bit() {
     assert_eq!(scratch.valid, [0]);
     reads = 0;
     let measure = scratch
-        .measure(&owner, 2, view(&owner, 2), |_| {
+        .extremum(&owner, 2, view(&owner, 2), |_| {
             reads += 1;
             Ok::<_, Stop>(false)
         })
@@ -226,7 +226,7 @@ fn failed_reductions_publish_no_valid_bit() {
     );
     assert_eq!(scratch.valid, [1]);
     let cached = scratch
-        .measure(&owner, 3, view(&owner, 3), |_| Err(Stop::Cancelled))
+        .extremum(&owner, 3, view(&owner, 3), |_| Err(Stop::Cancelled))
         .unwrap();
     assert_eq!(cached, measure);
 }
@@ -234,7 +234,7 @@ fn failed_reductions_publish_no_valid_bit() {
 #[test]
 fn packed_resets_preserve_zero_tail_bits() {
     let owner = raw(130, true);
-    let mut scratch = ExtremaScratch::default();
+    let mut scratch = NumericRowScratch::default();
     scratch.reserve(&owner).unwrap();
     let mut ticks = 0;
     scratch
@@ -246,7 +246,7 @@ fn packed_resets_preserve_zero_tail_bits() {
     assert_eq!(ticks, 133);
     assert_eq!(scratch.valid, [0, 0, 0]);
     scratch
-        .measure(&owner, 1, view(&owner, 1), |_| Ok::<_, Stop>(true))
+        .extremum(&owner, 1, view(&owner, 1), |_| Ok::<_, Stop>(true))
         .unwrap();
     assert_eq!(scratch.valid, [0, 0, 2]);
     ticks = 0;
@@ -265,7 +265,7 @@ fn packed_resets_preserve_zero_tail_bits() {
 #[test]
 fn interrupted_growth_only_retains_safe_cells() {
     let owner = raw(130, true);
-    let mut scratch = ExtremaScratch::default();
+    let mut scratch = NumericRowScratch::default();
     scratch.reserve(&owner).unwrap();
     let mut ticks = 0;
     let result = scratch.reset(&owner, || {
@@ -290,9 +290,9 @@ fn interrupted_growth_only_retains_safe_cells() {
 }
 
 #[test]
-fn weight_only_theories_allocate_no_ordinal_columns() {
+fn unused_weight_rows_allocate_no_measure_columns() {
     let owner = raw(130, false);
-    let mut scratch = ExtremaScratch::default();
+    let mut scratch = NumericRowScratch::default();
     assert_eq!(scratch.required_bytes(&owner), 0);
     scratch.reserve(&owner).unwrap();
     let mut ticks = 0;
@@ -559,7 +559,7 @@ fn eligibility_accounts_one_cache_for_both_phases() {
 #[test]
 fn observation_refusal_precedes_the_second_column() {
     let owner = raw(130, true);
-    let mut scratch = ExtremaScratch::default();
+    let mut scratch = NumericRowScratch::default();
     let mut observations = Vec::new();
     let result = scratch.reserve_observed(&owner, |actual| {
         observations.push(actual);
@@ -668,7 +668,7 @@ fn evaluation_bound_covers_fresh_and_reused_rows() {
             assert!(attempt.result.unwrap().is_model());
             assert_eq!(attempt.work, expected);
         }
-        // Retained larger cache columns add no work for an owner without cuts.
+        // Retained larger cache columns add no work for an owner without numeric nodes.
         let plain = raw(200, false);
         assert_eq!(EvaluationWorkspace::work_bound(&plain), 1);
         let plain_candidate = world(&plain, 0);
@@ -686,21 +686,23 @@ fn evaluation_bound_covers_fresh_and_reused_rows() {
 }
 
 #[test]
-fn evaluation_bound_includes_unused_cut_descriptors() {
+fn unused_numeric_descriptors_do_not_request_evaluation_slots() {
+    let mut rows = vec![
+        NumericRow {
+            start: 0,
+            length: 0,
+            domain: NumericDomain::Ordinal { rank_count: 3 },
+        };
+        65
+    ];
+    rows[0].domain = NumericDomain::Weights;
     let parts = FormulaParts::from_numeric_raw(
         vec![Node::atom(0)],
         vec![],
         vec![],
         vec![],
-        vec![
-            NumericRow {
-                start: 0,
-                length: 0,
-                domain: NumericDomain::Ordinal { rank_count: 3 },
-            };
-            65
-        ],
-        vec![],
+        rows,
+        vec![ThresholdDescriptor { row: 0, bound: 1 }],
         vec![ExtremumCutDescriptor {
             row: 64,
             rule: ExtremumCutRule::Prefix(2),
@@ -710,7 +712,9 @@ fn evaluation_bound_includes_unused_cut_descriptors() {
     let owner = Theory::new(1, parts, vec![0], AdmissionLimits::default()).unwrap();
     let candidate = world(&owner, 1);
     let bound = u64::try_from(EvaluationWorkspace::work_bound(&owner)).unwrap();
-    assert_eq!(bound, 69);
+    assert_eq!(bound, 2);
+    assert_eq!(NumericRowScratch::requested_bytes(&owner), 0);
+    assert_eq!(NumericRowScratch::reset_work_bound(&owner), 0);
     let mut workspace = EvaluationWorkspace::default();
     let attempt = workspace.evaluate(
         &candidate,

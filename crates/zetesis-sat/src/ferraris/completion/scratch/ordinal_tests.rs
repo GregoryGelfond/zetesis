@@ -4,7 +4,7 @@ use super::*;
 use crate::{Cancellation, ReductPreparationLimits};
 use zetesis_ferraris::{
     AdmissionLimits, ExtremaMeasure, ExtremumCutDescriptor, ExtremumCutRule, FormulaParts, Node,
-    NumericDomain, NumericRow,
+    NumericDomain, NumericRow, ThresholdDescriptor,
 };
 
 fn theory(rows: usize, cuts: bool) -> Theory {
@@ -17,7 +17,7 @@ fn theory(rows: usize, cuts: bool) -> Theory {
         rows
     ];
     // One ordinal row and many unused weight rows still require dense cache
-    // slots. Without descriptors neither domain requests cache storage.
+    // slots. Without live numeric nodes neither domain requests cache storage.
     spans[rows - 1] = NumericRow {
         start: 0,
         length: 1,
@@ -62,45 +62,48 @@ fn prepare(theory: &Theory) -> PreparedReduct {
 #[test]
 fn completion_counts_both_live_ordinal_caches() {
     for rows in [1_usize, 64, 65, 129] {
-        let theory = theory(rows, true);
-        let owner = prepare(&theory);
-        let nodes = theory.nodes().len() as u128;
-        let cache = rows as u128 * size_of::<ExtremaMeasure>() as u128
-            + rows.div_ceil(64) as u128 * size_of::<u64>() as u128;
-        let evaluation = EvaluationWorkspace::requested_payload_bytes(&theory);
-        assert_eq!(evaluation, nodes * size_of::<bool>() as u128 + cache);
-        let (variables, clauses) = owner.cnf_shape();
-        let previous_transient = transient_counts(1, nodes, variables as u128, nodes);
-        assert_eq!(transient(&owner), previous_transient + cache);
-        let previous_query = query_bytes(
-            1,
-            nodes,
-            owner.parameter_count() as u128,
-            variables as u128,
-            clauses as u128,
-            nodes,
-        );
-        let actual = prepared(&owner, 1).unwrap();
-        assert_eq!(u128::from(actual.query_bytes), previous_query + 2 * cache);
-        let source = requirements(&theory, Limits::default(), 1).unwrap();
-        let previous_source = counts(
-            1,
-            u64::try_from(nodes).unwrap(),
-            u64::try_from(theory.parts().occurrences()).unwrap(),
-            0,
-            nodes,
-            Limits::default(),
-            1,
-        )
-        .unwrap();
-        assert_eq!(
-            u128::from(source.query_bytes - previous_source.query_bytes),
-            2 * cache,
-        );
-        assert!(source.query_bytes >= actual.query_bytes);
-        assert_eq!(source.shared_bytes, previous_source.shared_bytes);
-        assert_eq!(source.result_bytes, previous_source.result_bytes);
+        assert_numeric_receipt(&theory(rows, true), rows);
     }
+}
+
+fn assert_numeric_receipt(theory: &Theory, rows: usize) {
+    let owner = prepare(theory);
+    let nodes = theory.nodes().len() as u128;
+    let cache = rows as u128 * size_of::<ExtremaMeasure>() as u128
+        + rows.div_ceil(64) as u128 * size_of::<u64>() as u128;
+    let evaluation = EvaluationWorkspace::requested_payload_bytes(theory);
+    assert_eq!(evaluation, nodes * size_of::<bool>() as u128 + cache);
+    let (variables, clauses) = owner.cnf_shape();
+    let previous_transient = transient_counts(1, nodes, variables as u128, nodes);
+    assert_eq!(transient(&owner), previous_transient + cache);
+    let previous_query = query_bytes(
+        1,
+        nodes,
+        owner.parameter_count() as u128,
+        variables as u128,
+        clauses as u128,
+        nodes,
+    );
+    let actual = prepared(&owner, 1).unwrap();
+    assert_eq!(u128::from(actual.query_bytes), previous_query + 2 * cache);
+    let source = requirements(theory, Limits::default(), 1).unwrap();
+    let previous_source = counts(
+        1,
+        u64::try_from(nodes).unwrap(),
+        u64::try_from(theory.parts().occurrences()).unwrap(),
+        0,
+        nodes,
+        Limits::default(),
+        1,
+    )
+    .unwrap();
+    assert_eq!(
+        u128::from(source.query_bytes - previous_source.query_bytes),
+        2 * cache,
+    );
+    assert!(source.query_bytes >= actual.query_bytes);
+    assert_eq!(source.shared_bytes, previous_source.shared_bytes);
+    assert_eq!(source.result_bytes, previous_source.result_bytes);
 }
 
 #[test]
@@ -198,4 +201,38 @@ fn actual_cache_growth_is_admitted_before_candidate_work() {
     assert_eq!(budget.statistics, before_budget);
     assert_eq!(statistics, before_statistics);
     assert!(accepted.is_empty());
+}
+
+#[test]
+fn completion_counts_both_live_weighted_caches() {
+    for rows in [1_usize, 64, 65, 129] {
+        let mut spans = vec![
+            NumericRow {
+                start: 0,
+                length: 0,
+                domain: NumericDomain::Ordinal { rank_count: 3 },
+            };
+            rows
+        ];
+        spans[rows - 1] = NumericRow {
+            start: 0,
+            length: 1,
+            domain: NumericDomain::Weights,
+        };
+        let parts = FormulaParts::from_numeric_raw(
+            vec![Node::atom(0), Node::threshold(0)],
+            vec![],
+            vec![0],
+            vec![2],
+            spans,
+            vec![ThresholdDescriptor {
+                row: rows - 1,
+                bound: 2,
+            }],
+            vec![],
+        )
+        .unwrap();
+        let owner = Theory::new(1, parts, vec![], AdmissionLimits::default()).unwrap();
+        assert_numeric_receipt(&owner, rows);
+    }
 }
