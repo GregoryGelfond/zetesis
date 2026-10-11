@@ -27,6 +27,16 @@ The conditions need not be independent. The progression may contain values that
 no interpretation realizes; it only has to contain every realizable sum. A
 nonempty intersection therefore supplies no model or answer-set certificate.
 
+`interval_intersection_refines` explains when a divisor scan can stop without
+refuting. If the final divisor divides the divisor of the scanned prefix, write
+`partial = final * factor`. Every point `B + partial*k` is the same point as
+`B + final*(factor*k)`. Thus an interval intersection already found for the
+partial progression survives further gcd refinement, with the base and interval
+held fixed. The law even holds without positivity; its intended gcd application
+uses positive divisors. This permits skipping the rest of that refutation check,
+not accepting a subset sum or a candidate. Establishing the scan's divisibility
+invariant and its Rust early-exit correspondence remains separate work.
+
 The Rust check uses coefficients grouped by identical condition. Its divisor can
 be stronger than the divisor of the ungrouped weights: two occurrences with
 weights 2 and 3 under one condition contribute either 0 or 5. The theorem applies

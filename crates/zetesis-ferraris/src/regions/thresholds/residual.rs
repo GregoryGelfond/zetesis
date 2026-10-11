@@ -4,8 +4,11 @@
 //! base plus a multiple of the gcd of undecided coefficients. Missing that
 //! lattice refutes a region; hitting it does not establish a possible model.
 //! This original-only check neither publishes bounds nor changes formula truth.
-//! It allocates nothing, charging terms and Euclidean steps. Dirty events
-//! coalesce, but successive event waves can still rescan a row.
+//! A partial gcd admitting an interval point cannot lead to a refutation: every
+//! later gcd divides it, so the final lattice still contains that point. Scan
+//! small coefficients first to expose these exits without another term order.
+//! It allocates nothing, charging terms, Euclidean steps and interval checks.
+//! Dirty events coalesce, but successive event waves can still rescan a row.
 
 use crate::regions::{Closure, Count, Narrower, Step, Work, bit};
 use zetesis_cpu::Stop;
@@ -73,14 +76,23 @@ impl<C: Count> Closure<'_, C> {
             .possible
             .min(upper.checked_sub(1).ok_or(Stop::InvalidProgram)?);
         let mut divisor = 0;
-        for &(condition, weight) in &data.terms {
+        // Forcing keeps its descending order; this independent reduction reads
+        // the same immutable coefficients from the small end.
+        for &(condition, weight) in data.terms.iter().rev() {
             work.tick()?;
             if bit(self.known.sure, condition) || bit(self.known.never, condition) {
                 continue;
             }
+            let previous = divisor;
             divisor = gcd(divisor, weight, work)?;
             if divisor == 1 {
                 return Ok(Step::Unchanged);
+            }
+            if divisor != previous {
+                work.tick()?;
+                if !misses(state.known, lower, upper, divisor)? {
+                    return Ok(Step::Unchanged);
+                }
             }
         }
         work.tick()?;

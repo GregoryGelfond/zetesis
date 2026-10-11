@@ -94,6 +94,8 @@ divisor of the undecided coefficients confines every completion to one arithmeti
 progression; `interval_refuted` and `formula_interval_refuted` exclude a required
 interval when that progression misses it. Correlated conditions may make further
 values unreachable, so a nonempty intersection is not a satisfaction certificate.
+A further divisor reduction preserves any existing progression point; this
+justifies ending the gcd scan once its current progression intersects the interval.
 The [reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/threshold-residues.md)
 distinguishes this restriction from full attainable-sum computation.
 

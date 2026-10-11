@@ -1628,6 +1628,7 @@ import Zetesis
 #print axioms Zetesis.ThresholdResidues.sum_decomposition
 #print axioms Zetesis.ThresholdResidues.sum_residue
 #print axioms Zetesis.ThresholdResidues.residual_divisible
+#print axioms Zetesis.ThresholdResidues.interval_intersection_refines
 #print axioms Zetesis.ThresholdResidues.interval_refuted
 #print axioms Zetesis.ThresholdResidues.formula_interval_refuted
 #print axioms Zetesis.Thresholds.threshold_query_exact

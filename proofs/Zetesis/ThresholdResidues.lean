@@ -82,6 +82,25 @@ theorem residual_divisible (lower upper actual : β → Bool)
     (ThresholdDivision.divide divisor (remaining lower upper inputs)), ?_⟩
   omega
 
+/-- Refining a divisor cannot remove an existing interval intersection. If the
+    refined divisor divides the earlier one, write the earlier divisor as their
+    product. Each earlier progression point then has the same value at a scaled
+    index in the refined progression. Positivity is unnecessary for this
+    inclusion. A progression point need not be a realizable selected sum. -/
+theorem interval_intersection_refines (base earlier refined low high : Nat)
+    (divides : refined ∣ earlier)
+    (intersects : ∃ multiple : Nat,
+      low ≤ base + earlier * multiple ∧ base + earlier * multiple < high) :
+    ∃ multiple : Nat,
+      low ≤ base + refined * multiple ∧ base + refined * multiple < high := by
+  obtain ⟨factor, factorization⟩ := divides
+  obtain ⟨multiple, within⟩ := intersects
+  have samePoint : base + earlier * multiple =
+      base + refined * (factor * multiple) := by
+    rw [factorization, Nat.mul_assoc]
+  refine ⟨factor * multiple, ?_⟩
+  simpa only [← samePoint] using within
+
 /-- An interval containing no point of the residual progression cannot contain
     a compatible sum. The argument uses the exact witness above, not an assumption
     that undecided conditions can be chosen independently. The upper bound is

@@ -1706,6 +1706,7 @@
 'Zetesis.ThresholdResidues.sum_decomposition' depends on axioms: [propext]
 'Zetesis.ThresholdResidues.sum_residue' depends on axioms: [propext]
 'Zetesis.ThresholdResidues.residual_divisible' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdResidues.interval_intersection_refines' depends on axioms: [propext]
 'Zetesis.ThresholdResidues.interval_refuted' depends on axioms: [propext]
 'Zetesis.ThresholdResidues.formula_interval_refuted' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.Thresholds.threshold_query_exact' depends on axioms: [propext, Classical.choice, Quot.sound]

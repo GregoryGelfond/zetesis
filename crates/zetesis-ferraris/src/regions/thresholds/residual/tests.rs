@@ -1,6 +1,6 @@
 //! Residual arithmetic preserves compatible models and consumes only closed sums.
 
-use crate::regions::{NarrowingStatistics, Work};
+use crate::regions::{Closure, NarrowingStatistics, Step, Width, Work};
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaNodes, FormulaParts,
     FrozenSubject, Interpretation, Knowledge, Limits, Narrower, Narrowing, NarrowingQuota,
@@ -332,6 +332,81 @@ fn lattice_distance_handles_extreme_bounds() {
     assert!(!misses(i128::MAX - 3, i128::MAX - 1, i128::MAX, 2).unwrap());
     assert!(!misses(7, 7, 7, 0).unwrap());
     assert!(misses(7, 8, 9, 0).unwrap());
+}
+
+#[test]
+fn gcd_refinement_preserves_interval_intersections() {
+    // One further coefficient can only enlarge the congruence lattice. The
+    // large base also checks the overflow-safe distance representation.
+    for divisor in 1..=16 {
+        for weight in 1..=16 {
+            let refined = gcd(divisor, weight, &mut Work::new(u64::MAX)).unwrap();
+            for base in [0, 7, i128::MAX - 64] {
+                for offset in 0..=16 {
+                    for width in 0..=4 {
+                        let lower = base + offset;
+                        let upper = lower + width;
+                        if !misses(base, lower, upper, divisor).unwrap() {
+                            assert!(!misses(base, lower, upper, refined).unwrap());
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn closed_residual_work(theory: &Theory, region: &mut Region) -> u64 {
+    let index = Narrower::new(theory);
+    assert_eq!(index.thresholds.rows.len(), 1);
+    let mut knowledge = index.knowledge();
+    assert_ne!(
+        close(
+            theory,
+            &index,
+            region,
+            &mut knowledge,
+            &mut NarrowingScratch::default(),
+        )
+        .0,
+        Narrowing::Refuted
+    );
+    let Width::Compact16(known) = &mut knowledge.width else {
+        panic!("the small residual fixture uses compact counters");
+    };
+    let mut work = Work::new(u64::MAX);
+    let result = Closure {
+        known: known.borrow(),
+        lists: &mut NarrowingScratch::default(),
+    }
+    .threshold_residual(&index, 0, &mut work)
+    .unwrap();
+    assert!(result == Step::Unchanged);
+    work.spent
+}
+
+#[test]
+fn unit_coefficient_ends_residual_scan() {
+    let theory = residual();
+    let mut region = Region::all_open(65);
+    // One row tick and one term read suffice. Reading from the large end
+    // instead visits every undecided coefficient before finding the unit.
+    assert_eq!(closed_residual_work(&theory, &mut region), 2);
+    assert!((0..65).all(|atom| region.is_open(atom)));
+}
+
+#[test]
+fn intersecting_residue_ends_scan_before_remaining_terms() {
+    let theory = residual();
+    let mut region = Region::all_open(65);
+    assert!(region.hold(0));
+    // The unit is fixed, so no remaining coefficient can give gcd 1. The first
+    // 10 after the 6s gives gcd 2 and admits 17 = 1 + 16; the remaining 10s
+    // cannot invalidate that lattice point. Each term read costs a tick, so a
+    // receipt smaller than the row proves that the whole row was not scanned.
+    assert!(closed_residual_work(&theory, &mut region) < 65);
+    assert!(region.is_held(0));
+    assert!((1..65).all(|atom| region.is_open(atom)));
 }
 
 #[test]

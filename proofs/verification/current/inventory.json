@@ -8142,12 +8142,17 @@
     },
     {
       "file": "Zetesis/ThresholdResidues.lean",
-      "line": 89,
+      "line": 90,
+      "name": "Zetesis.ThresholdResidues.interval_intersection_refines"
+    },
+    {
+      "file": "Zetesis/ThresholdResidues.lean",
+      "line": 108,
       "name": "Zetesis.ThresholdResidues.interval_refuted"
     },
     {
       "file": "Zetesis/ThresholdResidues.lean",
-      "line": 111,
+      "line": 130,
       "name": "Zetesis.ThresholdResidues.formula_interval_refuted"
     },
     {
@@ -8996,7 +9001,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "d6ed4be73ed263dc126ac243b383d959544c098d9adbc3c959e54b638b325696",
+    "Audit.lean": "0a034e73003747ba7f3e333ff78f1d2ae2ac8427fb3a266af5b8802177aae240",
     "Zetesis.lean": "73214e3657bb701dd45cb8723e3c3f3c3f1546ab393118f14ca856a83c2a35d1",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
@@ -9166,7 +9171,7 @@
     "Zetesis/ThresholdPrefixes.lean": "a7741e66b7dd983b727bee98e1d37a504b818aefd24a3851df45fcc2ababdf44",
     "Zetesis/ThresholdPropagation.lean": "c2d637283903b1f7f653390e1c939452168b86fb2ed7f582bfc5c502f89dca75",
     "Zetesis/ThresholdReduct.lean": "cd65ca3c8b5b66cea0058413b3290bae0da6ac51dbd553283a9647a2841f5840",
-    "Zetesis/ThresholdResidues.lean": "a6f4e327c303dcef75701096fa3d9c8681ae2804b63496029c2c5be5b4f02be7",
+    "Zetesis/ThresholdResidues.lean": "5fb8021d1ac4e0224f52a489281270b3573633d55fbf59a2c5cf62ddc350349e",
     "Zetesis/Thresholds.lean": "271ba89d3885ecf242dca61cc0ce8998f7b0f36db6a4df907ed1d4f7bd075a85",
     "Zetesis/TightBodyRecognition.lean": "fc2f7e335c6fb1d96f807f073ba54afa1e3c6ea37da6003f89e8733599c1ccdb",
     "Zetesis/TightEvaluation.lean": "a8dfdd3824eae4fdd35696869d47e56cb26ae1d931e0a0442a68f29498822864",

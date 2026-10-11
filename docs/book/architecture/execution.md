@@ -115,7 +115,10 @@ This check reads processed sums only after pending node events drain. It shares
 the row queue, distinguishing a changed sum from a request to transfer bounds,
 so arithmetic notifications do not repeat Boolean or prefix transport. It
 publishes no new bounds and adds no state to child copies. Work includes visited
-coefficients and Euclidean remainder steps; repeated event waves can rescan a row.
+coefficients, Euclidean remainder steps and interval tests. The scan visits
+smaller coefficients first and stops if the current progression intersects the
+interval: further gcd reductions preserve that intersection, so they cannot
+refute the region. Repeated event waves can still rescan a row.
 Frozen-reduct narrowing is unchanged. The
 [residual-sum laws](../lean/correspondence.md#nonnegative-aggregate-thresholds)
 state the necessary condition and the remaining implementation obligations.

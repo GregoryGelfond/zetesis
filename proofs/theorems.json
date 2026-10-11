@@ -8140,14 +8140,19 @@
     "line": 73
   },
   {
+    "name": "Zetesis.ThresholdResidues.interval_intersection_refines",
+    "file": "Zetesis/ThresholdResidues.lean",
+    "line": 90
+  },
+  {
     "name": "Zetesis.ThresholdResidues.interval_refuted",
     "file": "Zetesis/ThresholdResidues.lean",
-    "line": 89
+    "line": 108
   },
   {
     "name": "Zetesis.ThresholdResidues.formula_interval_refuted",
     "file": "Zetesis/ThresholdResidues.lean",
-    "line": 111
+    "line": 130
   },
   {
     "name": "Zetesis.Thresholds.threshold_query_exact",

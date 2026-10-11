@@ -12,6 +12,8 @@ use crate::{
 use super::super::{Row, State};
 use super::{links, prepare};
 
+mod promotion;
+
 fn row(conditions: &[usize], weights: &[u64]) -> Row {
     Row::new(Threshold {
         conditions,
