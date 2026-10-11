@@ -126,6 +126,9 @@ fn queue(
         .prepare_thresholds(index.thresholds.rows.len())
         .unwrap();
     if let Some(row) = promoted {
+        scratch
+            .prepare_residuals(index.thresholds.rows.len())
+            .unwrap();
         scratch.queue_residual(row);
     }
     for &row in order {
@@ -136,8 +139,7 @@ fn queue(
 
 fn pop_order(mut scratch: NarrowingScratch) -> Vec<usize> {
     let mut rows = Vec::new();
-    while let Some((row, transfer)) = scratch.next_threshold() {
-        assert!(transfer);
+    while let Some(row) = scratch.next_threshold() {
         rows.push(row);
     }
     rows
@@ -161,8 +163,8 @@ fn schedules(index: &Narrower, knowledge: &Knowledge) -> Vec<(Vec<usize>, Option
         })
     {
         let mut order = forward;
-        // Promotion changes the pop order only when the row was not already
-        // the first mandatory insertion. Preserve that discriminating premise.
+        // The old combined queue changed the pop order when a residual row
+        // preceded a different mandatory insertion. Preserve that discriminator.
         if order[0] == row {
             order.swap(0, 1);
         }
@@ -272,7 +274,7 @@ fn verify(case: &Case) {
     for (order, promoted) in schedules {
         let actual_order = pop_order(queue(&theory, &index, &order, promoted));
         if promoted.is_some() {
-            assert_ne!(
+            assert_eq!(
                 actual_order,
                 pop_order(queue(&theory, &index, &order, None))
             );

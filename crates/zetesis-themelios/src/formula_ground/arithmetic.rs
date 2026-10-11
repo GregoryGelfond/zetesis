@@ -1,7 +1,9 @@
 //! Authoritative family evidence over completed support, before formula emission.
 //!
 //! Comparison/domain pruning and support delta shortcuts are deliberately absent
-//! here. A complete false row still witnesses defined arithmetic. Each local
+//! in evidence cursors. A whole flat family whose scalar and key obligations
+//! are proved total on completed support needs no such scan. A complete false
+//! row otherwise still witnesses defined arithmetic. Each local
 //! source occurrence is finalized for its fixed outer binding, after combining
 //! its normalized alternatives. Top-level fragments with the same original
 //! source span likewise merge their evidence.
@@ -10,6 +12,7 @@
 //! visited. Each push spends grounding work and reserves fallibly; transient
 //! frame cells do not consume the cumulative scalar-payload allowance.
 
+mod certified;
 mod constant_divisors;
 
 use crate::formula_support::{Context, GroundingWork};
@@ -69,21 +72,7 @@ pub(super) fn prepare<'a, 'source>(
     counters: &mut Counters,
 ) -> Result<Warnings, FormulaFailure> {
     let mut warnings = Warnings::default();
-    let mut affected = Vec::new();
-    for rule in prepared.rules.iter().chain(&prepared.projection) {
-        if contains_partial(rule, limits, counters)?
-            && !constant_divisors::deferred(
-                rule,
-                prepared,
-                Context::new(&*computation, limits, counters, rule.location),
-            )?
-        {
-            affected
-                .try_reserve(1)
-                .map_err(|_| allocation(rule.location))?;
-            affected.push(rule.location);
-        }
-    }
+    let affected = affected(prepared, support, computation, limits, budget, counters)?;
     let mut families: Vec<(ProgramSite, Evidence)> = Vec::new();
     for rule in prepared.rules.iter().chain(&prepared.projection) {
         counters.charge_work(affected.len() as u128, limits, rule.location)?;
@@ -138,6 +127,72 @@ pub(super) fn prepare<'a, 'source>(
         warnings.family(evidence, limits, counters, location)?;
     }
     Ok(warnings)
+}
+
+/// Original sites whose complete family still needs explicit evidence.
+fn affected<'a, 'source>(
+    prepared: &'a Prepared,
+    support: &'a Support<'source>,
+    computation: &mut Computation<'_, 'source>,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+) -> Result<Vec<ProgramSite>, FormulaFailure> {
+    let mut affected = Vec::new();
+    for (position, rule) in prepared
+        .rules
+        .iter()
+        .chain(&prepared.projection)
+        .enumerate()
+    {
+        if contains_partial(rule, limits, counters)?
+            && !earlier_partial(prepared, position, rule.location, limits, counters)?
+            && !constant_divisors::deferred(
+                rule,
+                prepared,
+                Context::new(&*computation, limits, counters, rule.location),
+            )?
+            && !certified::family(
+                prepared,
+                rule.location,
+                support,
+                computation,
+                limits,
+                budget,
+                counters,
+            )?
+        {
+            affected
+                .try_reserve(1)
+                .map_err(|_| allocation(rule.location))?;
+            affected.push(rule.location);
+        }
+    }
+    Ok(affected)
+}
+
+/// Process each original partial family once without retaining another index.
+/// Only earlier siblings at this site need a partiality check. Every metadata
+/// visit is charged; the scan is bounded by the prepared fragment population.
+fn earlier_partial(
+    prepared: &Prepared,
+    position: usize,
+    location: ProgramSite,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<bool, FormulaFailure> {
+    for previous in prepared
+        .rules
+        .iter()
+        .chain(&prepared.projection)
+        .take(position)
+    {
+        counters.work(limits, location)?;
+        if previous.location == location && contains_partial(previous, limits, counters)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 /// Objective rows use the same independent nested-scope evidence before their

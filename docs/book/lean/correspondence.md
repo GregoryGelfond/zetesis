@@ -99,13 +99,15 @@ justifies ending the gcd scan once its current progression intersects the interv
 The [reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/threshold-residues.md)
 distinguishes this restriction from full attainable-sum computation.
 
-The original-only Rust check uses existing grouped rows after node events drain.
-A packed reason mask distinguishes arithmetic notifications from bound transport
-on the shared row queue. The check refutes regions without publishing bounds;
-its notifications arise only from processed conditions or existing stricter
-requirements. Grouping, the gcd computation and remainder-based interval test,
-finite-width arithmetic, snapshot consistency, queue termination and resource
-accounting remain executable correspondence obligations. These laws do not
+The original-only Rust check uses existing grouped rows after mandatory node,
+bound-transfer, witness and support propagation reaches a fixed point. Separate
+coalesced queues keep arithmetic notifications from changing bound-transfer order.
+The check refutes regions without publishing bounds or events, so each dirty row
+is checked at most once per closure. Notifications arise only from processed
+conditions or existing stricter requirements. Grouping, the gcd computation and
+remainder-based interval test, finite-width arithmetic, snapshot consistency,
+queue scheduling and termination, and resource accounting remain executable
+correspondence obligations. The laws do not verify this scheduling policy or
 qualify the retained native extraction or frozen-reduct propagation.
 
 [`ThresholdDivision.equivalent`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ThresholdDivision.lean)
@@ -785,6 +787,18 @@ zero-divisor classification and those local scopes. Normalized fragments must
 preserve their original family identity; sharing a diagnostic span is not
 enough. These laws do not certify the source walker, its work limits or checked
 arithmetic. An arithmetic fault and a missing positive fact are different objects.
+
+The Rust [whole-family omission](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/arithmetic/certified.rs)
+uses a stronger implementation premise: every normalized sibling is flat, its
+scalar expressions are total on completed positive columns, and its body and
+plain-head key variables are covered by positive atoms. It can then omit a scan
+that would discover neither an undefined instance nor a fatal diagnostic. The
+proof attempt does not construct a definedness witness or claim that a join is
+nonempty; empty required columns and any unproved sibling retain the ordinary
+whole-family traversal. `ArithmeticFamilies` does not prove this Rust classifier,
+its original-family association, scalar/key coverage, temporary storage or
+failure behavior. Those remain correspondence obligations alongside the existing
+column-totality transfers described below.
 
 [`ScalarArithmetic`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ScalarArithmetic.lean)
 specifies checked scalar values and faults, and its `evaluate` plan stops at the

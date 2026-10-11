@@ -42,9 +42,17 @@ be stronger than the divisor of the ungrouped weights: two occurrences with
 weights 2 and 3 under one condition contribute either 0 or 5. The theorem applies
 to the supplied row; preservation under runtime grouping is a separate premise.
 
+The Rust implementation coalesces arithmetic notifications separately from bound
+transport and runs them after node, bound-transfer, witness and support propagation
+settles. Each dirty row is then checked once; the check creates no further events.
+An earlier arithmetic refutation remains valid after more decisions or tighter
+bounds, since these only restrict its possible completions. This scheduling
+argument is separate from the proved arithmetic statements above.
+
 The mathematical arithmetic is unbounded. The Rust implementation must establish
 grouped-row correspondence, its greatest-common-divisor computation, the interval
 test, checked machine arithmetic and complete processing of pending truth events
-before reading the sum. Queue termination, cancellation and memory accounting
-remain implementation obligations. This is an original-candidate restriction;
-it neither changes the frozen reduct nor establishes answer-set membership.
+before reading the sum. Queue ordering and termination, cancellation and memory
+accounting remain implementation obligations. This is an original-candidate
+restriction; it neither changes the frozen reduct nor establishes answer-set
+membership.

@@ -91,7 +91,46 @@ fn grouped_divisibility_refutes_beyond_intervals() {
         &mut scratch,
     );
     assert_eq!(result.0, Narrowing::Refuted);
-    assert!(scratch.threshold_rows.capacity() >= 1);
+    assert_eq!(scratch.threshold_rows.capacity(), 0);
+    assert!(scratch.residual_rows.capacity() >= 1);
+}
+
+#[test]
+fn completed_residue_reuses_its_last_interval_check() {
+    let theory = grouped();
+    let index = Narrower::new(&theory);
+    let mut knowledge = index.knowledge();
+    assert_eq!(
+        close(
+            &theory,
+            &index,
+            &mut Region::all_open(8),
+            &mut knowledge,
+            &mut NarrowingScratch::default(),
+        )
+        .0,
+        Narrowing::Refuted
+    );
+    let Width::Compact16(known) = &mut knowledge.width else {
+        panic!("the small residual fixture uses compact counters");
+    };
+    // Mandatory propagation is closed and leaves all eight conditions open.
+    // Their grouped weights are all 5, and the required value is 17. The row
+    // tick, eight coefficient reads and one distinct progression test suffice;
+    // equal gcd operands need no Euclidean remainder step. Rechecking that
+    // final progression would exhaust this allowance rather than refute.
+    let mut work = Work::new(10);
+    let closure = Closure {
+        known: known.borrow(),
+        lists: &mut NarrowingScratch::default(),
+    };
+    assert!((0..8).all(
+        |condition| !crate::regions::bit(closure.known.sure, condition)
+            && !crate::regions::bit(closure.known.never, condition)
+    ));
+    let outcome = closure.threshold_residual(&index, 0, &mut work);
+    assert!(matches!(outcome, Ok(Step::Contradiction)));
+    assert_eq!(work.spent, 10);
 }
 
 #[test]
@@ -425,7 +464,8 @@ fn euclidean_steps_preserve_work_refusal() {
 fn unit_rows_do_not_allocate_residual_queue() {
     let theory = interval(8, &(0..8).map(|atom| (atom, 1)).collect::<Vec<_>>(), [3, 4]);
     let index = Narrower::new(&theory);
-    assert!(!index.thresholds.needs_row_queue());
+    assert!(!index.thresholds.has_residuals());
+    assert!(!index.thresholds.has_relations());
     let mut scratch = NarrowingScratch::default();
     assert_ne!(
         close(
@@ -440,43 +480,54 @@ fn unit_rows_do_not_allocate_residual_queue() {
     );
     assert_eq!(scratch.threshold_rows.capacity(), 0);
     assert_eq!(scratch.pending_thresholds.capacity(), 0);
-    assert_eq!(scratch.threshold_transfers.capacity(), 0);
+    assert_eq!(scratch.pending_residuals.capacity(), 0);
+    assert_eq!(scratch.residual_rows.capacity(), 0);
 }
 
 #[test]
-fn arithmetic_notifications_do_not_request_transport() {
+fn arithmetic_notifications_preserve_transport_order() {
     let mut scratch = NarrowingScratch::default();
     scratch.prepare_thresholds(130).unwrap();
+    scratch.prepare_residuals(130).unwrap();
     for row in [0, 63, 64, 129] {
         scratch.queue_residual(row);
         scratch.queue_residual(row);
     }
+    scratch.queue_threshold(129);
     scratch.queue_threshold(63);
     scratch.queue_residual(63);
-    assert_eq!(scratch.next_threshold(), Some((129, false)));
-    assert_eq!(scratch.next_threshold(), Some((64, false)));
-    assert_eq!(scratch.next_threshold(), Some((63, true)));
-    assert_eq!(scratch.next_threshold(), Some((0, false)));
+    // The earlier residual insertion must not move mandatory row 63 behind 129.
+    assert_eq!(scratch.next_threshold(), Some(63));
+    assert_eq!(scratch.next_threshold(), Some(129));
     assert_eq!(scratch.next_threshold(), None);
+    for row in [129, 64, 63, 0] {
+        assert_eq!(scratch.next_residual(), Some(row));
+    }
+    assert_eq!(scratch.next_residual(), None);
     assert!(scratch.pending_thresholds.iter().all(|&word| word == 0));
-    assert!(scratch.threshold_transfers.iter().all(|&word| word == 0));
+    assert!(scratch.pending_residuals.iter().all(|&word| word == 0));
     let retained = scratch.retained_bytes();
     scratch.queue_threshold(64);
+    scratch.queue_residual(64);
     scratch.prepare(0);
     assert_eq!(scratch.next_threshold(), None);
+    assert_eq!(scratch.next_residual(), None);
     scratch.queue_residual(64);
-    assert_eq!(scratch.next_threshold(), Some((64, false)));
+    assert_eq!(scratch.next_residual(), Some(64));
     assert_eq!(scratch.retained_bytes(), retained);
 }
 
 #[test]
-fn row_queue_receipt_includes_both_pending_masks() {
+fn row_queue_receipt_includes_both_worklists() {
     let mut scratch = NarrowingScratch::default();
     scratch.prepare_thresholds(130).unwrap();
-    assert!(scratch.threshold_transfers.capacity() >= 3);
-    let entries = scratch.threshold_rows.capacity() as u128 * size_of::<usize>() as u128;
-    let flags = (scratch.pending_thresholds.capacity() as u128
-        + scratch.threshold_transfers.capacity() as u128)
+    scratch.prepare_residuals(130).unwrap();
+    assert!(scratch.pending_residuals.capacity() >= 3);
+    assert!(scratch.residual_rows.capacity() >= 130);
+    let entries = (scratch.threshold_rows.capacity() + scratch.residual_rows.capacity()) as u128
+        * size_of::<usize>() as u128;
+    let flags = (scratch.pending_thresholds.capacity() + scratch.pending_residuals.capacity())
+        as u128
         * size_of::<u64>() as u128;
     assert_eq!(scratch.retained_bytes(), entries + flags);
 }
@@ -537,8 +588,9 @@ fn stopped_residual_closures_do_not_poison_reuse() {
             assert_eq!(actual.0, completed.0);
             assert_eq!(actual.1.work, completed.1.work);
             assert!(scratch.threshold_rows.is_empty());
+            assert!(scratch.residual_rows.is_empty());
             assert!(scratch.pending_thresholds.iter().all(|&word| word == 0));
-            assert!(scratch.threshold_transfers.iter().all(|&word| word == 0));
+            assert!(scratch.pending_residuals.iter().all(|&word| word == 0));
         }
     }
 }
@@ -602,7 +654,10 @@ fn frozen_subjects_do_not_run_residual_checks() {
                 .unwrap();
             assert_eq!(scratch.threshold_rows.capacity(), 0);
             assert_eq!(scratch.pending_thresholds.capacity(), 0);
-            assert_eq!(scratch.threshold_transfers.capacity(), 0);
+            assert_eq!(scratch.pending_residuals.capacity(), 0);
+            assert_eq!(scratch.residual_rows.capacity(), 0);
         }
     }
 }
+
+mod phase;

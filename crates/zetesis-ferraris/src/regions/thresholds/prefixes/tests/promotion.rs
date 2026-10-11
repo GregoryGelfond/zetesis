@@ -1,5 +1,5 @@
-//! A residual entry promoted to transport keeps its earlier queue position.
-//! Both resulting schedules must reach the same closed facts and split score.
+//! Residual notifications do not change mandatory transport order.
+//! Both pending schedules must reach the same closed facts and split score.
 
 use crate::regions::{Closure, NarrowingStatistics, Step, Subject, Width, Work, bit};
 use crate::{
@@ -94,6 +94,9 @@ impl Fixture {
             .unwrap();
         let [initial, extended] = self.endpoints;
         if promoted {
+            scratch
+                .prepare_residuals(self.index.thresholds.rows.len())
+                .unwrap();
             scratch.queue_residual(initial);
         }
         scratch.queue_threshold(extended);
@@ -109,16 +112,14 @@ impl Fixture {
             panic!("the small prefix fixture uses compact counters");
         };
         assert!(before.thresholds[initial].has_residual_interval());
-        let order = if promoted {
-            [extended, initial]
-        } else {
-            [initial, extended]
-        };
+        let order = [initial, extended];
         let mut scratch = self.queued(promoted);
         for row in order {
-            assert_eq!(scratch.next_threshold(), Some((row, true)));
+            assert_eq!(scratch.next_threshold(), Some(row));
         }
         assert_eq!(scratch.next_threshold(), None);
+        assert_eq!(scratch.next_residual(), promoted.then_some(initial));
+        assert_eq!(scratch.next_residual(), None);
         scratch = self.queued(promoted);
         finish_pending(&self.theory, &self.index, region, knowledge, &mut scratch)
     }
@@ -165,6 +166,7 @@ fn finish_pending(
     }
     region.snapshot_decided(closure.known.seen);
     assert!(closure.lists.threshold_rows.is_empty());
+    assert!(closure.lists.residual_rows.is_empty());
     assert!(
         closure
             .lists
@@ -175,7 +177,7 @@ fn finish_pending(
     assert!(
         closure
             .lists
-            .threshold_transfers
+            .pending_residuals
             .iter()
             .all(|&word| word == 0)
     );

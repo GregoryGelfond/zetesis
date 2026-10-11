@@ -231,8 +231,8 @@ impl Thresholds {
         self.relations.is_some() || self.connectives.is_some()
     }
 
-    pub(super) fn needs_row_queue(&self) -> bool {
-        self.residuals || self.has_relations()
+    pub(super) fn has_residuals(&self) -> bool {
+        self.residuals
     }
 
     fn related(&self, row: usize) -> &[usize] {

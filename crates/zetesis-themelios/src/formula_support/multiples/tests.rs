@@ -1,6 +1,6 @@
 use super::*;
 use crate::ProgramSite;
-use crate::formula_support::{Counters, testing};
+use crate::formula_support::{Counters, keys, testing};
 use crate::grounding_observer::Profile;
 use crate::test_support::Observer;
 use crate::{FormulaLimits, GroundingPhase, GroundingWork as ObservedWork};
@@ -269,7 +269,7 @@ fn negative_keys_require_positive_binding_coverage() {
                 .patterns
                 .retain(|occurrence| occurrence.atom().predicate().name() != "optional");
             assert!(
-                !keys_covered(
+                !keys::covered(
                     rule,
                     &join.plan,
                     &mut Context::new(&*computation, &limits, counters, rule.location)

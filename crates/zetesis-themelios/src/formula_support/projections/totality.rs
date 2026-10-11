@@ -1,6 +1,6 @@
 //! Optional totality over complete positive source-column domains.
 //!
-//! Final emission, hybrid capture and admitted hybrid checks share this gate
+//! Original-family admission, final emission, hybrid capture and admitted hybrid checks share this gate
 //! over the same completed source carrier. Each expression in an eligible flat normal body
 //! is either a leaf, reads one source variable covered by an ordinary positive
 //! atom column, or has checked arithmetic over several numeric column bounds.
@@ -79,8 +79,9 @@ struct Domain<'source> {
 impl<'a> Projections<'a> {
     /// Use completed, candidate-independent source columns. Success establishes
     /// scalar totality for complete positive bindings and permits post-admission
-    /// selection. Source-family evidence cursors must still traverse their
-    /// complete families.
+    /// selection. A separately covered flat original family may omit its scan
+    /// only when all normalized siblings succeed. Evidence cursors themselves
+    /// still traverse complete families; this proof supplies no defined witness.
     pub(in crate::formula_support) fn total_body(
         &mut self,
         rule: &'a RuleIr,

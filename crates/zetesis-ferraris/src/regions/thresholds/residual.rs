@@ -1,6 +1,6 @@
 //! A residual divisibility check over the existing grouped coefficients.
 //!
-//! After node events drain, every compatible complete sum is the processed
+//! After mandatory propagation drains, every compatible complete sum is the processed
 //! base plus a multiple of the gcd of undecided coefficients. Missing that
 //! lattice refutes a region; hitting it does not establish a possible model.
 //! This original-only check neither publishes bounds nor changes formula truth.
@@ -8,7 +8,9 @@
 //! later gcd divides it, so the final lattice still contains that point. Scan
 //! small coefficients first to expose these exits without another term order.
 //! It allocates nothing, charging terms, Euclidean steps and interval checks.
-//! Dirty events coalesce, but successive event waves can still rescan a row.
+//! Dirty events coalesce across mandatory waves; each row is scanned at most
+//! once per closure. Deferral preserves refutations: deciding conditions only
+//! restricts the old residue lattice, and requirements only tighten its interval.
 
 use crate::regions::{Closure, Count, Narrower, Step, Work, bit};
 use zetesis_cpu::Stop;
@@ -27,26 +29,9 @@ impl State {
 }
 
 impl<C: Count> Closure<'_, C> {
-    /// Node events have drained at this original row event. Transport may
-    /// enqueue more nodes, so the residual check must run first. Arithmetic-only
-    /// notifications do not revisit prefix or Boolean requirement neighbours.
-    pub(in crate::regions) fn threshold_event(
-        &mut self,
-        index: &Narrower,
-        row: usize,
-        transfer: bool,
-        work: &mut Work<'_>,
-    ) -> Result<Step, Stop> {
-        let residual = self.threshold_residual(index, row, work)?;
-        if residual == Step::Contradiction || !transfer {
-            Ok(residual)
-        } else {
-            self.threshold_requirements(index, row, work)
-        }
-    }
-
-    /// Called only for original subjects, before row transport, with no pending
-    /// node events. Thus every sure/never term has updated the processed sums.
+    /// Called only for original subjects after all mandatory propagation drains.
+    /// Thus every sure/never term has updated the processed sums. This check
+    /// publishes no knowledge, so later residual checks cannot dirty the row.
     pub(in crate::regions) fn threshold_residual(
         &self,
         index: &Narrower,
@@ -60,8 +45,10 @@ impl<C: Count> Closure<'_, C> {
         }
         work.tick()?;
         debug_assert!(
-            self.lists.nodes.is_empty(),
-            "residual sums require drained events"
+            self.lists.nodes.is_empty()
+                && self.lists.threshold_rows.is_empty()
+                && self.lists.heads.is_empty(),
+            "residual sums require drained mandatory events"
         );
         let state = self.known.thresholds[row];
         if !state.has_residual_interval() {
@@ -94,6 +81,11 @@ impl<C: Count> Closure<'_, C> {
                     return Ok(Step::Unchanged);
                 }
             }
+        }
+        // Every positive divisor was tested when it last changed. Reaching
+        // the end means that final progression already missed the interval.
+        if divisor != 0 {
+            return Ok(Step::Contradiction);
         }
         work.tick()?;
         Ok(if misses(state.known, lower, upper, divisor)? {

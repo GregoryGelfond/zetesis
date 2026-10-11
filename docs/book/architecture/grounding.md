@@ -605,6 +605,24 @@ reads spend grounding work; omitted joins and binding copies spend none.
 Resource limits remain cumulative, so the numerical work needed for the same
 source can decrease without changing the completed arithmetic verdict.
 
+A separate [whole-family certificate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/arithmetic/certified.rs)
+can omit the evidence scan for flat normal rules and constraints. Every
+normalized sibling of the original source occurrence must pass: completed
+positive columns prove all scalar expressions total, and positive flat atoms
+supply every variable used by body and plain-head keys, including negative
+atoms. The classifier covers flat atoms and scalar or tuple comparisons;
+generated bindings, local scopes and other heads keep the ordinary scan. The
+column proof uses no comparison truth or candidate membership as a premise.
+
+This certificate supplies no defined substitution. Empty required columns
+decline to the existing traversal, and an empty join remains silent. One
+unsupported or unproved sibling retains the complete family's diagnostics,
+including warnings and fatal errors. Successful proof scratch is released before
+the next sibling; no evidence survives the attempt. Preparation spends the
+ordinary grounding work and live-storage allowances, and resource, cancellation
+and owner refusals remain failures. Support-delta production and ordinary formula
+emission retain their existing contracts.
+
 Complete-row scalar comparisons may reuse successful unary projections within
 one join. Descriptors borrow the exact source expressions and are prepared when
 a complete row is first reached or a finite totality attempt needs them. The existing canonical `TermTable` indexes

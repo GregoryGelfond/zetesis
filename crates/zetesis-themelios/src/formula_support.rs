@@ -41,13 +41,14 @@ mod demand;
 mod factoring;
 pub(crate) mod family;
 mod filters;
+mod keys;
 #[cfg(test)]
 mod membership;
+mod multiples;
 mod order;
 #[cfg(test)]
 mod postings;
 mod prepared;
-mod multiples;
 mod probe_selection;
 mod producers;
 mod projections;
@@ -1325,6 +1326,51 @@ impl<'a, 'source> Join<'a, 'source> {
             self.coverage = Coverage::Selected;
         }
         Ok(total)
+    }
+
+    /// Prove a flat original-family fragment has no scalar or key failure over
+    /// its completed positive source columns. This does not establish that a
+    /// complete binding exists and changes neither coverage nor family evidence.
+    /// Every normalized sibling must succeed before the caller omits its scan.
+    /// Unsupported or partial expressions decline; resource/owner errors propagate.
+    pub(super) fn total_family_fragment(
+        &mut self,
+        rule: &'a crate::formula_ir::RuleIr,
+        computation: &mut Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+    ) -> Result<bool, FormulaFailure> {
+        counters.work(limits, rule.location)?;
+        if self.source_evidence
+            || self.delta.is_some()
+            || !matches!(rule.head, HeadIr::Normal(_))
+            || rule.variables != rule.body_variables
+        {
+            return Ok(false);
+        }
+        if !std::ptr::eq(self.literals, rule.body.as_slice()) {
+            return Err(FormulaFailure::SupportRelation {
+                error: zetesis_core::relation::Failure::Owner,
+                location: rule.location,
+            });
+        }
+        if !projections::supports_column_totality(rule, limits, counters)?
+            || !keys::covered(
+                rule,
+                &self.plan,
+                &mut Context::new(&*computation, limits, counters, rule.location),
+            )?
+        {
+            return Ok(false);
+        }
+        let total = self.projections.total_body(
+            rule,
+            self.support,
+            &mut self.evaluation,
+            Context::new(computation, limits, counters, rule.location),
+        );
+        self.evaluation.clear_zero_divisor();
+        total
     }
 
     pub(super) fn element(

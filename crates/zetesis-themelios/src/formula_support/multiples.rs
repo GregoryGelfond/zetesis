@@ -60,7 +60,7 @@ impl<'source> Prepared<'source> {
         let Some((dividend, divisor)) = comparison(rule, &mut context)? else {
             return Ok(None);
         };
-        if !keys_covered(rule, plan, &mut context)? {
+        if !super::keys::covered(rule, plan, &mut context)? {
             return Ok(None);
         }
         let mut divisor_bound = matches!(divisor, Divisor::Constant(_));
@@ -196,77 +196,6 @@ fn number(
         ValueNodeRef::Number(value) => Some(value),
         _ => None,
     })
-}
-
-/// Whole flat keys, including negative literals and a plain head, read only
-/// admitted constants or slots supplied by the complete positive join. No head
-/// evaluation occurs; false-body head suppression remains with the caller.
-fn keys_covered(
-    rule: &RuleIr,
-    plan: &order::Plan<'_>,
-    context: &mut Context<'_, &Computation<'_, '_>>,
-) -> Result<bool, FormulaFailure> {
-    let mut bound = Buffer::new(
-        context.computation,
-        context.work.limits,
-        context.work.counters,
-        context.work.location,
-    )?;
-    bound.resize(
-        rule.body_variables,
-        false,
-        context.computation,
-        context.work.limits,
-        context.work.counters,
-        context.work.location,
-    )?;
-    for occurrence in &plan.patterns {
-        tick(context)?;
-        let PositivePattern::Flat(pattern) = occurrence.pattern else {
-            return Ok(false);
-        };
-        for column in 0..pattern.terms().len() {
-            tick(context)?;
-            if let Some(TemplateTerm::Variable(slot)) = pattern.terms().at(column) {
-                let Some(entry) = bound.slice_mut().get_mut(slot) else {
-                    return Ok(false);
-                };
-                *entry = true;
-            }
-        }
-    }
-    let HeadIr::Normal(head) = &rule.head else {
-        return Ok(false);
-    };
-    for atom in rule
-        .body
-        .iter()
-        .map(|literal| match literal {
-            LiteralIr::Atom(_, atom) => Some(*atom),
-            _ => None,
-        })
-        .chain(head.iter().copied().map(Some))
-    {
-        tick(context)?;
-        let Some(atom) = atom else {
-            continue;
-        };
-        let pattern = context.computation.static_pattern(
-            atom,
-            context.work.limits,
-            context.work.counters,
-            context.work.location,
-        )?;
-        for column in 0..pattern.terms().len() {
-            tick(context)?;
-            if matches!(pattern.terms().at(column), Some(TemplateTerm::Variable(slot))
-                if !bound.slice().get(slot).copied().unwrap_or(false))
-            {
-                return Ok(false);
-            }
-        }
-    }
-    Ok(true)
 }
 
 impl<'a, 'source> Join<'a, 'source> {

@@ -197,10 +197,10 @@ pub(crate) fn prepare(text: &str) -> crate::formula::Preparation {
 /// Complete source support and lend its canonical query and computation owners.
 pub(crate) fn with_completed_source(
     text: &str,
-    run: impl FnOnce(
+    run: impl for<'source> FnOnce(
         &crate::formula_ir::Prepared,
-        &Support<'_>,
-        &mut Computation<'_, '_>,
+        &Support<'source>,
+        &mut Computation<'_, 'source>,
         &mut Counters,
     ),
 ) {

@@ -1338,12 +1338,15 @@ pub struct NarrowingScratch {
     /// One bit per atom, set exactly while the atom is in `heads`, so an
     /// atom's recheck is queued once until it runs.
     pending: Vec<u64>,
-    /// Original-subject rows awaiting residual checks or requirement transport.
+    /// Original-subject rows awaiting prefix/Boolean requirement transport.
     threshold_rows: Vec<usize>,
     /// One bit per row, set exactly while it is in `threshold_rows`.
     pending_thresholds: Vec<u64>,
-    /// Pending rows that also need prefix/Boolean requirement transport.
-    threshold_transfers: Vec<u64>,
+    /// Original-subject arithmetic checks, deferred until mandatory propagation
+    /// reaches a fixed point. These entries never change transport order.
+    residual_rows: Vec<usize>,
+    /// One bit per row, set exactly while it is in `residual_rows`.
+    pending_residuals: Vec<u64>,
     /// Shared connective views and dirty worklists belong to the walker.
     witnesses: witnesses::Scratch,
 }
@@ -1356,8 +1359,9 @@ impl NarrowingScratch {
         (self.learned.capacity() + self.heads.capacity()) as u128 * size_of::<usize>() as u128
             + self.nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
             + self.pending.capacity() as u128 * size_of::<u64>() as u128
-            + self.threshold_rows.capacity() as u128 * size_of::<usize>() as u128
-            + (self.pending_thresholds.capacity() + self.threshold_transfers.capacity()) as u128
+            + (self.threshold_rows.capacity() + self.residual_rows.capacity()) as u128
+                * size_of::<usize>() as u128
+            + (self.pending_thresholds.capacity() + self.pending_residuals.capacity()) as u128
                 * size_of::<u64>() as u128
             + self.witnesses.retained_bytes()
     }
@@ -1371,59 +1375,81 @@ impl NarrowingScratch {
         }
         for &row in &self.threshold_rows {
             self.pending_thresholds[row / 64] &= !(1u64 << (row % 64));
-            self.threshold_transfers[row / 64] &= !(1u64 << (row % 64));
+        }
+        for &row in &self.residual_rows {
+            self.pending_residuals[row / 64] &= !(1u64 << (row % 64));
         }
         self.learned.clear();
         self.nodes.clear();
         self.heads.clear();
         self.threshold_rows.clear();
+        self.residual_rows.clear();
         if self.pending.len() < flag_words(atoms) {
             self.pending.resize(flag_words(atoms), 0);
         }
     }
 
-    /// Reserve the bounded original-subject worklist before closure begins.
-    /// At most one entry per row is pending; no allocation is needed to enqueue.
-    /// Frozen subjects never request this additional scratch.
+    /// Reserve each original-subject worklist only when its route is present.
+    /// At most one entry per row is pending; enqueueing never allocates.
+    /// Frozen subjects never request either additional worklist.
     fn prepare_thresholds(&mut self, rows: usize) -> Result<(), Stop> {
-        self.threshold_rows
-            .try_reserve_exact(rows.saturating_sub(self.threshold_rows.len()))
+        Self::prepare_rows(&mut self.threshold_rows, &mut self.pending_thresholds, rows)
+    }
+
+    fn prepare_residuals(&mut self, rows: usize) -> Result<(), Stop> {
+        Self::prepare_rows(&mut self.residual_rows, &mut self.pending_residuals, rows)
+    }
+
+    fn prepare_rows(
+        entries: &mut Vec<usize>,
+        pending: &mut Vec<u64>,
+        rows: usize,
+    ) -> Result<(), Stop> {
+        entries
+            .try_reserve_exact(rows.saturating_sub(entries.len()))
             .map_err(|_| Stop::Allocation)?;
         let words = flag_words(rows);
-        for flags in [&mut self.pending_thresholds, &mut self.threshold_transfers] {
-            if flags.len() < words {
-                flags
-                    .try_reserve_exact(words - flags.len())
-                    .map_err(|_| Stop::Allocation)?;
-                flags.resize(words, 0);
-            }
+        if pending.len() < words {
+            pending
+                .try_reserve_exact(words - pending.len())
+                .map_err(|_| Stop::Allocation)?;
+            pending.resize(words, 0);
         }
         Ok(())
     }
 
-    /// Requirement changes also request a residual check. Condition changes
-    /// request only arithmetic: they must not repeat prefix or bridge walks.
+    /// Requirement transport retains its own insertion order. Each producer
+    /// then runs `threshold_row`, which separately marks eligible arithmetic.
     fn queue_threshold(&mut self, row: usize) {
-        self.threshold_transfers[row / 64] |= 1u64 << (row % 64);
-        self.queue_residual(row);
+        Self::queue_row(&mut self.threshold_rows, &mut self.pending_thresholds, row);
     }
 
-    /// One queue entry represents all outstanding reasons for this row.
+    /// Condition changes request only arithmetic, not prefix or bridge walks.
+    /// All mandatory waves coalesce into one check of the final row state.
     fn queue_residual(&mut self, row: usize) {
+        Self::queue_row(&mut self.residual_rows, &mut self.pending_residuals, row);
+    }
+
+    fn queue_row(entries: &mut Vec<usize>, pending: &mut [u64], row: usize) {
         let (word, flag) = (row / 64, 1u64 << (row % 64));
-        if self.pending_thresholds[word] & flag == 0 {
-            self.pending_thresholds[word] |= flag;
-            self.threshold_rows.push(row);
+        if pending[word] & flag == 0 {
+            pending[word] |= flag;
+            entries.push(row);
         }
     }
 
-    fn next_threshold(&mut self) -> Option<(usize, bool)> {
-        let row = self.threshold_rows.pop()?;
-        let (word, flag) = (row / 64, 1u64 << (row % 64));
-        self.pending_thresholds[word] &= !flag;
-        let transfer = self.threshold_transfers[word] & flag != 0;
-        self.threshold_transfers[word] &= !flag;
-        Some((row, transfer))
+    fn next_threshold(&mut self) -> Option<usize> {
+        Self::next_row(&mut self.threshold_rows, &mut self.pending_thresholds)
+    }
+
+    fn next_residual(&mut self) -> Option<usize> {
+        Self::next_row(&mut self.residual_rows, &mut self.pending_residuals)
+    }
+
+    fn next_row(entries: &mut Vec<usize>, pending: &mut [u64]) -> Option<usize> {
+        let row = entries.pop()?;
+        pending[row / 64] &= !(1u64 << (row % 64));
+        Some(row)
     }
 
     /// Queue the atom's support recheck unless one is already pending. Its
@@ -1610,7 +1636,8 @@ impl<C: Count> Closure<'_, C> {
     /// roots. Node events follow new bits or initial seeds. Original threshold
     /// row events follow strictly tighter requirements from the finite set of
     /// native and linked Boolean bounds, or processed condition events. A
-    /// residual divisibility check only refutes: it adds no bounds or events.
+    /// residual divisibility check runs only after all mandatory queues drain:
+    /// it adds no bounds or events, so each dirty row is checked at most once.
     /// Thus both row routes terminate; Boolean chains retain their counters.
     fn close(
         &mut self,
@@ -1625,8 +1652,13 @@ impl<C: Count> Closure<'_, C> {
             producers,
             frozen,
         } = subject;
-        if frozen.is_none() && index.thresholds.needs_row_queue() {
-            self.lists.prepare_thresholds(index.thresholds.rows.len())?;
+        if frozen.is_none() {
+            if index.thresholds.has_relations() {
+                self.lists.prepare_thresholds(index.thresholds.rows.len())?;
+            }
+            if index.thresholds.has_residuals() {
+                self.lists.prepare_residuals(index.thresholds.rows.len())?;
+            }
         }
         if !index.witness_chains.is_empty() && (frozen.is_none() || !index.extrema.is_empty()) {
             self.lists.witnesses.prepare_dirty(index.chains.len())?;
@@ -1692,13 +1724,13 @@ impl<C: Count> Closure<'_, C> {
             let step = if let Some((node, value)) = self.lists.nodes.pop() {
                 statistics.propagations += 1;
                 self.revisit(subject, index, node, value, work)?
-            } else if let Some((row, transfer)) = self.lists.next_threshold() {
+            } else if let Some(row) = self.lists.next_threshold() {
                 debug_assert!(
                     frozen.is_none(),
                     "only original rows transport requirements"
                 );
                 statistics.propagations += 1;
-                self.threshold_event(index, row, transfer, work)?
+                self.threshold_requirements(index, row, work)?
             } else if let Some(chain) = self.lists.witnesses.next_dirty() {
                 statistics.propagations += 1;
                 self.witness_changed(index, chain, frozen, work)?
@@ -1707,6 +1739,10 @@ impl<C: Count> Closure<'_, C> {
                 let producers =
                     producers.expect("a support recheck is queued only when producers are known");
                 self.recheck(index, producers, atom, work)?
+            } else if let Some(row) = self.lists.next_residual() {
+                debug_assert!(frozen.is_none(), "only original rows check residual sums");
+                statistics.propagations += 1;
+                self.threshold_residual(index, row, work)?
             } else {
                 return Ok(Step::Changed);
             };

@@ -111,14 +111,19 @@ An interval containing none of those values refutes the region, even when its
 ordinary lower and upper readings overlap. Coefficients sharing one condition
 are grouped first. Unit rows cannot gain from this test and skip it.
 
-This check reads processed sums only after pending node events drain. It shares
-the row queue, distinguishing a changed sum from a request to transfer bounds,
-so arithmetic notifications do not repeat Boolean or prefix transport. It
-publishes no new bounds and adds no state to child copies. Work includes visited
-coefficients, Euclidean remainder steps and interval tests. The scan visits
-smaller coefficients first and stops if the current progression intersects the
-interval: further gcd reductions preserve that intersection, so they cannot
-refute the region. Repeated event waves can still rescan a row.
+This check reads processed sums after node, bound-transfer, witness and support
+queues reach a fixed point. Arithmetic notifications use a separate coalesced
+queue, preserving bound-transfer order and checking each dirty row at most once
+per closure. They do not repeat Boolean or prefix transport. The check publishes
+no new bounds and adds no state to child copies. Both queues and their membership
+masks belong to worker scratch, with their actual capacities accounted.
+
+Work includes visited coefficients, Euclidean remainder steps and interval tests.
+The scan visits smaller coefficients first and stops if the current progression
+intersects the interval: further gcd reductions preserve that intersection, so
+they cannot refute the region. Deferring the scan can spend more mandatory work
+before an arithmetic refutation, but cannot restore an impossible completion:
+new decisions and stricter bounds only restrict the earlier possibilities.
 Frozen-reduct narrowing is unchanged. The
 [residual-sum laws](../lean/correspondence.md#nonnegative-aggregate-thresholds)
 state the necessary condition and the remaining implementation obligations.

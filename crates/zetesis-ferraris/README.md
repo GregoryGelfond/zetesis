@@ -221,7 +221,10 @@ The result is `Refuted`, or `Fixed` with whether any atom was decided; the
 statistics count charged node visits and producer checks, the propagation
 events, and the atoms held and cut. Ordinary node events follow newly learned truth bits.
 Threshold-row events follow stricter bounds; coalesced witness notices track
-changes in unresolved possibilities. A `Narrower` indexes the theory once
+changes in unresolved possibilities. Original-only residual-sum checks use their
+own dirty queue after mandatory propagation settles, so arithmetic notifications
+neither reorder bound transport nor rescan a row during intermediate waves.
+A `Narrower` indexes the theory once
 and narrows any region of it, the root from knowledge of nothing and a child
 from its parent's knowledge. The index
 reads each maximal tree of one connective, a clause or a body, as one node
