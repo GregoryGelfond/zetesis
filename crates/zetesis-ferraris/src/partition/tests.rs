@@ -1,4 +1,6 @@
-//! A requested stop keeps its precedence over construction refusals.
+//! A construction refusal between metered boundaries reports itself without
+//! observing a requested stop, and settling it reports the stop; that
+//! construction settles at its exit is read from its code, not tested here.
 
 use super::{Budget, ErrorKind, Group, Limits, Resource, Statistics, dimensions};
 use zetesis_cpu::{Cancellation, Refusal, Stop};
@@ -45,7 +47,8 @@ fn the_member_refusal_settles_to_a_requested_stop() {
         ..Limits::default()
     };
     // From one charged operation the measuring loop observes no boundary, so
-    // the refusal itself is reported; construction settles it at its exit.
+    // the refusal itself is reported; settling it, as construction's exit
+    // does, reports the stop.
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let refusal = dimensions(&groups, &mut budget(&cancellation, 1, limits));

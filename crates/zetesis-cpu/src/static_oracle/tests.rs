@@ -1,5 +1,7 @@
-//! Decoding keeps allocation refusal distinct from invalid admitted data, and
-//! a requested stop keeps its precedence over the checker's resource refusals.
+//! Decoding keeps allocation refusal distinct from invalid admitted data. A
+//! closure's resource refusal between metered boundaries reports itself without
+//! observing a requested stop, and settling it reports the stop; that the check
+//! settles at its exit is read from its code, not tested here.
 
 use super::{StaticStatistics, Work, close, decoding_stop};
 use crate::{Cancellation, Limits, Stop};
@@ -69,7 +71,7 @@ fn the_derived_atom_refusal_settles_to_a_requested_stop() {
     };
     // One charged operation leaves every later charge of this short closure
     // between boundaries, so the closure reports the refusal itself even with a
-    // stop requested; the check settles it at its exit.
+    // stop requested; settling it, as the check's exit does, reports the stop.
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let mut closure = vec![0; graph.word_count()];

@@ -1,4 +1,7 @@
-//! A requested stop keeps its precedence over the certificate's resource refusals.
+//! The certificate's work limit observes a requested stop before refusing, and
+//! settling one of its other resource refusals reports the stop; that
+//! compilation, certification and checks settle at their exits is read from
+//! their code, not tested here.
 
 use super::{Charged, TightError, TightResource, Work, bytes};
 use zetesis_cpu::{Cancellation, Refusal, Stop};

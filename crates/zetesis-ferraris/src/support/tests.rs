@@ -1,4 +1,6 @@
-//! A requested stop keeps its precedence over construction refusals.
+//! The construction work limit observes a requested stop before refusing, and
+//! construction errors classify their resource refusals; that construction
+//! settles at its exit is read from its code, not tested here.
 
 use super::{Builder, SupportError, SupportLimits};
 use crate::{AdmissionError, AdmissionLimits, FormulaNodes};

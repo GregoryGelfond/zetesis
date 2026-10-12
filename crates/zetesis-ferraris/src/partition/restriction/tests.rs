@@ -1,4 +1,6 @@
-//! A requested stop keeps its precedence over emission refusals.
+//! An emission refusal between metered boundaries reports itself without
+//! observing a requested stop, and settling it reports the stop; that emission
+//! settles at its exit is read from its code, not tested here.
 
 use super::{Builder, RestrictionErrorKind, RestrictionLimits};
 use crate::{AdmissionError, FormulaNodes, NodeView};
@@ -53,8 +55,8 @@ fn node_and_root_refusals_settle_to_a_requested_stop() {
             RestrictionErrorKind::Roots,
         ),
     ] {
-        // Between boundaries the emitter reports the refusal itself; emission
-        // settles it at its exit.
+        // Between boundaries the emitter reports the refusal itself; settling
+        // it, as emission's exit does, reports the stop.
         assert_eq!(refusal, Err(expected));
         assert_eq!(
             cancellation.settle(refusal),

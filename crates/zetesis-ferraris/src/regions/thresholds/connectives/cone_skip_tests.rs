@@ -33,9 +33,10 @@ fn case() -> impl Strategy<Value = Case> {
 }
 
 impl Case {
-    /// The theory, or none when a generated shape is not admissible (for
-    /// example two picks of one operand).
-    fn theory(&self) -> Option<Theory> {
+    /// The theory. A connective whose picks name fewer than two distinct
+    /// operands, and a row whose two picks coincide, are left out; every other
+    /// generated shape is admissible.
+    fn theory(&self) -> Theory {
         let mut nodes = FormulaNodes::new(
             FormulaParts::new((0..ATOMS).map(Node::atom).collect(), vec![]).unwrap(),
         );
@@ -55,7 +56,9 @@ impl Case {
             } else {
                 NodeView::And(&operands)
             };
-            let node = append.push(view, usize::MAX, usize::MAX).ok()?;
+            let node = append
+                .push(view, usize::MAX, usize::MAX)
+                .expect("generated connectives are admissible");
             built.push(node);
             roots.push(node);
         }
@@ -68,10 +71,11 @@ impl Case {
             }
             let row = nodes
                 .push_threshold_family(&conditions, &[1, 1], &[1], usize::MAX, usize::MAX)
-                .ok()?;
+                .expect("generated unit rows are admissible");
             roots.extend(row);
         }
-        Theory::new(ATOMS, nodes.into_parts(), roots, AdmissionLimits::default()).ok()
+        Theory::new(ATOMS, nodes.into_parts(), roots, AdmissionLimits::default())
+            .expect("generated theories are admissible")
     }
 }
 
@@ -82,13 +86,11 @@ proptest! {
     /// postings of every node its cone walk collects.
     #[test]
     fn unmarked_chains_reach_no_native_row(case in case()) {
-        let Some(theory) = case.theory() else {
-            return Ok(());
-        };
+        let theory = case.theory();
         let index = Narrower::new(&theory);
-        let Some(anchors) = index.thresholds.connectives.as_ref() else {
-            return Ok(());
-        };
+        // Without a unit row there is no connective index, and nothing to check.
+        prop_assume!(index.thresholds.connectives.is_some());
+        let anchors = index.thresholds.connectives.as_ref().unwrap();
         let mut scratch = NarrowingScratch::default();
         scratch.prepare_thresholds(index.thresholds.rows.len()).unwrap();
         let mut work = Work::new(u64::MAX);
