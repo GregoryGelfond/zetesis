@@ -88,7 +88,7 @@ one producer left demands that producer's body. The `zetesis-ferraris` crate nar
 these rules to a fixed point over the theory's own DAG, without a clause
 form (`FormulaBounds.read_sound`, `never_root_refutes`, `known_sound`,
 `unsupported_cut`). A region no reading refutes is split
-on the open atom the narrowing found most constrained, cut branch first;
+on the open atom the split ranking below prefers, cut branch first;
 a region with every atom decided is a leaf, and a leaf is a classical model, since at a full decision every
 root is sure or never (`FormulaBounds.decided_leaf_models`). The leaf
 is the candidate the reduct decides.
@@ -167,10 +167,12 @@ without a restart, and no exclusion index is kept, because a leaf is visited
 once. Propagation under the original theory, permanent restrictions and current
 bound repeats to a shared fixed point before one split ranking. That ranking
 uses the active bound when present, otherwise the latest permanent restriction,
-otherwise the original theory. Open atoms that head an atomic choice of the
-original theory rank first: deciding the choices leaves the atoms they derive to
-propagation and the support cut. Among atoms of the same kind, the one with the
-most unknown parents is preferred, with ties going to the lowest atom. Any open
+otherwise the original theory. Open atoms that head an atomic choice root of the
+original theory rank first, whether or not the theory lies in the producer
+fragment: deciding the choices leaves the atoms they derive to propagation and,
+where it applies, the support cut. Among atoms of the same kind, the one with the
+most unknown parents in the ranking subject is preferred, with ties going to the
+lowest atom. Any open
 atom is a sound split (the `CoverageTree.split` node of `Search.lean`), so this
 order changes the regions visited, never the answers. The packed region masks enumerate
 open atoms in ascending order, excluding decided atoms and unused final bits;

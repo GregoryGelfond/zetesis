@@ -65,6 +65,7 @@ fn residual_checks_wait_for_witness_events() {
             theory: &theory,
             producers: None,
             frozen: None,
+            choices: &crate::regions::NO_CHOICES,
         },
         &index,
         &region,

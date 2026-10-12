@@ -204,3 +204,44 @@ fn source_failure_survives_checker_drop_panic() {
     assert!(!search.exhausted());
     assert!(search.next().is_none());
 }
+
+#[test]
+fn proposals_split_on_the_original_choice_head_first() {
+    // The frontier is LIFO and holds each split's held sibling. Splitting the
+    // root on the choice head decides it in every pending region; splitting on
+    // a loop atom first would leave the root's sibling with the choice open.
+    let theory = crate::ferraris::fixtures::choice_beside_a_loop();
+    let cancellation = Cancellation::default();
+    let mut budget = crate::search::Budget {
+        quota: crate::search::LocalQuota,
+        limits: crate::SearchLimits::default(),
+        cancellation: &cancellation,
+        statistics: crate::SearchStatistics::default(),
+    };
+    let mut proposals = super::RegionProposals::new(
+        &theory,
+        NonZeroUsize::new(1).unwrap(),
+        u64::MAX,
+        &mut budget,
+    )
+    .unwrap();
+    let narrower = Narrower::new(&theory);
+    let mut output = Vec::with_capacity(1);
+    proposals.fill(
+        (&theory, &narrower),
+        1,
+        u64::MAX,
+        &mut budget,
+        &mut output,
+        false,
+    );
+    assert_eq!(output.len(), 1);
+    assert!(!proposals.pending.entries.is_empty());
+    assert!(
+        proposals
+            .pending
+            .entries
+            .iter()
+            .all(|(region, _)| !region.is_open(0))
+    );
+}

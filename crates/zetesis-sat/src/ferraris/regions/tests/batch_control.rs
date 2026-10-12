@@ -4,7 +4,7 @@
 use std::cell::Cell;
 
 use zetesis_cpu::regions::Region;
-use zetesis_ferraris::{NARROWING_BATCH, Narrower, Node, Theory};
+use zetesis_ferraris::{ChoiceHeads, NARROWING_BATCH, Narrower, Node, Theory};
 
 use super::super::{CandidateKnowledge, Conditions, RegionCounts, narrow};
 
@@ -76,7 +76,7 @@ fn cancelled_narrowing<Q: Quota>(quota: Q, cancellation: &Cancellation) -> (Inco
     };
     let mut counts = RegionCounts::default();
     let stop = narrow(
-        (&theory, &narrower, None),
+        (&theory, &narrower, None, &ChoiceHeads::default()),
         &Conditions::<(Theory, Narrower)>::default(),
         (
             &mut Region::all_open(theory.atom_count()),

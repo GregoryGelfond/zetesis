@@ -115,6 +115,7 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
                     original.theory(),
                     original.narrower(),
                     search.shared.producers.as_ref(),
+                    &search.shared.choice_heads,
                 ),
                 &conditions,
                 (region, knowledge),
@@ -783,4 +784,44 @@ fn a_waiter_released_by_the_end_of_the_walk_deregisters() {
         assert!(waiter.join().unwrap().is_none());
     });
     assert_eq!(waiting(&search), 0);
+}
+
+#[test]
+fn a_worker_splits_the_root_on_the_original_choice_head() {
+    let theory = crate::ferraris::fixtures::choice_beside_a_loop();
+    let cancellation = Cancellation::with_deadline(Instant::now() + 3 * WAIT).unwrap();
+    let limits = Limits::default();
+    let search = ParallelRegions::new(
+        &theory,
+        NonZeroUsize::new(1).unwrap(),
+        limits,
+        cancellation.clone(),
+        &mut Budget {
+            quota: crate::search::LocalQuota,
+            limits: limits.search,
+            cancellation: &cancellation,
+            statistics: SearchStatistics::default(),
+        },
+    )
+    .unwrap();
+    let original = super::original(&theory);
+    let root = search.shared.take_local(0).unwrap();
+    let stepped = step(
+        &search.shared,
+        &original,
+        root,
+        0,
+        &mut Workspaces::new(),
+        &mut budget(&search.shared),
+        &mut report(),
+    )
+    .unwrap();
+    assert!(matches!(stepped, Stepped::Split));
+    // The children differ only in the split atom: cut on top, held beneath.
+    let (cut, _) = search.shared.take_local(0).unwrap();
+    let (held, _) = search.shared.take_local(0).unwrap();
+    let split: Vec<_> = (0..theory.atom_count())
+        .filter(|&atom| cut.is_cut(atom) && held.is_held(atom))
+        .collect();
+    assert_eq!(split, [0]);
 }

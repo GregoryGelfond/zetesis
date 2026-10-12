@@ -1,7 +1,7 @@
 //! Propagation can be composed without spending or replacing split preferences.
 
 use crate::{
-    AdmissionLimits, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingQuota,
+    AdmissionLimits, ChoiceHeads, FormulaParts, Knowledge, Narrower, Narrowing, NarrowingQuota,
     NarrowingScratch, Node, OriginalSubject, Region, RegionLimits, Theory,
 };
 use zetesis_cpu::{Cancellation, Stop};
@@ -124,8 +124,12 @@ fn separate_preference_has_the_original_narrowing_receipt() {
         &mut allowance,
     );
     propagated.result.unwrap();
-    let preference =
-        known.preferred_atom_reserved(&region, None, &Cancellation::default(), &mut allowance);
+    let preference = known.preferred_atom_reserved(
+        &region,
+        &ChoiceHeads::default(),
+        &Cancellation::default(),
+        &mut allowance,
+    );
     region.prefer(preference.result.unwrap().unwrap());
     assert_eq!(region, ordinary);
     assert_eq!(preference.work, 3);
@@ -139,8 +143,12 @@ fn preference_refusal_retains_exact_read_prefix() {
     let (region, known) = closed(&theory);
     for limit in 0..=3 {
         let mut allowance = Allowance::new(limit);
-        let selected =
-            known.preferred_atom_reserved(&region, None, &Cancellation::default(), &mut allowance);
+        let selected = known.preferred_atom_reserved(
+            &region,
+            &ChoiceHeads::default(),
+            &Cancellation::default(),
+            &mut allowance,
+        );
         assert_eq!(selected.work, limit);
         assert_eq!(allowance.granted - allowance.refunded, limit);
         assert_eq!(
@@ -161,7 +169,12 @@ fn cancelled_preference_reads_nothing() {
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let mut allowance = Allowance::new(1000);
-    let selected = known.preferred_atom_reserved(&region, None, &cancellation, &mut allowance);
+    let selected = known.preferred_atom_reserved(
+        &region,
+        &ChoiceHeads::default(),
+        &cancellation,
+        &mut allowance,
+    );
     assert_eq!(selected.result, Err(Stop::Cancelled));
     assert_eq!(selected.work, 0);
     assert_eq!(allowance.granted, 0);
@@ -184,7 +197,7 @@ fn zero_parent_counts_prefer_the_lowest_open_atom() {
     }
     let selected = known.preferred_atom_reserved(
         &region,
-        None,
+        &ChoiceHeads::default(),
         &Cancellation::default(),
         &mut Allowance::new(1000),
     );
@@ -197,33 +210,39 @@ fn zero_parent_counts_prefer_the_lowest_open_atom() {
 /// through their own unresolved conjunction, so the loop atoms keep more
 /// unknown parents than the choice head. Every atom stays open.
 fn choice_beside_a_loop() -> Theory {
+    choice_beside_a_loop_and(vec![], vec![])
+}
+
+/// [`choice_beside_a_loop`] with `nodes` appended after its eighteen and
+/// `roots` appended to its six.
+fn choice_beside_a_loop_and(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
+    let mut all = vec![
+        Node::atom(0),
+        Node::atom(1),
+        Node::atom(2),
+        Node::atom(3),
+        Node::atom(4),
+        Node::falsum(),
+        Node::implies(0, 5),
+        Node::or_pair([0, 6]),
+        Node::implies(2, 5),
+        Node::implies(8, 1),
+        Node::implies(1, 5),
+        Node::implies(10, 2),
+        Node::and_pair([1, 2]),
+        Node::implies(12, 5),
+        Node::and_pair([1, 2]),
+        Node::implies(14, 3),
+        Node::and_pair([1, 2]),
+        Node::implies(16, 4),
+    ];
+    all.extend(nodes);
+    let mut asserted = vec![7, 9, 11, 13, 15, 17];
+    asserted.extend(roots);
     Theory::new(
         5,
-        FormulaParts::new(
-            vec![
-                Node::atom(0),
-                Node::atom(1),
-                Node::atom(2),
-                Node::atom(3),
-                Node::atom(4),
-                Node::falsum(),
-                Node::implies(0, 5),
-                Node::or_pair([0, 6]),
-                Node::implies(2, 5),
-                Node::implies(8, 1),
-                Node::implies(1, 5),
-                Node::implies(10, 2),
-                Node::and_pair([1, 2]),
-                Node::implies(12, 5),
-                Node::and_pair([1, 2]),
-                Node::implies(14, 3),
-                Node::and_pair([1, 2]),
-                Node::implies(16, 4),
-            ],
-            vec![],
-        )
-        .unwrap(),
-        vec![7, 9, 11, 13, 15, 17],
+        FormulaParts::new(all, vec![]).unwrap(),
+        asserted,
         AdmissionLimits::default(),
     )
     .unwrap()
@@ -240,8 +259,9 @@ fn unknown(known: &Knowledge, atom: usize) -> usize {
 #[test]
 fn choice_heads_rank_before_more_constrained_atoms() {
     let theory = choice_beside_a_loop();
-    let producers = crate::producers(&theory, RegionLimits::default(), &Cancellation::default())
-        .unwrap()
+    let extraction =
+        crate::producers(&theory, RegionLimits::default(), &Cancellation::default()).unwrap();
+    let producers = extraction
         .producers
         .expect("every root is in the producer fragment");
     let narrower = Narrower::new(&theory);
@@ -260,7 +280,7 @@ fn choice_heads_rank_before_more_constrained_atoms() {
     assert_eq!(region.open().collect::<Vec<_>>(), [0, 1, 2, 3, 4]);
     let ordinary = known.preferred_atom_reserved(
         &region,
-        None,
+        &ChoiceHeads::default(),
         &Cancellation::default(),
         &mut Allowance::new(1000),
     );
@@ -270,7 +290,7 @@ fn choice_heads_rank_before_more_constrained_atoms() {
     assert!(unknown(&known, busiest) > unknown(&known, 0));
     let choice = known.preferred_atom_reserved(
         &region,
-        Some(&producers),
+        &extraction.choice_heads,
         &Cancellation::default(),
         &mut Allowance::new(1000),
     );
@@ -278,4 +298,46 @@ fn choice_heads_rank_before_more_constrained_atoms() {
     // The choice bit is read with each open atom's count: no extra charge.
     assert_eq!(choice.work, 5);
     assert_eq!(ordinary.work, 5);
+}
+
+#[test]
+fn choice_heads_are_marked_outside_the_producer_fragment() {
+    // A bare conjunction root, a3 ∧ a4, lies outside the producer fragment.
+    let theory = choice_beside_a_loop_and(vec![Node::and_pair([3, 4])], vec![18]);
+    let extraction =
+        crate::producers(&theory, RegionLimits::default(), &Cancellation::default()).unwrap();
+    assert!(extraction.producers.is_none());
+    let marked: Vec<_> = (0..theory.atom_count())
+        .filter(|&atom| extraction.choice_heads.contains(atom))
+        .collect();
+    assert_eq!(marked, [0]);
+}
+
+#[test]
+fn a_subject_with_choices_splits_on_a_choice_head() {
+    let theory = choice_beside_a_loop();
+    let extraction =
+        crate::producers(&theory, RegionLimits::default(), &Cancellation::default()).unwrap();
+    let narrower = Narrower::new(&theory);
+    let split = |subject: OriginalSubject<'_>| {
+        let mut region = Region::all_open(theory.atom_count());
+        narrower
+            .narrow_known(
+                subject,
+                &mut region,
+                &mut narrower.knowledge(),
+                &mut NarrowingScratch::default(),
+                RegionLimits::default(),
+                &Cancellation::default(),
+            )
+            .unwrap();
+        region.split_atom()
+    };
+    let producers = extraction.producers.as_ref();
+    // The premise: without choices the subject splits on a busier atom.
+    assert_ne!(split(OriginalSubject::new(&theory, producers)), Some(0));
+    assert_eq!(
+        split(OriginalSubject::new(&theory, producers).with_choices(&extraction.choice_heads)),
+        Some(0)
+    );
 }

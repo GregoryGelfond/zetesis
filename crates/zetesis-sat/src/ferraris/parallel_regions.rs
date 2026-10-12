@@ -73,7 +73,9 @@ use std::thread::JoinHandle;
 use std::time::Duration;
 
 use zetesis_cpu::regions::{Narrowing, Region};
-use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Producers, Theory};
+use zetesis_ferraris::{
+    ChoiceHeads, Interpretation, Narrower, NarrowingScratch, Producers, Theory,
+};
 
 use super::certified::{self, Certification};
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
@@ -100,6 +102,8 @@ type Entry = (Region, CandidateKnowledge);
 
 struct Shared {
     producers: Option<Producers>,
+    /// The original theory's atomic choice heads, which every split ranks first.
+    choice_heads: ChoiceHeads,
     certificate: Option<Arc<Certification>>,
     filter: Option<crate::region_filter::Filter>,
     restrictions: RwLock<Conditions<Arc<(Theory, Narrower)>>>,
@@ -476,6 +480,7 @@ impl ParallelRegions {
     ) -> Result<Self, Incomplete> {
         let super::regions::Opened {
             producers,
+            choice_heads,
             statistics,
         } = super::regions::open(theory, budget)?;
         let (sender, receiver) = sync_channel(workers.get() * CHANNEL_SLACK);
@@ -494,6 +499,7 @@ impl ParallelRegions {
         Ok(Self {
             shared: Arc::new(Shared {
                 producers,
+                choice_heads,
                 certificate: None,
                 filter: None,
                 restrictions: RwLock::new(Conditions::default()),
@@ -1151,6 +1157,7 @@ fn step<'a>(
             original.theory(),
             original.narrower(),
             shared.producers.as_ref(),
+            &shared.choice_heads,
         ),
         &restrictions,
         (&mut region, &mut knowledge),

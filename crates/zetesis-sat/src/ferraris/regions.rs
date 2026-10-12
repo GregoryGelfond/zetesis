@@ -22,8 +22,8 @@
 use zetesis_cpu::Stop;
 use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use zetesis_ferraris::{
-    FrozenSubject, Interpretation, Knowledge, Narrower, NarrowingAttempt, NarrowingQuota,
-    NarrowingScratch, Producers, RegionLimits, Theory,
+    ChoiceHeads, FrozenSubject, Interpretation, Knowledge, Narrower, NarrowingAttempt,
+    NarrowingQuota, NarrowingScratch, Producers, RegionLimits, Theory,
 };
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
@@ -194,6 +194,8 @@ impl std::fmt::Debug for RetainedFilter {
 #[derive(Debug)]
 pub(crate) struct RegionSearch {
     producers: Option<Producers>,
+    /// The original theory's atomic choice heads, which every split ranks first.
+    choice_heads: ChoiceHeads,
     /// Each region carries what is known about it under the theory and
     /// under each restriction, in order; a restriction added after a region
     /// was reached gets fresh knowledge when the region is next narrowed.
@@ -208,12 +210,13 @@ pub(crate) struct RegionSearch {
 }
 
 /// What opening a region search over a theory establishes: its producers,
-/// when it lies in the producer fragment, and the statistics of the
-/// extraction, charged to the budget. The original theory's index is not
+/// when it lies in the producer fragment, the heads of its atomic choice
+/// roots, and the statistics of the extraction, charged to the budget. The original theory's index is not
 /// built here: the enumeration's `OriginalIndex` builds it when a walk first
 /// needs it, and its work is then recorded in these counts.
 pub(crate) struct Opened {
     pub(crate) producers: Option<Producers>,
+    pub(crate) choice_heads: ChoiceHeads,
     pub(crate) statistics: RegionSearchStatistics,
 }
 
@@ -233,6 +236,7 @@ pub(crate) fn open(theory: &Theory, budget: &mut Budget<'_>) -> Result<Opened, I
             frontier: None,
         },
         producers: extraction.producers,
+        choice_heads: extraction.choice_heads,
     })
 }
 
@@ -259,11 +263,13 @@ impl RegionSearch {
     ) -> Result<Self, Incomplete> {
         let Opened {
             producers,
+            choice_heads,
             statistics,
         } = open(theory, budget)?;
         Ok(Self {
             statistics,
             producers,
+            choice_heads,
             traversal: Traversal::with_state(
                 Region::all_open(theory.atom_count()),
                 Counting::Never,
@@ -417,6 +423,7 @@ impl RegionSearch {
     ) -> Result<Option<Interpretation>, Incomplete> {
         let Self {
             producers,
+            choice_heads,
             traversal,
             restrictions,
             scratch,
@@ -429,7 +436,7 @@ impl RegionSearch {
         let mut advance = |mut check: Option<crate::region_filter::Check<'_, '_>>| {
             traversal.next(|region, knowledge| -> Result<Narrowing, Incomplete> {
                 narrow(
-                    (formulas, narrower, producers.as_ref()),
+                    (formulas, narrower, producers.as_ref(), choice_heads),
                     restrictions,
                     (region, knowledge),
                     scratch,
@@ -485,11 +492,12 @@ impl Drop for RegionSearch {
 /// candidate bound, else the latest permanent restriction, else the original
 /// theory. This preserves the traversal policy of narrowing those subjects in
 /// sequence while charging only the final subject's scan, one count read per
-/// open atom. Open atoms heading an atomic choice producer of the original
-/// theory rank first, so choices are decided before the atoms they derive.
-/// Ties prefer the lower atom.
+/// open atom. Open atoms in `choices`, the heads of the original theory's
+/// atomic choice roots, rank first, so choices are decided before the atoms
+/// they derive, whether or not the theory lies in the producer fragment. Ties
+/// prefer the lower atom.
 pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
-    (theory, narrower, producers): (&Theory, &Narrower, Option<&Producers>),
+    (theory, narrower, producers, choices): (&Theory, &Narrower, Option<&Producers>, &ChoiceHeads),
     restrictions: &Conditions<R>,
     (region, knowledge): (&mut Region, &mut CandidateKnowledge),
     scratch: &mut NarrowingScratch,
@@ -580,7 +588,7 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
                 failure: None,
             };
             let preference =
-                known.preferred_atom_reserved(region, producers, cancellation, &mut quota);
+                known.preferred_atom_reserved(region, choices, cancellation, &mut quota);
             counts.work += preference.work;
             let preferred = preference
                 .result

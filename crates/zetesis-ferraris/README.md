@@ -257,9 +257,11 @@ proper-subset query's narrowing; `FormulaEvaluation::truth` is that mask.
 `RegionLimits` bounds charged work, and through it propagation events;
 exhausting that ceiling, or a control stop, returns the stop, and the region and
 the knowledge then hold what the closure had learned before it, sound but
-not closed, which the proposers abandon. A narrowing that does not refute also prefers the open atom with
-the most parents still unknown as the region's next split, which the
-traversal honours; without a preference it splits the highest open atom. The traversal that splits regions and
+not closed, which the proposers abandon. A narrowing that does not refute also prefers a
+region's next split, which the traversal honours: an open atom heading one of the
+subject's atomic choice roots (`ChoiceHeads`, when the subject carries them) before
+any other, then the open atom with the most parents still unknown, ties to the
+lowest; without a preference the traversal splits the highest open atom. The traversal that splits regions and
 covers the tree is `zetesis_cpu::regions::Traversal`, shared with the closure
 route; `zetesis-sat` uses it with this narrowing to propose candidates.
 

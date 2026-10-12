@@ -43,7 +43,12 @@ fn a_new_generation_discards_old_dag_knowledge() {
     };
     let mut counts = super::super::regions::RegionCounts::default();
     super::super::regions::narrow(
-        (&original, &narrower, None),
+        (
+            &original,
+            &narrower,
+            None,
+            &zetesis_ferraris::ChoiceHeads::default(),
+        ),
         &conditions,
         (&mut region, &mut knowledge),
         &mut zetesis_ferraris::NarrowingScratch::default(),
@@ -59,7 +64,12 @@ fn a_new_generation_discards_old_dag_knowledge() {
         Some(Bound::prepare(&guard(true), 2, u64::MAX, &crate::Cancellation::default()).unwrap());
     assert_ne!(
         super::super::regions::narrow(
-            (&original, &narrower, None),
+            (
+                &original,
+                &narrower,
+                None,
+                &zetesis_ferraris::ChoiceHeads::default()
+            ),
             &conditions,
             (&mut region, &mut knowledge),
             &mut zetesis_ferraris::NarrowingScratch::default(),
@@ -223,7 +233,12 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     };
     let mut counts = super::super::regions::RegionCounts::default();
     super::super::regions::narrow(
-        (&original, &narrower, None),
+        (
+            &original,
+            &narrower,
+            None,
+            &zetesis_ferraris::ChoiceHeads::default(),
+        ),
         &conditions,
         (&mut region, &mut knowledge),
         &mut zetesis_ferraris::NarrowingScratch::default(),
@@ -240,7 +255,12 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     let permanent_index = Narrower::new(&permanent);
     conditions.permanent.push((permanent, permanent_index));
     super::super::regions::narrow(
-        (&original, &narrower, None),
+        (
+            &original,
+            &narrower,
+            None,
+            &zetesis_ferraris::ChoiceHeads::default(),
+        ),
         &conditions,
         (&mut region, &mut knowledge),
         &mut zetesis_ferraris::NarrowingScratch::default(),

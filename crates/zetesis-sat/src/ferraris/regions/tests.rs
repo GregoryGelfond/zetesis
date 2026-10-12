@@ -143,9 +143,10 @@ fn an_enumeration_builds_one_original_index() {
 }
 
 /// Complete receipts on every region route. The original index costs N + E
-/// = 4 + 4, counted once beside 28 producer/walk operations. The reduct walks
-/// reuse that index. Search also charges two splits and two subset-atom reads.
-const CYCLE_REGIONS_WORK: u64 = 28 + 8;
+/// = 4 + 4, counted once beside 28 producer/walk operations and the choice-head
+/// scan's visit to each of the 2 roots. The reduct walks reuse that index.
+/// Search also charges two splits and two subset-atom reads.
+const CYCLE_REGIONS_WORK: u64 = 28 + 2 + 8;
 const CYCLE_REDUCT_WORK: u64 = 18;
 const CYCLE_SEARCH_WORK: u64 = CYCLE_REGIONS_WORK + CYCLE_REDUCT_WORK + 4;
 

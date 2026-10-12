@@ -5,7 +5,8 @@ use super::{NARROWING_ATTEMPTS, budget, enumeration};
 use crate::ferraris::conditions::Bound;
 use crate::{Cancellation, Limits};
 use zetesis_ferraris::{
-    AdmissionLimits, FormulaParts, Interpretation, Narrowing, NarrowingScratch, Node, Theory,
+    AdmissionLimits, ChoiceHeads, FormulaParts, Interpretation, Narrowing, NarrowingScratch, Node,
+    Theory,
 };
 
 fn theory(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
@@ -111,7 +112,7 @@ fn close(original: &Theory, conditions: &Conditions<(Theory, Narrower)>) -> (Reg
     let before = NARROWING_ATTEMPTS.get();
     assert_eq!(
         narrow(
-            (original, &narrower, None),
+            (original, &narrower, None, &ChoiceHeads::default()),
             conditions,
             (&mut region, &mut knowledge),
             &mut scratch,
@@ -130,7 +131,7 @@ fn close(original: &Theory, conditions: &Conditions<(Theory, Narrower)>) -> (Reg
     // knowledge and scratch so stale pending work cannot hide in a fresh state.
     assert_eq!(
         narrow(
-            (original, &narrower, None),
+            (original, &narrower, None, &ChoiceHeads::default()),
             conditions,
             (&mut region, &mut knowledge),
             &mut scratch,

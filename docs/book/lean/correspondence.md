@@ -1623,11 +1623,12 @@ flags and independent knowledge; those remain Rust correspondence obligations.
 The semantic preservation laws do not establish this concrete loop's fixed point
 or its work and interruption prefixes.
 
-At that joint fixed point, `Knowledge::preferred_atom_reserved` selects once
-from the last subject: the active bound, latest permanent restriction, or
+At that joint fixed point, `Knowledge::preferred_atom_reserved` selects once,
+ranking the original theory's atomic choice heads first and then the unknown-parent
+counts of the last subject: the active bound, latest permanent restriction, or
 original theory, in that precedence. The ranking charges each open atom's
-unknown-parent count, retains its charged prefix on refusal and installs no
-partial preference.
+unknown-parent count, reads its choice mark in the same charge, retains its
+charged prefix on refusal and installs no partial preference.
 Packed enumeration must exclude padding and preserve ascending ties. Selecting
 an open atom retains the split-partition obligation of `Search.CoverageTree`;
 the existing laws do not verify these Rust ordering and accounting operations.
