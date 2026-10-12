@@ -14,7 +14,7 @@ mod validation;
 use std::{fmt, mem::size_of};
 
 use crate::{Interpretation, Theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, ChargeError, Stop};
 
 /// Independent limits for complete-root classification and least closure.
 #[derive(Clone, Copy, Debug)]
@@ -280,19 +280,18 @@ struct Budget<'a> {
 
 impl Budget<'_> {
     fn tick(&mut self) -> Result<(), PositiveError> {
-        self.cancellation.poll_charged(self.statistics.work)?;
-        let admitted = Self::ceiling(
-            PositiveResource::Work,
-            u128::from(self.statistics.work) + 1,
-            u128::from(self.limits.max_work),
-        );
-        if admitted.is_err() {
-            // A requested stop keeps precedence over the work limit.
-            self.cancellation.poll()?;
+        match self
+            .cancellation
+            .charge(&mut self.statistics.work, self.limits.max_work)
+        {
+            Ok(()) => Ok(()),
+            Err(ChargeError::Stopped(stop)) => Err(stop.into()),
+            Err(ChargeError::WorkLimit) => Err(PositiveError::Limit {
+                resource: PositiveResource::Work,
+                observed: u128::from(self.statistics.work) + 1,
+                limit: u128::from(self.limits.max_work),
+            }),
         }
-        admitted?;
-        self.statistics.work += 1;
-        Ok(())
     }
 
     fn dependency(&mut self) -> Result<(), PositiveError> {
@@ -301,7 +300,7 @@ impl Budget<'_> {
             .dependencies
             .checked_add(1)
             .ok_or(PositiveError::Overflow)?;
-        Self::ceiling(
+        self.ceiling(
             PositiveResource::Dependencies,
             next as u128,
             self.limits.max_dependencies as u128,
@@ -317,7 +316,7 @@ impl Budget<'_> {
     }
 
     fn check_bytes(&self, bytes: u128) -> Result<(), PositiveError> {
-        Self::ceiling(
+        self.ceiling(
             PositiveResource::Bytes,
             bytes,
             self.limits.max_bytes as u128,
@@ -353,17 +352,23 @@ impl Budget<'_> {
         Ok(())
     }
 
+    /// Admit `observed` units of a named resource under `limit`, refusing
+    /// after observing control so that a requested stop takes precedence.
     fn ceiling(
+        &self,
         resource: PositiveResource,
         observed: u128,
         limit: u128,
     ) -> Result<(), PositiveError> {
         if observed > limit {
-            return Err(PositiveError::Limit {
-                resource,
-                observed,
-                limit,
-            });
+            return Err(self.cancellation.refusal(
+                PositiveError::Limit {
+                    resource,
+                    observed,
+                    limit,
+                },
+                PositiveError::from,
+            ));
         }
         Ok(())
     }

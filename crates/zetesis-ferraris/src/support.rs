@@ -3,6 +3,9 @@
 use crate::{AdmissionError, AdmissionLimits, ExtremumCut, FormulaNodes, NodeView, Theory};
 use zetesis_cpu::{Cancellation, Stop};
 
+#[cfg(test)]
+mod tests;
+
 /// Bounds for constructing a candidate-only support restriction. Formula
 /// dimensions bound retained nodes, roots and atom-indexed scratch. Work counts
 /// all copied arena cells, node recounts, root visits, head traversal,
@@ -112,14 +115,9 @@ struct Builder<'a> {
 
 impl Builder<'_> {
     fn tick(&mut self) -> Result<(), SupportError> {
-        self.cancellation.poll_charged(self.work)?;
-        if self.work == self.limits.max_work {
-            // A requested stop keeps precedence over the work limit.
-            self.cancellation.poll()?;
-            return Err(Stop::WorkLimit.into());
-        }
-        self.work += 1;
-        Ok(())
+        self.cancellation
+            .charge(&mut self.work, self.limits.max_work)
+            .map_err(|error| error.into_stop().into())
     }
 
     fn push(&mut self, node: NodeView<'_>) -> Result<usize, SupportError> {

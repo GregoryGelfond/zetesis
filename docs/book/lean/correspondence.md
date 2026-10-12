@@ -635,10 +635,13 @@ neither assume allocation succeeds nor prove changing runtime-effect projection.
 
 `NativeTightWork` and `NativeTightOperands` establish the tight classifier's
 actual inner-loop work and typed refusals. A successful row visits every child
-occurrence; an interrupted row retains only its charged prefix. Their extracted
-tick polls before every charged operation, as the recorded source did; the
-current tick polls only at metered boundaries and before a work refusal, so
-these laws describe the recorded generation, not the current control cadence. The class fold
+occurrence; an interrupted row retains only its charged prefix. Every extracted
+tick predates metered polling: the extracted `tight::Work::tick` and
+`oracle::Work::tick` poll before every charged operation, as the recorded source
+did, while the current ticks observe control only at metered boundaries and
+before a limit refusal. These laws, `NativeControl`'s tick laws and the typed-stop
+receipt of `NativeLoop` therefore describe the recorded generation, not the
+current control cadence. The class fold
 uses the existing body recognizer. The native outer classifier, exact syntax
 recognition and producer composition remain separate obligations.
 

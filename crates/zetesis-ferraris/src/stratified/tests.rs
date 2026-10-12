@@ -540,3 +540,57 @@ fn deep_shared_bodies_do_not_require_recursive_walks() {
     assert_eq!(complete.consequences().atoms().collect::<Vec<_>>(), [1]);
     assert!(complete.statistics().work < 100 * owner.nodes().len() as u64);
 }
+
+/// A preparation budget that has charged seven operations, which is not a
+/// metered boundary.
+fn budget(cancellation: &Cancellation, max_work: u64) -> Budget<'_> {
+    Budget {
+        limits: StratifiedPlanLimits {
+            max_work,
+            ..StratifiedPlanLimits::default()
+        },
+        cancellation,
+        statistics: StratifiedPlanStatistics {
+            work: 7,
+            ..StratifiedPlanStatistics::default()
+        },
+        current_bytes: 0,
+    }
+}
+
+#[test]
+fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
+    let cancellation = Cancellation::default();
+    assert_eq!(
+        budget(&cancellation, 7).tick(),
+        Err(StratifiedError::Limit {
+            resource: StratifiedResource::Work,
+            observed: 8,
+            limit: 7,
+        })
+    );
+    cancellation.cancel();
+    assert_eq!(
+        budget(&cancellation, 7).tick(),
+        Err(StratifiedError::Stopped(Stop::Cancelled))
+    );
+}
+
+#[test]
+fn a_requested_stop_precedes_a_ceiling_refusal() {
+    let cancellation = Cancellation::default();
+    let refusal = StratifiedError::Limit {
+        resource: StratifiedResource::Dependencies,
+        observed: 2,
+        limit: 1,
+    };
+    assert_eq!(
+        budget(&cancellation, u64::MAX).ceiling(StratifiedResource::Dependencies, 2, 1),
+        Err(refusal)
+    );
+    cancellation.cancel();
+    assert_eq!(
+        budget(&cancellation, u64::MAX).ceiling(StratifiedResource::Dependencies, 2, 1),
+        Err(StratifiedError::Stopped(Stop::Cancelled))
+    );
+}

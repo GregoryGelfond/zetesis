@@ -2,7 +2,7 @@ use std::mem::size_of;
 
 use super::{
     TightAttempt, TightError, TightPlan, TightPlanLimits, TightPlanStatistics, TightProducer,
-    TightProducerKind, TightResource, Work, bytes, filled, reserve,
+    TightProducerKind, TightResource, Work, bytes, filled, refuse, reserve,
 };
 use crate::{ExtremumCut, NodeView, Theory, Threshold};
 use zetesis_cpu::{Cancellation, Stop};
@@ -263,7 +263,7 @@ fn extract(
         work.tick()?;
         if producer(theory, root, classes)?.is_some() {
             if count == limits.max_producers {
-                return Err(TightError::Limit(TightResource::Producers));
+                return Err(work.refuse(TightResource::Producers));
             }
             count += 1;
         }
@@ -272,6 +272,7 @@ fn extract(
         theory.nodes().len() as u128 * size_of::<Body>() as u128
             + count as u128 * size_of::<TightProducer>() as u128,
         limits.max_bytes,
+        work.cancellation,
     )?;
     let mut producers = reserve(count)?;
     for &root in theory.roots() {
@@ -348,16 +349,18 @@ fn build(
     work: &mut Work<'_>,
 ) -> Result<TightPlan, TightError> {
     work.cancellation.poll()?;
+    let control = work.cancellation;
     bytes(
         theory.nodes().len() as u128 * size_of::<Body>() as u128,
         limits.max_bytes,
+        control,
     )?;
     let classes = classify(theory, work)?;
     let producers = extract(theory, &classes, limits, work)?;
     let mut dependencies = 0usize;
     each_dependency(theory, &classes, &producers, work, |_, _, _| {
         if dependencies == limits.max_dependencies {
-            return Err(TightError::Limit(TightResource::Dependencies));
+            return Err(refuse(control, TightResource::Dependencies));
         }
         dependencies += 1;
         Ok(())
@@ -365,11 +368,12 @@ fn build(
     let vertices = theory
         .atom_count()
         .checked_add(theory.nodes().len())
-        .ok_or(TightError::Limit(TightResource::Bytes))?;
+        .ok_or_else(|| work.refuse(TightResource::Bytes))?;
     let resident_bytes = bytes(
         producers.len() as u128 * size_of::<TightProducer>() as u128
             + theory.atom_count() as u128 * size_of::<usize>() as u128,
         limits.max_bytes,
+        control,
     )?;
     let graph_bytes = if proposed.is_some() {
         0
@@ -382,6 +386,7 @@ fn build(
             + theory.nodes().len() as u128 * (size_of::<Body>() + size_of::<usize>()) as u128
             + graph_bytes,
         limits.max_bytes,
+        control,
     )?;
     let ranks = if let Some(ranks) = proposed {
         validate_ranks(theory, &classes, &producers, ranks, work)?;

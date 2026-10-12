@@ -3,7 +3,7 @@ use super::{
 };
 use crate::numeric_evaluation::NumericRowScratch;
 use crate::{Interpretation, NodeView, Theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, CancellationPoll, Stop};
 
 #[cfg(test)]
 mod tests;
@@ -108,19 +108,20 @@ impl TightWorkspace {
             return Err(Stop::WrongProgram.into());
         }
         work.cancellation.poll()?;
-        self.admit(plan, limits.max_bytes)?;
+        let control = work.cancellation;
+        self.admit(plan, limits.max_bytes, control)?;
         // Explicit byte cells give candidate tiles a fixed payload bound.
         // Rust's Vec<bool> also stores byte-sized elements; it is not bit-packed.
         self.values.clear();
         self.values
             .try_reserve_exact(plan.theory.nodes().len())
             .map_err(|_| Stop::Allocation)?;
-        self.admit(plan, limits.max_bytes)?;
+        self.admit(plan, limits.max_bytes, control)?;
         let base = self.truth_support_bytes(plan);
         self.numeric.reserve_observed(&plan.theory, |actual| {
-            bytes(base + actual, limits.max_bytes).map(|_| ())
+            bytes(base + actual, limits.max_bytes, control).map(|_| ())
         })?;
-        let logical_bytes = self.admit(plan, limits.max_bytes)?;
+        let logical_bytes = self.admit(plan, limits.max_bytes, control)?;
         evaluate_truth(
             &plan.theory,
             candidate,
@@ -143,7 +144,7 @@ impl TightWorkspace {
         self.supported
             .try_reserve_exact(words)
             .map_err(|_| Stop::Allocation)?;
-        let logical_bytes = self.admit(plan, limits.max_bytes)?;
+        let logical_bytes = self.admit(plan, limits.max_bytes, control)?;
         self.supported.resize(words, 0);
         for producer in &plan.producers {
             work.tick()?;
@@ -175,10 +176,16 @@ impl TightWorkspace {
         })
     }
 
-    fn admit(&self, plan: &TightPlan, limit: u64) -> Result<u64, TightError> {
+    fn admit(
+        &self,
+        plan: &TightPlan,
+        limit: u64,
+        control: CancellationPoll<'_>,
+    ) -> Result<u64, TightError> {
         bytes(
             self.truth_support_bytes(plan) + self.numeric.required_bytes(&plan.theory),
             limit,
+            control,
         )
     }
 

@@ -495,3 +495,57 @@ fn empty_theory_keeps_its_exact_owner() {
     assert_eq!(complete.failed_constraint(), None);
     assert_eq!(complete.statistics().derived_atoms, 0);
 }
+
+/// A preparation budget that has charged seven operations, which is not a
+/// metered boundary.
+fn budget(cancellation: &Cancellation, max_work: u64) -> Budget<'_> {
+    Budget {
+        limits: PositivePlanLimits {
+            max_work,
+            ..PositivePlanLimits::default()
+        },
+        cancellation,
+        statistics: PositivePlanStatistics {
+            work: 7,
+            ..PositivePlanStatistics::default()
+        },
+        current_bytes: 0,
+    }
+}
+
+#[test]
+fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
+    let cancellation = Cancellation::default();
+    assert_eq!(
+        budget(&cancellation, 7).tick(),
+        Err(PositiveError::Limit {
+            resource: PositiveResource::Work,
+            observed: 8,
+            limit: 7,
+        })
+    );
+    cancellation.cancel();
+    assert_eq!(
+        budget(&cancellation, 7).tick(),
+        Err(PositiveError::Stopped(Stop::Cancelled))
+    );
+}
+
+#[test]
+fn a_requested_stop_precedes_a_ceiling_refusal() {
+    let cancellation = Cancellation::default();
+    let refusal = PositiveError::Limit {
+        resource: PositiveResource::Dependencies,
+        observed: 2,
+        limit: 1,
+    };
+    assert_eq!(
+        budget(&cancellation, u64::MAX).ceiling(PositiveResource::Dependencies, 2, 1),
+        Err(refusal)
+    );
+    cancellation.cancel();
+    assert_eq!(
+        budget(&cancellation, u64::MAX).ceiling(PositiveResource::Dependencies, 2, 1),
+        Err(PositiveError::Stopped(Stop::Cancelled))
+    );
+}

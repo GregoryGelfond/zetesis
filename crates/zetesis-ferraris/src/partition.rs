@@ -9,9 +9,11 @@
 
 use std::fmt;
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, ChargeError, Stop};
 
 mod restriction;
+#[cfg(test)]
+mod tests;
 pub use restriction::{Restriction, RestrictionError, RestrictionErrorKind, RestrictionLimits};
 
 /// A stated upper cardinality bound on one group of distinct semantic atoms.
@@ -199,8 +201,10 @@ impl Plan {
     /// Group/member order is retained. Empty groups and inconsistent logical
     /// bounds are legal: [`Self::inconsistent`] reports the latter. Validation
     /// takes `O(atom_count + declared members + membership occurrences + groups)`
-    /// work and initializes one coverage cell per semantic atom. All loops poll
-    /// control and charge work. No theory is read, searched or transformed.
+    /// work and initializes one coverage cell per semantic atom. All loops charge
+    /// work and observe control at metered boundaries, and a requested stop
+    /// takes precedence over every limit refusal. No theory is read, searched or
+    /// transformed.
     ///
     /// # Errors
     /// Refuses malformed partitions, dimensions, storage, work or control.
@@ -283,15 +287,18 @@ impl Budget<'_> {
 
     fn tick(&mut self) -> Result<(), ErrorKind> {
         self.cancellation
-            .poll_charged(self.statistics.work)
-            .map_err(ErrorKind::Stopped)?;
-        if self.statistics.work == self.limits.max_work {
-            // A requested stop keeps precedence over the work limit.
-            self.poll()?;
-            return Err(ErrorKind::Limit(Resource::Work));
-        }
-        self.statistics.work += 1;
-        Ok(())
+            .charge(&mut self.statistics.work, self.limits.max_work)
+            .map_err(|error| match error {
+                ChargeError::Stopped(stop) => ErrorKind::Stopped(stop),
+                ChargeError::WorkLimit => ErrorKind::Limit(Resource::Work),
+            })
+    }
+
+    /// Refuse a named resource after observing control, so that a requested
+    /// stop takes precedence over the refusal.
+    fn refuse(&self, resource: Resource) -> ErrorKind {
+        self.cancellation
+            .refusal(ErrorKind::Limit(resource), ErrorKind::Stopped)
     }
 
     fn storage<T>(&self, count: usize) -> Result<Vec<T>, ErrorKind> {
@@ -330,7 +337,7 @@ fn build(premises: Premises<'_>, budget: &mut Budget<'_>) -> Result<Plan, ErrorK
         .checked_add(bytes::<Coverage>(premises.atom_count)?)
         .ok_or(ErrorKind::Overflow)?;
     if budget.statistics.construction_bytes > budget.limits.max_bytes {
-        return Err(ErrorKind::Limit(Resource::Bytes));
+        return Err(budget.refuse(Resource::Bytes));
     }
     let mut coverage = budget.storage(premises.atom_count)?;
     for _ in 0..premises.atom_count {
@@ -376,7 +383,9 @@ fn dimensions(groups: &[Group<'_>], budget: &mut Budget<'_>) -> Result<(usize, u
         occurrences = occurrences
             .checked_add(group.members.len())
             .ok_or(ErrorKind::Overflow)?;
-        limit(occurrences, budget.limits.max_members, Resource::Members)?;
+        if occurrences > budget.limits.max_members {
+            return Err(budget.refuse(Resource::Members));
+        }
         capacity = capacity
             .checked_add(group.upper.min(group.members.len()))
             .ok_or(ErrorKind::Overflow)?;

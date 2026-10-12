@@ -182,10 +182,12 @@ observations and their source-checked context projection remain separate.
 
 The native control path uses a borrowed `CancellationPoll` view. The owning
 `Cancellation::poll` prepares this view and delegates to its poll; tight work
-retains the view between operation boundaries. The extracted `tight::Work::tick`
-polls before every charged operation, as its recorded source did; the current
-Rust tick polls at `POLL_INTERVAL` boundaries and before a work refusal, so
-`NativeTightWork` describes the recorded generation only. Conversion retains the flag
+retains the view between operation boundaries. Every extracted tick predates
+metered polling: the extracted `tight::Work::tick` and `oracle::Work::tick` poll
+before every charged operation, as their recorded source did, while the current
+Rust ticks observe control at `POLL_INTERVAL` boundaries and before a limit
+refusal. `NativeTightWork`, the tick laws of `NativeControl` and the typed-stop
+receipt of `NativeLoop` describe the recorded generation only. Conversion retains the flag
 references and immutable slot identity under the same fixed per-invocation
 observation model. Cancellation, slot membership and expiry keep their read
 order. This representation adds no proof of concurrent atomic behavior, Rust

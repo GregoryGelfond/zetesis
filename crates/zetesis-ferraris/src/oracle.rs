@@ -3,7 +3,7 @@ use crate::{
     EvaluationError, EvaluationLimits, EvaluationWorkspace, FrozenReduct, Interpretation, NodeView,
     Theory,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, ChargeError, Stop};
 
 /// Per-call bounds for exact finite checking. Exceeding a bound is incomplete,
 /// never a proof of stability or nonminimality.
@@ -84,14 +84,9 @@ pub(super) struct Work<'a> {
 }
 impl Work<'_> {
     pub(super) fn tick(&mut self) -> Result<(), Stop> {
-        self.cancellation.poll_charged(self.statistics.work)?;
-        if self.statistics.work >= self.limits.max_work {
-            // A requested stop keeps precedence over the work limit.
-            self.cancellation.poll()?;
-            return Err(Stop::WorkLimit);
-        }
-        self.statistics.work += 1;
-        Ok(())
+        self.cancellation
+            .charge(&mut self.statistics.work, self.limits.max_work)
+            .map_err(ChargeError::into_stop)
     }
 }
 
@@ -448,6 +443,15 @@ mod tests {
                 subsets: 3,
             },
         }
+    }
+
+    #[test]
+    fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
+        // The helper's work starts at seven, between metered boundaries.
+        let cancellation = Cancellation::default();
+        assert_eq!(work(&cancellation, 0).tick(), Err(Stop::WorkLimit));
+        cancellation.cancel();
+        assert_eq!(work(&cancellation, 0).tick(), Err(Stop::Cancelled));
     }
 
     #[test]

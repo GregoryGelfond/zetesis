@@ -14,7 +14,7 @@ mod tests;
 use std::{fmt, mem::size_of};
 
 use crate::{Interpretation, Theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, ChargeError, Stop};
 
 /// Bounds for checked classification, stratification and direct evaluation.
 #[derive(Clone, Copy, Debug)]
@@ -262,19 +262,18 @@ struct Budget<'a> {
 
 impl Budget<'_> {
     fn tick(&mut self) -> Result<(), StratifiedError> {
-        self.cancellation.poll_charged(self.statistics.work)?;
-        let admitted = Self::ceiling(
-            StratifiedResource::Work,
-            u128::from(self.statistics.work) + 1,
-            u128::from(self.limits.max_work),
-        );
-        if admitted.is_err() {
-            // A requested stop keeps precedence over the work limit.
-            self.cancellation.poll()?;
+        match self
+            .cancellation
+            .charge(&mut self.statistics.work, self.limits.max_work)
+        {
+            Ok(()) => Ok(()),
+            Err(ChargeError::Stopped(stop)) => Err(stop.into()),
+            Err(ChargeError::WorkLimit) => Err(StratifiedError::Limit {
+                resource: StratifiedResource::Work,
+                observed: u128::from(self.statistics.work) + 1,
+                limit: u128::from(self.limits.max_work),
+            }),
         }
-        admitted?;
-        self.statistics.work += 1;
-        Ok(())
     }
 
     fn dependency(&mut self) -> Result<(), StratifiedError> {
@@ -283,7 +282,7 @@ impl Budget<'_> {
             .dependencies
             .checked_add(1)
             .ok_or(StratifiedError::Overflow)?;
-        Self::ceiling(
+        self.ceiling(
             StratifiedResource::Dependencies,
             next as u128,
             self.limits.max_dependencies as u128,
@@ -299,7 +298,7 @@ impl Budget<'_> {
     }
 
     fn check_bytes(&self, bytes: u128) -> Result<(), StratifiedError> {
-        Self::ceiling(
+        self.ceiling(
             StratifiedResource::Bytes,
             bytes,
             self.limits.max_bytes as u128,
@@ -344,17 +343,23 @@ impl Budget<'_> {
         Ok(())
     }
 
+    /// Admit `observed` units of a named resource under `limit`, refusing
+    /// after observing control so that a requested stop takes precedence.
     fn ceiling(
+        &self,
         resource: StratifiedResource,
         observed: u128,
         limit: u128,
     ) -> Result<(), StratifiedError> {
         if observed > limit {
-            return Err(StratifiedError::Limit {
-                resource,
-                observed,
-                limit,
-            });
+            return Err(self.cancellation.refusal(
+                StratifiedError::Limit {
+                    resource,
+                    observed,
+                    limit,
+                },
+                StratifiedError::from,
+            ));
         }
         Ok(())
     }

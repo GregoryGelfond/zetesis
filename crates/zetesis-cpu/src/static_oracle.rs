@@ -4,7 +4,7 @@ use zetesis_core::{
     AtomId, GroundProgram, GroundRule, Interpretation, Program, Seed, SeedView, WordError,
 };
 
-use crate::{Cancellation, Limits, Stop};
+use crate::{Cancellation, ChargeError, Limits, Stop};
 
 #[cfg(test)]
 mod tests;
@@ -139,14 +139,9 @@ struct Work<'a> {
 
 impl Work<'_> {
     fn tick(&mut self) -> Result<(), Stop> {
-        self.cancellation.poll_charged(self.statistics.work)?;
-        if self.statistics.work >= self.limits.max_work {
-            // A requested stop keeps precedence over the work limit.
-            self.cancellation.poll()?;
-            return Err(Stop::WorkLimit);
-        }
-        self.statistics.work += 1;
-        Ok(())
+        self.cancellation
+            .charge(&mut self.statistics.work, self.limits.max_work)
+            .map_err(ChargeError::into_stop)
     }
 
     fn words(&mut self, count: usize) -> Result<Vec<u32>, Stop> {
@@ -200,9 +195,11 @@ fn enabled(rule: &GroundRule, frozen: &[u32], work: &mut Work<'_>) -> Result<boo
 /// occurs here; this is the explicit static CPU profile.
 ///
 /// [`Limits::max_work`] bounds the operations listed in [`StaticStatistics::work`].
-/// Cancellation and deadlines are polled before each charged operation, before
-/// invocation validation, and before returning a completed result. The atom
-/// limit bounds distinct consequences, not the graph's already compiled carrier.
+/// Cancellation and deadlines are polled before invocation validation, at
+/// metered boundaries of the charged operations (at most
+/// [`POLL_INTERVAL`](crate::POLL_INTERVAL) apart), before refusing the work or
+/// consequence limit, and before returning a completed result. The atom limit
+/// bounds distinct consequences, not the graph's already compiled carrier.
 ///
 /// # Errors
 /// Returns [`Stop`] for foreign program identity, cancellation, deadline, work or
@@ -220,8 +217,8 @@ pub fn check_static(
 /// Check an owned or shared selection through the same static reduct checker.
 /// The view borrows its true atoms; no seed payload or tree is materialized.
 /// Core-minted entries resolve by checked gate position; manual atoms use
-/// canonical lookup. Both retain the same per-entry work/poll charge and program
-/// identity check as [`check_static`].
+/// canonical lookup. Both retain the same per-entry work charge, metered polling
+/// and program identity check as [`check_static`].
 ///
 /// # Errors
 /// Returns the same typed stops as [`check_static`], without partial results.
@@ -305,7 +302,9 @@ fn close(rules: &[&GroundRule], closure: &mut [u32], work: &mut Work<'_>) -> Res
             }
             work.tick()?;
             if work.statistics.derived_atoms >= work.limits.max_derived_atoms {
-                return Err(Stop::DerivedAtomLimit);
+                return Err(work
+                    .cancellation
+                    .refusal(Stop::DerivedAtomLimit, |stop| stop));
             }
             insert(closure, head);
             work.statistics.derived_atoms += 1;

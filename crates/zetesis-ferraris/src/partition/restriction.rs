@@ -6,9 +6,12 @@ use crate::{
     AdmissionLimits, AggregateComparison, AggregateElement, AggregateError, AggregateLimits,
     FormulaNodes, NodeView, Theory,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, ChargeError, Stop};
 
 use super::Plan;
+
+#[cfg(test)]
+mod tests;
 
 /// Bounds for emitting a separate consequence theory, excluding the borrowed plan.
 /// The existing aggregate translator also bounds each temporary state frontier.
@@ -204,7 +207,7 @@ impl Builder<'_> {
 
     fn lower(&mut self, members: &[usize], lower: usize) -> Result<usize, RestrictionErrorKind> {
         if members.len() > self.limits.aggregate.max_elements {
-            return Err(RestrictionErrorKind::Elements);
+            return Err(self.refuse(RestrictionErrorKind::Elements));
         }
         let mut elements = Vec::new();
         elements
@@ -250,21 +253,24 @@ impl Builder<'_> {
 
     fn tick(&mut self) -> Result<(), RestrictionErrorKind> {
         self.cancellation
-            .poll_charged(self.work)
-            .map_err(RestrictionErrorKind::Stopped)?;
-        if self.work == self.limits.max_work {
-            // A requested stop keeps precedence over the work limit.
-            self.poll()?;
-            return Err(RestrictionErrorKind::Work);
-        }
-        self.work += 1;
-        Ok(())
+            .charge(&mut self.work, self.limits.max_work)
+            .map_err(|error| match error {
+                ChargeError::Stopped(stop) => RestrictionErrorKind::Stopped(stop),
+                ChargeError::WorkLimit => RestrictionErrorKind::Work,
+            })
+    }
+
+    /// Refuse an emission ceiling after observing control, so that a
+    /// requested stop takes precedence over the refusal.
+    fn refuse(&self, refusal: RestrictionErrorKind) -> RestrictionErrorKind {
+        self.cancellation
+            .refusal(refusal, RestrictionErrorKind::Stopped)
     }
 
     fn node(&mut self, node: NodeView<'_>) -> Result<usize, RestrictionErrorKind> {
         self.tick()?;
         if self.nodes.parts().nodes().len() == self.limits.theory.max_nodes {
-            return Err(RestrictionErrorKind::Nodes);
+            return Err(self.refuse(RestrictionErrorKind::Nodes));
         }
         let mut transaction = self.nodes.transaction();
         let index = transaction
@@ -281,7 +287,7 @@ impl Builder<'_> {
     fn root(&mut self, root: usize) -> Result<(), RestrictionErrorKind> {
         self.tick()?;
         if self.roots.len() == self.limits.theory.max_roots {
-            return Err(RestrictionErrorKind::Roots);
+            return Err(self.refuse(RestrictionErrorKind::Roots));
         }
         self.roots
             .try_reserve(1)
