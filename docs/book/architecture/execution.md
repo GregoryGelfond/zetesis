@@ -167,8 +167,12 @@ without a restart, and no exclusion index is kept, because a leaf is visited
 once. Propagation under the original theory, permanent restrictions and current
 bound repeats to a shared fixed point before one split ranking. That ranking
 uses the active bound when present, otherwise the latest permanent restriction,
-otherwise the original theory. Its open atom with the most unknown parents is
-preferred, with ties going to the lowest atom. The packed region masks enumerate
+otherwise the original theory. Open atoms that head an atomic choice of the
+original theory rank first: deciding the choices leaves the atoms they derive to
+propagation and the support cut. Among atoms of the same kind, the one with the
+most unknown parents is preferred, with ties going to the lowest atom. Any open
+atom is a sound split (the `CoverageTree.split` node of `Search.lean`), so this
+order changes the regions visited, never the answers. The packed region masks enumerate
 open atoms in ascending order, excluding decided atoms and unused final bits;
 each inspected parent count spends one work permit.
 The traversal itself is one operation in `zetesis-cpu`, shared by both

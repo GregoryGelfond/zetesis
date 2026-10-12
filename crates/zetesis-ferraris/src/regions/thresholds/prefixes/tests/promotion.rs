@@ -198,13 +198,13 @@ fn assert_same_choice(index: &Narrower, region: &Region, left: &Knowledge, right
         .collect();
     assert_eq!(left_scores, right_scores);
     let preferred = left
-        .preferred_atom(region, &mut Work::new(u64::MAX))
+        .preferred_atom(region, None, &mut Work::new(u64::MAX))
         .unwrap();
     assert_eq!(preferred.is_some(), region.open().next().is_some());
     assert_eq!(
         preferred,
         right
-            .preferred_atom(region, &mut Work::new(u64::MAX))
+            .preferred_atom(region, None, &mut Work::new(u64::MAX))
             .unwrap()
     );
 }

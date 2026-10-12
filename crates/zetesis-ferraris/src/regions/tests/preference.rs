@@ -125,7 +125,7 @@ fn separate_preference_has_the_original_narrowing_receipt() {
     );
     propagated.result.unwrap();
     let preference =
-        known.preferred_atom_reserved(&region, &Cancellation::default(), &mut allowance);
+        known.preferred_atom_reserved(&region, None, &Cancellation::default(), &mut allowance);
     region.prefer(preference.result.unwrap().unwrap());
     assert_eq!(region, ordinary);
     assert_eq!(preference.work, 3);
@@ -140,7 +140,7 @@ fn preference_refusal_retains_exact_read_prefix() {
     for limit in 0..=3 {
         let mut allowance = Allowance::new(limit);
         let selected =
-            known.preferred_atom_reserved(&region, &Cancellation::default(), &mut allowance);
+            known.preferred_atom_reserved(&region, None, &Cancellation::default(), &mut allowance);
         assert_eq!(selected.work, limit);
         assert_eq!(allowance.granted - allowance.refunded, limit);
         assert_eq!(
@@ -161,7 +161,7 @@ fn cancelled_preference_reads_nothing() {
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let mut allowance = Allowance::new(1000);
-    let selected = known.preferred_atom_reserved(&region, &cancellation, &mut allowance);
+    let selected = known.preferred_atom_reserved(&region, None, &cancellation, &mut allowance);
     assert_eq!(selected.result, Err(Stop::Cancelled));
     assert_eq!(selected.work, 0);
     assert_eq!(allowance.granted, 0);
@@ -182,8 +182,100 @@ fn zero_parent_counts_prefer_the_lowest_open_atom() {
             assert!(region.cut(atom));
         }
     }
-    let selected =
-        known.preferred_atom_reserved(&region, &Cancellation::default(), &mut Allowance::new(1000));
+    let selected = known.preferred_atom_reserved(
+        &region,
+        None,
+        &Cancellation::default(),
+        &mut Allowance::new(1000),
+    );
     assert_eq!(selected.result, Ok(Some(64)));
     assert_eq!(selected.work, 2);
+}
+
+/// `{a0}` is an atomic choice; `a1 :- not a2`, `a2 :- not a1` form an even
+/// loop, a constraint rejects both, and `a3` and `a4` each require both
+/// through their own unresolved conjunction, so the loop atoms keep more
+/// unknown parents than the choice head. Every atom stays open.
+fn choice_beside_a_loop() -> Theory {
+    Theory::new(
+        5,
+        FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::atom(2),
+                Node::atom(3),
+                Node::atom(4),
+                Node::falsum(),
+                Node::implies(0, 5),
+                Node::or_pair([0, 6]),
+                Node::implies(2, 5),
+                Node::implies(8, 1),
+                Node::implies(1, 5),
+                Node::implies(10, 2),
+                Node::and_pair([1, 2]),
+                Node::implies(12, 5),
+                Node::and_pair([1, 2]),
+                Node::implies(14, 3),
+                Node::and_pair([1, 2]),
+                Node::implies(16, 4),
+            ],
+            vec![],
+        )
+        .unwrap(),
+        vec![7, 9, 11, 13, 15, 17],
+        AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+fn unknown(known: &Knowledge, atom: usize) -> usize {
+    match &known.width {
+        crate::regions::Width::Compact16(known) => known.unknown.get(atom),
+        crate::regions::Width::Compact32(known) => known.unknown.get(atom),
+        crate::regions::Width::Native(known) => known.unknown.get(atom),
+    }
+}
+
+#[test]
+fn choice_heads_rank_before_more_constrained_atoms() {
+    let theory = choice_beside_a_loop();
+    let producers = crate::producers(&theory, RegionLimits::default(), &Cancellation::default())
+        .unwrap()
+        .producers
+        .expect("every root is in the producer fragment");
+    let narrower = Narrower::new(&theory);
+    let mut region = Region::all_open(theory.atom_count());
+    let mut known = narrower.knowledge();
+    narrower
+        .narrow_known(
+            OriginalSubject::new(&theory, Some(&producers)),
+            &mut region,
+            &mut known,
+            &mut NarrowingScratch::default(),
+            RegionLimits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
+    assert_eq!(region.open().collect::<Vec<_>>(), [0, 1, 2, 3, 4]);
+    let ordinary = known.preferred_atom_reserved(
+        &region,
+        None,
+        &Cancellation::default(),
+        &mut Allowance::new(1000),
+    );
+    let busiest = ordinary.result.unwrap().unwrap();
+    // The premise: the ordinary ranking prefers an atom with more unknown
+    // parents than the choice head.
+    assert!(unknown(&known, busiest) > unknown(&known, 0));
+    let choice = known.preferred_atom_reserved(
+        &region,
+        Some(&producers),
+        &Cancellation::default(),
+        &mut Allowance::new(1000),
+    );
+    assert_eq!(choice.result, Ok(Some(0)));
+    // The choice bit is read with each open atom's count: no extra charge.
+    assert_eq!(choice.work, 5);
+    assert_eq!(ordinary.work, 5);
 }

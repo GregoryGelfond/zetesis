@@ -485,7 +485,9 @@ impl Drop for RegionSearch {
 /// candidate bound, else the latest permanent restriction, else the original
 /// theory. This preserves the traversal policy of narrowing those subjects in
 /// sequence while charging only the final subject's scan, one count read per
-/// open atom. Ties prefer the lower atom.
+/// open atom. Open atoms heading an atomic choice producer of the original
+/// theory rank first, so choices are decided before the atoms they derive.
+/// Ties prefer the lower atom.
 pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     (theory, narrower, producers): (&Theory, &Narrower, Option<&Producers>),
     restrictions: &Conditions<R>,
@@ -577,7 +579,8 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
                 budget,
                 failure: None,
             };
-            let preference = known.preferred_atom_reserved(region, cancellation, &mut quota);
+            let preference =
+                known.preferred_atom_reserved(region, producers, cancellation, &mut quota);
             counts.work += preference.work;
             let preferred = preference
                 .result

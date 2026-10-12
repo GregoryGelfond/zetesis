@@ -175,7 +175,7 @@ fn schedules(index: &Narrower, knowledge: &Knowledge) -> Vec<(Vec<usize>, Option
 
 fn branches(theory: &Theory, index: &Narrower, region: &Region, inherited: &Knowledge) {
     let Some(atom) = inherited
-        .preferred_atom(region, &mut Work::new(u64::MAX))
+        .preferred_atom(region, None, &mut Work::new(u64::MAX))
         .unwrap()
     else {
         return;
