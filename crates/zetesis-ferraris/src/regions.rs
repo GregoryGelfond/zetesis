@@ -930,9 +930,10 @@ impl Narrower {
     /// When unit rows exist, immutable anchor projections retain one entry per
     /// eligible row and matching Boolean chain, with sparse reverse chain
     /// lookup. Chain minima are read once; their operand order is unchanged.
-    /// For U unit rows, C chains, L chain leaves and A anchors, this adds
-    /// O(R + U log U + L + (R + C) log(A + 1)) preparation work and O(U + C)
-    /// storage, with fallible reservations. There are no row/chain pairs or
+    /// For N nodes, U unit rows, C chains, L chain leaves and A anchors, this
+    /// adds O(N + R + U log U + L + (R + C + L) log(A + 1)) preparation work,
+    /// including the per-chain anchored-cone summary, and O(U + C) storage,
+    /// with fallible reservations. There are no row/chain pairs or
     /// node-sized offsets. With no unit row there is no allocation or chain
     /// scan. Runtime anchor lookups, posting visits and exact-prefix comparisons
     /// consume propagation work; no per-Boolean mutable state is added.

@@ -265,12 +265,23 @@ fn sparse_lookup_charges_every_attempted_comparison() {
 /// A chain's summary bit is set exactly when a row anchor lies in its same-kind
 /// cone: through a shared chain of the same connective, but never through a
 /// chain of the other connective, whose node is an opaque leaf of the cone.
-#[test]
-fn cone_summary_follows_only_same_kind_chains_to_anchors() {
-    use crate::{AdmissionLimits, FormulaNodes, FormulaParts, Narrower, Node, NodeView, Theory};
+/// The chain roots of [`cone_theory`], by node.
+struct Cones {
+    shared: usize,
+    reaching: usize,
+    also_reaching: usize,
+    conjunction: usize,
+    crossing: usize,
+    hidden: usize,
+    unanchored: usize,
+}
+
+/// One unit row over atoms 2 and 3, whose only anchor is node 2, beside
+/// same-kind chains that do and do not reach it.
+fn cone_theory() -> (crate::Theory, Cones) {
+    use crate::{AdmissionLimits, FormulaNodes, FormulaParts, Node, NodeView, Theory};
     let mut nodes =
         FormulaNodes::new(FormulaParts::new((0..6).map(Node::atom).collect(), vec![]).unwrap());
-    // One unit row over atoms 2 and 3; node 2 is its only anchor.
     nodes
         .push_threshold_family(&[2, 3], &[1, 1], &[1], usize::MAX, usize::MAX)
         .unwrap();
@@ -314,18 +325,109 @@ fn cone_summary_follows_only_same_kind_chains_to_anchors() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let index = Narrower::new(&theory);
+    let cones = Cones {
+        shared,
+        reaching,
+        also_reaching,
+        conjunction,
+        crossing,
+        hidden,
+        unanchored,
+    };
+    (theory, cones)
+}
+
+#[test]
+fn cone_summary_follows_only_same_kind_chains_to_anchors() {
+    let (theory, cones) = cone_theory();
+    let index = crate::Narrower::new(&theory);
     let chain = |node: usize| super::chain_position(index.chain_of[node].expect("chain root"));
     let summary = index
         .thresholds
         .connectives
         .as_ref()
         .expect("a unit row and shared same-kind chains");
-    assert!(summary.anchored_cone(chain(shared)));
-    assert!(summary.anchored_cone(chain(reaching)));
-    assert!(summary.anchored_cone(chain(also_reaching)));
-    assert!(summary.anchored_cone(chain(conjunction)));
-    assert!(!summary.anchored_cone(chain(crossing)));
-    assert!(!summary.anchored_cone(chain(hidden)));
-    assert!(!summary.anchored_cone(chain(unanchored)));
+    assert!(summary.anchored_cone(chain(cones.shared)));
+    assert!(summary.anchored_cone(chain(cones.reaching)));
+    assert!(summary.anchored_cone(chain(cones.also_reaching)));
+    assert!(summary.anchored_cone(chain(cones.conjunction)));
+    assert!(!summary.anchored_cone(chain(cones.crossing)));
+    assert!(!summary.anchored_cone(chain(cones.hidden)));
+    assert!(!summary.anchored_cone(chain(cones.unanchored)));
+}
+
+#[test]
+fn an_anchor_at_a_chain_root_marks_that_chain() {
+    use crate::{AdmissionLimits, FormulaNodes, FormulaParts, Narrower, Node, NodeView, Theory};
+    let mut nodes =
+        FormulaNodes::new(FormulaParts::new((0..6).map(Node::atom).collect(), vec![]).unwrap());
+    let mut append = nodes.transaction();
+    let anchored = append
+        .push(NodeView::Or(&[0, 1]), usize::MAX, usize::MAX)
+        .unwrap();
+    let other = append
+        .push(NodeView::Or(&[4, 5]), usize::MAX, usize::MAX)
+        .unwrap();
+    // A second parent shares the anchored disjunction, which then roots its own
+    // chain inside the outer one.
+    let outer = append
+        .push(NodeView::Or(&[anchored, 2]), usize::MAX, usize::MAX)
+        .unwrap();
+    append.commit();
+    // The unit row's least condition, its anchor, is the compound `anchored`;
+    // no leaf of that chain is an anchor, so only its root can mark it.
+    let row = nodes
+        .push_threshold_family(&[anchored, other], &[1, 1], &[1], usize::MAX, usize::MAX)
+        .unwrap()[0];
+    let theory = Theory::new(
+        6,
+        nodes.into_parts(),
+        vec![row, outer],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let index = Narrower::new(&theory);
+    let chain = |node: usize| super::chain_position(index.chain_of[node].expect("chain root"));
+    let summary = index
+        .thresholds
+        .connectives
+        .as_ref()
+        .expect("a unit row and a shared same-kind chain");
+    assert!(summary.anchored_cone(chain(anchored)));
+    assert!(summary.anchored_cone(chain(outer)));
+    assert!(!summary.anchored_cone(chain(other)));
+}
+
+#[test]
+fn an_unanchored_chain_skips_connective_discovery() {
+    use crate::regions::{Closure, Step, Width, witnesses};
+    let (theory, cones) = cone_theory();
+    let index = crate::Narrower::new(&theory);
+    let chain = |node: usize| super::chain_position(index.chain_of[node].expect("chain root"));
+    let mut knowledge = index.knowledge();
+    let Width::Compact16(known) = &mut knowledge.width else {
+        panic!("the small theory uses compact counters");
+    };
+    let mut discover = |node: usize| {
+        let chain = chain(node);
+        // Both chains take the expanded walk when discovery runs at all.
+        assert!(witnesses::expands(&index, chain));
+        let mut scratch = crate::NarrowingScratch::default();
+        scratch
+            .prepare_thresholds(index.thresholds.rows.len())
+            .unwrap();
+        let mut work = Work::new(u64::MAX);
+        let step = Closure {
+            known: known.borrow(),
+            lists: &mut scratch,
+        }
+        .threshold_connective(&index, chain, true, &mut work)
+        .unwrap();
+        (step, work.spent)
+    };
+    // The contrast: an anchored chain's discovery walks its cone and probes
+    // anchors, charging work, though it finds nothing to transport here.
+    assert!(discover(cones.reaching).1 > 0);
+    // The unanchored chain returns before its walk, charging nothing.
+    assert!(discover(cones.unanchored) == (Step::Unchanged, 0));
 }

@@ -252,10 +252,10 @@ impl<'a> FormulaView<'a> {
     /// index below their node count.
     #[inline]
     pub fn node(self, index: usize) -> Result<NodeView<'a>, AdmissionError> {
-        // Atoms, implications and pairs keep their operands in the node itself
-        // and are most of the reads in evaluation and narrowing loops. Answering
-        // them here keeps this accessor small enough for those loops to inline.
-        // Every other node, and every refusal, takes the complete reading.
+        // Atoms, implications and pairs keep their operands in the node itself.
+        // Answering them here keeps this accessor small enough for evaluation
+        // and narrowing loops to inline it; every other node, and every
+        // refusal, takes the complete reading.
         match self.nodes.get(index).map(|node| &node.0) {
             Some(Storage::Atom(atom)) => Ok(NodeView::Atom(*atom)),
             Some(Storage::Implies(left, right)) => Ok(NodeView::Implies(*left, *right)),

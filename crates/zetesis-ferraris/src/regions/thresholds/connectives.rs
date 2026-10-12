@@ -1,14 +1,15 @@
 //! Unit-count bounds across Boolean witnesses.
 //!
 //! Flat theories use the sparse least-condition anchor join and exact-prefix
-//! authentication. Its preparation is O(R + U log U + L + (R + C) log(A + 1))
-//! for R native rows, U unit rows, C chains, L chain leaves and A distinct row
-//! anchors. Retained storage is O(U + C); there is no row-by-chain table. With
-//! no unit row, preparation allocates nothing and never examines chains.
+//! authentication. Preparation takes O(N + R + U log U + L + (R + C + L)
+//! log(A + 1)) work for N nodes, R native rows, U unit rows, C chains, L chain
+//! leaves and A distinct row anchors, including the cone summary below.
+//! Retained storage is O(U + C); there is no row-by-chain table. With no unit
+//! row, preparation allocates nothing and never examines chains.
 //!
 //! Preparation also records, in one bit per chain, whether the chain's
-//! same-kind cone contains a row anchor, in O(N + (C + L) log(A + 1)) work for
-//! N nodes. Every row either discovery below can reach is posted under an
+//! same-kind cone contains a row anchor, the O(N + (C + L) log(A + 1)) part of
+//! that total. Every row either discovery below can reach is posted under an
 //! anchor of that cone, so a chain whose cone holds none returns at once,
 //! without reading its cone or postings.
 //!
