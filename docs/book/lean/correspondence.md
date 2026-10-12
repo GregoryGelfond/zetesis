@@ -635,7 +635,10 @@ neither assume allocation succeeds nor prove changing runtime-effect projection.
 
 `NativeTightWork` and `NativeTightOperands` establish the tight classifier's
 actual inner-loop work and typed refusals. A successful row visits every child
-occurrence; an interrupted row retains only its charged prefix. The class fold
+occurrence; an interrupted row retains only its charged prefix. Their extracted
+tick polls before every charged operation, as the recorded source did; the
+current tick polls only at metered boundaries and before a work refusal, so
+these laws describe the recorded generation, not the current control cadence. The class fold
 uses the existing body recognizer. The native outer classifier, exact syntax
 recognition and producer composition remain separate obligations.
 

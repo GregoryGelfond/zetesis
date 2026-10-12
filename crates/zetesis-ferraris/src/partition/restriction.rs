@@ -249,8 +249,12 @@ impl Builder<'_> {
     }
 
     fn tick(&mut self) -> Result<(), RestrictionErrorKind> {
-        self.poll()?;
+        self.cancellation
+            .poll_charged(self.work)
+            .map_err(RestrictionErrorKind::Stopped)?;
         if self.work == self.limits.max_work {
+            // A requested stop keeps precedence over the work limit.
+            self.poll()?;
             return Err(RestrictionErrorKind::Work);
         }
         self.work += 1;

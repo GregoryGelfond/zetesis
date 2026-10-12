@@ -351,8 +351,9 @@ pub trait NarrowingQuota {
 }
 
 /// The most charged reads a narrowing asks its [`NarrowingQuota`] for at once,
-/// and so the most reads between two consultations of it.
-pub const NARROWING_BATCH: u64 = 256;
+/// and so the most reads between two consultations of it: the shared metered
+/// polling interval, [`zetesis_cpu::POLL_INTERVAL`].
+pub const NARROWING_BATCH: u64 = zetesis_cpu::POLL_INTERVAL;
 
 /// The narrowing's charged reads: a fixed ceiling, or permits granted by a
 /// quota in batches and spent locally.

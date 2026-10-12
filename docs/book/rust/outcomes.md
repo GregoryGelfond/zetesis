@@ -321,8 +321,18 @@ Repeated polls can retain `Cancellation::polling()`'s borrowed
 and slot identity once, without allocation or reference-count updates. Each poll
 still reads the live flags in the same order. The view borrows the token; it
 neither owns a run guard nor extends a deadline. Tight certificate preparation
-and formula checking retain this view while preserving their poll before each
-charged primitive operation.
+and formula checking retain this view.
+
+Operations that charge work per formula node or edge observe control at metered
+boundaries: before their first charged operation, at least once every
+`zetesis_cpu::POLL_INTERVAL` (256) charged operations thereafter, and before
+refusing a work limit, so a requested stop keeps its precedence over the limit.
+These are original and frozen formula evaluation, the tight, positive and
+stratified certificates, support and partition construction, and static closure
+checks; narrowing observes control at the same interval through its quota.
+Coarser operations, such as objective reduction and search decisions, still poll
+before every charged step. A computation that completes between two boundaries
+returns its complete result; a stop is then observed at the caller's next boundary.
 
 Cancellation is observed at cooperative polling boundaries, not by forcibly
 terminating arbitrary work. A future deadline owns a timer that sets an expiry

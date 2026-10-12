@@ -280,12 +280,17 @@ struct Budget<'a> {
 
 impl Budget<'_> {
     fn tick(&mut self) -> Result<(), PositiveError> {
-        self.cancellation.poll()?;
-        Self::ceiling(
+        self.cancellation.poll_charged(self.statistics.work)?;
+        let admitted = Self::ceiling(
             PositiveResource::Work,
             u128::from(self.statistics.work) + 1,
             u128::from(self.limits.max_work),
-        )?;
+        );
+        if admitted.is_err() {
+            // A requested stop keeps precedence over the work limit.
+            self.cancellation.poll()?;
+        }
+        admitted?;
         self.statistics.work += 1;
         Ok(())
     }

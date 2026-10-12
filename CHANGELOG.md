@@ -27,6 +27,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   reach one, reducing candidate narrowing work without changing its deductions.
 - Keep reads of atoms, implications and two-operand connectives inline in formula
   evaluation and narrowing, restoring the speed of complete candidate checks.
+- Observe cancellation and deadlines once per 256 charged operations in formula
+  evaluation, membership certificates and support construction, and before any
+  work refusal, instead of at every node; coarse operations still poll each step.
 
 ## 0.5.0 — 2026-10-10
 

@@ -268,8 +268,10 @@ struct Work<'a> {
 }
 impl Work<'_> {
     fn tick(&mut self) -> Result<(), TightError> {
-        self.cancellation.poll()?;
+        self.cancellation.poll_charged(self.used)?;
         if self.used == self.max {
+            // A requested stop keeps precedence over the work limit.
+            self.cancellation.poll()?;
             return Err(TightError::Limit(TightResource::Work));
         }
         self.used += 1;

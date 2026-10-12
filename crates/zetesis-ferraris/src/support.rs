@@ -112,8 +112,10 @@ struct Builder<'a> {
 
 impl Builder<'_> {
     fn tick(&mut self) -> Result<(), SupportError> {
-        self.cancellation.poll()?;
+        self.cancellation.poll_charged(self.work)?;
         if self.work == self.limits.max_work {
+            // A requested stop keeps precedence over the work limit.
+            self.cancellation.poll()?;
             return Err(Stop::WorkLimit.into());
         }
         self.work += 1;

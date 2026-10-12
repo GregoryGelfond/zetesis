@@ -139,8 +139,10 @@ struct Work<'a> {
 
 impl Work<'_> {
     fn tick(&mut self) -> Result<(), Stop> {
-        self.cancellation.poll()?;
+        self.cancellation.poll_charged(self.statistics.work)?;
         if self.statistics.work >= self.limits.max_work {
+            // A requested stop keeps precedence over the work limit.
+            self.cancellation.poll()?;
             return Err(Stop::WorkLimit);
         }
         self.statistics.work += 1;

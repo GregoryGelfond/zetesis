@@ -282,8 +282,12 @@ impl Budget<'_> {
     }
 
     fn tick(&mut self) -> Result<(), ErrorKind> {
-        self.poll()?;
+        self.cancellation
+            .poll_charged(self.statistics.work)
+            .map_err(ErrorKind::Stopped)?;
         if self.statistics.work == self.limits.max_work {
+            // A requested stop keeps precedence over the work limit.
+            self.poll()?;
             return Err(ErrorKind::Limit(Resource::Work));
         }
         self.statistics.work += 1;

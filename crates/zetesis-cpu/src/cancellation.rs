@@ -11,6 +11,18 @@ mod slot;
 
 pub use slot::{CancellationRun, CancellationSlot, CancellationSlotError};
 
+/// The most operations a metered computation charges between two observations
+/// of its cancellation and deadline flags. A poll reads up to three shared
+/// flags; observing them once per this many operations keeps that cost small
+/// inside per-node loops while bounding the work that can follow a stop.
+pub const POLL_INTERVAL: u64 = 256;
+
+/// Whether `charged` operations complete a run of [`POLL_INTERVAL`], so that
+/// the next operation starts a new run and observes the flags first.
+const fn at_poll_boundary(charged: u64) -> bool {
+    charged.is_multiple_of(POLL_INTERVAL)
+}
+
 /// Shared cancellation and an optional immutable deadline. Clones observe the
 /// same flags. A deadline is observed the way cancellation is: a timer thread
 /// sets an expiry flag when the deadline passes, and a poll reads flags only,
@@ -51,6 +63,20 @@ impl Cancellation {
     #[inline]
     pub fn poll(&self) -> Result<(), Stop> {
         self.polling().poll()
+    }
+
+    /// Observe at a metered boundary, as [`CancellationPoll::poll_charged`]
+    /// does for the borrowed view.
+    ///
+    /// # Errors
+    /// As [`Self::poll`] when `charged` starts a new run; otherwise none.
+    #[inline]
+    pub fn poll_charged(&self, charged: u64) -> Result<(), Stop> {
+        if at_poll_boundary(charged) {
+            self.poll()
+        } else {
+            Ok(())
+        }
     }
 
     /// Borrow the immutable handle shape once for repeated boundary polls.
@@ -99,6 +125,24 @@ impl CancellationPoll<'_> {
             .is_some_and(|expired| expired.load(Ordering::Relaxed))
         {
             Err(Stop::Deadline)
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Observe the flags at a metered boundary: when `charged`, the operations
+    /// a computation has already charged, completes a run of [`POLL_INTERVAL`].
+    /// A computation that calls this before each charged operation therefore
+    /// observes its flags before the first operation and at least once every
+    /// [`POLL_INTERVAL`] operations. To give a requested stop precedence over a
+    /// work limit, it also calls [`Self::poll`] before refusing that limit.
+    ///
+    /// # Errors
+    /// As [`Self::poll`] when `charged` starts a new run; otherwise none.
+    #[inline]
+    pub fn poll_charged(&self, charged: u64) -> Result<(), Stop> {
+        if at_poll_boundary(charged) {
+            self.poll()
         } else {
             Ok(())
         }
@@ -277,6 +321,22 @@ mod tests {
         while !deadline.expired.load(Ordering::Relaxed) {
             assert!(Instant::now() < timeout, "deadline timer did not expire");
             thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    #[test]
+    fn metered_polls_read_flags_once_per_interval() {
+        let cancellation = Cancellation::default();
+        cancellation.cancel();
+        let polling = cancellation.polling();
+        for charged in 0..=3 * POLL_INTERVAL {
+            let expected = if charged.is_multiple_of(POLL_INTERVAL) {
+                Err(Stop::Cancelled)
+            } else {
+                Ok(())
+            };
+            assert_eq!(polling.poll_charged(charged), expected, "{charged}");
+            assert_eq!(cancellation.poll_charged(charged), expected, "{charged}");
         }
     }
 
