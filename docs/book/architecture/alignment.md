@@ -332,8 +332,11 @@ The bridge borrows chain leaves and reuses their counters and the native row
 worklist. Shared associative views use reusable worker scratch with 32-bit visit
 marks; it is not copied with each region. No table of all row/chain pairs or
 all descendants is retained. With no eligible native row, anchor preparation
-allocates nothing and reads no chains. Runtime walks and comparisons consume
-propagation work and remain cancellable; shared paths and dense anchor buckets
+allocates nothing and reads no chains. Otherwise preparation keeps one bit per
+chain recording whether a row anchor lies in its same-kind cone. Both
+discoveries reach a row only through such an anchor, so a chain whose cone
+holds none skips them without reading its cone or postings. Runtime walks and
+comparisons consume propagation work and remain cancellable; shared paths and dense anchor buckets
 can still require repeated visits. Enqueue sites select participating chains
 before one shared predicate checks whether a notification can still help. After
 operand counters are updated, only unknown roots or remaining expanded-witness

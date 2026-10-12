@@ -34,6 +34,7 @@ fn no_unit_rows_have_no_anchor_storage() {
             Connectives::prepare(
                 &rows,
                 &[chain(&[1, 0])],
+                &[],
                 &crate::regions::extrema::Extrema::default(),
                 false
             )
@@ -91,7 +92,8 @@ fn native_receipt_includes_shared_anchor_storage() {
     let payload = anchors.rows.retained_bytes()
         + anchors.chains.retained_bytes()
         + anchors.anchors.capacity() as u128 * size_of::<usize>() as u128
-        + anchors.by_chain.capacity() as u128 * size_of::<(usize, usize)>() as u128;
+        + anchors.by_chain.capacity() as u128 * size_of::<(usize, usize)>() as u128
+        + anchors.anchored_cones.capacity() as u128 * size_of::<u64>() as u128;
     assert!(payload > 0);
     assert_eq!(before - index.extremum_index_bytes(), payload);
 }
@@ -104,6 +106,7 @@ fn compact_postings_record_each_owner_once() {
     let anchors = Connectives::prepare(
         &rows,
         &chains,
+        &[],
         &crate::regions::extrema::Extrema::default(),
         false,
     )
@@ -142,6 +145,7 @@ fn a_shared_parent_with_a_different_minimum_is_excluded() {
     let anchors = Connectives::prepare(
         &rows,
         &chains,
+        &[],
         &crate::regions::extrema::Extrema::default(),
         false,
     )
@@ -175,6 +179,7 @@ fn repeated_anchors_preserve_both_owner_orders() {
     let anchors = Connectives::prepare(
         &rows,
         &chains,
+        &[],
         &crate::regions::extrema::Extrema::default(),
         false,
     )
@@ -197,6 +202,7 @@ fn rebuilding_does_not_reuse_another_owners_chain_anchor() {
     let first = Connectives::prepare(
         &[row(&[3, 5], &[1, 1])],
         &[chain(&[5, 3])],
+        &[],
         &crate::regions::extrema::Extrema::default(),
         false,
     )
@@ -205,6 +211,7 @@ fn rebuilding_does_not_reuse_another_owners_chain_anchor() {
     let second = Connectives::prepare(
         &[row(&[40, 42], &[1, 1])],
         &[chain(&[42, 40])],
+        &[],
         &crate::regions::extrema::Extrema::default(),
         false,
     )
@@ -226,6 +233,7 @@ fn sparse_lookup_charges_every_attempted_comparison() {
     let anchors = Connectives::prepare(
         &rows,
         &chains,
+        &[],
         &crate::regions::extrema::Extrema::default(),
         false,
     )
@@ -252,4 +260,72 @@ fn sparse_lookup_charges_every_attempted_comparison() {
             assert_eq!(query(&mut exact).unwrap(), query(&mut full).unwrap());
         }
     }
+}
+
+/// A chain's summary bit is set exactly when a row anchor lies in its same-kind
+/// cone: through a shared chain of the same connective, but never through a
+/// chain of the other connective, whose node is an opaque leaf of the cone.
+#[test]
+fn cone_summary_follows_only_same_kind_chains_to_anchors() {
+    use crate::{AdmissionLimits, FormulaNodes, FormulaParts, Narrower, Node, NodeView, Theory};
+    let mut nodes =
+        FormulaNodes::new(FormulaParts::new((0..6).map(Node::atom).collect(), vec![]).unwrap());
+    // One unit row over atoms 2 and 3; node 2 is its only anchor.
+    nodes
+        .push_threshold_family(&[2, 3], &[1, 1], &[1], usize::MAX, usize::MAX)
+        .unwrap();
+    let mut append = nodes.transaction();
+    // Each shared disjunction has two parents, so it roots its own chain.
+    let shared = append
+        .push(NodeView::Or(&[2, 4]), usize::MAX, usize::MAX)
+        .unwrap();
+    let reaching = append
+        .push(NodeView::Or(&[0, shared]), usize::MAX, usize::MAX)
+        .unwrap();
+    let also_reaching = append
+        .push(NodeView::Or(&[1, shared]), usize::MAX, usize::MAX)
+        .unwrap();
+    let conjunction = append
+        .push(NodeView::And(&[2, 5]), usize::MAX, usize::MAX)
+        .unwrap();
+    let crossing = append
+        .push(NodeView::Or(&[0, conjunction]), usize::MAX, usize::MAX)
+        .unwrap();
+    let hidden = append
+        .push(NodeView::Or(&[4, 5]), usize::MAX, usize::MAX)
+        .unwrap();
+    let unanchored = append
+        .push(NodeView::Or(&[0, hidden]), usize::MAX, usize::MAX)
+        .unwrap();
+    let also_unanchored = append
+        .push(NodeView::Or(&[1, hidden]), usize::MAX, usize::MAX)
+        .unwrap();
+    append.commit();
+    let theory = Theory::new(
+        6,
+        nodes.into_parts(),
+        vec![
+            reaching,
+            also_reaching,
+            crossing,
+            unanchored,
+            also_unanchored,
+        ],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let index = Narrower::new(&theory);
+    let chain = |node: usize| super::chain_position(index.chain_of[node].expect("chain root"));
+    let summary = index
+        .thresholds
+        .connectives
+        .as_ref()
+        .expect("a unit row and shared same-kind chains");
+    assert!(summary.anchored_cone(chain(shared)));
+    assert!(summary.anchored_cone(chain(reaching)));
+    assert!(summary.anchored_cone(chain(also_reaching)));
+    assert!(summary.anchored_cone(chain(conjunction)));
+    assert!(!summary.anchored_cone(chain(crossing)));
+    assert!(!summary.anchored_cone(chain(hidden)));
+    assert!(!summary.anchored_cone(chain(unanchored)));
 }

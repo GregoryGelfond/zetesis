@@ -23,6 +23,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   repeated sessions reuse the result without constructing a formula theory.
 - Stream range facts into admission and reuse borrowed term comparisons in
   grounding filters, reducing temporary storage and repeated lookup.
+- Skip the search for native aggregate rows from Boolean conditions that cannot
+  reach one, reducing candidate narrowing work without changing its deductions.
 
 ## 0.5.0 — 2026-10-10
 

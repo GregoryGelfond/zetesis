@@ -82,7 +82,9 @@ distinct leaves and stop at an absorbing witness or two open leaves. Resumable
 frames also serve structural coverage, skipping covered subtrees and unread
 siblings. Enqueue sites share one eligibility predicate to omit settled
 obligations; later root events seed any new demand. Local anchor roles keep
-unrelated shared formulas off the dynamic bridge route. Expanded discovery
+unrelated shared formulas off the dynamic bridge route, and a per-chain bit
+records whether any row anchor lies in a chain's same-kind cone, so discovery
+from a chain without one returns at once. Expanded discovery
 retains only proposals that can tighten a row's bounds, then authenticates their
 exact witness relationship before transport.
 GPU and clause

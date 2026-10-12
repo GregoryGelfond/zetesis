@@ -6,6 +6,12 @@
 //! anchors. Retained storage is O(U + C); there is no row-by-chain table. With
 //! no unit row, preparation allocates nothing and never examines chains.
 //!
+//! Preparation also records, in one bit per chain, whether the chain's
+//! same-kind cone contains a row anchor, in O(N + (C + L) log(A + 1)) work for
+//! N nodes. Every row either discovery below can reach is posted under an
+//! anchor of that cone, so a chain whose cone holds none returns at once,
+//! without reading its cone or postings.
+//!
 //! A shared associative DAG can hide an intermediate cut such as [C,b,d]
 //! inside ((C or b) or d). Opaque and fully unfolded minima do not identify
 //! every such cut. For a nested Boolean event, walk its same-kind cone and
@@ -36,10 +42,11 @@
 //! never an assumption about arbitrary frozen-reduct interpretations.
 
 use std::cmp::Ordering;
+use std::num::NonZeroUsize;
 
 use zetesis_cpu::Stop;
 
-use crate::regions::{Chain, Closure, Count, Narrower, Step, Work, bit};
+use crate::regions::{Chain, Closure, Count, Narrower, Step, Work, bit, chain_position};
 
 use super::{Adjacency, Row, State, Thresholds, reserve};
 
@@ -58,6 +65,9 @@ pub(super) struct Connectives {
     chains: Adjacency,
     /// Sparse reverse projection, ordered by original chain ID.
     by_chain: Vec<(usize, usize)>,
+    /// One bit per chain: set when its same-kind cone, the nodes an expanded
+    /// discovery walk collects, contains a row anchor.
+    anchored_cones: Vec<u64>,
 }
 
 impl Connectives {
@@ -67,11 +77,13 @@ impl Connectives {
             + self.chains.retained_bytes()
             + self.anchors.capacity() as u128 * size_of::<usize>() as u128
             + self.by_chain.capacity() as u128 * size_of::<(usize, usize)>() as u128
+            + self.anchored_cones.capacity() as u128 * size_of::<u64>() as u128
     }
 
     pub(super) fn prepare(
         rows: &[Row],
         chains: &[Chain],
+        chain_of: &[Option<NonZeroUsize>],
         extrema: &crate::regions::extrema::Extrema,
         shared_connectives: bool,
     ) -> Result<Option<Self>, Stop> {
@@ -97,11 +109,13 @@ impl Connectives {
             anchors.len(),
             by_chain.iter().map(|&(chain, anchor)| (anchor, chain)),
         )?;
+        let anchored_cones = anchored_cones(chains, chain_of, extrema, &anchors)?;
         Ok(Some(Self {
             anchors,
             rows: row_postings,
             chains: chain_postings,
             by_chain,
+            anchored_cones,
         }))
     }
 
@@ -111,6 +125,12 @@ impl Connectives {
             return Ok(&[]);
         };
         Ok(&self.rows[self.by_chain[position].1])
+    }
+
+    /// Whether the chain's same-kind cone contains any row anchor. When it
+    /// does not, neither discovery from this chain can reach a row.
+    fn anchored_cone(&self, chain: usize) -> bool {
+        bit(&self.anchored_cones, chain)
     }
 
     /// A cone node is only a discovery key, not proof of a row relation.
@@ -128,6 +148,42 @@ impl Connectives {
         };
         Ok(&self.chains[anchor])
     }
+}
+
+/// Mark each chain whose same-kind cone contains a row anchor. A cone is the
+/// chain's root together with, for each leaf, the cone of the same-kind chain
+/// that leaf roots, or else the leaf itself: exactly the nodes an expanded
+/// discovery walk collects. A flat chain has no same-kind inner chain, so its
+/// cone holds its least leaf, the key of its posting. Operands precede their
+/// parents, so ascending node order completes every inner chain before an
+/// outer one reads it. With N nodes, C chains, L chain leaves and A anchors
+/// this takes O(N + (C + L) log(A + 1)) work and retains one bit per chain. A
+/// node absent from `chain_of` roots no chain.
+fn anchored_cones(
+    chains: &[Chain],
+    chain_of: &[Option<NonZeroUsize>],
+    extrema: &crate::regions::extrema::Extrema,
+    anchors: &[usize],
+) -> Result<Vec<u64>, Stop> {
+    let mut marks = reserve(chains.len().div_ceil(64))?;
+    marks.resize(chains.len().div_ceil(64), 0);
+    for &link in chain_of.iter().flatten() {
+        let chain = chain_position(link);
+        let source = &chains[chain];
+        let reaches = anchors.binary_search(&source.root).is_ok()
+            || source.leaves(extrema).iter().any(|&leaf| {
+                match chain_of.get(leaf).copied().flatten().map(chain_position) {
+                    Some(inner) if chains[inner].disjunction == source.disjunction => {
+                        bit(&marks, inner)
+                    }
+                    _ => anchors.binary_search(&leaf).is_ok(),
+                }
+            });
+        if reaches {
+            marks[chain / 64] |= 1u64 << (chain % 64);
+        }
+    }
+    Ok(marks)
 }
 
 /// Allocate only after finding a native unit row. Sorting and deduplication
@@ -301,6 +357,13 @@ impl<C: Count> Closure<'_, C> {
         let Some(anchors) = &index.thresholds.connectives else {
             return Ok(Step::Unchanged);
         };
+        if !anchors.anchored_cone(chain) {
+            // Both discoveries below reach rows only through an anchor in this
+            // chain's same-kind cone: an expanded walk reads the anchors of the
+            // cone's nodes, and a flat chain's posting is keyed by its least
+            // leaf. With no anchor there is no candidate row to transport.
+            return Ok(Step::Unchanged);
+        }
         let expanded = crate::regions::witnesses::expands(index, chain);
         let rows = if expanded {
             // Each distinct cone node has at most one anchor slot, and each

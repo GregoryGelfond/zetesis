@@ -132,6 +132,7 @@ impl Thresholds {
     pub(super) fn prepare(
         theory: &Theory,
         chains: &[super::Chain],
+        chain_of: &[Option<std::num::NonZeroUsize>],
         extrema: &super::extrema::Extrema,
         shared_connectives: bool,
     ) -> Result<Self, Stop> {
@@ -203,8 +204,13 @@ impl Thresholds {
             )?)
         };
         let relations = prefixes::prepare(&rows)?;
-        let connectives =
-            connectives::Connectives::prepare(&rows, chains, extrema, shared_connectives)?;
+        let connectives = connectives::Connectives::prepare(
+            &rows,
+            chains,
+            chain_of,
+            extrema,
+            shared_connectives,
+        )?;
         Ok(Self {
             rows,
             by_descriptor,

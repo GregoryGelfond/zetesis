@@ -169,7 +169,10 @@ requires monotonic bounds: a redundant proposal stays redundant through closure.
 This does not change the coverage or containment premises. Local parent
 roles select ancestor discovery, conservatively retaining compound anchors and
 ordinal parents on that route; unrelated sharing does not change flat discovery.
-This local eligibility argument remains a Rust obligation. The bridge keeps no
+This local eligibility argument remains a Rust obligation, as does the prepared
+per-chain bit that skips discovery when no row anchor lies in a chain's
+same-kind cone: it must mark every chain whose walk or least-leaf posting can
+reach a row. The bridge keeps no
 table of all row/chain pairs and adds no state to region copies; its temporary
 walks use accounted worker scratch. Enqueueing uses processed operand counters
 and frozen gates: unknown roots may relay changes, while a settled root needs

@@ -872,8 +872,13 @@ impl Narrower {
         let extrema = extrema::Extrema::prepare(theory)?;
         extrema.append_chains(&mut chains, &mut chain_of)?;
         let witness_chains = witnesses::nested(&chains, &chain_of, &extrema)?;
-        let thresholds =
-            thresholds::Thresholds::prepare(theory, &chains, &extrema, !witness_chains.is_empty())?;
+        let thresholds = thresholds::Thresholds::prepare(
+            theory,
+            &chains,
+            &chain_of,
+            &extrema,
+            !witness_chains.is_empty(),
+        )?;
         let parents = Adjacency::build(nodes.len(), dependencies(nodes, &chains))?;
         let atom_operands = Adjacency::try_build(
             nodes.len(),
