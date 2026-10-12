@@ -31,9 +31,7 @@ pub enum SupportError {
 impl Refusal for SupportError {
     fn is_resource_refusal(&self) -> bool {
         match self {
-            Self::Admission(error) => {
-                matches!(error, AdmissionError::Limit | AdmissionError::Allocation)
-            }
+            Self::Admission(error) => error.is_resource_refusal(),
             Self::Stopped(stop) => stop.is_resource_refusal(),
         }
     }

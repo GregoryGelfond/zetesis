@@ -40,7 +40,7 @@ pub enum ChargeError {
 pub trait Refusal: Sized {
     /// Whether this error refuses a resource: work, storage, a named ceiling,
     /// a size the host cannot represent, or an allocation. Errors about the
-    /// program's shape, identity or invariants are not refusals.
+    /// program's shape, identity or invariants are not resource refusals.
     fn is_resource_refusal(&self) -> bool;
 
     /// This error type's report of a requested stop.
@@ -49,16 +49,16 @@ pub trait Refusal: Sized {
 
 impl Refusal for Stop {
     fn is_resource_refusal(&self) -> bool {
-        matches!(
-            self,
+        match self {
             Self::WorkLimit
-                | Self::RoundLimit
-                | Self::StorageLimit
-                | Self::DerivedAtomLimit
-                | Self::CandidateLimit
-                | Self::CarrierLimit
-                | Self::Allocation
-        )
+            | Self::RoundLimit
+            | Self::StorageLimit
+            | Self::DerivedAtomLimit
+            | Self::CandidateLimit
+            | Self::CarrierLimit
+            | Self::Allocation => true,
+            Self::Cancelled | Self::Deadline | Self::WrongProgram | Self::InvalidProgram => false,
+        }
     }
 
     fn from_stop(stop: Stop) -> Self {
@@ -234,12 +234,6 @@ impl CancellationPoll<'_> {
     /// again before refusing, so a requested stop takes precedence over the
     /// work limit. An admitted charge counts the operation; a refused charge
     /// leaves `charged` unchanged.
-    ///
-    /// A charge writes `charged` and the next one reads it again. Keep the
-    /// count alone in its cell (for example with 16-byte alignment): a paired
-    /// load of the count with any neighbouring field cannot be forwarded from
-    /// the pending store on aarch64, which stalls every charge in a per-node
-    /// loop.
     ///
     /// # Errors
     /// [`ChargeError::Stopped`] when an observation finds a requested stop or

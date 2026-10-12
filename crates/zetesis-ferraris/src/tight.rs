@@ -281,12 +281,12 @@ pub struct TightAttempt<T> {
     pub work: u64,
 }
 
-/// Work charged by one certificate operation, alone in a 16-byte cell. Each
-/// charge stores the count and the next reads it back; were another field
-/// beside it, the compiler could read both in one paired load, which on aarch64
-/// cannot be forwarded from the pending store and stalls every charge (it
-/// doubled the cost of a complete check). The cell's padding keeps every other
-/// field out of that load, whatever order the fields of [`Work`] take.
+/// Work charged by one certificate operation. Each charge stores the count and
+/// the next reads it back, and a paired load of the count with a neighbouring
+/// field cannot be forwarded from that pending store on aarch64, stalling every
+/// charge. The count opens a 16-byte aligned cell whose other eight bytes are
+/// padding, so no field follows it within such a pair; the cell does not govern
+/// the field before it, which the layout of [`Work`] decides.
 #[repr(align(16))]
 struct Charged(u64);
 

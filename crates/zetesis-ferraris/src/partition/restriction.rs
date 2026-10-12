@@ -82,12 +82,7 @@ impl Refusal for RestrictionErrorKind {
                 | AggregateErrorKind::Allocation
                 | AggregateErrorKind::ArithmeticOverflow => true,
             },
-            Self::Theory(error) => {
-                matches!(
-                    error,
-                    crate::AdmissionError::Limit | crate::AdmissionError::Allocation
-                )
-            }
+            Self::Theory(error) => error.is_resource_refusal(),
             Self::Stopped(stop) => stop.is_resource_refusal(),
         }
     }

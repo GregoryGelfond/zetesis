@@ -418,6 +418,28 @@ pub enum AdmissionError {
     /// Formula or interpretation storage could not be reserved.
     Allocation,
 }
+impl AdmissionError {
+    /// Whether this refusal is of a resource (a shape bound or count, or an
+    /// allocation) rather than of the formula's shape, so that an operation
+    /// settling its exit can report a requested stop in its place.
+    pub(crate) const fn is_resource_refusal(self) -> bool {
+        match self {
+            Self::Limit | Self::Allocation => true,
+            Self::Atom
+            | Self::Edge
+            | Self::Arity
+            | Self::Span
+            | Self::ThresholdShape
+            | Self::NumericShape
+            | Self::NumericDomain
+            | Self::OrdinalRank
+            | Self::OrdinalCut
+            | Self::ThresholdMeasure
+            | Self::Root => false,
+        }
+    }
+}
+
 impl fmt::Display for AdmissionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
@@ -1248,6 +1270,28 @@ mod tests {
 
     fn parts(nodes: Vec<Node>, operands: Vec<usize>) -> FormulaParts {
         FormulaParts::new(nodes, operands).unwrap()
+    }
+
+    #[test]
+    fn admission_errors_classify_resource_refusals() {
+        for refusal in [AdmissionError::Limit, AdmissionError::Allocation] {
+            assert!(refusal.is_resource_refusal(), "{refusal:?}");
+        }
+        for shape in [
+            AdmissionError::Atom,
+            AdmissionError::Edge,
+            AdmissionError::Arity,
+            AdmissionError::Span,
+            AdmissionError::ThresholdShape,
+            AdmissionError::NumericShape,
+            AdmissionError::NumericDomain,
+            AdmissionError::OrdinalRank,
+            AdmissionError::OrdinalCut,
+            AdmissionError::ThresholdMeasure,
+            AdmissionError::Root,
+        ] {
+            assert!(!shape.is_resource_refusal(), "{shape:?}");
+        }
     }
 
     fn limits(max_operands: usize) -> AdmissionLimits {

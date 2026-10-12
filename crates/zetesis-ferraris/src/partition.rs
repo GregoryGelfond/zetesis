@@ -221,8 +221,8 @@ impl Plan {
     /// takes `O(atom_count + declared members + membership occurrences + groups)`
     /// work and initializes one coverage cell per semantic atom. All loops charge
     /// work and observe control at metered boundaries, and a requested stop
-    /// takes precedence over every limit refusal. No theory is read, searched or
-    /// transformed.
+    /// takes precedence over every resource refusal. No theory is read, searched
+    /// or transformed.
     ///
     /// # Errors
     /// Refuses malformed partitions, dimensions, storage, work or control.
