@@ -192,6 +192,11 @@ impl CancellationPoll<'_> {
     /// work limit. An admitted charge counts the operation; a refused charge
     /// leaves `charged` unchanged.
     ///
+    /// A charge writes `charged` and the next one reads it again with `limit`.
+    /// Keep the two apart in memory: if they are adjacent, a single paired
+    /// load of both cannot be forwarded from the pending store on aarch64,
+    /// which stalls every charge in a per-node loop.
+    ///
     /// # Errors
     /// [`ChargeError::Stopped`] when an observation finds a requested stop or
     /// an expired deadline; otherwise [`ChargeError::WorkLimit`] when

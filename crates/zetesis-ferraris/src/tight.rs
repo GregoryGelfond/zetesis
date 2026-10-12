@@ -263,10 +263,16 @@ pub struct TightAttempt<T> {
     pub work: u64,
 }
 
+/// The certificate's charged work and its limit. Each charge stores `used`
+/// and the next reads it back with `max`; were the two adjacent, the compiler
+/// could read them in one paired load, which on aarch64 cannot be forwarded
+/// from the pending store and stalls every charge (it doubled the cost of a
+/// complete check). The fixed layout keeps `max` apart from `used`.
+#[repr(C)]
 struct Work<'a> {
     used: u64,
-    max: u64,
     cancellation: zetesis_cpu::CancellationPoll<'a>,
+    max: u64,
 }
 impl Work<'_> {
     fn tick(&mut self) -> Result<(), TightError> {
