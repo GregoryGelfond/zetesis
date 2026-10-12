@@ -25,6 +25,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   grounding filters, reducing temporary storage and repeated lookup.
 - Skip the search for native aggregate rows from Boolean conditions that cannot
   reach one, reducing candidate narrowing work without changing its deductions.
+- Keep reads of atoms, implications and two-operand connectives inline in formula
+  evaluation and narrowing, restoring the speed of complete candidate checks.
 
 ## 0.5.0 — 2026-10-10
 

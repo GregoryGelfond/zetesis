@@ -250,7 +250,25 @@ impl<'a> FormulaView<'a> {
     /// Refuses an absent node, a noncanonical span arity, overflow or a range
     /// outside the paired arena. Admitted [`Theory`] views cannot fail for an
     /// index below their node count.
+    #[inline]
     pub fn node(self, index: usize) -> Result<NodeView<'a>, AdmissionError> {
+        // Atoms, implications and pairs keep their operands in the node itself
+        // and are most of the reads in evaluation and narrowing loops. Answering
+        // them here keeps this accessor small enough for those loops to inline.
+        // Every other node, and every refusal, takes the complete reading.
+        match self.nodes.get(index).map(|node| &node.0) {
+            Some(Storage::Atom(atom)) => Ok(NodeView::Atom(*atom)),
+            Some(Storage::Implies(left, right)) => Ok(NodeView::Implies(*left, *right)),
+            Some(Storage::AndPair(pair)) => Ok(NodeView::And(pair)),
+            Some(Storage::OrPair(pair)) => Ok(NodeView::Or(pair)),
+            _ => self.stored_node(index),
+        }
+    }
+
+    /// The complete reading of one stored node, kept out of line so that the
+    /// spans, numeric rows and refusals it checks do not enlarge [`Self::node`].
+    #[inline(never)]
+    fn stored_node(self, index: usize) -> Result<NodeView<'a>, AdmissionError> {
         self.nodes
             .get(index)
             .ok_or(AdmissionError::Edge)?
@@ -1262,6 +1280,62 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The inline answers for atoms, implications and pairs must be the
+    /// complete reading; every other kind and every refusal is that reading.
+    #[test]
+    fn node_agrees_with_the_complete_reading_for_every_kind() {
+        use crate::{ExtremumCutRule, ExtremumRow, FormulaNodes};
+        let span = OperandSpan {
+            start: 0,
+            length: 3,
+        };
+        let mut nodes = FormulaNodes::new(parts(
+            vec![
+                Node::falsum(),
+                Node::atom(0),
+                Node::atom(1),
+                Node::implies(1, 2),
+                Node::and_pair([1, 2]),
+                Node::or_pair([2, 1]),
+                Node::and_span(span),
+                Node::or_span(span),
+            ],
+            vec![1, 2, 3],
+        ));
+        nodes
+            .push_threshold_family(&[1, 2], &[1, 2], &[2], usize::MAX, usize::MAX)
+            .unwrap();
+        let mut append = nodes.transaction();
+        append
+            .push(
+                NodeView::ExtremumCut(ExtremumCut {
+                    row: ExtremumRow {
+                        conditions: &[1, 2],
+                        ranks: &[1, 2],
+                        rank_count: 4,
+                    },
+                    rule: &ExtremumCutRule::Prefix(3),
+                }),
+                usize::MAX,
+                usize::MAX,
+            )
+            .unwrap();
+        append.commit();
+        let parts = nodes.into_parts();
+        let view = parts.view();
+        let mut kinds = Vec::new();
+        for index in 0..=view.len() {
+            let read = view.node(index);
+            assert_eq!(read, view.stored_node(index), "node {index}");
+            let kind = read.map(|node| std::mem::discriminant(&node));
+            if !kinds.contains(&kind) {
+                kinds.push(kind);
+            }
+        }
+        // Seven node kinds and the refusal past the last node.
+        assert_eq!(kinds.len(), 8);
     }
 
     #[test]
