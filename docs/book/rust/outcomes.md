@@ -334,11 +334,11 @@ requested stop instead. A requested stop therefore takes precedence over every
 resource refusal; errors about the program's shape, identity or invariants are
 reported as found. `Cancellation::charge` carries the cadence, and
 `Cancellation::settle` with each error type's `Refusal` classification carries the
-precedence; both have `CancellationPoll` forms. Formula evaluation, whose only
-refusals are its work limit and a candidate ceiling checked right after a poll,
-relies on the charge alone. These operations are original and frozen formula evaluation, the tight, positive
-and stratified certificates, support construction, partition construction and
-restriction emission, and static closure checks; narrowing observes control at
+precedence; both have `CancellationPoll` forms. These operations are original and
+frozen formula evaluation (with the exhaustive reference check and native
+aggregate eligibility), the tight, positive and stratified certificates, support
+construction, partition construction and restriction emission, and static closure
+checks; each settles its outcome where it returns. Narrowing observes control at
 the same interval through its quota. Coarser operations, such as objective
 reduction and search decisions, still poll before every charged step. A
 computation that completes between two boundaries may return its complete result

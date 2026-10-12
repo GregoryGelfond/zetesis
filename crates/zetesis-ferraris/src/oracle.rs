@@ -245,6 +245,23 @@ pub fn models_reduct(
     limits: Limits,
     cancellation: &Cancellation,
 ) -> Result<bool, Stop> {
+    cancellation.settle(reduct_satisfaction(
+        theory,
+        candidate,
+        tested,
+        limits,
+        cancellation,
+    ))
+}
+
+/// [`models_reduct`] before its exit settles a resource refusal.
+fn reduct_satisfaction(
+    theory: &Theory,
+    candidate: &Interpretation,
+    tested: &Interpretation,
+    limits: Limits,
+    cancellation: &Cancellation,
+) -> Result<bool, Stop> {
     identities(theory, candidate)?;
     identities(theory, tested)?;
     cancellation.poll()?;
@@ -368,6 +385,16 @@ fn find_countermodel(
 /// work/subset bounds. A subset bound uses `Stop::CandidateLimit` because it
 /// bounds candidate countermodels; no partial search returns `Stable`.
 pub fn check(
+    theory: &Theory,
+    candidate: &Interpretation,
+    limits: Limits,
+    cancellation: &Cancellation,
+) -> Result<Check, Stop> {
+    cancellation.settle(exhaustive_check(theory, candidate, limits, cancellation))
+}
+
+/// [`check`] before its exit settles a resource refusal.
+fn exhaustive_check(
     theory: &Theory,
     candidate: &Interpretation,
     limits: Limits,

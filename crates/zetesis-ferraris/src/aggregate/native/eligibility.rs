@@ -130,7 +130,13 @@ impl<'a> GroupRef<'a> {
         cancellation: &Cancellation,
     ) -> Result<Eligibility<'a>, Error> {
         let mut statistics = Statistics::default();
-        let result = self.acquire(candidate, tested, limits, cancellation, &mut statistics);
+        let result = cancellation.settle(self.acquire(
+            candidate,
+            tested,
+            limits,
+            cancellation,
+            &mut statistics,
+        ));
         result
             .map(|(original, frozen)| Eligibility {
                 group: self,

@@ -11,7 +11,8 @@ Notable changes by release. Versions follow Semantic Versioning.
 - `Cancellation::charge` and `Cancellation::settle`, with their `CancellationPoll`
   forms, `ChargeError`, the `Refusal` classification and `POLL_INTERVAL`, give
   metered computations one rule for charging work, observing control and letting
-  a requested stop take precedence over resource refusals.
+  a requested stop take precedence over resource refusals. The error type of
+  each metered operation implements `Refusal`.
 
 ### Changed
 
@@ -44,7 +45,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   pass an empty `ChoiceHeads` for the previous ranking. Producer extraction
   reports the heads of every theory's atomic choice roots in
   `Extraction::choice_heads`, and `OriginalSubject::with_choices` gives a
-  self-selecting narrowing the same ranking.
+  self-selecting narrowing the same ranking; `OriginalSubject::theory` and
+  `OriginalSubject::choices` read the subject's parts.
 
 ## 0.5.0 — 2026-10-10
 

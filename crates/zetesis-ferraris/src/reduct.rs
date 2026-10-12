@@ -52,6 +52,15 @@ impl<'a> FrozenReduct<'a> {
         limits: Limits,
         cancellation: &Cancellation,
     ) -> Result<Self, Stop> {
+        cancellation.settle(Self::freeze_with(candidate, limits, cancellation))
+    }
+
+    /// [`Self::new`] before its exit settles a resource refusal.
+    fn freeze_with(
+        candidate: &'a Interpretation,
+        limits: Limits,
+        cancellation: &Cancellation,
+    ) -> Result<Self, Stop> {
         cancellation.poll()?;
         let mut work = Work {
             limits,
@@ -93,6 +102,16 @@ impl<'a> FrozenReduct<'a> {
     /// Returns wrong-theory, cancellation, deadline, allocation, or work-limit
     /// stops. A stop is not a logical rejection and leaves this reduct reusable.
     pub fn is_satisfied_by(
+        &self,
+        tested: &Interpretation,
+        limits: Limits,
+        cancellation: &Cancellation,
+    ) -> Result<bool, Stop> {
+        cancellation.settle(self.satisfaction(tested, limits, cancellation))
+    }
+
+    /// [`Self::is_satisfied_by`] before its exit settles a resource refusal.
+    fn satisfaction(
         &self,
         tested: &Interpretation,
         limits: Limits,

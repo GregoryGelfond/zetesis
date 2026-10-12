@@ -11,7 +11,7 @@ use std::fmt;
 
 use zetesis_core::catalog::{CatalogRead, TermRef, Vocabulary};
 use zetesis_core::{TemplateComponents, TemplateComponentsRef, TemplateTerm, Value as Term};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, Refusal, Stop};
 
 use crate::{AggregateComparison, Theory};
 
@@ -168,6 +168,25 @@ pub enum ErrorKind {
     Overflow,
     /// Cancellation, deadline or fallible allocation stopped the operation.
     Stopped(Stop),
+}
+
+impl Refusal for ErrorKind {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Limit(_) | Self::Overflow => true,
+            Self::Stopped(stop) => stop.is_resource_refusal(),
+            Self::Condition { .. }
+            | Self::Duplicate { .. }
+            | Self::Mask { .. }
+            | Self::WrongTheory
+            | Self::Canonical(_)
+            | Self::Catalog(_) => false,
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
 }
 
 /// Deterministic accounting local to one admission, acquisition or reduction.
@@ -604,4 +623,37 @@ fn bytes<T>(count: usize) -> Result<u64, ErrorKind> {
 
 fn add(left: u64, right: u64) -> Result<u64, ErrorKind> {
     left.checked_add(right).ok_or(ErrorKind::Overflow)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ErrorKind, Phase, Resource};
+    use zetesis_cpu::{Refusal, Stop};
+
+    #[test]
+    fn native_errors_classify_resource_refusals() {
+        for refusal in [
+            ErrorKind::Limit(Resource::Bytes),
+            ErrorKind::Overflow,
+            ErrorKind::Stopped(Stop::WorkLimit),
+        ] {
+            assert!(refusal.is_resource_refusal(), "{refusal:?}");
+        }
+        for other in [
+            ErrorKind::Condition { tuple: 0, node: 9 },
+            ErrorKind::Duplicate {
+                first: 0,
+                second: 1,
+            },
+            ErrorKind::Mask {
+                phase: Phase::Original,
+                expected: 2,
+                actual: 1,
+            },
+            ErrorKind::WrongTheory,
+            ErrorKind::Stopped(Stop::Cancelled),
+        ] {
+            assert!(!other.is_resource_refusal(), "{other:?}");
+        }
+    }
 }

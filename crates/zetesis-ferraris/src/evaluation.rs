@@ -5,7 +5,7 @@ use std::{fmt, mem::size_of_val};
 use crate::numeric_evaluation::NumericRowScratch;
 use crate::oracle::{Work, evaluate, failed_root};
 use crate::{Interpretation, Limits, Statistics, Theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, Refusal, Stop};
 
 /// Per-evaluation bounds, including storage retained from earlier evaluations.
 #[derive(Clone, Copy, Debug)]
@@ -150,7 +150,8 @@ impl EvaluationWorkspace {
             cancellation,
             statistics: Statistics::default(),
         };
-        let result = self.evaluate_into(interpretation, limits.max_bytes, &mut work);
+        let result =
+            cancellation.settle(self.evaluate_into(interpretation, limits.max_bytes, &mut work));
         EvaluationAttempt {
             work: work.statistics.work,
             retained_bytes: self.retained_bytes(),
@@ -302,6 +303,19 @@ impl From<Stop> for EvaluationError {
     }
 }
 
+impl Refusal for EvaluationError {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Stopped(stop) => stop.is_resource_refusal(),
+            Self::Storage { .. } => true,
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
+}
+
 impl fmt::Display for EvaluationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -315,3 +329,29 @@ impl fmt::Display for EvaluationError {
 }
 
 impl std::error::Error for EvaluationError {}
+
+#[cfg(test)]
+mod tests {
+    use super::EvaluationError;
+    use zetesis_cpu::{Refusal, Stop};
+
+    #[test]
+    fn evaluation_errors_classify_resource_refusals() {
+        for refusal in [
+            EvaluationError::Storage {
+                required: 9,
+                limit: 8,
+            },
+            EvaluationError::Stopped(Stop::WorkLimit),
+            EvaluationError::Stopped(Stop::Allocation),
+        ] {
+            assert!(refusal.is_resource_refusal(), "{refusal:?}");
+        }
+        for other in [
+            EvaluationError::Stopped(Stop::Cancelled),
+            EvaluationError::Stopped(Stop::WrongProgram),
+        ] {
+            assert!(!other.is_resource_refusal(), "{other:?}");
+        }
+    }
+}
