@@ -121,3 +121,17 @@ fn replacing_a_budget_preserves_each_accepted_charge() {
     drop(original);
     assert_eq!(allowance.statistics().scalar_bytes, 5);
 }
+
+#[test]
+fn allocation_refusal_keeps_its_site_and_does_not_retry() {
+    use std::error::Error;
+    let error = Vec::<u8>::new().try_reserve(usize::MAX).unwrap_err();
+    let failure = ExpansionFailure::Allocation {
+        error,
+        location: location(),
+    };
+    assert_eq!(failure.site(), Some(location()));
+    assert!(!failure.needs_formula_admission());
+    assert!(failure.source().is_some());
+    assert!(failure.to_string().contains("source expansion storage"));
+}

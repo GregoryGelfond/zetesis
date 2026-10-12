@@ -19,9 +19,9 @@ enum Input {
     Parsed(ParsedSource),
 }
 
-/// A formula program materialized by the library for the requested grounder;
+/// A program prepared by the shared library execution policy;
 /// the CLI only presents its warnings and failures.
-struct FormulaInput(zetesis_solve::GroundedFormula);
+struct FormulaInput(zetesis_solve::PreparedExecution);
 
 impl FormulaInput {
     fn prepared(&self) -> crate::PreparedInput<'_> {
@@ -30,7 +30,17 @@ impl FormulaInput {
 
     fn warnings(&self, diagnostics: &mut Diagnostics<impl Write>) -> std::io::Result<()> {
         use zetesis_solve::GroundedFormula as Grounded;
-        match &self.0 {
+        let grounded = match &self.0 {
+            zetesis_solve::PreparedExecution::Source(owner) => {
+                return if owner.warnings().is_empty() {
+                    Ok(())
+                } else {
+                    diagnostics.diagnostic(&owner.warning_view())
+                };
+            }
+            zetesis_solve::PreparedExecution::Grounded(grounded) => grounded.as_ref(),
+        };
+        match grounded {
             Grounded::Source(owner) if !owner.warnings().is_empty() => {
                 diagnostics.diagnostic(&owner.warning_view())
             }
@@ -49,7 +59,19 @@ impl FormulaInput {
 
     fn retain_source(&self, failure: PublicationFailure) -> PublicationFailure {
         use zetesis_solve::GroundedFormula as Grounded;
-        match &self.0 {
+        let grounded = match &self.0 {
+            zetesis_solve::PreparedExecution::Source(owner) => {
+                return if let Some(bundle) = owner.bundle() {
+                    bundle_failure(failure, bundle)
+                } else if let Some(source) = owner.source() {
+                    source_failure(failure, "<input>", source)
+                } else {
+                    failure
+                };
+            }
+            zetesis_solve::PreparedExecution::Grounded(grounded) => grounded.as_ref(),
+        };
+        match grounded {
             Grounded::Source(owner) => {
                 if let Some(source) = owner.source() {
                     source_failure(failure, "<input>", source)
@@ -187,7 +209,12 @@ pub(crate) fn source(
             let observer = observer
                 .as_ref()
                 .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver);
-            zetesis_solve::ground_formula(prepared, options.grounder, observer).map(FormulaInput)
+            zetesis_solve::prepare_formula_execution(
+                prepared,
+                &crate::SolveConfig::from(options),
+                observer,
+            )
+            .map(FormulaInput)
         });
     let admitted = match admitted {
         Ok(admitted) => admitted,
@@ -291,7 +318,12 @@ pub(crate) fn bundle(
             let observer = observer
                 .as_ref()
                 .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver);
-            zetesis_solve::ground_bundle(prepared, options.grounder, observer).map(FormulaInput)
+            zetesis_solve::prepare_bundle_execution(
+                prepared,
+                &crate::SolveConfig::from(options),
+                observer,
+            )
+            .map(FormulaInput)
         });
     let admitted = match admitted {
         Ok(admitted) => admitted,

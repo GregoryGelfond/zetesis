@@ -1,6 +1,36 @@
 {
   "declarations": [
     {
+      "file": "Zetesis/AcyclicEvaluation.lean",
+      "line": 32,
+      "name": "Zetesis.AcyclicEvaluation.ranked_stratified"
+    },
+    {
+      "file": "Zetesis/AcyclicEvaluation.lean",
+      "line": 48,
+      "name": "Zetesis.AcyclicEvaluation.consequence_agrees"
+    },
+    {
+      "file": "Zetesis/AcyclicEvaluation.lean",
+      "line": 79,
+      "name": "Zetesis.AcyclicEvaluation.scan_prefix"
+    },
+    {
+      "file": "Zetesis/AcyclicEvaluation.lean",
+      "line": 120,
+      "name": "Zetesis.AcyclicEvaluation.scan_eq_stages"
+    },
+    {
+      "file": "Zetesis/AcyclicEvaluation.lean",
+      "line": 135,
+      "name": "Zetesis.AcyclicEvaluation.normalized_answer_set_iff"
+    },
+    {
+      "file": "Zetesis/AcyclicEvaluation.lean",
+      "line": 146,
+      "name": "Zetesis.AcyclicEvaluation.answer_set_iff"
+    },
+    {
       "file": "Zetesis/AdjacencyRows.lean",
       "line": 31,
       "name": "Zetesis.AdjacencyRows.slice_exact"
@@ -8847,6 +8877,7 @@
     }
   ],
   "modules": [
+    "Zetesis/AcyclicEvaluation.lean",
     "Zetesis/AdjacencyRows.lean",
     "Zetesis/AggregateAssignment.lean",
     "Zetesis/AggregateBounds.lean",
@@ -9032,8 +9063,9 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "25b14b39de99b1704fc61eed74030d49d6ea9ef73a3d075c1153f8c14cfed8be",
-    "Zetesis.lean": "f197dfd785e2d22ebb23b7fb7ad553d697f65565cde04605cf1ae306eb427054",
+    "Audit.lean": "db6a191a3793984f7585b0133fc08408303e6e71dd536e26363b0cd9a9ae2fd6",
+    "Zetesis.lean": "2e2f2ccb2a9b8d979235c671cad5431b1930402cb17dd520c396b67b4b702abb",
+    "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",

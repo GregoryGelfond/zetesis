@@ -79,6 +79,8 @@ impl Decision {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Procedure {
+    /// Complete signed-acyclic source evaluation during admission.
+    AcyclicSource,
     /// Least reduct closure.
     Closure,
     /// General reduct countermodel procedure.
@@ -192,6 +194,20 @@ pub struct Observation {
     /// ordinary and streamed-constraint routes and older records.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal: Option<TerminalStatistics>,
+    /// Exact source preparation, absent for formula and relational routes and
+    /// older records. These charges are not repeated session search work.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_evaluation: Option<SourceEvaluationStatistics>,
+}
+
+/// Accepted admission charges for a completely evaluated acyclic source.
+/// The reader authenticates the original receipt's `source_admission` scope.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct SourceEvaluationStatistics {
+    /// Cumulative source preparation work, including support and arithmetic.
+    pub work: u64,
+    /// Cumulative complete source substitutions admitted during preparation.
+    pub substitutions: u64,
 }
 
 /// Original-answer reconstruction receipt, independent of base membership work.

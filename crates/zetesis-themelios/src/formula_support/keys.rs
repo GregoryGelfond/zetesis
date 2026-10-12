@@ -21,6 +21,17 @@ pub(super) fn covered(
     plan: &order::Plan<'_>,
     context: &mut Context<'_, &Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
+    covered_with_range(rule, plan, None, context)
+}
+
+/// A single authenticated range binder may supply a slot absent from every
+/// positive pattern. All other key slots still require the complete join.
+pub(super) fn covered_with_range(
+    rule: &RuleIr,
+    plan: &order::Plan<'_>,
+    generated: Option<usize>,
+    context: &mut Context<'_, &Computation<'_, '_>>,
+) -> Result<bool, FormulaFailure> {
     let mut bound = Buffer::new(
         context.computation,
         context.work.limits,
@@ -46,9 +57,19 @@ pub(super) fn covered(
                 let Some(entry) = bound.slice_mut().get_mut(slot) else {
                     return Ok(false);
                 };
+                if Some(slot) == generated {
+                    return Ok(false);
+                }
                 *entry = true;
             }
         }
+    }
+    if let Some(slot) = generated {
+        tick(context)?;
+        let Some(entry) = bound.slice_mut().get_mut(slot) else {
+            return Ok(false);
+        };
+        *entry = true;
     }
     let HeadIr::Normal(head) = &rule.head else {
         return Ok(false);

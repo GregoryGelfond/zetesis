@@ -13,6 +13,7 @@ pub(super) fn configuration(
     view: ConfigurationView<'_>,
 ) -> io::Result<()> {
     let grounding = match view.grounding {
+        GroundingDisplay::SourceEvaluation => "direct source evaluation",
         GroundingDisplay::Eager => "eager grounding",
         GroundingDisplay::Lazy => "lazy grounding",
         GroundingDisplay::Hybrid => "hybrid grounding",

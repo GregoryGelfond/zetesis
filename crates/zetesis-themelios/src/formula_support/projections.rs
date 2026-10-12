@@ -13,7 +13,7 @@
 mod domains;
 mod totality;
 pub(crate) use totality::supports_column_totality;
-pub(super) use totality::{needed as needs_totality, positive_bounds};
+pub(super) use totality::{needed as needs_totality, positive_bounds, range_body};
 
 use std::{cmp::Ordering, ops::Deref};
 
@@ -277,6 +277,16 @@ impl<'a> Projections<'a> {
         evaluation: &mut Evaluation,
         mut context: Context<'_, &mut Computation<'_, '_>>,
     ) -> Result<bool, FormulaFailure> {
+        // Single-node expressions never have a projection entry. Reuse the
+        // canonical evaluator's borrowed leaves instead of making temporary
+        // owner keys and resolving them again. Its existing fallback handles
+        // a one-node constructor; no second leaf grammar is needed here.
+        if expressions
+            .iter()
+            .all(|expression| expression.nodes.len() == 1)
+        {
+            return evaluation.source_comparison((expressions, relation), binding, context);
+        }
         let mut failures = Failures::default();
         let mut values = [None, None];
         for (side, expression) in expressions.into_iter().enumerate() {

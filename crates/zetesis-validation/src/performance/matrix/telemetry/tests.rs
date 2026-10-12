@@ -12,10 +12,11 @@ fn metal() -> NativeExecution {
     }
 }
 
-mod tight_tests;
-mod residual_tests;
 mod hybrid_tests;
+mod residual_tests;
+mod source_tests;
 mod terminal_tests;
+mod tight_tests;
 
 #[test]
 fn actual_cpu_route_remains_distinct_from_requested_metal() {

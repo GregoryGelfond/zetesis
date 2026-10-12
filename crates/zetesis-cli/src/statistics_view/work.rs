@@ -19,6 +19,9 @@ fn base_execution(semantic: Option<&SemanticOutcome>) -> String {
     let Some(semantic) = semantic else {
         return "unavailable".into();
     };
+    if semantic.source_evaluation().is_some() {
+        return "CPU direct source evaluation during admission".into();
+    }
     if semantic.hybrid_execution().is_some() {
         return "CPU hybrid formula; eager core, streamed constraints".into();
     }
@@ -99,7 +102,9 @@ fn semantic_rows(rows: &mut Vec<Row>, semantic: &SemanticOutcome) {
     rows.push(count(
         "Verified memberships",
         semantic.verified_models(),
-        if semantic.terminal_execution().is_some() {
+        if semantic.source_evaluation().is_some() {
+            "original source answers after exact evaluation"
+        } else if semantic.terminal_execution().is_some() {
             "original answers after complete reconstruction"
         } else if semantic.hybrid_execution().is_some() {
             "original answers after completed constraint checks"
@@ -112,6 +117,18 @@ fn semantic_rows(rows: &mut Vec<Row>, semantic: &SemanticOutcome) {
     }
     if let Some(execution) = semantic.terminal_execution() {
         terminal(rows, execution);
+    }
+    if let Some(statistics) = semantic.source_evaluation() {
+        rows.push(count(
+            "Source evaluation work",
+            statistics.work,
+            "cumulative source admission; support, arithmetic and exact activity",
+        ));
+        rows.push(count(
+            "Source substitutions",
+            statistics.substitutions,
+            "completed bindings charged during source admission",
+        ));
     }
     if let Some(statistics) = semantic.model_construction() {
         model_construction(rows, statistics);
@@ -390,12 +407,12 @@ fn grounding_rows(rows: &mut Vec<Row>, grounding: &GroundingTimings) {
             rows.push(Row::new([
                 label.to_owned(),
                 value.map_or_else(|| "unavailable".into(), |value| value.to_string()),
-                "eager formula rule instantiation only".into(),
+                "formula instantiation or certified source evaluation".into(),
             ]));
         }
     } else {
         rows.push(Row::new([
-            "Eager rule work",
+            "Rule work",
             "unavailable",
             "phase not entered or attribution not retained",
         ]));

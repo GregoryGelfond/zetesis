@@ -36,7 +36,7 @@ pub use config::{
 pub use invocation::NativeInvocation;
 pub use record::{
     Decision, DeviceWork, Execution, FormulaResidualStatistics, HybridStatistics, Observation,
-    Procedure, RegionChecks, Sample, TerminalStatistics,
+    Procedure, RegionChecks, Sample, SourceEvaluationStatistics, TerminalStatistics,
 };
 pub(crate) use workload::workload_label;
 pub use workload::{AuthoredProgram, ConstantAmendment, Workload, WorkloadLimits};

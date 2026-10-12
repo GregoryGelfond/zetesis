@@ -178,6 +178,7 @@ import Zetesis.TightBodyRecognition
 import Zetesis.SupportTransposition
 import Zetesis.FactRejection
 import Zetesis.StratifiedEvaluation
+import Zetesis.AcyclicEvaluation
 import Zetesis.RequiredChoiceCosts
 
 import Zetesis.ThresholdPropagation

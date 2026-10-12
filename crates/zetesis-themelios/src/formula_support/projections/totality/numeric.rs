@@ -65,6 +65,53 @@ impl<'input, 'source> Preparation<'input, 'source> {
         }
     }
 
+    /// Seed one authenticated, closed range producer in the same workspace as
+    /// positive-column hulls. This establishes bounds only, never a populated
+    /// expression projection or completed-family evidence.
+    pub(super) fn seed_range(
+        &mut self,
+        slot: usize,
+        bounds: (i32, i32),
+        context: &mut Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        tick(context)?;
+        if self.workspace.is_none() {
+            self.workspace = Some(Workspace::new(self.rule.body_variables, context)?);
+        }
+        let mut range = Range::point(bounds.0);
+        range.include(bounds.1);
+        self.workspace
+            .as_mut()
+            .expect("workspace initialized above")
+            .hulls
+            .slice_mut()[slot] = Some(range);
+        Ok(())
+    }
+
+    /// Read the same numeric hull used by expression totality. A generated
+    /// range has already seeded its slot; other inputs require a full column.
+    pub(super) fn positive_domain(
+        &mut self,
+        slot: usize,
+        context: &mut Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<bool, FormulaFailure> {
+        if self.workspace.is_none() {
+            self.workspace = Some(Workspace::new(self.rule.body_variables, context)?);
+        }
+        let workspace = self
+            .workspace
+            .as_mut()
+            .expect("workspace initialized above");
+        tick(context)?;
+        if workspace.hulls.slice()[slot].is_none() {
+            workspace.hulls.slice_mut()[slot] =
+                numeric_domain(slot, &self.rule.body, self.support, context)?;
+        }
+        Ok(workspace.hulls.slice()[slot]
+            .and_then(Range::positive_bounds)
+            .is_some())
+    }
+
     pub(super) fn domain(
         &self,
         slot: usize,

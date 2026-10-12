@@ -47,9 +47,11 @@ fn bounded(
 #[test]
 fn auto_observation_uses_original_models_and_separate_output_channels() {
     let (result, output, diagnostics) = solve("a. #show a.", &["--stats"]);
-    assert_eq!(result.unwrap().models, 1);
+    let report = result.unwrap();
+    assert_eq!(report.models, 1);
+    assert!(report.source_evaluation.is_some());
     assert!(output.contains("Answer: 1\na a\n"), "{output}");
-    assert!(diagnostics.contains("oracle: Ferraris reduct membership"));
+    assert!(diagnostics.contains("dependency-ordered source evaluation"));
     let (result, output, _) = solve(
         "p(1;2). #show. #show f(g(X),(X,)):p(X).",
         &["--models", "0"],

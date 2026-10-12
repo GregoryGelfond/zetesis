@@ -85,6 +85,10 @@ impl Default for SupportCatalog {
 }
 
 impl SupportCatalog {
+    pub(in crate::formula_support) fn source_scope(&self) -> &SourceScope {
+        &self.scope
+    }
+
     #[cfg(test)]
     pub(super) fn owner(&self) -> &AtomInterner {
         &self.owner

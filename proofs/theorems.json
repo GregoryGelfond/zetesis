@@ -1,5 +1,35 @@
 [
   {
+    "name": "Zetesis.AcyclicEvaluation.ranked_stratified",
+    "file": "Zetesis/AcyclicEvaluation.lean",
+    "line": 32
+  },
+  {
+    "name": "Zetesis.AcyclicEvaluation.consequence_agrees",
+    "file": "Zetesis/AcyclicEvaluation.lean",
+    "line": 48
+  },
+  {
+    "name": "Zetesis.AcyclicEvaluation.scan_prefix",
+    "file": "Zetesis/AcyclicEvaluation.lean",
+    "line": 79
+  },
+  {
+    "name": "Zetesis.AcyclicEvaluation.scan_eq_stages",
+    "file": "Zetesis/AcyclicEvaluation.lean",
+    "line": 120
+  },
+  {
+    "name": "Zetesis.AcyclicEvaluation.normalized_answer_set_iff",
+    "file": "Zetesis/AcyclicEvaluation.lean",
+    "line": 135
+  },
+  {
+    "name": "Zetesis.AcyclicEvaluation.answer_set_iff",
+    "file": "Zetesis/AcyclicEvaluation.lean",
+    "line": 146
+  },
+  {
     "name": "Zetesis.AdjacencyRows.slice_exact",
     "file": "Zetesis/AdjacencyRows.lean",
     "line": 31

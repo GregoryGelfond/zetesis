@@ -1,6 +1,6 @@
 //! Finite substitutions and support-preserving conditional-choice formulas.
 
-mod arithmetic;
+pub(crate) mod arithmetic;
 mod objectives;
 mod scoped_body;
 pub(crate) use scoped_body::source_activity;
@@ -16,6 +16,7 @@ mod nodes;
 mod producer;
 mod projection;
 mod rejected;
+pub(crate) use rejected::validate_atom_keys;
 mod retained;
 mod support_guards;
 use retained::RetainedState;
@@ -349,7 +350,7 @@ fn instantiate(
 
 /// Prepare optional domains and complete support under the same cumulative
 /// account. The domain certificate remains tied to the prepared program.
-fn complete_support<'source>(
+pub(crate) fn complete_support<'source>(
     prepared: &'source crate::formula_ir::Prepared,
     mut catalog: formula_support::SupportCatalog,
     options: Option<crate::DomainLimits>,
@@ -758,6 +759,7 @@ impl Builder<'_, '_, '_> {
         if producer::rule(self, rule, &mut outer)? {
             return Ok(());
         }
+        outer.select_range_multiples(rule, self.computation, self.limits, &mut self.counters)?;
         while let Some(row) = outer.next_row(
             self.computation,
             self.limits,

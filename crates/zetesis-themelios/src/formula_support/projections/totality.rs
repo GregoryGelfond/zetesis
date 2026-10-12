@@ -379,5 +379,42 @@ fn domain<'source>(
     Ok(selected)
 }
 
+/// Prove scalar intermediates on the original range and full positive columns.
+/// The caller authenticates the one generated slot and flat positive profile.
+/// Unlike complete-column projection preparation, this populates no expression
+/// map and grants neither table coverage nor original-family admission.
+pub(in crate::formula_support) fn range_body(
+    rule: &RuleIr,
+    support: &Support<'_>,
+    target: usize,
+    bounds: (i32, i32),
+    divisor: Option<usize>,
+    mut context: Context<'_, &mut Computation<'_, '_>>,
+) -> Result<bool, FormulaFailure> {
+    let mut numeric = numeric::Preparation::new(rule, support);
+    numeric.seed_range(target, bounds, &mut context)?;
+    if let Some(slot) = divisor
+        && !numeric.positive_domain(slot, &mut context)?
+    {
+        return Ok(false);
+    }
+    for literal in &rule.body {
+        tick(&mut context)?;
+        if let LiteralIr::Compare(left, _, right) = literal {
+            for expression in [left, right] {
+                context.work.counters.charge_work(
+                    expression.nodes.len() as u128,
+                    context.work.limits,
+                    context.work.location,
+                )?;
+                if !numeric.total(expression, &mut context)? {
+                    return Ok(false);
+                }
+            }
+        }
+    }
+    Ok(true)
+}
+
 #[cfg(test)]
 mod tests;

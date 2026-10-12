@@ -557,6 +557,7 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             query_execution: None,
             hybrid_execution: None,
             terminal_execution: None,
+            source_evaluation: None,
             model_construction: self
                 .construction
                 .as_ref()

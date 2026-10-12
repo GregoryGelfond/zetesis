@@ -424,7 +424,7 @@ fn expansion_class(error: &zetesis_themelios::ExpansionFailure) -> Class {
     use zetesis_themelios::ExpansionFailure as E;
     match error {
         E::Interrupted { reason, .. } => stop_class(*reason),
-        E::Limit { .. } => Class::Resource,
+        E::Limit { .. } | E::Allocation { .. } => Class::Resource,
         E::Admission(error) => admission_class(error),
         E::DuplicateConstant { .. }
         | E::ConstantPolicy { .. }

@@ -608,6 +608,8 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
         hybrid_statistics(out, view.hybrid_execution)?;
         out.text(",\"terminal_execution\":")?;
         terminal_statistics(out, view.terminal_execution)?;
+        out.text(",\"source_evaluation\":")?;
+        source_evaluation_statistics(out, view.source_evaluation)?;
         out.text(",\"objective_work\":")?;
         out.optional_number(view.objective_work)?;
         out.text(",\"model_construction\":")?;
@@ -637,6 +639,19 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
         out.text("null")?;
     }
     Ok(())
+}
+
+fn source_evaluation_statistics(
+    out: &mut Buffer,
+    statistics: Option<&zetesis_themelios::SourceEvaluationStatistics>,
+) -> Result<(), RunError> {
+    let Some(statistics) = statistics else {
+        return out.text("null");
+    };
+    out.text("{\"scope\":\"source_admission\"")?;
+    out.number_field("work", statistics.work)?;
+    out.number_field("substitutions", statistics.substitutions)?;
+    out.text("}")
 }
 
 fn model_construction_statistics(
@@ -761,6 +776,7 @@ struct SummaryView<'a> {
     execution: Option<&'a crate::FormulaExecutionStatistics>,
     hybrid_execution: Option<&'a zetesis_solve::HybridExecutionStatistics>,
     terminal_execution: Option<&'a zetesis_solve::TerminalExecutionStatistics>,
+    source_evaluation: Option<&'a zetesis_themelios::SourceEvaluationStatistics>,
     model_construction: Option<&'a zetesis_solve::ModelConstructionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
@@ -790,6 +806,7 @@ impl<'a> SummaryView<'a> {
                     hybrid_execution: semantic.and_then(crate::SemanticOutcome::hybrid_execution),
                     terminal_execution: semantic
                         .and_then(crate::SemanticOutcome::terminal_execution),
+                    source_evaluation: semantic.and_then(crate::SemanticOutcome::source_evaluation),
                     model_construction: semantic
                         .and_then(crate::SemanticOutcome::model_construction),
                     lazy_execution: semantic.and_then(crate::SemanticOutcome::lazy_execution),
@@ -823,6 +840,7 @@ impl<'a> SummaryView<'a> {
                     execution: partial.and_then(|p| p.formula_execution.as_ref()),
                     hybrid_execution: partial.and_then(|p| p.hybrid_execution.as_ref()),
                     terminal_execution: partial.and_then(|p| p.terminal_execution.as_ref()),
+                    source_evaluation: partial.and_then(|p| p.source_evaluation.as_ref()),
                     model_construction: partial.and_then(|p| p.model_construction.as_ref()),
                     lazy_execution: partial.and_then(|p| p.lazy_execution.as_ref()),
                     shared_execution: partial.and_then(|p| p.shared_execution.as_ref()),

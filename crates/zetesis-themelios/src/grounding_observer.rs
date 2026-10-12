@@ -22,16 +22,16 @@ pub enum DomainObservation<'a, 'source> {
     Analyzed(&'a zetesis_domain::Analysis<'source>),
 }
 
-/// Observe only complete formula materialization after source preparation.
+/// Observe formula materialization or certified exact source evaluation.
 ///
 /// Every `enter` has a matching `exit`, including a failed or unwinding attempt.
 /// A boundary event says nothing about semantic completion. Implementations must
 /// not panic or affect source semantics. No observer is called by the ordinary
 /// admission APIs, and this crate performs no timing itself.
 pub trait GroundingObserver {
-    /// Begin possible-support completion and finite formula instantiation.
+    /// Begin possible-support completion and formula or source evaluation.
     fn enter(&self);
-    /// End the attempted materialization, whether it succeeded or failed.
+    /// End the attempted preparation, whether it succeeded or failed.
     fn exit(&self);
 
     /// Opt into bounded work counters and coarse phase callbacks for this attempt.

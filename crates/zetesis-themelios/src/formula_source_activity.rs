@@ -1,4 +1,4 @@
-//! Shared finite source activity for objectives and projection declarations.
+//! Shared finite source activity for declarations and certified evaluation.
 //!
 //! Required/possible activity is a source grounding abstraction, not answer-set
 //! realization. Optional means retained as a grounding possibility; it does not
@@ -9,6 +9,9 @@
 //! Completed support and whole-producer refinement establish source coverage;
 //! the separate `model_query` module constructs original-model objective queries
 //! only after row eligibility. Its retained-node limit does not bound activity.
+//! A private strict dependency-order certificate permits an exact producer scan
+//! through the same activity operations. Only that complete class, followed by
+//! constraint and coherence checks, can establish an original answer.
 
 use std::collections::BTreeSet;
 
@@ -22,6 +25,8 @@ mod cyclic;
 mod possible;
 mod roots;
 mod authority;
+mod acyclic;
+pub(crate) use acyclic::{Exact, evaluate_acyclic};
 
 use crate::expansion::Budget;
 use crate::formula::ceiling;
@@ -72,13 +77,15 @@ impl Activity {
 }
 
 /// Finite source-atom truth coverage built from completed possible Support.
-/// Optional rows need not be simultaneously realizable. This certificate never
-/// determines answer-set membership or replaces original-model query truth.
+/// Optional rows need not be simultaneously realizable. Ordinary coverage does
+/// not determine membership or replace original-model query truth. The private
+/// acyclic evaluator uses the same cells under its stronger class certificate.
 pub(crate) struct SourceEligibility {
     atoms: SourceSelection,
     activity: Vec<Activity>,
     round: Option<authority::Round>,
     lease: StorageLease,
+    exact: bool,
 }
 
 pub(crate) struct Context<'a, 'terms, 'source> {
@@ -506,7 +513,7 @@ impl SourceEligibility {
         // Validate the complete assigned atom even when its producer is absent.
         // Identity admission changes neither activity nor support membership.
         let atom = context.atom(pattern, binding)?;
-        if activity == Activity::Absent {
+        if activity == Activity::Absent && !self.exact {
             return Ok(());
         }
         self.stage(&atom, activity, temporary, context)
@@ -534,6 +541,16 @@ impl SourceEligibility {
         binding: &Binding,
         context: &mut Context<'_, '_, '_>,
     ) -> Result<Activity, FormulaFailure> {
+        self.fold_activity(literals, binding, false, context)
+    }
+
+    fn fold_activity(
+        &self,
+        literals: &[LiteralIr],
+        binding: &Binding,
+        selected: bool,
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<Activity, FormulaFailure> {
         let mut result = Activity::Required;
         for literal in literals {
             context.work()?;
@@ -552,6 +569,7 @@ impl SourceEligibility {
                 LiteralIr::PatternAtom(pattern) => {
                     self.pattern_activity(pattern.atom, binding, context)?
                 }
+                LiteralIr::Compare(..) if selected => Activity::Required,
                 // The complete Join already checked these ordinary data filters.
                 LiteralIr::ArgumentCheck { .. } | LiteralIr::TupleCompare(..) => Activity::Required,
                 _ => {

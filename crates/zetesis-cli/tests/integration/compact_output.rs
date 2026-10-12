@@ -63,6 +63,27 @@ fn eager_summary_reports_separate_stage_times() {
 }
 
 #[test]
+fn automatic_summary_identifies_direct_source_evaluation() {
+    let rendered = solve("d(1). p(X) :- d(X), X+1=2.", &serial(&[]));
+    assert_eq!(rendered.report.completion, Completion::Exhausted);
+    assert_eq!(rendered.report.models, 1);
+    assert!(
+        rendered
+            .answers
+            .contains("CPU · 1 thread · direct source evaluation")
+    );
+    assert!(
+        rendered
+            .answers
+            .contains("Answer: 1\nd(1) p(1)\nSATISFIABLE\nModels: 1")
+    );
+    assert!(rendered.diagnostics.is_empty());
+    let timings = rendered.report.phase_timings.unwrap();
+    assert!(timings.stages.get(SolveStage::Grounding).is_some());
+    assert!(timings.stages.get(SolveStage::Solving).is_some());
+}
+
+#[test]
 fn lazy_summary_reports_interleaved_work() {
     let rendered = solve("p:-not q. q:-not p.", &serial(&["--grounder", "lazy"]));
     assert_eq!(rendered.report.completion, Completion::Exhausted);

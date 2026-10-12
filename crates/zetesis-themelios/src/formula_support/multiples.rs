@@ -36,7 +36,7 @@ use crate::FormulaFailure;
 use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation, RuleIr};
 
 #[derive(Clone, Copy)]
-enum Divisor {
+pub(super) enum Divisor {
     Constant(i32),
     Variable(usize),
 }
@@ -154,7 +154,7 @@ fn comparison(
     Ok(selected)
 }
 
-fn remainder(
+pub(super) fn remainder(
     expression: &Expression,
     zero: &Expression,
     context: &mut Context<'_, &Computation<'_, '_>>,
@@ -187,7 +187,7 @@ fn remainder(
     Ok(Some((*dividend, divisor)))
 }
 
-fn number(
+pub(super) fn number(
     value: components::Scalar,
     context: &mut Context<'_, &Computation<'_, '_>>,
 ) -> Result<Option<i32>, FormulaFailure> {
@@ -358,10 +358,10 @@ impl Prepared<'_> {
         support: &Support<'source>,
         mut context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Option<Buffer<usize>>, FormulaFailure> {
+        let factors = positive_factors(self.bounds, divisor);
         let divisor = i64::from(divisor);
-        let (low, high) = self.bounds;
-        let first = (i64::from(low) + divisor - 1) / divisor;
-        let last = i64::from(high) / divisor;
+        let first = *factors.start();
+        let last = *factors.end();
         let count = if first > last { 0 } else { last - first + 1 };
         let count = usize::try_from(count).expect("positive i32 interval count fits usize");
         tick(&mut context)?;
@@ -429,4 +429,17 @@ impl Prepared<'_> {
         })?;
         Ok(Some(selected.embedded(location)?))
     }
+}
+
+/// Factors of positive-divisor multiples in an inclusive positive i32 interval.
+/// Widened endpoint arithmetic cannot overflow: the largest numerator is less
+/// than 2^32. An inverted result is an empty iterator; emitted products remain
+/// within the original i32 endpoints. Both relation and range selection use it.
+pub(super) fn positive_factors(
+    (low, high): (i32, i32),
+    divisor: i32,
+) -> std::ops::RangeInclusive<i64> {
+    assert!(low > 0 && high >= low && divisor > 0);
+    let divisor = i64::from(divisor);
+    (i64::from(low) + divisor - 1) / divisor..=i64::from(high) / divisor
 }

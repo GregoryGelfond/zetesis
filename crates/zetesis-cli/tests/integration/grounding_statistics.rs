@@ -123,14 +123,14 @@ fn the_ordinary_command_requests_the_domain_analysis() {
 }
 
 #[test]
-fn the_ordinary_command_narrows_candidates_by_comparison() {
+fn eager_grounding_narrows_candidates_by_comparison() {
     // X < 3 excludes 198 of the 200 candidates the domain of d/1 offers
     // before any row is read; the two answers are the instances that remain.
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_detailed_with_diagnostics(
         "d(1..200). p(X) :- d(X), X < 3.".into(),
-        &options(&[]),
+        &options(&["--grounder", "eager"]),
         &mut output,
         &mut diagnostics,
         &Cancellation::default(),

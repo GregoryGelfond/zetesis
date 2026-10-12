@@ -250,3 +250,132 @@ fn prepared_einstein_retains_a_terminal_flat_definition() {
         crate::formula_ir::LiteralIr::Atom(themelios_program::program::DefaultNegation::None, _)
     )));
 }
+
+#[test]
+fn exact_source_admission_keeps_accepted_work_and_cancellation() {
+    let (mut prepared, _key) = prepared_with_identity();
+    let accepted = prepared.preparation.accounting.work;
+    prepared.preparation.limits.max_work = accepted;
+    let error = prepared.try_source().unwrap_err();
+    assert!(matches!(error, FormulaFailure::Limit {
+        resource: FormulaResource::Work, observed, limit, ..
+    } if observed == u128::from(accepted) + 1 && limit == u128::from(accepted)));
+
+    let (mut prepared, _key) = prepared_with_identity();
+    let cancellation = zetesis_cpu::Cancellation::default();
+    prepared
+        .preparation
+        .budget
+        .set_cancellation(Some(cancellation.clone()));
+    cancellation.cancel();
+    assert_eq!(
+        prepared.try_source().unwrap_err().interruption(),
+        Some(zetesis_cpu::Stop::Cancelled)
+    );
+}
+
+#[test]
+fn declined_source_class_retains_its_charges_for_the_original_ground_door() {
+    let mut prepared = prepare_formula(
+        "{a}.".into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap();
+    let accepted = prepared.preparation.accounting.work;
+    let source = std::ptr::from_ref(prepared.original_program());
+    let crate::SourceAdmission::NotApplicable(declined) = prepared.try_source().unwrap() else {
+        panic!()
+    };
+    prepared = declined;
+    assert_eq!(std::ptr::from_ref(prepared.original_program()), source);
+    assert!(prepared.preparation.accounting.work > accepted);
+    prepared.preparation.limits.max_work = prepared.preparation.accounting.work;
+    assert!(matches!(
+        prepared.ground().unwrap_err(),
+        FormulaFailure::Limit {
+            resource: FormulaResource::Work,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn exact_source_receipt_bounds_its_complete_preparation() {
+    let make = || {
+        prepare_formula(
+            SOURCE.into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap()
+    };
+    let crate::SourceAdmission::Admitted(owner) = make().try_source().unwrap() else {
+        panic!()
+    };
+    let total = owner.statistics().work;
+    assert!(total > make().preparation.accounting.work);
+    let mut exact = make();
+    exact.preparation.limits.max_work = total;
+    let crate::SourceAdmission::Admitted(repeated) = exact.try_source().unwrap() else {
+        panic!()
+    };
+    assert_eq!(repeated.statistics().work, total);
+    let mut short = make();
+    short.preparation.limits.max_work = total - 1;
+    assert!(
+        matches!(short.try_source().unwrap_err(), FormulaFailure::Limit {
+        resource: FormulaResource::Work, limit, ..
+    } if limit == u128::from(total - 1))
+    );
+}
+
+#[test]
+fn exact_source_selection_and_plan_keep_named_storage_limits() {
+    for resource in [FormulaResource::Atoms, FormulaResource::SupportBytes] {
+        let mut prepared = prepare_formula(
+            "a.".into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap();
+        match resource {
+            FormulaResource::Atoms => prepared.preparation.limits.theory.max_atoms = 0,
+            FormulaResource::SupportBytes => prepared.preparation.limits.max_support_bytes = 0,
+            _ => unreachable!(),
+        }
+        assert!(
+            matches!(prepared.try_source().unwrap_err(), FormulaFailure::Limit {
+            resource: actual, ..
+        } if actual == resource)
+        );
+    }
+}
+
+#[test]
+fn acyclic_order_cannot_cross_an_independently_prepared_source_owner() {
+    let make = || {
+        prepare_formula(
+            SOURCE.into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits::default(),
+        )
+        .unwrap()
+    };
+    let mut first = make();
+    let order = crate::formula_source::classify(&mut first.preparation)
+        .unwrap()
+        .unwrap();
+    let second = make();
+    assert!(matches!(
+        crate::formula_source::evaluate(second.preparation, order, None),
+        Err(FormulaFailure::SupportRelation {
+            error: zetesis_core::relation::Failure::Owner,
+            ..
+        })
+    ));
+}

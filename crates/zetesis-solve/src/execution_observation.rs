@@ -21,6 +21,10 @@ pub struct StreamedConstraints {
 /// its own storage policy. Its work and storage are outside solver resource limits.
 #[derive(Debug)]
 pub enum ExecutionObservation<'a> {
+    /// Preparation evaluated a complete signed-acyclic normal source in
+    /// dependency order. This session consumes its certified interpretation;
+    /// no candidate-region search or formula theory is constructed.
+    SourceEvaluation,
     /// The original source is represented by a checked base theory and terminal
     /// definitions. Formula populations and membership events that follow refer
     /// to that base; host reconstruction precedes every original answer.

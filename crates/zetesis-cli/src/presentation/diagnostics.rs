@@ -57,6 +57,20 @@ impl<W: Write> Diagnostics<W> {
         self
     }
 
+    fn should_report(&self, observation: &crate::ExecutionObservation<'_>) -> bool {
+        use crate::ExecutionObservation as Event;
+        !self.quiet
+            || matches!(
+                observation,
+                Event::KeyAnalysisStopped(_)
+                    | Event::ObjectiveUnavailable(_)
+                    | Event::ChoiceObjectiveBoundUnavailable(_)
+                    | Event::ObjectiveBoundStopped(_)
+                    | Event::ObjectiveTheoryMismatch
+                    | Event::ObjectiveRestrictionStopped(_)
+            )
+    }
+
     pub(crate) fn for_solve(writer: W, color: ColorMode, options: &crate::Options) -> Self {
         let execution_details = options.json
             || (options.stats && matches!(options.statistics_view, crate::StatisticsView::Records));
@@ -163,20 +177,12 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
     type Error = io::Error;
     fn observe(&mut self, observation: crate::ExecutionObservation<'_>) -> Result<(), Self::Error> {
         use crate::ExecutionObservation as Event;
-        if self.quiet
-            && !matches!(
-                &observation,
-                Event::KeyAnalysisStopped(_)
-                    | Event::ObjectiveUnavailable(_)
-                    | Event::ChoiceObjectiveBoundUnavailable(_)
-                    | Event::ObjectiveBoundStopped(_)
-                    | Event::ObjectiveTheoryMismatch
-                    | Event::ObjectiveRestrictionStopped(_)
-            )
-        {
+        if !self.should_report(&observation) {
             return Ok(());
         }
         match observation {
+            Event::SourceEvaluation => self.metadata(Label::Backend,
+                format_args!("cpu (dependency-ordered source evaluation; constraints checked before publication)")),
             Event::StaticGrounding { requested, atoms, rules, limits } => self.metadata(
                 Label::Grounding,
                 format_args!("requested={}, effective=eager (static atoms={atoms}, rules={rules}; lowering caps atoms={}, rules={}, substitutions={})", requested.label(), limits.max_atoms, limits.max_ground_rules, limits.max_substitutions),

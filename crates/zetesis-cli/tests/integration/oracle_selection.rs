@@ -103,13 +103,8 @@ fn auto_uses_closure_for_supported_scalar_normal_programs() {
 }
 
 #[test]
-fn auto_uses_formula_membership_for_choices_and_variable_arithmetic() {
-    for (source, count) in [
-        ("1 {a;b} 1.", 2),
-        ("d(1;2). {p(X):d(X)}.", 4),
-        ("d(1..3). p(X) :- d(X), X+1=3.", 1),
-        ("d(1..3). p(X) :- d(X), X<3.", 1),
-    ] {
+fn auto_uses_formula_membership_for_choices() {
+    for (source, count) in [("1 {a;b} 1.", 2), ("d(1;2). {p(X):d(X)}.", 4)] {
         let (automatic, auto_output, diagnostics) = run(source, &options(&[]));
         let (explicit, explicit_output, _) = run(source, &options(&["--oracle", "countermodel"]));
         let automatic = automatic.expect("formula fallback preserves supported syntax");
@@ -124,6 +119,35 @@ fn auto_uses_formula_membership_for_choices_and_variable_arithmetic() {
         assert!(diagnostics.contains("oracle: Ferraris reduct membership"));
         assert!(!diagnostics.contains("Oracle: reduct closure"));
         assert!(automatic.countermodel_statistics.is_some());
+        assert!(matches!(
+            assert_refused_without_output(source, &options(&["--oracle", "closure"])),
+            RunError::Expansion(_)
+        ));
+    }
+}
+
+#[test]
+fn auto_evaluates_acyclic_arithmetic_sources_directly() {
+    for source in [
+        "d(1..3). p(X) :- d(X), X+1=3.",
+        "d(1..3). p(X) :- d(X), X<3.",
+    ] {
+        let (automatic, auto_output, diagnostics) = run(source, &options(&[]));
+        let (explicit, explicit_output, _) = run(source, &options(&["--oracle", "countermodel"]));
+        let automatic = automatic.expect("certified source evaluation");
+        let explicit = explicit.expect("explicit formula admission");
+        assert_eq!(automatic.completion, Completion::Exhausted);
+        assert_eq!(automatic.models, 1);
+        assert_eq!(automatic.models, explicit.models);
+        assert_eq!(
+            answers(&auto_output).into_iter().collect::<BTreeSet<_>>(),
+            answers(&explicit_output).into_iter().collect()
+        );
+        assert!(diagnostics.contains("dependency-ordered source evaluation"));
+        assert!(automatic.source_evaluation.unwrap().work > 0);
+        assert!(automatic.countermodel_statistics.is_none());
+        assert!(explicit.source_evaluation.is_none());
+        assert!(explicit.countermodel_statistics.is_some());
         assert!(matches!(
             assert_refused_without_output(source, &options(&["--oracle", "closure"])),
             RunError::Expansion(_)

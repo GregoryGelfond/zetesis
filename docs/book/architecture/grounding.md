@@ -607,6 +607,14 @@ already bind the divisor first; this operation does not reorder a rule or make
 every divisibility join sieve-like. Unknown, mixed or nonpositive target domains
 retain checked scalar evaluation.
 
+A closed body range can supply the same full-domain numeric evidence. After
+complete arithmetic admission, eligible flat positive rules step directly over
+the ascending multiples of a positive constant or already-bound divisor. The
+existing range cursor still checks its original width, constructs canonical
+numbers and runs residual filters. This selection is used during eager producer
+emission, including a hybrid program's eager base; streamed constraints and
+support completion keep their original traversals.
+
 Source-family evidence is finalized over completed support and the original
 source occurrence, not one support round or normalized fragment. Evaluated
 numeric division or remainder by zero omits an instance only when the same

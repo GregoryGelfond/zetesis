@@ -24,8 +24,9 @@ pub struct Report {
     /// Partial writes are excluded; sink acceptance does not establish durability.
     /// This count can be smaller than the number of verified stable models.
     pub models: usize,
-    /// Closure result/control records examined, or classical formula candidates
-    /// proposed (including explicitly retained pending batch work). A whole-batch
+    /// Closure result/control records examined, classical formula candidates
+    /// proposed, or completed source evaluations. Formula counts include
+    /// explicitly retained pending batch work. A whole-batch
     /// closure interruption is one control record; shared statistics separately
     /// count every submitted occurrence without a complete check.
     pub checked: u64,
@@ -51,6 +52,9 @@ pub struct Report {
     pub hybrid_execution: Option<zetesis_solve::HybridExecutionStatistics>,
     /// Base answers and completed original-answer reconstruction.
     pub terminal_execution: Option<zetesis_solve::TerminalExecutionStatistics>,
+    /// Cumulative source admission and exact evaluation charges. This receipt
+    /// alone establishes neither membership nor complete coverage.
+    pub source_evaluation: Option<zetesis_themelios::SourceEvaluationStatistics>,
     /// Prepared formula-model ordering and completed selections, including stopped work.
     pub model_construction: Option<zetesis_solve::ModelConstructionStatistics>,
     /// Actual lazy device execution, including shared source work and failed

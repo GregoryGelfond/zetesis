@@ -49,6 +49,8 @@ pub struct ExpansionLimits {
     /// Maximum named logical bytes in one materialized source-alternative family.
     /// Pool constructors, local conditions, dependency projections and fact
     /// intervals check their complete term/text/carrier envelope before cloning.
+    /// Streamed fact products retain the same complete logical envelope although
+    /// only compact scalar/range columns and one emitted head are temporary.
     /// Repeated families do not accumulate this allowance. It is independent of
     /// cumulative `max_values` and `max_scalar_bytes`; other retained program
     /// state, spare allocation capacity, provenance and allocator overhead remain
@@ -122,6 +124,13 @@ pub enum ExpansionResource {
 /// behavior for undefined instances.
 #[derive(Debug)]
 pub enum ExpansionFailure {
+    /// Source-expansion cursor or carrier storage could not be reserved.
+    Allocation {
+        /// The allocator's refusal, distinct from a configured logical ceiling.
+        error: std::collections::TryReserveError,
+        /// Original statement or whole-program site at the stopped boundary.
+        location: ProgramSite,
+    },
     /// Shared cancellation or deadline observed before the next expansion step.
     Interrupted {
         /// The control signal; separate from configured resource ceilings.
@@ -188,7 +197,8 @@ impl ExpansionFailure {
     pub fn site(&self) -> Option<ProgramSite> {
         match self {
             Self::Admission(error) => error.site(),
-            Self::Interrupted { location, .. }
+            Self::Allocation { location, .. }
+            | Self::Interrupted { location, .. }
             | Self::Limit { location, .. }
             | Self::ConstantPolicy { location }
             | Self::ConstantCycle { location, .. }
@@ -219,7 +229,8 @@ impl ExpansionFailure {
     pub fn diagnostics(&self) -> Vec<Diagnostic> {
         let location = match self {
             Self::Admission(error) => return error.diagnostics(),
-            Self::Interrupted { location, .. }
+            Self::Allocation { location, .. }
+            | Self::Interrupted { location, .. }
             | Self::Limit { location, .. }
             | Self::ConstantPolicy { location }
             | Self::ConstantCycle { location, .. }
@@ -239,6 +250,7 @@ impl ExpansionFailure {
 impl fmt::Display for ExpansionFailure {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Allocation { error, .. } => write!(f, "source expansion storage: {error}"),
             Self::Admission(error) => error.fmt(f),
             Self::Interrupted { reason, .. } => reason.fmt(f),
             Self::Limit {
@@ -277,6 +289,7 @@ impl fmt::Display for ExpansionFailure {
 impl std::error::Error for ExpansionFailure {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
+            Self::Allocation { error, .. } => Some(error),
             Self::Admission(error) => Some(error),
             Self::Evaluation { error, .. } => Some(error),
             Self::Interrupted { reason, .. } => Some(reason),
@@ -452,6 +465,12 @@ impl Budget {
     pub(crate) fn remaining_templates(&self) -> usize {
         usize::try_from((self.limits.max_templates as u128).saturating_sub(self.templates))
             .expect("remaining templates do not exceed a usize limit")
+    }
+
+    /// Unspent copied-payload allowance; a closed product can admit its complete
+    /// copy traffic without visiting every row when that traffic fits.
+    pub(crate) fn remaining_scalar_bytes(&self) -> u128 {
+        (self.limits.max_scalar_bytes as u128).saturating_sub(self.scalar_bytes)
     }
 
     /// The term work still allowed under the ceiling, for a reading that

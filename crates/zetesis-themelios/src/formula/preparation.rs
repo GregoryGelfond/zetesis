@@ -156,6 +156,44 @@ impl PreparedFormula {
         self
     }
 
+    /// Admit and evaluate a complete signed acyclic normal source once, before
+    /// formula construction. Complete support and original arithmetic admission
+    /// still run. Inapplicable sources retain the ordinary ground/query door and
+    /// all accepted classification charges. Objectives, projections, recursive
+    /// components and non-flat source bodies use that ordinary door.
+    ///
+    /// # Errors
+    /// Returns the original typed admission, arithmetic, control or resource
+    /// failure. No admitted-class failure retries through another evaluator.
+    pub fn try_source(self) -> Result<crate::SourceAdmission<Self>, FormulaFailure> {
+        self.try_source_with_observer(None)
+    }
+
+    /// Exact source admission with the ordinary source phase observer. All
+    /// support and consequence work is reported during this call.
+    ///
+    /// # Errors
+    /// Returns the same failures as [`Self::try_source`].
+    pub fn try_source_with_observer(
+        mut self,
+        observer: Option<&dyn GroundingObserver>,
+    ) -> Result<crate::SourceAdmission<Self>, FormulaFailure> {
+        let plan = crate::formula_source::classify(&mut self.preparation)
+            .map_err(|error| self.source.retain_failure(error))?;
+        let Some(plan) = plan else {
+            return Ok(crate::SourceAdmission::NotApplicable(self));
+        };
+        let evaluation = grounding_observer::observe(observer, || {
+            crate::formula_source::evaluate(self.preparation, plan, observer)
+        })
+        .map_err(|error| self.source.retain_failure(error))?;
+        Ok(crate::SourceAdmission::Admitted(crate::AcyclicSource::new(
+            evaluation,
+            self.source,
+            self.metadata,
+        )))
+    }
+
     /// Materialize producers and ineligible constraints while retaining ordinary
     /// atom/scalar integrity constraints for repeated bounded satisfaction checks.
     /// Complete possible support and original arithmetic admission still run.
@@ -439,6 +477,48 @@ impl PreparedFormulaBundle {
             preparation,
             source,
             metadata,
+        }
+    }
+
+    /// Admit and evaluate the complete signed acyclic normal source bundle.
+    /// Inapplicability retains the same original bundle and cumulative budgets.
+    ///
+    /// # Errors
+    /// Preserves the original bundle with every admission or resource refusal.
+    pub fn try_source(self) -> Result<crate::SourceAdmission<Self>, FormulaBundleFailure> {
+        self.try_source_with_observer(None)
+    }
+
+    /// Exact source admission with phase observations and retained bundle errors.
+    ///
+    /// # Errors
+    /// Returns the same failures as [`Self::try_source`].
+    pub fn try_source_with_observer(
+        mut self,
+        observer: Option<&dyn GroundingObserver>,
+    ) -> Result<crate::SourceAdmission<Self>, FormulaBundleFailure> {
+        let plan = match crate::formula_source::classify(&mut self.preparation) {
+            Ok(Some(plan)) => plan,
+            Ok(None) => return Ok(crate::SourceAdmission::NotApplicable(self)),
+            Err(error) => {
+                return Err(FormulaBundleFailure {
+                    bundle: self.source.into_bundle(),
+                    error: Box::new(error),
+                });
+            }
+        };
+        match grounding_observer::observe(observer, || {
+            crate::formula_source::evaluate(self.preparation, plan, observer)
+        }) {
+            Ok(evaluation) => Ok(crate::SourceAdmission::Admitted(crate::AcyclicSource::new(
+                evaluation,
+                self.source,
+                self.metadata,
+            ))),
+            Err(error) => Err(FormulaBundleFailure {
+                bundle: self.source.into_bundle(),
+                error: Box::new(error),
+            }),
         }
     }
 

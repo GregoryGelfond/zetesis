@@ -81,6 +81,8 @@ mod formula_projection_ir;
 mod formula_raise;
 mod formula_range_ir;
 mod formula_source_activity;
+mod formula_source;
+pub use formula_source::{AcyclicSource, SourceAdmission, SourceEvaluationStatistics};
 mod formula_support;
 mod formula_value;
 mod formula_value_ir;

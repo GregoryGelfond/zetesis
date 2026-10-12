@@ -110,6 +110,20 @@ and formula graph; the result retains its original theory owner. The
 establishes the mathematical reduct argument. Recognition of the Rust grammar
 and correspondence of its component schedule remain implementation obligations.
 
+Automatic CPU preparation can apply the stronger case earlier: when every
+positive and negative dependency is strictly earlier than its producer, one
+dependency-ordered source pass suffices. `AcyclicSource` retains the original
+program, canonical atom catalog and checked result. Complete support and
+original-family arithmetic checks precede that pass; all constraints and
+opposite classical signs are checked before an answer is accepted. No formula
+theory or candidate search is needed for this class. Choices, objectives,
+projection and recursive producers keep the ordinary route. Explicit eager,
+lazy, device and oracle requests keep their requested execution contracts.
+
+The [acyclic evaluation law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AcyclicEvaluation.lean)
+shows that the ordered consequence scan equals stratified reduct evaluation.
+It does not yet verify source classification, binding enumeration or Rust storage.
+
 ## Membership, enumeration, and optimization
 
 Membership answers whether one candidate is an answer set. Enumeration also

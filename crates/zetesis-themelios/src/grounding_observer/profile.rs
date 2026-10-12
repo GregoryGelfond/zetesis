@@ -7,7 +7,7 @@ use crate::ProgramSite;
 
 use super::GroundingObserver;
 
-/// A coarse operation inside eager formula materialization.
+/// A coarse operation inside formula materialization or certified source evaluation.
 ///
 /// These phases exclude parsing and prepared-IR/observation compilation. Their
 /// callbacks are sequential; rule phases repeat in the existing prepared order.
@@ -23,7 +23,8 @@ pub enum GroundingPhase {
     ObjectiveActivation,
     /// Initialize formula storage and the false/true nodes.
     FormulaInitialization,
-    /// Join one prepared rule, evaluate filters and emit its formulas together.
+    /// Join one prepared rule and evaluate its filters, either emitting formulas
+    /// or deriving consequences in a certified source evaluation.
     RuleInstantiation,
     /// Add constraints for present opposite classical signs.
     Coherence,

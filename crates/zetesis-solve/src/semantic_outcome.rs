@@ -41,6 +41,7 @@ pub struct SemanticOutcome {
     pub(crate) query_execution: Option<crate::QueryExecutionObservation>,
     pub(crate) hybrid_execution: Option<crate::HybridExecutionStatistics>,
     pub(crate) terminal_execution: Option<crate::TerminalExecutionStatistics>,
+    pub(crate) source_evaluation: Option<zetesis_themelios::SourceEvaluationStatistics>,
     pub(crate) model_construction: Option<crate::ModelConstructionStatistics>,
 }
 
@@ -72,6 +73,7 @@ impl SemanticOutcome {
             query_execution: None,
             hybrid_execution: None,
             terminal_execution: None,
+            source_evaluation: None,
             model_construction: None,
         }
     }
@@ -98,7 +100,8 @@ impl SemanticOutcome {
         self.subject.as_ref()
     }
 
-    /// Closure result/control records consumed, or formula candidates proposed.
+    /// Closure result/control records consumed, formula candidates proposed, or
+    /// completed certified source evaluations.
     /// One shared-batch stop record can represent several interrupted occurrences.
     #[must_use]
     pub const fn candidate_progress(&self) -> u64 {
@@ -141,6 +144,17 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn terminal_execution(&self) -> Option<&crate::TerminalExecutionStatistics> {
         self.terminal_execution.as_ref()
+    }
+
+    /// Accepted work from the retained source preparation, including its exact
+    /// dependency-ordered evaluation. Sessions reuse this receipt without
+    /// repeating that work. It alone establishes neither published membership
+    /// nor complete coverage; use the semantic counts and search state.
+    #[must_use]
+    pub const fn source_evaluation(
+        &self,
+    ) -> Option<&zetesis_themelios::SourceEvaluationStatistics> {
+        self.source_evaluation.as_ref()
     }
 
     /// Prepared semantic order and model construction over the formula catalog.

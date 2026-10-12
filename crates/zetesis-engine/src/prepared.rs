@@ -15,8 +15,8 @@ use crate::{Config, Grounder};
 
 pub(crate) enum Prepared {
     Relational(Box<PreparedRelational>),
-    /// Materialized by the library's grounder mapping, as the CLI's is.
-    Formula(Box<zetesis_solve::GroundedFormula>),
+    /// Prepared by the shared execution policy, as the CLI's input is.
+    Execution(zetesis_solve::PreparedExecution),
 }
 
 impl Prepared {
@@ -57,26 +57,21 @@ impl Prepared {
                 cancellation: Some(cancellation.clone()),
             },
         )?;
-        let grounder = match config.grounder {
-            Grounder::Auto => zetesis_solve::Grounder::Auto,
-            Grounder::Eager => zetesis_solve::Grounder::Eager,
-            Grounder::Lazy => zetesis_solve::Grounder::Lazy,
-        };
-        zetesis_solve::ground_formula(prepared, grounder, None)
-            .map(|grounded| Self::Formula(Box::new(grounded)))
+        zetesis_solve::prepare_formula_execution(prepared, &config.session(), None)
+            .map(Self::Execution)
     }
 
     pub(crate) fn input(&self) -> PreparedInput<'_> {
         match self {
             Self::Relational(owner) => PreparedInput::relational(owner),
-            Self::Formula(grounded) => grounded.input(),
+            Self::Execution(prepared) => prepared.input(),
         }
     }
 
     pub(crate) fn metadata(&self) -> &SourceMetadata {
         match self {
             Self::Relational(owner) => owner.metadata(),
-            Self::Formula(grounded) => grounded.metadata(),
+            Self::Execution(prepared) => prepared.metadata(),
         }
     }
 }

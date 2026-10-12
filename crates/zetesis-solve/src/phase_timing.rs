@@ -104,7 +104,8 @@ pub struct PhaseTimings {
     pub driver_elapsed: Duration,
     /// Exclusive high-level host stages; accessible without parsing diagnostics.
     pub stages: StageTimings,
-    /// Optional attribution within eager formula grounding. Other grounders remain unmeasured here.
+    /// Optional attribution within formula preparation or certified source evaluation.
+    /// Later streamed grounding is measured by its execution owner.
     pub grounding: crate::GroundingTimings,
     measurements: [Option<PhaseMeasurement>; SolvePhase::ALL.len()],
 }

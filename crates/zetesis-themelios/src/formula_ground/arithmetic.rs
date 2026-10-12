@@ -63,7 +63,7 @@ struct Scan<'a, 'source, 'context, 'compute> {
     stack: Vec<Task<'a, 'source>>,
 }
 
-pub(super) fn prepare<'a, 'source>(
+pub(crate) fn prepare<'a, 'source>(
     prepared: &'a Prepared,
     support: &'a Support<'source>,
     computation: &mut Computation<'_, 'source>,

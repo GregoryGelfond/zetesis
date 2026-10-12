@@ -45,6 +45,8 @@ mod keys;
 #[cfg(test)]
 mod membership;
 mod multiples;
+mod range_selection;
+pub(crate) use range_selection::Prepared as RangeSelection;
 mod order;
 #[cfg(test)]
 mod postings;
@@ -79,6 +81,7 @@ use rows::{Advance, Frame, Ownership, Staged};
 pub(crate) use accounting::{Accounting, AccountingBaseline};
 pub(crate) use evaluation::{Evaluation, Failures};
 pub(crate) use prepared::PreparedRule;
+pub(crate) use producers::AcyclicPlan;
 pub(crate) use queries::{Candidates, Support};
 #[cfg(test)]
 use relations::RelationRows;
@@ -1035,6 +1038,7 @@ pub(crate) struct Join<'a, 'source> {
     /// All flat constraint expressions succeeded over completed source domains.
     certified_total: bool,
     multiples: Option<multiples::Prepared<'a>>,
+    range_selection: Option<RangeSelection<'a>>,
     family: family::Evidence,
     head_bounds: &'a [crate::formula_ir::AggregateGuard],
     checked_guard: Option<&'a crate::formula_guard::Guard>,
@@ -1340,7 +1344,7 @@ impl<'a, 'source> Join<'a, 'source> {
     /// before a frozen checker prepares its retained immutable rule and carrier.
     /// This includes successful speculative values before a declined attempt;
     /// a missing frozen term remains an error. Evidence cursors stay complete.
-    pub(super) fn select_total_body(
+    pub(crate) fn select_total_body(
         &mut self,
         rule: &'a crate::formula_ir::RuleIr,
         computation: &mut Computation<'_, '_>,
@@ -1680,11 +1684,6 @@ impl<'a, 'source> Join<'a, 'source> {
         computation.storage_observed(&lease, 0, initial, limits, counters, location)?;
         let mut values = prefix.copied(computation, limits, counters, location)?;
         values.extend_scope(variables, computation, limits, counters, location)?;
-        let coverage = if family::partial(literals) {
-            Coverage::Complete
-        } else {
-            Coverage::Selected
-        };
         let mut join = Self {
             bindings: None,
             literals,
@@ -1696,10 +1695,15 @@ impl<'a, 'source> Join<'a, 'source> {
             head_slots: variables..variables,
             comparisons: Comparisons::Deferred,
             pending_comparisons: Comparisons::Deferred,
-            coverage,
+            coverage: if family::partial(literals) {
+                Coverage::Complete
+            } else {
+                Coverage::Selected
+            },
             source_evidence: false,
             certified_total: false,
             multiples: None,
+            range_selection: None,
             family: family::Evidence::default(),
             head_bounds: &[],
             checked_guard: None,
@@ -1927,6 +1931,7 @@ impl<'a, 'source> Join<'a, 'source> {
         self.source_evidence = true;
         self.certified_total = false;
         self.multiples = None;
+        self.range_selection = None;
         self.coverage = Coverage::Complete;
         self.domains = None;
     }
@@ -2329,14 +2334,16 @@ impl<'a, 'source> Join<'a, 'source> {
             )?;
         } else {
             self.pending_comparisons = self.comparisons.clone();
-            self.pending = Some(crate::formula_binding_cursor::Cursor::new(
+            let mut pending = crate::formula_binding_cursor::Cursor::new(
                 self.literals,
                 binding,
                 self.support,
                 self.bindings,
                 0..self.head_slots.start,
                 Context::new(computation, limits, counters, location),
-            )?);
+            )?;
+            pending.select_range(self.range_selection);
+            self.pending = Some(pending);
         }
         self.lease.observe(self.storage_bytes(), location)?;
         Ok(())

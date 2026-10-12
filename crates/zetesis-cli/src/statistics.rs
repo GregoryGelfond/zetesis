@@ -102,6 +102,7 @@ pub(crate) fn write_progress(
             formula_execution: semantic.formula_execution(),
             hybrid_execution: semantic.hybrid_execution(),
             terminal_execution: semantic.terminal_execution(),
+            source_evaluation: semantic.source_evaluation(),
             model_construction: semantic.model_construction(),
             lazy_execution: semantic.lazy_execution(),
             shared_execution: semantic.shared_execution(),
@@ -218,6 +219,7 @@ struct Details<'a> {
     formula_execution: Option<&'a crate::FormulaExecutionStatistics>,
     hybrid_execution: Option<&'a zetesis_solve::HybridExecutionStatistics>,
     terminal_execution: Option<&'a zetesis_solve::TerminalExecutionStatistics>,
+    source_evaluation: Option<&'a zetesis_themelios::SourceEvaluationStatistics>,
     model_construction: Option<&'a zetesis_solve::ModelConstructionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
@@ -240,6 +242,7 @@ impl<'a> From<&'a Report> for Details<'a> {
             formula_execution: report.formula_execution.as_ref(),
             hybrid_execution: report.hybrid_execution.as_ref(),
             terminal_execution: report.terminal_execution.as_ref(),
+            source_evaluation: report.source_evaluation.as_ref(),
             model_construction: report.model_construction.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
@@ -264,6 +267,7 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
             formula_execution: report.formula_execution.as_ref(),
             hybrid_execution: report.hybrid_execution.as_ref(),
             terminal_execution: report.terminal_execution.as_ref(),
+            source_evaluation: report.source_evaluation.as_ref(),
             model_construction: report.model_construction.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
@@ -281,21 +285,7 @@ fn details(
     report: &Details<'_>,
 ) -> io::Result<()> {
     if let Some(usage) = report.expansion {
-        let limits = crate::admission::expansion_limits(options);
-        writeln!(
-            sink,
-            "  expansion used: term work={} of {}; templates={} of {}; values={} of {}; scalar bytes={} of {}; origins={} of {}",
-            usage.term_work,
-            limits.max_term_work,
-            usage.templates,
-            limits.max_templates,
-            usage.values,
-            limits.max_values,
-            usage.scalar_bytes,
-            limits.max_scalar_bytes,
-            usage.origin_locations,
-            limits.max_origin_locations
-        )?;
+        expansion(sink, options, usage)?;
     }
     if let Some(stats) = report.candidate_statistics {
         candidates(sink, stats)?;
@@ -322,7 +312,9 @@ fn details(
             stats.work, stats.prepared_bytes, stats.peak_bytes, stats.constructed
         )?;
     }
-    let examined = if report.shared_execution.is_some() {
+    let examined = if report.source_evaluation.is_some() {
+        "completed source evaluations"
+    } else if report.shared_execution.is_some() {
         "closure result/control records examined"
     } else {
         "candidates examined"
@@ -335,7 +327,17 @@ fn details(
     if let Some(reason) = report.interruption {
         writeln!(sink, "  interruption: {reason}")?;
     }
-    if let Some(stats) = report.countermodel_statistics {
+    if let Some(stats) = report.source_evaluation {
+        writeln!(
+            sink,
+            "  effective execution: backend=cpu; operation=direct source evaluation"
+        )?;
+        writeln!(
+            sink,
+            "  source evaluation: work={}; substitutions={}; scope=source_admission; includes support, arithmetic and exact activity",
+            stats.work, stats.substitutions
+        )?;
+    } else if let Some(stats) = report.countermodel_statistics {
         formula(sink, config, report)?;
         countermodel(
             sink,
@@ -380,6 +382,28 @@ fn details(
         )?;
     }
     objective(sink, report)
+}
+
+fn expansion(
+    sink: &mut impl Write,
+    options: &Options,
+    usage: zetesis_themelios::ExpansionUsage,
+) -> io::Result<()> {
+    let limits = crate::admission::expansion_limits(options);
+    writeln!(
+        sink,
+        "  expansion used: term work={} of {}; templates={} of {}; values={} of {}; scalar bytes={} of {}; origins={} of {}",
+        usage.term_work,
+        limits.max_term_work,
+        usage.templates,
+        limits.max_templates,
+        usage.values,
+        limits.max_values,
+        usage.scalar_bytes,
+        limits.max_scalar_bytes,
+        usage.origin_locations,
+        limits.max_origin_locations
+    )
 }
 
 fn objective(sink: &mut impl Write, report: &Details<'_>) -> io::Result<()> {

@@ -239,6 +239,7 @@ impl<'a> ClosureSession<'a> {
             formula_execution: None,
             hybrid_execution: None,
             terminal_execution: None,
+            source_evaluation: None,
             model_construction: None,
             query_execution: self
                 .engine

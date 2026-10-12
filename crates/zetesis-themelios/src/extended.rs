@@ -400,14 +400,20 @@ fn emit<P: Clone>(
     location: ProgramSite,
     (templates, origins): &mut Compiled<P>,
 ) -> Result<(), ExpansionFailure> {
-    if let Some(facts) = fact_expansion::facts(statement, budget, location)? {
+    if let Some(mut facts) = fact_expansion::facts(statement, budget, location)? {
         budget.charge(
             ExpansionResource::Origins,
             (facts.len() as u128).saturating_mul(locations.len() as u128),
             location,
         )?;
-        for fact in facts {
-            templates.push(fact);
+        while let Some(head) = facts.next(budget, location)? {
+            templates.push(zetesis_core::Template::new(
+                Some(head),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+                Vec::new(),
+            ));
             origins.push(locations.clone());
         }
     } else {

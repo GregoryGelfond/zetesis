@@ -1,3 +1,9 @@
+'Zetesis.AcyclicEvaluation.ranked_stratified' does not depend on any axioms
+'Zetesis.AcyclicEvaluation.consequence_agrees' does not depend on any axioms
+'Zetesis.AcyclicEvaluation.scan_prefix' depends on axioms: [propext, Quot.sound]
+'Zetesis.AcyclicEvaluation.scan_eq_stages' depends on axioms: [propext, Quot.sound]
+'Zetesis.AcyclicEvaluation.normalized_answer_set_iff' depends on axioms: [propext, Quot.sound]
+'Zetesis.AcyclicEvaluation.answer_set_iff' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.AdjacencyRows.slice_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.AdjacencyRows.fold_exact' depends on axioms: [propext, Quot.sound]
 'Zetesis.AggregateAssignment.mem_unique' depends on axioms: [propext]

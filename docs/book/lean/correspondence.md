@@ -252,6 +252,17 @@ for the fixed-provider scope.
 
 ## Stratified normal evaluation
 
+[`AcyclicEvaluation.answer_set_iff`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AcyclicEvaluation.lean)
+handles the strict-rank case: every producer reads only lower-ranked positive
+atoms and frozen gates. A single complete producer scan per rank equals the
+stratified result; constraints then decide answer-set membership. Rust's
+`AcyclicPlan` checks the complete normalized source and orders all producers.
+`AcyclicSource` evaluates that order after complete support and original-family
+arithmetic admission, retaining the original program and exact interpretation.
+Source normalization, rule enumeration, rank recognition, canonical storage and
+bounded publication remain implementation obligations. The law proves no Rust
+execution or performance claim.
+
 [`StratifiedEvaluation.answer_set_iff`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StratifiedEvaluation.lean)
 derives a unique answer candidate from syntactic rank conditions. Positive
 dependencies may stay in a stratum; frozen gates must read earlier strata.
@@ -2867,6 +2878,16 @@ pivot; each variant separately authenticates its selected multiples against its
 own join order. This grants neither completed-support authority nor generic
 table selection. Evidence lifetime, storage accounting and error-preserving
 reuse remain implementation obligations.
+
+For an eligible body with one closed positive integer range, Rust can supply
+the full original interval to the same numeric-hull check. After original-family
+admission, a checked divisibility equality selects ascending multiples in the
+existing range cursor. The original range width is still admitted; other
+comparisons and tuple matching still run. This grants no support-round,
+incremental or streamed-constraint certificate. `BoundedMultiples` and
+`IntegerEnvelopes` justify the mathematical selection and numeric bounds;
+cursor correspondence, canonical identities and diagnostic preservation remain
+Rust obligations.
 
 Eager emission, hybrid capture and hybrid model/region checks use the same Rust
 preparation and necessary-domain selector. Hybrid capture runs after original

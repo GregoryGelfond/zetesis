@@ -19,6 +19,10 @@ Notable changes by release. Versions follow Semantic Versioning.
   scans and notifications once their result is settled.
 - Use divisibility to narrow eligible numeric joins and reject unreachable
   aggregate sums, retaining checked arithmetic and complete answer sets.
+- Evaluate eligible acyclic normal programs during automatic CPU preparation;
+  repeated sessions reuse the result without constructing a formula theory.
+- Stream range facts into admission and reuse borrowed term comparisons in
+  grounding filters, reducing temporary storage and repeated lookup.
 
 ## 0.5.0 — 2026-10-10
 

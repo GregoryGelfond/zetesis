@@ -1,5 +1,11 @@
 import Zetesis
 
+#print axioms Zetesis.AcyclicEvaluation.ranked_stratified
+#print axioms Zetesis.AcyclicEvaluation.consequence_agrees
+#print axioms Zetesis.AcyclicEvaluation.scan_prefix
+#print axioms Zetesis.AcyclicEvaluation.scan_eq_stages
+#print axioms Zetesis.AcyclicEvaluation.normalized_answer_set_iff
+#print axioms Zetesis.AcyclicEvaluation.answer_set_iff
 #print axioms Zetesis.AdjacencyRows.slice_exact
 #print axioms Zetesis.AdjacencyRows.fold_exact
 #print axioms Zetesis.AggregateAssignment.mem_unique

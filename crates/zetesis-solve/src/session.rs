@@ -23,6 +23,7 @@ use crate::formula_execution::Execution;
 use crate::formula_session::FormulaSession;
 use crate::hybrid_session::HybridSession;
 use crate::phase_timing::Recorder;
+use crate::source_session::SourceSession;
 use crate::terminal_session::TerminalSession;
 use crate::{
     AnswerSelection, ExecutionResources, Grounder, Interruption, Oracle, PhaseTimings,
@@ -33,6 +34,8 @@ use crate::{
 /// The complete semantic representation supplied to an ordinary session.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PreparedProfile {
+    /// A complete source program certified for dependency-ordered evaluation.
+    AcyclicSource,
     /// Finite relational normal program; closure execution chooses lazy or eager.
     Relational,
     /// Coherently indexed finite formulas and their objective/observation programs.
@@ -47,6 +50,7 @@ pub enum PreparedProfile {
 
 #[derive(Clone, Copy)]
 enum Prepared<'a> {
+    Source(&'a zetesis_themelios::AcyclicSource),
     Relational(&'a Program),
     Formula(crate::countermodel::Input<'a>),
     Hybrid(&'a zetesis_themelios::HybridFormula),
@@ -64,6 +68,21 @@ pub struct PreparedInput<'a> {
     projection: Option<&'a zetesis_themelios::PreparedProjection>,
 }
 impl<'a> PreparedInput<'a> {
+    /// Borrow a certified normal source program without materializing formulas.
+    /// Preparation evaluated its producers in dependency order and checked all
+    /// constraints. An automatic CPU session publishes its sole possible answer
+    /// under that session's cancellation and model-construction allowances.
+    /// Explicit grounding and oracle requests retain their original contracts
+    /// and are incompatible with this representation.
+    #[must_use]
+    pub fn source(owner: &'a zetesis_themelios::AcyclicSource) -> Self {
+        Self {
+            input: Prepared::Source(owner),
+            metadata: Some(owner.metadata()),
+            projection: None,
+        }
+    }
+
     /// Borrow the original source plan with its checked base and terminal
     /// definitions. Each verified base answer is reconstructed before a full
     /// answer can be published. An eager base runs under automatic grounding;
@@ -193,6 +212,7 @@ impl<'a> PreparedInput<'a> {
     #[must_use]
     pub const fn profile(self) -> PreparedProfile {
         match self.input {
+            Prepared::Source(_) => PreparedProfile::AcyclicSource,
             Prepared::Relational(_) => PreparedProfile::Relational,
             Prepared::Formula(_) => PreparedProfile::Formula,
             Prepared::Hybrid(_) => PreparedProfile::Hybrid,
@@ -214,6 +234,7 @@ impl<'a> PreparedInput<'a> {
     }
     pub(crate) fn subject(self) -> Subject {
         match self.input {
+            Prepared::Source(owner) => Subject::Source(owner.clone()),
             Prepared::Relational(program) => Subject::Program(program.clone()),
             Prepared::Formula(input) => Subject::Theory(input.theory.clone()),
             Prepared::Hybrid(owner) => Subject::Hybrid(owner.clone()),
@@ -258,6 +279,7 @@ impl<'a> PreparedInput<'a> {
             return Err(SolveError::UnsupportedSourceBatching);
         }
         let compatible = match self.input {
+            Prepared::Source(_) => crate::grounding::source_compatible(&config),
             Prepared::Relational(_) => config.oracle != Oracle::Countermodel,
             Prepared::Formula(_) => {
                 config.oracle != Oracle::Closure && config.grounder != Grounder::Lazy
@@ -290,6 +312,9 @@ impl<'a> PreparedInput<'a> {
 /// use the contained program/theory's `same_instance` method.
 #[derive(Clone, Debug)]
 pub enum Subject {
+    /// Original source with a complete dependency-order certificate. No formula
+    /// theory is substituted for the source or its arbitrary reduct queries.
+    Source(zetesis_themelios::AcyclicSource),
     /// Original finite relational program, also retained by a ground graph.
     Program(Program),
     /// Original indexed finite formula theory, before candidate restrictions.
@@ -306,6 +331,7 @@ impl Subject {
     #[must_use]
     pub fn same_instance(&self, other: &Self) -> bool {
         match (self, other) {
+            (Self::Source(left), Self::Source(right)) => left.same_instance(right),
             (Self::Program(left), Self::Program(right)) => left.same_instance(right),
             (Self::Theory(left), Self::Theory(right)) => left.same_instance(right),
             (Self::Hybrid(left), Self::Hybrid(right)) => left.same_instance(right),
@@ -367,6 +393,7 @@ impl AnswerSet {
 pub type SessionModel = AnswerSet;
 
 enum State<'a> {
+    Source(Box<SourceSession<'a>>),
     Closure(Box<ClosureSession<'a>>),
     Formula(Box<FormulaSession<'a, Execution>>),
     Hybrid(Box<HybridSession<'a>>),
@@ -747,12 +774,16 @@ impl<'a> Session<'a> {
                     query_execution: None,
                     hybrid_execution: None,
                     terminal_execution: None,
+                    source_evaluation: None,
                     model_construction: None,
                 })),
                 config,
             ));
         }
         let state = match input.input {
+            Prepared::Source(owner) => {
+                State::Source(Box::new(SourceSession::new(owner, observations)?))
+            }
             Prepared::Relational(program) => {
                 State::Closure(Box::new(ClosureSession::with_resources(
                     program,
@@ -815,6 +846,7 @@ impl<'a> Session<'a> {
             return Some(self.progress());
         }
         let mut outcome = match &self.state {
+            State::Source(state) => state.finished().then(|| state.outcome()),
             State::Closure(state) => state.terminal().then(|| state.outcome()),
             State::Formula(state) => state
                 .finished()
@@ -842,6 +874,7 @@ impl<'a> Session<'a> {
     pub fn stop(mut self) -> SemanticOutcome {
         let phases = self.phases.recorder();
         match &mut self.state {
+            State::Source(state) => state.stop(),
             State::Formula(state) => {
                 let previous = state.outcome(phases).search_state();
                 let cleanup = state.stop(phases);
@@ -872,6 +905,7 @@ impl<'a> Session<'a> {
     #[must_use]
     pub fn progress(&self) -> SemanticOutcome {
         let mut outcome = match &self.state {
+            State::Source(state) => state.outcome(),
             State::Closure(state) => state.outcome(),
             State::Formula(state) => state.outcome(self.phases.recorder()),
             State::Hybrid(state) => state.outcome(self.phases.recorder()),
@@ -969,6 +1003,9 @@ impl<'a> Session<'a> {
     ) -> Option<Result<AnswerSet, SolveFailure>> {
         let solving = self.phases.stage(crate::SolveStage::Solving);
         let next = match &mut self.state {
+            State::Source(state) => {
+                state.next(&self.config, &self.cancellation, self.phases.recorder())
+            }
             State::Closure(state) => state
                 .next(&self.config, &self.cancellation, self.phases.recorder())
                 .map(|result| result.map(|model| (model, None))),

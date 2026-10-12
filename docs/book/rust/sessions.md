@@ -20,6 +20,22 @@ broader finite formula profile. These are explicit library choices. The ordinary
 source driver provides automatic profile selection; `Session` receives an
 already prepared representation and does not retry admission itself.
 
+`prepare_formula_execution` and `prepare_bundle_execution` apply the same
+execution policy as the CLI and native API. Under automatic CPU execution, a
+complete acyclic normal source can be evaluated during preparation, without
+constructing formulas. The returned `PreparedExecution` owns either that
+`AcyclicSource` or the selected `GroundedFormula`; `input()` borrows it for a
+session. Explicit grounding and oracle requests retain their ordinary paths.
+The original `ground()` doors still construct theories for arbitrary formula
+and reduct queries.
+
+An `AcyclicSource` is evaluated once. Sessions reuse its checked interpretation
+and original subject, while applying their own cancellation and model-publication
+allowances. `SemanticOutcome::source_evaluation()` reports preparation work;
+it is not search work repeated by each session. Preparation time belongs to the
+grounding phase. A successfully published sole answer establishes exhaustion
+even when the requested model count is one.
+
 `SolveConfig::validate` checks representation-independent policy combinations.
 Prepared input adds its profile constraints; the selected executor then checks
 its own resources. CPU closure setup conservatively requires
@@ -69,8 +85,9 @@ privately constructed `AnswerSet` retains its original `Subject`, complete inter
 fully evaluated score. Hidden atoms remain present even when `#show` would omit
 them from human output. `SessionModel` remains a compatibility alias. These are
 completed membership results under the selected implementation, not Lean proof
-objects. Membership is always decided by zetesis's own reduct check, on the CPU
-or on a qualified GPU route; the library accepts no caller-supplied checker.
+objects. Membership is decided by zetesis's own reduct check or an applicable
+certified class evaluation, on the CPU or a qualified GPU route. The library
+accepts no caller-supplied checker.
 
 `Session::enumerate` streams all answers of the original program, including
 nonoptimal answers. It evaluates objective scores but disables both candidate

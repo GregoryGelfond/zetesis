@@ -64,33 +64,42 @@ impl Builder<'_, '_, '_> {
         location: ProgramSite,
         unbound: impl Fn(usize, ProgramSite) -> FormulaFailure,
     ) -> Result<(), FormulaFailure> {
-        for literal in literals {
-            self.work(location)?;
-            let pattern = match literal {
-                LiteralIr::Atom(_, pattern) => pattern,
-                LiteralIr::PatternAtom(pattern) => &pattern.atom,
-                _ => continue,
-            };
-            let view = binding.view(
-                self.computation.read(),
-                self.limits,
-                &mut self.counters,
-                location,
-            )?;
-            let pattern = self.computation.static_pattern(
-                *pattern,
-                self.limits,
-                &mut self.counters,
-                location,
-            )?;
-            // A key scans argument metadata, including constants and repeated
-            // variables. Account for the complete scan before starting it.
-            self.counters
-                .charge_work(pattern.terms().len() as u128, self.limits, location)?;
-            pattern
-                .key(view)
-                .map_err(|error| unbound(error.variable, location))?;
-        }
-        Ok(())
+        validate_atom_keys(
+            literals,
+            binding,
+            self.computation,
+            self.limits,
+            &mut self.counters,
+            location,
+            unbound,
+        )
     }
+}
+
+pub(crate) fn validate_atom_keys(
+    literals: &[LiteralIr],
+    binding: &Binding<'_>,
+    computation: &crate::formula_support::Computation<'_, '_>,
+    limits: &crate::FormulaLimits,
+    counters: &mut crate::formula_support::Counters,
+    location: ProgramSite,
+    unbound: impl Fn(usize, ProgramSite) -> FormulaFailure,
+) -> Result<(), FormulaFailure> {
+    for literal in literals {
+        counters.work(limits, location)?;
+        let pattern = match literal {
+            LiteralIr::Atom(_, pattern) => pattern,
+            LiteralIr::PatternAtom(pattern) => &pattern.atom,
+            _ => continue,
+        };
+        let view = binding.view(computation.read(), limits, counters, location)?;
+        let pattern = computation.static_pattern(*pattern, limits, counters, location)?;
+        // A key scans argument metadata, including constants and repeated
+        // variables. Account for the complete scan before starting it.
+        counters.charge_work(pattern.terms().len() as u128, limits, location)?;
+        pattern
+            .key(view)
+            .map_err(|error| unbound(error.variable, location))?;
+    }
+    Ok(())
 }

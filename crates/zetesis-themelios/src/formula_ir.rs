@@ -881,7 +881,7 @@ impl Compiler<'_> {
             parts.analyzed.extend(observation);
             return Ok(());
         }
-        if let Some(facts) = if generated_fact(statement.get()) {
+        if let Some(mut facts) = if generated_fact(statement.get()) {
             None
         } else {
             fact_expansion::facts(statement, self.budget, self.location)?
@@ -891,8 +891,7 @@ impl Compiler<'_> {
                 (facts.len() as u128).saturating_mul(origins.len() as u128),
                 self.location,
             )?;
-            for fact in facts {
-                let head = fact.head().expect("expanded facts have a head").clone();
+            while let Some(head) = facts.next(self.budget, self.location)? {
                 parts.analyzed.push(crate::formula_analysis::fact(
                     &head,
                     statement,

@@ -27,6 +27,10 @@ enum State {
         pending: bool,
     },
     Range(Option<RangeInclusive<i32>>),
+    Multiples {
+        factors: RangeInclusive<i64>,
+        divisor: i32,
+    },
     Values {
         values: Binding<'static>,
         index: usize,
@@ -53,6 +57,7 @@ pub(super) struct Cursor<'a, 'source> {
     scalars: Binding<'static>,
     lease: StorageLease,
     support: &'a Support<'source>,
+    range_selection: Option<crate::formula_support::RangeSelection<'a>>,
     depth: usize,
     finished: bool,
     variables: usize,
@@ -100,6 +105,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
             scalars,
             lease: computation.lease(),
             support,
+            range_selection: None,
             depth: 0,
             finished: false,
             variables: targets.end,
@@ -141,6 +147,15 @@ impl<'a, 'source> Cursor<'a, 'source> {
             location,
         )?;
         Ok(cursor)
+    }
+
+    /// Install a descriptor prepared for this exact body before first traversal.
+    /// Its inline storage is included in the cursor's ordinary header receipt.
+    pub(super) fn select_range(
+        &mut self,
+        selection: Option<crate::formula_support::RangeSelection<'a>>,
+    ) {
+        self.range_selection = selection;
     }
 
     /// Preserve the plan order, or the scalar-before-aggregate fallback order.
@@ -541,6 +556,15 @@ impl<'a, 'source> Cursor<'a, 'source> {
                 }
                 None => Alternative::Exhausted,
             },
+            State::Multiples { factors, divisor } => match factors.next() {
+                Some(factor) => {
+                    counters.work(limits, location)?;
+                    let number =
+                        i32::try_from(factor * i64::from(*divisor)).expect("bounded multiple");
+                    Alternative::Value(computation.number(number, limits, counters, location)?)
+                }
+                None => Alternative::Exhausted,
+            },
             State::Values { values, index } => {
                 if *index < values.len() {
                     let value = values.key(*index, location)?;
@@ -654,6 +678,16 @@ impl<'a, 'source> Cursor<'a, 'source> {
                     limits.max_assignment_values as u128,
                     location,
                 )?;
+                if let (Some(selection), Some(bounds)) = (self.range_selection, range.as_ref())
+                    && let Some((factors, divisor)) = selection.factors(
+                        self.generators[self.depth].literal,
+                        bounds,
+                        &self.values,
+                        Context::new(&*computation, limits, counters, location),
+                    )?
+                {
+                    return Ok(State::Multiples { factors, divisor });
+                }
                 Ok(State::Range(range))
             }
             LiteralIr::Aggregate(aggregate) => {

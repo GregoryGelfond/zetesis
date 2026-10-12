@@ -9,6 +9,8 @@
 mod tests;
 
 mod wake;
+mod acyclic;
+pub(crate) use acyclic::AcyclicPlan;
 pub(super) use wake::Schedule;
 use wake::Wake;
 
