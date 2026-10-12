@@ -44,10 +44,8 @@ fn a_new_generation_discards_old_dag_knowledge() {
     let mut counts = super::super::regions::RegionCounts::default();
     super::super::regions::narrow(
         (
-            &original,
+            zetesis_ferraris::OriginalSubject::new(&original, None),
             &narrower,
-            None,
-            &zetesis_ferraris::ChoiceHeads::default(),
         ),
         &conditions,
         (&mut region, &mut knowledge),
@@ -65,10 +63,8 @@ fn a_new_generation_discards_old_dag_knowledge() {
     assert_ne!(
         super::super::regions::narrow(
             (
-                &original,
-                &narrower,
-                None,
-                &zetesis_ferraris::ChoiceHeads::default()
+                zetesis_ferraris::OriginalSubject::new(&original, None),
+                &narrower
             ),
             &conditions,
             (&mut region, &mut knowledge),
@@ -234,10 +230,8 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     let mut counts = super::super::regions::RegionCounts::default();
     super::super::regions::narrow(
         (
-            &original,
+            zetesis_ferraris::OriginalSubject::new(&original, None),
             &narrower,
-            None,
-            &zetesis_ferraris::ChoiceHeads::default(),
         ),
         &conditions,
         (&mut region, &mut knowledge),
@@ -256,10 +250,8 @@ fn a_late_permanent_condition_keeps_bound_knowledge_separate() {
     conditions.permanent.push((permanent, permanent_index));
     super::super::regions::narrow(
         (
-            &original,
+            zetesis_ferraris::OriginalSubject::new(&original, None),
             &narrower,
-            None,
-            &zetesis_ferraris::ChoiceHeads::default(),
         ),
         &conditions,
         (&mut region, &mut knowledge),

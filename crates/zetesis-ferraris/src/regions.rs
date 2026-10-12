@@ -126,6 +126,18 @@ impl<'a> OriginalSubject<'a> {
     pub const fn with_choices(self, choices: &'a ChoiceHeads) -> Self {
         Self { choices, ..self }
     }
+
+    /// The theory read.
+    #[must_use]
+    pub const fn theory(&self) -> &'a Theory {
+        self.theory
+    }
+
+    /// The choice heads a split ranks first; empty unless given.
+    #[must_use]
+    pub const fn choices(&self) -> &'a ChoiceHeads {
+        self.choices
+    }
 }
 
 impl<'a> From<OriginalSubject<'a>> for Subject<'a> {

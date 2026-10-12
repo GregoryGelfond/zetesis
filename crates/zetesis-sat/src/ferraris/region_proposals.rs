@@ -22,9 +22,7 @@ use std::time::Duration;
 
 use rayon::prelude::*;
 use zetesis_cpu::regions::{Narrowing, Region};
-use zetesis_ferraris::{
-    ChoiceHeads, Interpretation, Narrower, NarrowingScratch, Producers, Theory,
-};
+use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Theory};
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
 use super::regions::{self, RegionCounts, RegionFrontierStatistics, RegionSearchStatistics};
@@ -143,9 +141,8 @@ impl Frontier {
 /// preparation, and the original index each round is lent, are shared across
 /// workers and every bounded production round.
 pub(crate) struct RegionProposals {
-    producers: Option<Producers>,
-    /// The original theory's atomic choice heads, which every split ranks first.
-    choice_heads: ChoiceHeads,
+    /// What the walk reads of the original theory beyond the theory itself.
+    parts: regions::OriginalParts,
     restrictions: Conditions<(Theory, Narrower)>,
     pending: Frontier,
     pool: rayon::ThreadPool,
@@ -182,11 +179,7 @@ impl RegionProposals {
         native_byte_limit: u64,
         budget: &mut Budget<'_>,
     ) -> Result<Self, Incomplete> {
-        let regions::Opened {
-            producers,
-            choice_heads,
-            statistics,
-        } = regions::open(theory, budget)?;
+        let regions::Opened { parts, statistics } = regions::open(theory, budget)?;
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(workers.get())
             .thread_name(|index| format!("zetesis-proposal-{index}"))
@@ -197,8 +190,7 @@ impl RegionProposals {
             CandidateKnowledge::default(),
         ))?;
         Ok(Self {
-            producers,
-            choice_heads,
+            parts,
             restrictions: Conditions::default(),
             pending,
             pool,
@@ -350,8 +342,7 @@ impl RegionProposals {
                 theory,
                 filter: filter.as_ref(),
                 timed,
-                producers: self.producers.as_ref(),
-                choices: &self.choice_heads,
+                parts: &self.parts,
                 narrower,
                 restrictions: &self.restrictions,
                 allowance: &allowance,
@@ -440,8 +431,7 @@ struct Round<'a, 'filter> {
     theory: &'a Theory,
     filter: Option<&'filter crate::region_filter::Filter>,
     timed: bool,
-    producers: Option<&'a Producers>,
-    choices: &'a ChoiceHeads,
+    parts: &'a regions::OriginalParts,
     narrower: &'a Narrower,
     restrictions: &'a Conditions<(Theory, Narrower)>,
     allowance: &'a SharedBudget,
@@ -571,7 +561,7 @@ impl<'filter> Round<'_, 'filter> {
             timings,
         });
         if regions::narrow(
-            (self.theory, self.narrower, self.producers, self.choices),
+            (self.parts.subject(self.theory), self.narrower),
             self.restrictions,
             (region, knowledge),
             scratch,

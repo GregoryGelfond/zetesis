@@ -112,10 +112,8 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
         assert_ne!(
             super::super::super::regions::narrow(
                 (
-                    original.theory(),
+                    search.shared.parts.subject(original.theory()),
                     original.narrower(),
-                    search.shared.producers.as_ref(),
-                    &search.shared.choice_heads,
                 ),
                 &conditions,
                 (region, knowledge),

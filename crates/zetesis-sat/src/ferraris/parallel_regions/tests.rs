@@ -53,10 +53,8 @@ fn shared_narrowing_never_executes_an_unleased_read() {
     let mut counts = RegionCounts::default();
     let result = super::super::regions::narrow(
         (
-            &theory,
+            zetesis_ferraris::OriginalSubject::new(&theory, None),
             &narrower,
-            None,
-            &zetesis_ferraris::ChoiceHeads::default(),
         ),
         &Conditions::<(Theory, Narrower)>::default(),
         (&mut region, &mut knowledge),

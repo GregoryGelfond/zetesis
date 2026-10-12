@@ -94,7 +94,10 @@ fn closed_with(
     let mut counts = RegionCounts::default();
     let mut region = Region::all_open(3);
     let result = narrow(
-        (original, &narrower, None, choices),
+        (
+            OriginalSubject::new(original, None).with_choices(choices),
+            &narrower,
+        ),
         conditions,
         (&mut region, &mut CandidateKnowledge::default()),
         &mut NarrowingScratch::default(),
