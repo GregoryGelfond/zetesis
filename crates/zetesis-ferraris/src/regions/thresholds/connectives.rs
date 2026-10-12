@@ -54,6 +54,8 @@ use super::{Adjacency, Row, State, Thresholds, reserve};
 #[cfg(test)]
 mod anchors_tests;
 #[cfg(test)]
+mod cone_skip_tests;
+#[cfg(test)]
 mod tests;
 
 /// One immutable anchor relation projected to native rows and Boolean chains.
