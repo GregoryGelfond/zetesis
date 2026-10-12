@@ -532,20 +532,45 @@ fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
 }
 
 #[test]
-fn a_requested_stop_precedes_a_ceiling_refusal() {
-    let cancellation = Cancellation::default();
-    let refusal = PositiveError::Limit {
-        resource: PositiveResource::Dependencies,
-        observed: 2,
-        limit: 1,
-    };
+fn a_ceiling_refusal_settles_to_a_requested_stop() {
+    let refusal = Budget::ceiling(PositiveResource::Dependencies, 2, 1);
     assert_eq!(
-        budget(&cancellation, u64::MAX).ceiling(PositiveResource::Dependencies, 2, 1),
-        Err(refusal)
+        refusal,
+        Err(PositiveError::Limit {
+            resource: PositiveResource::Dependencies,
+            observed: 2,
+            limit: 1,
+        })
     );
+    let cancellation = Cancellation::default();
+    assert_eq!(cancellation.settle(refusal), refusal);
     cancellation.cancel();
     assert_eq!(
-        budget(&cancellation, u64::MAX).ceiling(PositiveResource::Dependencies, 2, 1),
+        cancellation.settle(refusal),
         Err(PositiveError::Stopped(Stop::Cancelled))
     );
+}
+
+#[test]
+fn plan_errors_classify_resource_refusals() {
+    use zetesis_cpu::Refusal;
+    for refusal in [
+        PositiveError::Limit {
+            resource: PositiveResource::Bytes,
+            observed: 2,
+            limit: 1,
+        },
+        PositiveError::Overflow,
+        PositiveError::Stopped(Stop::Allocation),
+    ] {
+        assert!(refusal.is_resource_refusal(), "{refusal:?}");
+    }
+    for shape in [
+        PositiveError::UnsupportedRoot { root: 0 },
+        PositiveError::UnsupportedBody { root: 0, body: 1 },
+        PositiveError::InvalidClosure { root: 0 },
+        PositiveError::Stopped(Stop::Cancelled),
+    ] {
+        assert!(!shape.is_resource_refusal(), "{shape:?}");
+    }
 }

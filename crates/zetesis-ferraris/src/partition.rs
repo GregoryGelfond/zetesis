@@ -9,7 +9,7 @@
 
 use std::fmt;
 
-use zetesis_cpu::{Cancellation, ChargeError, Stop};
+use zetesis_cpu::{Cancellation, ChargeError, Refusal, Stop};
 
 mod restriction;
 #[cfg(test)]
@@ -100,6 +100,24 @@ pub enum ErrorKind {
     Overflow,
     /// Cancellation or fallible allocation stopped construction.
     Stopped(Stop),
+}
+
+impl Refusal for ErrorKind {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Limit(_) | Self::Overflow => true,
+            Self::Stopped(stop) => stop.is_resource_refusal(),
+            Self::Atom(_)
+            | Self::DuplicateMember(_)
+            | Self::ForeignMember(_)
+            | Self::RepeatedMember(_)
+            | Self::MissingMember(_) => false,
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
 }
 
 /// Construction accounting; byte fields describe requested logical payloads.
@@ -218,7 +236,7 @@ impl Plan {
             cancellation,
             statistics: Statistics::default(),
         };
-        let result = build(premises, &mut budget);
+        let result = cancellation.settle(build(premises, &mut budget));
         result.map_err(|kind| Error {
             kind,
             statistics: budget.statistics,
@@ -294,13 +312,6 @@ impl Budget<'_> {
             })
     }
 
-    /// Refuse a named resource after observing control, so that a requested
-    /// stop takes precedence over the refusal.
-    fn refuse(&self, resource: Resource) -> ErrorKind {
-        self.cancellation
-            .refusal(ErrorKind::Limit(resource), ErrorKind::Stopped)
-    }
-
     fn storage<T>(&self, count: usize) -> Result<Vec<T>, ErrorKind> {
         self.poll()?;
         let mut values = Vec::new();
@@ -337,7 +348,7 @@ fn build(premises: Premises<'_>, budget: &mut Budget<'_>) -> Result<Plan, ErrorK
         .checked_add(bytes::<Coverage>(premises.atom_count)?)
         .ok_or(ErrorKind::Overflow)?;
     if budget.statistics.construction_bytes > budget.limits.max_bytes {
-        return Err(budget.refuse(Resource::Bytes));
+        return Err(ErrorKind::Limit(Resource::Bytes));
     }
     let mut coverage = budget.storage(premises.atom_count)?;
     for _ in 0..premises.atom_count {
@@ -383,9 +394,7 @@ fn dimensions(groups: &[Group<'_>], budget: &mut Budget<'_>) -> Result<(usize, u
         occurrences = occurrences
             .checked_add(group.members.len())
             .ok_or(ErrorKind::Overflow)?;
-        if occurrences > budget.limits.max_members {
-            return Err(budget.refuse(Resource::Members));
-        }
+        limit(occurrences, budget.limits.max_members, Resource::Members)?;
         capacity = capacity
             .checked_add(group.upper.min(group.members.len()))
             .ok_or(ErrorKind::Overflow)?;

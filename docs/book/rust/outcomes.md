@@ -326,12 +326,17 @@ and formula checking retain this view.
 Operations that charge work per formula node or edge observe control at metered
 boundaries: before their first charged operation and at least once every
 `zetesis_cpu::POLL_INTERVAL` (256) charged operations thereafter, so at most 255
-further charged operations follow a requested stop. They also observe control
-before refusing any named limit (work, derived atoms, producers, dependencies,
-members, elements, formula nodes, roots or bytes), so a requested stop takes
-precedence over every such refusal. `Cancellation::charge` and
-`Cancellation::refusal`, with their `CancellationPoll` forms, carry both rules.
-These operations are original and frozen formula evaluation, the tight, positive
+further charged operations follow a requested stop. A refused work charge
+observes control first, and each operation settles its outcome at its exit: when
+it would report a resource refusal (work, storage, a named ceiling, a size the
+host cannot represent, or an allocation), it observes control and reports a
+requested stop instead. A requested stop therefore takes precedence over every
+resource refusal; errors about the program's shape, identity or invariants are
+reported as found. `Cancellation::charge` carries the cadence, and
+`Cancellation::settle` with each error type's `Refusal` classification carries the
+precedence; both have `CancellationPoll` forms. Formula evaluation, whose only
+refusals are its work limit and a candidate ceiling checked right after a poll,
+relies on the charge alone. These operations are original and frozen formula evaluation, the tight, positive
 and stratified certificates, support construction, partition construction and
 restriction emission, and static closure checks; narrowing observes control at
 the same interval through its quota. Coarser operations, such as objective

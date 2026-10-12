@@ -10,7 +10,7 @@ pub use evaluate::TightWorkspace;
 use std::fmt;
 
 use crate::Theory;
-use zetesis_cpu::{CancellationPoll, ChargeError, Stop};
+use zetesis_cpu::{ChargeError, Refusal, Stop};
 
 /// Admission bounds for the optional class certificate. Logical bytes cover the
 /// plan and all construction vectors, excluding the borrowed theory, allocator
@@ -125,6 +125,24 @@ impl fmt::Display for TightError {
 impl std::error::Error for TightError {}
 impl From<Stop> for TightError {
     fn from(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
+}
+
+impl Refusal for TightError {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Limit(_) => true,
+            Self::Stopped(stop) => stop.is_resource_refusal(),
+            Self::UnsupportedRoot { .. }
+            | Self::UnsupportedBody { .. }
+            | Self::PositiveCycle { .. }
+            | Self::RankShape
+            | Self::RankOrder { .. } => false,
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
         Self::Stopped(stop)
     }
 }
@@ -263,44 +281,37 @@ pub struct TightAttempt<T> {
     pub work: u64,
 }
 
-/// The certificate's charged work and its limit. Each charge stores `used`
-/// and the next reads it back with `max`; were the two adjacent, the compiler
-/// could read them in one paired load, which on aarch64 cannot be forwarded
-/// from the pending store and stalls every charge (it doubled the cost of a
-/// complete check). The fixed layout keeps `max` apart from `used`.
-#[repr(C)]
+/// Work charged by one certificate operation, alone in a 16-byte cell. Each
+/// charge stores the count and the next reads it back; were another field
+/// beside it, the compiler could read both in one paired load, which on aarch64
+/// cannot be forwarded from the pending store and stalls every charge (it
+/// doubled the cost of a complete check). The cell's padding keeps every other
+/// field out of that load, whatever order the fields of [`Work`] take.
+#[repr(align(16))]
+struct Charged(u64);
+
+/// The certificate's charged work, its limit and its control.
 struct Work<'a> {
-    used: u64,
-    cancellation: zetesis_cpu::CancellationPoll<'a>,
+    used: Charged,
     max: u64,
+    cancellation: zetesis_cpu::CancellationPoll<'a>,
 }
 impl Work<'_> {
     fn tick(&mut self) -> Result<(), TightError> {
         self.cancellation
-            .charge(&mut self.used, self.max)
+            .charge(&mut self.used.0, self.max)
             .map_err(|error| match error {
                 ChargeError::Stopped(stop) => stop.into(),
                 ChargeError::WorkLimit => TightError::Limit(TightResource::Work),
             })
     }
-
-    /// Refuse a named resource after observing control, so that a requested
-    /// stop takes precedence over the refusal.
-    fn refuse(&self, resource: TightResource) -> TightError {
-        refuse(self.cancellation, resource)
-    }
 }
 
-/// Refuse a named resource unless control has requested a stop.
-fn refuse(control: CancellationPoll<'_>, resource: TightResource) -> TightError {
-    control.refusal(TightError::Limit(resource), TightError::from)
-}
-
-/// Admit `value` logical bytes under `limit`, refusing as [`refuse`] does.
-fn bytes(value: u128, limit: u64, control: CancellationPoll<'_>) -> Result<u64, TightError> {
+/// Admit `value` logical bytes under `limit`.
+fn bytes(value: u128, limit: u64) -> Result<u64, TightError> {
     match u64::try_from(value) {
         Ok(value) if value <= limit => Ok(value),
-        _ => Err(refuse(control, TightResource::Bytes)),
+        _ => Err(TightError::Limit(TightResource::Bytes)),
     }
 }
 

@@ -1,7 +1,7 @@
 //! Necessary support for complete mixed ordinary/atomic-choice theories.
 
 use crate::{AdmissionError, AdmissionLimits, ExtremumCut, FormulaNodes, NodeView, Theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, Refusal, Stop};
 
 #[cfg(test)]
 mod tests;
@@ -26,6 +26,21 @@ pub enum SupportError {
     Admission(AdmissionError),
     /// Cancellation, deadline or the construction work bound was reached.
     Stopped(Stop),
+}
+
+impl Refusal for SupportError {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Admission(error) => {
+                matches!(error, AdmissionError::Limit | AdmissionError::Allocation)
+            }
+            Self::Stopped(stop) => stop.is_resource_refusal(),
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
 }
 
 impl std::fmt::Display for SupportError {
@@ -99,7 +114,7 @@ pub fn support_restriction(
         work: 0,
         nodes: FormulaNodes::default(),
     };
-    let result = builder.build(theory);
+    let result = cancellation.settle(builder.build(theory));
     SupportAttempt {
         result,
         work: builder.work,

@@ -1,8 +1,8 @@
 use std::mem::size_of;
 
 use super::{
-    TightAttempt, TightError, TightPlan, TightPlanLimits, TightPlanStatistics, TightProducer,
-    TightProducerKind, TightResource, Work, bytes, filled, refuse, reserve,
+    Charged, TightAttempt, TightError, TightPlan, TightPlanLimits, TightPlanStatistics,
+    TightProducer, TightProducerKind, TightResource, Work, bytes, filled, reserve,
 };
 use crate::{ExtremumCut, NodeView, Theory, Threshold};
 use zetesis_cpu::{Cancellation, Stop};
@@ -57,14 +57,14 @@ impl TightPlan {
         cancellation: &Cancellation,
     ) -> TightAttempt<Self> {
         let mut work = Work {
-            used: 0,
+            used: Charged(0),
             max: limits.max_work,
             cancellation: cancellation.polling(),
         };
-        let result = build(theory, None, limits, &mut work);
+        let result = cancellation.settle(build(theory, None, limits, &mut work));
         TightAttempt {
             result,
-            work: work.used,
+            work: work.used.0,
         }
     }
 
@@ -81,11 +81,11 @@ impl TightPlan {
         cancellation: &Cancellation,
     ) -> Result<Self, TightError> {
         let mut work = Work {
-            used: 0,
+            used: Charged(0),
             max: limits.max_work,
             cancellation: cancellation.polling(),
         };
-        build(theory, Some(ranks), limits, &mut work)
+        cancellation.settle(build(theory, Some(ranks), limits, &mut work))
     }
 }
 
@@ -263,7 +263,7 @@ fn extract(
         work.tick()?;
         if producer(theory, root, classes)?.is_some() {
             if count == limits.max_producers {
-                return Err(work.refuse(TightResource::Producers));
+                return Err(TightError::Limit(TightResource::Producers));
             }
             count += 1;
         }
@@ -272,7 +272,6 @@ fn extract(
         theory.nodes().len() as u128 * size_of::<Body>() as u128
             + count as u128 * size_of::<TightProducer>() as u128,
         limits.max_bytes,
-        work.cancellation,
     )?;
     let mut producers = reserve(count)?;
     for &root in theory.roots() {
@@ -349,18 +348,16 @@ fn build(
     work: &mut Work<'_>,
 ) -> Result<TightPlan, TightError> {
     work.cancellation.poll()?;
-    let control = work.cancellation;
     bytes(
         theory.nodes().len() as u128 * size_of::<Body>() as u128,
         limits.max_bytes,
-        control,
     )?;
     let classes = classify(theory, work)?;
     let producers = extract(theory, &classes, limits, work)?;
     let mut dependencies = 0usize;
     each_dependency(theory, &classes, &producers, work, |_, _, _| {
         if dependencies == limits.max_dependencies {
-            return Err(refuse(control, TightResource::Dependencies));
+            return Err(TightError::Limit(TightResource::Dependencies));
         }
         dependencies += 1;
         Ok(())
@@ -368,12 +365,11 @@ fn build(
     let vertices = theory
         .atom_count()
         .checked_add(theory.nodes().len())
-        .ok_or_else(|| work.refuse(TightResource::Bytes))?;
+        .ok_or(TightError::Limit(TightResource::Bytes))?;
     let resident_bytes = bytes(
         producers.len() as u128 * size_of::<TightProducer>() as u128
             + theory.atom_count() as u128 * size_of::<usize>() as u128,
         limits.max_bytes,
-        control,
     )?;
     let graph_bytes = if proposed.is_some() {
         0
@@ -386,7 +382,6 @@ fn build(
             + theory.nodes().len() as u128 * (size_of::<Body>() + size_of::<usize>()) as u128
             + graph_bytes,
         limits.max_bytes,
-        control,
     )?;
     let ranks = if let Some(ranks) = proposed {
         validate_ranks(theory, &classes, &producers, ranks, work)?;
@@ -401,7 +396,7 @@ fn build(
         producers,
         ranks,
         statistics: TightPlanStatistics {
-            work: work.used,
+            work: work.used.0,
             dependencies,
             construction_bytes,
             resident_bytes,

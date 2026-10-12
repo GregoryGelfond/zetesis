@@ -197,8 +197,9 @@ fn enabled(rule: &GroundRule, frozen: &[u32], work: &mut Work<'_>) -> Result<boo
 /// [`Limits::max_work`] bounds the operations listed in [`StaticStatistics::work`].
 /// Cancellation and deadlines are polled before invocation validation, at
 /// metered boundaries of the charged operations (at most
-/// [`POLL_INTERVAL`](crate::POLL_INTERVAL) apart), before refusing the work or
-/// consequence limit, and before returning a completed result. The atom limit
+/// [`POLL_INTERVAL`](crate::POLL_INTERVAL) apart), before reporting any
+/// resource refusal (work, consequence limit or allocation), and before
+/// returning a completed result. The atom limit
 /// bounds distinct consequences, not the graph's already compiled carrier.
 ///
 /// # Errors
@@ -223,6 +224,16 @@ pub fn check_static(
 /// # Errors
 /// Returns the same typed stops as [`check_static`], without partial results.
 pub fn check_static_view(
+    graph: &GroundProgram,
+    seed: SeedView<'_>,
+    limits: Limits,
+    cancellation: &Cancellation,
+) -> Result<StaticCheck, Stop> {
+    cancellation.settle(check_view(graph, seed, limits, cancellation))
+}
+
+/// The static check itself; [`check_static_view`] settles its outcome.
+fn check_view(
     graph: &GroundProgram,
     seed: SeedView<'_>,
     limits: Limits,
@@ -302,9 +313,7 @@ fn close(rules: &[&GroundRule], closure: &mut [u32], work: &mut Work<'_>) -> Res
             }
             work.tick()?;
             if work.statistics.derived_atoms >= work.limits.max_derived_atoms {
-                return Err(work
-                    .cancellation
-                    .refusal(Stop::DerivedAtomLimit, |stop| stop));
+                return Err(Stop::DerivedAtomLimit);
             }
             insert(closure, head);
             work.statistics.derived_atoms += 1;

@@ -1,7 +1,7 @@
 //! A requested stop keeps its precedence over construction refusals.
 
 use super::{Budget, ErrorKind, Group, Limits, Resource, Statistics, dimensions};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, Refusal, Stop};
 
 /// A construction budget that has charged `work` operations.
 fn budget(cancellation: &Cancellation, work: u64, limits: Limits) -> Budget<'_> {
@@ -35,7 +35,7 @@ fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
 }
 
 #[test]
-fn a_requested_stop_precedes_the_member_limit() {
+fn the_member_refusal_settles_to_a_requested_stop() {
     let groups = [Group {
         members: &[0, 1],
         upper: 1,
@@ -44,18 +44,35 @@ fn a_requested_stop_precedes_the_member_limit() {
         max_members: 1,
         ..Limits::default()
     };
-    // The group's charge starts from one operation, between boundaries, so
-    // only the refusal can observe the stop.
-    let measure =
-        |cancellation: &Cancellation| dimensions(&groups, &mut budget(cancellation, 1, limits));
+    // From one charged operation the measuring loop observes no boundary, so
+    // the refusal itself is reported; construction settles it at its exit.
     let cancellation = Cancellation::default();
-    assert_eq!(
-        measure(&cancellation),
-        Err(ErrorKind::Limit(Resource::Members))
-    );
     cancellation.cancel();
+    let refusal = dimensions(&groups, &mut budget(&cancellation, 1, limits));
+    assert_eq!(refusal, Err(ErrorKind::Limit(Resource::Members)));
     assert_eq!(
-        measure(&cancellation),
+        cancellation.settle(refusal),
         Err(ErrorKind::Stopped(Stop::Cancelled))
     );
+}
+
+#[test]
+fn construction_errors_classify_resource_refusals() {
+    for refusal in [
+        ErrorKind::Limit(Resource::Bytes),
+        ErrorKind::Overflow,
+        ErrorKind::Stopped(Stop::Allocation),
+    ] {
+        assert!(refusal.is_resource_refusal(), "{refusal:?}");
+    }
+    for shape in [
+        ErrorKind::Atom(0),
+        ErrorKind::DuplicateMember(0),
+        ErrorKind::ForeignMember(0),
+        ErrorKind::RepeatedMember(0),
+        ErrorKind::MissingMember(0),
+        ErrorKind::Stopped(Stop::Cancelled),
+    ] {
+        assert!(!shape.is_resource_refusal(), "{shape:?}");
+    }
 }

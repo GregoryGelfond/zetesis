@@ -14,7 +14,7 @@ mod tests;
 use std::{fmt, mem::size_of};
 
 use crate::{Interpretation, Theory};
-use zetesis_cpu::{Cancellation, ChargeError, Stop};
+use zetesis_cpu::{Cancellation, ChargeError, Refusal, Stop};
 
 /// Bounds for checked classification, stratification and direct evaluation.
 #[derive(Clone, Copy, Debug)]
@@ -125,6 +125,23 @@ impl fmt::Display for StratifiedError {
     }
 }
 impl std::error::Error for StratifiedError {}
+impl Refusal for StratifiedError {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Limit { .. } | Self::Overflow => true,
+            Self::Stopped(stop) => stop.is_resource_refusal(),
+            Self::UnsupportedRoot { .. }
+            | Self::UnsupportedBody { .. }
+            | Self::NegativeCycle { .. }
+            | Self::InvalidClosure { .. } => false,
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
+}
+
 impl From<Stop> for StratifiedError {
     fn from(stop: Stop) -> Self {
         Self::Stopped(stop)
@@ -202,8 +219,9 @@ impl StratifiedPlan {
             statistics: StratifiedPlanStatistics::default(),
             current_bytes: 0,
         };
-        let result =
-            compile::build(theory, &mut budget).map(|(consequences, failed_constraint)| {
+        let result = cancellation
+            .settle(compile::build(theory, &mut budget))
+            .map(|(consequences, failed_constraint)| {
                 budget.statistics.retained_bytes = size_of::<Self>() as u128
                     + consequences.words.capacity() as u128 * size_of::<u64>() as u128;
                 Self {
@@ -282,7 +300,7 @@ impl Budget<'_> {
             .dependencies
             .checked_add(1)
             .ok_or(StratifiedError::Overflow)?;
-        self.ceiling(
+        Self::ceiling(
             StratifiedResource::Dependencies,
             next as u128,
             self.limits.max_dependencies as u128,
@@ -298,7 +316,7 @@ impl Budget<'_> {
     }
 
     fn check_bytes(&self, bytes: u128) -> Result<(), StratifiedError> {
-        self.ceiling(
+        Self::ceiling(
             StratifiedResource::Bytes,
             bytes,
             self.limits.max_bytes as u128,
@@ -343,23 +361,17 @@ impl Budget<'_> {
         Ok(())
     }
 
-    /// Admit `observed` units of a named resource under `limit`, refusing
-    /// after observing control so that a requested stop takes precedence.
     fn ceiling(
-        &self,
         resource: StratifiedResource,
         observed: u128,
         limit: u128,
     ) -> Result<(), StratifiedError> {
         if observed > limit {
-            return Err(self.cancellation.refusal(
-                StratifiedError::Limit {
-                    resource,
-                    observed,
-                    limit,
-                },
-                StratifiedError::from,
-            ));
+            return Err(StratifiedError::Limit {
+                resource,
+                observed,
+                limit,
+            });
         }
         Ok(())
     }

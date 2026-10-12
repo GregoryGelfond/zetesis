@@ -20,7 +20,7 @@ pub mod table;
 pub use batch::{BatchError, BatchOracle, QueryStatistics};
 pub use cancellation::{
     Cancellation, CancellationPoll, CancellationRun, CancellationSlot, CancellationSlotError,
-    ChargeError, POLL_INTERVAL, Stop,
+    ChargeError, POLL_INTERVAL, Refusal, Stop,
 };
 pub use candidates::{
     CandidateLimits, CandidateRestrictionLimits, CandidateStatistics, CandidateTermination,

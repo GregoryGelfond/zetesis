@@ -1,9 +1,10 @@
 use super::{
-    TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightVerdict, Work, bytes,
+    Charged, TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightVerdict, Work,
+    bytes,
 };
 use crate::numeric_evaluation::NumericRowScratch;
 use crate::{Interpretation, NodeView, Theory};
-use zetesis_cpu::{Cancellation, CancellationPoll, Stop};
+use zetesis_cpu::{Cancellation, Stop};
 
 #[cfg(test)]
 mod tests;
@@ -86,14 +87,14 @@ impl TightWorkspace {
         cancellation: &Cancellation,
     ) -> TightAttempt<TightCheck> {
         let mut work = Work {
-            used: 0,
+            used: Charged(0),
             max: limits.max_work,
             cancellation: cancellation.polling(),
         };
-        let result = self.evaluate(plan, candidate, limits, &mut work);
+        let result = cancellation.settle(self.evaluate(plan, candidate, limits, &mut work));
         TightAttempt {
             result,
-            work: work.used,
+            work: work.used.0,
         }
     }
 
@@ -108,20 +109,19 @@ impl TightWorkspace {
             return Err(Stop::WrongProgram.into());
         }
         work.cancellation.poll()?;
-        let control = work.cancellation;
-        self.admit(plan, limits.max_bytes, control)?;
+        self.admit(plan, limits.max_bytes)?;
         // Explicit byte cells give candidate tiles a fixed payload bound.
         // Rust's Vec<bool> also stores byte-sized elements; it is not bit-packed.
         self.values.clear();
         self.values
             .try_reserve_exact(plan.theory.nodes().len())
             .map_err(|_| Stop::Allocation)?;
-        self.admit(plan, limits.max_bytes, control)?;
+        self.admit(plan, limits.max_bytes)?;
         let base = self.truth_support_bytes(plan);
         self.numeric.reserve_observed(&plan.theory, |actual| {
-            bytes(base + actual, limits.max_bytes, control).map(|_| ())
+            bytes(base + actual, limits.max_bytes).map(|_| ())
         })?;
-        let logical_bytes = self.admit(plan, limits.max_bytes, control)?;
+        let logical_bytes = self.admit(plan, limits.max_bytes)?;
         evaluate_truth(
             &plan.theory,
             candidate,
@@ -134,7 +134,7 @@ impl TightWorkspace {
             if self.values[root] == 0 {
                 return Ok(TightCheck {
                     verdict: TightVerdict::NotModel { root },
-                    work: work.used,
+                    work: work.used.0,
                     logical_bytes,
                 });
             }
@@ -144,7 +144,7 @@ impl TightWorkspace {
         self.supported
             .try_reserve_exact(words)
             .map_err(|_| Stop::Allocation)?;
-        let logical_bytes = self.admit(plan, limits.max_bytes, control)?;
+        let logical_bytes = self.admit(plan, limits.max_bytes)?;
         self.supported.resize(words, 0);
         for producer in &plan.producers {
             work.tick()?;
@@ -164,28 +164,22 @@ impl TightWorkspace {
                     verdict: TightVerdict::Residual {
                         unsupported_atom: word * 32 + missing.trailing_zeros() as usize,
                     },
-                    work: work.used,
+                    work: work.used.0,
                     logical_bytes,
                 });
             }
         }
         Ok(TightCheck {
             verdict: TightVerdict::Stable,
-            work: work.used,
+            work: work.used.0,
             logical_bytes,
         })
     }
 
-    fn admit(
-        &self,
-        plan: &TightPlan,
-        limit: u64,
-        control: CancellationPoll<'_>,
-    ) -> Result<u64, TightError> {
+    fn admit(&self, plan: &TightPlan, limit: u64) -> Result<u64, TightError> {
         bytes(
             self.truth_support_bytes(plan) + self.numeric.required_bytes(&plan.theory),
             limit,
-            control,
         )
     }
 

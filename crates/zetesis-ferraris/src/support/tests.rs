@@ -1,8 +1,8 @@
-//! A requested stop keeps its precedence over the construction work limit.
+//! A requested stop keeps its precedence over construction refusals.
 
 use super::{Builder, SupportError, SupportLimits};
-use crate::{AdmissionLimits, FormulaNodes};
-use zetesis_cpu::{Cancellation, Stop};
+use crate::{AdmissionError, AdmissionLimits, FormulaNodes};
+use zetesis_cpu::{Cancellation, Refusal, Stop};
 
 #[test]
 fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
@@ -29,4 +29,21 @@ fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
         tick(&cancellation),
         Err(SupportError::Stopped(Stop::Cancelled))
     );
+}
+
+#[test]
+fn support_errors_classify_resource_refusals() {
+    for refusal in [
+        SupportError::Admission(AdmissionError::Limit),
+        SupportError::Admission(AdmissionError::Allocation),
+        SupportError::Stopped(Stop::WorkLimit),
+    ] {
+        assert!(refusal.is_resource_refusal(), "{refusal:?}");
+    }
+    for shape in [
+        SupportError::Admission(AdmissionError::Root),
+        SupportError::Stopped(Stop::Cancelled),
+    ] {
+        assert!(!shape.is_resource_refusal(), "{shape:?}");
+    }
 }

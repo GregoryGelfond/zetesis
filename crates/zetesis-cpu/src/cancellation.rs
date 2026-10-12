@@ -34,6 +34,38 @@ pub enum ChargeError {
     WorkLimit,
 }
 
+/// An error a metered operation reports, classified so that a requested stop
+/// takes precedence over every resource refusal at the operation's exit
+/// ([`Cancellation::settle`]).
+pub trait Refusal: Sized {
+    /// Whether this error refuses a resource: work, storage, a named ceiling,
+    /// a size the host cannot represent, or an allocation. Errors about the
+    /// program's shape, identity or invariants are not refusals.
+    fn is_resource_refusal(&self) -> bool;
+
+    /// This error type's report of a requested stop.
+    fn from_stop(stop: Stop) -> Self;
+}
+
+impl Refusal for Stop {
+    fn is_resource_refusal(&self) -> bool {
+        matches!(
+            self,
+            Self::WorkLimit
+                | Self::RoundLimit
+                | Self::StorageLimit
+                | Self::DerivedAtomLimit
+                | Self::CandidateLimit
+                | Self::CarrierLimit
+                | Self::Allocation
+        )
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        stop
+    }
+}
+
 impl ChargeError {
     /// The stop reporting this refusal: the requested stop, or
     /// [`Stop::WorkLimit`] for an exhausted work limit.
@@ -44,6 +76,19 @@ impl ChargeError {
             Self::WorkLimit => Stop::WorkLimit,
         }
     }
+}
+
+/// The error a settled operation reports: a requested stop when `error` refuses
+/// a resource and the flags hold one, otherwise `error` itself.
+#[cold]
+#[inline(never)]
+fn settled<E: Refusal>(poll: CancellationPoll<'_>, error: E) -> E {
+    if error.is_resource_refusal()
+        && let Err(stop) = poll.poll()
+    {
+        return E::from_stop(stop);
+    }
+    error
 }
 
 /// The metered charge shared by [`Cancellation::charge`] and
@@ -119,15 +164,13 @@ impl Cancellation {
         metered_charge(charged, limit, || self.poll())
     }
 
-    /// Report a resource refusal of a metered computation, as
-    /// [`CancellationPoll::refusal`] does for the borrowed view.
-    #[must_use]
-    #[inline]
-    pub fn refusal<E>(&self, refusal: E, stopped: impl FnOnce(Stop) -> E) -> E {
-        match self.poll() {
-            Ok(()) => refusal,
-            Err(stop) => stopped(stop),
-        }
+    /// Settle a metered operation's outcome, as [`CancellationPoll::settle`]
+    /// does for the borrowed view.
+    ///
+    /// # Errors
+    /// As [`CancellationPoll::settle`].
+    pub fn settle<T, E: Refusal>(&self, outcome: Result<T, E>) -> Result<T, E> {
+        self.polling().settle(outcome)
     }
 
     /// Borrow the immutable handle shape once for repeated boundary polls.
@@ -192,10 +235,11 @@ impl CancellationPoll<'_> {
     /// work limit. An admitted charge counts the operation; a refused charge
     /// leaves `charged` unchanged.
     ///
-    /// A charge writes `charged` and the next one reads it again with `limit`.
-    /// Keep the two apart in memory: if they are adjacent, a single paired
-    /// load of both cannot be forwarded from the pending store on aarch64,
-    /// which stalls every charge in a per-node loop.
+    /// A charge writes `charged` and the next one reads it again. Keep the
+    /// count alone in its cell (for example with 16-byte alignment): a paired
+    /// load of the count with any neighbouring field cannot be forwarded from
+    /// the pending store on aarch64, which stalls every charge in a per-node
+    /// loop.
     ///
     /// # Errors
     /// [`ChargeError::Stopped`] when an observation finds a requested stop or
@@ -206,17 +250,20 @@ impl CancellationPoll<'_> {
         metered_charge(charged, limit, || self.poll())
     }
 
-    /// Report a resource refusal of a metered computation: the requested stop
-    /// when the flags hold one, otherwise `refusal`. Observing the flags first
-    /// keeps a requested stop's precedence over every resource refusal,
-    /// although the computation observes them only at metered boundaries.
-    #[must_use]
+    /// Settle a metered operation's outcome at its exit: when the operation
+    /// refuses a resource ([`Refusal::is_resource_refusal`]), observe the flags
+    /// and report a requested stop instead. A requested stop thus takes
+    /// precedence over every resource refusal of the operation, although the
+    /// operation observes the flags only at metered boundaries. Results and
+    /// other errors pass through unread.
+    ///
+    /// # Errors
+    /// The operation's own error, or its report of a stop observed here.
     #[inline]
-    pub fn refusal<E>(&self, refusal: E, stopped: impl FnOnce(Stop) -> E) -> E {
-        match self.poll() {
-            Ok(()) => refusal,
-            Err(stop) => stopped(stop),
-        }
+    pub fn settle<T, E: Refusal>(&self, outcome: Result<T, E>) -> Result<T, E> {
+        // Only an error leaves the inlined path, so a hot operation's success
+        // costs one discriminant test.
+        outcome.map_err(|error| settled(*self, error))
     }
 }
 
@@ -458,19 +505,57 @@ mod tests {
     }
 
     #[test]
-    fn a_requested_stop_precedes_a_resource_refusal() {
+    fn a_requested_stop_settles_a_resource_refusal() {
         let cancellation = Cancellation::default();
-        let refuse = |cancellation: &Cancellation| {
-            let owned = cancellation.refusal(Stop::StorageLimit, |stop| stop);
-            let borrowed = cancellation
-                .polling()
-                .refusal(Stop::StorageLimit, |stop| stop);
-            assert_eq!(owned, borrowed);
-            owned
-        };
-        assert_eq!(refuse(&cancellation), Stop::StorageLimit);
+        assert_eq!(
+            settle_both(&cancellation, Err(Stop::StorageLimit)),
+            Err(Stop::StorageLimit)
+        );
         cancellation.cancel();
-        assert_eq!(refuse(&cancellation), Stop::Cancelled);
+        assert_eq!(
+            settle_both(&cancellation, Err(Stop::StorageLimit)),
+            Err(Stop::Cancelled)
+        );
+    }
+
+    /// Settle through the owned token and its borrowed view, which must agree.
+    fn settle_both(cancellation: &Cancellation, outcome: Result<u8, Stop>) -> Result<u8, Stop> {
+        let owned = cancellation.settle(outcome);
+        assert_eq!(cancellation.polling().settle(outcome), owned);
+        owned
+    }
+
+    #[test]
+    fn settling_leaves_results_and_shape_errors_alone() {
+        let cancellation = Cancellation::default();
+        cancellation.cancel();
+        assert_eq!(settle_both(&cancellation, Ok(3)), Ok(3));
+        for shape in [Stop::WrongProgram, Stop::InvalidProgram] {
+            assert_eq!(settle_both(&cancellation, Err(shape)), Err(shape));
+        }
+    }
+
+    #[test]
+    fn stops_classify_resource_refusals() {
+        for stop in [
+            Stop::WorkLimit,
+            Stop::RoundLimit,
+            Stop::StorageLimit,
+            Stop::DerivedAtomLimit,
+            Stop::CandidateLimit,
+            Stop::CarrierLimit,
+            Stop::Allocation,
+        ] {
+            assert!(stop.is_resource_refusal(), "{stop:?}");
+        }
+        for stop in [
+            Stop::Cancelled,
+            Stop::Deadline,
+            Stop::WrongProgram,
+            Stop::InvalidProgram,
+        ] {
+            assert!(!stop.is_resource_refusal(), "{stop:?}");
+        }
     }
 
     #[test]

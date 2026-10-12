@@ -3,10 +3,10 @@
 use std::fmt;
 
 use crate::{
-    AdmissionLimits, AggregateComparison, AggregateElement, AggregateError, AggregateLimits,
-    FormulaNodes, NodeView, Theory,
+    AdmissionLimits, AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind,
+    AggregateLimits, FormulaNodes, NodeView, Theory,
 };
-use zetesis_cpu::{Cancellation, ChargeError, Stop};
+use zetesis_cpu::{Cancellation, ChargeError, Refusal, Stop};
 
 use super::Plan;
 
@@ -57,6 +57,44 @@ pub enum RestrictionErrorKind {
     Theory(crate::AdmissionError),
     /// Cancellation or fallible allocation stopped emission.
     Stopped(Stop),
+}
+
+impl Refusal for RestrictionErrorKind {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Atoms
+            | Self::Nodes
+            | Self::Roots
+            | Self::Elements
+            | Self::Work
+            | Self::Overflow => true,
+            Self::Aggregate(error) => match error.kind() {
+                AggregateErrorKind::Control(stop) => stop.is_resource_refusal(),
+                AggregateErrorKind::InvalidPrefix { .. }
+                | AggregateErrorKind::InvalidCondition { .. } => false,
+                AggregateErrorKind::ElementLimit
+                | AggregateErrorKind::GuardLimit
+                | AggregateErrorKind::NodeLimit
+                | AggregateErrorKind::OperandLimit
+                | AggregateErrorKind::WorkLimit
+                | AggregateErrorKind::StateLimit
+                | AggregateErrorKind::SubsetLimit
+                | AggregateErrorKind::Allocation
+                | AggregateErrorKind::ArithmeticOverflow => true,
+            },
+            Self::Theory(error) => {
+                matches!(
+                    error,
+                    crate::AdmissionError::Limit | crate::AdmissionError::Allocation
+                )
+            }
+            Self::Stopped(stop) => stop.is_resource_refusal(),
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
 }
 
 /// Typed emission refusal with its charged work prefix.
@@ -154,7 +192,7 @@ impl Plan {
             limits,
             cancellation,
         };
-        let result = builder.build(self);
+        let result = cancellation.settle(builder.build(self));
         result
             .map(|theory| Restriction {
                 theory,
@@ -207,7 +245,7 @@ impl Builder<'_> {
 
     fn lower(&mut self, members: &[usize], lower: usize) -> Result<usize, RestrictionErrorKind> {
         if members.len() > self.limits.aggregate.max_elements {
-            return Err(self.refuse(RestrictionErrorKind::Elements));
+            return Err(RestrictionErrorKind::Elements);
         }
         let mut elements = Vec::new();
         elements
@@ -260,17 +298,10 @@ impl Builder<'_> {
             })
     }
 
-    /// Refuse an emission ceiling after observing control, so that a
-    /// requested stop takes precedence over the refusal.
-    fn refuse(&self, refusal: RestrictionErrorKind) -> RestrictionErrorKind {
-        self.cancellation
-            .refusal(refusal, RestrictionErrorKind::Stopped)
-    }
-
     fn node(&mut self, node: NodeView<'_>) -> Result<usize, RestrictionErrorKind> {
         self.tick()?;
         if self.nodes.parts().nodes().len() == self.limits.theory.max_nodes {
-            return Err(self.refuse(RestrictionErrorKind::Nodes));
+            return Err(RestrictionErrorKind::Nodes);
         }
         let mut transaction = self.nodes.transaction();
         let index = transaction
@@ -287,7 +318,7 @@ impl Builder<'_> {
     fn root(&mut self, root: usize) -> Result<(), RestrictionErrorKind> {
         self.tick()?;
         if self.roots.len() == self.limits.theory.max_roots {
-            return Err(self.refuse(RestrictionErrorKind::Roots));
+            return Err(RestrictionErrorKind::Roots);
         }
         self.roots
             .try_reserve(1)

@@ -59,7 +59,7 @@ fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
 }
 
 #[test]
-fn a_requested_stop_precedes_the_derived_atom_limit() {
+fn the_derived_atom_refusal_settles_to_a_requested_stop() {
     let graph =
         GroundProgram::compile(&program(vec![fact("a", vec![])]), StaticLimits::default()).unwrap();
     let rules: Vec<_> = graph.rules().iter().collect();
@@ -67,14 +67,13 @@ fn a_requested_stop_precedes_the_derived_atom_limit() {
         max_derived_atoms: 0,
         ..Limits::default()
     };
-    let close_from = |cancellation: &Cancellation| {
-        let mut closure = vec![0; graph.word_count()];
-        // One charged operation leaves every later charge of this short
-        // closure between boundaries, so only the refusal can observe a stop.
-        close(&rules, &mut closure, &mut work(cancellation, 1, limits))
-    };
+    // One charged operation leaves every later charge of this short closure
+    // between boundaries, so the closure reports the refusal itself even with a
+    // stop requested; the check settles it at its exit.
     let cancellation = Cancellation::default();
-    assert_eq!(close_from(&cancellation), Err(Stop::DerivedAtomLimit));
     cancellation.cancel();
-    assert_eq!(close_from(&cancellation), Err(Stop::Cancelled));
+    let mut closure = vec![0; graph.word_count()];
+    let refusal = close(&rules, &mut closure, &mut work(&cancellation, 1, limits));
+    assert_eq!(refusal, Err(Stop::DerivedAtomLimit));
+    assert_eq!(cancellation.settle(refusal), Err(Stop::Cancelled));
 }

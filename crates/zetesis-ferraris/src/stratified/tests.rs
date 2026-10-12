@@ -577,20 +577,46 @@ fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
 }
 
 #[test]
-fn a_requested_stop_precedes_a_ceiling_refusal() {
-    let cancellation = Cancellation::default();
-    let refusal = StratifiedError::Limit {
-        resource: StratifiedResource::Dependencies,
-        observed: 2,
-        limit: 1,
-    };
+fn a_ceiling_refusal_settles_to_a_requested_stop() {
+    let refusal = Budget::ceiling(StratifiedResource::Dependencies, 2, 1);
     assert_eq!(
-        budget(&cancellation, u64::MAX).ceiling(StratifiedResource::Dependencies, 2, 1),
-        Err(refusal)
+        refusal,
+        Err(StratifiedError::Limit {
+            resource: StratifiedResource::Dependencies,
+            observed: 2,
+            limit: 1,
+        })
     );
+    let cancellation = Cancellation::default();
+    assert_eq!(cancellation.settle(refusal), refusal);
     cancellation.cancel();
     assert_eq!(
-        budget(&cancellation, u64::MAX).ceiling(StratifiedResource::Dependencies, 2, 1),
+        cancellation.settle(refusal),
         Err(StratifiedError::Stopped(Stop::Cancelled))
     );
+}
+
+#[test]
+fn plan_errors_classify_resource_refusals() {
+    use zetesis_cpu::Refusal;
+    for refusal in [
+        StratifiedError::Limit {
+            resource: StratifiedResource::Bytes,
+            observed: 2,
+            limit: 1,
+        },
+        StratifiedError::Overflow,
+        StratifiedError::Stopped(Stop::Allocation),
+    ] {
+        assert!(refusal.is_resource_refusal(), "{refusal:?}");
+    }
+    for shape in [
+        StratifiedError::UnsupportedRoot { root: 0 },
+        StratifiedError::UnsupportedBody { root: 0, body: 1 },
+        StratifiedError::NegativeCycle { atom: 0, body: 1 },
+        StratifiedError::InvalidClosure { root: 0 },
+        StratifiedError::Stopped(Stop::Cancelled),
+    ] {
+        assert!(!shape.is_resource_refusal(), "{shape:?}");
+    }
 }

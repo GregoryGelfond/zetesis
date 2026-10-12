@@ -40,7 +40,7 @@ fn decisive_operands_do_not_require_suffix_work() {
     let cancellation = Cancellation::default();
     for (conjunction, values) in [(true, [0, 1, 1]), (false, [1, 0, 0])] {
         let mut work = Work {
-            used: 0,
+            used: Charged(0),
             max: 1,
             cancellation: cancellation.polling(),
         };
@@ -48,7 +48,7 @@ fn decisive_operands_do_not_require_suffix_work() {
             evaluate_operands(&[0, 1, 2], &values, conjunction, &mut work),
             Ok(!conjunction),
         );
-        assert_eq!(work.used, 1);
+        assert_eq!(work.used.0, 1);
     }
 }
 
@@ -59,12 +59,12 @@ fn nondecisive_operands_require_the_complete_group() {
         let values = [u8::from(conjunction); 3];
         for max in [2, 3] {
             let mut work = Work {
-                used: 0,
+                used: Charged(0),
                 max,
                 cancellation: cancellation.polling(),
             };
             let result = evaluate_operands(&[0, 1, 2], &values, conjunction, &mut work);
-            assert_eq!(work.used, max);
+            assert_eq!(work.used.0, max);
             assert_eq!(
                 result,
                 if max == 3 {
