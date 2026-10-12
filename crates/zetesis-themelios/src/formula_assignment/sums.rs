@@ -1,8 +1,12 @@
-//! Merge sorted subset-sum runs under the caller's shared storage allowance.
+//! Distinct finite assignment sums with leased sorted or packed execution.
+//!
+//! Every input occurrence remains independently optional. The returned `Numbers`
+//! are always ascending, distinct i32 values; packed words are private scratch.
+mod packed;
+
 use crate::ProgramSite;
 use crate::formula::ceiling;
-use crate::formula_support::Buffer;
-use crate::formula_support::{Computation, Counters};
+use crate::formula_support::{Buffer, Computation, Context, Counters};
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 use themelios_program::term::EvalError;
 
@@ -15,32 +19,120 @@ pub(crate) fn sums(
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<Numbers, FormulaFailure> {
+    // Preserve the empty proposal's refusal before input, work or storage.
     ceiling(
         FormulaResource::AssignmentValues,
         1,
         limits.max_assignment_values as u128,
         location,
     )?;
-    let mut sums = Buffer::new(computation, limits, counters, location)?;
-    let mut next = Buffer::new(computation, limits, counters, location)?;
-    sums.push(0_i32, computation, limits, counters, location)?;
-    for weight in weights {
-        // Adding a fixed integer preserves order. Check every addition before
-        // merging so an overflowing possible subset remains a source refusal.
-        for sum in sums.iter() {
-            counters.work(limits, location)?;
-            sum.checked_add(weight)
-                .ok_or(ExpansionFailure::Evaluation {
-                    error: EvalError::Overflow,
-                    location,
-                })?;
+    let mut context = Context::new(computation, limits, counters, location);
+    let mut runs = Runs::new(&mut context)?;
+    let mut weights = weights.into_iter();
+    for weight in weights.by_ref() {
+        tick(&mut context)?;
+        if let Some(plan) = packed::Plan::for_runs(&runs.values, weight, &mut context)? {
+            // This is the only entry into packed execution. A later signed or
+            // sparse contribution returns to merging without trying it again.
+            drop(runs.next);
+            return packed::finish(runs.values, weight, weights, plan, &mut context);
         }
-        next.clear();
+        runs.add(weight, &mut context)?;
+    }
+    Ok(runs.values)
+}
+
+fn tick(context: &mut Context<'_, &Computation<'_, '_>>) -> Result<(), FormulaFailure> {
+    context
+        .work
+        .counters
+        .work(context.work.limits, context.work.location)
+}
+
+fn overflow(location: ProgramSite) -> FormulaFailure {
+    ExpansionFailure::Evaluation {
+        error: EvalError::Overflow,
+        location,
+    }
+    .into()
+}
+
+struct Runs {
+    values: Numbers,
+    next: Numbers,
+}
+
+impl Runs {
+    fn new(context: &mut Context<'_, &Computation<'_, '_>>) -> Result<Self, FormulaFailure> {
+        let mut values = Buffer::new(
+            context.computation,
+            context.work.limits,
+            context.work.counters,
+            context.work.location,
+        )?;
+        let next = Buffer::new(
+            context.computation,
+            context.work.limits,
+            context.work.counters,
+            context.work.location,
+        )?;
+        values.push(
+            0,
+            context.computation,
+            context.work.limits,
+            context.work.counters,
+            context.work.location,
+        )?;
+        Ok(Self { values, next })
+    }
+
+    fn from_values(
+        values: Numbers,
+        context: &mut Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Self, FormulaFailure> {
+        let next = Buffer::new(
+            context.computation,
+            context.work.limits,
+            context.work.counters,
+            context.work.location,
+        )?;
+        Ok(Self { values, next })
+    }
+
+    fn finish(
+        mut self,
+        weights: impl IntoIterator<Item = i32>,
+        context: &mut Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Numbers, FormulaFailure> {
+        for weight in weights {
+            tick(context)?;
+            self.add(weight, context)?;
+        }
+        Ok(self.values)
+    }
+
+    fn add(
+        &mut self,
+        weight: i32,
+        context: &mut Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        // Adding a fixed integer preserves order. The caller paid the first
+        // value's work/cancellation charge before choosing the physical route.
+        // Check every addition before merging; an overflowing optional subset
+        // remains a source refusal. Zero ensures this run is never empty.
+        for (index, sum) in self.values.iter().enumerate() {
+            if index != 0 {
+                tick(context)?;
+            }
+            sum.checked_add(weight)
+                .ok_or_else(|| overflow(context.work.location))?;
+        }
+        self.next.clear();
         let (mut original, mut shifted) = (0, 0);
-        while original < sums.len() || shifted < sums.len() {
-            counters.work(limits, location)?;
-            let left = sums.slice().get(original).copied();
-            let right = sums.slice().get(shifted).map(|sum| sum + weight);
+        while original < self.values.len() || shifted < self.values.len() {
+            tick(context)?;
+            let left = self.values.slice().get(original).copied();
+            let right = self.values.slice().get(shifted).map(|sum| sum + weight);
             let value = match (left, right) {
                 (Some(left), Some(right)) => left.min(right),
                 (Some(value), None) | (None, Some(value)) => value,
@@ -54,15 +146,21 @@ pub(crate) fn sums(
             }
             ceiling(
                 FormulaResource::AssignmentValues,
-                next.len() as u128 + 1,
-                limits.max_assignment_values as u128,
-                location,
+                self.next.len() as u128 + 1,
+                context.work.limits.max_assignment_values as u128,
+                context.work.location,
             )?;
-            next.push(value, computation, limits, counters, location)?;
+            self.next.push(
+                value,
+                context.computation,
+                context.work.limits,
+                context.work.counters,
+                context.work.location,
+            )?;
         }
-        std::mem::swap(&mut sums, &mut next);
+        std::mem::swap(&mut self.values, &mut self.next);
+        Ok(())
     }
-    Ok(sums)
 }
 
 #[cfg(test)]

@@ -143,11 +143,23 @@ Each distinct key contributes one, regardless of its first field or how many
 witnesses produce it. On success,
 [`formula_assignment::counts`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment/counts.rs)
 constructs exactly the ordered values `0..=N` for `N` keys, using
-checked increments in one bounded buffer. Weighted sums retain subset-sum
-construction. This count carrier still includes unrealizable values: the
+checked increments in one bounded buffer. This count carrier still includes
+unrealizable values: the
 original aggregate equality decides truth, and proposal traversal preserves
 required source warnings and errors. Value, storage, work and cancellation
 checks remain active.
+
+Weighted assignments compute distinct subset sums in ascending order. The
+[`sum operation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment/sums.rs)
+merges checked sorted runs. For a sufficiently dense nonnegative range, it can
+instead retain one bit per reachable sum and add each weight by shifting and
+uniting those bits. A work and storage comparison includes conversion costs;
+sparse or signed contributions use the sorted operation. Each occurrence remains
+optional, including repeated weights. The operation consumes its input once and
+returns the same ordered numeric buffer; packed words are temporary storage.
+Allocation, overflow, cancellation and resource failures remain explicit.
+These proposals may include sums that correlated conditions cannot realize;
+the original aggregate still determines truth.
 
 Independent compilations share the ground builder's `FormulaNodes` owner. It
 retains the node, operand and numeric arenas and the extent of committed topology
@@ -572,8 +584,14 @@ matching row IDs to retain ordinary traversal order and complete tuple identity.
 
 The same selector serves post-admission formula emission and eligible support
 rounds.
-A round proves totality again on its current full columns; the proof and selected
-postings do not survive support publication. Each posting is intersected with
+A round proves totality on its current full columns. After one variant succeeds,
+the rule can retain that cursor's successful expression map for later variants
+of the same immutable snapshot. Each later variant still prepares its own join
+order and checks target/divisor readiness; an ineligible plan uses ordinary
+scalar evaluation. The map is borrowed read-only, its live storage remains
+charged, and a final or only variant retains no new owner. Failed or declined
+proofs are not shared. Neither the proof nor selected postings survives support
+publication. Each posting is intersected with
 the old, new or unrestricted interval of its original body occurrence before
 counting retained rows. This preserves the first-new partition even when the join
 order changes or a predicate occurs more than once. A round-local proof enables

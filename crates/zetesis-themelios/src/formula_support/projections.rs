@@ -6,8 +6,9 @@
 //! results; failed computations are never retained. Selection requires its own
 //! certificate, while source-family evidence retains complete traversal. Each
 //! lookup and retained pair consumes work and leased support storage.
-//! Ordinary cursors own their entries; prepared rules can retain a completed
-//! finite-domain map for immutable borrowing by later cursors.
+//! Ordinary cursors own their entries. Prepared rules and same-rule support
+//! rounds can retain a complete-column map for immutable borrowing by later
+//! cursors; only the prepared-rule owner establishes completed support.
 
 mod domains;
 mod totality;
@@ -47,8 +48,9 @@ struct Projection<'a> {
     inputs: TermTable,
     results: Binding<'static>,
     /// A prefix covering every possible complete binding of this expression's
-    /// input. Only completed source-domain totality publishes this witness;
-    /// ordinary successful memo entries establish no coverage.
+    /// input within its immutable support snapshot. Only full-column totality
+    /// publishes this witness; ordinary memo entries establish no coverage.
+    /// A growing-round owner grants no completed-support selection authority.
     covered: Option<usize>,
 }
 
@@ -235,7 +237,8 @@ impl<'a> Projections<'a> {
     }
 
     /// Borrow only within the workspace that owns the retained map's leases.
-    /// Completion identity separately authenticates its rule and term carrier.
+    /// The caller's completed-rule or round owner separately authenticates the
+    /// exact rule and immutable support snapshot.
     pub(super) fn borrowed(
         values: &'a ProjectionValues<'a>,
         context: &Context<'_, &Computation<'_, '_>>,

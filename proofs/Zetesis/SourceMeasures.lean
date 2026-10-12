@@ -149,4 +149,39 @@ theorem count_carrier_membership [DecidableEq K] (possible : List K) (value : Na
       ⟨List.take_sublist value possible, List.nil_subset _⟩
     exact ⟨possible.take value, prefix_admissible, List.length_take_of_le bounded⟩
 
+/-- With no required occurrences and no possible occurrences, the only
+optional integer sum is zero. This is the initial carrier for either a sorted
+or a packed finite-sum operation; it specifies no storage representation. -/
+theorem sum_carrier_nil :
+    carrier [] ([] : List Int) List.sum = [0] := by
+  simp [carrier, selections]
+
+/-- Adding one optional integer occurrence keeps every previous sum and adds
+its translation by that weight. No sign, nonzero or distinctness premise is
+needed. Equal weights remain separate occurrences, so two occurrences of weight
+w can contribute twice even though repeated result values need not be retained.
+
+Split selections into those omitting the new occurrence and those retaining it.
+Mapping List.sum turns retention into addition by the new weight. The final
+membership statement is extensional: it does not count witnesses or prescribe
+an enumeration order. Correlated source conditions may make some selections
+unrealizable; ASP callers must separately supply one contribution per complete
+tuple key and retain the original aggregate condition. -/
+theorem sum_carrier_cons (weight : Int) (possible : List Int) (value : Int) :
+    value ∈ carrier [] (weight :: possible) List.sum ↔
+      value ∈ carrier [] possible List.sum ∨
+        ∃ previous ∈ carrier [] possible List.sum, weight + previous = value := by
+  have split : carrier [] (weight :: possible) List.sum =
+      carrier [] possible List.sum ++
+        (carrier [] possible List.sum).map (fun previous => weight + previous) := by
+    have noRequiredKeys (rows : List (List Int)) :
+        rows.filter (fun _ => true) = rows := by
+      apply List.filter_eq_self.mpr
+      intro row member
+      rfl
+    simp [carrier, selections, noRequiredKeys, List.map_append, List.map_map,
+      Function.comp_def]
+  rw [split, List.mem_append]
+  simp only [List.mem_map]
+
 end Zetesis.SourceMeasures

@@ -15,6 +15,9 @@
 //! This bounds retained rows, not the total cost of an unsuccessful attempt. Ordinary
 //! matching and the original scalar comparison still check every offered row.
 
+mod round;
+pub(super) use round::RoundPreparation;
+
 #[cfg(test)]
 mod tests;
 
@@ -230,15 +233,20 @@ impl<'a, 'source> Join<'a, 'source> {
         else {
             return Ok(false);
         };
-        let total = self.projections.total_body(
-            rule,
-            self.support,
-            &mut self.evaluation,
-            Context::new(computation, limits, counters, rule.location),
-        );
-        self.evaluation.clear_zero_divisor();
-        if !total? {
-            return Ok(false);
+        // A borrowed map was certified by the same-rule round owner. Its
+        // scalar proof is independent of this plan and pivot; the target and
+        // divisor checks above still belong to every individual plan.
+        if matches!(self.projections, projections::Projections::Local(_)) {
+            let total = self.projections.total_body(
+                rule,
+                self.support,
+                &mut self.evaluation,
+                Context::new(computation, limits, counters, rule.location),
+            );
+            self.evaluation.clear_zero_divisor();
+            if !total? {
+                return Ok(false);
+            }
         }
         // Publication follows the last charged/cancellable boundary. The
         // descriptor never escapes this cursor or changes its coverage mode.

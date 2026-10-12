@@ -59,6 +59,7 @@ impl<C: Count> Closure<'_, C> {
         if lower >= upper || lower > state.possible {
             return Ok(Step::Contradiction);
         }
+        let width = upper.checked_sub(lower).ok_or(Stop::InvalidProgram)?;
         let upper = state
             .possible
             .min(upper.checked_sub(1).ok_or(Stop::InvalidProgram)?);
@@ -69,6 +70,13 @@ impl<C: Count> Closure<'_, C> {
             work.tick()?;
             if bit(self.known.sure, condition) || bit(self.known.never, condition) {
                 continue;
+            }
+            // This first undecided term was already read and charged. A
+            // coefficient fitting the exclusive width supplies a point for
+            // every final divisor, without a separate probe or modulo test.
+            // Later terms are no smaller, so test this witness only once.
+            if divisor == 0 && weight <= width {
+                return Ok(Step::Unchanged);
             }
             let previous = divisor;
             divisor = gcd(divisor, weight, work)?;

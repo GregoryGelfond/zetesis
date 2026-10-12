@@ -1377,6 +1377,8 @@ import Zetesis
 #print axioms Zetesis.SourceMeasures.possible_extension
 #print axioms Zetesis.SourceMeasures.source_priority_presence
 #print axioms Zetesis.SourceMeasures.count_carrier_membership
+#print axioms Zetesis.SourceMeasures.sum_carrier_nil
+#print axioms Zetesis.SourceMeasures.sum_carrier_cons
 #print axioms Zetesis.SourceSupport.unchanged_round_closed
 #print axioms Zetesis.SourceSupport.stages_inside_closed
 #print axioms Zetesis.SourceSupport.stable_inside_closed
@@ -1631,6 +1633,8 @@ import Zetesis
 #print axioms Zetesis.ThresholdResidues.sum_residue
 #print axioms Zetesis.ThresholdResidues.residual_divisible
 #print axioms Zetesis.ThresholdResidues.interval_intersection_refines
+#print axioms Zetesis.ThresholdResidues.wide_interval_intersects
+#print axioms Zetesis.ThresholdResidues.open_coefficient_intersects
 #print axioms Zetesis.ThresholdResidues.interval_refuted
 #print axioms Zetesis.ThresholdResidues.formula_interval_refuted
 #print axioms Zetesis.Thresholds.threshold_query_exact

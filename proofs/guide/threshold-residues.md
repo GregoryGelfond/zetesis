@@ -37,6 +37,22 @@ uses positive divisors. This permits skipping the rest of that refutation check,
 not accepting a subset sum or a candidate. Establishing the scan's divisibility
 invariant and its Rust early-exit correspondence remains separate work.
 
+`wide_interval_intersects` gives a sufficient intersection condition without a
+coefficient scan. If a positive coefficient `w` fits inside the width `U-L`, then
+`[L,U)` contains a point `B+w*k`, provided `B≤L`. Divide `L-B` by `w`: an exact
+quotient reaches `L`; otherwise the next quotient reaches a point less than `w`
+beyond `L`. `open_coefficient_intersects` carries that witness to every divisor
+of `w`. An undecided coefficient therefore proves that the residual-divisor test
+cannot refute this interval. It does not prove that a selected sum exists.
+
+The Rust consumer applies this witness to the first undecided grouped coefficient
+in its existing scan, after mandatory events have updated the numeric sums. The
+term visit is charged once; decided conditions supply no residual witness. The
+check runs once for each coalesced dirty row, rather than inspecting a witness at
+every notification. Later decisions and tighter requirements reconsider the row
+through the existing propagation callbacks. These event and representation
+obligations remain separate from the arithmetic laws.
+
 The Rust check uses coefficients grouped by identical condition. Its divisor can
 be stronger than the divisor of the ungrouped weights: two occurrences with
 weights 2 and 3 under one condition contribute either 0 or 5. The theorem applies

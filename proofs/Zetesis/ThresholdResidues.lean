@@ -101,6 +101,47 @@ theorem interval_intersection_refines (base earlier refined low high : Nat)
   refine ⟨factor * multiple, ?_⟩
   simpa only [← samePoint] using within
 
+/-- A nonempty interval whose width is at least a positive divisor contains
+    a point of that divisor's progression above the known base.
+
+    Divide the distance from the base to the lower endpoint. If its remainder
+    is zero, the quotient reaches that endpoint; otherwise the next quotient
+    reaches a point less than one divisor beyond it. The interval's width
+    contains that point. This is a lattice witness, not an attainable sum. -/
+theorem wide_interval_intersects (base divisor low high : Nat)
+    (above : base ≤ low) (positive : 0 < divisor)
+    (wide : divisor ≤ high - low) :
+    ∃ multiple : Nat,
+      low ≤ base + divisor * multiple ∧ base + divisor * multiple < high := by
+  let distance := low - base
+  have distanceEquation : base + distance = low := by
+    dsimp [distance]
+    omega
+  have division : distance % divisor + divisor * (distance / divisor) = distance :=
+    Nat.mod_add_div distance divisor
+  have remainderBound : distance % divisor < divisor := Nat.mod_lt distance positive
+  by_cases aligned : distance % divisor = 0
+  · refine ⟨distance / divisor, ?_⟩
+    omega
+  · have nextPoint : divisor * (distance / divisor + 1) =
+        divisor * (distance / divisor) + divisor := by
+      simp only [Nat.mul_add, Nat.mul_one]
+    refine ⟨distance / divisor + 1, ?_⟩
+    omega
+
+/-- An open coefficient fitting inside the interval proves that every positive
+    divisor of it has a progression point in the interval. Reuse the coefficient
+    witness, then refine the progression by divisibility. -/
+theorem open_coefficient_intersects (base coefficient divisor low high : Nat)
+    (above : base ≤ low) (positive : 0 < coefficient)
+    (wide : coefficient ≤ high - low) (divides : divisor ∣ coefficient) :
+    ∃ multiple : Nat,
+      low ≤ base + divisor * multiple ∧ base + divisor * multiple < high := by
+  have witness : ∃ multiple : Nat,
+      low ≤ base + coefficient * multiple ∧ base + coefficient * multiple < high :=
+    wide_interval_intersects base coefficient low high above positive wide
+  exact interval_intersection_refines base coefficient divisor low high divides witness
+
 /-- An interval containing no point of the residual progression cannot contain
     a compatible sum. The argument uses the exact witness above, not an assumption
     that undecided conditions can be chosen independently. The upper bound is

@@ -109,7 +109,12 @@ divisibility of the remaining coefficients. If `B` is already known true and
 `d` divides every undecided coefficient, every completion has sum `B + d*k`.
 An interval containing none of those values refutes the region, even when its
 ordinary lower and upper readings overlap. Coefficients sharing one condition
-are grouped first. Unit rows cannot gain from this test and skip it.
+are grouped first. Unit rows cannot gain from this test and skip it. The
+coalesced check reads coefficients from the small end. If the first undecided
+coefficient fits within the required interval’s width, every divisor of that
+coefficient has a progression point in the interval, and the check ends before
+computing a remainder. Deciding conditions or tightening the interval reconsiders
+the row; this witness is not retained as a permanent property.
 
 This check reads processed sums after node, bound-transfer, witness and support
 queues reach a fixed point. Arithmetic notifications use a separate coalesced

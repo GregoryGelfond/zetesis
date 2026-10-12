@@ -6886,6 +6886,16 @@
       "name": "Zetesis.SourceMeasures.count_carrier_membership"
     },
     {
+      "file": "Zetesis/SourceMeasures.lean",
+      "line": 155,
+      "name": "Zetesis.SourceMeasures.sum_carrier_nil"
+    },
+    {
+      "file": "Zetesis/SourceMeasures.lean",
+      "line": 170,
+      "name": "Zetesis.SourceMeasures.sum_carrier_cons"
+    },
+    {
       "file": "Zetesis/SourceSupport.lean",
       "line": 59,
       "name": "Zetesis.SourceSupport.unchanged_round_closed"
@@ -8157,12 +8167,22 @@
     },
     {
       "file": "Zetesis/ThresholdResidues.lean",
-      "line": 108,
+      "line": 111,
+      "name": "Zetesis.ThresholdResidues.wide_interval_intersects"
+    },
+    {
+      "file": "Zetesis/ThresholdResidues.lean",
+      "line": 135,
+      "name": "Zetesis.ThresholdResidues.open_coefficient_intersects"
+    },
+    {
+      "file": "Zetesis/ThresholdResidues.lean",
+      "line": 149,
       "name": "Zetesis.ThresholdResidues.interval_refuted"
     },
     {
       "file": "Zetesis/ThresholdResidues.lean",
-      "line": 130,
+      "line": 171,
       "name": "Zetesis.ThresholdResidues.formula_interval_refuted"
     },
     {
@@ -9012,7 +9032,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "86c7d8d43ab76065bd0053dd345c9a85a6dbbf9becce310f3595f8ab6c16d8f1",
+    "Audit.lean": "25b14b39de99b1704fc61eed74030d49d6ea9ef73a3d075c1153f8c14cfed8be",
     "Zetesis.lean": "f197dfd785e2d22ebb23b7fb7ad553d697f65565cde04605cf1ae306eb427054",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "5575ab2c129668410b7373007b4faf1fa7d4dce922c0ade85d1054e91fc29cef",
@@ -9161,7 +9181,7 @@
     "Zetesis/SignedObjectiveBounds.lean": "9a196ef4647a4999a96373134d80c92ecd940d4c3ee7dc7c173545a2a4816045",
     "Zetesis/SingletonHeads.lean": "a07c6c50041c0771175b98fa6d9d2d56ecb4c9c29ad09205acf44f44fcabe147",
     "Zetesis/SourceContributions.lean": "be9baa860c0caafeaba1068e269b8cec5531cce91a5dd694232e98847ee394df",
-    "Zetesis/SourceMeasures.lean": "4bb8b01b913896ba0b96d339801a4f316293884c4d056895943a04954ffe69b3",
+    "Zetesis/SourceMeasures.lean": "067f1879c975746f5ac1758e09a770119befec26542bbf394aacd2472c4c8c5d",
     "Zetesis/SourceSupport.lean": "ee2c6f8e7e3031c667f29a93ddc376f2d4c5b84725cc1a9482b5c636ff232387",
     "Zetesis/StorageOwners.lean": "6319788182043ddcfaf40d79ab7de9a052b1bb719679031042f4002b20d3be22",
     "Zetesis/StratifiedEvaluation.lean": "4cd3e24702fbdb9a466741251bc16ed01f3ebc7081b0151311392410b4f08a00",
@@ -9183,7 +9203,7 @@
     "Zetesis/ThresholdPrefixes.lean": "a7741e66b7dd983b727bee98e1d37a504b818aefd24a3851df45fcc2ababdf44",
     "Zetesis/ThresholdPropagation.lean": "c2d637283903b1f7f653390e1c939452168b86fb2ed7f582bfc5c502f89dca75",
     "Zetesis/ThresholdReduct.lean": "cd65ca3c8b5b66cea0058413b3290bae0da6ac51dbd553283a9647a2841f5840",
-    "Zetesis/ThresholdResidues.lean": "5fb8021d1ac4e0224f52a489281270b3573633d55fbf59a2c5cf62ddc350349e",
+    "Zetesis/ThresholdResidues.lean": "a0bd983d7b61a16118467bd7076b7315b45cc63a338f90520a4b8e2586c535d5",
     "Zetesis/Thresholds.lean": "271ba89d3885ecf242dca61cc0ce8998f7b0f36db6a4df907ed1d4f7bd075a85",
     "Zetesis/TightBodyRecognition.lean": "fc2f7e335c6fb1d96f807f073ba54afa1e3c6ea37da6003f89e8733599c1ccdb",
     "Zetesis/TightEvaluation.lean": "a8dfdd3824eae4fdd35696869d47e56cb26ae1d931e0a0442a68f29498822864",

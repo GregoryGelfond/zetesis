@@ -705,7 +705,34 @@ fn derive_variants<'source>(
                 location: _,
             },
     } = context;
-    while let Some(variant) = variants.next(limits, counters)? {
+    // A successful map belongs to this exact rule and immutable round. The
+    // first cursor retains its ordinary mutable preparation; later variants
+    // borrow it only after that cursor has finished and released its state.
+    let mut preparation = None;
+    let mut next = variants.next(limits, counters)?;
+    while let Some(variant) = next {
+        if let Some(preparation) = &preparation {
+            let mut outer = multiples::RoundPreparation::rows(
+                preparation,
+                variant,
+                guards,
+                budget,
+                Context::new(computation, limits, counters, rule.location),
+            )?;
+            outer.select_round_multiples(rule, computation, limits, counters)?;
+            derive_rule(
+                rule,
+                &mut outer,
+                support,
+                computation,
+                limits,
+                budget,
+                counters,
+            )?;
+            drop(outer);
+            next = variants.next(limits, counters)?;
+            continue;
+        }
         let mut outer = Join::variant_rule(
             rule,
             variant,
@@ -714,7 +741,7 @@ fn derive_variants<'source>(
             budget,
             Context::new(computation, limits, counters, rule.location),
         )?;
-        outer.select_round_multiples(rule, computation, limits, counters)?;
+        let total = outer.select_round_multiples(rule, computation, limits, counters)?;
         derive_rule(
             rule,
             &mut outer,
@@ -724,6 +751,16 @@ fn derive_variants<'source>(
             budget,
             counters,
         )?;
+        // Preserve the next-variant lookup before admitting any new owner. A
+        // final or only successful cursor has no reuse consumer.
+        next = variants.next(limits, counters)?;
+        if total && next.is_some() {
+            preparation = Some(multiples::RoundPreparation::retain(
+                rule,
+                outer,
+                Context::new(computation, limits, counters, rule.location),
+            )?);
+        }
     }
     Ok(())
 }
@@ -1254,6 +1291,20 @@ impl<'a, 'source> Join<'a, 'source> {
         budget: &mut Budget,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
+        Self::variant_rule_with_total(rule, variant, support, domains, None, budget, context)
+    }
+
+    /// A round owner authenticates any borrowed map to this rule and support.
+    /// This changes expression reuse, never the cursor's coverage authority.
+    fn variant_rule_with_total(
+        rule: &'a crate::formula_ir::RuleIr,
+        variant: delta::Variant,
+        support: &'a Support<'source>,
+        domains: Option<&'a queries::Guards<'a, 'source>>,
+        total: Option<&'a projections::ProjectionValues<'a>>,
+        budget: &mut Budget,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Self, FormulaFailure> {
         let Context {
             computation,
             work:
@@ -1276,7 +1327,7 @@ impl<'a, 'source> Join<'a, 'source> {
             support,
             budget,
             Context::new(computation, limits, counters, rule.location),
-            variant,
+            (variant, total),
         )?;
         join.configure_rule(rule, limits, counters)?;
         join.domains = domains;
@@ -1535,7 +1586,7 @@ impl<'a, 'source> Join<'a, 'source> {
             support,
             budget,
             context,
-            delta::Variant::Full,
+            (delta::Variant::Full, None),
         )
     }
 
@@ -1546,7 +1597,10 @@ impl<'a, 'source> Join<'a, 'source> {
         support: &'a Support<'source>,
         budget: &mut Budget,
         context: Context<'_, &Computation<'_, '_>>,
-        variant: delta::Variant,
+        (variant, total): (
+            delta::Variant,
+            Option<&'a projections::ProjectionValues<'a>>,
+        ),
     ) -> Result<Self, FormulaFailure> {
         let Context {
             computation,
@@ -1580,7 +1634,7 @@ impl<'a, 'source> Join<'a, 'source> {
             variables,
             support,
             Cow::Owned(plan),
-            None,
+            total,
             Context::new(computation, limits, counters, location),
         )
     }

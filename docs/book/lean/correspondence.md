@@ -96,6 +96,11 @@ interval when that progression misses it. Correlated conditions may make further
 values unreachable, so a nonempty intersection is not a satisfaction certificate.
 A further divisor reduction preserves any existing progression point; this
 justifies ending the gcd scan once its current progression intersects the interval.
+`wide_interval_intersects` supplies such a point when a positive coefficient fits
+inside the interval’s width; `open_coefficient_intersects` preserves that point for
+every divisor of the coefficient. Applying the latter to the first undecided
+coefficient can end the coalesced residual scan before a remainder calculation,
+without establishing an attainable sum.
 The [reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/threshold-residues.md)
 distinguishes this restriction from full attainable-sum computation.
 
@@ -2745,6 +2750,16 @@ obligations. In particular, unconditional witnesses are still optional during
 proposal generation; removing unrealizable count values could suppress a
 required diagnostic.
 
+[`SourceMeasures.sum_carrier_nil` and `sum_carrier_cons`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceMeasures.lean)
+specialize the same carrier to optional integer sums: the empty input has only
+zero, and one more occurrence keeps the old values together with their translation
+by its weight. Equal weights remain separate occurrences. This is a common
+denotation for sorted merging and packed reachability, not a proof of Rust shifts,
+word boundaries, sorted output, checked `i32` arithmetic or resource behavior.
+Callers still coalesce complete ASP tuple keys before supplying contributions;
+correlated conditions can leave carrier values unrealizable, and the original
+aggregate equality retains those conditions.
+
 [`IntegerEnvelopes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/IntegerEnvelopes.lean)
 proves directed bound coverage and integer floor/ceiling laws.
 `filtered_bindings_exact` states that a covering envelope followed by the original
@@ -2845,7 +2860,12 @@ cases, or source-column coverage. The argument establishes
 definedness on full bindings, not on every earlier join prefix.
 One Rust totality attempt reuses successful numeric-column hulls for its fixed
 rule and immutable support snapshot. Every intermediate remains checked; no hull
-survives the attempt. Evidence lifetime, storage accounting and error-preserving
+survives the attempt. Within a growing support round, Rust can retain a
+successful expression map for one exact rule and snapshot, then borrow it across
+that rule's delta variants. The body-totality premise is independent of the
+pivot; each variant separately authenticates its selected multiples against its
+own join order. This grants neither completed-support authority nor generic
+table selection. Evidence lifetime, storage accounting and error-preserving
 reuse remain implementation obligations.
 
 Eager emission, hybrid capture and hybrid model/region checks use the same Rust

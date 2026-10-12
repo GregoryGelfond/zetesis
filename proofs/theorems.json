@@ -6885,6 +6885,16 @@
     "line": 140
   },
   {
+    "name": "Zetesis.SourceMeasures.sum_carrier_nil",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 155
+  },
+  {
+    "name": "Zetesis.SourceMeasures.sum_carrier_cons",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 170
+  },
+  {
     "name": "Zetesis.SourceSupport.unchanged_round_closed",
     "file": "Zetesis/SourceSupport.lean",
     "line": 59
@@ -8155,14 +8165,24 @@
     "line": 90
   },
   {
+    "name": "Zetesis.ThresholdResidues.wide_interval_intersects",
+    "file": "Zetesis/ThresholdResidues.lean",
+    "line": 111
+  },
+  {
+    "name": "Zetesis.ThresholdResidues.open_coefficient_intersects",
+    "file": "Zetesis/ThresholdResidues.lean",
+    "line": 135
+  },
+  {
     "name": "Zetesis.ThresholdResidues.interval_refuted",
     "file": "Zetesis/ThresholdResidues.lean",
-    "line": 108
+    "line": 149
   },
   {
     "name": "Zetesis.ThresholdResidues.formula_interval_refuted",
     "file": "Zetesis/ThresholdResidues.lean",
-    "line": 130
+    "line": 171
   },
   {
     "name": "Zetesis.Thresholds.threshold_query_exact",

@@ -660,4 +660,5 @@ fn frozen_subjects_do_not_run_residual_checks() {
     }
 }
 
+mod eligibility;
 mod phase;

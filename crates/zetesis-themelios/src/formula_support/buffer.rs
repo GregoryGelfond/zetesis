@@ -69,6 +69,9 @@ impl<T> Buffer<T> {
     pub(crate) fn len(&self) -> usize {
         self.values.len()
     }
+    pub(crate) fn capacity(&self) -> usize {
+        self.values.capacity()
+    }
     pub(crate) fn slice(&self) -> &[T] {
         &self.values
     }
