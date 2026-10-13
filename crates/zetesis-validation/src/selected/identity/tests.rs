@@ -241,6 +241,22 @@ fn a_statistics_object_names_its_executable_by_key() {
 }
 
 #[test]
+fn a_report_without_a_statistics_object_names_nothing() {
+    let named = |statistics: serde_json::Value| super::named(&statistics);
+    assert_eq!(named(serde_json::Value::Null), Named::NoStatistics);
+    assert_eq!(named(serde_json::json!("statistics")), Named::NoStatistics);
+}
+
+#[test]
+fn a_run_whose_report_names_nothing_is_refused() {
+    // Counting it as the native executable would attribute a handed-off GPU
+    // run to the front.
+    let (_directory, mut rule, _, _, _) = executables();
+    let refusal = rule.settle(&Named::NoStatistics).unwrap_err();
+    assert!(refusal.contains("no statistics"), "{refusal}");
+}
+
+#[test]
 fn runs_naming_the_native_executable_or_none_seal_nothing() {
     let (_directory, mut rule, native, _, _) = executables();
     for named in [Named::Path(native), Named::Omitted] {

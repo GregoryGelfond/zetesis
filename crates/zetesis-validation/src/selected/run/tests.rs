@@ -120,13 +120,15 @@ fn absent_native_capture_cannot_pass_a_case() {
 }
 
 /// A completed native run whose statistics name `executable`.
-fn naming(executable: &Path) -> InvocationRecord {
+/// A completed native run whose report is `document`.
+fn reporting(document: &serde_json::Value) -> InvocationRecord {
     let mut record = complete(0);
-    record.stdout = serde_json::to_vec(
-        &serde_json::json!({"statistics": {"executable": executable.to_str().unwrap()}}),
-    )
-    .unwrap();
+    record.stdout = serde_json::to_vec(document).unwrap();
     record
+}
+
+fn naming(executable: &Path) -> InvocationRecord {
+    reporting(&serde_json::json!({"statistics": {"executable": executable.to_str().unwrap()}}))
 }
 
 /// The settlement rule for a native executable at `native`.
@@ -184,13 +186,43 @@ fn a_passing_case_whose_native_run_names_a_third_executable_is_an_invalid_report
 }
 
 #[test]
-fn a_passing_native_report_without_statistics_is_an_invalid_report() {
+fn a_passing_native_report_that_is_not_json_is_an_invalid_report() {
     let directory = tempfile::tempdir().unwrap();
     let native = directory.path().join("native");
     std::fs::write(&native, "native").unwrap();
     let mut executables = rule(&native);
     let unreadable = settled((Decision::Pass, None), Some(&complete(0)), &mut executables);
     assert_eq!(unreadable.0, Decision::InvalidReport);
+}
+
+#[test]
+fn a_passing_native_report_with_null_statistics_is_an_invalid_report() {
+    let directory = tempfile::tempdir().unwrap();
+    let native = directory.path().join("native");
+    std::fs::write(&native, "native").unwrap();
+    let mut executables = rule(&native);
+    let null = settled(
+        (Decision::Pass, None),
+        Some(&reporting(&serde_json::json!({"statistics": null}))),
+        &mut executables,
+    );
+    assert_eq!(null.0, Decision::InvalidReport);
+    assert!(null.1.unwrap().contains("no statistics"));
+}
+
+#[test]
+fn a_passing_native_report_without_statistics_is_an_invalid_report() {
+    let directory = tempfile::tempdir().unwrap();
+    let native = directory.path().join("native");
+    std::fs::write(&native, "native").unwrap();
+    let mut executables = rule(&native);
+    let absent = settled(
+        (Decision::Pass, None),
+        Some(&reporting(&serde_json::json!({"models": []}))),
+        &mut executables,
+    );
+    assert_eq!(absent.0, Decision::InvalidReport);
+    assert!(absent.1.unwrap().contains("no statistics"));
 }
 
 #[test]

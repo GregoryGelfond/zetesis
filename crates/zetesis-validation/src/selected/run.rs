@@ -288,8 +288,8 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
 /// inputs: [`seals`] places the reference first and the native second.
 const NATIVE_SEAL: usize = 1;
 
-/// A passing case's decision once the executable its native run's statistics
-/// name is settled by `executables`; a report without statistics, or a refused
+/// A passing case's decision once the executable its native report names is
+/// settled by `executables`; a report that is not JSON, or a refused
 /// settlement, makes the case an invalid report.
 fn settled(
     (decision, detail): (Decision, Option<String>),
@@ -299,17 +299,13 @@ fn settled(
     let Some(native) = native.filter(|_| decision == Decision::Pass) else {
         return (decision, detail);
     };
-    let statistics = serde_json::from_slice::<serde_json::Value>(native.stdout())
-        .ok()
-        .map(|document| document["statistics"].clone())
-        .filter(serde_json::Value::is_object);
-    let Some(statistics) = statistics else {
+    let Ok(document) = serde_json::from_slice::<serde_json::Value>(native.stdout()) else {
         return (
             Decision::InvalidReport,
-            Some("the native report carries no statistics to name its executable".to_owned()),
+            Some("the native report is not a JSON document".to_owned()),
         );
     };
-    match executables.settle(&identity::named(&statistics)) {
+    match executables.settle(&identity::named(&document["statistics"])) {
         Ok(()) => (decision, detail),
         Err(refusal) => (Decision::InvalidReport, Some(refusal)),
     }

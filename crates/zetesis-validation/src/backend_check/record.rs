@@ -65,8 +65,9 @@ pub struct Attempt {
     pub(super) family: Option<Family>,
     pub(super) observation: Option<Observation>,
     pub(super) cleanup: Option<Cleanup>,
-    /// What a passing run's statistics name as its executable; absent until a
-    /// passing run's report is read.
+    /// What a run's report names as its executable, read once the report
+    /// passes validation; absent before. A run the settlement then refuses
+    /// keeps what it named, which its refusal's detail also names.
     pub(super) executed: Option<selected::identity::Named>,
 }
 impl Attempt {
@@ -91,7 +92,9 @@ impl Attempt {
         self.detail.as_deref()
     }
     /// The executable this run's statistics name as having done its work,
-    /// resolved through links; absent unless the run passed and named one.
+    /// resolved through links; absent unless the run's report passed
+    /// validation and named one. A run the settlement refused keeps the
+    /// executable it named, so read it with [`Self::decision`].
     #[must_use]
     pub fn executed(&self) -> Option<&Path> {
         match &self.executed {
