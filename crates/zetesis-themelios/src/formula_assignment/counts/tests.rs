@@ -101,7 +101,8 @@ fn value_limit_includes_the_zero_proposal() {
             assert_eq!(fitting.len(), limit);
             drop(fitting);
             assert!(matches!(
-                counts(0,
+                counts(
+                    0,
                     std::iter::repeat_n(1, limit),
                     computation,
                     &limits,

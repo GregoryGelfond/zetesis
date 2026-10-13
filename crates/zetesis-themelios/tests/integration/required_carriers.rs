@@ -29,9 +29,36 @@ fn a_comparison_only_condition_is_required() {
 
 #[test]
 fn a_guard_only_condition_is_required() {
-    // A comparison guard and #true are decided by the element's local join.
-    let admitted = formula("q(M) :- M = #count{1 : #true; 2 : 1 < 2}.");
-    assert_eq!(possible(&admitted), atoms(&["q(2)"]));
+    // #true, a comparison chain and a negated comparison lower to guards,
+    // which the element's local join decides before it yields a row.
+    for (source, expected) in [
+        ("q(M) :- M = #count{1 : #true}.", "q(1)"),
+        ("q(M) :- M = #count{X : X = 1..3, 1 < X < 3}.", "q(1)"),
+        ("q(M) :- M = #count{X : X = 1..3, not X > 2}.", "q(2)"),
+    ] {
+        assert_eq!(possible(&formula(source)), atoms(&[expected]), "{source}");
+    }
+}
+
+#[test]
+fn a_key_with_one_required_occurrence_is_required() {
+    // Tuple 1 occurs under p and unconditionally: one required occurrence
+    // makes the key required at both proposal sites, and final grounding finds
+    // a root for every proposal.
+    let admitted = formula("{p}. q(M) :- M = #count{1 : p; 1}.");
+    assert_eq!(possible(&admitted), atoms(&["p", "q(1)"]));
+    assert_eq!(native(&admitted), exhaustive(&admitted));
+}
+
+#[test]
+fn a_sum_omits_a_value_only_an_interpretation_outside_the_support_gives() {
+    // p has no rule, so the -1 element has no row: the carrier omits V = 0,
+    // which only the interpretation {p}, outside the support, would give.
+    let admitted = formula("x(V) :- V = #sum{1; -1 : p}.");
+    assert_eq!(possible(&admitted), atoms(&["x(1)"]));
+    let expected = Models::from([BTreeSet::from(["x(1)".into()])]);
+    assert_eq!(native(&admitted), expected);
+    assert_eq!(exhaustive(&admitted), expected);
 }
 
 #[test]
@@ -88,9 +115,10 @@ fn a_tuple_in_every_interpretation_without_an_atom_free_condition_stays_optional
 }
 
 #[test]
-fn nested_mastermind_proposes_only_realizable_values() {
-    // Each minimum of two unconditional counts is exact, so shared/3 holds one
-    // atom per realizable minimum and score/3 one per realizable total.
+fn nested_mastermind_possible_atoms_follow_the_carrier() {
+    // shared/3 is exact per binding, because the two elements of its #min are
+    // unconditional. score/3 pairs every carrier value of B with every carrier
+    // value of H, so it holds values no answer set realizes (for example B > H).
     let admitted = formula(include_str!(
         "../../../../examples/scalability/mastermind-nested.lp"
     ));

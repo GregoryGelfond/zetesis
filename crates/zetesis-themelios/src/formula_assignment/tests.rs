@@ -173,8 +173,10 @@ fn a_required_total_outside_i32_refuses_the_sum() {
 }
 
 #[test]
-fn a_seeded_dense_sum_matches_the_unseeded_one_shifted() {
-    // Enough unit weights to enter packed execution from a nonzero seed.
+fn a_seeded_sum_of_many_units_matches_the_unseeded_one_shifted() {
+    // Values only: the carrier of a required -7 is the unseeded carrier moved
+    // by -7. The packed route from a nonzero origin is asserted by the packed
+    // tests' `seeded_packed` cases.
     let optional = [1; 64];
     let seeded = numbers(AggregateFunction::Sum, &[-7], &optional).unwrap();
     let shifted: Vec<_> = numbers(AggregateFunction::Sum, &[], &optional)
