@@ -1,6 +1,6 @@
 //! clingo's bounded reports on a source, and the models they and the fixtures
-//! record: every model, every model or the refusal of an unsafe source, and the
-//! optimal models.
+//! record: every model, every model or the refusal of an unsafe source, the
+//! optimal models, and the optimal witnesses of an optN report.
 
 use std::time::Duration;
 
@@ -63,6 +63,39 @@ pub(crate) fn optimal(source: &str) -> Json {
             max_output_bytes: 2 * 65_536,
         },
     ))
+}
+
+/// The optimal witnesses among an optN report's `records`, each a witness's
+/// display with its costs. Such a report lists incumbents first; its first
+/// witness at the optimum's costs, `summary["Costs"]`, is the final incumbent,
+/// which recurs once more in the complete tie pass, so every witness up to and
+/// including it is dropped. The rest have the optimum's costs, and there are
+/// `summary["Optimal"]` of them.
+///
+/// # Panics
+/// Panics unless the summary names the optimum's costs, a witness has them and
+/// recurs later, and the remaining witnesses are exactly the optimal ones.
+pub(crate) fn optimal_witnesses<T: PartialEq>(
+    summary: &Json,
+    records: Vec<(T, Option<Vec<i64>>)>,
+) -> Vec<(T, Option<Vec<i64>>)> {
+    let best = oracle::costs(&summary["Costs"]).expect("an optimum's costs");
+    let first = records
+        .iter()
+        .position(|(_, costs)| costs.as_ref() == Some(&best))
+        .expect("a witness at the optimum's costs");
+    assert!(
+        records[first + 1..].contains(&records[first]),
+        "optN replays its final incumbent in the complete tie pass"
+    );
+    let optimal: Vec<_> = records.into_iter().skip(first + 1).collect();
+    assert!(
+        optimal
+            .iter()
+            .all(|(_, costs)| costs.as_ref() == Some(&best))
+    );
+    assert_eq!(summary["Optimal"].as_u64(), Some(optimal.len() as u64));
+    optimal
 }
 
 /// The models a fixture row records from clingo.

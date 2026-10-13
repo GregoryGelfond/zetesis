@@ -1,7 +1,7 @@
 //! Closed choice ranges preserve one group, local products and every reduct.
 
 use crate::support::answer_records::Record;
-use crate::support::clingo_reports::optimal;
+use crate::support::clingo_reports::{optimal, optimal_witnesses};
 use crate::support::finite_bindings::{holds, remap, values};
 use crate::support::limits;
 use crate::support::objective_dependency_records as objective_dependencies;
@@ -125,21 +125,7 @@ fn reference(raw: &Json) -> Vec<Record> {
         records.len() as u64
     );
     if raw["Result"] == "OPTIMUM FOUND" {
-        let best = oracle::costs(&raw["Models"]["Costs"]).expect("an optimum's costs");
-        let first = records
-            .iter()
-            .position(|(_, cost)| cost.as_ref() == Some(&best))
-            .unwrap();
-        assert!(
-            records[first + 1..].contains(&records[first]),
-            "optN incumbent recurrence"
-        );
-        records = records.into_iter().skip(first + 1).collect();
-        assert!(records.iter().all(|(_, cost)| cost.as_ref() == Some(&best)));
-        assert_eq!(
-            raw["Models"]["Optimal"].as_u64().unwrap(),
-            records.len() as u64
-        );
+        records = optimal_witnesses(&raw["Models"], records);
     }
     records.sort();
     records

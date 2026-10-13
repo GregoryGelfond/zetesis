@@ -4,7 +4,7 @@ use crate::support::atom_models::answer_sets;
 use std::collections::BTreeSet;
 
 use crate::support::answer_records::Record;
-use crate::support::clingo_reports::optimal;
+use crate::support::clingo_reports::{optimal, optimal_witnesses};
 use crate::support::finite_bindings::{holds, values};
 use crate::support::objective_boundaries;
 use serde_json::Value as Json;
@@ -146,27 +146,7 @@ fn reference(raw: &Json) -> Vec<Record> {
     match raw["Result"].as_str().unwrap() {
         "SATISFIABLE" => assert!(records.iter().all(|(_, costs)| costs.is_none())),
         "UNSATISFIABLE" => assert!(records.is_empty()),
-        "OPTIMUM FOUND" => {
-            let cost = oracle::costs(&raw["Models"]["Costs"]).expect("an optimum's costs");
-            let first = records
-                .iter()
-                .position(|(_, found)| found.as_ref() == Some(&cost))
-                .unwrap();
-            assert!(
-                records[first + 1..].contains(&records[first]),
-                "one optN incumbent replay"
-            );
-            records = records.into_iter().skip(first + 1).collect();
-            assert!(
-                records
-                    .iter()
-                    .all(|(_, found)| found.as_ref() == Some(&cost))
-            );
-            assert_eq!(
-                raw["Models"]["Optimal"].as_u64().unwrap(),
-                records.len() as u64
-            );
-        }
+        "OPTIMUM FOUND" => records = optimal_witnesses(&raw["Models"], records),
         other => panic!("incomplete reference: {other}"),
     }
     records.sort();

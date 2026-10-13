@@ -4,6 +4,7 @@
 //! deliberately has no quoted or whitespace-containing terms; the fixed
 //! observation campaign separately tests escaping and its richer token parser.
 
+use crate::support::clingo_reports::optimal_witnesses;
 use std::collections::BTreeSet;
 
 use crate::support::answer_records::Record;
@@ -114,10 +115,9 @@ fn reference(result: &str, summary: &Json, witnesses: &[Json]) -> Vec<Record> {
                     .iter()
                     .all(|(_, costs)| costs.as_deref() == Some(&[0]))
             );
-            // optN reports its final incumbent once before the complete tie pass.
-            // Drop exactly that one record, even when many displays are equal.
-            assert!(records[1..].contains(&records[0]));
-            records.remove(0);
+            // Every display ties, so exactly the replayed incumbent is dropped,
+            // even when many displays are equal.
+            records = optimal_witnesses(summary, records);
         }
         other => panic!("incomplete or unexpected reference result: {other}"),
     }

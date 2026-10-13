@@ -1,5 +1,6 @@
 //! Independent complete display multisets; observation never changes the reduct.
 
+use crate::support::clingo_reports::optimal_witnesses;
 use std::time::{Duration, Instant};
 
 use crate::support::admission;
@@ -77,19 +78,7 @@ fn reference(case: &Json) -> Vec<Record> {
         })
         .collect();
     if case["reference_result"] == "OPTIMUM FOUND" {
-        let summary = &case["reference_summary"];
-        let best = oracle::costs(&summary["Costs"]).expect("an optimum's costs");
-        let first = records
-            .iter()
-            .position(|(_, cost)| cost.as_ref() == Some(&best))
-            .unwrap();
-        assert!(
-            records[first + 1..].contains(&records[first]),
-            "first final incumbent must recur in optN enumeration"
-        );
-        records = records.into_iter().skip(first + 1).collect();
-        assert!(records.iter().all(|(_, cost)| cost.as_ref() == Some(&best)));
-        assert_eq!(summary["Optimal"].as_u64().unwrap(), records.len() as u64);
+        records = optimal_witnesses(&case["reference_summary"], records);
     }
     records.sort();
     records
