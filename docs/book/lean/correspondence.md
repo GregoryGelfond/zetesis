@@ -230,8 +230,16 @@ qualify runtime propagation or GPU execution.
 ## Tight-body classification
 
 CPU tight membership retains its truth and packed support vectors in a
-worker-local `TightWorkspace`. Every formula node receives fresh truth, while
-conjunctions and disjunctions stop reading operands at the first decisive value.
+worker-local `TightWorkspace`. A complete check gives every formula node fresh
+truth, while conjunctions and disjunctions stop reading operands at the first
+decisive value. With the plan's readers index, a later check updates the
+retained evaluation instead: it re-evaluates, in node order, exactly the nodes
+with a changed operand and maintains support counts and the false-root and
+unsupported-atom sets. That this update equals `TightEvaluation.values` of the
+new candidate (by induction over the node order), and that the maintained sets
+equal their definitions, is argued in the Rust documentation and checked by a
+differential property against complete evaluation; the Lean laws below do not
+cover the update.
 All original roots and producers remain covered. Support is reset before reuse;
 the final check intersects each candidate word with the complement of its
 support word, returning the first unsupported atom. Work counts visited operand

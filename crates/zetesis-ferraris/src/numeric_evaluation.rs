@@ -3,14 +3,18 @@
 //! One 16-byte slot holds either an `i128` sum or two `u64` extrema. The immutable
 //! `NumericRow` domain determines its interpretation; the slot is never a second
 //! row authority. Byte conversions are safe Rust, with no union or casts.
-//! Validity is reset before each complete original or frozen evaluation pass.
+//! Validity is reset before each complete original or frozen evaluation pass. An
+//! update of a retained tight evaluation instead withdraws exactly the rows whose
+//! conditions changed; the other rows keep measures equal to their reductions
+//! under the current candidate.
 
 use crate::{ExtremaMeasure, ExtremumCut, NumericDomain, Theory, Threshold};
 use zetesis_cpu::Stop;
 
-/// Capacity survives passes; valid bits never do. Measure cells remain safely
-/// initialized after interruption, but are readable only after the current
-/// pass has published their bit. The cache borrows no subject or source data.
+/// Capacity survives passes; valid bits survive only into an update of the
+/// evaluation that published them. Measure cells remain safely initialized after
+/// interruption, but are readable only after the current pass, or the update,
+/// has published their bit. The cache borrows no subject or source data.
 #[derive(Debug, Default)]
 pub(crate) struct NumericRowScratch {
     measures: Vec<Measure>,
@@ -173,6 +177,16 @@ impl NumericRowScratch {
         }
         self.cached(row, || cut.row.reduce(read).map(Measure::ordinal))
             .map(Measure::extrema)
+    }
+
+    /// Withdraw one row's measure, so that its next guard reduces it again. An
+    /// update of a retained evaluation withdraws exactly the rows whose
+    /// conditions changed; every other row keeps a measure equal to its
+    /// reduction under the current candidate.
+    pub(crate) fn invalidate(&mut self, row: usize) -> Result<(), Stop> {
+        let word = self.valid.get_mut(row / 64).ok_or(Stop::InvalidProgram)?;
+        *word &= !(1_u64 << (row % 64));
+        Ok(())
     }
 
     /// Domain interpretation is fixed by the admitted descriptor before this

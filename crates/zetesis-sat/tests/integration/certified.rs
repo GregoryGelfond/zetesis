@@ -362,16 +362,21 @@ fn certificate_failure_retains_pending_candidates_without_reentering_completion(
     assert_eq!(stream.statistics().stable_models, 0);
     assert_eq!(stream.statistics().certified.unwrap().failed, 1);
     let certified = stream.statistics().certified.unwrap();
-    assert!(matches!(
-        certified.plan,
-        Some(zetesis_sat::CertificatePlanStatistics::Tight(_))
-    ));
+    // The refused check is the worker's first, a complete one: the plan with its
+    // readers index, one truth byte per node, and the kept candidate words and
+    // queued marks; its work ran out testing roots, before support was reserved.
+    let Some(zetesis_sat::CertificatePlanStatistics::Tight(plan)) = certified.plan else {
+        panic!("tight certificate required");
+    };
+    assert!(plan.resident_bytes > probe.statistics().resident_bytes);
     assert_eq!(
         certified.tight_check_peak_bytes,
         Some(
-            u128::from(probe.statistics().resident_bytes)
+            u128::from(plan.resident_bytes)
                 + original.nodes().len() as u128
-                + original.atom_count().div_ceil(32) as u128 * size_of::<u32>() as u128
+                + (original.atom_count().div_ceil(64) + original.nodes().len().div_ceil(64))
+                    as u128
+                    * size_of::<u64>() as u128
         ),
     );
     assert_eq!(pool.last_statistics(), None);

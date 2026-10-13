@@ -444,7 +444,10 @@ fn joined_workers_report_their_certificate_checks() {
 }
 
 #[test]
-fn parallel_certificates_charge_the_scalar_work() {
+fn parallel_certificates_charge_the_scalar_regions_and_construction() {
+    // Checking work depends on what each worker checked before (its retained
+    // evaluation), so only region and construction work match the scalar run;
+    // every check stays within the plan's per-check bound.
     let (scalar_models, scalar, scalar_exhausted) = certified_family(1, Limits::default());
     let (parallel_models, parallel, parallel_exhausted) = certified_family(3, Limits::default());
     assert!(scalar_exhausted && parallel_exhausted);
@@ -453,11 +456,18 @@ fn parallel_certificates_charge_the_scalar_work() {
         parallel.regions.unwrap().counts.work,
         scalar.regions.unwrap().counts.work
     );
-    assert_eq!(
-        parallel.certified.unwrap().construction_work,
-        scalar.certified.unwrap().construction_work,
-    );
-    assert_eq!(parallel.search.work, scalar.search.work);
+    let (scalar, parallel) = (scalar.certified.unwrap(), parallel.certified.unwrap());
+    assert_eq!(parallel.construction_work, scalar.construction_work);
+    let plan = zetesis_ferraris::TightPlan::compile(
+        &choices(5),
+        TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    for certified in [scalar, parallel] {
+        assert_eq!(certified.checks, 32);
+        assert!(u128::from(certified.checking_work) <= 32 * plan.check_work_bound());
+    }
 }
 
 #[test]
@@ -481,9 +491,24 @@ fn tight_check_storage_is_local_to_each_worker() {
     let Some(zetesis_sat::CertificatePlanStatistics::Tight(plan)) = scalar.plan else {
         panic!("tight certificate required");
     };
+    // One workspace's footprint once it has updated an evaluation: the plan,
+    // truth and support words of a complete check, then the retained candidate,
+    // queued marks, support counts, unsupported atoms, false roots, the first
+    // reservations of the changed-word list (8) and the worklist (64). A peak
+    // summed over workers would exceed it.
+    let (atoms, nodes, roots) = (
+        original.atom_count(),
+        original.nodes().len(),
+        original.roots().len(),
+    );
+    let words = atoms.div_ceil(64) as u128;
     let expected = u128::from(plan.resident_bytes)
-        + original.nodes().len() as u128
-        + original.atom_count().div_ceil(32) as u128 * size_of::<u32>() as u128;
+        + nodes as u128
+        + atoms.div_ceil(32) as u128 * size_of::<u32>() as u128
+        + (2 * words + nodes.div_ceil(64) as u128 + roots.div_ceil(64) as u128 + 8)
+            * size_of::<u64>() as u128
+        + atoms as u128 * size_of::<u32>() as u128
+        + 64 * size_of::<usize>() as u128;
     assert_eq!(scalar.tight_check_peak_bytes, Some(expected));
     assert_eq!(parallel.tight_check_peak_bytes, Some(expected));
 }

@@ -390,6 +390,7 @@ fn build(
         theory: theory.clone(),
         producers,
         ranks,
+        readers: None,
         statistics: TightPlanStatistics {
             work: work.charged(),
             dependencies,

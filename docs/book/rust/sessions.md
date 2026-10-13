@@ -176,11 +176,23 @@ set; it does not necessarily rule out larger classical models. `TightPlan`
 instead establishes its own acyclicity and supportedness conditions. Neither
 plan changes the definition of membership. CPU tight checks retain exclusive
 `TightWorkspace` scratch in each worker; immutable plans can be shared. Every
-call checks its retained capacity against the current allowance. Support uses
-one bit per atom in 32-bit words. Each conjunction or disjunction stops reading
-operands once its value is determined, while every formula node receives fresh
-truth. Interrupted or rejected candidates cannot leave truth or support in the
-next check.
+call checks its retained capacity against the current allowance. A complete
+check gives every formula node fresh truth, and each conjunction or disjunction
+stops reading operands once its value is determined; support uses one bit per
+atom in 32-bit words. When the plan has its readers index
+(`TightPlan::prepare_updates`, which certified checking calls when it prepares
+the certificate for CPU use, before sharing the plan), a worker's
+workspace keeps the complete evaluation of the last candidate it checked and
+updates it for the next one: it re-evaluates, in node order, exactly the nodes
+with an operand whose truth changed, and keeps support counts and the false-root
+and unsupported-atom sets, so every verdict and its witness equal a complete
+evaluation's. A candidate that differs in more than an eighth of the atoms (at
+least 64), another theory, or a check after an interrupted one evaluates
+completely. An interrupted check leaves nothing the next check reads. The work a
+check charges then depends on the candidate checked before it;
+`TightPlan::check_work_bound` bounds every check by either route. A certificate
+prepared for an external checker shares its plan without the index; if it is
+later enabled for CPU checking, its checks evaluate every candidate completely.
 
 `StratifiedPlan` extends direct evaluation to the supported stratified normal
 grammar. It completes positive components in signed dependency order and checks
