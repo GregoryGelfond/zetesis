@@ -365,16 +365,9 @@ fn arithmetic_inside_constructors_disables_batching() {
 fn oversized_constructor_prefixes_fail_during_capture() {
     // Eighteen shared DAG constructors exceed the logical node ceiling without
     // allocating a corresponding exponential source expression or owned tree.
-    // Preparation's refusal is inspected, which `test_support::prepared` would raise as a panic.
-    let failure = crate::prepare_formula(
-        include_str!(
-            "../../../../tests/fixtures/streamed-consequences/oversized-constructor-chain.lp"
-        )
-        .into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
+    let failure = crate::test_support::prepare(include_str!(
+        "../../../../tests/fixtures/streamed-consequences/oversized-constructor-chain.lp"
+    ))
     .and_then(crate::PreparedFormula::ground_hybrid)
     .expect_err("oversized constructor cannot be captured");
     assert!(

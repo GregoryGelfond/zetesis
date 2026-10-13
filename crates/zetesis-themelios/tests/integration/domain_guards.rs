@@ -3,15 +3,15 @@
 use crate::support::resource_limits;
 use std::cell::{Cell, RefCell};
 use std::fmt::Write;
+use zetesis_reference_support::prepare;
 use zetesis_test_support::thresholds::first_success;
 
 use zetesis_domain::Status;
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, DomainLimits, DomainObservation, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, GroundingObserver,
-    GroundingOptions, GroundingOutcome, GroundingPhase, GroundingWork, JoinStrategy,
-    prepare_formula,
+    ExpansionLimits, FormulaFailure, FormulaResource, GroundingObserver, GroundingOptions,
+    GroundingOutcome, GroundingPhase, GroundingWork, JoinStrategy, prepare_formula,
 };
 
 #[derive(Default)]
@@ -62,16 +62,10 @@ fn ground(
     domains: Option<DomainLimits>,
     observation: &Observation,
 ) -> Result<AdmittedFormula, FormulaFailure> {
-    // Preparation's refusal is returned, which `prepared` would raise as a panic.
-    prepare_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )?
-    .with_grounding_options(GroundingOptions { joins: strategy })
-    .with_domain_analysis(domains)
-    .ground_with_observer(Some(observation))
+    prepare(source)?
+        .with_grounding_options(GroundingOptions { joins: strategy })
+        .with_domain_analysis(domains)
+        .ground_with_observer(Some(observation))
 }
 
 fn equal(left: &AdmittedFormula, right: &AdmittedFormula) {

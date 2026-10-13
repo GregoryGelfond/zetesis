@@ -73,9 +73,9 @@ pub(crate) fn compiled_atoms(compiled: &Compiled) -> Vec<Atom> {
         .collect()
 }
 
-/// `source` admitted under the default options and limits, which must admit
-/// it.
-pub(crate) fn admitted(source: &str) -> AdmittedFormula {
+/// `source` admitted as a formula program under the default options and
+/// limits, which must admit it.
+pub(crate) fn formula(source: &str) -> AdmittedFormula {
     crate::admit_formula(
         source.into(),
         AdmissionOptions::default(),
@@ -85,16 +85,20 @@ pub(crate) fn admitted(source: &str) -> AdmittedFormula {
     .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
-/// `source` prepared under the default options and limits, which must admit
-/// it.
-pub(crate) fn prepared(source: &str) -> PreparedFormula {
+/// `source` prepared under the default options and limits.
+pub(crate) fn prepare(source: &str) -> Result<PreparedFormula, crate::FormulaFailure> {
     crate::prepare_formula(
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+}
+
+/// `source` prepared under the default options and limits, which must admit
+/// it.
+pub(crate) fn prepared(source: &str) -> PreparedFormula {
+    prepare(source).unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
 /// `source` prepared under the default options and limits and grounded for

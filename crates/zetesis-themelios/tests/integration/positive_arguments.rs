@@ -5,10 +5,10 @@ use crate::support::thresholds::minimum_preparation_bytes as minimum_bytes;
 use reference::{Models, native};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::{admit, formula, prepared};
+use zetesis_reference_support::{admit, formula, prepare, prepared};
 use zetesis_themelios::{
     AdmissionOptions, AnalysisBasis, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaResource, admit_formula, prepare_formula,
+    FormulaLimits, FormulaResource, admit_formula,
 };
 
 // Explicit finite substitutions retain each whole supporting atom. Arithmetic
@@ -186,14 +186,8 @@ fn input_refusal_explains_the_located_profile_boundary() {
 
 #[test]
 fn empty_support_cannot_supply_an_expression_input() {
-    // Preparation's refusal is inspected, which `prepared` would raise as a panic.
     assert!(matches!(
-        prepare_formula(
-            "q(X):-p(X+1).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
+        prepare("q(X):-p(X+1)."),
         Err(FormulaFailure::UnboundArgumentInput { .. })
     ));
 }

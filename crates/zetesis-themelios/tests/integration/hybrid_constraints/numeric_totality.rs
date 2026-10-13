@@ -2,7 +2,7 @@ use super::*;
 use std::collections::BTreeSet;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_reference_support as reference;
-use zetesis_reference_support::prepared;
+use zetesis_reference_support::{prepare, prepared};
 
 fn full_family(owner: &HybridFormula) -> BTreeSet<BTreeSet<String>> {
     let count = owner.atom_catalog().atoms().len();
@@ -150,13 +150,6 @@ fn independent_fatal_arithmetic_keeps_its_source_site() {
 #[test]
 fn total_body_evidence_does_not_supply_a_head_binding() {
     let source = "d(1).e(1).p(Z):-d(X),e(Y),X/Y=1.";
-    // Preparation's refusal is inspected, which `prepared` would raise as a panic.
-    let result = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .and_then(zetesis_themelios::PreparedFormula::ground);
+    let result = prepare(source).and_then(zetesis_themelios::PreparedFormula::ground);
     assert!(matches!(result, Err(FormulaFailure::UnsafeVariable { .. })));
 }

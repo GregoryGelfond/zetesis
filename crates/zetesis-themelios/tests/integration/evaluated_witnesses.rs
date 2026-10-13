@@ -7,10 +7,10 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use reference::{Models, holds, native, values};
-use zetesis_reference_support::{canonical, formula, prepared};
+use zetesis_reference_support::{canonical, formula, prepare, prepared};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, admit_formula, prepare_formula,
+    FormulaResource, admit_formula,
 };
 
 // These independently written finite substitutions retain whole source atoms.
@@ -281,14 +281,8 @@ fn arithmetic_cannot_invert_a_captured_value() {
 fn preparation_requires_independently_bound_inputs() {
     // Preparation must refuse before any support traversal, including when the
     // current finite support carrier would be empty.
-    // Preparation's refusal is inspected, which `prepared` would raise as a panic.
     assert!(matches!(
-        prepare_formula(
-            "q:-p(X,X+Y):#true.".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
+        prepare("q:-p(X,X+Y):#true."),
         Err(FormulaFailure::UnboundArgumentInput { .. })
     ));
 }

@@ -1,8 +1,9 @@
 //! Source validation is independent of whether a rule can contribute an answer.
 
+use zetesis_reference_support::prepare;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, ProfileFeature, admit_extended, prepare_formula,
+    ProfileFeature, admit_extended,
 };
 
 #[test]
@@ -23,14 +24,7 @@ fn authored_terms_reject_undefined_arithmetic() {
             matches!(error, ExpansionFailure::Evaluation { .. }),
             "{source}: {error}"
         );
-        // Preparation's refusal is inspected, which `prepared` would raise as a panic.
-        let error = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
+        let error = prepare(source).unwrap_err();
         assert!(
             matches!(
                 error,
@@ -63,14 +57,7 @@ fn authored_terms_reject_nested_nul_values() {
             ),
             "{error}"
         );
-        // Preparation's refusal is inspected, which `prepared` would raise as a panic.
-        let error = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
+        let error = prepare(source).unwrap_err();
         assert!(
             matches!(
                 error,

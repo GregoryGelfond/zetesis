@@ -1,20 +1,15 @@
 //! Literal divisors defer only the redundant complete-family traversal.
 
+use zetesis_reference_support::prepare;
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
-    GroundingOutcome, GroundingPhase, observation::EvaluationError, prepare_formula,
+    ExpansionFailure, FormulaFailure, GroundingOutcome, GroundingPhase,
+    observation::EvaluationError,
 };
 
 use super::{Observer, Record};
 
 fn ground(source: &str, hybrid: bool, observer: &Observer) -> Result<usize, FormulaFailure> {
-    // Preparation's refusal is returned, which `prepared` would raise as a panic.
-    let prepared = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )?;
+    let prepared = prepare(source)?;
     if hybrid {
         prepared
             .ground_hybrid_with_observer(Some(observer))

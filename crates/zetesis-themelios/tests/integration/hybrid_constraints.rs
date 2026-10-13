@@ -1,15 +1,14 @@
 //! Hybrid admission preserves original source validation and candidate identity.
 
 use std::fmt::Write;
-use zetesis_reference_support::{hybrid, prepared};
+use zetesis_reference_support::{hybrid, prepare, prepared};
 
 use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::{
-    AdmissionOptions, ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits,
-    ConstraintCheckStatistics, ConstraintVerdict, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, GroundingOptions, HybridFeature, HybridFormula,
-    JoinStrategy, prepare_formula,
+    ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits, ConstraintCheckStatistics,
+    ConstraintVerdict, ExpansionFailure, FormulaFailure, FormulaResource, GroundingOptions,
+    HybridFeature, HybridFormula, JoinStrategy,
 };
 
 fn model(owner: &HybridFormula, selected: &[&str]) -> Model {
@@ -196,14 +195,7 @@ fn candidate_gates_cannot_hide_fatal_source_arithmetic() {
     ] {
         // An interpretation can omit p, but original arithmetic validation
         // precedes every candidate and must refuse the source itself.
-        // Preparation's refusal is inspected, which `prepared` would raise as a panic.
-        let result = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .and_then(zetesis_themelios::PreparedFormula::ground_hybrid);
+        let result = prepare(source).and_then(zetesis_themelios::PreparedFormula::ground_hybrid);
         assert!(
             matches!(
                 result,

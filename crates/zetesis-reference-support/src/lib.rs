@@ -11,9 +11,9 @@
 //! (`zetesis_ferraris::check`) accepts, each with its objective's costs; atoms
 //! are spelled as clingo spells them ([`canonical`]). [`normal_answer_sets`]
 //! finds a normal program's answer sets by exhausting its candidates, each
-//! checked against the reduct (`zetesis_cpu::check`). [`prepared`] prepares a
-//! source under the default options and limits and [`hybrid`] grounds it for
-//! hybrid execution; [`BundleFixture`] writes a source bundle into a temporary
+//! checked against the reduct (`zetesis_cpu::check`). [`prepare`] prepares a
+//! source under the default options and limits, [`prepared`] when preparation
+//! must accept it, and [`hybrid`] grounds it for hybrid execution; [`BundleFixture`] writes a source bundle into a temporary
 //! directory for the tests that load or run one. The crate stands above
 //! `zetesis-themelios`, so only the tests that need that closure compile it.
 //! It is not published or installed.
@@ -105,17 +105,24 @@ pub fn normal(source: &str) -> Admitted {
 
 /// `source` prepared under the default options and limits.
 ///
-/// # Panics
-/// Panics, naming `source` and the refusal, if preparation refuses it.
-#[must_use]
-pub fn prepared(source: &str) -> PreparedFormula {
+/// # Errors
+/// Returns the preparation's refusal.
+pub fn prepare(source: &str) -> Result<PreparedFormula, FormulaFailure> {
     prepare_formula(
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+}
+
+/// `source` prepared under the default options and limits.
+///
+/// # Panics
+/// Panics, naming `source` and the refusal, if preparation refuses it.
+#[must_use]
+pub fn prepared(source: &str) -> PreparedFormula {
+    prepare(source).unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
 /// `source` prepared under the default options and limits and grounded for

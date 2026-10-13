@@ -267,7 +267,7 @@ fn observation_preserves_the_compiled_subject() {
         "p(1,2). p(2,1). q(X) :- p(X,Y), X+Y=3.",
         "p(1).p(2).#minimize { X@1,X : p(X) }.",
     ] {
-        let compile = || crate::test_support::admitted(source);
+        let compile = || crate::test_support::formula(source);
         let (observed, report) = record(Limits::default(), compile);
         let plain = compile();
         assert_eq!(report.stop, None);
