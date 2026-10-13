@@ -1,14 +1,16 @@
 //! The installer's phases, driven with stand-in build tools.
 //!
 //! A temporary checkout holds the real `scripts/install.sh` and a manifest.
-//! Stand-ins for `cargo`, `rustc`, `uname` and `install` come first on `PATH`:
-//! the stand-in `cargo` writes a distinct stand-in executable per package and
-//! profile, naming the source and the identity it was built with, and fails a
-//! numbered build of the run on request; the stand-in `install` runs the
-//! host's own and fails writing a named file on request. The SHA-256 tool and the file
-//! utilities are the host's. The stand-in `uname` reports Linux, because the
-//! macOS load-command guard reads `/usr/bin/otool`, which no stand-in can
-//! replace: every default install on macOS drives that guard instead.
+//! Stand-ins for `cargo`, `rustc`, `uname` and `install` come first on `PATH`.
+//! The stand-in `cargo` writes a distinct stand-in executable per package and
+//! profile, naming the source and the identity it was built with, or copies a
+//! named executable into a profile's output when a test asks; it fails a
+//! numbered build of the run on request. The stand-in `install` runs the
+//! host's own and fails writing a named file on request. The stand-in `uname`
+//! reports Linux unless a test names Darwin. The SHA-256 tool and the file
+//! utilities are the host's. On macOS the guard's tests name Darwin and have
+//! the stand-in `cargo` copy system executables, which the host's own
+//! `/usr/bin/otool` reads.
 
 use crate::support::process::{Command, Output};
 use sha2::{Digest, Sha256};
