@@ -1,30 +1,20 @@
 use super::counts;
 use crate::formula_assignment::sums;
 use crate::formula_support::testing::Fixture;
-use crate::{FormulaFailure, FormulaLimits, FormulaResource, ProgramSite};
-use themelios_base::{
-    source::SourceId,
-    span::{ByteOffset, Span},
-};
-
-fn location() -> ProgramSite {
-    ProgramSite::source(themelios_base::span::Location {
-        source: SourceId::new(89),
-        span: Span::empty(ByteOffset::new(0)),
-    })
-}
+use crate::test_support::given_site;
+use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
 #[test]
 fn count_proposals_equal_unit_subset_sums() {
     for size in 0..=16 {
-        Fixture::default().with(location(), |_, computation, counters| {
+        Fixture::default().with(given_site(), |_, computation, counters| {
             let limits = FormulaLimits::default();
             let actual = counts(
                 std::iter::repeat_n(1, size),
                 computation,
                 &limits,
                 counters,
-                location(),
+                given_site(),
             )
             .unwrap();
             let reference = sums(
@@ -32,7 +22,7 @@ fn count_proposals_equal_unit_subset_sums() {
                 computation,
                 &limits,
                 counters,
-                location(),
+                given_site(),
             )
             .unwrap();
             assert_eq!(actual.slice(), reference.slice());
@@ -42,13 +32,13 @@ fn count_proposals_equal_unit_subset_sums() {
 
 #[test]
 fn count_construction_avoids_subset_merge_work() {
-    let (direct, merged) = Fixture::default().with(location(), |_, computation, counters| {
+    let (direct, merged) = Fixture::default().with(given_site(), |_, computation, counters| {
         let limits = FormulaLimits::default();
         let before = counters.accounting.work;
-        drop(counts([1; 64], computation, &limits, counters, location()).unwrap());
+        drop(counts([1; 64], computation, &limits, counters, given_site()).unwrap());
         let direct = counters.accounting.work - before;
         let before = counters.accounting.work;
-        drop(sums([1; 64], computation, &limits, counters, location()).unwrap());
+        drop(sums([1; 64], computation, &limits, counters, given_site()).unwrap());
         (direct, counters.accounting.work - before)
     });
     assert!(
@@ -59,7 +49,7 @@ fn count_construction_avoids_subset_merge_work() {
 
 #[test]
 fn zero_value_limit_precedes_other_refusals() {
-    Fixture::default().with(location(), |_, computation, counters| {
+    Fixture::default().with(given_site(), |_, computation, counters| {
         let cancellation = zetesis_cpu::Cancellation::default();
         cancellation.cancel();
         *counters = std::mem::take(counters).with_cancellation(Some(&cancellation));
@@ -74,7 +64,7 @@ fn zero_value_limit_precedes_other_refusals() {
             panic!("the empty candidate's limit precedes input consumption")
         });
         assert!(matches!(
-            counts(unseen, computation, &limits, counters, location()),
+            counts(unseen, computation, &limits, counters, given_site()),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::AssignmentValues,
                 observed: 1,
@@ -92,7 +82,7 @@ fn zero_value_limit_precedes_other_refusals() {
 #[test]
 fn value_limit_includes_the_zero_proposal() {
     for limit in 1_usize..=5 {
-        Fixture::default().with(location(), |_, computation, counters| {
+        Fixture::default().with(given_site(), |_, computation, counters| {
             let limits = FormulaLimits {
                 max_assignment_values: limit,
                 ..FormulaLimits::default()
@@ -102,7 +92,7 @@ fn value_limit_includes_the_zero_proposal() {
                 computation,
                 &limits,
                 counters,
-                location(),
+                given_site(),
             )
             .unwrap();
             assert_eq!(fitting.len(), limit);
@@ -113,7 +103,7 @@ fn value_limit_includes_the_zero_proposal() {
                     computation,
                     &limits,
                     counters,
-                    location()
+                    given_site()
                 ),
                 Err(FormulaFailure::Limit {
                     resource: FormulaResource::AssignmentValues,
@@ -128,7 +118,7 @@ fn value_limit_includes_the_zero_proposal() {
 
 #[test]
 fn every_work_refusal_releases_count_storage() {
-    let needed = Fixture::default().with(location(), |_, computation, counters| {
+    let needed = Fixture::default().with(given_site(), |_, computation, counters| {
         let before = counters.accounting.work;
         drop(
             counts(
@@ -136,21 +126,21 @@ fn every_work_refusal_releases_count_storage() {
                 computation,
                 &FormulaLimits::default(),
                 counters,
-                location(),
+                given_site(),
             )
             .unwrap(),
         );
         counters.accounting.work - before
     });
     for cutoff in 0..needed {
-        Fixture::default().with(location(), |_, computation, counters| {
+        Fixture::default().with(given_site(), |_, computation, counters| {
             let before = counters.workspace_bytes();
             let limits = FormulaLimits {
                 max_work: counters.accounting.work + cutoff,
                 ..FormulaLimits::default()
             };
             assert!(matches!(
-                counts([1; 8], computation, &limits, counters, location()),
+                counts([1; 8], computation, &limits, counters, given_site()),
                 Err(FormulaFailure::Limit {
                     resource: FormulaResource::Work,
                     ..
@@ -164,14 +154,14 @@ fn every_work_refusal_releases_count_storage() {
 
 #[test]
 fn storage_refusal_releases_the_count_header() {
-    Fixture::default().with(location(), |_, computation, counters| {
+    Fixture::default().with(given_site(), |_, computation, counters| {
         let before = counters.workspace_bytes();
         let limits = FormulaLimits {
             max_support_bytes: 0,
             ..FormulaLimits::default()
         };
         assert!(matches!(
-            counts([1; 4], computation, &limits, counters, location()),
+            counts([1; 4], computation, &limits, counters, given_site()),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::SupportBytes,
                 ..
@@ -183,7 +173,7 @@ fn storage_refusal_releases_the_count_header() {
 
 #[test]
 fn cancellation_between_contributions_releases_storage() {
-    Fixture::default().with(location(), |_, computation, counters| {
+    Fixture::default().with(given_site(), |_, computation, counters| {
         let cancellation = zetesis_cpu::Cancellation::default();
         *counters = std::mem::take(counters).with_cancellation(Some(&cancellation));
         let before = counters.workspace_bytes();
@@ -200,7 +190,7 @@ fn cancellation_between_contributions_releases_storage() {
                 computation,
                 &FormulaLimits::default(),
                 counters,
-                location()
+                given_site()
             ),
             Err(FormulaFailure::Interrupted {
                 reason: zetesis_cpu::Stop::Cancelled,
@@ -215,13 +205,13 @@ fn cancellation_between_contributions_releases_storage() {
 #[test]
 #[should_panic(expected = "count contributions are unit weights")]
 fn nonunit_count_contribution_is_an_invariant_failure() {
-    Fixture::default().with(location(), |_, computation, counters| {
+    Fixture::default().with(given_site(), |_, computation, counters| {
         let _ = counts(
             [1, 2],
             computation,
             &FormulaLimits::default(),
             counters,
-            location(),
+            given_site(),
         );
     });
 }

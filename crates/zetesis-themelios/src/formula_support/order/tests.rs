@@ -1,6 +1,4 @@
-use crate::ProgramSite;
-use themelios_base::source::SourceId;
-use themelios_base::span::{ByteOffset, Span};
+use crate::test_support::given_site;
 use themelios_program::program::{DefaultNegation, Relation};
 use zetesis_core::{AtomPattern, Predicate, Sign, Term};
 
@@ -13,13 +11,6 @@ use crate::formula_ir::{Expression, LiteralIr, Operation};
 use crate::formula_support::testing::Fixture;
 use crate::formula_support::{PatternOccurrence, PositivePattern};
 
-fn location() -> ProgramSite {
-    ProgramSite::source(themelios_base::span::Location {
-        source: SourceId::new(37),
-        span: Span::empty(ByteOffset::new(12)),
-    })
-}
-
 fn atom(fixture: &mut Fixture, name: &str, variables: &[usize]) -> LiteralIr {
     let pattern = AtomPattern::new(
         Predicate::with_sign(name, variables.len(), Sign::Positive).unwrap(),
@@ -29,7 +20,10 @@ fn atom(fixture: &mut Fixture, name: &str, variables: &[usize]) -> LiteralIr {
             .collect(),
     )
     .unwrap();
-    LiteralIr::Atom(DefaultNegation::None, fixture.pattern(&pattern, location()))
+    LiteralIr::Atom(
+        DefaultNegation::None,
+        fixture.pattern(&pattern, given_site()),
+    )
 }
 
 fn less(left: usize, right: usize) -> LiteralIr {
@@ -47,7 +41,7 @@ fn order(
     sizes: &[usize],
     variables: usize,
 ) -> Vec<String> {
-    fixture.with(location(), |_, computation, counters| {
+    fixture.with(given_site(), |_, computation, counters| {
         let mut occurrences: Vec<_> = literals
             .iter()
             .enumerate()
@@ -59,7 +53,7 @@ fn order(
                                 *pattern,
                                 &crate::FormulaLimits::default(),
                                 counters,
-                                location(),
+                                given_site(),
                             )
                             .unwrap(),
                     ),
@@ -82,7 +76,7 @@ fn order(
                     .unwrap()]
             },
             &mut budget,
-            location(),
+            given_site(),
         )
         .unwrap();
         occurrences
@@ -169,12 +163,12 @@ fn refused_preparation_capacity_is_not_reported_as_allocated() {
         events.push(bytes);
         Err(crate::FormulaFailure::UnsafeVariable {
             variable: 17,
-            location: location(),
+            location: given_site(),
         })
     };
     let mut space = super::Workspace {
         bytes: 0,
-        location: Some(location()),
+        location: Some(given_site()),
         admit: Some(&mut admit),
     };
     assert!(matches!(
@@ -197,7 +191,7 @@ fn preparation_observes_actual_cumulative_capacity() {
     };
     let mut space = super::Workspace {
         bytes: 0,
-        location: Some(location()),
+        location: Some(given_site()),
         admit: Some(&mut admit),
     };
     let first = space.reserve::<usize>(3).unwrap();
@@ -224,7 +218,7 @@ fn arrangement_resolves_each_offered_count_once() {
         atom(&mut fixture, "small", &[1]),
         atom(&mut fixture, "middle", &[2]),
     ];
-    fixture.with(location(), |_, computation, counters| {
+    fixture.with(given_site(), |_, computation, counters| {
         let mut occurrences: Vec<_> = literals
             .iter()
             .enumerate()
@@ -240,7 +234,7 @@ fn arrangement_resolves_each_offered_count_once() {
                                 *pattern,
                                 &crate::FormulaLimits::default(),
                                 counters,
-                                location(),
+                                given_site(),
                             )
                             .unwrap(),
                     ),
@@ -258,7 +252,7 @@ fn arrangement_resolves_each_offered_count_once() {
                 [30, 10, 20][occurrence.source]
             },
             &mut budget,
-            location(),
+            given_site(),
         )
         .unwrap();
         assert_eq!(calls.get(), 3);
@@ -278,25 +272,25 @@ fn comparison_free_arrangement_refuses_every_short_work_prefix() {
     let literals: Vec<_> = (0..4)
         .map(|slot| atom(&mut fixture, "p", &[slot]))
         .collect();
-    fixture.with(location(), |_, computation, counters| {
+    fixture.with(given_site(), |_, computation, counters| {
         let original: Vec<_> = literals.iter().enumerate().map(|(source, literal)| {
             let LiteralIr::Atom(_, pattern) = literal else { unreachable!() };
             PatternOccurrence {
                 source,
                 pattern: PositivePattern::Flat(computation.static_pattern(
-                    *pattern, &crate::FormulaLimits::default(), counters, location(),
+                    *pattern, &crate::FormulaLimits::default(), counters, given_site(),
                 ).unwrap()),
             }
         }).collect();
         let mut complete = Budget::new(ExpansionLimits::default(), usize::MAX);
-        arrange(&mut original.clone(), &literals, &mut [false; 4], |_| 1, &mut complete, location()).unwrap();
+        arrange(&mut original.clone(), &literals, &mut [false; 4], |_| 1, &mut complete, given_site()).unwrap();
         let required = complete.usage().term_work;
         assert!(required > original.len() * original.len());
         for maximum in 0..required {
             let mut budget = Budget::new(ExpansionLimits { max_term_work: maximum, ..ExpansionLimits::default() }, usize::MAX);
             let mut occurrences = original.clone();
             assert!(matches!(
-                arrange(&mut occurrences, &literals, &mut [false; 4], |_| 1, &mut budget, location()),
+                arrange(&mut occurrences, &literals, &mut [false; 4], |_| 1, &mut budget, given_site()),
                 Err(crate::FormulaFailure::Expansion(crate::ExpansionFailure::Limit {
                     resource: crate::ExpansionResource::TermWork, limit, observed, ..
                 })) if limit == maximum as u128 && observed > limit
@@ -322,8 +316,8 @@ fn offered_counts_use_checked_predicate_text_comparison() {
         .unwrap()
     });
     let query = Predicate::new(format!("p{prefix}b"), 0).unwrap();
-    let mut fixture = Fixture::from_atoms(atoms, location());
-    fixture.with(location(), |support, _, _| {
+    let mut fixture = Fixture::from_atoms(atoms, given_site());
+    fixture.with(given_site(), |support, _, _| {
         let mut required = 0;
         let expected = support
             .row_counts_with((&query).into(), || {
@@ -362,7 +356,7 @@ fn comparison_readiness_refuses_unpaid_variable_scans() {
         &[],
         &[true, true],
         &mut complete,
-        location(),
+        given_site(),
         &mut |_| Ok(()),
     )
     .unwrap();
@@ -377,7 +371,7 @@ fn comparison_readiness_refuses_unpaid_variable_scans() {
             usize::MAX,
         );
         assert!(matches!(
-            super::Decisions::checked(&literals, &[], &[true, true], &mut budget, location(), &mut |_| Ok(())),
+            super::Decisions::checked(&literals, &[], &[true, true], &mut budget, given_site(), &mut |_| Ok(())),
             Err(crate::FormulaFailure::Expansion(crate::ExpansionFailure::Limit {
                 resource: crate::ExpansionResource::TermWork, limit, observed, ..
             })) if limit == maximum as u128 && observed > limit

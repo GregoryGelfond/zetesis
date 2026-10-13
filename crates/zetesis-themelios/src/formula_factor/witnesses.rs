@@ -3,8 +3,9 @@ use super::testing::{self as route, Counts, Point};
 use crate::formula::Compiled;
 use crate::formula_ground::{ground, ground_retained};
 use crate::formula_support::testing;
+use crate::test_support::compiled_atoms;
 use crate::{ExpansionFailure, FormulaFailure, FormulaResource};
-use zetesis_core::{Atom, ValueLimits};
+use zetesis_core::Atom;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
 
@@ -13,19 +14,10 @@ fn compile(source: &str, factored: bool) -> (Compiled, Counts) {
     (result.unwrap(), counts)
 }
 
-fn atoms(compiled: &Compiled) -> Vec<Atom> {
-    compiled
-        .atoms
-        .atoms()
-        .iter()
-        .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
-        .collect()
-}
-
 fn interpretation(compiled: &Compiled, vocabulary: &[Atom], bits: usize) -> Interpretation {
     Interpretation::new(
         &compiled.theory,
-        atoms(compiled)
+        compiled_atoms(compiled)
             .iter()
             .enumerate()
             .filter_map(|(index, atom)| {
@@ -38,9 +30,9 @@ fn interpretation(compiled: &Compiled, vocabulary: &[Atom], bits: usize) -> Inte
 fn same_truth(source: &str) -> Counts {
     let (shared, counts) = compile(source, true);
     let (reference, _) = compile(source, false);
-    let mut vocabulary = atoms(&shared);
+    let mut vocabulary = compiled_atoms(&shared);
     vocabulary.sort();
-    let mut original = atoms(&reference);
+    let mut original = compiled_atoms(&reference);
     original.sort();
     assert_eq!(vocabulary, original, "{source}");
     assert!(

@@ -3,12 +3,13 @@
 
 use std::{borrow::Cow, cell::Cell};
 
-use super::{atom, less, location, order};
+use super::{atom, less, order};
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, LiteralIr, Operation};
 use crate::formula_support::{Computation, Context, Counters, Join, testing::Fixture};
 use crate::grounding_observer::{GroundingOutcome, GroundingPhase, GroundingWork, Profile};
+use crate::test_support::given_site;
 use crate::{ExpansionLimits, FormulaFailure, FormulaLimits, GroundingObserver, ProgramSite};
 use themelios_program::{program::Relation, term::BinaryOp};
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueNodeRef};
@@ -45,57 +46,61 @@ fn execute(
     variables: usize,
     permutation: Option<&[usize]>,
 ) -> Run {
-    fixture.with(location(), |support, computation, counters| {
+    fixture.with(given_site(), |support, computation, counters| {
         let observer = Observer::default();
         let profile = Profile::new(Some(&observer));
         let previous = std::mem::replace(&mut counters.observed, profile.work());
         let before = counters.accounting.work;
         let mut actual_order = Vec::new();
-        let result = profile.phase(GroundingPhase::RuleInstantiation, Some(location()), || {
-            let limits = FormulaLimits::default();
-            let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
-            let prefix = Binding::new(computation, &limits, counters, location())?;
-            let mut plan = super::super::Plan::new(
-                literals,
-                &prefix,
-                variables,
-                super::super::SourceRows {
-                    relations: support,
-                    pivot: None,
-                },
-                &mut budget,
-                location(),
-                None,
-            )?;
-            if let Some(permutation) = permutation {
-                assert_eq!(permutation.len(), plan.patterns.len());
-                plan.patterns.sort_by_key(|pattern| {
-                    permutation
-                        .iter()
-                        .position(|&source| source == pattern.source)
-                        .unwrap()
-                });
-                plan.decisions = super::super::Decisions::checked(
+        let result = profile.phase(
+            GroundingPhase::RuleInstantiation,
+            Some(given_site()),
+            || {
+                let limits = FormulaLimits::default();
+                let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
+                let prefix = Binding::new(computation, &limits, counters, given_site())?;
+                let mut plan = super::super::Plan::new(
                     literals,
-                    &plan.patterns,
-                    &vec![false; variables],
+                    &prefix,
+                    variables,
+                    super::super::SourceRows {
+                        relations: support,
+                        pivot: None,
+                    },
                     &mut budget,
-                    location(),
-                    &mut |_| Ok(()),
+                    given_site(),
+                    None,
                 )?;
-            }
-            actual_order = plan.patterns.iter().map(|pattern| pattern.source).collect();
-            let mut join = Join::with_plan(
-                literals,
-                &prefix,
-                variables,
-                support,
-                Cow::Owned(plan),
-                None,
-                Context::new(computation, &limits, counters, location()),
-            )?;
-            complete(&mut join, computation, &mut budget, counters, variables)
-        });
+                if let Some(permutation) = permutation {
+                    assert_eq!(permutation.len(), plan.patterns.len());
+                    plan.patterns.sort_by_key(|pattern| {
+                        permutation
+                            .iter()
+                            .position(|&source| source == pattern.source)
+                            .unwrap()
+                    });
+                    plan.decisions = super::super::Decisions::checked(
+                        literals,
+                        &plan.patterns,
+                        &vec![false; variables],
+                        &mut budget,
+                        given_site(),
+                        &mut |_| Ok(()),
+                    )?;
+                }
+                actual_order = plan.patterns.iter().map(|pattern| pattern.source).collect();
+                let mut join = Join::with_plan(
+                    literals,
+                    &prefix,
+                    variables,
+                    support,
+                    Cow::Owned(plan),
+                    None,
+                    Context::new(computation, &limits, counters, given_site()),
+                )?;
+                complete(&mut join, computation, &mut budget, counters, variables)
+            },
+        );
         counters.observed = previous;
         Run {
             result,
@@ -119,7 +124,7 @@ fn complete(
         &FormulaLimits::default(),
         budget,
         counters,
-        location(),
+        given_site(),
     )? {
         if row.passes {
             found.push(
@@ -127,7 +132,7 @@ fn complete(
                     .map(|slot| {
                         match row
                             .values
-                            .read(slot, computation.read(), location())
+                            .read(slot, computation.read(), given_site())
                             .unwrap()
                             .descriptor()
                         {
@@ -167,7 +172,7 @@ fn graph(width: i32) -> (Fixture, Vec<LiteralIr>, Vec<Vec<i32>>) {
         }
     }
     expected.sort();
-    let mut fixture = Fixture::from_atoms(atoms, location());
+    let mut fixture = Fixture::from_atoms(atoms, given_site());
     let literals = vec![
         atom(&mut fixture, "p", &[0]),
         atom(&mut fixture, "q", &[1]),
@@ -226,7 +231,7 @@ fn intervals() -> (Fixture, Vec<LiteralIr>, Vec<Vec<i32>>) {
             }
         }
     }
-    let mut fixture = Fixture::from_atoms(atoms, location());
+    let mut fixture = Fixture::from_atoms(atoms, given_site());
     let literals = vec![
         atom(&mut fixture, "start", &[0, 1]),
         atom(&mut fixture, "end", &[0, 2]),
@@ -320,7 +325,7 @@ fn constant_arguments_enable_posting_preference() {
             vec![Term::Constant(Value::Number(7)), Term::Variable(0)],
         )
         .unwrap(),
-        location(),
+        given_site(),
     );
     let literals = [
         atom(&mut fixture, "independent", &[1]),
@@ -343,9 +348,9 @@ fn nested_bindings_do_not_claim_a_flat_posting() {
             vec![Term::Variable(1)],
         )
         .unwrap(),
-        location(),
+        given_site(),
     );
-    let shape = fixture.constructor(ValueNodeRef::Tuple { arity: 1 }, location());
+    let shape = fixture.constructor(ValueNodeRef::Tuple { arity: 1 }, given_site());
     let pattern = PatternAtom {
         atom: whole,
         arguments: vec![ArgumentPattern {
@@ -353,9 +358,9 @@ fn nested_bindings_do_not_claim_a_flat_posting() {
             nodes: vec![PatternNode::Constructor(shape), PatternNode::Slot(0)],
         }],
     };
-    fixture.with(location(), |_, computation, counters| {
+    fixture.with(given_site(), |_, computation, counters| {
         let flat = computation
-            .static_pattern(whole, &FormulaLimits::default(), counters, location())
+            .static_pattern(whole, &FormulaLimits::default(), counters, given_site())
             .unwrap();
         let occurrence = PatternOccurrence {
             source: 0,
@@ -363,11 +368,16 @@ fn nested_bindings_do_not_claim_a_flat_posting() {
         };
         let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
         assert!(
-            !super::super::has_bound_argument(&occurrence, &[true, false], &mut budget, location())
-                .unwrap()
+            !super::super::has_bound_argument(
+                &occurrence,
+                &[true, false],
+                &mut budget,
+                given_site()
+            )
+            .unwrap()
         );
         assert!(
-            super::super::has_bound_argument(&occurrence, &[true, true], &mut budget, location())
+            super::super::has_bound_argument(&occurrence, &[true, true], &mut budget, given_site())
                 .unwrap()
         );
     });
@@ -379,7 +389,7 @@ fn skewed_postings_preserve_complete_bindings() {
     // preference, not a promise of smaller fanout than the independent domain.
     let mut atoms = vec![row("p", &[0]), row("q", &[0]), row("q", &[1])];
     atoms.extend((0..8).map(|value| row("edge", &[0, value])));
-    let mut fixture = Fixture::from_atoms(atoms, location());
+    let mut fixture = Fixture::from_atoms(atoms, given_site());
     let literals = [
         atom(&mut fixture, "p", &[0]),
         atom(&mut fixture, "q", &[1]),
@@ -409,7 +419,7 @@ fn arithmetic_fixture(operator: BinaryOp, left: i32, right: i32) -> (Fixture, Ve
             row("q", &[1]),
             row("edge", &[left, right]),
         ],
-        location(),
+        given_site(),
     );
     let literals = vec![
         atom(&mut fixture, "p", &[0]),

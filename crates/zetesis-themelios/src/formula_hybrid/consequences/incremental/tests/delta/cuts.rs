@@ -14,20 +14,9 @@ const DOUBLE_ALIAS: &str = include_str!(
     "../../../../../../tests/fixtures/streamed-consequences/delta/positive-double-alias.lp"
 );
 
-fn completed(owner: &HybridFormula) -> crate::ConstraintChecker<'_> {
-    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
-    let region = Region::all_open(owner.atom_catalog().atoms().len());
-    assert_eq!(
-        pass(&mut checker, &region, ConstraintRegionPass::First),
-        ConstraintConsequence::NoConsequence
-    );
-    assert_eq!(state(&checker).scans, [Scan::Clean]);
-    checker
-}
-
 #[test]
 fn positive_cuts_keep_completed_evidence() {
-    let owner = admit(SIMPLE);
+    let owner = hybrid(SIMPLE);
     let mut checker = completed(&owner);
     let mut region = Region::all_open(owner.atom_catalog().atoms().len());
     assert!(region.cut(atom(&owner, "p")));
@@ -51,7 +40,7 @@ fn positive_cuts_keep_completed_evidence() {
 
 #[test]
 fn positive_cuts_leave_held_anchors_available() {
-    let owner = admit(ROWS);
+    let owner = hybrid(ROWS);
     let mut checker = completed(&owner);
     let mut region = Region::all_open(owner.atom_catalog().atoms().len());
     let mut held = None;
@@ -91,7 +80,7 @@ fn positive_cuts_leave_held_anchors_available() {
 #[test]
 fn positive_cuts_preserve_later_default_read_effects() {
     for (source, expected) in [(NEGATIVE_ALIAS, Scan::Full), (DOUBLE_ALIAS, Scan::Clean)] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let mut checker = completed(&owner);
         let prepared = checker.prepared.as_ref().unwrap();
         let body = &prepared.source.rules[0].body;
@@ -129,7 +118,7 @@ fn positive_cuts_preserve_later_default_read_effects() {
 
 #[test]
 fn positive_cuts_do_not_reuse_generated_rules() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../../tests/fixtures/streamed-consequences/generated-negative.lp"
     ));
     let mut checker = completed(&owner);
@@ -153,7 +142,7 @@ fn positive_cuts_do_not_reuse_generated_rules() {
 
 #[test]
 fn untracked_positive_cuts_keep_the_complete_scan() {
-    let owner = admit(ROWS);
+    let owner = hybrid(ROWS);
     let mut checker = completed(&owner);
     let mut region = Region::all_open(owner.atom_catalog().atoms().len());
     let cuts: Vec<_> = owner
@@ -208,7 +197,7 @@ fn monotone_decisions_match_complete_region_scans() {
             "../../../../../../tests/fixtures/streamed-consequences/nested-positive-join.lp"
         ),
     ] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let atoms = owner.atom_catalog().atoms().len();
         assert!(atoms <= 4);
         let encodings = 3_usize.pow(u32::try_from(atoms).unwrap());

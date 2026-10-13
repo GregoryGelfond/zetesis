@@ -30,7 +30,7 @@ fn prepare<'a>(checker: &mut crate::ConstraintChecker<'a>, counters: &mut Counte
 
 #[test]
 fn shared_plan_admission_counts_retained_storage_once() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/signed-plan.lp"
     ));
     let mut first = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -66,7 +66,7 @@ fn shared_plan_admission_counts_retained_storage_once() {
 
 #[test]
 fn racing_checkers_publish_one_complete_plan() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/signed-plan.lp"
     ));
     let barrier = std::sync::Barrier::new(4);
@@ -110,10 +110,10 @@ fn racing_checkers_publish_one_complete_plan() {
 
 #[test]
 fn equal_contents_do_not_share_plan_authority() {
-    let first = admit(include_str!(
+    let first = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/one-atom-unit.lp"
     ));
-    let second = admit(include_str!(
+    let second = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/one-atom-unit.lp"
     ));
     let mut a = first.checker(ConstraintCheckLimits::default()).unwrap();
@@ -129,7 +129,7 @@ fn equal_contents_do_not_share_plan_authority() {
 
 #[test]
 fn refused_preparation_preserves_retryability() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/three-row-units.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -163,7 +163,7 @@ fn refused_preparation_preserves_retryability() {
 
 #[test]
 fn shared_borrow_still_refuses_insufficient_storage() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/three-row-units.lp"
     ));
     let mut first = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -198,7 +198,7 @@ fn shared_borrow_still_refuses_insufficient_storage() {
 
 #[test]
 fn cancelled_borrow_does_not_admit_shared_bytes() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/one-atom-unit.lp"
     ));
     let mut first = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -224,7 +224,7 @@ fn cancelled_borrow_does_not_admit_shared_bytes() {
 
 #[test]
 fn shared_plan_does_not_share_candidate_progress() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/two-row-gated-units.lp"
     ));
     let mut first = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -250,7 +250,7 @@ fn shared_plan_does_not_share_candidate_progress() {
 
 #[test]
 fn discarded_candidate_state_keeps_one_plan_admission() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/three-row-units.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();

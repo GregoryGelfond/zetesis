@@ -1,21 +1,8 @@
 use super::*;
 use crate::formula_support::testing::budget;
-use crate::{
-    AdmissionOptions, ConstraintCheckLimits, ExpansionLimits, FormulaLimits, HybridFormula,
-};
+use crate::test_support::hybrid;
+use crate::{ConstraintCheckLimits, HybridFormula};
 use std::collections::BTreeSet;
-
-fn owner(source: &str) -> HybridFormula {
-    crate::prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_hybrid()
-    .unwrap()
-}
 
 #[derive(Debug)]
 struct Scan {
@@ -87,7 +74,7 @@ fn shared_queries_preserve_signed_region_consequences() {
         include_str!("../../../tests/fixtures/streamed-consequences/negative-double-negative.lp"),
         include_str!("../../../tests/fixtures/streamed-consequences/guarded-negative.lp"),
     ] {
-        let owner = owner(source);
+        let owner = hybrid(source);
         let atoms = owner.atom_catalog().atoms().len();
         assert!(atoms <= 4);
         for encoding in 0..3_usize.pow(u32::try_from(atoms).unwrap()) {
@@ -114,7 +101,7 @@ fn shared_queries_preserve_signed_region_consequences() {
 
 #[test]
 fn shared_prefixes_reduce_charged_work() {
-    let owner = owner(include_str!(
+    let owner = hybrid(include_str!(
         "../../../tests/fixtures/streamed-consequences/independent-prefixes.lp"
     ));
     let mut region = Region::all_open(owner.atom_catalog().atoms().len());
@@ -134,7 +121,7 @@ fn shared_prefixes_reduce_charged_work() {
 
 #[test]
 fn two_forced_open_occurrences_skip_the_join() {
-    let owner = owner(include_str!(
+    let owner = hybrid(include_str!(
         "../../../tests/fixtures/streamed-consequences/two-positive.lp"
     ));
     let region = Region::all_open(owner.atom_catalog().atoms().len());
@@ -149,7 +136,7 @@ fn two_forced_open_occurrences_skip_the_join() {
 
 #[test]
 fn generated_rules_retain_mode_traversal() {
-    let owner = owner(include_str!(
+    let owner = hybrid(include_str!(
         "../../../tests/fixtures/streamed-consequences/generated-negative.lp"
     ));
     let checker = owner.checker(ConstraintCheckLimits::default()).unwrap();

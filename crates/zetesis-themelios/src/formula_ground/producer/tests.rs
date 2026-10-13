@@ -4,6 +4,7 @@ use super::testing::{self as route, Counts, Point};
 use crate::formula::Compiled;
 use crate::formula_ground::{Builder, Purpose, ground, ground_retained};
 use crate::formula_support::testing;
+use crate::test_support::compiled_atoms;
 use crate::{ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProgramSite};
 use zetesis_core::{Atom, Value, ValueLimits};
 use zetesis_cpu::{Cancellation, Stop};
@@ -21,15 +22,6 @@ const SEMANTIC_CASES: &[&str] = &[
     "{p(1);q(1)}. h(X,X) :- p(X),p(X),q(X).",
     "{-p(1);q(1)}. -h(X,7,X) :- -p(X),q(X).",
 ];
-
-fn atoms(compiled: &Compiled) -> Vec<Atom> {
-    compiled
-        .atoms
-        .atoms()
-        .iter()
-        .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
-        .collect()
-}
 
 struct Pair {
     shared: Compiled,
@@ -59,8 +51,8 @@ impl Pair {
     }
 
     fn from_compiled(shared: Compiled, reference: Compiled, source: &str) -> Self {
-        let shared_atoms = atoms(&shared);
-        let reference_atoms = atoms(&reference);
+        let shared_atoms = compiled_atoms(&shared);
+        let reference_atoms = compiled_atoms(&reference);
         let mut vocabulary = shared_atoms.clone();
         vocabulary.sort();
         let mut other = reference_atoms.clone();

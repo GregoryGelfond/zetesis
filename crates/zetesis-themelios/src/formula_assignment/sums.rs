@@ -167,18 +167,8 @@ impl Runs {
 mod tests {
     use super::*;
     use crate::formula_support::testing::Fixture;
+    use crate::test_support::given_site;
     use std::collections::BTreeSet;
-    use themelios_base::{
-        source::SourceId,
-        span::{ByteOffset, Span},
-    };
-    fn location() -> ProgramSite {
-        ProgramSite::source(themelios_base::span::Location {
-            source: SourceId::new(89),
-            span: Span::empty(ByteOffset::new(0)),
-        })
-    }
-
     #[test]
     fn merged_runs_equal_all_distinct_subset_sums() {
         for weights in [vec![2, -3, 2, 0], vec![-5, 9, 4], Vec::new()] {
@@ -192,13 +182,13 @@ mod tests {
                         .sum::<i32>()
                 })
                 .collect();
-            Fixture::default().with(location(), |_, computation, counters| {
+            Fixture::default().with(given_site(), |_, computation, counters| {
                 let actual = sums(
                     weights,
                     computation,
                     &FormulaLimits::default(),
                     counters,
-                    location(),
+                    given_site(),
                 )
                 .unwrap();
                 assert_eq!(actual.slice(), expected.into_iter().collect::<Vec<_>>());
@@ -207,13 +197,13 @@ mod tests {
     }
     #[test]
     fn candidate_limit_counts_distinct_sums() {
-        Fixture::default().with(location(), |_, computation, counters| {
+        Fixture::default().with(given_site(), |_, computation, counters| {
             let limits = FormulaLimits {
                 max_assignment_values: 3,
                 ..Default::default()
             };
             assert_eq!(
-                sums([1, 1], computation, &limits, counters, location())
+                sums([1, 1], computation, &limits, counters, given_site())
                     .unwrap()
                     .slice(),
                 &[0, 1, 2]
@@ -223,7 +213,7 @@ mod tests {
                 ..limits
             };
             assert!(matches!(
-                sums([1, 1], computation, &limits, counters, location()),
+                sums([1, 1], computation, &limits, counters, given_site()),
                 Err(FormulaFailure::Limit {
                     resource: FormulaResource::AssignmentValues,
                     observed: 3,
@@ -236,14 +226,14 @@ mod tests {
     #[test]
     fn any_overflowing_subset_refuses_the_carrier() {
         for weights in [[i32::MAX, 1], [i32::MIN, -1]] {
-            Fixture::default().with(location(), |_, computation, counters| {
+            Fixture::default().with(given_site(), |_, computation, counters| {
                 assert!(matches!(
                     sums(
                         weights,
                         computation,
                         &FormulaLimits::default(),
                         counters,
-                        location()
+                        given_site()
                     ),
                     Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation {
                         error: EvalError::Overflow,
@@ -255,33 +245,33 @@ mod tests {
     }
     #[test]
     fn every_work_stop_releases_both_sum_runs() {
-        let needed = Fixture::default().with(location(), |_, computation, counters| {
+        let needed = Fixture::default().with(given_site(), |_, computation, counters| {
             let before = counters.accounting.work;
             sums(
                 [2, -3, 5],
                 computation,
                 &FormulaLimits::default(),
                 counters,
-                location(),
+                given_site(),
             )
             .unwrap();
             counters.accounting.work - before
         });
         for cutoff in 0..needed {
-            Fixture::default().with(location(), |_, computation, counters| {
+            Fixture::default().with(given_site(), |_, computation, counters| {
                 let limits = FormulaLimits::default();
                 let observer = computation.lease();
                 let before = computation
-                    .allowance(&observer, &limits, location())
+                    .allowance(&observer, &limits, given_site())
                     .unwrap();
                 let bounded = FormulaLimits {
                     max_work: counters.accounting.work + cutoff,
                     ..limits
                 };
-                assert!(sums([2, -3, 5], computation, &bounded, counters, location()).is_err());
+                assert!(sums([2, -3, 5], computation, &bounded, counters, given_site()).is_err());
                 assert_eq!(
                     computation
-                        .allowance(&observer, &limits, location())
+                        .allowance(&observer, &limits, given_site())
                         .unwrap(),
                     before
                 );

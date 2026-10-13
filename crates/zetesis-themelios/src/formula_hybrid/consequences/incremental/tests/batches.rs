@@ -28,7 +28,7 @@ fn numbered(owner: &HybridFormula, predicate: &str, value: i32) -> usize {
 
 #[test]
 fn applied_batches_avoid_repeating_the_rule_scan() {
-    let owner = admit(TWO);
+    let owner = hybrid(TWO);
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let mut region = Region::all_open(owner.atom_catalog().atoms().len());
     let first = pass(&mut checker, &region, ConstraintRegionPass::First);
@@ -54,7 +54,7 @@ fn applied_batches_avoid_repeating_the_rule_scan() {
 
 #[test]
 fn applied_negative_units_discharge_the_batch() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/negative-unit.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -80,7 +80,7 @@ fn applied_negative_units_discharge_the_batch() {
 
 #[test]
 fn an_ignored_delivered_unit_is_rediscovered() {
-    let owner = admit(TWO);
+    let owner = hybrid(TWO);
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let mut region = Region::all_open(owner.atom_catalog().atoms().len());
     let ignored = pass(&mut checker, &region, ConstraintRegionPass::First);
@@ -98,7 +98,7 @@ fn an_ignored_delivered_unit_is_rediscovered() {
 
 #[test]
 fn a_contradicted_delivered_unit_refutes_the_region() {
-    let owner = admit(TWO);
+    let owner = hybrid(TWO);
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let mut region = Region::all_open(owner.atom_catalog().atoms().len());
     let ConstraintConsequence::Cut { atom, .. } =
@@ -119,7 +119,7 @@ fn a_contradicted_delivered_unit_refutes_the_region() {
 
 #[test]
 fn enabling_changes_during_a_batch_produce_new_units() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/batches/independent-rows.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -141,7 +141,7 @@ fn enabling_changes_during_a_batch_produce_new_units() {
 #[test]
 fn mixed_polarity_changes_produce_new_units() {
     for held in [false, true] {
-        let owner = admit(include_str!(
+        let owner = hybrid(include_str!(
             "../../../../../tests/fixtures/streamed-consequences/batches/mixed-polarities.lp"
         ));
         let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -200,7 +200,7 @@ fn mixed_polarity_changes_produce_new_units() {
 
 #[test]
 fn applied_delta_batches_avoid_repeating_the_rule_scan() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/batches/independent-rows.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -246,7 +246,7 @@ fn applied_delta_batches_avoid_repeating_the_rule_scan() {
 
 #[test]
 fn receipt_validation_refusal_keeps_the_full_scan() {
-    let owner = admit(TWO);
+    let owner = hybrid(TWO);
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let mut region = Region::all_open(owner.atom_catalog().atoms().len());
     let _ = pass(&mut checker, &region, ConstraintRegionPass::First);

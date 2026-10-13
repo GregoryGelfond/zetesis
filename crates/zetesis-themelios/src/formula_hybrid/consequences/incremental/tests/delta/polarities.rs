@@ -2,17 +2,6 @@
 
 use super::*;
 
-fn completed(owner: &HybridFormula) -> crate::ConstraintChecker<'_> {
-    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
-    let region = Region::all_open(owner.atom_catalog().atoms().len());
-    assert_eq!(
-        pass(&mut checker, &region, ConstraintRegionPass::First),
-        ConstraintConsequence::NoConsequence
-    );
-    assert_eq!(state(&checker).scans, [Scan::Clean]);
-    checker
-}
-
 #[test]
 fn disabling_default_reads_keep_completed_evidence() {
     for (source, held) in [
@@ -27,7 +16,7 @@ fn disabling_default_reads_keep_completed_evidence() {
             false,
         ),
     ] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let mut checker = completed(&owner);
         let mut region = Region::all_open(owner.atom_catalog().atoms().len());
         let q = atom(&owner, "q");
@@ -52,7 +41,7 @@ fn disabling_default_reads_keep_completed_evidence() {
 
 #[test]
 fn disabling_default_reads_preserve_positive_anchors() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../../tests/fixtures/streamed-consequences/delta/positive-negative-alias.lp"
     ));
     let mut checker = completed(&owner);

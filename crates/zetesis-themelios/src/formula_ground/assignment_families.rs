@@ -1,8 +1,9 @@
 //! Family sharing preserves the original theory and every frozen reduct.
 use super::*;
 use crate::formula_support::testing;
+use crate::test_support::interpretation;
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
+use zetesis_ferraris::{Limits, models, models_reduct};
 
 /// Reproduce the prior cache boundary without changing the source or its joins.
 fn full_binding_keys(preparation: &mut crate::formula::Preparation) {
@@ -58,14 +59,6 @@ fn unrelated_bindings_share_bounded_assignment_families() {
             })
         ));
     }
-}
-
-fn interpretation(theory: &Theory, bits: usize) -> Interpretation {
-    Interpretation::new(
-        theory,
-        (0..theory.atom_count()).filter(|atom| bits & (1 << atom) != 0),
-    )
-    .unwrap()
 }
 
 fn same_truth(source: &str) {

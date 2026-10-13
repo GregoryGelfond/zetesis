@@ -3,20 +3,10 @@ mod resources;
 use super::*;
 use crate::formula_assignment::sums::sums;
 use crate::formula_support::testing::Fixture;
-use crate::{ExpansionFailure, FormulaLimits, ProgramSite};
+use crate::test_support::given_site;
+use crate::{ExpansionFailure, FormulaLimits};
 use std::collections::BTreeSet;
-use themelios_base::{
-    source::SourceId,
-    span::{ByteOffset, Span},
-};
 use themelios_program::term::EvalError;
-
-fn location() -> ProgramSite {
-    ProgramSite::source(themelios_base::span::Location {
-        source: SourceId::new(89),
-        span: Span::empty(ByteOffset::new(0)),
-    })
-}
 
 fn expected(weights: &[i32]) -> Vec<i32> {
     let mut sums = BTreeSet::from([0_i32]);
@@ -31,11 +21,11 @@ fn expected(weights: &[i32]) -> Vec<i32> {
 }
 
 fn result_and_work(weights: &[i32], merge_only: bool) -> (Vec<i32>, u64) {
-    Fixture::default().with(location(), |_, computation, counters| {
+    Fixture::default().with(given_site(), |_, computation, counters| {
         let limits = FormulaLimits::default();
         let before = counters.accounting.work;
         let result = if merge_only {
-            let mut context = Context::new(&*computation, &limits, counters, location());
+            let mut context = Context::new(&*computation, &limits, counters, given_site());
             Runs::new(&mut context)
                 .unwrap()
                 .finish(weights.iter().copied(), &mut context)
@@ -46,7 +36,7 @@ fn result_and_work(weights: &[i32], merge_only: bool) -> (Vec<i32>, u64) {
                 computation,
                 &limits,
                 counters,
-                location(),
+                given_site(),
             )
             .unwrap()
         };
@@ -125,7 +115,7 @@ fn a_signed_tail_returns_to_checked_sorted_merging() {
 fn a_wide_tail_declines_before_allocating_its_span() {
     let mut weights = vec![1; 24];
     weights.push(i32::MAX - 24);
-    Fixture::default().with(location(), |_, computation, counters| {
+    Fixture::default().with(given_site(), |_, computation, counters| {
         let limits = FormulaLimits {
             max_support_bytes: 64 * 1024,
             ..Default::default()
@@ -135,7 +125,7 @@ fn a_wide_tail_declines_before_allocating_its_span() {
             computation,
             &limits,
             counters,
-            location(),
+            given_site(),
         )
         .unwrap();
         assert_eq!(actual.slice(), expected(&weights));
@@ -149,7 +139,7 @@ fn overflow_remains_a_typed_failure_before_and_after_packing() {
     let mut negative = vec![1; 32];
     negative.extend([i32::MIN, -1]);
     for weights in [vec![i32::MAX, 1], vec![i32::MIN, -1], positive, negative] {
-        Fixture::default().with(location(), |_, computation, counters| {
+        Fixture::default().with(given_site(), |_, computation, counters| {
             let before = counters.workspace_bytes();
             assert!(matches!(
                 sums(
@@ -157,7 +147,7 @@ fn overflow_remains_a_typed_failure_before_and_after_packing() {
                     computation,
                     &FormulaLimits::default(),
                     counters,
-                    location()
+                    given_site()
                 ),
                 Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation {
                     error: EvalError::Overflow,
@@ -171,12 +161,12 @@ fn overflow_remains_a_typed_failure_before_and_after_packing() {
 
 #[test]
 fn packed_distinct_limit_reports_the_first_excess_value() {
-    Fixture::default().with(location(), |_, computation, counters| {
+    Fixture::default().with(given_site(), |_, computation, counters| {
         let limits = FormulaLimits {
             max_assignment_values: 65,
             ..Default::default()
         };
-        let fitting = sums([1; 64], computation, &limits, counters, location()).unwrap();
+        let fitting = sums([1; 64], computation, &limits, counters, given_site()).unwrap();
         assert_eq!(fitting.slice(), (0..=64).collect::<Vec<_>>());
         drop(fitting);
         let limits = FormulaLimits {
@@ -185,7 +175,7 @@ fn packed_distinct_limit_reports_the_first_excess_value() {
         };
         let weights = std::iter::repeat_n(1, 32).chain([64]);
         assert!(matches!(
-            sums(weights, computation, &limits, counters, location()),
+            sums(weights, computation, &limits, counters, given_site()),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::AssignmentValues,
                 observed: 41,
