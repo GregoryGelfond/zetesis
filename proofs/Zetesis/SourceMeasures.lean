@@ -242,15 +242,14 @@ theorem assembled_split [DecidableEq K] (required possible chosen : List K)
     (distinct : possible.Nodup) (requiredDistinct : required.Nodup)
     (included : required ⊆ possible) (chosenDistinct : chosen.Nodup)
     (optional : ∀ key ∈ chosen, key ∈ possible ∧ key ∉ required) :
-    ((assembled required possible chosen).Sublist possible ∧
-        required ⊆ assembled required possible chosen) ∧
+    Admissible required possible (assembled required possible chosen) ∧
       ((assembled required possible chosen).filter
           (fun key => decide (key ∈ required))).Perm required ∧
       ((assembled required possible chosen).filter
           (fun key => !decide (key ∈ required))).Perm chosen := by
   have mandatory : required ⊆ assembled required possible chosen := fun key member =>
     List.mem_filter.mpr ⟨included member, by simp [member]⟩
-  refine ⟨⟨List.filter_sublist, mandatory⟩, ?_, ?_⟩
+  refine ⟨And.intro List.filter_sublist mandatory, ?_, ?_⟩
   · exact required_part_perm required possible _ distinct requiredDistinct
       List.filter_sublist mandatory
   · apply (List.perm_ext_iff_of_nodup
