@@ -39,8 +39,14 @@ if [ "$mode" = portable ] || [ "$mode" = full ]; then
     cargo fmt --all -- --check
     cargo test --locked --workspace --all-features --no-fail-fast
     cargo test --locked -p zetesis-cli -p zetesis-solve -p zetesis-engine -p zetesis --no-default-features --no-fail-fast
+    # The default install's front: the CPU-only command line that hands GPU
+    # requests to the sibling the installer builds beside it. A fixed identity
+    # stands in for the one the installer derives from the build.
+    front_identity=0.0.0-0123456789abcdef
+    ZETESIS_SIBLING_IDENTITY=$front_identity cargo test --locked -p zetesis-cli --no-default-features --features front --no-fail-fast
     cargo clippy --locked --workspace --all-targets --all-features -- -D warnings
     cargo clippy --locked -p zetesis-cli -p zetesis-solve -p zetesis-engine -p zetesis --no-default-features --all-targets -- -D warnings
+    ZETESIS_SIBLING_IDENTITY=$front_identity cargo clippy --locked -p zetesis-cli --no-default-features --features front --all-targets -- -D warnings
     RUSTDOCFLAGS="-D warnings" cargo doc --locked --workspace --all-features --no-deps
     # The maintained standalone packages are independent Cargo workspaces.
     # Main-workspace checks cannot select them implicitly.

@@ -395,10 +395,16 @@ fn portable_test_campaigns_collect_target_failures() {
         .lines()
         .filter(|line| line.starts_with("cargo test "))
         .collect();
-    // Two workspace campaigns, then tests and doctests for each of the two
-    // maintained standalone packages.
-    assert_eq!(campaigns.len(), 6);
+    // Three workspace campaigns (every feature, CPU-only and the default
+    // install's front), then tests and doctests for each of the two maintained
+    // standalone packages.
+    assert_eq!(campaigns.len(), 7);
     assert!(campaigns.iter().all(|line| line.contains("--no-fail-fast")));
+    assert!(
+        campaigns
+            .iter()
+            .any(|line| line.contains("--no-default-features --features front"))
+    );
 }
 
 fn workflow_block() -> String {

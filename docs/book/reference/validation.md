@@ -15,7 +15,7 @@ Run from the checkout root, after installing the tools in the next section.
 
 | Command | Checks |
 | --- | --- |
-| `scripts/check.sh portable` | Rust tests, formatting, strict lint, documentation and benchmark correctness, including the maintained standalone packages. |
+| `scripts/check.sh portable` | Rust tests, formatting, strict lint, documentation and benchmark correctness, including the maintained standalone packages and the default install's CPU front. |
 | `scripts/check.sh oracle` | External clingo comparisons. |
 | `scripts/check.sh proofs` | Lean build, axiom audit and proof-record consistency. |
 | `scripts/check.sh coverage` | Separate workspace and CPU-only line-coverage floors. |
