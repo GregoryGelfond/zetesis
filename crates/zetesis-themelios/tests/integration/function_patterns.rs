@@ -4,7 +4,7 @@ use crate::support::thresholds::minimum_preparation_bytes;
 use reference::{Models, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::{canonical, formula, prepared};
+use zetesis_reference_support::{admit, canonical, formula, prepared};
 use zetesis_themelios::{
     AdmissionOptions, AnalysisBasis, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
@@ -265,12 +265,7 @@ fn inverse_consequent_remains_a_typed_refusal() {
     // supplies the compared value, but cannot invert X+1 to bind X.
     assert!(
         matches!(
-            admit_formula(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default()
-            ),
+            admit(source, &FormulaLimits::default()),
             Err(FormulaFailure::UnboundArgumentInput { .. })
         ),
         "{source}"
@@ -282,12 +277,7 @@ fn negative_patterns_do_not_supply_bindings() {
     for source in ["p(X):-not q(f(X)).", "p(X):-not not q(f(X))."] {
         assert!(
             matches!(
-                admit_formula(
-                    source.into(),
-                    AdmissionOptions::default(),
-                    ExpansionLimits::default(),
-                    FormulaLimits::default()
-                ),
+                admit(source, &FormulaLimits::default()),
                 Err(FormulaFailure::UnsafeVariable { .. })
             ),
             "{source}"
@@ -298,12 +288,7 @@ fn negative_patterns_do_not_supply_bindings() {
 #[test]
 fn extraction_does_not_bind_unmentioned_names() {
     assert!(matches!(
-        admit_formula(
-            "p(X):-q(f(Y)).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
+        admit("p(X):-q(f(Y)).", &FormulaLimits::default()),
         Err(FormulaFailure::UnsafeVariable { .. })
     ));
 }

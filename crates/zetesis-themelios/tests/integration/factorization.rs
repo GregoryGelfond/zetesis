@@ -10,12 +10,12 @@ use stable_models::stable;
 use zetesis_core::Value;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula};
 use zetesis_test_support::programs::atom;
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, FormulaResource,
-    GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork, admit_formula,
+    GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
     admit_formula_with_grounding_observer,
 };
 
@@ -266,12 +266,7 @@ fn a_factored_source_respects_the_zero_root_ceiling() {
     let mut limits = FormulaLimits::default();
     limits.theory.max_roots = 0;
     assert!(matches!(
-        admit_formula(
-            CARTESIAN_SOURCE.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits
-        ),
+        admit(CARTESIAN_SOURCE, &limits),
         Err(zetesis_themelios::FormulaFailure::Limit {
             resource: FormulaResource::Roots,
             ..

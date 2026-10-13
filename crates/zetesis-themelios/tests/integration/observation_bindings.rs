@@ -5,14 +5,11 @@ use crate::support::observation_reference;
 use zetesis_core::{Atom, Model, Predicate, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, check};
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula};
 use zetesis_themelios::observation::{
     AdmissionLimits, ErrorKind, EvaluationError, Feature, Limits, Resource, Symbol,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    admit_formula,
-};
+use zetesis_themelios::{AdmittedFormula, FormulaFailure, FormulaLimits};
 
 // The first source is the unchanged original L17 refusal witness. The remaining
 // sources exercise its dependency and shared-operand contract in both directions.
@@ -339,11 +336,9 @@ fn structural_binding_reserves_its_complete_value_slot() {
 
 fn assert_complete_value_slot(source: &str, slots: u32) {
     let run = |max_variables| {
-        admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
+        admit(
+            source,
+            &FormulaLimits {
                 observation: AdmissionLimits {
                     max_variables,
                     ..AdmissionLimits::default()
@@ -375,11 +370,9 @@ fn moved_operands_charge_their_retained_guard_nodes() {
         ("#show. #show X:f(X)=#min{f(1)}.", 12),
     ] {
         let run = |max_nodes| {
-            admit_formula(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits {
+            admit(
+                source,
+                &FormulaLimits {
                     observation: AdmissionLimits {
                         max_nodes,
                         ..AdmissionLimits::default()
@@ -546,12 +539,8 @@ fn nongenerating_edges_cannot_establish_bindings() {
         "#show. #show X:not not f(X)=#min{f(1)}.",
         "#show. #show X:f(X)=#min{f(X)}.",
     ] {
-        let Err(FormulaFailure::Observation { error }) = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        ) else {
+        let Err(FormulaFailure::Observation { error }) = admit(source, &FormulaLimits::default())
+        else {
             panic!("expected unavailable binding: {source}");
         };
         assert_eq!(

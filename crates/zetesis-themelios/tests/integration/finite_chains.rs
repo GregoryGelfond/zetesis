@@ -9,7 +9,7 @@ use proptest::prelude::*;
 use reference::{Models, exhaustive, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::{admit, canonical, formula};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
@@ -206,12 +206,7 @@ const UNSAFE: &[&str] = &[
 #[test]
 fn absent_finite_domains_remain_unsafe() {
     for source in UNSAFE {
-        let result = admit_formula(
-            (*source).into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        );
+        let result = admit(source, &FormulaLimits::default());
         assert!(
             matches!(result, Err(FormulaFailure::UnsafeVariable { .. })),
             "{source}: {result:?}"
@@ -274,12 +269,7 @@ fn reached_chain_arithmetic_remains_an_error() {
         "p(X,Y):-0<X<Y<3,0=1,1/0=1.",
         "p(X,Y):-0<X<Y<3,2147483647+X>0.",
     ] {
-        let result = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        );
+        let result = admit(source, &FormulaLimits::default());
         assert!(
             matches!(
                 result,

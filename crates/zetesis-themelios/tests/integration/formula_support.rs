@@ -6,11 +6,8 @@ use crate::support::atom_models::{self, Models};
 use crate::support::objective_boundaries;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
-use zetesis_reference_support::formula;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, admit_formula,
-};
+use zetesis_reference_support::{admit, formula};
+use zetesis_themelios::{AdmittedFormula, FormulaFailure, FormulaLimits, FormulaResource};
 
 fn exhaustive(input: &AdmittedFormula) -> Models {
     let count = input.atoms().len();
@@ -172,11 +169,9 @@ fn local_choice_joins_preserve_global_bindings_and_duplicate_eligibility() {
 fn incomplete_support_is_a_located_refusal_not_a_smaller_program() {
     let source = "p(1). p(2) :- p(1). p(3) :- p(2).";
     for max_support_rounds in [0, 1] {
-        let error = admit_formula(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
+        let error = admit(
+            source,
+            &FormulaLimits {
                 max_support_rounds,
                 ..FormulaLimits::default()
             },

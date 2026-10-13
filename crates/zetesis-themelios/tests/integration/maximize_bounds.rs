@@ -7,15 +7,13 @@ use zetesis_core::{Model, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, WeightPolarity, evaluate};
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula};
 use zetesis_sat::StableModels;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
     ObjectivePlanLimits,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_themelios::{AdmittedFormula, FormulaLimits};
 
 fn score(input: &AdmittedFormula, selected: impl IntoIterator<Item = usize>) -> Score {
     let model = Model::from_positions(input.atom_catalog(), selected).unwrap();
@@ -217,13 +215,7 @@ fn checked_source_arithmetic_reaches_only_eligible_negation_endpoints() {
         "#maximize{(-2147483647-1)@1,k}.",
         "v(-2147483647-1).v(1). #maximize{W@1,k:v(W)}.",
     ] {
-        let error = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
+        let error = admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(
             matches!(
                 error,

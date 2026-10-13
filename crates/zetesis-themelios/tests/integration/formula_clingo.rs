@@ -10,6 +10,7 @@
 //! without depending on a particular random-generator implementation.
 
 use std::collections::BTreeSet;
+use zetesis_reference_support::admit;
 
 use crate::support::atom_models::{self, Models, atom};
 use serde_json::Value as Json;
@@ -17,9 +18,7 @@ use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_themelios::{AdmittedFormula, FormulaLimits};
 
 struct Case {
     source: String,
@@ -86,12 +85,7 @@ fn exhaustive(input: &AdmittedFormula) -> Models {
 }
 
 fn native(case: &Case) -> Option<Models> {
-    match admit_formula(
-        case.source.clone(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    ) {
+    match admit(&case.source, &FormulaLimits::default()) {
         Ok(input) => Some(exhaustive(&input)),
         Err(error) => {
             assert!(

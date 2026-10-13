@@ -5,13 +5,13 @@ use std::collections::BTreeSet;
 use zetesis_core::{Atom, AtomCatalog, Model, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::{Score, evaluate};
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula};
 use zetesis_sat::{Limits as SearchLimits, StableModels};
 use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,
     FormulaFailure, FormulaLimits, FormulaResource, SourceBundle, admit_bundle_formula,
-    admit_extended, admit_formula,
+    admit_extended,
 };
 
 fn scored(
@@ -283,13 +283,7 @@ fn original_objective_budgets_count_occurrences_before_canonicalization() {
         },
         ..FormulaLimits::default()
     };
-    let error = admit_formula(
-        "a. #minimize{1:a;1:a}.".to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        limits,
-    )
-    .expect_err("raw objective element budget");
+    let error = admit("a. #minimize{1:a;1:a}.", &limits).expect_err("raw objective element budget");
     assert!(matches!(
         error,
         FormulaFailure::Limit {
@@ -306,12 +300,7 @@ fn original_objective_budgets_count_occurrences_before_canonicalization() {
     };
     assert!(
         matches!(
-            admit_formula(
-                "#minimize{1,a,b:p}.".to_owned(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                limits
-            ),
+            admit("#minimize{1,a,b:p}.", &limits),
             Err(FormulaFailure::Objective { .. })
         ),
         "independent objective admission runs even for unreachable conditions"
@@ -322,13 +311,7 @@ fn original_objective_budgets_count_occurrences_before_canonicalization() {
 fn unsupported_objective_syntax_and_unsafe_variables_are_typed_refusals() {
     for source in ["#minimize{X:a}.", "d(1). #minimize{Y+1:d(X)}."] {
         assert!(
-            admit_formula(
-                source.to_owned(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default()
-            )
-            .is_err(),
+            admit(source, &FormulaLimits::default()).is_err(),
             "{source}"
         );
     }

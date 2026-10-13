@@ -4,11 +4,9 @@ use crate::support::observation_reference;
 
 use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula};
 use zetesis_themelios::observation::{AdmissionLimits, ErrorKind, Feature, Limits, Resource};
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, admit_formula,
-};
+use zetesis_themelios::{FormulaFailure, FormulaLimits};
 
 fn rendered(source: &str) -> String {
     let input = formula(source);
@@ -61,11 +59,9 @@ fn cardinality_keys_pay_their_complete_admission_cost() {
         ("p. #show. #show N:N={p}. #show f(N):N={p}.", 19, "1 f(1)"),
     ] {
         let run = |max_nodes| {
-            admit_formula(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits {
+            admit(
+                source,
+                &FormulaLimits {
                     observation: AdmissionLimits {
                         max_nodes,
                         ..AdmissionLimits::default()
@@ -146,12 +142,7 @@ fn aggregate_negation_tests_the_supplied_model() {
 }
 #[test]
 fn aggregate_local_names_do_not_escape_their_elements() {
-    let result = admit_formula(
-        "p(1).#show X:#count{X:p(X)}=1.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    );
+    let result = admit("p(1).#show X:#count{X:p(X)}=1.", &FormulaLimits::default());
     assert!(
         matches!(result, Err(FormulaFailure::Observation { error }) if error.kind() == &ErrorKind::Unsupported(Feature::UnsafeVariable))
     );
@@ -361,11 +352,9 @@ fn unchanged_scoped_sources_match_fresh_clingo_evidence() {
 #[test]
 fn extremum_elements_require_a_measure_at_admission() {
     for function in ["#min", "#max"] {
-        let result = admit_formula(
-            format!("#show x:{function}{{:}}=0."),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
+        let result = admit(
+            &format!("#show x:{function}{{:}}=0."),
+            &FormulaLimits::default(),
         );
         let Err(FormulaFailure::Observation { error }) = result else {
             panic!("missing extremum measure was admitted")
@@ -432,12 +421,7 @@ fn empty_extrema_bind_genuine_endpoint_symbols() {
 }
 #[test]
 fn circular_aggregate_result_dependencies_are_refused() {
-    let result = admit_formula(
-        "#show N:N=#count{X:p(X),X<N}.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    );
+    let result = admit("#show N:N=#count{X:p(X),X<N}.", &FormulaLimits::default());
     assert!(
         matches!(result, Err(FormulaFailure::Observation { error }) if error.kind() == &ErrorKind::Unsupported(Feature::UnsafeVariable))
     );

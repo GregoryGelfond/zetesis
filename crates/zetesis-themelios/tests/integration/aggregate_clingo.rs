@@ -12,7 +12,7 @@
 use crate::support::atom_models::atom;
 use crate::support::finite_bindings::Models;
 use crate::support::objective_dependency_records as objective_dependencies;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula};
 
 use std::collections::BTreeSet;
 
@@ -22,8 +22,8 @@ use zetesis_core::{Atom, Model};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateErrorKind, AggregateLimits, Interpretation, Limits, check};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula,
+    AdmissionFailure, AdmittedFormula, ExpansionFailure, FormulaFailure, FormulaLimits,
+    FormulaResource, ProfileFeature,
 };
 
 struct Case {
@@ -168,12 +168,7 @@ fn recorded_aggregate_comparisons_match_exhaustive_reduct_models() {
     let mut admitted = 0;
     let mut refused = 0;
     for case in cases {
-        let result = admit_formula(
-            case.source.clone(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        );
+        let result = admit(&case.source, &FormulaLimits::default());
         if let Some(expected) = expected_refusal(&case.name) {
             let Err(error) = result else {
                 panic!(
@@ -239,11 +234,9 @@ fn aggregate_translation_refusals_identify_original_rule_and_resource() {
             AggregateErrorKind::SubsetLimit,
         ),
     ] {
-        let error = admit_formula(
-            source.clone(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
+        let error = admit(
+            &source,
+            &FormulaLimits {
                 aggregate,
                 ..FormulaLimits::default()
             },
@@ -262,11 +255,9 @@ fn aggregate_translation_refusals_identify_original_rule_and_resource() {
             rule
         );
     }
-    let error = admit_formula(
-        source,
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits {
+    let error = admit(
+        &source,
+        &FormulaLimits {
             aggregate: AggregateLimits {
                 max_elements: 1,
                 ..AggregateLimits::default()

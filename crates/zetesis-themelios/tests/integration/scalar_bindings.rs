@@ -1,15 +1,12 @@
 //! Generative scalar instructions preserve scoped bindings and whole-model identity.
 
 use std::collections::BTreeSet;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula};
 
 use zetesis_core::{Atom, Predicate, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_sat::{Limits, StableModels};
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, admit_formula,
-};
+use zetesis_themelios::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 
 fn models(source: &str) -> BTreeSet<BTreeSet<Atom>> {
     let admitted = formula(source);
@@ -84,12 +81,7 @@ fn unanchored_scalar_dependencies_remain_unsafe() {
     for source in ["p(X):-X=Y,Y=X.", "p(X):-X=1..X."] {
         assert!(
             matches!(
-                admit_formula(
-                    source.to_owned(),
-                    AdmissionOptions::default(),
-                    ExpansionLimits::default(),
-                    FormulaLimits::default()
-                ),
+                admit(source, &FormulaLimits::default()),
                 Err(FormulaFailure::UnsafeVariable { .. })
             ),
             "{source}"
@@ -147,12 +139,7 @@ fn local_bindings_do_not_escape_choice_and_aggregate_scopes() {
         models("d(1).n(1,2).")
     );
     assert!(matches!(
-        admit_formula(
-            "p(X):-#count{Y:Y=1..2}>0.".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
+        admit("p(X):-#count{Y:Y=1..2}>0.", &FormulaLimits::default()),
         Err(FormulaFailure::UnsafeVariable { .. })
     ));
 }
@@ -182,13 +169,7 @@ fn value_ranges_recursive_growth_and_arithmetic_have_typed_refusals() {
             FormulaResource::AssignmentValues,
         ),
     ] {
-        let failure = admit_formula(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        )
-        .expect_err("no partial carrier may be admitted");
+        let failure = admit(source, &limits).expect_err("no partial carrier may be admitted");
         assert!(
             matches!(failure, FormulaFailure::Limit { resource:actual, .. } if actual == resource)
         );
@@ -196,12 +177,7 @@ fn value_ranges_recursive_growth_and_arithmetic_have_typed_refusals() {
     }
     for source in ["d(0).p(Y):-d(X),Y=1/X.", "d(2147483647).p(X+1):-d(X)."] {
         assert!(matches!(
-            admit_formula(
-                source.to_owned(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default()
-            ),
+            admit(source, &FormulaLimits::default()),
             Err(FormulaFailure::Expansion(
                 ExpansionFailure::Evaluation { .. }
             ))

@@ -11,7 +11,7 @@ use std::fmt::Write as _;
 use cases::CASES;
 use reference::{Models, holds, native, values};
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{canonical, formula, prepared};
+use zetesis_reference_support::{admit, canonical, formula, prepared};
 use zetesis_themelios::{
     AdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
@@ -169,22 +169,9 @@ fn alias_groups_preserve_other_count_certificates() {
 fn tuple_limits_count_distinct_complete_keys() {
     let mut limits = FormulaLimits::default();
     limits.aggregate.max_elements = 1;
-    assert!(
-        admit_formula(
-            "1#count{1:a;1:b}1.".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        )
-        .is_ok()
-    );
+    assert!(admit("1#count{1:a;1:b}1.", &limits).is_ok());
     assert!(matches!(
-        admit_formula(
-            "1#count{1:a;2:a}1.".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        ),
+        admit("1#count{1:a;2:a}1.", &limits),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::AggregateElements,
             limit: 1,

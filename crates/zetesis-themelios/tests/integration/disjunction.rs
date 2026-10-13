@@ -16,7 +16,7 @@ use zetesis_reference_support::{admit, canonical};
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_extended, admit_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_extended,
 };
 
 fn cases() -> Vec<Json> {
@@ -304,11 +304,9 @@ fn conditional_head_preserves_the_recorded_complete_family() {
 #[test]
 fn disjunction_element_ceiling_is_inclusive_and_independent_of_body_limits() {
     let admit = |text: &str, count| {
-        admit_formula(
-            text.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
+        zetesis_reference_support::admit(
+            text,
+            &FormulaLimits {
                 max_disjunction_elements: count,
                 ..FormulaLimits::default()
             },

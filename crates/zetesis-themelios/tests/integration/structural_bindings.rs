@@ -3,7 +3,7 @@ use crate::support::finite_bindings as reference;
 use crate::support::finite_bindings::expected as models;
 use reference::{exhaustive, holds, native, values};
 use std::collections::BTreeSet;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::{admit, canonical, formula};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 const PROJECTION: &str = "q((1,x),2).\np(A) :- q((A,_),_).\np(B) :- q((A,_),B).\n";
@@ -213,27 +213,11 @@ fn structural_bindings_can_feed_later_support_rounds() {
 }
 #[test]
 fn a_negative_tuple_occurrence_cannot_make_a_name_safe() {
-    assert!(
-        admit_formula(
-            "p(X):-not q((X,_)).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        )
-        .is_err()
-    );
+    assert!(admit("p(X):-not q((X,_)).", &FormulaLimits::default()).is_err());
 }
 #[test]
 fn an_arithmetic_tuple_pattern_is_not_a_producer() {
-    assert!(
-        admit_formula(
-            "q((2,x)).p(X):-q((X+1,_)).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        )
-        .is_err()
-    );
+    assert!(admit("q((2,x)).p(X):-q((X+1,_)).", &FormulaLimits::default()).is_err());
 }
 #[test]
 fn a_named_pattern_retains_the_complete_source_atom() {

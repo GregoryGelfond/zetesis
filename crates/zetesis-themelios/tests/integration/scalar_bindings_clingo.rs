@@ -4,7 +4,7 @@
 //! historical integer-maximum singleton-range timeout is deliberately excluded.
 
 use std::collections::BTreeSet;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula};
 
 use crate::support::finite_bindings::Models;
 use crate::support::unsigned_spellings::atom_text;
@@ -14,8 +14,8 @@ use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula,
+    AdmissionFailure, AdmittedFormula, ExpansionFailure, FormulaFailure, FormulaLimits,
+    FormulaResource, ProfileFeature,
 };
 
 struct Case {
@@ -140,12 +140,7 @@ fn scalar_and_interval_admissions_match_complete_models_with_explicit_boundaries
         } else {
             FormulaLimits::default()
         };
-        let result = admit_formula(
-            case.source.clone(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        );
+        let result = admit(&case.source, &limits);
         // Keep historical native labels and original reference models intact.
         // Evaluated choice heads, separate bounds and mixed arithmetic families
         // promote these cases without altering the independent reference record.

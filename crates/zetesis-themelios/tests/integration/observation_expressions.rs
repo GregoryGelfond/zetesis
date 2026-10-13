@@ -4,7 +4,7 @@ use crate::support::observation_reference;
 use crate::support::observation_rendering::shown as terms;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula};
 use zetesis_themelios::observation::{
     ConstructionLimits, ErrorKind, EvaluationError, Limits, Resource,
 };
@@ -354,12 +354,7 @@ fn a_pool_exports_only_variables_captured_in_every_branch() {
         "#show x:p(X;1),#count{Y:q(X,Y)}>0.",
         "#show x:p(X;1),q(X):r.",
     ] {
-        let result = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        );
+        let result = admit(source, &FormulaLimits::default());
         assert!(
             matches!(result, Err(zetesis_themelios::FormulaFailure::Observation { error }) if error.kind() == &ErrorKind::Unsupported(zetesis_themelios::observation::Feature::UnsafeVariable)),
             "{source}"
@@ -501,11 +496,9 @@ fn atom_pattern_cases_preserve_complete_displays() {
 fn structural_pool_products_are_charged_before_materialization() {
     for (arity, pool, minimum) in [(32, "(1;2)", 1u128 << 32), (64, "(1;2;3;4)", u128::MAX)] {
         let arguments = vec![pool; arity].join(",");
-        let result = admit_formula(
-            format!("#show x:p({arguments})."),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
+        let result = admit(
+            &format!("#show x:p({arguments})."),
+            &FormulaLimits::default(),
         );
         assert!(
             matches!(result, Err(zetesis_themelios::FormulaFailure::Observation { error }) if matches!(error.kind(), ErrorKind::Limit { resource: Resource::Nodes, observed, .. } if *observed >= minimum))

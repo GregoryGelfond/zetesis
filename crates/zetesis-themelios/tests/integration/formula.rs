@@ -9,12 +9,12 @@ use std::collections::BTreeSet;
 use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
-use zetesis_reference_support::{BundleFixture, formula};
+use zetesis_reference_support::{BundleFixture, admit, formula};
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
     FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_bundle_formula,
-    admit_extended, admit_formula,
+    admit_extended,
 };
 
 fn models(theory: &Theory, atoms: zetesis_core::catalog::Atoms<'_>) -> Models {
@@ -105,13 +105,7 @@ fn unsafe_scopes_and_unsupported_body_or_choice_expressions_are_refused() {
         "a :- d(X+1).",
     ] {
         assert!(
-            admit_formula(
-                source.to_owned(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default()
-            )
-            .is_err(),
+            admit(source, &FormulaLimits::default()).is_err(),
             "{source}"
         );
     }
@@ -128,12 +122,7 @@ fn bound_arithmetic_comparisons_are_tests_and_unbound_inequalities_remain_unsafe
         expected(&["d(-2..2). p(-2). p(2)."])
     );
     assert!(matches!(
-        admit_formula(
-            "p(X) :- X<1.".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
+        admit("p(X) :- X<1.", &FormulaLimits::default()),
         Err(FormulaFailure::UnsafeVariable { .. })
     ));
 }
@@ -216,13 +205,7 @@ fn conditional_disjuncts_preserve_the_complete_source_family() {
 
 #[test]
 fn parameterized_program_parts_remain_located_refusals() {
-    let error = admit_formula(
-        "#program base(x). a.".to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
+    let error = admit("#program base(x). a.", &FormulaLimits::default()).unwrap_err();
     assert!(matches!(
         error,
         FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
@@ -235,11 +218,9 @@ fn parameterized_program_parts_remain_located_refusals() {
 
 #[test]
 fn limit_diagnostics_report_required_counts() {
-    let error = admit_formula(
-        "a. b.".to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits {
+    let error = admit(
+        "a. b.",
+        &FormulaLimits {
             theory: zetesis_ferraris::AdmissionLimits {
                 max_atoms: 1,
                 ..zetesis_ferraris::AdmissionLimits::default()
@@ -317,13 +298,7 @@ fn each_formula_resource_refuses_without_returning_a_partial_theory() {
         ),
     ];
     for (limits, expected) in cases {
-        let error = admit_formula(
-            "d(1..2). 1{a(X):d(X)}1.".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        )
-        .expect_err("bounded refusal");
+        let error = admit("d(1..2). 1{a(X):d(X)}1.", &limits).expect_err("bounded refusal");
         assert!(
             matches!(error, FormulaFailure::Limit { resource, .. } if resource == expected),
             "{error}"

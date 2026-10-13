@@ -633,14 +633,7 @@ fn a_formula_admission_reports_the_charges_its_preparation_made() {
 #[test]
 fn native_source_groups_obey_operand_ceiling() {
     let source = "a;b;c;d.";
-    let admit = |limits| {
-        admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        )
-    };
+    let admit = |limits| zetesis_reference_support::admit(source, &limits);
     let full = admit(FormulaLimits::default()).unwrap();
     assert!((0..full.theory().view().len()).any(|index| matches!(full.theory().view().node(index).unwrap(), zetesis_ferraris::NodeView::Or(row) if row.len() == 4)));
     let count = full.theory().parts().occurrences();

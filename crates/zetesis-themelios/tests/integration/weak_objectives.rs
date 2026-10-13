@@ -94,11 +94,9 @@ fn weak_occurrences_count_before_upstream_statement_deduplication() {
         "{a}. :~a.[1,k] :~a.[1,k]",
         "{a}. :~a.[1,k] #minimize{1,k:a}.",
     ] {
-        let result = admit_formula(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
+        let result = zetesis_reference_support::admit(
+            source,
+            &FormulaLimits {
                 objective: zetesis_objective::AdmissionLimits {
                     max_templates: 1,
                     ..zetesis_objective::AdmissionLimits::default()
@@ -142,12 +140,7 @@ fn unsupported_weak_scopes_remain_typed_refusals() {
     for source in [":~.[X]", "{p(1)}. :~p(_).[_]"] {
         assert!(
             matches!(
-                admit_formula(
-                    source.to_owned(),
-                    AdmissionOptions::default(),
-                    ExpansionLimits::default(),
-                    FormulaLimits::default()
-                ),
+                zetesis_reference_support::admit(source, &FormulaLimits::default()),
                 Err(FormulaFailure::UnsafeVariable { .. })
             ),
             "{source}"

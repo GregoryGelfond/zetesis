@@ -3,7 +3,7 @@
 use crate::support::limits;
 use std::cell::Cell;
 use std::fmt::Write;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula};
 use zetesis_test_support::thresholds::first_success;
 
 use zetesis_themelios::ProgramSite;
@@ -206,11 +206,9 @@ fn indexed_candidates_still_validate_repeated_variables_and_every_constant() {
 fn retained_index_entries_have_an_independent_inclusive_ceiling() {
     for maximum in [0, 1, 2] {
         // q's rule reads both columns of p, through its head; q is unread.
-        let result = admit_formula(
-            "p(1,2). q(X,Y) :- p(X,Y).".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
+        let result = admit(
+            "p(1,2). q(X,Y) :- p(X,Y).",
+            &FormulaLimits {
                 max_support_index_entries: maximum,
                 ..FormulaLimits::default()
             },
@@ -229,11 +227,9 @@ fn retained_index_entries_have_an_independent_inclusive_ceiling() {
         }
     }
     assert!(
-        admit_formula(
-            "p.".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
+        admit(
+            "p.",
+            &FormulaLimits {
                 max_support_index_entries: 0,
                 ..FormulaLimits::default()
             }

@@ -480,11 +480,9 @@ fn all_source_ceilings_preflight_owned_templates_and_origin_copies() {
             Resource::Origins,
         ),
     ] {
-        let result = admit_formula(
-            "p(1). #show f(X):p(X).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
+        let result = admit(
+            "p(1). #show f(X):p(X).",
+            &FormulaLimits {
                 observation: limits,
                 ..Default::default()
             },

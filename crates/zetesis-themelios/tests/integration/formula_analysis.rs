@@ -2,24 +2,19 @@
 //! its class/safety verdicts neither replace native scope checks nor lift quotas.
 
 use std::collections::BTreeSet;
-use zetesis_reference_support::BundleFixture;
+use zetesis_reference_support::{BundleFixture, admit};
 
 use themelios_analysis::{Analysis, Verdict};
 use themelios_base::source::SourceId;
 use themelios_program::program::Statement;
 use themelios_program::provenance::Origin;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaResource, admit_bundle_formula, admit_formula,
+    AdmittedFormula, BundleAdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits,
+    FormulaResource, admit_bundle_formula,
 };
 
 fn admit_with(text: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        text.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        *limits,
-    )
+    admit(text, limits)
 }
 
 #[test]

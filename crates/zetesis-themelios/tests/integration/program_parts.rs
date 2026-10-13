@@ -8,7 +8,7 @@ use themelios_base::source::SourceId;
 use zetesis_reference_support::{formula, prepared};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits,
-    InputLimit, ProfileFeature, admit, admit_extended, admit_formula,
+    InputLimit, ProfileFeature, admit, admit_extended,
 };
 
 const CASES: &[(&str, &str)] = &[
@@ -199,13 +199,7 @@ fn base_sections_do_not_hide_invalid_rules() {
         "#program base. p(.",
     ] {
         assert!(
-            admit_formula(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default(),
-            )
-            .is_err(),
+            zetesis_reference_support::admit(source, &FormulaLimits::default()).is_err(),
             "{source}"
         );
     }

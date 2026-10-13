@@ -12,8 +12,8 @@ use zetesis_reference_support::{admit, formula as input};
 use zetesis_sat::{Limits, StableModels};
 use zetesis_test_support::repository;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaResource, admit_formula,
+    AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
+    FormulaResource,
 };
 
 fn models(input: &AdmittedFormula) -> Models {
@@ -124,12 +124,7 @@ fn generative_recursion_and_candidate_rows_have_typed_independent_limits() {
         ..FormulaLimits::default()
     };
     assert!(matches!(
-        admit_formula(
-            "n(N):-N=#count{X:n(X)}.".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits
-        ),
+        admit("n(N):-N=#count{X:n(X)}.", &limits),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::SupportRounds,
             ..
@@ -140,12 +135,7 @@ fn generative_recursion_and_candidate_rows_have_typed_independent_limits() {
         ..FormulaLimits::default()
     };
     assert!(matches!(
-        admit_formula(
-            "n(N):-N=#sum{}.".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits
-        ),
+        admit("n(N):-N=#sum{}.", &limits),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::AssignmentValues,
             ..
@@ -156,12 +146,7 @@ fn generative_recursion_and_candidate_rows_have_typed_independent_limits() {
         ..FormulaLimits::default()
     };
     assert!(matches!(
-        admit_formula(
-            "{a;b}.n(N):-N=#sum{1:a;2:b}.".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits
-        ),
+        admit("{a;b}.n(N):-N=#sum{1:a;2:b}.", &limits),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::AssignmentValues,
             ..
@@ -375,13 +360,7 @@ fn eligibility_cache_separates_source_aggregates_and_outer_bindings() {
             FormulaResource::AggregateCacheRoots,
         ),
     ] {
-        let error = admit_formula(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        )
-        .expect_err("explicit cache ceiling");
+        let error = admit(source, &limits).expect_err("explicit cache ceiling");
         assert!(
             matches!(error, FormulaFailure::Limit { resource: actual, .. } if actual == resource)
         );

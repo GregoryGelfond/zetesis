@@ -10,11 +10,10 @@ use crate::support::objective_dependency_records as objective_dependencies;
 use crate::support::head_element_reference as reference;
 
 use reference::{Selection, cost_records, expected, external, models};
-use zetesis_reference_support::{BundleFixture, formula, prepared};
+use zetesis_reference_support::{BundleFixture, admit, formula, prepared};
 use zetesis_themelios::{
-    AdmissionOptions, AnalysisBasis, BundleAdmissionOptions, CountPlanLimits, CountPlanStatus,
-    ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    admit_bundle_formula, admit_formula,
+    AnalysisBasis, BundleAdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionFailure,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula,
 };
 
 const CASES: &[(&str, &[&[&str]])] = &[
@@ -211,13 +210,7 @@ proptest::proptest! {
 fn false_constants_cannot_hide_undefined_weights() {
     for function in ["#sum", "#sum+"] {
         let source = format!("0{function}{{1/0:#false}}0:-#false.");
-        let error = admit_formula(
-            source,
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
+        let error = admit(&source, &FormulaLimits::default()).unwrap_err();
         assert!(
             matches!(
                 error,
@@ -230,13 +223,7 @@ fn false_constants_cannot_hide_undefined_weights() {
 
 #[test]
 fn local_constant_witnesses_require_safe_bindings() {
-    let error = admit_formula(
-        "1{#true:not p(X)}1.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
+    let error = admit("1{#true:not p(X)}1.", &FormulaLimits::default()).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::UnsafeVariable { .. }),
         "{error}"
@@ -245,11 +232,9 @@ fn local_constant_witnesses_require_safe_bindings() {
 
 #[test]
 fn constant_activity_observes_element_refusal() {
-    let error = admit_formula(
-        "1#count{0:#true;1:#false}1.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits {
+    let error = admit(
+        "1#count{0:#true;1:#false}1.",
+        &FormulaLimits {
             aggregate: zetesis_ferraris::AggregateLimits {
                 max_elements: 0,
                 ..Default::default()
@@ -281,20 +266,8 @@ fn occurrence_keys_own_the_choice_element_budget() {
         },
         ..Default::default()
     };
-    admit_formula(
-        "d(1..2).1{#true:d(X)}1.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        limits,
-    )
-    .unwrap();
-    let error = admit_formula(
-        "2{#true;#true}2.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        limits,
-    )
-    .unwrap_err();
+    admit("d(1..2).1{#true:d(X)}1.", &limits).unwrap();
+    let error = admit("2{#true;#true}2.", &limits).unwrap_err();
     assert!(
         matches!(
             error,

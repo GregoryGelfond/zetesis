@@ -3,6 +3,7 @@ use crate::support::clingo_reports;
 use crate::support::finite_bindings as reference;
 use crate::support::upstream;
 use zetesis_clingo_support as oracle;
+use zetesis_reference_support::admit;
 
 use reference::{exhaustive, native};
 use serde_json::Value as Json;
@@ -139,13 +140,7 @@ fn value_carrier_and_cache_limits_refuse_without_a_partial_formula() {
             ..FormulaLimits::default()
         },
     ] {
-        let error = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        )
-        .unwrap_err();
+        let error = admit(source, &limits).unwrap_err();
         assert!(!error.diagnostics().is_empty(), "{error}");
     }
 }
@@ -158,13 +153,7 @@ fn equal_first_values_share_proposals_but_retain_complete_tuple_limit_counts() {
         max_aggregate_cache_elements: 2,
         ..FormulaLimits::default()
     };
-    let input = admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        limits,
-    )
-    .unwrap();
+    let input = admit(source, &limits).unwrap();
     assert_eq!(native(&input), exhaustive(&input));
     for limits in [
         FormulaLimits {
@@ -176,15 +165,7 @@ fn equal_first_values_share_proposals_but_retain_complete_tuple_limit_counts() {
             ..limits
         },
     ] {
-        assert!(
-            admit_formula(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                limits
-            )
-            .is_err()
-        );
+        assert!(admit(source, &limits).is_err());
     }
 }
 

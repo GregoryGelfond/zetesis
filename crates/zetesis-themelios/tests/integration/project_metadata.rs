@@ -1,7 +1,7 @@
 //! Source declarations stay separate from completed fixed-domain projection.
 
 use zetesis_core::Predicate;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula};
 use zetesis_test_support::programs::unary as atom;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
@@ -76,11 +76,9 @@ fn project_metadata_records_the_explicit_domain() {
 
 #[test]
 fn absent_project_heads_leave_an_explicit_empty_domain() {
-    let result = admit_formula(
-        "p(1).#project q(X):p(X).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits {
+    let result = admit(
+        "p(1).#project q(X):p(X).",
+        &FormulaLimits {
             max_project_atoms: 0,
             max_project_bytes: 0,
             ..FormulaLimits::default()
@@ -139,13 +137,7 @@ fn projection_admission_refuses_the_complete_owner_at_its_own_limit() {
             FormulaResource::ProjectBytes,
         ),
     ] {
-        let error = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        )
-        .unwrap_err();
+        let error = admit(source, &limits).unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Limit { resource: actual, .. } if actual == resource),
             "{error}"
@@ -195,13 +187,7 @@ fn project_constants_use_a_separate_domain_allowance() {
     };
     let source = "p(1).";
     let original = formula(source);
-    let selected = admit_formula(
-        format!("{source}#project q((2;3))."),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        limits,
-    )
-    .unwrap();
+    let selected = admit(&format!("{source}#project q((2;3))."), &limits).unwrap();
     assert_eq!(selected.atoms(), original.atoms());
     assert_eq!(
         (selected.theory().nodes(), selected.theory().operands()),

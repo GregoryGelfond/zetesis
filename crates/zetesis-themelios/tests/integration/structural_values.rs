@@ -5,7 +5,7 @@ use reference::{Models, exhaustive, native};
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 fn expected(models: &[&[&str]]) -> Models {
     models
@@ -174,13 +174,7 @@ fn unsupported_structural_sources_remain_refused() {
         "#const a=f(b).#const b=g(a).p(a).",
     ] {
         assert!(
-            admit_formula(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default()
-            )
-            .is_err(),
+            admit(source, &FormulaLimits::default()).is_err(),
             "{source}"
         );
     }

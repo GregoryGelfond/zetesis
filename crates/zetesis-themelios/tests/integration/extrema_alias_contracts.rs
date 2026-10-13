@@ -3,11 +3,8 @@
 use crate::support::head_element_reference as reference;
 
 use reference::{Selection, expected, external, models};
-use zetesis_reference_support::formula;
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    admit_formula,
-};
+use zetesis_reference_support::{admit, formula};
+use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &[(&str, &[&[&str]])] = &[
     ("1#min{1:a;1:b}1.", &[&["a"], &["b"], &["a", "b"]]),
@@ -109,22 +106,10 @@ fn alias_keys_own_the_element_budget() {
             ..Default::default()
         };
         let shared = format!("0{function}{{0,k:a;0,k:b;0,k:a}}0.");
-        let result = admit_formula(
-            shared.clone(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        )
-        .unwrap();
+        let result = admit(&shared, &limits).unwrap();
         assert_eq!(result.atoms(), formula(&shared).atoms());
         let separate = format!("0{function}{{0,k:a;0,l:a}}0.");
-        let error = admit_formula(
-            separate,
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        )
-        .unwrap_err();
+        let error = admit(&separate, &limits).unwrap_err();
         assert!(
             matches!(
                 error,
@@ -147,13 +132,7 @@ fn alias_expansion_observes_work_refusal() {
         max_work: 0,
         ..Default::default()
     };
-    let error = admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        limits,
-    )
-    .unwrap_err();
+    let error = admit(source, &limits).unwrap_err();
     assert!(
         matches!(
             error,

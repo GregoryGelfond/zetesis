@@ -16,7 +16,7 @@ use zetesis_reference_support::{BundleFixture, canonical};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
     ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit,
-    admit_bundle_formula, admit_extended, admit_formula,
+    admit_bundle_formula, admit_extended,
 };
 
 const SIGNED_ANONYMOUS_PROJECTIONS: [(&str, &str); 2] = [
@@ -425,12 +425,7 @@ fn coherence_roots_are_bounded_and_keep_both_original_source_locations() {
     for (limit, succeeds) in [(roots, true), (roots - 1, false)] {
         let mut limits = FormulaLimits::default();
         limits.theory.max_roots = limit;
-        let result = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        );
+        let result = zetesis_reference_support::admit(source, &limits);
         if succeeds {
             assert!(result.is_ok());
         } else {
