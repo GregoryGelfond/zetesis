@@ -371,14 +371,21 @@ fn an_index_the_work_allowance_cannot_build_spends_nothing() {
 
 #[test]
 fn the_update_index_admits_at_most_u32_max_producers() {
-    // No test can build a plan with that many producers, so the admission
-    // decision is driven with the figures `prepare_updates` passes it, under
-    // allowances that cover any build.
-    let ample = TightPlanLimits::default();
+    // No test can build a plan with that many producers, so the decision is
+    // driven directly. Its bounds are zero, which every allowance covers, even
+    // the zero allowances given here, so the producer count alone decides, and
+    // a refusal here is a refusal under every bound and limit. Where `usize` is
+    // no wider than a support count, no plan can pass the bound, and there is
+    // nothing beyond it to refuse.
+    let none = TightPlanLimits {
+        max_work: 0,
+        max_bytes: 0,
+        ..TightPlanLimits::default()
+    };
     let most = SupportCount::MAX as usize;
-    assert!(TightPlan::index_admitted(most, 0, 0, ample));
+    assert!(TightPlan::index_admitted(most, 0, 0, none));
     if let Some(beyond) = most.checked_add(1) {
-        assert!(!TightPlan::index_admitted(beyond, 0, 0, ample));
+        assert!(!TightPlan::index_admitted(beyond, 0, 0, none));
     }
 }
 
@@ -634,7 +641,7 @@ fn an_update_refuses_a_support_count_past_u32() {
             .result
             .unwrap();
     }
-    workspace.retained.support[3] = u32::MAX;
+    workspace.retained.support[3] = SupportCount::MAX;
     let raised = world(&theory, [0, 1, 2, 4]);
     let refused = workspace.check(&plan, &raised, TightCheckLimits::default(), &cancellation);
     assert_eq!(
