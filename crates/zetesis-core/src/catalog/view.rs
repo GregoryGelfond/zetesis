@@ -11,6 +11,7 @@ use std::{
     iter::FusedIterator,
 };
 
+use crate::structured::ceiling;
 use crate::{
     Atom, Predicate, Sign, Value, ValueError, ValueLimits, ValueNode, ValueNodeRef, ValueResource,
 };
@@ -1437,18 +1438,6 @@ fn flat_depth_with<E>(
         maximum = maximum.max(depth);
     }
     Ok(maximum)
-}
-
-fn ceiling(resource: ValueResource, observed: u128, limit: usize) -> Result<(), ValueError> {
-    if observed > limit as u128 {
-        Err(ValueError::Limit {
-            resource,
-            observed,
-            limit,
-        })
-    } else {
-        Ok(())
-    }
 }
 
 fn copy_text(text: &str, bytes: &mut u128, limit: usize) -> Result<String, ValueError> {

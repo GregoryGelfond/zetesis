@@ -169,7 +169,12 @@ impl StructuralValue {
     }
 }
 
-fn ceiling(resource: ValueResource, observed: u128, limit: usize) -> Result<(), ValueError> {
+/// Refuse `observed` past the inclusive `limit` of a value `resource`.
+pub(crate) fn ceiling(
+    resource: ValueResource,
+    observed: u128,
+    limit: usize,
+) -> Result<(), ValueError> {
     if observed > limit as u128 {
         Err(ValueError::Limit {
             resource,
