@@ -1,5 +1,6 @@
 //! Source pools retain whole-rule products, local groups and bounded evidence.
 use crate::support::finite_bindings as reference;
+use crate::support::thresholds;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
@@ -314,22 +315,11 @@ fn templates_charge_duplicate_occurrences_before_deduplication() {
     );
 }
 
+/// The least `usize` threshold at which `accepts` succeeds, by the shared
+/// search.
 fn first_success(mut accepts: impl FnMut(usize) -> bool) -> usize {
-    let mut high = 1;
-    while !accepts(high) {
-        high *= 2;
-        assert!(high <= 1 << 24);
-    }
-    let mut low = 0;
-    while low + 1 < high {
-        let middle = usize::midpoint(low, high);
-        if accepts(middle) {
-            high = middle;
-        } else {
-            low = middle;
-        }
-    }
-    high
+    let least = thresholds::first_success(|limit| accepts(usize::try_from(limit).unwrap()));
+    usize::try_from(least).unwrap()
 }
 
 #[test]

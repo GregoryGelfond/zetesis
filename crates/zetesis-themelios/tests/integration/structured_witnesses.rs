@@ -1,12 +1,12 @@
 //! Local witnesses retain complete atoms under structural selection.
 use crate::support::finite_bindings as reference;
-use crate::support::witnesses::limited;
+use crate::support::witnesses::{self, limited};
 use reference::{Models, exhaustive, native, values};
 use std::collections::BTreeSet;
 use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
+    FormulaLimits, FormulaResource, admit_formula,
 };
 
 // Written finite substitutions retain full supporting atoms. A condition row
@@ -432,34 +432,12 @@ fn compiled_witnesses_retain_source_provenance() {
     }));
 }
 
-// Admission is monotone in each isolated resource ceiling. Each iteration halves
-// a finite interval; only the one varied typed refusal is accepted below it.
-fn first_cap(
-    mut run: impl FnMut(usize) -> Result<AdmittedFormula, FormulaFailure>,
-    refused: impl Fn(&FormulaFailure) -> bool,
-) -> usize {
-    let (mut low, mut high) = (0, 1_000_000);
-    assert!(run(high).is_ok());
-    while low < high {
-        let middle = low + (high - low) / 2;
-        match run(middle) {
-            Ok(_) => high = middle,
-            Err(error) => {
-                assert!(refused(&error), "{error}");
-                low = middle + 1;
-            }
-        }
-    }
-    assert!(low > 0);
-    assert!(refused(&run(low - 1).unwrap_err()));
-    assert_eq!(native(&run(low).unwrap()), native(&formula(BOUNDED)));
-    low
-}
 const BOUNDED: &str = "{p(f(1,2));p(f(2,2));p(f(3,3))}.q:-p(f(X,X)):#true.";
 
 #[test]
 fn witness_work_limit_is_inclusive() {
-    let cap = first_cap(
+    let cap = witnesses::inclusive_ceiling(
+        BOUNDED,
         |cap| {
             limited(
                 BOUNDED,
@@ -478,70 +456,15 @@ fn witness_work_limit_is_inclusive() {
 
 #[test]
 fn witness_substitution_limit_is_inclusive() {
-    let cap = first_cap(
-        |cap| {
-            limited(
-                BOUNDED,
-                ExpansionLimits::default(),
-                &FormulaLimits {
-                    max_substitutions: cap as u64,
-                    ..Default::default()
-                },
-            )
-        },
-        |error| matches!(error, FormulaFailure::Limit { resource: FormulaResource::Substitutions, observed, limit, .. } if *observed == limit + 1),
-    );
-    println!("substitutions={cap}");
+    println!("substitutions={}", witnesses::substitution_ceiling(BOUNDED));
 }
 
 #[test]
 fn witness_storage_limit_is_inclusive() {
-    let cap = first_cap(
-        |cap| {
-            limited(
-                BOUNDED,
-                ExpansionLimits {
-                    max_scalar_bytes: cap,
-                    ..Default::default()
-                },
-                &FormulaLimits::default(),
-            )
-        },
-        |error| {
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Limit {
-                    resource: ExpansionResource::ScalarBytes,
-                    ..
-                })
-            )
-        },
-    );
-    println!("scalar_bytes={cap}");
+    println!("scalar_bytes={}", witnesses::scalar_bytes_ceiling(BOUNDED));
 }
 
 #[test]
 fn witness_term_work_limit_is_inclusive() {
-    let cap = first_cap(
-        |cap| {
-            limited(
-                BOUNDED,
-                ExpansionLimits {
-                    max_term_work: cap,
-                    ..Default::default()
-                },
-                &FormulaLimits::default(),
-            )
-        },
-        |error| {
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Limit {
-                    resource: ExpansionResource::TermWork,
-                    ..
-                })
-            )
-        },
-    );
-    println!("term_work={cap}");
+    println!("term_work={}", witnesses::term_work_ceiling(BOUNDED));
 }

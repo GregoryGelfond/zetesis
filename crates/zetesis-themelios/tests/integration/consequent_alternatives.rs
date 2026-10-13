@@ -1,6 +1,7 @@
 //! Universal rows and existential consequent alternatives have separate scopes.
 use crate::support::finite_bindings as reference;
 use crate::support::formula_trees::{Formula, world};
+use crate::support::thresholds::first_success;
 use crate::support::upstream;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, native, values};
@@ -581,22 +582,12 @@ fn complete_sources_match_clingo() {
     );
 }
 
+/// The least ceiling at which `admit` succeeds.
 fn first_cap(mut admit: impl FnMut(usize) -> Result<AdmittedFormula, FormulaFailure>) -> usize {
-    let mut low = 0;
-    let mut high = 1_000_000;
-    assert!(admit(high).is_ok());
-    while low < high {
-        let middle = low + (high - low) / 2;
-        if admit(middle).is_ok() {
-            high = middle;
-        } else {
-            low = middle + 1;
-        }
-    }
-    assert!(low > 0);
-    assert!(admit(low).is_ok());
-    assert!(admit(low - 1).is_err());
-    low
+    usize::try_from(first_success(|cap| {
+        admit(usize::try_from(cap).unwrap()).is_ok()
+    }))
+    .unwrap()
 }
 const BOUNDED: &str = "{p(1..3)}.q:-p(X-1;2*(X..X+1)-3):X=2.";
 const PROJECTED: &str = "{p(f(1,1));p(f(2,1));p(g(1,1))}.q:-not p(f(_,X..X+1)):X=1.";

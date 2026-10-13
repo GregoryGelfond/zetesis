@@ -1,6 +1,6 @@
 //! Local witness rows distinguish captured inputs from closed evaluated values.
 use crate::support::finite_bindings as reference;
-use crate::support::witnesses::limited;
+use crate::support::witnesses::{self, limited};
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -8,8 +8,8 @@ use std::fmt::Write as _;
 use reference::{Models, exhaustive, holds, native, values};
 use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
+    AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
+    FormulaResource, admit_formula, prepare_formula,
 };
 
 // These independently written finite substitutions retain whole source atoms.
@@ -439,96 +439,19 @@ fn witness_captures_obey_the_variable_ceiling() {
 
 const BOUNDED: &str = "{p(f(1,2));p(f(2,4));p(f(3,4))}.q:-p(f(X,X+1)):#true.";
 
-fn first_cap(
-    mut run: impl FnMut(usize) -> Result<AdmittedFormula, FormulaFailure>,
-    refused: impl Fn(&FormulaFailure) -> bool,
-) -> usize {
-    let (mut low, mut high) = (0, 1_000_000);
-    assert!(run(high).is_ok());
-    while low < high {
-        let middle = low + (high - low) / 2;
-        match run(middle) {
-            Ok(_) => high = middle,
-            Err(error) => {
-                assert!(refused(&error), "{error}");
-                low = middle + 1;
-            }
-        }
-    }
-    assert!(low > 0);
-    assert!(refused(&run(low - 1).unwrap_err()));
-    assert_eq!(native(&run(low).unwrap()), native(&formula(BOUNDED)));
-    low
-}
-
 #[test]
 fn source_work_limit_is_inclusive() {
-    let cap = first_cap(
-        |cap| {
-            limited(
-                BOUNDED,
-                ExpansionLimits {
-                    max_term_work: cap,
-                    ..Default::default()
-                },
-                &FormulaLimits::default(),
-            )
-        },
-        |error| {
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Limit {
-                    resource: ExpansionResource::TermWork,
-                    ..
-                })
-            )
-        },
-    );
-    println!("term_work={cap}");
+    println!("term_work={}", witnesses::term_work_ceiling(BOUNDED));
 }
 
 #[test]
 fn source_storage_limit_is_inclusive() {
-    let cap = first_cap(
-        |cap| {
-            limited(
-                BOUNDED,
-                ExpansionLimits {
-                    max_scalar_bytes: cap,
-                    ..Default::default()
-                },
-                &FormulaLimits::default(),
-            )
-        },
-        |error| {
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Limit {
-                    resource: ExpansionResource::ScalarBytes,
-                    ..
-                })
-            )
-        },
-    );
-    println!("scalar_bytes={cap}");
+    println!("scalar_bytes={}", witnesses::scalar_bytes_ceiling(BOUNDED));
 }
 
 #[test]
 fn substitution_limit_is_inclusive() {
-    let cap = first_cap(
-        |cap| {
-            limited(
-                BOUNDED,
-                ExpansionLimits::default(),
-                &FormulaLimits {
-                    max_substitutions: cap as u64,
-                    ..Default::default()
-                },
-            )
-        },
-        |error| matches!(error, FormulaFailure::Limit { resource: FormulaResource::Substitutions, observed, limit, .. } if *observed == limit + 1),
-    );
-    println!("substitutions={cap}");
+    println!("substitutions={}", witnesses::substitution_ceiling(BOUNDED));
 }
 
 #[test]

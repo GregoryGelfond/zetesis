@@ -1,5 +1,6 @@
 //! Selected complete rows preserve source grounding, evidence and finite refusals.
 
+use crate::support::thresholds::first_success;
 use std::cell::Cell;
 
 use zetesis_themelios::ProgramSite;
@@ -171,38 +172,21 @@ fn minimum(resource: FormulaResource) -> u64 {
             &Observation::default(),
         )
     };
-    let mut low = 0;
-    let mut high = match resource {
-        FormulaResource::Work => FormulaLimits::default().max_work,
-        FormulaResource::SupportBytes => {
-            u64::try_from(FormulaLimits::default().max_support_bytes).unwrap()
+    first_success(|maximum| match compile(maximum) {
+        Ok(_) => true,
+        Err(FormulaFailure::Limit {
+            resource: found,
+            observed,
+            limit,
+            ..
+        }) => {
+            assert_eq!(found, resource);
+            assert_eq!(limit, u128::from(maximum));
+            assert!(observed > limit);
+            false
         }
-        _ => unreachable!("selected finite resource"),
-    };
-    assert!(compile(high).is_ok());
-    while low < high {
-        let mid = low + (high - low) / 2;
-        match compile(mid) {
-            Ok(_) => high = mid,
-            Err(FormulaFailure::Limit {
-                resource: found,
-                observed,
-                limit,
-                ..
-            }) => {
-                assert_eq!(found, resource);
-                assert_eq!(limit, u128::from(mid));
-                assert!(observed > limit);
-                low = mid + 1;
-            }
-            other => panic!("unexpected resource result: {other:?}"),
-        }
-    }
-    assert!(compile(low).is_ok());
-    assert!(
-        matches!(compile(low - 1), Err(FormulaFailure::Limit { resource: found, .. }) if found == resource)
-    );
-    low
+        other => panic!("unexpected resource result: {other:?}"),
+    })
 }
 
 #[test]

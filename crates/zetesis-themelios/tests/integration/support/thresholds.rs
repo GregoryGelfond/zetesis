@@ -6,16 +6,20 @@ use zetesis_themelios::{
 };
 
 /// The least threshold at which `attempt` succeeds, found by doubling and then
-/// bisecting; `attempt` must succeed at every threshold above its least.
+/// bisecting. `attempt` must fail at zero, since the threshold is a resource
+/// the operation charges, and succeed at every threshold from its least on;
+/// every threshold the search tries is passed to `attempt`, which may check
+/// how a failure refuses.
 pub(crate) fn first_success(mut attempt: impl FnMut(u64) -> bool) -> u64 {
+    assert!(!attempt(0), "the operation must charge this resource");
     let mut high = 1;
     while !attempt(high) {
         high *= 2;
-        assert!(high <= 1_048_576, "bounded resource threshold probe");
+        assert!(high <= 1 << 24, "bounded resource threshold probe");
     }
     let mut low = 0;
     while low + 1 < high {
-        let middle = low + (high - low) / 2;
+        let middle = low.midpoint(high);
         if attempt(middle) {
             high = middle;
         } else {
@@ -39,23 +43,13 @@ pub(crate) fn minimum_preparation_bytes(source: &str) -> usize {
             FormulaLimits::default(),
         )
     };
-    let (mut lower, mut upper) = (0, ExpansionLimits::default().max_scalar_bytes);
-    assert!(prepare(upper).is_ok());
-    while lower < upper {
-        let middle = lower + (upper - lower) / 2;
-        if prepare(middle).is_ok() {
-            upper = middle;
-        } else {
-            lower = middle + 1;
-        }
-    }
-    assert!(prepare(lower).is_ok());
-    assert!(matches!(
-        prepare(lower - 1),
+    let least = first_success(|cap| match prepare(usize::try_from(cap).unwrap()) {
+        Ok(_) => true,
         Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
             resource: ExpansionResource::ScalarBytes,
             ..
-        }))
-    ));
-    lower
+        })) => false,
+        Err(other) => panic!("unexpected refusal: {other}"),
+    });
+    usize::try_from(least).unwrap()
 }

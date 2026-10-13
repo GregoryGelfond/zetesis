@@ -1,5 +1,6 @@
 //! Bound-column probes restrict work without replacing full relational matching.
 
+use crate::support::thresholds::first_success;
 use std::cell::Cell;
 use std::fmt::Write;
 
@@ -125,27 +126,20 @@ fn selective_join_work_limit_is_inclusive() {
             },
         )
     };
-    let (mut low, mut high) = (0, FormulaLimits::default().max_work);
-    assert!(compile(high).is_ok());
-    while low < high {
-        let middle = low + (high - low) / 2;
-        match compile(middle) {
-            Ok(_) => high = middle,
-            Err(FormulaFailure::Limit {
-                resource: FormulaResource::Work,
-                observed,
-                limit,
-                ..
-            }) => {
-                assert_eq!(limit, u128::from(middle));
-                assert!(observed > limit);
-                low = middle + 1;
-            }
-            other => panic!("unexpected admission: {other:?}"),
+    let low = first_success(|max_work| match compile(max_work) {
+        Ok(_) => true,
+        Err(FormulaFailure::Limit {
+            resource: FormulaResource::Work,
+            observed,
+            limit,
+            ..
+        }) => {
+            assert_eq!(limit, u128::from(max_work));
+            assert!(observed > limit);
+            false
         }
-    }
-    assert!(low > 0);
-    assert!(compile(low).is_ok());
+        other => panic!("unexpected admission: {other:?}"),
+    });
     let Err(FormulaFailure::Limit {
         resource: FormulaResource::Work,
         observed,

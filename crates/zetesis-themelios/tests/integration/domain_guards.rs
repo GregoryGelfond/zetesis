@@ -1,5 +1,6 @@
 //! Optional domains preserve complete theories while avoiding impossible prefixes.
 
+use crate::support::thresholds::first_success;
 use std::cell::{Cell, RefCell};
 use std::fmt::Write;
 
@@ -546,25 +547,20 @@ fn exceeds_work(failure: &FormulaFailure, ceiling: u64) -> bool {
 
 // Domain analysis is charged as formula work: at the least work that admits
 // the fact without it, admission with it is refused by the typed work limit.
-// The boundary is found by bisection; only typed work refusals move its lower
-// end, so no fixed implementation cost is assumed.
+// The boundary is found by the shared threshold search, and every refusal it
+// meets must be the typed work refusal, so no fixed implementation cost is
+// assumed.
 #[test]
 fn domain_analysis_is_charged_beyond_the_plain_admission_boundary() {
-    let mut upper = FormulaLimits::default().max_work;
-    assert!(fact(upper, None).is_ok());
-    let mut lower = 0;
-    while lower + 1 < upper {
-        let middle = lower + (upper - lower) / 2;
-        match fact(middle, None) {
-            Ok(_) => upper = middle,
-            Err(failure) => {
-                assert!(exceeds_work(&failure, middle), "{failure:?}");
-                lower = middle;
-            }
+    let least = first_success(|max_work| match fact(max_work, None) {
+        Ok(_) => true,
+        Err(failure) => {
+            assert!(exceeds_work(&failure, max_work), "{failure:?}");
+            false
         }
-    }
-    let failure = fact(upper, Some(DomainLimits::default())).unwrap_err();
-    assert!(exceeds_work(&failure, upper), "{failure:?}");
+    });
+    let failure = fact(least, Some(DomainLimits::default())).unwrap_err();
+    assert!(exceeds_work(&failure, least), "{failure:?}");
 }
 
 #[test]

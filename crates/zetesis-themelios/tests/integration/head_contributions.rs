@@ -2,6 +2,7 @@
 
 mod cases;
 use crate::support::finite_bindings as reference;
+use crate::support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 
@@ -362,25 +363,6 @@ fn neutral_rows_cannot_repair_unsafe_variables() {
         );
         assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
     }
-}
-
-fn first_success(mut accepts: impl FnMut(u64) -> bool) -> u64 {
-    let mut lower = 0;
-    let mut upper = 1;
-    assert!(!accepts(lower), "the operation must charge this resource");
-    while !accepts(upper) {
-        upper *= 2;
-        assert!(upper <= 1 << 20, "bounded reference fixture");
-    }
-    while lower + 1 < upper {
-        let middle = lower + (upper - lower) / 2;
-        if accepts(middle) {
-            upper = middle;
-        } else {
-            lower = middle;
-        }
-    }
-    upper
 }
 
 #[test]

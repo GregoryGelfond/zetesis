@@ -1,6 +1,7 @@
 //! Boolean heads retain their original truth without supplying atom support.
 
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::thresholds::first_success;
 
 mod cases;
 mod comparisons;
@@ -281,24 +282,6 @@ fn tautologies_preserve_arithmetic_refusals() {
 }
 
 const BUDGET_SOURCE: &str = "d(1..2).#true|p(X+1):-d(X).";
-
-fn first_success(mut attempt: impl FnMut(u64) -> bool) -> u64 {
-    let mut high = 1;
-    while !attempt(high) {
-        high *= 2;
-        assert!(high <= 1_048_576, "qualification threshold exceeded");
-    }
-    let mut low = 0;
-    while low + 1 < high {
-        let middle = low + (high - low) / 2;
-        if attempt(middle) {
-            high = middle;
-        } else {
-            low = middle;
-        }
-    }
-    high
-}
 
 fn exact_formula_budget(resource: FormulaResource, configure: impl Fn(&mut FormulaLimits, u64)) {
     let attempt = |limit| {
