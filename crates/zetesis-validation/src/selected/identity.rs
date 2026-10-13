@@ -7,7 +7,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use super::Error;
-use crate::corpus_files::spelled;
+use crate::digest::spelled;
 
 /// A primary input's requested path, resolved file identity and exact byte seal.
 /// The bounded read must agree with the opened file's length before and after

@@ -205,7 +205,7 @@ fn original_decoding_retains_the_utf8_cause() {
     let bytes = [0xff];
     // Seal the invalid bytes at this private boundary so decoding, rather than
     // identity checking, supplies the refusal under test.
-    corpus.files[0].original_sha256 = crate::corpus_files::sha256(&bytes);
+    corpus.files[0].original_sha256 = crate::digest::sha256(&bytes);
     let directory = original_fixture(&corpus, &bytes);
     let error = crate::examples::verify_originals(&corpus, directory.path(), Limits::default())
         .unwrap_err();
