@@ -1,8 +1,8 @@
 //! Lazy original acceptance shares the ordinary objective and retention semantics.
 
 use crate::support::models::ScoredFamily as Family;
-use crate::support::sessions::hybrid;
 use std::{convert::Infallible, num::NonZeroUsize};
+use zetesis_reference_support::hybrid;
 
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{

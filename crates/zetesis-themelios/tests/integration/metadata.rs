@@ -3,11 +3,11 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::support::atom_models::{Models, answer_sets};
-use crate::support::bundle_fixtures::Fixture;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Atom;
+use zetesis_reference_support::BundleFixture;
 use zetesis_themelios::{
     AdmissionOptions, Admitted, BundleAdmissionError, BundleAdmissionOptions, ExpansionFailure,
     ExpansionLimits, ExpansionResource, OutputSelection, SourceDirective, admit,
@@ -231,7 +231,7 @@ fn strict_s0_and_unsupported_display_forms_still_refuse() {
 
 #[test]
 fn bundle_metadata_unions_global_selection_and_keeps_file_identities() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write(
         "entry.lp",
         "#include \"child.lp\". #show p/0. #defined missing/1.",
@@ -406,7 +406,7 @@ fn declarations_and_signature_display_match_clingo_without_model_projection() {
 #[test]
 #[ignore = "requires clingo: included signature metadata matches clingo complete display multiplicities"]
 fn included_signature_metadata_matches_clingo_complete_display_multiplicities() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     for directives in ["#show.", "#show p/0.", "#show p/0. #show q/0."] {
         fixture.write(
             "entry.lp",

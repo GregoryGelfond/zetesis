@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 serde_json.workspace = true
+tempfile.workspace = true
 zetesis-core.workspace = true
 zetesis-cpu.workspace = true
 zetesis-ferraris.workspace = true

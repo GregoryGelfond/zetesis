@@ -50,7 +50,7 @@ fn consequences_preserve_every_satisfying_completion() {
         include_str!("../../fixtures/streamed-consequences/partial-division.lp"),
         include_str!("../../fixtures/streamed-consequences/empty-constraint.lp"),
     ] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let count = owner.atom_catalog().atoms().len();
         assert!(count <= 5, "finite exhaustive fixture");
         let mut regions = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -109,7 +109,7 @@ fn consequences_preserve_every_satisfying_completion() {
 
 #[test]
 fn same_predicate_pivots_follow_original_occurrences() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../fixtures/streamed-consequences/two-row-ordered-pair.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -129,7 +129,7 @@ fn multiple_open_occurrences_may_decline() {
         include_str!("../../fixtures/streamed-consequences/one-row-alias.lp"),
         include_str!("../../fixtures/streamed-consequences/two-positive.lp"),
     ] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
         let region = Region::all_open(owner.atom_catalog().atoms().len());
         assert_eq!(
@@ -143,7 +143,7 @@ fn multiple_open_occurrences_may_decline() {
 #[test]
 fn normalized_duplicate_literals_still_force() {
     // The source body's canonical set coalesces the identical occurrences.
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../fixtures/streamed-consequences/normalized-duplicate.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -155,7 +155,7 @@ fn normalized_duplicate_literals_still_force() {
 
 #[test]
 fn no_consequence_does_not_certify_model_satisfaction() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../fixtures/streamed-consequences/two-positive.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -173,7 +173,7 @@ fn no_consequence_does_not_certify_model_satisfaction() {
 
 #[test]
 fn continuation_shares_the_substitution_allowance() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../fixtures/streamed-consequences/two-negative-units.lp"
     ));
     let cancellation = Cancellation::default();
@@ -225,7 +225,7 @@ fn continuation_shares_the_scalar_allowance() {
     // Separate rules require a new traversal after the first deduction;
     // draining a prepared batch correctly needs no new scalar allocation.
     let source = include_str!("../../fixtures/streamed-consequences/separate-scalar-rules.lp");
-    let owner = admit(source);
+    let owner = hybrid(source);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
     first(&owner, &mut baseline, &Region::all_open(2));
     let scalar = baseline.statistics().scalar_bytes;
@@ -255,7 +255,7 @@ fn continuation_shares_the_scalar_allowance() {
 
 #[test]
 fn continuation_requires_an_unfinished_closure() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../fixtures/streamed-consequences/two-positive.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -294,7 +294,7 @@ fn continuation_requires_an_unfinished_closure() {
 
 #[test]
 fn ordinary_checks_retire_consequence_closures() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../fixtures/streamed-consequences/negative-unit.lp"
     ));
     let mut checker = owner
@@ -341,10 +341,10 @@ fn ordinary_checks_retire_consequence_closures() {
 
 #[test]
 fn consequence_authentication_precedes_source_work() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../fixtures/streamed-consequences/positive-unit.lp"
     ));
-    let other = admit(include_str!(
+    let other = hybrid(include_str!(
         "../../fixtures/streamed-consequences/positive-unit.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -379,7 +379,7 @@ fn consequence_authentication_precedes_source_work() {
 
 #[test]
 fn cancelled_consequences_publish_no_decision() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../fixtures/streamed-consequences/two-negative-units.lp"
     ));
     let allowance = ConstraintAllowance::new(ConstraintCheckLimits::default());
@@ -409,7 +409,7 @@ fn cancelled_consequences_publish_no_decision() {
 #[test]
 fn consequence_passes_share_every_work_cutoff() {
     let source = include_str!("../../fixtures/streamed-consequences/two-negative-units.lp");
-    let owner = admit(source);
+    let owner = hybrid(source);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let preparation = baseline.statistics().work;
     let mut region = Region::all_open(2);
@@ -430,7 +430,7 @@ fn consequence_passes_share_every_work_cutoff() {
     // Each owner is fresh so lazy index preparation is charged in the same
     // closure. The limit just below first_work detects dropped setup charges.
     for maximum in first_work - 1..=complete_work {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let allowance = ConstraintAllowance::new(ConstraintCheckLimits {
             max_work: maximum,
             ..Default::default()
@@ -474,7 +474,7 @@ fn consequence_passes_share_every_work_cutoff() {
 
 #[test]
 fn narrowed_pivots_use_the_complete_scalar_filter() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../fixtures/streamed-consequences/reordered-positive.lp"
     ));
     let q = owner

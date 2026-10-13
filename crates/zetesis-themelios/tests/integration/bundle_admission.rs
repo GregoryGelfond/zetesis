@@ -6,10 +6,11 @@ use std::fs;
 use std::path::Path;
 
 use crate::support::atom_models::{self, Models, answer_sets};
-use crate::support::bundle_fixtures::Fixture;
+use crate::support::bundle_fixtures;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
+use zetesis_reference_support::BundleFixture;
 use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions, BundleLimits,
@@ -27,7 +28,7 @@ fn explicit(source: &str) -> Models {
 
 #[test]
 fn global_forward_constants_and_nested_includes_produce_native_templates() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write(
         "entry.lp",
         "#const upper=lower+2. #include \"parts/data.lp\". {pick(X)} :- d(X). :- pick(1),pick(3).",
@@ -37,7 +38,7 @@ fn global_forward_constants_and_nested_includes_produce_native_templates() {
         "#include \"../constants.lp\". d(lower..upper).",
     );
     fixture.write("constants.lp", "#const lower=1.");
-    let admitted = fixture.admit().expect("global scalar definitions");
+    let admitted = bundle_fixtures::admit(&fixture).expect("global scalar definitions");
     assert_eq!(admitted.bundle().sources().len(), 3);
     assert_eq!(
         answer_sets(admitted.program()),
@@ -47,13 +48,13 @@ fn global_forward_constants_and_nested_includes_produce_native_templates() {
 
 #[test]
 fn base_sections_preserve_included_rules() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write(
         "entry.lp",
         "#program base. p. #include \"child.lp\". #program base. r :- q.",
     );
     fixture.write("child.lp", "#program base. q :- p. #program base().");
-    let admitted = fixture.admit().unwrap();
+    let admitted = bundle_fixtures::admit(&fixture).unwrap();
     assert_eq!(answer_sets(admitted.program()), explicit("p. q. r."));
     for origins in admitted.template_origins() {
         assert!(!origins.is_empty());
@@ -72,20 +73,20 @@ fn base_sections_preserve_included_rules() {
 
 #[test]
 fn base_sections_preserve_global_metadata() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write(
         "entry.lp",
         "#program base. #include \"child.lp\". p(n). #show p/1.",
     );
     fixture.write("child.lp", "#program base. #const n=2. #defined d/1.");
-    let admitted = fixture.admit().unwrap();
+    let admitted = bundle_fixtures::admit(&fixture).unwrap();
     assert_eq!(answer_sets(admitted.program()), explicit("p(2)."));
     assert_eq!(admitted.metadata().directives().len(), 2);
 }
 
 #[test]
 fn rule_variables_remain_local_across_files_and_positive_cycles() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write(
         "entry.lp",
         "#include \"left.lp\". #include \"right.lp\". left(1). right(2).",
@@ -93,20 +94,24 @@ fn rule_variables_remain_local_across_files_and_positive_cycles() {
     fixture.write("left.lp", "p(X) :- left(X). cycle(X) :- loop(X).");
     fixture.write("right.lp", "q(X) :- right(X). loop(X) :- cycle(X).");
     assert_eq!(
-        answer_sets(fixture.admit().expect("local rule scopes").program()),
+        answer_sets(
+            bundle_fixtures::admit(&fixture)
+                .expect("local rule scopes")
+                .program()
+        ),
         explicit("left(1). right(2). p(1). q(2).")
     );
 }
 
 #[test]
 fn merged_cross_file_rules_retain_both_original_source_locations() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write(
         "entry.lp",
         "% unchanged\r\n#include \"child.lp\".\r\np(1..2).",
     );
     fixture.write("child.lp", "p(1..2).\n");
-    let admitted = fixture.admit().expect("merged rule evidence");
+    let admitted = bundle_fixtures::admit(&fixture).expect("merged rule evidence");
     assert_eq!(admitted.program().templates().len(), 2);
     for locations in admitted.template_origins() {
         assert_eq!(locations.len(), 2);
@@ -130,13 +135,13 @@ fn merged_cross_file_rules_retain_both_original_source_locations() {
 
 #[test]
 fn repeated_identical_include_paths_are_not_duplicate_definitions() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write(
         "entry.lp",
         "#include \"shared.lp\". #include \"shared.lp\". q(n).",
     );
     fixture.write("shared.lp", "#const n=2. p(n).");
-    let admitted = fixture.admit().expect("same lexical path included once");
+    let admitted = bundle_fixtures::admit(&fixture).expect("same lexical path included once");
     assert_eq!(admitted.bundle().sources()[0].includes().len(), 2);
     assert_eq!(answer_sets(admitted.program()), explicit("p(2). q(2)."));
 }
@@ -145,15 +150,14 @@ fn repeated_identical_include_paths_are_not_duplicate_definitions() {
 fn lexical_aliases_preserve_the_native_refusal_contract() {
     // External include-alias handling differs across clingo installations.
     // Assert the native contract directly, including its source provenance.
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fs::create_dir(fixture.path("sub")).expect("alias parent");
     fixture.write(
         "entry.lp",
         "#include \"shared.lp\". #include \"sub/../shared.lp\".",
     );
     fixture.write("shared.lp", "#const n=2. p(n).");
-    let error = fixture
-        .admit()
+    let error = bundle_fixtures::admit(&fixture)
         .expect_err("distinct lexical paths must not be silently merged");
     assert_eq!(
         error.bundle().sources().len(),
@@ -177,23 +181,25 @@ fn lexical_aliases_preserve_the_native_refusal_contract() {
 #[cfg(unix)]
 #[test]
 fn redirected_include_paths_refuse_instead_of_guessing_relative_scopes() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("actual.lp", "p.");
     std::os::unix::fs::symlink(fixture.path("actual.lp"), fixture.path("linked.lp"))
         .expect("fixture symlink");
     fixture.write("entry.lp", "#include \"linked.lp\".");
     assert!(matches!(
-        fixture.admit().expect_err("redirected include").error(),
+        bundle_fixtures::admit(&fixture)
+            .expect_err("redirected include")
+            .error(),
         BundleAdmissionError::IncludeRedirection { .. }
     ));
 }
 
 #[test]
 fn cross_file_constant_duplicates_and_cycles_keep_their_source_catalog() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", "#const n=2. #include \"child.lp\".");
     fixture.write("child.lp", "#const n=2.");
-    let error = fixture.admit().expect_err("global duplicate");
+    let error = bundle_fixtures::admit(&fixture).expect_err("global duplicate");
     match error.error() {
         BundleAdmissionError::Expansion(ExpansionFailure::DuplicateConstant {
             first,
@@ -207,7 +213,7 @@ fn cross_file_constant_duplicates_and_cycles_keep_their_source_catalog() {
     }
     fixture.write("entry.lp", "#const a=b. #include \"child.lp\".");
     fixture.write("child.lp", "#const b=a.");
-    let error = fixture.admit().expect_err("global cycle");
+    let error = bundle_fixtures::admit(&fixture).expect_err("global cycle");
     assert!(matches!(
         error.error(),
         BundleAdmissionError::Expansion(ExpansionFailure::ConstantCycle { .. })
@@ -217,7 +223,7 @@ fn cross_file_constant_duplicates_and_cycles_keep_their_source_catalog() {
 
 #[test]
 fn unsupported_directives_and_child_raiser_failures_do_not_return_partial_programs() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", "p. #include \"child.lp\".");
     for child in [
         "#program base(x). q.",
@@ -226,7 +232,7 @@ fn unsupported_directives_and_child_raiser_failures_do_not_return_partial_progra
         "{p;q}.",
     ] {
         fixture.write("child.lp", child);
-        let error = fixture.admit().expect_err("unsupported original child");
+        let error = bundle_fixtures::admit(&fixture).expect_err("unsupported original child");
         assert!(
             matches!(error.error(), BundleAdmissionError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile { location, .. })) if location.location().unwrap().source == SourceId::new(1))
         );
@@ -234,14 +240,16 @@ fn unsupported_directives_and_child_raiser_failures_do_not_return_partial_progra
     }
     fixture.write("child.lp", "q(-2147483648).");
     assert!(matches!(
-        fixture.admit().expect_err("child numeric raising").error(),
+        bundle_fixtures::admit(&fixture)
+            .expect_err("child numeric raising")
+            .error(),
         BundleAdmissionError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Raise(_)))
     ));
 }
 
 #[test]
 fn syntax_and_constant_budgets_are_cumulative_across_original_sources() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", "#const a=1. #include \"child.lp\".");
     fixture.write("child.lp", "#const b=2. p(a,b).");
     let bundle = fixture.bundle();
@@ -277,7 +285,7 @@ fn syntax_and_constant_budgets_are_cumulative_across_original_sources() {
 
 #[test]
 fn expansion_and_provenance_budgets_remain_global_across_files() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", "#include \"child.lp\". p(1..2).");
     fixture.write("child.lp", "q(1..2).");
     let limits = ExpansionLimits {
@@ -360,15 +368,15 @@ fn external(directory: &Path) -> Models {
     atom_models::clingo_models(&oracle::json(&run))
 }
 
-fn compare(fixture: &Fixture) {
-    let input = fixture.admit().expect("supported original bundle");
+fn compare(fixture: &BundleFixture) {
+    let input = bundle_fixtures::admit(fixture).expect("supported original bundle");
     assert_eq!(answer_sets(input.program()), external(fixture.directory()));
 }
 
 #[test]
 #[ignore = "requires clingo: accepted original include graphs match complete clingo models"]
 fn accepted_original_include_graphs_match_complete_clingo_models() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     for lower in -2..=2 {
         for upper in -2..=2 {
             fixture.write(

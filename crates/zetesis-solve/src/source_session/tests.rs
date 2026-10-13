@@ -1,11 +1,9 @@
 //! An exact source receipt composes with ordinary session boundaries.
 
 use std::{convert::Infallible, num::NonZeroUsize};
+use zetesis_reference_support::prepared;
 
 use zetesis_cpu::{Cancellation, Stop};
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaLimits, PreparedFormula, prepare_formula,
-};
 
 use crate::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder, Interruption,
@@ -14,16 +12,6 @@ use crate::{
 };
 
 const SIGNED: &str = include_str!("../../tests/fixtures/acyclic-source/signed.lp");
-
-fn prepare(source: &str) -> PreparedFormula {
-    prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-}
 
 fn config() -> SolveConfig {
     SolveConfig {
@@ -35,7 +23,7 @@ fn config() -> SolveConfig {
 }
 
 fn admitted(source: &str) -> PreparedExecution {
-    let input = prepare_formula_execution(prepare(source), &config(), None).unwrap();
+    let input = prepare_formula_execution(prepared(source), &config(), None).unwrap();
     assert_eq!(input.input().profile(), PreparedProfile::AcyclicSource);
     input
 }
@@ -69,7 +57,7 @@ fn source_session_preserves_the_complete_original_answer() {
     let answer = session.next().unwrap().unwrap();
     assert!(session.next().is_none());
     assert_eq!((route.source, route.formulas), (1, 0));
-    let full = prepare(SIGNED).ground().unwrap();
+    let full = prepared(SIGNED).ground().unwrap();
     let mut ordinary = Session::enumerate(
         crate::PreparedInput::formula(&full),
         config(),
@@ -183,7 +171,7 @@ fn explicit_materialization_requests_do_not_select_source_evaluation() {
             grounder,
             ..config()
         };
-        let owner = prepare_formula_execution(prepare(SIGNED), &requested, None).unwrap();
+        let owner = prepare_formula_execution(prepared(SIGNED), &requested, None).unwrap();
         assert_ne!(owner.input().profile(), PreparedProfile::AcyclicSource);
     }
 }
@@ -194,7 +182,7 @@ fn explicit_oracle_requests_do_not_select_source_evaluation() {
         oracle: Oracle::Countermodel,
         ..config()
     };
-    let owner = prepare_formula_execution(prepare(SIGNED), &requested, None).unwrap();
+    let owner = prepare_formula_execution(prepared(SIGNED), &requested, None).unwrap();
     assert_ne!(owner.input().profile(), PreparedProfile::AcyclicSource);
 }
 

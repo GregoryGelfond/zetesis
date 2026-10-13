@@ -1,7 +1,8 @@
 //! Runtime observation diagnostics retain original sources and publication evidence.
 
-use crate::support::bundles::Fixture;
+use crate::support::bundles::process;
 use std::error::Error as _;
+use zetesis_reference_support::BundleFixture;
 
 use clap::Parser;
 use zetesis_cli::{
@@ -148,8 +149,8 @@ fn unrelated_source_cannot_replace_the_retained_context() {
 #[test]
 fn process_observation_diagnostic_uses_the_existing_color_policy() {
     let fixture = included_source();
-    let plain = fixture.process(&["--color", "never"]);
-    let colored = fixture.process(&["--color", "always"]);
+    let plain = process(&fixture, &["--color", "never"]);
+    let colored = process(&fixture, &["--color", "always"]);
     for result in [&plain, &colored] {
         assert_eq!(result.status.code(), Some(2));
         assert!(crate::support::human::preamble(&without_styles(
@@ -183,7 +184,7 @@ fn without_styles(text: &str) -> String {
 
 #[test]
 fn json_observation_failure_keeps_models_empty_and_diagnostics_separate() {
-    let result = included_source().process(&["--json", "--color", "always"]);
+    let result = process(&included_source(), &["--json", "--color", "always"]);
     assert_eq!(result.status.code(), Some(2));
     let document: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert!(document["models"].as_array().unwrap().is_empty());
@@ -269,8 +270,8 @@ fn source_attachment_preserves_the_library_refusal() {
 }
 
 /// A bundle whose entry includes `SOURCE` as `child.lp`.
-fn included_source() -> Fixture {
-    let fixture = Fixture::new();
+fn included_source() -> BundleFixture {
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", "#include \"child.lp\".\n");
     fixture.write("child.lp", SOURCE);
     fixture

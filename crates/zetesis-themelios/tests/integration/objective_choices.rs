@@ -158,15 +158,7 @@ fn an_empty_head_never_creates_a_required_member() {
 #[test]
 fn eager_and_hybrid_capture_the_same_choice_premises() {
     let eager = formula(DERIVED);
-    let hybrid = prepare_formula(
-        DERIVED.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_hybrid()
-    .unwrap();
+    let hybrid = zetesis_reference_support::hybrid(DERIVED);
     let eager_choices = eager.required_choices().unwrap();
     let hybrid_choices = hybrid.core().required_choices().unwrap();
     assert_eq!(eager_choices.len(), hybrid_choices.len());

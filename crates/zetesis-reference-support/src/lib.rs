@@ -9,7 +9,10 @@
 //! accepts, each with its objective's costs; atoms are spelled as clingo
 //! spells them ([`canonical`]). [`normal_answer_sets`] finds a normal
 //! program's answer sets by exhausting its candidates, each checked against
-//! the reduct (`zetesis_cpu::check`). The crate stands above `zetesis-themelios`,
+//! the reduct (`zetesis_cpu::check`). [`prepared`] prepares a source under the
+//! default options and limits and [`hybrid`] grounds it for hybrid execution;
+//! [`BundleFixture`] writes a source bundle into a temporary directory for the
+//! tests that load or run one. The crate stands above `zetesis-themelios`,
 //! so only the tests that compare a native enumeration compile it. It is not
 //! published or installed.
 
@@ -19,8 +22,11 @@ use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{
     AdmissionOptions, Admitted, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    admit_extended, admit_formula,
+    HybridFormula, PreparedFormula, admit_extended, admit_formula, prepare_formula,
 };
+
+mod bundle;
+pub use bundle::BundleFixture;
 
 /// An atom as clingo spells it: a leading `-` for strong negation, and
 /// arguments in clingo's notation, strings quoted.
@@ -93,6 +99,33 @@ pub fn normal(source: &str) -> Admitted {
         ExpansionLimits::default(),
     )
     .unwrap()
+}
+
+/// `source` prepared under the default options and limits.
+///
+/// # Panics
+/// Panics, naming `source` and the refusal, if preparation refuses it.
+#[must_use]
+pub fn prepared(source: &str) -> PreparedFormula {
+    prepare_formula(
+        source.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap_or_else(|error| panic!("{source}: {error}"))
+}
+
+/// `source` prepared under the default options and limits and grounded for
+/// hybrid execution.
+///
+/// # Panics
+/// Panics if preparation refuses `source` or hybrid grounding refuses it.
+#[must_use]
+pub fn hybrid(source: &str) -> HybridFormula {
+    prepared(source)
+        .ground_hybrid()
+        .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
 /// Every answer set of `input`, each with its objective's costs: every subset
@@ -198,6 +231,18 @@ mod tests {
         ]
         .into();
         assert_eq!(exhaustive(&admitted), expected);
+    }
+
+    #[test]
+    fn a_hybrid_grounding_keeps_the_prepared_atoms() {
+        let grounded = hybrid("{a}. b :- a.");
+        assert_eq!(grounded.atom_catalog().atoms().len(), 2);
+    }
+
+    #[test]
+    #[should_panic(expected = "q(1/0).")]
+    fn a_refused_preparation_names_its_source() {
+        let _ = prepared("q(1/0).");
     }
 
     #[test]

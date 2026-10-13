@@ -2,23 +2,11 @@
 
 use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop, regions::Region};
+use zetesis_reference_support::hybrid;
 use zetesis_themelios::{
-    AdmissionOptions, ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits,
-    ConstraintCheckStatistics, ConstraintRegionVerdict, ConstraintVerdict, ExpansionLimits,
-    FormulaLimits, HybridFormula, prepare_formula,
+    ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits, ConstraintCheckStatistics,
+    ConstraintRegionVerdict, ConstraintVerdict, HybridFormula,
 };
-
-fn admit(source: &str) -> HybridFormula {
-    prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_hybrid()
-    .unwrap()
-}
 
 fn ternary_region(count: usize, mut code: usize) -> Region {
     let mut region = Region::all_open(count);
@@ -57,7 +45,7 @@ fn region_refutation_excludes_every_completion() {
         "{p(1..3)}. X=2 :-p(X),X/2=1.",
         ":-.",
     ] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let count = owner.atom_catalog().atoms().len();
         assert!(count <= 5, "finite exhaustive fixture");
         let mut regions = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -99,7 +87,7 @@ fn region_refutation_excludes_every_completion() {
 
 #[test]
 fn decided_regions_agree_with_full_model_checks() {
-    let owner = admit("{p;q;r}. :-p,not q. :-not not q,r.");
+    let owner = hybrid("{p;q;r}. :-p,not q. :-not not q,r.");
     let count = owner.atom_catalog().atoms().len();
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let cancellation = Cancellation::default();
@@ -128,7 +116,7 @@ fn decided_regions_agree_with_full_model_checks() {
 
 #[test]
 fn not_refuted_does_not_establish_any_satisfying_completion() {
-    let owner = admit("{p}. :-p. :-not p.");
+    let owner = hybrid("{p}. :-p. :-not p.");
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let cancellation = Cancellation::default();
     assert_eq!(
@@ -149,8 +137,8 @@ fn not_refuted_does_not_establish_any_satisfying_completion() {
 
 #[test]
 fn region_theory_identity_is_checked_before_decoding() {
-    let owner = admit("{p}. :-p.");
-    let other = admit("{p}. :-p.");
+    let owner = hybrid("{p}. :-p.");
+    let other = hybrid("{p}. :-p.");
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let before = checker.statistics();
     let failure = checker
@@ -166,7 +154,7 @@ fn region_theory_identity_is_checked_before_decoding() {
 
 #[test]
 fn region_dimension_is_checked_before_decoding() {
-    let owner = admit("{p}. :-p.");
+    let owner = hybrid("{p}. :-p.");
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let before = checker.statistics();
     for actual in [0, 2] {
@@ -186,7 +174,7 @@ fn region_dimension_is_checked_before_decoding() {
 
 #[test]
 fn cancellation_precedes_region_index_preparation() {
-    let owner = admit("{p}. :-p.");
+    let owner = hybrid("{p}. :-p.");
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let before = checker.statistics();
     let cancellation = Cancellation::default();
@@ -200,7 +188,7 @@ fn cancellation_precedes_region_index_preparation() {
 
 #[test]
 fn region_index_is_reused_between_checks() {
-    let owner = admit("{p;q}. :-p,not q.");
+    let owner = hybrid("{p;q}. :-p,not q.");
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let before = checker.statistics().work;
     let region = Region::all_open(2);
@@ -225,7 +213,7 @@ fn region_index_is_reused_between_checks() {
 fn checkers_sharing_an_allowance_each_check_within_its_ceiling() {
     // A region check and a final check each make one substitution under a
     // one-substitution ceiling; the shared receipt holds both.
-    let owner = admit("{p}. :-p.");
+    let owner = hybrid("{p}. :-p.");
     let allowance = ConstraintAllowance::new(ConstraintCheckLimits {
         max_substitutions: 1,
         ..Default::default()
@@ -256,7 +244,7 @@ fn checkers_sharing_an_allowance_each_check_within_its_ceiling() {
 
 #[test]
 fn unheld_rows_do_not_consume_substitutions() {
-    let owner = admit("{p(1..8)}. :-p(X),X>0.");
+    let owner = hybrid("{p(1..8)}. :-p(X),X>0.");
     let mut checker = owner
         .checker(ConstraintCheckLimits {
             max_substitutions: 1,
@@ -293,7 +281,7 @@ fn unheld_rows_do_not_consume_substitutions() {
 
 #[test]
 fn held_negative_predicate_skips_join_substitutions() {
-    let owner = admit("d(1..4). p(X,Y):-d(X),d(Y). {a}. :-p(X,Y),p(Y,Z),not p(X,Z).");
+    let owner = hybrid("d(1..4). p(X,Y):-d(X),d(Y). {a}. :-p(X,Y),p(Y,Z),not p(X,Z).");
     let mut checker = owner
         .checker(ConstraintCheckLimits {
             max_substitutions: 0,
@@ -317,7 +305,7 @@ fn held_negative_predicate_skips_join_substitutions() {
 
 #[test]
 fn shared_setup_honors_precancellation() {
-    let owner = admit("{p}. :-p.");
+    let owner = hybrid("{p}. :-p.");
     let allowance = ConstraintAllowance::new(ConstraintCheckLimits::default());
     let cancellation = Cancellation::default();
     cancellation.cancel();
@@ -331,7 +319,7 @@ fn shared_setup_honors_precancellation() {
 
 #[test]
 fn a_later_checker_prepares_under_its_own_ceiling() {
-    let owner = admit("{p}. :-p.");
+    let owner = hybrid("{p}. :-p.");
     let cancellation = Cancellation::default();
     // Compare checkers attaching to the same prepared shared row identities.
     // Each must still charge its own preparation against its own ceiling.
@@ -363,7 +351,7 @@ fn a_later_checker_prepares_under_its_own_ceiling() {
 
 #[test]
 fn independent_checkers_reuse_canonical_constructors() {
-    let owner = admit("d(1..2). {p(f(1));p(f(2))}. :-d(X),Y=f(X),p(Y),X>1.");
+    let owner = hybrid("d(1..2). {p(f(1));p(f(2))}. :-d(X),Y=f(X),p(Y),X>1.");
     let cancellation = Cancellation::default();
     let candidate =
         Model::from_positions(owner.atom_catalog(), 0..owner.atom_catalog().atoms().len()).unwrap();
@@ -395,7 +383,7 @@ fn independent_checkers_reuse_canonical_constructors() {
 
 #[test]
 fn the_shared_receipt_sums_every_workers_charges() {
-    let owner = admit("{p}. :-p.");
+    let owner = hybrid("{p}. :-p.");
     let allowance = ConstraintAllowance::new(ConstraintCheckLimits {
         max_substitutions: 1,
         ..Default::default()

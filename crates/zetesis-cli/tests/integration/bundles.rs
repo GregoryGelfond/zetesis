@@ -1,9 +1,10 @@
 //! Original-file bundle invocation shares solver behavior and keeps refusals located.
 
-use crate::support::bundles::Fixture;
+use crate::support::bundles::process;
 use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
+use zetesis_reference_support::BundleFixture;
 
 use crate::support::human::before_timing;
 use crate::support::options::enumerating as options;
@@ -15,7 +16,7 @@ const MALFORMED_CHOICE: &str = "{a,b :- q.\nq :- c.\n";
 
 #[test]
 fn typed_include_depth_bounds_the_loaded_graph() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", "#include \"child.lp\".");
     fixture.write("child.lp", "#include \"leaf.lp\".");
     fixture.write("leaf.lp", "a.");
@@ -43,7 +44,7 @@ fn typed_include_depth_bounds_the_loaded_graph() {
     )
     .unwrap();
     assert_eq!(complete_bundle.sources().len(), 3);
-    let complete = fixture.process(&["--color", "never"]);
+    let complete = process(&fixture, &["--color", "never"]);
     assert!(complete.status.success());
     let output = String::from_utf8(complete.stdout).unwrap();
     assert!(output.contains("a\n"), "{output}");
@@ -93,9 +94,9 @@ fn stdin_syntax_failure_renders_each_diagnostic_once() {
 
 #[test]
 fn syntax_failure_exposes_each_original_diagnostic() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", MALFORMED_CHOICE);
-    let result = fixture.process(&["--color", "never"]);
+    let result = process(&fixture, &["--color", "never"]);
     assert_eq!(result.status.code(), Some(2));
     assert!(result.stdout.is_empty());
     let text = String::from_utf8(result.stderr).unwrap();
@@ -108,10 +109,10 @@ fn syntax_failure_exposes_each_original_diagnostic() {
 
 #[test]
 fn included_syntax_failure_resolves_the_child_source() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", "#include \"child.lp\". q.");
     fixture.write("child.lp", "% original é\r\n{a,b :- q.\r\n");
-    let result = fixture.process(&["--color", "never"]);
+    let result = process(&fixture, &["--color", "never"]);
     let text = String::from_utf8(result.stderr).unwrap();
     assert_eq!(result.status.code(), Some(2));
     assert!(text.contains("child.lp:2:"), "{text}");
@@ -121,7 +122,7 @@ fn included_syntax_failure_resolves_the_child_source() {
 
 #[test]
 fn later_root_syntax_failure_keeps_its_source_identity() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", "q.");
     fixture.write("later.lp", MALFORMED_CHOICE);
     let result = Command::new(env!("CARGO_BIN_EXE_zetesis"))
@@ -139,10 +140,10 @@ fn later_root_syntax_failure_keeps_its_source_identity() {
 
 #[test]
 fn syntax_error_styles_preserve_the_canonical_text() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", MALFORMED_CHOICE);
-    let plain = fixture.process(&["--color", "never"]);
-    let painted = fixture.process(&["--color", "always"]);
+    let plain = process(&fixture, &["--color", "never"]);
+    let painted = process(&fixture, &["--color", "always"]);
     let plain = String::from_utf8(plain.stderr).unwrap();
     let painted = String::from_utf8(painted.stderr).unwrap();
     assert!(painted.contains("\u{1b}[1;31merror[syntax::"), "{painted}");
@@ -164,17 +165,17 @@ fn syntax_error_styles_preserve_the_canonical_text() {
 
 #[test]
 fn redirected_syntax_errors_are_plain_by_default() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", MALFORMED_CHOICE);
-    let result = fixture.process(&[]);
+    let result = process(&fixture, &[]);
     assert!(!result.stderr.contains(&0x1b));
 }
 
 #[test]
 fn json_syntax_failure_remains_machine_readable() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", MALFORMED_CHOICE);
-    let result = fixture.process(&["--json", "--color", "always"]);
+    let result = process(&fixture, &["--json", "--color", "always"]);
     assert_eq!(result.status.code(), Some(2));
     let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert!(report["models"].as_array().unwrap().is_empty());
@@ -186,7 +187,7 @@ fn json_syntax_failure_remains_machine_readable() {
 
 #[test]
 fn bundle_and_string_paths_share_exhaustive_solver_results() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write(
         "entry.lp",
         "#const upper=lower+1. #include \"data.lp\". {pick(X)} :- d(X).",
@@ -225,7 +226,7 @@ fn bundle_and_string_paths_share_exhaustive_solver_results() {
             .unwrap()
             .contains("2 original files")
     );
-    let process = fixture.process(&[]);
+    let process = process(&fixture, &[]);
     assert!(process.status.success());
     assert_eq!(
         before_timing(std::str::from_utf8(&process.stdout).unwrap()),
@@ -240,14 +241,14 @@ fn bundle_and_string_paths_share_exhaustive_solver_results() {
 
 #[test]
 fn bundled_show_filters_output_without_merging_hidden_models() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write(
         "entry.lp",
         "#include \"data.lp\". {hidden}. #show p/1. #show.",
     );
     fixture.write("data.lp", "#defined unused/2. p(1). q. #show q/0.");
     for grounder in ["lazy", "eager"] {
-        let result = fixture.process(&["--grounder", grounder]);
+        let result = process(&fixture, &["--grounder", grounder]);
         assert!(result.status.success(), "{:?}", result.stderr);
         let output = String::from_utf8(result.stdout).unwrap();
         assert!(output.contains("Answer: 1\np(1) q\nAnswer: 2\np(1) q\n"));
@@ -257,7 +258,7 @@ fn bundled_show_filters_output_without_merging_hidden_models() {
 
 #[test]
 fn unsafe_included_rule_keeps_original_file_and_span_in_typed_failure() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", "#include \"unsafe.lp\". d(1).");
     let original = "% source evidence\np(X) :- not q(X).\n";
     fixture.write("unsafe.lp", original);
@@ -290,7 +291,7 @@ fn unsafe_included_rule_keeps_original_file_and_span_in_typed_failure() {
 
 #[test]
 fn combined_expansion_budget_applies_across_original_files() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", "#include \"data.lp\". p(1..2).");
     fixture.write("data.lp", "q(1..2).");
     let error = zetesis_themelios::admit_bundle_extended(
@@ -316,7 +317,7 @@ fn combined_expansion_budget_applies_across_original_files() {
 
 #[test]
 fn typed_file_byte_limit_applies_to_included_files() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", "#include \"large.lp\".");
     fixture.write("large.lp", &format!("% {}\np.", "padding ".repeat(10)));
     let error = SourceBundle::load(
@@ -339,10 +340,10 @@ fn typed_file_byte_limit_applies_to_included_files() {
 
 #[test]
 fn files_resolve_original_includes_but_strings_have_no_implicit_base_path() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write("entry.lp", "#include \"data.lp\".");
     fixture.write("data.lp", "p.");
-    let file = fixture.process(&[]);
+    let file = process(&fixture, &[]);
     assert!(file.status.success());
     assert!(
         String::from_utf8(file.stdout)

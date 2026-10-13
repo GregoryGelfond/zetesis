@@ -2093,6 +2093,7 @@ name = "zetesis-reference-support"
 version = "0.5.0"
 dependencies = [
  "serde_json",
+ "tempfile",
  "zetesis-core",
  "zetesis-cpu",
  "zetesis-ferraris",

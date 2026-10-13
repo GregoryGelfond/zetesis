@@ -44,8 +44,8 @@ fn full_family(owner: &HybridFormula) -> BTreeSet<BTreeSet<String>> {
 #[test]
 fn normal_arithmetic_preserves_eager_and_hybrid_families() {
     let source = include_str!("../../fixtures/column-totality/normal-selection.lp");
-    let eager = prepare(source).ground().unwrap();
-    let hybrid = admit(source);
+    let eager = prepared(source).ground().unwrap();
+    let hybrid = hybrid(source);
     assert_eq!(
         hybrid.streamed_templates(),
         1,
@@ -75,8 +75,8 @@ fn normal_arithmetic_preserves_eager_and_hybrid_families() {
 fn false_bodies_do_not_evaluate_generated_heads() {
     let source = include_str!("../../fixtures/column-totality/false-generated-head.lp");
     let expected = BTreeSet::from([BTreeSet::from(["d(0)".to_owned(), "e(1)".to_owned()])]);
-    let eager = prepare(source).ground().unwrap();
-    let hybrid = admit(source);
+    let eager = prepared(source).ground().unwrap();
+    let hybrid = hybrid(source);
     let eager = reference::exhaustive(&eager)
         .into_iter()
         .map(|(atoms, cost)| {
@@ -91,8 +91,8 @@ fn false_bodies_do_not_evaluate_generated_heads() {
 #[test]
 fn normal_siblings_keep_the_original_family_warning() {
     let source = include_str!("../../fixtures/column-totality/normal-sibling-warning.lp");
-    let eager = prepare(source).ground().unwrap();
-    let hybrid = admit(source);
+    let eager = prepared(source).ground().unwrap();
+    let hybrid = hybrid(source);
     assert_eq!(eager.warnings().len(), 1);
     assert_eq!(hybrid.warnings().len(), 1);
     for warning in eager.warnings().iter().chain(hybrid.warnings()) {
