@@ -229,7 +229,7 @@ fn implication_parent_keeps_two_charged_visits() {
             }
             .revisit(subject, &index, 0, true, &mut work);
             assert_eq!(work.spent, limit);
-            work.settle();
+            work.refund();
             if limit < 2 {
                 assert!(result == Err(failure));
             } else {

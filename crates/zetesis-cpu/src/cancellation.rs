@@ -207,10 +207,9 @@ impl<'a> Meter<'a> {
     ///
     /// # Errors
     /// When `nested` exceeds the remaining allowance, the nested operation
-    /// overran the limit it was given and this operation's work limit is
-    /// spent: control is observed first, as for a refused charge, and
-    /// [`ChargeError::WorkLimit`] is reported otherwise. Nothing is counted
-    /// then.
+    /// overran the limit it was given. Control is observed first, as for a
+    /// refused charge, and [`ChargeError::WorkLimit`] is reported otherwise.
+    /// As for a refused charge, nothing is counted then.
     pub fn absorb(&mut self, nested: u64) -> Result<(), ChargeError> {
         if nested > self.remaining() {
             // A requested stop takes precedence over the work limit.
@@ -234,6 +233,7 @@ impl<'a> Meter<'a> {
 
 /// A metered operation's settled outcome and the work it charged.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use]
 pub struct Metered<T, E> {
     /// The operation's outcome, with a resource refusal replaced by a stop
     /// requested before the operation returned.

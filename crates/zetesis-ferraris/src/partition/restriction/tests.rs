@@ -3,7 +3,7 @@
 //! emission's own refusals are, it becomes the stop.
 
 use super::{Builder, RestrictionErrorKind, RestrictionLimits};
-use crate::{AdmissionError, FormulaNodes, NodeView};
+use crate::{AdmissionError, AggregateComparison, AggregateElement, FormulaNodes, NodeView};
 use zetesis_cpu::{Cancellation, Refusal, Stop};
 
 /// Run `test` on an emitter whose meter has admitted seven operations, which is
@@ -93,4 +93,72 @@ fn emission_errors_classify_resource_refusals() {
     ] {
         assert!(!shape.is_resource_refusal(), "{shape:?}");
     }
+}
+
+/// The work cardinality lowering reports for `members` under the lower bound
+/// `lower`, over a DAG holding just their atom nodes, as an emitter builds it.
+fn lowering_work(members: &[usize], lower: usize, limits: RestrictionLimits) -> u64 {
+    let mut nodes = FormulaNodes::default();
+    let mut elements = Vec::new();
+    for &atom in members {
+        let mut transaction = nodes.transaction();
+        let condition = transaction
+            .push(
+                NodeView::Atom(atom),
+                limits.theory.max_nodes,
+                limits.theory.max_operands,
+            )
+            .unwrap();
+        transaction.commit();
+        elements.push(AggregateElement {
+            condition,
+            weight: 1,
+        });
+    }
+    let mut aggregate = limits.aggregate;
+    aggregate.max_nodes = aggregate.max_nodes.min(limits.theory.max_nodes);
+    aggregate.max_operands = aggregate.max_operands.min(limits.theory.max_operands);
+    nodes
+        .append_aggregate(
+            &elements,
+            AggregateComparison::Ge,
+            i64::try_from(lower).unwrap(),
+            aggregate,
+            &Cancellation::default(),
+        )
+        .unwrap()
+        .statistics()
+        .work
+}
+
+#[test]
+fn emission_counts_its_cardinality_lowering_work() {
+    let limits = RestrictionLimits::default();
+    let members = [0, 1, 2, 3];
+    let lowering = lowering_work(&members, 2, limits);
+    let charged = with_builder(limits, false, |builder| {
+        builder.lower(&members, 2)?;
+        Ok(builder.meter.charged())
+    })
+    .unwrap();
+    // Seven charged before, one per atom node, and the lowering's own report.
+    assert_eq!(charged, 7 + members.len() as u64 + lowering);
+}
+
+#[test]
+fn a_refused_lowering_counts_the_work_it_did() {
+    let members = [0, 1, 2, 3];
+    let lowering = lowering_work(&members, 2, RestrictionLimits::default());
+    // The lowering's allowance falls one operation short of its work.
+    let limits = RestrictionLimits {
+        max_work: 7 + members.len() as u64 + lowering - 1,
+        ..RestrictionLimits::default()
+    };
+    let (refusal, charged) = with_builder(limits, false, |builder| {
+        let refusal = builder.lower(&members, 2).map(|_| ());
+        Ok((refusal, builder.meter.charged()))
+    })
+    .unwrap();
+    assert!(matches!(refusal, Err(RestrictionErrorKind::Aggregate(_))));
+    assert_eq!(charged, limits.max_work);
 }

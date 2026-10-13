@@ -477,7 +477,7 @@ impl<'q> Work<'q> {
         Ok(())
     }
     /// Return the unspent permits to the quota.
-    fn settle(&mut self) {
+    fn refund(&mut self) {
         if let Some(quota) = &mut self.quota {
             quota.refund(std::mem::take(&mut self.available));
         }
@@ -800,7 +800,7 @@ impl Knowledge {
         let result = cancellation
             .poll()
             .and_then(|()| self.preferred_atom(region, choices, &mut work));
-        work.settle();
+        work.refund();
         PreferenceAttempt {
             result,
             work: work.spent,
@@ -1294,7 +1294,7 @@ impl Narrower {
             }
             Ok(narrowing)
         });
-        work.settle();
+        work.refund();
         statistics.work = work.spent;
         NarrowingAttempt { result, statistics }
     }

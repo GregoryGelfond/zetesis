@@ -414,7 +414,7 @@ pub struct TightAttempt<T> {
 /// The other metered contexts name this charge `tick` on a context that holds
 /// their meter. The certificate has no such context: its operations take the
 /// meter itself, so a per-node loop reaches the count through one reference
-/// instead of two, which a complete check of a wide theory measurably feels.
+/// instead of two.
 trait Tick {
     fn tick(&mut self) -> Result<(), TightError>;
 }

@@ -159,7 +159,7 @@ fn cancelled_marking_prefixes_retry_with_fresh_membership() {
             Err(Stop::Cancelled)
         );
         assert_eq!(work.spent, allowed);
-        work.settle();
+        work.refund();
         assert_eq!(quota.0, 0);
         scratch
             .mark_cone(&index, chain, &mut Work::new(u64::MAX))

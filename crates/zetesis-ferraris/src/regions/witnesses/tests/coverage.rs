@@ -320,7 +320,7 @@ fn cancelled_cover_prefixes_do_not_establish_coverage() {
         });
         assert_eq!(result, Err(Stop::Cancelled));
         assert_eq!(work.spent, allowed);
-        work.settle();
+        work.refund();
         assert_eq!(quota.remaining, 0);
         assert!(
             scratch

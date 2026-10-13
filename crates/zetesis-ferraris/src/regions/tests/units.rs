@@ -512,7 +512,7 @@ fn processed_roots_keep_the_node_and_parent_permits() {
                 }
                 .revisit(subject, &index, 2, !disjunction, &mut work);
                 assert_eq!(work.spent, limit);
-                work.settle();
+                work.refund();
                 let known = compact_mut(&mut expected);
                 if limit > 0 {
                     known.unknown.decrement(0);
@@ -642,7 +642,7 @@ fn witnessed_units_keep_the_node_and_parent_permits() {
                 }
                 .revisit(subject, &index, 2, !disjunction, &mut work);
                 assert_eq!(work.spent, limit);
-                work.settle();
+                work.refund();
                 let expected_known = compact_mut(&mut expected);
                 if limit > 0 {
                     if disjunction {

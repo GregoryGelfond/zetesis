@@ -82,7 +82,7 @@ fn chain_refutation_visits_only_its_prefix() {
                         lists: &mut scratch,
                     }
                     .teach_chain(&index, 0, &mut work);
-                    work.settle();
+                    work.refund();
                     assert_eq!(work.spent, limit);
                     if limit < needed {
                         assert!(result == Err(failure));
@@ -136,7 +136,7 @@ fn parent_refutation_visits_only_its_prefix() {
                 lists: &mut scratch,
             }
             .revisit(subject, &index, 0, true, &mut work);
-            work.settle();
+            work.refund();
             assert_eq!(work.spent, limit);
             if limit < 2 {
                 assert!(result == Err(failure));

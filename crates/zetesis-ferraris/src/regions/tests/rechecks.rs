@@ -485,7 +485,7 @@ fn support_quota_stops_before_the_next_producer() {
             let (result, _) = support_attempt(&theory, &[0], &[1, 2, 3], &mut work);
             assert!(matches!(result, Err(stop) if stop == failure));
             assert_eq!(work.spent, permitted);
-            work.settle();
+            work.refund();
             assert_eq!(quota.remaining, 0);
             assert_eq!(quota.refunded, 0);
         }
@@ -507,7 +507,7 @@ fn support_saturation_refunds_unvisited_permits() {
         assert!(matches!(result, Ok(Step::Unchanged)));
         assert!(learned.is_empty());
         let spent = work.spent;
-        work.settle();
+        work.refund();
         assert_eq!(quota.refunded, 64 - spent);
         assert_eq!(quota.remaining, 0);
     }
