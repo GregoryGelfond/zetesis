@@ -3,7 +3,7 @@ mod counts;
 mod sums;
 #[cfg(test)]
 mod tests;
-pub(crate) use sums::sums;
+use sums::sums;
 
 use crate::ProgramSite;
 use crate::diagnostic::unsupported;
@@ -36,7 +36,7 @@ pub(crate) fn values(
     let mut tuples = TermSelection::new(computation, limits, counters, location)?;
     // The tuples with an occurrence from an element whose condition the local
     // join decides: present in every interpretation for this binding.
-    let mut required = TermSelection::new(computation, limits, counters, location)?;
+    let mut required_tuples = TermSelection::new(computation, limits, counters, location)?;
     for element in &aggregate.elements {
         let mut local = Join::new(
             &element.condition,
@@ -58,7 +58,7 @@ pub(crate) fn values(
                 Context::new(&*computation, limits, counters, location),
             )?;
             if element.required {
-                required.insert(
+                required_tuples.insert(
                     &tuple,
                     FormulaResource::AggregateElements,
                     limits.aggregate.max_elements,
@@ -68,19 +68,63 @@ pub(crate) fn values(
         }
     }
     let tuples = tuples.ordered(true, computation, limits, counters, location)?;
-    let extremum = matches!(
+    match split(
         aggregate.function,
-        AggregateFunction::Min | AggregateFunction::Max
-    );
-    // Contributions of the optional tuples, then of the required ones.
-    let mut firsts = [
-        Binding::new(computation, limits, counters, location)?,
-        Binding::new(computation, limits, counters, location)?,
-    ];
-    let mut weights = [
-        Buffer::new(computation, limits, counters, location)?,
-        Buffer::new(computation, limits, counters, location)?,
-    ];
+        &tuples,
+        &required_tuples,
+        computation,
+        limits,
+        counters,
+        location,
+    )? {
+        Split::Values(firsts) => extrema_carrier(
+            aggregate.function,
+            firsts.required.slots(),
+            firsts.optional.slots(),
+            computation,
+            limits,
+            counters,
+            location,
+        ),
+        Split::Weights(weights) => carrier(
+            aggregate.function,
+            weights.required.iter().copied(),
+            weights.optional.iter().copied(),
+            computation,
+            limits,
+            counters,
+            location,
+        ),
+    }
+}
+
+/// An assignment's contributions split by side: first values for `#min` and
+/// `#max`, weights for `#count`, `#sum` and `#sum+`.
+enum Split {
+    Values(Sides<Binding<'static>>),
+    Weights(Sides<Buffer<i32>>),
+}
+
+/// Reduce each ordered tuple to its contribution, on the side of the split its
+/// tuple belongs to: required when it is in `required_tuples`.
+fn split(
+    function: AggregateFunction,
+    tuples: &Binding<'static>,
+    required_tuples: &TermSelection,
+    computation: &mut Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<Split, FormulaFailure> {
+    let extremum = matches!(function, AggregateFunction::Min | AggregateFunction::Max);
+    let mut firsts = Sides {
+        required: Binding::new(computation, limits, counters, location)?,
+        optional: Binding::new(computation, limits, counters, location)?,
+    };
+    let mut weights = Sides {
+        required: Buffer::new(computation, limits, counters, location)?,
+        optional: Buffer::new(computation, limits, counters, location)?,
+    };
     for slot in 0..tuples.len() {
         counters.work(limits, location)?;
         let key = tuples
@@ -88,7 +132,7 @@ pub(crate) fn values(
             .key(slot)
             .map_err(|error| crate::formula_binding::assignment(error, location))?
             .expect("ordered tuples have no missing entries");
-        let side = usize::from(required.contains(&key, limits, counters, location)?);
+        let required = required_tuples.contains(&key, limits, counters, location)?;
         let read = computation.read();
         let first = tuples.read(slot, read, location)?.child(0);
         if extremum {
@@ -100,35 +144,56 @@ pub(crate) fn values(
                     location,
                 )
             })?;
-            let firsts = &mut firsts[side];
-            let at = firsts.len();
-            firsts.extend_scope(at + 1, computation, limits, counters, location)?;
-            firsts.set(at, &key, limits, counters, location)?;
-        } else if let Some(weight) = contribution(aggregate.function, first, location)? {
-            weights[side].push(weight, computation, limits, counters, location)?;
+            append(
+                firsts.side_mut(required),
+                &key,
+                computation,
+                limits,
+                counters,
+                location,
+            )?;
+        } else if let Some(weight) = contribution(function, first, location)? {
+            weights
+                .side_mut(required)
+                .push(weight, computation, limits, counters, location)?;
         }
     }
-    let [optional, required] = &weights;
-    if extremum {
-        extrema_carrier(
-            aggregate.function,
-            firsts[1].slots(),
-            firsts[0].slots(),
-            computation,
-            limits,
-            counters,
-            location,
-        )
+    Ok(if extremum {
+        Split::Values(firsts)
     } else {
-        carrier(
-            aggregate.function,
-            required.iter().copied(),
-            optional.iter().copied(),
-            computation,
-            limits,
-            counters,
-            location,
-        )
+        Split::Weights(weights)
+    })
+}
+
+/// Append `key` as the last slot of `values`.
+pub(crate) fn append(
+    values: &mut Binding<'static>,
+    key: &TermKey,
+    computation: &Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<(), FormulaFailure> {
+    let at = values.len();
+    values.extend_scope(at + 1, computation, limits, counters, location)?;
+    values.set(at, key, limits, counters, location)
+}
+
+/// An assignment's contributions split by whether every selection contains
+/// their tuple: the required tuples' and the optional ones'.
+pub(crate) struct Sides<T> {
+    pub(crate) required: T,
+    pub(crate) optional: T,
+}
+
+impl<T> Sides<T> {
+    /// The required side when `required`, else the optional one.
+    pub(crate) fn side_mut(&mut self, required: bool) -> &mut T {
+        if required {
+            &mut self.required
+        } else {
+            &mut self.optional
+        }
     }
 }
 
@@ -184,7 +249,7 @@ pub(crate) fn extremum_value(
 /// Whether `order`, a value's order against the current extremum, puts the
 /// value strictly before it in `function`'s order: below for `#min`, above for
 /// `#max`.
-pub(crate) fn precedes(function: AggregateFunction, order: std::cmp::Ordering) -> bool {
+fn precedes(function: AggregateFunction, order: std::cmp::Ordering) -> bool {
     match function {
         AggregateFunction::Min => order.is_lt(),
         AggregateFunction::Max => order.is_gt(),
@@ -197,7 +262,10 @@ pub(crate) fn precedes(function: AggregateFunction, order: std::cmp::Ordering) -
 /// every optional value strictly before it, since every selection contains the
 /// required tuples. Without one: the empty value (`#sup` for `#min`, `#inf` for
 /// `#max`) and every optional value. Charges work per step and assignment
-/// values per distinct value; returns the values in ascending term order.
+/// values per distinct value; returns the values in ascending term order. The
+/// endpoint guard ([`extremum_value`]) is the proposal sites' admission policy,
+/// applied where they reduce their tuples to values; this operation applies no
+/// guard of its own.
 pub(crate) fn extrema_carrier(
     function: AggregateFunction,
     required: AssignmentSlice<'_>,
@@ -213,7 +281,6 @@ pub(crate) fn extrema_carrier(
         counters.work(limits, location)?;
         let key = slice_key(required, slot, location)?;
         let value = read_term(computation, &key, location)?;
-        extremum_value(value, location)?;
         let before = match &extremum {
             None => true,
             Some(current) => {
@@ -253,7 +320,6 @@ pub(crate) fn extrema_carrier(
         counters.work(limits, location)?;
         let key = slice_key(optional, slot, location)?;
         let value = read_term(computation, &key, location)?;
-        extremum_value(value, location)?;
         if let Some(current) = &extremum {
             let current = read_term(computation, current, location)?;
             let order = value.compare_terms_with(current, || counters.work(limits, location))?;
@@ -312,13 +378,14 @@ pub(crate) fn contribution(
     }
 }
 
-/// The proposed values of an assignment aggregate: the measure of every
-/// selection between its required tuples and its possible ones, from each
-/// required and each optional tuple's contribution (`#count`: one; `#sum` and
-/// `#sum+`: its weight; `#min` and `#max`: its value as a number). Without a
-/// required tuple, every selection of the optional ones. Charges work and
-/// cancellation per step, assignment values per distinct value and storage
-/// through its buffers; returns the values in ascending order.
+/// The proposed values of a `#count`, `#sum` or `#sum+` assignment: the measure
+/// of every selection between its required tuples and its possible ones, from
+/// each required and each optional tuple's contribution (`#count`: one; `#sum`
+/// and `#sum+`: its weight). Without a required tuple, every selection of the
+/// optional ones. Charges work and cancellation per step, assignment values
+/// per distinct value and storage through its buffers; returns the values in
+/// ascending order. Extremum contributions are terms, not numbers, and go to
+/// [`extrema_carrier`].
 pub(crate) fn carrier(
     function: AggregateFunction,
     required: impl IntoIterator<Item = i32>,
@@ -358,17 +425,7 @@ pub(crate) fn carrier(
             )?
         }
         AggregateFunction::Min | AggregateFunction::Max => {
-            let required = numbers_binding(required, computation, limits, counters, location)?;
-            let optional = numbers_binding(optional, computation, limits, counters, location)?;
-            return extrema_carrier(
-                function,
-                required.slots(),
-                optional.slots(),
-                computation,
-                limits,
-                counters,
-                location,
-            );
+            unreachable!("extremum contributions are terms and go to extrema_carrier")
         }
     };
     let mut result = Binding::new(computation, limits, counters, location)?;
@@ -383,7 +440,7 @@ pub(crate) fn carrier(
 /// The total of the required contributions, summed exactly. It is the measure
 /// of the selection of exactly the required tuples, so a total outside `i32`
 /// refuses the aggregate as an overflow, whatever the summation order.
-pub(crate) fn required_total(
+fn required_total(
     weights: impl IntoIterator<Item = i32>,
     limits: &FormulaLimits,
     counters: &mut Counters,
@@ -399,21 +456,4 @@ pub(crate) fn required_total(
         total = total.checked_add(i64::from(weight)).ok_or_else(overflow)?;
     }
     Ok(i32::try_from(total).map_err(|_| overflow())?)
-}
-
-fn numbers_binding(
-    numbers: impl IntoIterator<Item = i32>,
-    computation: &mut Computation<'_, '_>,
-    limits: &FormulaLimits,
-    counters: &mut Counters,
-    location: ProgramSite,
-) -> Result<Binding<'static>, FormulaFailure> {
-    let mut binding = Binding::new(computation, limits, counters, location)?;
-    for number in numbers {
-        let slot = binding.len();
-        binding.extend_scope(slot + 1, computation, limits, counters, location)?;
-        let key = computation.number(number, limits, counters, location)?;
-        binding.set(slot, &key, limits, counters, location)?;
-    }
-    Ok(binding)
 }

@@ -13,11 +13,12 @@ use std::cmp::Ordering;
 use super::super::Predicates;
 use crate::formula_support::components::Term;
 use themelios_program::program::AggregateFunction;
-use zetesis_core::catalog::{AssignmentError, TermKey, TermRef};
-use zetesis_core::{TemplateTerm, Value, ValueNodeRef};
+use zetesis_core::TemplateTerm;
+use zetesis_core::catalog::{TermKey, TermRef};
 
 use super::{Activity, Context, activity, assignment, transport};
 use crate::formula::ceiling;
+use crate::formula_binding::Binding;
 use crate::formula_ir::{AggregateKey, LiteralIr, Prepared, RuleIr};
 use crate::formula_support::{Buffer, Computation, Counters, TermSelection};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
@@ -91,7 +92,12 @@ pub(in super::super) fn certify<'source>(
             required.insert(tuple, &mut context)?;
         }
     }
-    let value = measure(aggregate.function, &required, &mut context)?;
+    let required_contributions = contributions(
+        aggregate.function,
+        required.values.iter().copied(),
+        Entries::Unreserved,
+        &mut context,
+    )?;
     let mut optional = Buffer::new(
         context.computation,
         context.limits,
@@ -109,53 +115,62 @@ pub(in super::super) fn certify<'source>(
             )?;
         }
     }
+    let optional_contributions = contributions(
+        aggregate.function,
+        optional.iter().copied(),
+        Entries::Reserved,
+        &mut context,
+    )?;
     let values = complete(
         aggregate.function,
-        &value,
-        optional.iter().copied(),
+        &required_contributions,
+        &optional_contributions,
         &mut context,
     )?;
     Ok(Some(Carrier { predicates, values }))
 }
 
-/// Optional keys are independent only in the source abstraction. Original
-/// eligibility remains responsible for their correlation in an interpretation.
-fn complete<'a>(
+/// What each closed tuple contributes to the carrier operation the assignment
+/// proposal sites share: its weight for `#count`, `#sum` and `#sum+`, its first
+/// value for `#min` and `#max`.
+enum Contributions {
+    Weights(Buffer<i32>),
+    Values(Binding<'static>),
+}
+
+/// Whether each numeric contribution takes an entry as it is reduced: the
+/// optional ones do, one per weight before any sum is formed.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Entries {
+    Reserved,
+    Unreserved,
+}
+
+/// Reduce `tuples` to their contributions.
+fn contributions<'a>(
     function: AggregateFunction,
-    required: &TermKey,
-    optional: impl Iterator<Item = &'a [Term]>,
+    tuples: impl Iterator<Item = &'a [Term]>,
+    entries: Entries,
     context: &mut Context<'_, '_, '_>,
-) -> Result<TermSelection, FormulaFailure> {
-    let mut values = TermSelection::new(
-        context.computation,
-        context.limits,
-        context.counters,
-        context.location,
-    )?;
+) -> Result<Contributions, FormulaFailure> {
     match function {
         AggregateFunction::Count | AggregateFunction::Sum | AggregateFunction::SumPlus => {
-            context.inspect()?;
-            let read = context.computation.read();
-            let required_value = read.term(required).map_err(|error| {
-                crate::formula_binding::assignment(AssignmentError::Read(error), context.location)
-            })?;
-            let ValueNodeRef::Number(initial) = required_value.descriptor() else {
-                unreachable!("numeric aggregate reduction")
-            };
             let mut weights = Buffer::new(
                 context.computation,
                 context.limits,
                 context.counters,
                 context.location,
             )?;
-            for tuple in optional {
+            for tuple in tuples {
                 context.inspect()?;
                 if let Some(weight) = crate::formula_assignment::contribution(
                     function,
                     first(tuple, context)?,
                     context.location,
                 )? {
-                    context.reserve_entry()?;
+                    if entries == Entries::Reserved {
+                        context.reserve_entry()?;
+                    }
                     weights.push(
                         weight,
                         context.computation,
@@ -165,57 +180,87 @@ fn complete<'a>(
                     )?;
                 }
             }
-            // Seeded at the required measure, every sum is a carrier value, so
-            // the operation refuses exactly a carrier value outside i32.
-            let sums = crate::formula_assignment::sums(
-                initial,
-                weights.iter().copied(),
+            Ok(Contributions::Weights(weights))
+        }
+        AggregateFunction::Min | AggregateFunction::Max => {
+            let mut values = Binding::new(
                 context.computation,
                 context.limits,
                 context.counters,
                 context.location,
             )?;
-            for &total in sums.iter() {
+            for tuple in tuples {
                 context.inspect()?;
-                let value = context.computation.number(
-                    total,
+                let value = first(tuple, context)?.expect("admitted nonempty extremum tuple");
+                let key = context
+                    .computation
+                    .read()
+                    .term_key(value)
+                    .map_err(|error| {
+                        crate::formula_binding::assignment(error.into(), context.location)
+                    })?;
+                crate::formula_assignment::append(
+                    &mut values,
+                    &key,
+                    context.computation,
                     context.limits,
                     context.counters,
                     context.location,
                 )?;
-                retain_value(&mut values, &value, context)?;
             }
+            Ok(Contributions::Values(values))
         }
-        AggregateFunction::Min | AggregateFunction::Max => {
-            retain_value(&mut values, required, context)?;
-            for tuple in optional {
-                context.inspect()?;
-                let optional = first(tuple, context)?.expect("admitted nonempty extremum tuple");
-                let order = {
-                    let read = context.computation.read();
-                    let required = read.term(required).map_err(|error| {
-                        crate::formula_binding::assignment(
-                            AssignmentError::Read(error),
-                            context.location,
-                        )
-                    })?;
-                    optional.compare_terms_with(required, || {
-                        context.counters.work(context.limits, context.location)
-                    })?
-                };
-                if crate::formula_assignment::precedes(function, order) {
-                    context.inspect()?;
-                    let value = context
-                        .computation
-                        .read()
-                        .term_key(optional)
-                        .map_err(|error| {
-                            crate::formula_binding::assignment(error.into(), context.location)
-                        })?;
-                    retain_value(&mut values, &value, context)?;
-                }
-            }
+    }
+}
+
+/// The carrier between the required and the possible tuples, from the shared
+/// carrier operation; each retained value takes an entry. Optional keys are
+/// independent only in the source abstraction. Original eligibility remains
+/// responsible for their correlation in an interpretation.
+fn complete(
+    function: AggregateFunction,
+    required: &Contributions,
+    optional: &Contributions,
+    context: &mut Context<'_, '_, '_>,
+) -> Result<TermSelection, FormulaFailure> {
+    let proposals = match (required, optional) {
+        (Contributions::Weights(required), Contributions::Weights(optional)) => {
+            crate::formula_assignment::carrier(
+                function,
+                required.iter().copied(),
+                optional.iter().copied(),
+                context.computation,
+                context.limits,
+                context.counters,
+                context.location,
+            )?
         }
+        (Contributions::Values(required), Contributions::Values(optional)) => {
+            crate::formula_assignment::extrema_carrier(
+                function,
+                required.slots(),
+                optional.slots(),
+                context.computation,
+                context.limits,
+                context.counters,
+                context.location,
+            )?
+        }
+        _ => unreachable!("one function reduces both sides to one kind of contribution"),
+    };
+    let mut values = TermSelection::new(
+        context.computation,
+        context.limits,
+        context.counters,
+        context.location,
+    )?;
+    for slot in 0..proposals.len() {
+        let value = proposals
+            .slots()
+            .key(slot)
+            .map_err(|error| crate::formula_binding::assignment(error, context.location))?
+            .expect("carrier values have no missing entries");
+        retain_value(&mut values, &value, context)?;
     }
     Ok(values)
 }
@@ -247,89 +292,6 @@ fn retain_value(
             context.location,
         ),
     )
-}
-
-fn measure(
-    function: AggregateFunction,
-    required: &Tuples<'_>,
-    context: &mut Context<'_, '_, '_>,
-) -> Result<TermKey, FormulaFailure> {
-    match function {
-        AggregateFunction::Count | AggregateFunction::Sum | AggregateFunction::SumPlus => {
-            let mut weights = Buffer::new(
-                context.computation,
-                context.limits,
-                context.counters,
-                context.location,
-            )?;
-            for tuple in required.values.iter().copied() {
-                context.inspect()?;
-                if let Some(weight) = crate::formula_assignment::contribution(
-                    function,
-                    first(tuple, context)?,
-                    context.location,
-                )? {
-                    weights.push(
-                        weight,
-                        context.computation,
-                        context.limits,
-                        context.counters,
-                        context.location,
-                    )?;
-                }
-            }
-            // Summed exactly, so a partial sum outside i32 refuses nothing the
-            // carrier does not contain.
-            let total = crate::formula_assignment::required_total(
-                weights.iter().copied(),
-                context.limits,
-                context.counters,
-                context.location,
-            )?;
-            context
-                .computation
-                .number(total, context.limits, context.counters, context.location)
-        }
-        AggregateFunction::Min | AggregateFunction::Max => {
-            let mut selected = None;
-            for tuple in required.values.iter().copied() {
-                context.inspect()?;
-                let value = first(tuple, context)?.expect("admitted nonempty extremum tuple");
-                if let Some(previous) = selected {
-                    let order = value.compare_terms_with(previous, || context.inspect())?;
-                    if (function == AggregateFunction::Min && order.is_lt())
-                        || (function == AggregateFunction::Max && order.is_gt())
-                    {
-                        selected = Some(value);
-                    }
-                } else {
-                    selected = Some(value);
-                }
-            }
-            if let Some(selected) = selected {
-                context.inspect()?;
-                context
-                    .computation
-                    .read()
-                    .term_key(selected)
-                    .map_err(|error| {
-                        crate::formula_binding::assignment(error.into(), context.location)
-                    })
-            } else {
-                let empty = if function == AggregateFunction::Min {
-                    Value::Supremum
-                } else {
-                    Value::Infimum
-                };
-                context.computation.import(
-                    (&empty).into(),
-                    context.limits,
-                    context.counters,
-                    context.location,
-                )
-            }
-        }
-    }
 }
 
 fn first<'source>(

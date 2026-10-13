@@ -2262,26 +2262,28 @@ impl Builder<'_, '_, '_> {
     }
 
     /// Enumerate the complete assignment proposal family before building roots.
+    /// `flags` holds, for each element, whether its tuple is required.
     fn aggregate_candidates(
         &mut self,
         function: AggregateFunction,
         elements: &GroundAggregate,
-        required: &Buffer<bool>,
+        flags: &Buffer<bool>,
         location: ProgramSite,
     ) -> Result<Binding<'static>, FormulaFailure> {
         match elements {
             GroundAggregate::Numeric(elements) => {
-                let weights = |side: bool| {
+                // The weights of the elements on one side of the split.
+                let side = |required: bool| {
                     elements
                         .iter()
-                        .zip(required.iter())
-                        .filter(move |(_, required)| **required == side)
+                        .zip(flags.iter())
+                        .filter(move |&(_, &flag)| flag == required)
                         .map(|(element, _)| element.weight)
                 };
                 crate::formula_assignment::carrier(
                     function,
-                    weights(true),
-                    weights(false),
+                    side(true),
+                    side(false),
                     self.computation,
                     self.limits,
                     &mut self.counters,
@@ -2289,29 +2291,36 @@ impl Builder<'_, '_, '_> {
                 )
             }
             GroundAggregate::Extrema(elements) => {
-                // The optional tuples' values, then the required ones'.
-                let mut firsts = [
-                    Binding::new(self.computation, self.limits, &mut self.counters, location)?,
-                    Binding::new(self.computation, self.limits, &mut self.counters, location)?,
-                ];
-                for (element, &required) in elements.iter().zip(required.iter()) {
+                let mut firsts = crate::formula_assignment::Sides {
+                    required: Binding::new(
+                        self.computation,
+                        self.limits,
+                        &mut self.counters,
+                        location,
+                    )?,
+                    optional: Binding::new(
+                        self.computation,
+                        self.limits,
+                        &mut self.counters,
+                        location,
+                    )?,
+                };
+                for (element, &required) in elements.iter().zip(flags.iter()) {
                     self.work(location)?;
                     let key = self.terms.key(element.value, location)?;
-                    let firsts = &mut firsts[usize::from(required)];
-                    let at = firsts.len();
-                    firsts.extend_scope(
-                        at + 1,
+                    crate::formula_assignment::append(
+                        firsts.side_mut(required),
+                        &key,
                         self.computation,
                         self.limits,
                         &mut self.counters,
                         location,
                     )?;
-                    firsts.set(at, &key, self.limits, &mut self.counters, location)?;
                 }
                 crate::formula_assignment::extrema_carrier(
                     function,
-                    firsts[1].slots(),
-                    firsts[0].slots(),
+                    firsts.required.slots(),
+                    firsts.optional.slots(),
                     self.computation,
                     self.limits,
                     &mut self.counters,
@@ -2525,6 +2534,7 @@ impl Builder<'_, '_, '_> {
                     location,
                 )?;
                 for entry in grouped.iter() {
+                    self.work(location)?;
                     let found = required.find(
                         &entry.0,
                         self.computation,

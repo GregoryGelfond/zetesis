@@ -202,6 +202,16 @@ fn a_required_maximum_keeps_only_values_above_it() {
 }
 
 #[test]
+fn the_extremum_carrier_leaves_the_endpoint_guard_to_its_callers() {
+    // The proposal sites refuse an i32 endpoint where they reduce a tuple to
+    // its value; the operation itself proposes whatever values it is given.
+    assert_eq!(
+        extrema(AggregateFunction::Max, &[i32::MAX], &[i32::MIN]),
+        [Some(i32::MAX)]
+    );
+}
+
+#[test]
 fn an_extremum_without_a_required_tuple_keeps_the_empty_value() {
     // The empty value of #min is #sup, the last term in term order.
     assert_eq!(

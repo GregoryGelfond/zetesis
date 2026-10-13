@@ -4,6 +4,7 @@ use themelios_base::span::{ByteOffset, Span};
 
 use super::*;
 use crate::formula_support::testing::Fixture;
+use zetesis_core::{Value, ValueNodeRef};
 
 fn with_context(values: &[Value], run: impl FnOnce(&[Term], &mut Context<'_, '_, '_>)) {
     let limits = FormulaLimits::default();
@@ -38,21 +39,41 @@ fn with_context(values: &[Value], run: impl FnOnce(&[Term], &mut Context<'_, '_,
     });
 }
 
+/// The objective carrier of `required` and `optional` tuples, through the
+/// contributions it hands the shared carrier operation.
+fn carrier_values(
+    function: AggregateFunction,
+    required: &[&[Term]],
+    optional: &[&[Term]],
+    context: &mut Context<'_, '_, '_>,
+) -> TermSelection {
+    let required = contributions(
+        function,
+        required.iter().copied(),
+        Entries::Unreserved,
+        context,
+    )
+    .unwrap();
+    let optional = contributions(
+        function,
+        optional.iter().copied(),
+        Entries::Reserved,
+        context,
+    )
+    .unwrap();
+    complete(function, &required, &optional, context).unwrap()
+}
+
 #[test]
 fn numeric_carriers_include_every_optional_subset_sum() {
-    with_context(&[Value::Number(2), Value::Number(-1)], |terms, context| {
-        let required = context
-            .computation
-            .number(3, context.limits, context.counters, context.location)
-            .unwrap();
-        let tuples = [[terms[0]], [terms[1]]];
-        let selected = complete(
+    let values = [Value::Number(2), Value::Number(-1), Value::Number(3)];
+    with_context(&values, |terms, context| {
+        let selected = carrier_values(
             AggregateFunction::Sum,
-            &required,
-            tuples.iter().map(<[Term; 1]>::as_slice),
+            &[&[terms[2]]],
+            &[&[terms[0]], &[terms[1]]],
             context,
-        )
-        .unwrap();
+        );
         let ordered = selected
             .ordered(
                 false,
@@ -121,18 +142,12 @@ fn minimum_carrier_uses_asp_order_between_symbols_and_strings() {
             Value::Symbol("zz".into()),
         ],
         |terms, context| {
-            let required_tuple = [terms[0]];
-            let mut required = Tuples::new(context).unwrap();
-            required.insert(&required_tuple, context).unwrap();
-            let initial = measure(AggregateFunction::Min, &required, context).unwrap();
-            let optional = [[terms[1]], [terms[2]], [terms[3]]];
-            let selected = complete(
+            let selected = carrier_values(
                 AggregateFunction::Min,
-                &initial,
-                optional.iter().map(<[Term; 1]>::as_slice),
+                &[&[terms[0]]],
+                &[&[terms[1]], &[terms[2]], &[terms[3]]],
                 context,
-            )
-            .unwrap();
+            );
             // ASP order places every symbol below every string, independently of
             // spelling. Storage order deliberately has the opposite class order.
             assert_values(
@@ -156,18 +171,12 @@ fn maximum_carrier_keeps_same_spelling_symbol_and_string_distinct() {
             Value::Symbol("a".into()),
         ],
         |terms, context| {
-            let required_tuple = [terms[0]];
-            let mut required = Tuples::new(context).unwrap();
-            required.insert(&required_tuple, context).unwrap();
-            let initial = measure(AggregateFunction::Max, &required, context).unwrap();
-            let optional = [[terms[1]], [terms[2]], [terms[3]], [terms[4]]];
-            let selected = complete(
+            let selected = carrier_values(
                 AggregateFunction::Max,
-                &initial,
-                optional.iter().map(<[Term; 1]>::as_slice),
+                &[&[terms[0]]],
+                &[&[terms[1]], &[terms[2]], &[terms[3]], &[terms[4]]],
                 context,
-            )
-            .unwrap();
+            );
             assert_values(
                 &selected,
                 &[
@@ -193,30 +202,11 @@ fn empty_extrema_carriers_keep_bounds_and_all_optional_types() {
             Value::Supremum,
         ];
         with_context(&values, |terms, context| {
-            let required = Tuples::new(context).unwrap();
-            let initial = measure(function, &required, context).unwrap();
-            let empty = if function == AggregateFunction::Min {
-                ValueNodeRef::Supremum
-            } else {
-                ValueNodeRef::Infimum
-            };
-            assert_eq!(
-                context
-                    .computation
-                    .read()
-                    .term(&initial)
-                    .unwrap()
-                    .descriptor(),
-                empty
-            );
+            // Without a required tuple the carrier keeps the empty value and
+            // every optional value, of every type, the bounds included.
             let optional: Vec<_> = terms.iter().copied().map(|term| [term]).collect();
-            let selected = complete(
-                function,
-                &initial,
-                optional.iter().map(<[Term; 1]>::as_slice),
-                context,
-            )
-            .unwrap();
+            let optional: Vec<&[Term]> = optional.iter().map(<[Term; 1]>::as_slice).collect();
+            let selected = carrier_values(function, &[], &optional, context);
             assert_values(&selected, &values, &[], context);
         });
     }
@@ -252,16 +242,9 @@ fn separately_admitted_equal_constants_coalesce_as_full_tuple_keys() {
                     .unwrap()
                     .is_eq()
             );
-            let count = measure(AggregateFunction::Count, &keys, context).unwrap();
-            assert_eq!(
-                context
-                    .computation
-                    .read()
-                    .term(&count)
-                    .unwrap()
-                    .descriptor(),
-                ValueNodeRef::Number(2)
-            );
+            let keys_required: Vec<&[Term]> = keys.values.iter().copied().collect();
+            let count = carrier_values(AggregateFunction::Count, &keys_required, &[], context);
+            assert_values(&count, &[Value::Number(2)], &[], context);
             let mut required = Tuples::new(context).unwrap();
             required.insert(&tuples[0], context).unwrap();
             assert!(required.contains(&tuples[1], context).unwrap());
