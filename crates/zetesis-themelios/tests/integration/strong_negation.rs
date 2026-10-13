@@ -437,8 +437,7 @@ fn coherence_roots_are_bounded_and_keep_both_original_source_locations() {
             ));
         }
     }
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_templates = 2;
+    let options = resource_limits::admission_core(zetesis_core::AdmissionResource::Templates, 2);
     assert!(
         matches!(
             admit(source.into(), options),

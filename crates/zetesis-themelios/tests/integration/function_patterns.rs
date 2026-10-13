@@ -345,11 +345,9 @@ fn captured_rules_retain_source_origins() {
 #[test]
 fn captures_obey_the_variable_ceiling() {
     for limit in [1, 2] {
-        let mut options = AdmissionOptions::default();
-        options.core_limits.max_variables_per_template = limit;
         let result = admit_formula(
             "q(f(1,2)).p(X):-q(f(X,_)).".into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, limit),
             ExpansionLimits::default(),
             FormulaLimits::default(),
         );
@@ -371,12 +369,10 @@ fn captures_obey_the_variable_ceiling() {
 
 #[test]
 fn anonymous_nodes_need_only_the_whole_capture() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 1;
     assert!(
         admit_formula(
             "q(f(1,g(2,3))).p:-q(f(_,g(_,_))).".into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 1),
             ExpansionLimits::default(),
             FormulaLimits::default()
         )

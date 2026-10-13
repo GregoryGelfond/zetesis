@@ -110,10 +110,7 @@ fn weak_occurrences_count_before_upstream_statement_deduplication() {
     let source = "a.b. :~a,b.[1,k]";
     let result = admit_formula(
         source.to_owned(),
-        AdmissionOptions {
-            max_body_elements: 1,
-            ..AdmissionOptions::default()
-        },
+        resource_limits::admission(InputLimit::BodyElements, 1),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     );

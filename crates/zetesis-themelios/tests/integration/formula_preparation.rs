@@ -173,10 +173,7 @@ fn preparation_enforces_the_analysis_budget() {
 fn preparation_enforces_the_source_budget() {
     let error = prepare_formula(
         "p.".into(),
-        AdmissionOptions {
-            max_source_bytes: 1,
-            ..AdmissionOptions::default()
-        },
+        resource_limits::admission(InputLimit::SourceBytes, 1),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     )

@@ -6,8 +6,8 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use zetesis_reference_support::{admit, formula, prepare, prepared, resource_limits};
 use zetesis_themelios::{
-    AdmissionOptions, AnalysisBasis, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaResource, admit_formula,
+    AnalysisBasis, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
+    FormulaResource, admit_formula,
 };
 
 // Explicit finite substitutions retain each whole supporting atom. Arithmetic
@@ -289,11 +289,9 @@ fn captured_rules_retain_source_origins() {
 fn captures_obey_the_variable_ceiling() {
     for (source, exact) in [("q(X):-d(X),p(X+1).", 2), ("q(X):-p(f(X,X+1)).", 3)] {
         for limit in [exact - 1, exact] {
-            let mut options = AdmissionOptions::default();
-            options.core_limits.max_variables_per_template = limit;
             let result = admit_formula(
                 source.into(),
-                options,
+                resource_limits::admission_formula(FormulaResource::Variables, limit),
                 ExpansionLimits::default(),
                 FormulaLimits::default(),
             );
@@ -301,7 +299,7 @@ fn captures_obey_the_variable_ceiling() {
                 assert!(result.is_ok(), "{source}: {result:?}");
             } else {
                 assert!(
-                    matches!(result, Err(FormulaFailure::Limit { resource: FormulaResource::Variables, observed, .. }) if observed == exact as u128),
+                    matches!(result, Err(FormulaFailure::Limit { resource: FormulaResource::Variables, observed, .. }) if observed == u128::from(exact)),
                     "{source}: {result:?}"
                 );
             }

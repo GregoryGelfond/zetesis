@@ -12,7 +12,7 @@ use themelios_program::term::EvalError;
 use zetesis_core::{Atom, Term};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, Admitted, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, ExpansionUsage, ProfileFeature, admit, admit_extended,
+    ExpansionResource, ExpansionUsage, InputLimit, ProfileFeature, admit, admit_extended,
 };
 
 fn extended(text: &str) -> Admitted {
@@ -395,16 +395,14 @@ fn extended_is_explicit_and_source_and_core_limits_still_apply() {
         assert!(admit(text.to_owned(), AdmissionOptions::default()).is_err());
         extended(text);
     }
-    let options = AdmissionOptions {
-        max_source_bytes: 2,
-        ..AdmissionOptions::default()
-    };
+    let options = resource_limits::admission(InputLimit::SourceBytes, 2);
     assert!(matches!(
         admit_extended("p(1..2).".to_owned(), options, ExpansionLimits::default()),
         Err(ExpansionFailure::Admission(AdmissionFailure::Limit { .. }))
     ));
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_templates = 1;
+    // Expansion caps its template budget at the core ceiling, so it reports
+    // the core limit as its own.
+    let options = resource_limits::admission_core(zetesis_core::AdmissionResource::Templates, 1);
     assert!(matches!(
         admit_extended("p(1..2).".to_owned(), options, ExpansionLimits::default()),
         Err(ExpansionFailure::Limit {

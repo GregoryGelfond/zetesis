@@ -258,10 +258,10 @@ fn syntax_and_constant_budgets_are_cumulative_across_original_sources() {
         .iter()
         .map(|source| source.parsed().syntax().descendants().count())
         .sum();
-    let options = BundleAdmissionOptions {
-        max_syntax_nodes: total_nodes - 1,
-        ..BundleAdmissionOptions::default()
-    };
+    let options = resource_limits::bundle(
+        InputLimit::SyntaxNodes,
+        u64::try_from(total_nodes - 1).unwrap(),
+    );
     let error = admit_bundle_extended(bundle, options, ExpansionLimits::default())
         .expect_err("cumulative node budget");
     assert!(

@@ -3,8 +3,8 @@ use crate::support::finite_bindings as reference;
 use crate::support::finite_bindings::expected as models;
 use reference::{exhaustive, holds, native, values};
 use std::collections::BTreeSet;
-use zetesis_reference_support::{admit, canonical, formula};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
+use zetesis_reference_support::{admit, canonical, formula, resource_limits};
+use zetesis_themelios::{ExpansionLimits, FormulaLimits, FormulaResource, admit_formula};
 
 const PROJECTION: &str = "q((1,x),2).\np(A) :- q((A,_),_).\np(B) :- q((A,_),B).\n";
 const EXTREMA_SOURCE: &str = "q((#inf,a)).q((#sup,b)).q((\"#inf\",c)).p(X):-q((X,_)).";
@@ -228,12 +228,10 @@ fn a_named_pattern_retains_the_complete_source_atom() {
 }
 #[test]
 fn nested_anonymous_nodes_do_not_consume_variable_slots() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 1;
     assert!(
         admit_formula(
             "q((1,2)).p:-q((_,_)).".into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 1),
             ExpansionLimits::default(),
             FormulaLimits::default()
         )
@@ -242,11 +240,9 @@ fn nested_anonymous_nodes_do_not_consume_variable_slots() {
 }
 #[test]
 fn a_whole_argument_capture_obeys_the_variable_ceiling() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 1;
     let error = admit_formula(
         "q((1,2)).p(X):-q((X,_)).".into(),
-        options,
+        resource_limits::admission_formula(FormulaResource::Variables, 1),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     )
@@ -254,7 +250,7 @@ fn a_whole_argument_capture_obeys_the_variable_ceiling() {
     assert!(matches!(
         error,
         zetesis_themelios::FormulaFailure::Limit {
-            resource: zetesis_themelios::FormulaResource::Variables,
+            resource: FormulaResource::Variables,
             observed: 2,
             limit: 1,
             ..

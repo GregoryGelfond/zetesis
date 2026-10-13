@@ -45,6 +45,37 @@ const EXPANSION: [ExpansionResource; 8] = [
     ExpansionResource::MetadataStatements,
 ];
 
+const FORMULA_CORE: [FormulaResource; 2] = [FormulaResource::Variables, FormulaResource::Arity];
+
+const INPUT: [InputLimit; 4] = [
+    InputLimit::SourceBytes,
+    InputLimit::SyntaxNodes,
+    InputLimit::SyntaxDepth,
+    InputLimit::BodyElements,
+];
+
+/// The input limits bundle admission bounds; loading bounds the source bytes.
+const BUNDLE: [InputLimit; 3] = [
+    InputLimit::SyntaxNodes,
+    InputLimit::SyntaxDepth,
+    InputLimit::BodyElements,
+];
+
+const CORE: [zetesis_core::AdmissionResource; 5] = [
+    zetesis_core::AdmissionResource::Templates,
+    zetesis_core::AdmissionResource::PredicateArity,
+    zetesis_core::AdmissionResource::Variables,
+    zetesis_core::AdmissionResource::PositiveBody,
+    zetesis_core::AdmissionResource::DomainValues,
+];
+
+const PROGRAM: [ProgramResource; 4] = [
+    ProgramResource::Nodes,
+    ProgramResource::Depth,
+    ProgramResource::BodyElements,
+    ProgramResource::TextBytes,
+];
+
 const OBSERVATION: [observation::Resource; 8] = [
     observation::Resource::Directives,
     observation::Resource::Nodes,
@@ -75,6 +106,11 @@ const AGGREGATE: [AggregateErrorKind; 6] = [
     AggregateErrorKind::SubsetLimit,
 ];
 
+/// The limit `independent` bounds each resource by. No field of these tables
+/// defaults to it, and `independent` checks that: two resources sharing a
+/// field that defaulted to it would each still read their default.
+const PROBE: u64 = 3;
+
 /// Every pair of resources in `resources`: bounding the first leaves the
 /// second at its default, and the first reads back its new limit. A table
 /// that named one field for two resources would fail here.
@@ -83,11 +119,16 @@ fn independent<R: Copy + std::fmt::Debug + PartialEq, L: Default>(
     field: impl Fn(&mut L, R) -> Field<'_>,
 ) {
     for &bounded in resources {
+        assert_ne!(
+            field(&mut L::default(), bounded).get(),
+            PROBE,
+            "{bounded:?} defaults to the probe"
+        );
         let mut limits = L::default();
-        field(&mut limits, bounded).set(3);
+        field(&mut limits, bounded).set(PROBE);
         for &other in resources {
             let expected = if other == bounded {
-                3
+                PROBE
             } else {
                 field(&mut L::default(), other).get()
             };
@@ -108,6 +149,31 @@ fn each_formula_resource_has_a_field_of_its_own() {
 #[test]
 fn each_expansion_resource_has_a_field_of_its_own() {
     independent(&EXPANSION, expansion_field);
+}
+
+#[test]
+fn each_formula_resource_of_the_core_limits_has_a_field_of_its_own() {
+    independent(&FORMULA_CORE, formula_core_field);
+}
+
+#[test]
+fn each_input_limit_has_a_field_of_its_own() {
+    independent(&INPUT, input_field);
+}
+
+#[test]
+fn each_bundle_input_limit_has_a_field_of_its_own() {
+    independent(&BUNDLE, bundle_field);
+}
+
+#[test]
+fn each_core_admission_resource_has_a_field_of_its_own() {
+    independent(&CORE, core_field);
+}
+
+#[test]
+fn each_program_resource_has_a_field_of_its_own() {
+    independent(&PROGRAM, program_field);
 }
 
 #[test]
@@ -176,6 +242,31 @@ fn the_formula_forms_bound_only_their_nested_field() {
         &OBSERVATION,
         observation_field
     ));
+}
+
+#[test]
+fn the_admission_forms_bound_only_their_nested_field() {
+    let mut templates = admission_core(zetesis_core::AdmissionResource::Templates, 0);
+    assert_eq!(templates.core_limits.max_templates, 0);
+    assert!(at_defaults(&mut templates, &INPUT, input_field));
+    let mut arity = admission_formula(FormulaResource::Arity, 0);
+    assert_eq!(arity.core_limits.max_predicate_arity, 0);
+    assert!(at_defaults(&mut arity, &INPUT, input_field));
+    let mut program = program_core(zetesis_core::AdmissionResource::Templates, 0);
+    assert_eq!(program.core_limits.max_templates, 0);
+    assert!(at_defaults(&mut program, &PROGRAM, program_field));
+}
+
+#[test]
+#[should_panic(expected = "counted against the core admission limits")]
+fn a_core_counted_formula_resource_has_no_formula_field() {
+    let _ = formula(FormulaResource::Variables, 1);
+}
+
+#[test]
+#[should_panic(expected = "bounded when a bundle is loaded")]
+fn the_source_bytes_have_no_bundle_admission_field() {
+    let _ = bundle(InputLimit::SourceBytes, 1);
 }
 
 #[test]

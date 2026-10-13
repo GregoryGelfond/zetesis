@@ -5,7 +5,7 @@ use crate::support::finite_bindings as reference;
 
 use reference::native;
 use themelios_base::source::SourceId;
-use zetesis_reference_support::{formula, prepared};
+use zetesis_reference_support::{formula, prepared, resource_limits};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits,
     InputLimit, ProfileFeature, admit, admit_extended,
@@ -171,17 +171,17 @@ fn base_delimiters_consume_the_syntax_budget() {
         zetesis_themelios::syntax::dialect::Dialect::Clingo,
     );
     let nodes = parsed.syntax().descendants().count();
-    let options = AdmissionOptions {
-        max_syntax_nodes: nodes,
-        ..AdmissionOptions::default()
-    };
-    admit(source.into(), options).unwrap();
-    let options = AdmissionOptions {
-        max_syntax_nodes: nodes - 1,
-        ..options
-    };
+    let exact = u64::try_from(nodes).unwrap();
+    admit(
+        source.into(),
+        resource_limits::admission(InputLimit::SyntaxNodes, exact),
+    )
+    .unwrap();
     assert!(matches!(
-        admit(source.into(), options),
+        admit(
+            source.into(),
+            resource_limits::admission(InputLimit::SyntaxNodes, exact - 1)
+        ),
         Err(AdmissionFailure::Limit {
             resource: InputLimit::SyntaxNodes,
             limit,

@@ -197,11 +197,12 @@ without compiling a solver. `zetesis-reference-support`, over
 `zetesis-themelios`, admits a source under default or given limits, enumerates
 a small program's answer sets through the reduct check, prepares a source and
 grounds it for hybrid execution, writes the temporary source bundles several
-crates' tests load or run, and names the limit each typed resource a refusal
-reports is counted against. A helper that
-only one crate's tests use stays in that crate's `tests/integration/support`.
-The support crates are not published, and every coverage report skips their
-sources.
+crates' tests load or run, and names, by the resource a refusal reports, the
+limits of the formula, expansion, input, core admission, logical program,
+observation admission and objective admission resources and of the aggregate
+ceilings. A helper that only one crate's tests use stays in that crate's
+`tests/integration/support`. The support crates are not published, and every
+coverage report skips their sources.
 
 The data a crate's tests read, unit or integration, lives in its
 `tests/fixtures/`. Property tests keep proptest's default failure persistence:

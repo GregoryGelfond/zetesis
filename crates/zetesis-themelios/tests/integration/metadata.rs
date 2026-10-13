@@ -170,8 +170,7 @@ fn raw_metadata_occurrences_have_their_own_budget_before_deduplication() {
             ..
         })
     ));
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_templates = 0;
+    let options = resource_limits::admission_core(zetesis_core::AdmissionResource::Templates, 0);
     let accepted = admit_extended(
         "#defined p/2. #show.".to_owned(),
         options,

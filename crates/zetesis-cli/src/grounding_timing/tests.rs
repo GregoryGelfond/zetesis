@@ -3,7 +3,7 @@
 use crate::{
     GroundingMeasurement, GroundingOutcome, GroundingPhase, GroundingWork, SolveMeasurements,
 };
-use zetesis_reference_support::prepared;
+use zetesis_reference_support::{prepared, resource_limits};
 use zetesis_test_support::io::BoundedWriter;
 use zetesis_themelios::GroundingObserver as _;
 
@@ -11,8 +11,7 @@ use zetesis_themelios::GroundingObserver as _;
 fn a_grounding_failure_retains_its_phase_outcome() {
     let measurements = SolveMeasurements::new(true);
     let observer = measurements.grounding_observer().unwrap();
-    let mut limits = zetesis_themelios::FormulaLimits::default();
-    limits.theory.max_atoms = 0;
+    let limits = resource_limits::formula(zetesis_themelios::FormulaResource::Atoms, 0);
     let cause = zetesis_themelios::admit_formula_with_grounding_observer(
         "1{p;q}1.".into(),
         zetesis_themelios::AdmissionOptions::default(),

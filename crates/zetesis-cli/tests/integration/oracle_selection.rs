@@ -175,10 +175,7 @@ fn empty_and_unsupported_positive_cycles_have_one_empty_stable_model() {
 #[test]
 fn source_limits_preserve_typed_admission_refusals() {
     use zetesis_themelios::{AdmissionOptions, ExpansionLimits, admit_extended};
-    let bounded = AdmissionOptions {
-        max_source_bytes: 1,
-        ..AdmissionOptions::default()
-    };
+    let bounded = resource_limits::admission(InputLimit::SourceBytes, 1);
     assert!(matches!(
         admit_extended("1 {a;b} 1.".into(), bounded, ExpansionLimits::default()),
         Err(ExpansionFailure::Admission(AdmissionFailure::Limit {

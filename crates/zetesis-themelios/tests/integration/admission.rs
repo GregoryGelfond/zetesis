@@ -3,7 +3,8 @@
 
 use crate::support::admission;
 use themelios_base::source::SourceId;
-use zetesis_core::{Filter, Term, Value};
+use zetesis_core::{AdmissionResource, Filter, Term, Value};
+use zetesis_reference_support::resource_limits;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, Admitted, ExpansionLimits, ExpansionUsage, InputLimit,
     ProfileFeature, admit, admit_extended,
@@ -354,10 +355,7 @@ fn negated_anonymous_atoms_require_projection() {
 
 #[test]
 fn byte_limits_are_checked_before_syntax() {
-    let options = AdmissionOptions {
-        max_source_bytes: 2,
-        ..AdmissionOptions::default()
-    };
+    let options = resource_limits::admission(InputLimit::SourceBytes, 2);
     assert!(matches!(
         admit("invalid input".to_owned(), options),
         Err(AdmissionFailure::Limit {
@@ -370,10 +368,7 @@ fn byte_limits_are_checked_before_syntax() {
 
 #[test]
 fn body_limits_count_source_occurrences_before_deduplication() {
-    let options = AdmissionOptions {
-        max_body_elements: 1,
-        ..AdmissionOptions::default()
-    };
+    let options = resource_limits::admission(InputLimit::BodyElements, 1);
     assert!(matches!(
         admit("p :- q,q.".to_owned(), options),
         Err(AdmissionFailure::Limit {
@@ -385,22 +380,8 @@ fn body_limits_count_source_occurrences_before_deduplication() {
 
 #[test]
 fn syntax_node_and_depth_limits_refuse_with_locations() {
-    for (options, expected) in [
-        (
-            AdmissionOptions {
-                max_syntax_nodes: 0,
-                ..AdmissionOptions::default()
-            },
-            InputLimit::SyntaxNodes,
-        ),
-        (
-            AdmissionOptions {
-                max_syntax_depth: 1,
-                ..AdmissionOptions::default()
-            },
-            InputLimit::SyntaxDepth,
-        ),
-    ] {
+    for (expected, limit) in [(InputLimit::SyntaxNodes, 0), (InputLimit::SyntaxDepth, 1)] {
+        let options = resource_limits::admission(expected, limit);
         match admit("p(a).".to_owned(), options) {
             Err(AdmissionFailure::Limit {
                 resource, location, ..
@@ -415,8 +396,7 @@ fn syntax_node_and_depth_limits_refuse_with_locations() {
 
 #[test]
 fn core_limits_remain_an_independent_admission_door() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_templates = 1;
+    let options = resource_limits::admission_core(AdmissionResource::Templates, 1);
     assert!(matches!(
         admit("p. q.".to_owned(), options),
         Err(AdmissionFailure::Core { .. })

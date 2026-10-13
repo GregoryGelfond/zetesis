@@ -1,18 +1,40 @@
-//! The limit each typed resource is counted against, set and read by resource.
+//! The limit each typed resource is counted against, set by resource, for the
+//! families of limits held here.
 //!
-//! A refusal at a limit reports the resource it met: a formula or expansion
-//! resource, an observation or objective admission resource, or an aggregate
-//! error kind. A test that sets one such limit, leaving the others at their
-//! defaults, names the resource; the field holding that limit, with its
-//! default, is named here, once. A test that sets several limits at once, or a
-//! limit no typed resource reports (a key-analysis or source-admission option,
-//! say), names the fields itself and says why. Limits are read and set as `u64`
-//! whatever the field's width, so one threshold search, which starts from the
-//! resource's default, serves every resource.
+//! A refusal at a limit reports the resource it met. This view holds the
+//! formula and expansion resources; the input limits of a source or a bundle;
+//! the core admission resources of a source or a logical program, and the
+//! logical program resources; the observation and objective admission
+//! resources; and the aggregate ceilings an aggregate error kind reports.
+//! Formula admission counts template variables and predicate arity against the
+//! core admission limits, so those two formula resources are set through
+//! [`admission_formula`].
+//!
+//! The view stands above `zetesis-themelios`, so it serves the tests that use
+//! that crate as a dependency, its own integration tests among them. A unit
+//! test of `zetesis-themelios` would link a second copy of the crate, and a
+//! test of a crate below it would make that crate depend on its own
+//! dependents. The tests of the crates that define these limits (the unit
+//! tests of `zetesis-themelios`, and the tests of `zetesis-core`,
+//! `zetesis-ferraris` and `zetesis-objective`) name their own fields by
+//! decision: they establish each pairing this view restates.
+//!
+//! A test the view serves that sets one such limit, leaving the others at
+//! their defaults, names the resource; the field holding that limit is named
+//! here, once. A test that sets several limits at once, or varies one limit of
+//! a configuration that already sets others, names the fields, and its code
+//! shows why. A test that sets a field of these limits that no typed resource
+//! reports, such as the formula limits' key-analysis work, says why where it
+//! sets it. Formula and expansion limits are also read by resource, so a
+//! threshold search over one of them starts from its default. Limits are read
+//! and set as `u64` whatever the field's width.
 
 use zetesis_ferraris::{AggregateErrorKind, AggregateLimits};
 use zetesis_themelios::observation;
-use zetesis_themelios::{ExpansionLimits, ExpansionResource, FormulaLimits, FormulaResource};
+use zetesis_themelios::{
+    AdmissionOptions, BundleAdmissionOptions, ExpansionLimits, ExpansionResource, FormulaLimits,
+    FormulaResource, InputLimit, ProgramAdmissionOptions, ProgramResource,
+};
 
 /// A limit field, at the width its limits declare.
 enum Field<'a> {
@@ -52,7 +74,8 @@ impl Field<'_> {
 ///
 /// # Panics
 /// Panics for a resource that no field of the formula limits bounds: a fixed
-/// capacity of binding analysis, or a source-admission option.
+/// capacity of binding analysis, or a resource counted against the core
+/// admission limits.
 fn formula_field(limits: &mut FormulaLimits, resource: FormulaResource) -> Field<'_> {
     match resource {
         FormulaResource::ProjectAtoms => Field::Size(&mut limits.max_project_atoms),
@@ -102,9 +125,30 @@ fn formula_field(limits: &mut FormulaLimits, resource: FormulaResource) -> Field
         }
         FormulaResource::Variables | FormulaResource::Arity => {
             panic!(
-                "{resource:?} is bounded by the source admission options, not the formula limits"
+                "{resource:?} is counted against the core admission limits: see admission_formula"
             )
         }
+    }
+}
+
+/// The field of `limits` that bounds the formula `resource`, among the core
+/// admission limits that formula admission also checks.
+///
+/// # Panics
+/// Panics for a formula resource that the formula limits bound, or a fixed
+/// capacity of binding analysis.
+fn formula_core_field(
+    limits: &mut zetesis_core::AdmissionLimits,
+    resource: FormulaResource,
+) -> Field<'_> {
+    match resource {
+        FormulaResource::Variables => {
+            core_field(limits, zetesis_core::AdmissionResource::Variables)
+        }
+        FormulaResource::Arity => {
+            core_field(limits, zetesis_core::AdmissionResource::PredicateArity)
+        }
+        _ => panic!("{resource:?} is not counted against the core admission limits"),
     }
 }
 
@@ -119,6 +163,56 @@ fn expansion_field(limits: &mut ExpansionLimits, resource: ExpansionResource) ->
         ExpansionResource::FamilyBytes => Field::Size(&mut limits.max_family_bytes),
         ExpansionResource::Origins => Field::Size(&mut limits.max_origin_locations),
         ExpansionResource::MetadataStatements => Field::Size(&mut limits.max_metadata_statements),
+    }
+}
+
+/// The field of `options` that bounds the input `resource` of one source.
+fn input_field(options: &mut AdmissionOptions, resource: InputLimit) -> Field<'_> {
+    match resource {
+        InputLimit::SourceBytes => Field::Size(&mut options.max_source_bytes),
+        InputLimit::SyntaxNodes => Field::Size(&mut options.max_syntax_nodes),
+        InputLimit::SyntaxDepth => Field::Size(&mut options.max_syntax_depth),
+        InputLimit::BodyElements => Field::Size(&mut options.max_body_elements),
+    }
+}
+
+/// The field of `options` that bounds the input `resource` across a bundle.
+///
+/// # Panics
+/// Panics for the source bytes, which the bundle's loading limits bound.
+fn bundle_field(options: &mut BundleAdmissionOptions, resource: InputLimit) -> Field<'_> {
+    match resource {
+        InputLimit::SyntaxNodes => Field::Size(&mut options.max_syntax_nodes),
+        InputLimit::SyntaxDepth => Field::Size(&mut options.max_syntax_depth),
+        InputLimit::BodyElements => Field::Size(&mut options.max_body_elements),
+        InputLimit::SourceBytes => {
+            panic!("{resource:?} is bounded when a bundle is loaded, not admitted")
+        }
+    }
+}
+
+/// The field of `limits` that bounds the core admission `resource`.
+fn core_field(
+    limits: &mut zetesis_core::AdmissionLimits,
+    resource: zetesis_core::AdmissionResource,
+) -> Field<'_> {
+    use zetesis_core::AdmissionResource;
+    match resource {
+        AdmissionResource::Templates => Field::Size(&mut limits.max_templates),
+        AdmissionResource::PredicateArity => Field::Size(&mut limits.max_predicate_arity),
+        AdmissionResource::Variables => Field::Size(&mut limits.max_variables_per_template),
+        AdmissionResource::PositiveBody => Field::Size(&mut limits.max_positive_body),
+        AdmissionResource::DomainValues => Field::Size(&mut limits.max_domain_values),
+    }
+}
+
+/// The field of `options` that bounds the logical program `resource`.
+fn program_field(options: &mut ProgramAdmissionOptions, resource: ProgramResource) -> Field<'_> {
+    match resource {
+        ProgramResource::Nodes => Field::Size(&mut options.max_nodes),
+        ProgramResource::Depth => Field::Size(&mut options.max_depth),
+        ProgramResource::BodyElements => Field::Size(&mut options.max_body_elements),
+        ProgramResource::TextBytes => Field::Size(&mut options.max_text_bytes),
     }
 }
 
@@ -199,8 +293,9 @@ fn aggregate_field(limits: &mut AggregateLimits, kind: AggregateErrorKind) -> Fi
 /// The default formula limits, with `resource` bounded by `limit`.
 ///
 /// # Panics
-/// Panics for a resource no formula limit bounds, or a `limit` that does not
-/// fit the field's width.
+/// Panics for a resource no formula limit bounds (a fixed capacity, or a
+/// resource [`admission_formula`] bounds), or a `limit` that does not fit the
+/// field's width.
 #[must_use]
 pub fn formula(resource: FormulaResource, limit: u64) -> FormulaLimits {
     let mut limits = FormulaLimits::default();
@@ -237,6 +332,84 @@ pub fn expansion(resource: ExpansionResource, limit: u64) -> ExpansionLimits {
 #[must_use]
 pub fn expansion_default(resource: ExpansionResource) -> u64 {
     expansion_field(&mut ExpansionLimits::default(), resource).get()
+}
+
+/// The default admission options of one source, with the input `resource`
+/// bounded by `limit`.
+///
+/// # Panics
+/// Panics for a `limit` that does not fit the field's width.
+#[must_use]
+pub fn admission(resource: InputLimit, limit: u64) -> AdmissionOptions {
+    let mut options = AdmissionOptions::default();
+    input_field(&mut options, resource).set(limit);
+    options
+}
+
+/// The default admission options of one source, with the core admission
+/// `resource` bounded by `limit`.
+///
+/// # Panics
+/// Panics for a `limit` that does not fit the field's width.
+#[must_use]
+pub fn admission_core(resource: zetesis_core::AdmissionResource, limit: u64) -> AdmissionOptions {
+    let mut options = AdmissionOptions::default();
+    core_field(&mut options.core_limits, resource).set(limit);
+    options
+}
+
+/// The default admission options of one source, with the formula `resource`
+/// bounded by `limit`: formula admission counts template variables and
+/// predicate arity against the core admission limits.
+///
+/// # Panics
+/// Panics for a formula resource that the formula limits bound ([`formula`]),
+/// a fixed capacity, or a `limit` that does not fit the field's width.
+#[must_use]
+pub fn admission_formula(resource: FormulaResource, limit: u64) -> AdmissionOptions {
+    let mut options = AdmissionOptions::default();
+    formula_core_field(&mut options.core_limits, resource).set(limit);
+    options
+}
+
+/// The default bundle admission options, with the input `resource` bounded by
+/// `limit` across the bundle.
+///
+/// # Panics
+/// Panics for the source bytes, which the bundle's loading limits bound, or a
+/// `limit` that does not fit the field's width.
+#[must_use]
+pub fn bundle(resource: InputLimit, limit: u64) -> BundleAdmissionOptions {
+    let mut options = BundleAdmissionOptions::default();
+    bundle_field(&mut options, resource).set(limit);
+    options
+}
+
+/// The default logical program admission options, with `resource` bounded by
+/// `limit`.
+///
+/// # Panics
+/// Panics for a `limit` that does not fit the field's width.
+#[must_use]
+pub fn program(resource: ProgramResource, limit: u64) -> ProgramAdmissionOptions {
+    let mut options = ProgramAdmissionOptions::default();
+    program_field(&mut options, resource).set(limit);
+    options
+}
+
+/// The default logical program admission options, with the core admission
+/// `resource` bounded by `limit`.
+///
+/// # Panics
+/// Panics for a `limit` that does not fit the field's width.
+#[must_use]
+pub fn program_core(
+    resource: zetesis_core::AdmissionResource,
+    limit: u64,
+) -> ProgramAdmissionOptions {
+    let mut options = ProgramAdmissionOptions::default();
+    core_field(&mut options.core_limits, resource).set(limit);
+    options
 }
 
 /// The default observation admission limits, with `resource` bounded by

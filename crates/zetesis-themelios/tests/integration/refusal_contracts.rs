@@ -49,40 +49,16 @@ fn located(error: &AdmissionFailure, source: &str) {
 #[test]
 fn input_quota_diagnostics_preserve_observed_count_source_and_typed_boundary() {
     let source = "p(a) :- q(a), q(a).";
-    for (options, expected, phrase) in [
-        (
-            AdmissionOptions {
-                max_source_bytes: source.len() - 1,
-                ..options()
-            },
-            InputLimit::SourceBytes,
-            "source bytes",
-        ),
-        (
-            AdmissionOptions {
-                max_syntax_nodes: 0,
-                ..options()
-            },
-            InputLimit::SyntaxNodes,
-            "syntax nodes",
-        ),
-        (
-            AdmissionOptions {
-                max_syntax_depth: 1,
-                ..options()
-            },
-            InputLimit::SyntaxDepth,
-            "syntax depth",
-        ),
-        (
-            AdmissionOptions {
-                max_body_elements: 1,
-                ..options()
-            },
-            InputLimit::BodyElements,
-            "body elements",
-        ),
+    for (expected, bound, phrase) in [
+        (InputLimit::SourceBytes, source.len() - 1, "source bytes"),
+        (InputLimit::SyntaxNodes, 0, "syntax nodes"),
+        (InputLimit::SyntaxDepth, 1, "syntax depth"),
+        (InputLimit::BodyElements, 1, "body elements"),
     ] {
+        let options = AdmissionOptions {
+            source_id: SOURCE,
+            ..resource_limits::admission(expected, u64::try_from(bound).unwrap())
+        };
         let error = admit(source.to_owned(), options).unwrap_err();
         located(&error, source);
         let AdmissionFailure::Limit {
@@ -106,8 +82,8 @@ fn input_quota_diagnostics_preserve_observed_count_source_and_typed_boundary() {
     let error = admit_formula(
         source.to_owned(),
         AdmissionOptions {
-            max_source_bytes: 0,
-            ..options()
+            source_id: SOURCE,
+            ..resource_limits::admission(InputLimit::SourceBytes, 0)
         },
         ExpansionLimits::default(),
         FormulaLimits::default(),
@@ -213,8 +189,10 @@ fn core_shape_and_program_limits_remain_actionable_through_source_admission() {
         }
     );
     assert!(arity.to_string().contains('2') && arity.to_string().contains('0'));
-    let mut limits = options();
-    limits.core_limits.max_templates = 1;
+    let limits = AdmissionOptions {
+        source_id: SOURCE,
+        ..resource_limits::admission_core(zetesis_core::AdmissionResource::Templates, 1)
+    };
     let source = "p. q.";
     let error = admit(source.to_owned(), limits).unwrap_err();
     let cause = error

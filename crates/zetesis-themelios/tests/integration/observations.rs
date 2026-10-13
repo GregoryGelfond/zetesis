@@ -14,8 +14,8 @@ use zetesis_ferraris::{Interpretation, check};
 use zetesis_reference_support::{BundleFixture, admit, resource_limits};
 use zetesis_themelios::observation::{ErrorKind, Feature, Limits, Resource};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, admit_formula,
+    AdmissionFailure, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
+    FormulaLimits, InputLimit, admit_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -443,10 +443,7 @@ fn all_source_ceilings_preflight_owned_templates_and_origin_copies() {
     let deep = format!("#show {}x{}.", "f(".repeat(65), ")".repeat(65));
     let result = admit_formula(
         deep,
-        AdmissionOptions {
-            max_syntax_depth: 1_000,
-            ..Default::default()
-        },
+        resource_limits::admission(InputLimit::SyntaxDepth, 1_000),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     );
@@ -530,10 +527,7 @@ fn show_traversal_preserves_closed_logical_values_and_raw_body_limits() {
     }
     let result = admit_formula(
         "p. #show x:p,p.".into(),
-        AdmissionOptions {
-            max_body_elements: 1,
-            ..Default::default()
-        },
+        resource_limits::admission(InputLimit::BodyElements, 1),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     );
@@ -541,7 +535,7 @@ fn show_traversal_preserves_closed_logical_values_and_raw_body_limits() {
         result,
         Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
             AdmissionFailure::Limit {
-                resource: zetesis_themelios::InputLimit::BodyElements,
+                resource: InputLimit::BodyElements,
                 observed: 2,
                 ..
             }

@@ -184,20 +184,18 @@ fn generated_slot_arity_and_range_width_limits_are_inclusive() {
         ("d(1).{p(X+1..X+2,X)}:-d(X).", 2),
         ("1{p(X+1..X+2,X):X=1}1.", 2),
     ] {
-        let mut options = AdmissionOptions::default();
-        options.core_limits.max_variables_per_template = slots;
         assert!(
             limited(
                 source,
-                options,
+                resource_limits::admission_formula(FormulaResource::Variables, slots),
                 ExpansionLimits::default(),
                 &FormulaLimits::default()
             )
             .is_ok()
         );
-        options.core_limits.max_variables_per_template -= 1;
+        let options = resource_limits::admission_formula(FormulaResource::Variables, slots - 1);
         assert!(
-            matches!(limited(source, options, ExpansionLimits::default(), &FormulaLimits::default()), Err(FormulaFailure::Limit { resource: FormulaResource::Variables, observed, .. }) if observed == slots as u128)
+            matches!(limited(source, options, ExpansionLimits::default(), &FormulaLimits::default()), Err(FormulaFailure::Limit { resource: FormulaResource::Variables, observed, .. }) if observed == u128::from(slots))
         );
     }
     let source = "n(1).{p(N..N+1):n(N)}.";
@@ -237,12 +235,10 @@ fn generated_slot_arity_and_range_width_limits_are_inclusive() {
             ..
         })
     ));
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_predicate_arity = 1;
     assert!(matches!(
         limited(
             "d(1).{p(X+1,X)}:-d(X).",
-            options,
+            resource_limits::admission_formula(FormulaResource::Arity, 1),
             ExpansionLimits::default(),
             &FormulaLimits::default()
         ),

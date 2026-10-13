@@ -2,8 +2,9 @@
 //! or given limits, the native reference the zetesis workspace's tests compare
 //! with clingo (every answer set of a small program, found by checking each
 //! candidate against the reduct), preparation and hybrid grounding,
-//! source-bundle fixtures, and the limit each typed resource is counted
-//! against.
+//! source-bundle fixtures, and, by resource, the limits of the formula,
+//! expansion, input, core admission, logical program, observation admission
+//! and objective admission resources and of the aggregate ceilings.
 //!
 //! [`admit`] admits a source under given formula limits, the rest at their
 //! defaults, [`formula`] under the default limits throughout and [`normal`] on
@@ -16,11 +17,11 @@
 //! source under the default options and limits, [`prepared`] when preparation
 //! must accept it, and [`hybrid`] grounds it for hybrid execution;
 //! [`BundleFixture`] writes a source bundle into a temporary directory for the
-//! tests that load or run one. [`resource_limits`] sets and reads, by
-//! resource, the limit each typed resource a refusal reports is counted
-//! against. The crate stands above
-//! `zetesis-themelios`, so only the tests that need that closure compile it.
-//! It is not published or installed.
+//! tests that load or run one. [`resource_limits`] sets those limits by the
+//! resource a refusal reports, and reads the formula and expansion limits'
+//! defaults by resource. The crate stands above `zetesis-themelios`, so only
+//! the tests that need that closure compile it. It is not published or
+//! installed.
 
 use zetesis_core::{Model, Program, Sign};
 use zetesis_cpu::{Cancellation, CandidateLimits, CandidateTermination, Candidates};

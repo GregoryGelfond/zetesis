@@ -9,8 +9,8 @@ use std::fmt::Write as _;
 use zetesis_reference_support::{BundleFixture, canonical, formula, prepared, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, AnalysisBasis, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    AdmittedFormula, AnalysisBasis, ExpansionLimits, ExpansionResource, FormulaFailure,
+    FormulaLimits, FormulaResource, admit_formula,
 };
 
 fn corpus_case() -> &'static zetesis_validation::curated::Case {
@@ -735,27 +735,24 @@ fn anonymous_inspections_obey_the_term_work_ceiling() {
 #[test]
 fn private_witness_slots_obey_the_variable_ceiling() {
     let source = "q:-not p(f(_)):#true.";
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 0;
     assert!(matches!(
         admit_formula(
             source.into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 0),
             ExpansionLimits::default(),
             FormulaLimits::default()
         ),
         Err(FormulaFailure::Limit {
-            resource: zetesis_themelios::FormulaResource::Variables,
+            resource: FormulaResource::Variables,
             observed: 1,
             ..
         })
     ));
-    options.core_limits.max_variables_per_template = 1;
     assert_eq!(
         native(
             &admit_formula(
                 source.into(),
-                options,
+                resource_limits::admission_formula(FormulaResource::Variables, 1),
                 ExpansionLimits::default(),
                 FormulaLimits::default()
             )
@@ -1014,18 +1011,16 @@ fn outer_pools_preserve_local_alternatives() {
 
 #[test]
 fn private_interval_slots_obey_variable_limit() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 1;
     let result = admit_formula(
         "q:-p(2*(X..X+1)):X=1.".into(),
-        options,
+        resource_limits::admission_formula(FormulaResource::Variables, 1),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     );
     assert!(matches!(
         result,
         Err(FormulaFailure::Limit {
-            resource: zetesis_themelios::FormulaResource::Variables,
+            resource: FormulaResource::Variables,
             limit: 1,
             observed: 2,
             ..

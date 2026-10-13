@@ -139,24 +139,19 @@ fn erased_conditions_do_not_bind_or_hide_unsafe_head_arguments() {
 #[test]
 fn condition_and_head_counts_have_inclusive_limits() {
     let source = "p:#true,#true;q:#true.";
-    let mut options = AdmissionOptions {
-        max_body_elements: 2,
-        ..AdmissionOptions::default()
-    };
     assert!(
         limited(
             source,
-            options,
+            resource_limits::admission(InputLimit::BodyElements, 2),
             ExpansionLimits::default(),
             &FormulaLimits::default()
         )
         .is_ok()
     );
-    options.max_body_elements = 1;
     assert!(matches!(
         limited(
             source,
-            options,
+            resource_limits::admission(InputLimit::BodyElements, 1),
             ExpansionLimits::default(),
             &FormulaLimits::default()
         ),
@@ -198,22 +193,19 @@ fn condition_and_head_counts_have_inclusive_limits() {
 #[test]
 fn erased_conditions_do_not_consume_synthetic_variable_slots() {
     let source = "d(1).p(X+1):#true;q:#true:-d(X).";
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 2;
     assert!(
         limited(
             source,
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 2),
             ExpansionLimits::default(),
             &FormulaLimits::default()
         )
         .is_ok()
     );
-    options.core_limits.max_variables_per_template = 1;
     assert!(matches!(
         limited(
             source,
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 1),
             ExpansionLimits::default(),
             &FormulaLimits::default()
         ),

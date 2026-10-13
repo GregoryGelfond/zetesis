@@ -8,8 +8,8 @@ use std::fmt::Write as _;
 
 use reference::{Models, holds, native, values};
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, admit_formula,
+    ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
+    admit_formula,
 };
 
 // These independently written finite substitutions retain whole source atoms.
@@ -401,11 +401,9 @@ fn compiled_checks_retain_original_source() {
 fn witness_captures_obey_the_variable_ceiling() {
     for (source, exact) in [("q:-p(X,X+1):#true.", 2), ("q:-p(f(X,X+1)):#true.", 3)] {
         for cap in [exact - 1, exact] {
-            let mut options = AdmissionOptions::default();
-            options.core_limits.max_variables_per_template = cap;
             let result = admit_formula(
                 source.into(),
-                options,
+                resource_limits::admission_formula(FormulaResource::Variables, cap),
                 ExpansionLimits::default(),
                 FormulaLimits::default(),
             );
@@ -415,7 +413,7 @@ fn witness_captures_obey_the_variable_ceiling() {
                 assert!(
                     matches!(result, Err(FormulaFailure::Limit {
                 resource: FormulaResource::Variables, observed, ..
-            }) if observed == exact as u128),
+            }) if observed == u128::from(exact)),
                     "{result:?}"
                 );
             }

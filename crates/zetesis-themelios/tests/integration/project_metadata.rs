@@ -4,8 +4,7 @@ use zetesis_core::Predicate;
 use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_test_support::programs::unary as atom;
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    SourceDirective, admit_formula,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, SourceDirective, admit_formula,
 };
 
 fn selected_pair() -> (
@@ -140,10 +139,7 @@ fn declaration_bodies_count_authored_occurrences_before_deduplication() {
     let source = "p(1).#project p(X):p(X),p(X).";
     let error = admit_formula(
         source.into(),
-        AdmissionOptions {
-            max_body_elements: 1,
-            ..AdmissionOptions::default()
-        },
+        resource_limits::admission(InputLimit::BodyElements, 1),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     )

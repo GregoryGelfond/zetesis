@@ -387,8 +387,7 @@ fn excluded_endpoints_syntax_and_unsafe_scopes_remain_typed_refusals() {
 
 #[test]
 fn interval_slots_obey_the_variable_limit() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 2;
+    let options = resource_limits::admission_formula(FormulaResource::Variables, 2);
     let admit = |source: &str| {
         admit_formula(
             source.into(),

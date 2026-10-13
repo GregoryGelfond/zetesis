@@ -242,16 +242,13 @@ fn partial_local_iteration_never_certifies_vacuity_and_exact_caps_are_inclusive(
     for (source, limit) in [("d(1).p(1).q:-p(X):d(X),X=1.", 1), ("q:-p(X,Y):d(X,Y).", 1)] {
         let options = if source.contains("X,Y") {
             AdmissionOptions {
-                core_limits: zetesis_core::AdmissionLimits {
-                    max_variables_per_template: limit,
-                    ..Default::default()
-                },
-                ..options()
+                source_id: SOURCE,
+                ..resource_limits::admission_formula(FormulaResource::Variables, limit)
             }
         } else {
             AdmissionOptions {
-                max_body_elements: limit,
-                ..options()
+                source_id: SOURCE,
+                ..resource_limits::admission(zetesis_themelios::InputLimit::BodyElements, limit)
             }
         };
         let error = admit_formula(

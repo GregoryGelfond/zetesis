@@ -18,8 +18,8 @@ use zetesis_themelios::logical::{
 };
 use zetesis_themelios::{
     AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
-    FormulaPurpose, ProgramFailureKind, ProgramRelationalOptions, ProgramSubject, admit_extended,
-    prepare_program_relational, symbols,
+    FormulaPurpose, ProgramFailureKind, ProgramRelationalOptions, ProgramResource, ProgramSubject,
+    admit_extended, prepare_program_relational, symbols,
 };
 
 fn atom(name: &str, terms: impl IntoIterator<Item = Term>) -> Atom {
@@ -309,8 +309,10 @@ fn expanded_templates_retain_original_evidence() {
 #[test]
 fn excluded_input_remains_structurally_bounded() {
     let program = Arc::new(Program::of([objective()]));
-    let mut options = answers();
-    options.admission.max_nodes = 1;
+    let options = ProgramRelationalOptions {
+        admission: resource_limits::program(ProgramResource::Nodes, 1),
+        ..answers()
+    };
     let error = prepare_program_relational(program, options).unwrap_err();
     assert!(matches!(
         error.cause(),

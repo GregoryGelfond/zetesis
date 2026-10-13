@@ -553,11 +553,9 @@ fn generated_head_value_limit_is_inclusive() {
 fn constructor_inputs_count_toward_slot_limit() {
     let source = "d(1).p(f(X)):-d(X).";
     for (slots, succeeds) in [(2, true), (1, false)] {
-        let mut options = AdmissionOptions::default();
-        options.core_limits.max_variables_per_template = slots;
         let result = admit_formula(
             source.into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, slots),
             ExpansionLimits::default(),
             FormulaLimits::default(),
         );

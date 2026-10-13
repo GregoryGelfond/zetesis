@@ -18,7 +18,7 @@ const CHOICES: &str = "letter(a;b;c). digit(0..9). carry_value(0;1). idx(1). \
 
 /// The default formula limits, with `max_key_work` steps for the key analysis.
 /// The analysis stops rather than refusing, so no typed resource reports
-/// this limit and the resource view does not name it.
+/// this limit and `resource_limits` does not name it.
 fn key_work(max_key_work: u64) -> FormulaLimits {
     FormulaLimits {
         max_key_work,

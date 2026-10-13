@@ -1,7 +1,7 @@
 //! The typed relational boundary shares source semantics without a text roundtrip.
 
 use std::collections::BTreeSet;
-use zetesis_reference_support::{canonical, normal_answer_sets};
+use zetesis_reference_support::{canonical, normal_answer_sets, resource_limits};
 
 use zetesis_core::Program as NativeProgram;
 use zetesis_themelios::logical::{
@@ -142,10 +142,7 @@ fn node_limits_accumulate_across_statements() {
     ]);
     let error = admit_program(
         &program,
-        ProgramAdmissionOptions {
-            max_nodes: 8,
-            ..ProgramAdmissionOptions::default()
-        },
+        resource_limits::program(ProgramResource::Nodes, 8),
     )
     .unwrap_err();
     assert!(
@@ -158,10 +155,7 @@ fn logical_body_width_has_its_own_ceiling() {
     let program = raised(SOURCE);
     let error = admit_program(
         &program,
-        ProgramAdmissionOptions {
-            max_body_elements: 1,
-            ..ProgramAdmissionOptions::default()
-        },
+        resource_limits::program(ProgramResource::BodyElements, 1),
     )
     .unwrap_err();
     assert!(
@@ -179,10 +173,7 @@ fn text_limits_accumulate_across_rules() {
     ]);
     let error = admit_program(
         &program,
-        ProgramAdmissionOptions {
-            max_text_bytes: 8,
-            ..ProgramAdmissionOptions::default()
-        },
+        resource_limits::program(ProgramResource::TextBytes, 8),
     )
     .unwrap_err();
     assert!(
@@ -212,10 +203,7 @@ fn compound_unary_operands_are_bounded_before_evaluation() {
     });
     let error = admit_program(
         &program,
-        ProgramAdmissionOptions {
-            max_depth: 12,
-            ..ProgramAdmissionOptions::default()
-        },
+        resource_limits::program(ProgramResource::Depth, 12),
     )
     .unwrap_err();
     assert!(
@@ -229,10 +217,7 @@ fn symbol_interiors_obey_depth_limits() {
     let program = fact(Term::Symbolic(symbol));
     let error = admit_program(
         &program,
-        ProgramAdmissionOptions {
-            max_depth: 12,
-            ..ProgramAdmissionOptions::default()
-        },
+        resource_limits::program(ProgramResource::Depth, 12),
     )
     .unwrap_err();
     assert!(
@@ -245,10 +230,7 @@ fn strings_obey_logical_text_limits() {
     let program = fact(Term::Symbolic(Symbol::String("x".repeat(32))));
     let error = admit_program(
         &program,
-        ProgramAdmissionOptions {
-            max_text_bytes: 16,
-            ..ProgramAdmissionOptions::default()
-        },
+        resource_limits::program(ProgramResource::TextBytes, 16),
     )
     .unwrap_err();
     assert!(
@@ -259,8 +241,10 @@ fn strings_obey_logical_text_limits() {
 #[test]
 fn coherence_respects_native_template_limits() {
     let program = raised(SOURCE);
-    let mut options = ProgramAdmissionOptions::default();
-    options.core_limits.max_templates = program.statements().count();
+    let options = resource_limits::program_core(
+        zetesis_core::AdmissionResource::Templates,
+        u64::try_from(program.statements().count()).unwrap(),
+    );
     let error = admit_program(&program, options).unwrap_err();
     assert!(matches!(
         error.kind,

@@ -336,12 +336,10 @@ fn late_mismatch_cannot_poison_the_next_witness() {
 
 #[test]
 fn anonymous_positions_need_only_the_whole_capture() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 1;
     assert!(
         admit_formula(
             "p(f(1,g(2,3))).q:-p(f(_,g(_,_))):#true.".into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 1),
             ExpansionLimits::default(),
             FormulaLimits::default()
         )
@@ -351,23 +349,20 @@ fn anonymous_positions_need_only_the_whole_capture() {
 
 #[test]
 fn witness_capture_limit_is_inclusive() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 2;
     let source = "p(f(1)).q:-p(f(X)):#true.";
     assert!(
         admit_formula(
             source.into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 2),
             ExpansionLimits::default(),
             FormulaLimits::default()
         )
         .is_ok()
     );
-    options.core_limits.max_variables_per_template = 1;
     assert!(matches!(
         admit_formula(
             source.into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 1),
             ExpansionLimits::default(),
             FormulaLimits::default()
         ),
