@@ -1,9 +1,10 @@
 //! Device core membership composes with host acceptance and reconstruction.
 
-use std::{collections::BTreeMap, convert::Infallible, num::NonZeroUsize};
+use crate::support::models::ScoredFamily as Family;
+use crate::support::sessions::hybrid;
+use std::{convert::Infallible, num::NonZeroUsize};
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_objective::Score;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver,
     ExecutionResources, GpuApi, Grounder, Oracle, PreparedInput, SearchMethod, SemanticOutcome,
@@ -11,23 +12,9 @@ use zetesis_solve::{
 };
 use zetesis_themelios::{
     AdmissionOptions, ConstraintCheckLimits, ExpansionLimits, FormulaLimits,
-    FormulaMaterialization, HybridFormula, prepare_formula,
+    FormulaMaterialization, prepare_formula,
 };
 use zetesis_wgpu::{AdapterBackend, GpuContext, GpuOptions, GpuSelection};
-
-type Family = BTreeMap<Model, Option<Score>>;
-
-fn hybrid(source: &str) -> HybridFormula {
-    prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_hybrid()
-    .unwrap()
-}
 
 fn config(api: GpuApi, oracle: Oracle) -> SolveConfig {
     SolveConfig {
