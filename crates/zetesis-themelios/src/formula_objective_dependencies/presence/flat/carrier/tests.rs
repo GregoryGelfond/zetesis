@@ -39,29 +39,24 @@ fn with_context(values: &[Value], run: impl FnOnce(&[Term], &mut Context<'_, '_,
     });
 }
 
-/// The objective carrier of `required` and `optional` tuples, through the
-/// contributions it hands the shared carrier operation.
-fn carrier_values(
+/// The objective carrier of `required` and `optional` tuples, whose possible
+/// tuples are both.
+fn carrier_values<'ir>(
     function: AggregateFunction,
-    required: &[&[Term]],
-    optional: &[&[Term]],
+    required: &[&'ir [Term]],
+    optional: &[&'ir [Term]],
     context: &mut Context<'_, '_, '_>,
 ) -> TermSelection {
-    let required = contributions(
-        function,
-        required.iter().copied(),
-        Entries::Unreserved,
-        context,
-    )
-    .unwrap();
-    let optional = contributions(
-        function,
-        optional.iter().copied(),
-        Entries::Reserved,
-        context,
-    )
-    .unwrap();
-    complete(function, &required, &optional, context).unwrap()
+    let mut required_tuples = Tuples::new(context).unwrap();
+    let mut possible = Tuples::new(context).unwrap();
+    for &tuple in required {
+        required_tuples.insert(tuple, context).unwrap();
+        possible.insert(tuple, context).unwrap();
+    }
+    for &tuple in optional {
+        possible.insert(tuple, context).unwrap();
+    }
+    complete(function, &required_tuples, &possible, context).unwrap()
 }
 
 #[test]

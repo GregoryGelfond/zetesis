@@ -92,50 +92,8 @@ pub(in super::super) fn certify<'source>(
             required.insert(tuple, &mut context)?;
         }
     }
-    let required_contributions = contributions(
-        aggregate.function,
-        required.values.iter().copied(),
-        Entries::Unreserved,
-        &mut context,
-    )?;
-    let mut optional = Buffer::new(
-        context.computation,
-        context.limits,
-        context.counters,
-        context.location,
-    )?;
-    for tuple in possible.values.iter().copied() {
-        if !required.contains(tuple, &mut context)? {
-            optional.push(
-                tuple,
-                context.computation,
-                context.limits,
-                context.counters,
-                context.location,
-            )?;
-        }
-    }
-    let optional_contributions = contributions(
-        aggregate.function,
-        optional.iter().copied(),
-        Entries::Reserved,
-        &mut context,
-    )?;
-    let values = complete(
-        aggregate.function,
-        &required_contributions,
-        &optional_contributions,
-        &mut context,
-    )?;
+    let values = complete(aggregate.function, &required, &possible, &mut context)?;
     Ok(Some(Carrier { predicates, values }))
-}
-
-/// What each closed tuple contributes to the carrier operation the assignment
-/// proposal sites share: its weight for `#count`, `#sum` and `#sum+`, its first
-/// value for `#min` and `#max`.
-enum Contributions {
-    Weights(Buffer<i32>),
-    Values(Binding<'static>),
 }
 
 /// Whether each numeric contribution takes an entry as it is reduced: the
@@ -146,108 +104,163 @@ enum Entries {
     Unreserved,
 }
 
-/// Reduce `tuples` to their contributions.
-fn contributions<'a>(
+/// The carrier between the `required` and the `possible` tuples, from the
+/// shared carrier operation for what `function` reduces each tuple to: its
+/// weight for `#count`, `#sum` and `#sum+`, its first value for `#min` and
+/// `#max`. One match on `function` reduces both sides, the required tuples and
+/// then the possible ones outside them, so the two are of one kind; each
+/// retained value takes an entry. Optional keys are independent only in the
+/// source abstraction. Original eligibility remains responsible for their
+/// correlation in an interpretation.
+fn complete<'ir>(
     function: AggregateFunction,
-    tuples: impl Iterator<Item = &'a [Term]>,
-    entries: Entries,
+    required: &Tuples<'ir>,
+    possible: &Tuples<'ir>,
     context: &mut Context<'_, '_, '_>,
-) -> Result<Contributions, FormulaFailure> {
+) -> Result<TermSelection, FormulaFailure> {
     match function {
         AggregateFunction::Count | AggregateFunction::Sum | AggregateFunction::SumPlus => {
-            let mut weights = Buffer::new(
+            let required_weights = weights(
+                function,
+                required.values.iter().copied(),
+                Entries::Unreserved,
+                context,
+            )?;
+            let optional = optional_tuples(required, possible, context)?;
+            let optional_weights = weights(
+                function,
+                optional.iter().copied(),
+                Entries::Reserved,
+                context,
+            )?;
+            let proposals = crate::formula_assignment::carrier(
+                function,
+                required_weights.iter().copied(),
+                optional_weights.iter().copied(),
                 context.computation,
                 context.limits,
                 context.counters,
                 context.location,
             )?;
-            for tuple in tuples {
-                context.inspect()?;
-                if let Some(weight) = crate::formula_assignment::contribution(
-                    function,
-                    first(tuple, context)?,
-                    context.location,
-                )? {
-                    if entries == Entries::Reserved {
-                        context.reserve_entry()?;
-                    }
-                    weights.push(
-                        weight,
-                        context.computation,
-                        context.limits,
-                        context.counters,
-                        context.location,
-                    )?;
-                }
-            }
-            Ok(Contributions::Weights(weights))
+            retained(&proposals, context)
         }
         AggregateFunction::Min | AggregateFunction::Max => {
-            let mut values = Binding::new(
+            let required_firsts = firsts(required.values.iter().copied(), context)?;
+            let optional = optional_tuples(required, possible, context)?;
+            let optional_firsts = firsts(optional.iter().copied(), context)?;
+            let proposals = crate::formula_assignment::extrema_carrier(
+                function,
+                required_firsts.slots(),
+                optional_firsts.slots(),
                 context.computation,
                 context.limits,
                 context.counters,
                 context.location,
             )?;
-            for tuple in tuples {
-                context.inspect()?;
-                let value = first(tuple, context)?.expect("admitted nonempty extremum tuple");
-                let key = context
-                    .computation
-                    .read()
-                    .term_key(value)
-                    .map_err(|error| {
-                        crate::formula_binding::assignment(error.into(), context.location)
-                    })?;
-                crate::formula_assignment::append(
-                    &mut values,
-                    &key,
-                    context.computation,
-                    context.limits,
-                    context.counters,
-                    context.location,
-                )?;
-            }
-            Ok(Contributions::Values(values))
+            retained(&proposals, context)
         }
     }
 }
 
-/// The carrier between the required and the possible tuples, from the shared
-/// carrier operation; each retained value takes an entry. Optional keys are
-/// independent only in the source abstraction. Original eligibility remains
-/// responsible for their correlation in an interpretation.
-fn complete(
+/// The `possible` tuples outside the `required` ones, in order: an optional
+/// occurrence of a required key adds no contribution.
+fn optional_tuples<'ir>(
+    required: &Tuples<'ir>,
+    possible: &Tuples<'ir>,
+    context: &mut Context<'_, '_, '_>,
+) -> Result<Buffer<&'ir [Term]>, FormulaFailure> {
+    let mut optional = Buffer::new(
+        context.computation,
+        context.limits,
+        context.counters,
+        context.location,
+    )?;
+    for tuple in possible.values.iter().copied() {
+        if !required.contains(tuple, context)? {
+            optional.push(
+                tuple,
+                context.computation,
+                context.limits,
+                context.counters,
+                context.location,
+            )?;
+        }
+    }
+    Ok(optional)
+}
+
+/// Reduce `tuples` to their weights under `function`, each taking an entry
+/// when `entries` reserves them.
+fn weights<'a>(
     function: AggregateFunction,
-    required: &Contributions,
-    optional: &Contributions,
+    tuples: impl Iterator<Item = &'a [Term]>,
+    entries: Entries,
+    context: &mut Context<'_, '_, '_>,
+) -> Result<Buffer<i32>, FormulaFailure> {
+    let mut weights = Buffer::new(
+        context.computation,
+        context.limits,
+        context.counters,
+        context.location,
+    )?;
+    for tuple in tuples {
+        context.inspect()?;
+        if let Some(weight) = crate::formula_assignment::contribution(
+            function,
+            first(tuple, context)?,
+            context.location,
+        )? {
+            if entries == Entries::Reserved {
+                context.reserve_entry()?;
+            }
+            weights.push(
+                weight,
+                context.computation,
+                context.limits,
+                context.counters,
+                context.location,
+            )?;
+        }
+    }
+    Ok(weights)
+}
+
+/// Reduce `tuples` to their first values.
+fn firsts<'a>(
+    tuples: impl Iterator<Item = &'a [Term]>,
+    context: &mut Context<'_, '_, '_>,
+) -> Result<Binding<'static>, FormulaFailure> {
+    let mut values = Binding::new(
+        context.computation,
+        context.limits,
+        context.counters,
+        context.location,
+    )?;
+    for tuple in tuples {
+        context.inspect()?;
+        let value = first(tuple, context)?.expect("admitted nonempty extremum tuple");
+        let key = context
+            .computation
+            .read()
+            .term_key(value)
+            .map_err(|error| crate::formula_binding::assignment(error.into(), context.location))?;
+        crate::formula_assignment::append(
+            &mut values,
+            &key,
+            context.computation,
+            context.limits,
+            context.counters,
+            context.location,
+        )?;
+    }
+    Ok(values)
+}
+
+/// Retain each of the carrier's `proposals`, each new value taking an entry.
+fn retained(
+    proposals: &Binding<'static>,
     context: &mut Context<'_, '_, '_>,
 ) -> Result<TermSelection, FormulaFailure> {
-    let proposals = match (required, optional) {
-        (Contributions::Weights(required), Contributions::Weights(optional)) => {
-            crate::formula_assignment::carrier(
-                function,
-                required.iter().copied(),
-                optional.iter().copied(),
-                context.computation,
-                context.limits,
-                context.counters,
-                context.location,
-            )?
-        }
-        (Contributions::Values(required), Contributions::Values(optional)) => {
-            crate::formula_assignment::extrema_carrier(
-                function,
-                required.slots(),
-                optional.slots(),
-                context.computation,
-                context.limits,
-                context.counters,
-                context.location,
-            )?
-        }
-        _ => unreachable!("one function reduces both sides to one kind of contribution"),
-    };
     let mut values = TermSelection::new(
         context.computation,
         context.limits,
