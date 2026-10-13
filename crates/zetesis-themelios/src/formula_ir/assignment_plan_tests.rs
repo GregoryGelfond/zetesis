@@ -517,8 +517,8 @@ fn nonbinding_element(key: AggregateKey, condition: Vec<LiteralIr>) -> LiteralIr
         guards: Vec::new(),
         elements: vec![AggregateElementIr {
             family: crate::formula_ir::LocalFamily(0),
+            required: crate::formula_ir::required(&key, &condition),
             key,
-            required: crate::formula_ir::decided_by_join(&condition),
             condition,
             variables: 2,
         }],
@@ -550,6 +550,16 @@ fn nonbinding_tuple_keys_mark_objective_consumers() {
             assert!(plan.steps[0].required(&body).is_empty());
         }
     }
+}
+
+#[test]
+fn an_atom_key_is_not_required_by_an_atom_free_condition() {
+    // The counted atom is itself a literal of the interpretation, so a
+    // condition the local join decides does not make the key present.
+    with_compiler(ExpansionLimits::default(), |compiler| {
+        let key = AggregateKey::Atom(atom(compiler, "p", &[CoreTerm::Variable(0)]));
+        assert!(!crate::formula_ir::required(&key, &[]));
+    });
 }
 
 #[test]

@@ -287,10 +287,11 @@ impl Compiler<'_> {
                                 self.positive_atom_key(atom.get(), &mut local, &mut condition)?;
                             self.bindings(&mut condition, &mut local)?;
                             local.safety(self.location)?;
+                            let key = AggregateKey::Atom(atom);
                             elements.push(AggregateElementIr {
                                 family,
-                                key: AggregateKey::Atom(atom),
-                                required: crate::formula_ir::decided_by_join(&condition),
+                                required: crate::formula_ir::required(&key, &condition),
+                                key,
                                 condition,
                                 variables: local.count,
                             });
@@ -338,10 +339,11 @@ impl Compiler<'_> {
         }
         self.bindings(&mut condition, &mut local)?;
         local.safety(self.location)?;
+        let key = AggregateKey::Tuple(tuple);
         Ok(AggregateElementIr {
             family,
-            key: AggregateKey::Tuple(tuple),
-            required: crate::formula_ir::decided_by_join(&condition),
+            required: crate::formula_ir::required(&key, &condition),
+            key,
             condition,
             variables: local.count,
         })
