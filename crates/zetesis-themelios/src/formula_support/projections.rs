@@ -236,6 +236,18 @@ impl<'a> Projections<'a> {
         ProjectionValues::new(context).map(Self::Local)
     }
 
+    /// A cursor's projections: the prepared rule's complete-column map when one
+    /// is supplied, borrowed as [`Self::borrowed`] does, and otherwise its own.
+    pub(super) fn for_cursor(
+        total: Option<&'a ProjectionValues<'a>>,
+        context: &Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Self, FormulaFailure> {
+        match total {
+            Some(values) => Self::borrowed(values, context),
+            None => Self::new(context),
+        }
+    }
+
     /// Borrow only within the workspace that owns the retained map's leases.
     /// The caller's completed-rule or round owner separately authenticates the
     /// exact rule and immutable support snapshot.

@@ -20,6 +20,7 @@ pub(crate) use storage::{
 mod accounting;
 mod generated;
 mod heads;
+mod integer_comparisons;
 pub(crate) use heads::RowHead;
 mod observation;
 mod term_selection;
@@ -60,6 +61,7 @@ mod relations;
 mod rows;
 pub(crate) use factoring::Continuations;
 
+use integer_comparisons::IntegerComparisons;
 use std::borrow::Cow;
 
 use crate::ProgramSite;
@@ -1050,6 +1052,9 @@ pub(crate) struct Join<'a, 'source> {
     /// met it; released when that depth is undone.
     failure: Option<(usize, EvalError)>,
     evaluation: Evaluation,
+    /// Comparison literals decided with machine integers, compiled at their
+    /// first decision; empty until then.
+    integer_comparisons: IntegerComparisons,
     projections: projections::Projections<'a>,
     pending: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
     pending_head: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
@@ -1711,13 +1716,11 @@ impl<'a, 'source> Join<'a, 'source> {
             verdicts: Vec::new(),
             failure: None,
             evaluation: Evaluation::default(),
-            projections: {
-                let context = Context::new(computation, limits, counters, location);
-                match total {
-                    Some(values) => projections::Projections::borrowed(values, &context)?,
-                    None => projections::Projections::new(&context)?,
-                }
-            },
+            integer_comparisons: IntegerComparisons::default(),
+            projections: projections::Projections::for_cursor(
+                total,
+                &Context::new(computation, limits, counters, location),
+            )?,
             delta,
             domains: None,
             row_filter: None,
@@ -1807,6 +1810,7 @@ impl<'a, 'source> Join<'a, 'source> {
             + self.resolutions.capacity() * size_of::<Resolution<'_>>()
             + self.changes.capacity() * size_of::<Vec<usize>>()
             + self.pattern_captures.capacity() * size_of::<(usize, TermRef<'_>)>()
+            + self.integer_comparisons.capacity_bytes()
             + self
                 .witnesses
                 .as_ref()
@@ -2812,9 +2816,21 @@ impl<'a, 'source> Join<'a, 'source> {
         let depth = self.depth;
         let mut passes = depth == 0 || self.verdicts[depth - 1];
         for index in self.plan.decisions.decided_at(depth) {
+            let literals = self.literals;
             let (left, relation, right) =
-                comparison(&self.literals[index]).expect("a decided literal is a comparison");
-            let compared = if self.certified_total {
+                comparison(&literals[index]).expect("a decided literal is a comparison");
+            let base = self.storage_bytes() - self.integer_comparisons.capacity_bytes();
+            let decided = self.integer_comparisons.decide(
+                &mut self.lease,
+                base,
+                (index, literals.len()),
+                ([left, right], relation),
+                &self.values,
+                Context::new(&*computation, limits, counters, location),
+            )?;
+            let compared = if let Some(holds) = decided {
+                Ok(holds)
+            } else if self.certified_total {
                 self.projections.compare(
                     index,
                     ([left, right], relation),
@@ -3027,14 +3043,19 @@ pub(super) fn compare(
     location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
     let order = left.compare_terms_with(right, || counters.work(limits, location))?;
-    Ok(match relation {
+    Ok(relation_holds(relation, order))
+}
+
+/// Whether `relation` holds between two values whose order is `order`.
+pub(super) fn relation_holds(relation: Relation, order: std::cmp::Ordering) -> bool {
+    match relation {
         Relation::Eq => order.is_eq(),
         Relation::Neq => !order.is_eq(),
         Relation::Lt => order.is_lt(),
         Relation::Le => !order.is_gt(),
         Relation::Gt => order.is_gt(),
         Relation::Ge => !order.is_lt(),
-    })
+    }
 }
 
 pub(super) fn undefined(location: ProgramSite) -> FormulaFailure {

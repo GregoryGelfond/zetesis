@@ -1,6 +1,7 @@
 //! Public phase observation describes work without changing admitted formulas.
 
 mod constant_divisors;
+mod integer_comparisons;
 mod lending_rows;
 mod support_demand;
 
@@ -271,10 +272,14 @@ fn arithmetic_counts_describe_the_joined_rule() {
         })
         .expect("the original constraint has its own phase record");
     assert_eq!(arithmetic.phase, GroundingPhase::RuleInstantiation);
-    // Totality prepares X+1 and 3 (four nodes). The join reuses X+1's
-    // canonical result and reads 3 again (one node), in this same rule phase.
-    assert_eq!(arithmetic.work.expression_nodes, Some(5));
-    assert_eq!(arithmetic.work.expression_evaluations, Some(3));
+    // Totality prepares X+1 and 3 (four nodes, two evaluations). The join
+    // then decides X+1<3 with its integer comparison form, evaluating both
+    // operands again in machine integers (four nodes, two evaluations), in
+    // this same rule phase.
+    assert_eq!(arithmetic.work.expression_nodes, Some(8));
+    assert_eq!(arithmetic.work.expression_evaluations, Some(4));
+    assert_eq!(arithmetic.work.integer_comparisons, Some(1));
+    assert_eq!(arithmetic.work.integer_comparison_declines, Some(0));
     assert_eq!(arithmetic.work.join_probes, Some(1));
     assert_eq!(arithmetic.work.join_rows, Some(1));
     assert_eq!(arithmetic.work.binding_snapshots, Some(0));

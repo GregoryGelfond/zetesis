@@ -55,13 +55,26 @@ impl Join<'_, '_> {
                 continue;
             }
             let result = if let Some((left, relation, right)) = comparison(literal) {
-                self.projections.compare(
-                    index,
+                let base = self.storage_bytes() - self.integer_comparisons.capacity_bytes();
+                let decided = self.integer_comparisons.decide(
+                    &mut self.lease,
+                    base,
+                    (index, self.literals.len()),
                     ([left, right], relation),
                     &binding,
-                    &mut self.evaluation,
-                    super::Context::new(computation, limits, counters, location),
-                )
+                    super::Context::new(&*computation, limits, counters, location),
+                )?;
+                if let Some(holds) = decided {
+                    Ok(holds)
+                } else {
+                    self.projections.compare(
+                        index,
+                        ([left, right], relation),
+                        &binding,
+                        &mut self.evaluation,
+                        super::Context::new(computation, limits, counters, location),
+                    )
+                }
             } else {
                 check(
                     literal,

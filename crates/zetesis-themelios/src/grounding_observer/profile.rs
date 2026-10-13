@@ -198,6 +198,20 @@ pub struct GroundingWork {
     pub expression_evaluations: Option<u64>,
     /// Expression operations admitted by the work ceiling, including failed operations.
     pub expression_nodes: Option<u64>,
+    /// Comparison literals a join decided with machine integers, through their
+    /// integer comparison form.
+    pub integer_comparisons: Option<u64>,
+    /// Rows of a comparison literal with an integer comparison form that fell
+    /// back to the general evaluator: a nonnumeric or unreadable operand, or a
+    /// failing operation.
+    pub integer_comparison_declines: Option<u64>,
+    /// Comparison literals compiled into an integer comparison form, once per
+    /// join that decides them.
+    pub integer_comparison_forms: Option<u64>,
+    /// Comparison literals found to have no integer comparison form, once per
+    /// join that decides them: an operand beyond the node bound, a constructor,
+    /// a nonnumeric constant, or an argument naming a later node.
+    pub comparisons_without_integer_form: Option<u64>,
     /// Fully instantiated atom identities presented to the formula atom catalog.
     pub atom_lookups: Option<u64>,
     /// New atom identities inserted into the formula atom catalog.
@@ -246,6 +260,10 @@ impl Default for GroundingWork {
             binding_snapshots: Some(0),
             expression_evaluations: Some(0),
             expression_nodes: Some(0),
+            integer_comparisons: Some(0),
+            integer_comparison_declines: Some(0),
+            integer_comparison_forms: Some(0),
+            comparisons_without_integer_form: Some(0),
             atom_lookups: Some(0),
             atoms_inserted: Some(0),
             node_lookups: Some(0),
@@ -290,6 +308,10 @@ pub(crate) enum Event {
     BindingSnapshot,
     ExpressionEvaluation,
     ExpressionNode,
+    IntegerComparison,
+    IntegerComparisonDeclined,
+    IntegerComparisonForm,
+    ComparisonWithoutIntegerForm,
     AtomLookup,
     AtomInserted,
     NodeLookup,
@@ -364,6 +386,19 @@ impl GroundingWork {
             binding_snapshots: sum(self.binding_snapshots, other.binding_snapshots),
             expression_evaluations: sum(self.expression_evaluations, other.expression_evaluations),
             expression_nodes: sum(self.expression_nodes, other.expression_nodes),
+            integer_comparisons: sum(self.integer_comparisons, other.integer_comparisons),
+            integer_comparison_declines: sum(
+                self.integer_comparison_declines,
+                other.integer_comparison_declines,
+            ),
+            integer_comparison_forms: sum(
+                self.integer_comparison_forms,
+                other.integer_comparison_forms,
+            ),
+            comparisons_without_integer_form: sum(
+                self.comparisons_without_integer_form,
+                other.comparisons_without_integer_form,
+            ),
             atom_lookups: sum(self.atom_lookups, other.atom_lookups),
             atoms_inserted: sum(self.atoms_inserted, other.atoms_inserted),
             node_lookups: sum(self.node_lookups, other.node_lookups),
@@ -426,6 +461,10 @@ impl GroundingWork {
             Event::BindingSnapshot => &mut self.binding_snapshots,
             Event::ExpressionEvaluation => &mut self.expression_evaluations,
             Event::ExpressionNode => &mut self.expression_nodes,
+            Event::IntegerComparison => &mut self.integer_comparisons,
+            Event::IntegerComparisonDeclined => &mut self.integer_comparison_declines,
+            Event::IntegerComparisonForm => &mut self.integer_comparison_forms,
+            Event::ComparisonWithoutIntegerForm => &mut self.comparisons_without_integer_form,
             Event::AtomLookup => &mut self.atom_lookups,
             Event::AtomInserted => &mut self.atoms_inserted,
             Event::NodeLookup => &mut self.node_lookups,

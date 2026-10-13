@@ -520,6 +520,9 @@ them. Checker preparation belongs to its first check's allowance.
 Checkers share a cumulative receipt, not a cumulative admission ceiling.
 Charges are admitted locally before their operations and published when
 preparation or a check returns, fails or unwinds, and when a checker drops.
+One bounded exception: an integer comparison form admits its charge after
+evaluating, at most 32 node operations and 32 variable reads with no
+allocation, and polls cancellation once per comparison at that charge.
 In-flight charges may remain local; live receipt fields are independent,
 monotone lower bounds. Joined receipts are exact until their fields saturate.
 Zero work charges still poll cancellation. The final outcome joins workers
@@ -564,6 +567,32 @@ missing mask; an unavailable partial variable still reports typed undefined
 arithmetic. Workspace admission and node work remain charged. Constructing
 composite results can allocate. This storage schedule has a separate
 [preservation law](../lean/correspondence.md).
+
+A join decides a comparison whose operands are integer arithmetic of at most
+sixteen nodes with an integer comparison form instead of this evaluator. At the
+comparison's first decision in a join, the join compiles each operand once,
+resolving its numeric constants; whether a literal has a form depends only on
+the literal, so every join that decides it takes the same route on the same
+values, and a refused reservation of the form's storage refuses rather than
+falling back. On each row the
+[form](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/integer_comparisons.rs)
+reads the operands' variables, evaluates with the same checked operations in
+machine integers, and compares the two integers, which is the ASP order on
+numbers. It constructs no term and reads no projection. It records its
+evaluations as entered, then charges one unit per node and per variable read in
+a single admission before its verdict is used. A row with a variable that is
+unreadable or not a number, or with a failing operation, declines without a
+charge, and this evaluator then decides it with its own charges, diagnostics and
+failure order. Per join, compiling charges the literal states' initialization,
+each constant's lookup and each reservation, and retains eight bytes per body
+literal, per compiled node and per form. A comparison decided this way uses less
+work than the evaluator unless a projection would have answered it, so a work
+ceiling can be reached earlier or later than before. The grounding counters
+`integer_comparisons` and `integer_comparison_declines` count decided and
+declined rows; `integer_comparison_forms` and `comparisons_without_integer_form`
+count literals compiled with and without a form, once per join. A hybrid
+check's joins decide comparisons the same way but are not observed by these
+counters.
 
 A positive body is joined in an order chosen once per join, before a row is
 read, from what the body says: each relation's size, the variables each
@@ -685,8 +714,10 @@ Complete-row scalar comparisons may reuse successful unary projections within
 one join. Descriptors borrow the exact source expressions and are prepared when
 a complete row is first reached or a finite totality attempt needs them. The existing canonical `TermTable` indexes
 each distinct input; a `Binding` retains its corresponding successful result.
-Value reuse alone copies no scalar payload and skips no row or comparison. Leaves,
-multivariable expressions and partial evaluations use the ordinary evaluator;
+Value reuse alone copies no scalar payload and skips no row or comparison. A
+comparison decided by an integer comparison form uses neither projections nor the
+evaluator; other leaves, multivariable expressions and partial evaluations use
+the ordinary evaluator;
 failed computations are not retained, so later rows still supply their original
 arithmetic checks and family evidence. Hits authenticate the canonical owner and
 accessible term prefix, clear stale zero-divisor state, and spend work under the

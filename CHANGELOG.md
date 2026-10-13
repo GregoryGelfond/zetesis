@@ -36,6 +36,19 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Joins decide comparisons of integer arithmetic with machine integers: each such
+  comparison is compiled once per join into an integer comparison form, which
+  constructs no term and leaves every other row to the expression evaluator.
+  Verdicts and answers are unchanged. Grounding work falls for these comparisons,
+  except where a unary projection used to answer, which now costs one unit per
+  node and read; support bytes fall where a number would have been newly
+  constructed and rise by the forms' own storage, eight bytes per body literal,
+  compiled node and form in each join. A work or support-storage ceiling can
+  therefore be reached earlier or later than before. `GroundingWork` gains
+  `integer_comparisons`, `integer_comparison_declines`, `integer_comparison_forms`
+  and `comparisons_without_integer_form`, which the statistics' grounding
+  attribution reports.
+
 - An aggregate assignment now proposes only the values its aggregate can take:
   the measure of every selection that contains its required tuples, those from
   an element whose condition has no atom of either sign, and lies within its

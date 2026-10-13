@@ -43,7 +43,7 @@ fn json_attribution_preserves_typed_measurements() {
     for phase in GroundingPhase::ALL {
         let json = &view["measurements"][phase.label()];
         let measurement = typed.get(phase).unwrap();
-        assert_eq!(json["work"].as_object().unwrap().len(), 37);
+        assert_eq!(json["work"].as_object().unwrap().len(), 41);
         assert_eq!(
             json["elapsed_ns"].as_u64().map(u128::from),
             measurement.elapsed.map(|value| value.as_nanos())
@@ -82,6 +82,19 @@ fn json_attribution_preserves_typed_measurements() {
             (
                 "domain_excluded_values",
                 measurement.work.domain_excluded_values,
+            ),
+            ("integer_comparisons", measurement.work.integer_comparisons),
+            (
+                "integer_comparison_declines",
+                measurement.work.integer_comparison_declines,
+            ),
+            (
+                "integer_comparison_forms",
+                measurement.work.integer_comparison_forms,
+            ),
+            (
+                "comparisons_without_integer_form",
+                measurement.work.comparisons_without_integer_form,
             ),
         ] {
             assert_eq!(json["work"][name].as_u64(), count);

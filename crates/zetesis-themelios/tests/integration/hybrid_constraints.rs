@@ -101,6 +101,23 @@ fn candidate_truth_is_distinct_from_possible_support() {
 }
 
 #[test]
+fn frozen_checks_decide_integer_comparisons_without_admitted_operands() {
+    // X - Y takes the values 0, -1 and -2, which no fact or head constructs.
+    // The append-lane capture decides the comparison with its integer form,
+    // admitting none of them, and so do the frozen checks.
+    let owner = hybrid("{q(1..3)}. :- q(X), q(Y), X - Y = 2.");
+    assert!(owner.streamed_templates() > 0);
+    assert!(matches!(
+        verdict(&owner, &["q(1)", "q(3)"]),
+        ConstraintVerdict::Violated { .. }
+    ));
+    assert_eq!(
+        verdict(&owner, &["q(1)", "q(2)"]),
+        ConstraintVerdict::Satisfied
+    );
+}
+
+#[test]
 fn default_negation_preserves_typed_signed_identity() {
     let owner = hybrid("{p(1);p(\"1\");-p(1)}. :-not p(1),not not p(\"1\"). :- -p(1),not p(1).");
     for selected in [vec!["p(\"1\")"], vec!["-p(1)"]] {
