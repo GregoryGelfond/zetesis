@@ -33,8 +33,10 @@ enum ReadFailure {
         path: PathBuf,
         source: std::io::Error,
     },
-    /// The name is not a regular file confined to the corpus.
+    /// The name is not confined to the corpus.
     Unconfined(String),
+    /// The file at the path is not a regular file.
+    Irregular(PathBuf),
     /// A read exceeded its inclusive ceiling.
     Limit {
         resource: ReadResource,
@@ -69,6 +71,9 @@ impl crate::corpus_files::Failure for ReadFailure {
     fn digest(path: String, _expected: String, _actual: String) -> Self {
         Self::Digest(path)
     }
+    fn irregular(path: &Path) -> Self {
+        Self::Irregular(path.to_owned())
+    }
 }
 
 impl fmt::Display for ReadFailure {
@@ -79,6 +84,7 @@ impl fmt::Display for ReadFailure {
                 formatter,
                 "target path must be a confined relative path: {text}"
             ),
+            Self::Irregular(path) => write!(formatter, "not a regular file: {}", path.display()),
             Self::Limit {
                 resource,
                 observed,
@@ -155,7 +161,7 @@ pub(crate) fn load(options: &Request) -> Result<Loaded, String> {
         .clone()
         .unwrap_or_else(|| options.repo.join("validation/corpus/manifest.json"));
     let bytes = Files::read(&path, MAX_MANIFEST, ReadResource::ManifestBytes)
-        .map_err(|error| error.to_string())?;
+        .map_err(|error| format!("manifest: {error}"))?;
     if crate::digest::sha256(&bytes) != MANIFEST_SHA256 {
         return Err("manifest identity differs from the trusted pinned target".into());
     }
@@ -206,14 +212,18 @@ pub(crate) fn load(options: &Request) -> Result<Loaded, String> {
 }
 
 /// Whether the regular file `relative` names, confined to `root`, holds at
-/// most the source ceiling of bytes with the SHA-256 `expected`.
+/// most the source ceiling of bytes with the SHA-256 `expected`. A refusal of
+/// its size names the file.
 fn verify(root: &Path, relative: &str, expected: &str) -> Result<(), String> {
     let sealed = || {
         let path = Files::confined(root, relative)?;
         let bytes = Files::read(&path, MAX_SOURCE, ReadResource::SourceBytes)?;
         Files::digest(relative, &bytes, expected)
     };
-    sealed().map_err(|error: ReadFailure| error.to_string())
+    sealed().map_err(|error: ReadFailure| match error {
+        ReadFailure::Limit { .. } => format!("{relative}: {error}"),
+        error => error.to_string(),
+    })
 }
 
 #[cfg(test)]
@@ -269,15 +279,47 @@ mod tests {
         let canonical = root.path().canonicalize().unwrap();
         let expected = crate::digest::sha256(b"original.");
         verify(&canonical, "dir/source.lp", &expected).unwrap();
-        // Separators that a platform could read differently, and a name that
-        // is not a regular file, are refused before any digest is compared.
-        for unconfined in ["dir//source.lp", "dir\\source.lp", "C:source.lp", "dir"] {
+        // Separators that a platform could read differently are refused before
+        // any digest is compared.
+        for unconfined in ["dir//source.lp", "dir\\source.lp", "C:source.lp"] {
             let refusal = verify(&canonical, unconfined, &expected).unwrap_err();
             assert!(
                 refusal.contains("confined relative path"),
                 "{unconfined}: {refusal}"
             );
         }
+    }
+
+    #[test]
+    fn a_directory_target_is_refused_as_not_a_regular_file() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("dir")).unwrap();
+        let canonical = root.path().canonicalize().unwrap();
+        let refusal = verify(&canonical, "dir", &crate::digest::sha256(b"")).unwrap_err();
+        assert!(refusal.starts_with("not a regular file: "), "{refusal}");
+        assert!(refusal.ends_with("dir"), "{refusal}");
+    }
+
+    #[test]
+    fn an_oversized_source_is_refused_by_its_name() {
+        let root = tempfile::tempdir().unwrap();
+        let bytes = vec![b'%'; super::MAX_SOURCE + 1];
+        std::fs::write(root.path().join("large.lp"), &bytes).unwrap();
+        let canonical = root.path().canonicalize().unwrap();
+        let refusal = verify(&canonical, "large.lp", &crate::digest::sha256(&bytes)).unwrap_err();
+        assert!(refusal.starts_with("large.lp: SourceBytes"), "{refusal}");
+    }
+
+    #[test]
+    fn a_manifest_that_is_not_a_regular_file_is_refused_as_the_manifest() {
+        let directory = tempfile::tempdir().unwrap();
+        let mut options = repository_options();
+        options.manifest = Some(directory.path().to_owned());
+        let refusal = load(&options).unwrap_err();
+        assert!(
+            refusal.starts_with("manifest: not a regular file: "),
+            "{refusal}"
+        );
     }
 
     #[test]

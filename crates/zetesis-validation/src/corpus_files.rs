@@ -10,8 +10,9 @@ use std::marker::PhantomData;
 use std::path::{Component, Path, PathBuf};
 
 /// The failures a corpus reports in its own error type: a failed file
-/// operation, a name outside the corpus, an exceeded ceiling on any quantity
-/// it bounds, and a digest that differs from its seal.
+/// operation, a name outside the corpus, a file that is not regular, an
+/// exceeded ceiling on any quantity it bounds, and a digest that differs from
+/// its seal.
 pub(crate) trait Failure: Sized {
     /// The quantities the corpus bounds; one names each read's byte ceiling.
     type Resource: Copy;
@@ -23,6 +24,12 @@ pub(crate) trait Failure: Sized {
     fn limit(resource: Self::Resource, observed: u128, limit: usize) -> Self;
     /// The bytes named `path` have the SHA-256 `actual`, not their seal.
     fn digest(path: String, expected: String, actual: String) -> Self;
+
+    /// The file at `path` is not a regular file. A corpus that does not tell
+    /// this apart reports it as a name outside the corpus.
+    fn irregular(path: &Path) -> Self {
+        Self::unconfined(path.display().to_string())
+    }
 
     /// Refuse `observed` past the inclusive `limit` of `resource`.
     fn ceiling(resource: Self::Resource, observed: u128, limit: usize) -> Result<(), Self> {
@@ -77,7 +84,7 @@ impl<E: Failure> Files<E> {
         let file = std::fs::File::open(path).map_err(|source| E::io(path, source))?;
         let metadata = file.metadata().map_err(|source| E::io(path, source))?;
         if !metadata.is_file() {
-            return Err(E::unconfined(path.display().to_string()));
+            return Err(E::irregular(path));
         }
         E::ceiling(resource, u128::from(metadata.len()), maximum)?;
         let cap = u64::try_from(maximum).unwrap_or(u64::MAX).saturating_add(1);
