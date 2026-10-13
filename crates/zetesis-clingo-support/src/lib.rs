@@ -6,9 +6,8 @@
 //! complete records of atoms and costs ([`model_records`]), as full models
 //! ([`full_models`], [`objective_free_models`]), from a witness's parts
 //! ([`atoms`], [`costs`]), or as `zetesis-validation` reads it ([`answers()`]).
-//! [`records`] runs and decodes a complete enumeration in one call, and
-//! [`parsed`] reads decoded models into a test's own atom type. Each test keeps
-//! the clingo arguments its comparison needs.
+//! [`records`] runs and decodes a complete enumeration in one call. Each test
+//! keeps the clingo arguments its comparison needs.
 //!
 //! The crate depends on `zetesis-validation`, whose bounded process capture
 //! runs clingo, and on nothing that solves, so a test reaches clingo without
@@ -282,8 +281,9 @@ pub fn records(source: &str) -> Records {
 ///
 /// # Panics
 /// Panics unless the enumeration is complete and satisfiable, unsatisfiable
-/// or optimal, if a witness repeats, or if the report's model count differs
-/// from its witnesses.
+/// or optimal, if a witness's atoms are not an array of distinct strings or
+/// its present costs are not an array of integers, if a witness repeats, or if
+/// the report's model count differs from its witnesses.
 #[must_use]
 pub fn model_records(report: &Value) -> Records {
     assert_eq!(
@@ -357,10 +357,16 @@ pub fn objective_free_models(report: &Value) -> Models {
 /// Panics if `values` is not an array of strings, or names an atom twice.
 #[must_use]
 pub fn atoms(values: &Value) -> BTreeSet<String> {
-    let values = values.as_array().unwrap();
+    let values = values
+        .as_array()
+        .expect("a witness's atoms are an array of strings");
     let atoms: BTreeSet<String> = values
         .iter()
-        .map(|atom| atom.as_str().unwrap().into())
+        .map(|atom| {
+            atom.as_str()
+                .expect("a witness's atoms are an array of strings")
+                .into()
+        })
         .collect();
     assert_eq!(atoms.len(), values.len(), "full atom identities are unique");
     atoms
@@ -377,34 +383,12 @@ pub fn costs(values: &Value) -> Option<Vec<i64>> {
         return None;
     }
     let values = values.as_array().expect("costs are an array of integers");
-    Some(values.iter().map(|value| value.as_i64().unwrap()).collect())
-}
-
-/// `models` with every atom spelling read by `parse` into a test's own atom
-/// type, which must keep every atom of a model, and every model, distinct.
-///
-/// # Panics
-/// Panics if two spellings of one model, or two models, read as one.
-#[must_use]
-pub fn parsed<T: Ord>(models: &Models, mut parse: impl FnMut(&str) -> T) -> BTreeSet<BTreeSet<T>> {
-    let parsed: BTreeSet<BTreeSet<T>> = models
-        .iter()
-        .map(|model| {
-            let atoms: BTreeSet<T> = model.iter().map(|spelling| parse(spelling)).collect();
-            assert_eq!(
-                atoms.len(),
-                model.len(),
-                "parsing keeps a model's atoms distinct"
-            );
-            atoms
-        })
-        .collect();
-    assert_eq!(
-        parsed.len(),
-        models.len(),
-        "parsing keeps the models distinct"
-    );
-    parsed
+    Some(
+        values
+            .iter()
+            .map(|value| value.as_i64().expect("costs are an array of integers"))
+            .collect(),
+    )
 }
 
 /// The answers a run reports, as `zetesis-validation` reads a clingo JSON
@@ -504,24 +488,6 @@ mod tests {
     #[should_panic(expected = "costs are an array of integers")]
     fn malformed_costs_are_refused() {
         let _ = costs(&json!("3"));
-    }
-
-    #[test]
-    fn parsed_models_keep_every_model_and_atom() {
-        let models = full_models(&report(&Value::Null));
-        let upper = parsed(&models, str::to_uppercase);
-        let expected: BTreeSet<BTreeSet<String>> = [vec!["A"], vec!["B", "C"]]
-            .iter()
-            .map(|atoms| atoms.iter().map(|&atom| atom.to_owned()).collect())
-            .collect();
-        assert_eq!(upper, expected);
-    }
-
-    #[test]
-    #[should_panic(expected = "parsing keeps a model's atoms distinct")]
-    fn parsing_that_merges_atoms_is_refused() {
-        let models = full_models(&report(&Value::Null));
-        let _ = parsed(&models, |_| 0);
     }
 
     /// The shell stands in for clingo in the tests of a run's contract.

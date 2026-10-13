@@ -60,5 +60,60 @@ pub(crate) fn atom(source: &str) -> Atom {
 /// The full models of a complete clingo report of a program without an
 /// objective, read as atoms; reading keeps every model and atom distinct.
 pub(crate) fn clingo_models(report: &Json) -> Models {
-    oracle::parsed(&oracle::objective_free_models(report), atom)
+    parsed(&oracle::objective_free_models(report), atom)
+}
+
+/// `models` with every atom spelling read by `parse`, which must keep every
+/// atom of a model, and every model, distinct.
+///
+/// # Panics
+/// Panics if two spellings of one model, or two models, read as one.
+fn parsed<T: Ord>(
+    models: &BTreeSet<BTreeSet<String>>,
+    mut parse: impl FnMut(&str) -> T,
+) -> BTreeSet<BTreeSet<T>> {
+    let parsed: BTreeSet<BTreeSet<T>> = models
+        .iter()
+        .map(|model| {
+            let atoms: BTreeSet<T> = model.iter().map(|spelling| parse(spelling)).collect();
+            assert_eq!(
+                atoms.len(),
+                model.len(),
+                "parsing keeps a model's atoms distinct"
+            );
+            atoms
+        })
+        .collect();
+    assert_eq!(
+        parsed.len(),
+        models.len(),
+        "parsing keeps the models distinct"
+    );
+    parsed
+}
+
+/// Models spelled as clingo spells their atoms.
+fn spelled(models: &[&[&str]]) -> BTreeSet<BTreeSet<String>> {
+    models
+        .iter()
+        .map(|atoms| atoms.iter().map(|&atom| atom.to_owned()).collect())
+        .collect()
+}
+
+#[test]
+fn parsed_models_keep_every_model_and_atom() {
+    let upper = parsed(&spelled(&[&["a"], &["b", "c"]]), str::to_uppercase);
+    assert_eq!(upper, spelled(&[&["A"], &["B", "C"]]));
+}
+
+#[test]
+#[should_panic(expected = "parsing keeps a model's atoms distinct")]
+fn parsing_that_merges_atoms_is_refused() {
+    let _ = parsed(&spelled(&[&["a"], &["b", "c"]]), |_| 0);
+}
+
+#[test]
+#[should_panic(expected = "parsing keeps the models distinct")]
+fn parsing_that_merges_models_is_refused() {
+    let _ = parsed(&spelled(&[&["a"], &["b"]]), |_| 0);
 }
