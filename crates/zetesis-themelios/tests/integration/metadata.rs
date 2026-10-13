@@ -2,7 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::support::atom_models::{Models, answer_sets};
+use crate::support::atom_models::{self, Models, answer_sets};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
@@ -304,38 +304,6 @@ fn bundle_metadata_unions_global_selection_and_keeps_file_identities() {
     ));
 }
 
-fn oracle_atom(source: &str) -> Atom {
-    let accepted =
-        admit(format!("{source}."), AdmissionOptions::default()).expect("whole scalar oracle atom");
-    let head = accepted
-        .program()
-        .templates()
-        .at(0)
-        .unwrap()
-        .head()
-        .expect("oracle fact");
-    let values = head
-        .terms()
-        .iter()
-        .map(|term| match term {
-            zetesis_core::TemplateTerm::Constant(value) => value
-                .to_value(zetesis_core::ValueLimits::default())
-                .unwrap(),
-            zetesis_core::TemplateTerm::Variable(_) => panic!("ground oracle atom"),
-        })
-        .collect();
-    Atom::new(
-        zetesis_core::Predicate::with_sign(
-            head.predicate().name(),
-            head.predicate().arity(),
-            head.predicate().sign(),
-        )
-        .unwrap(),
-        values,
-    )
-    .expect("oracle atom arity")
-}
-
 fn oracle_json(output: &[u8]) -> Displays {
     let json: Json = serde_json::from_slice(output).expect("clingo JSON atom arrays");
     assert_eq!(json["Models"]["More"], "no");
@@ -351,7 +319,7 @@ fn oracle_json(output: &[u8]) -> Displays {
                     .as_array()
                     .expect("whole atom values")
                     .iter()
-                    .map(|atom| oracle_atom(atom.as_str().expect("atom string")))
+                    .map(|atom| atom_models::atom(atom.as_str().expect("atom string")))
                     .collect();
                 *displays.entry(shown).or_default() += 1;
             }

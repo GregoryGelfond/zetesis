@@ -9,6 +9,7 @@
 //! Formal references: Ferraris (arXiv:0812.1462),
 //! Proposition 12; Abstract Gringo (arXiv:1507.06576), equation 22 and Theorem 1.
 
+use crate::support::atom_models::atom;
 use crate::support::finite_bindings::Models;
 use crate::support::objective_dependency_records as objective_dependencies;
 
@@ -21,7 +22,7 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateErrorKind, AggregateLimits, Interpretation, Limits, check};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit, admit_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula,
 };
 
 struct Case {
@@ -73,40 +74,6 @@ fn cases() -> Vec<Case> {
             }
         })
         .collect()
-}
-
-fn atom(source: &str) -> Atom {
-    let fact = admit(format!("{source}."), AdmissionOptions::default())
-        .expect("complete scalar atom identity");
-    let head = fact
-        .program()
-        .templates()
-        .at(0)
-        .unwrap()
-        .head()
-        .expect("fact head");
-    let values = head
-        .terms()
-        .iter()
-        .map(|term| match term {
-            zetesis_core::TemplateTerm::Constant(value) => value
-                .to_value(zetesis_core::ValueLimits::default())
-                .unwrap(),
-            zetesis_core::TemplateTerm::Variable(_) => {
-                panic!("recorded model atoms must be ground")
-            }
-        })
-        .collect();
-    Atom::new(
-        zetesis_core::Predicate::with_sign(
-            head.predicate().name(),
-            head.predicate().arity(),
-            head.predicate().sign(),
-        )
-        .unwrap(),
-        values,
-    )
-    .expect("ground atom arity")
 }
 
 fn exhaustive(input: &AdmittedFormula) -> (BTreeSet<BTreeSet<Atom>>, Option<Vec<i64>>) {

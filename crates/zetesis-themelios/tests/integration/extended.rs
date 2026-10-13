@@ -2,6 +2,8 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::atom_models::ground_atom;
+
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Span};
 use themelios_program::term::EvalError;
@@ -30,27 +32,7 @@ fn ground_heads(input: &Admitted) -> BTreeSet<Atom> {
             assert!(template.gate_true().is_empty());
             assert!(template.gate_false().is_empty());
             assert!(template.filters().is_empty());
-            let head = template.head().expect("fact");
-            let values = head
-                .terms()
-                .iter()
-                .map(|term| match term {
-                    zetesis_core::TemplateTerm::Constant(value) => value
-                        .to_value(zetesis_core::ValueLimits::default())
-                        .unwrap(),
-                    zetesis_core::TemplateTerm::Variable(_) => panic!("ground fact"),
-                })
-                .collect();
-            Atom::new(
-                zetesis_core::Predicate::with_sign(
-                    head.predicate().name(),
-                    head.predicate().arity(),
-                    head.predicate().sign(),
-                )
-                .unwrap(),
-                values,
-            )
-            .expect("head arity")
+            ground_atom(template.head().expect("fact"))
         })
         .collect()
 }

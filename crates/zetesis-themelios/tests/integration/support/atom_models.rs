@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
-use zetesis_core::{Atom, Predicate, Program, TemplateTerm, ValueLimits};
+use zetesis_core::{Atom, PatternRef, Predicate, Program, TemplateTerm, ValueLimits};
 use zetesis_reference_support::normal_answer_sets;
 use zetesis_themelios::{AdmissionOptions, admit};
 
@@ -34,19 +34,25 @@ pub(crate) fn atom(source: &str) -> Atom {
     let input = admit(format!("{source}."), AdmissionOptions::default())
         .expect("campaign atoms belong to the scalar profile");
     assert_eq!(input.program().templates().len(), 1);
-    let head = input
-        .program()
-        .templates()
-        .at(0)
-        .unwrap()
-        .head()
-        .expect("ground atom");
+    ground_atom(
+        input
+            .program()
+            .templates()
+            .at(0)
+            .unwrap()
+            .head()
+            .expect("ground atom"),
+    )
+}
+
+/// The atom an admitted fact's ground head denotes.
+pub(crate) fn ground_atom(head: PatternRef<'_>) -> Atom {
     let values = head
         .terms()
         .iter()
         .map(|term| match term {
             TemplateTerm::Constant(value) => value.to_value(ValueLimits::default()).unwrap(),
-            TemplateTerm::Variable(_) => panic!("oracle atom must be ground"),
+            TemplateTerm::Variable(_) => panic!("a fact's head is ground"),
         })
         .collect();
     let predicate = head.predicate();
