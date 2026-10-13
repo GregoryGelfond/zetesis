@@ -1,8 +1,8 @@
 //! Confined, bounded reads of a sealed corpus's files and their SHA-256
-//! identities, shared by the curated and the self-contained example corpora.
-//! Each corpus reports its failures, among them its inclusive ceilings, in its
-//! own error type through [`Failure`], and reaches its files through its own
-//! alias of [`Files`].
+//! identities, shared by the curated, the self-contained example and the
+//! historical comparison corpora. Each corpus reports its failures, among them
+//! its inclusive ceilings, in its own error type through [`Failure`], and
+//! reaches its files through its own alias of [`Files`].
 
 use crate::digest::sha256;
 use std::io::{self, Read};

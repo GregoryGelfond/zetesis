@@ -3,8 +3,8 @@
 mod examples;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::io::Read;
-use std::path::{Component, Path, PathBuf};
+use std::fmt;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -12,8 +12,85 @@ use crate::corpus_comparison::Request;
 
 const REVISION: &str = "38f0660ded448ed268c5a68759ceb0e2840dd497";
 const MANIFEST_SHA256: &str = "372f44c59f3b6c530d50e6683e087dbceda028d54195b9f1de1ef610803c71fb";
-const MAX_MANIFEST: u64 = 4_194_304;
-const MAX_SOURCE: u64 = 1_048_576;
+const MAX_MANIFEST: usize = 4_194_304;
+const MAX_SOURCE: usize = 1_048_576;
+
+/// The bytes the corpus's reads bound.
+#[derive(Clone, Copy, Debug)]
+enum ReadResource {
+    /// The serialized manifest.
+    ManifestBytes,
+    /// One target source.
+    SourceBytes,
+}
+
+/// A refusal of a read of the corpus's files, as the shared confined reads
+/// report it.
+#[derive(Debug)]
+enum ReadFailure {
+    /// A filesystem operation failed at `path`.
+    Io {
+        path: PathBuf,
+        source: std::io::Error,
+    },
+    /// The name is not a regular file confined to the corpus.
+    Unconfined(String),
+    /// A read exceeded its inclusive ceiling.
+    Limit {
+        resource: ReadResource,
+        observed: u128,
+        limit: usize,
+    },
+    /// The named source differs from its seal.
+    Digest(String),
+}
+
+/// This corpus's confined, bounded file reads.
+type Files = crate::corpus_files::Files<ReadFailure>;
+
+impl crate::corpus_files::Failure for ReadFailure {
+    type Resource = ReadResource;
+    fn io(path: &Path, source: std::io::Error) -> Self {
+        Self::Io {
+            path: path.to_owned(),
+            source,
+        }
+    }
+    fn unconfined(text: String) -> Self {
+        Self::Unconfined(text)
+    }
+    fn limit(resource: ReadResource, observed: u128, limit: usize) -> Self {
+        Self::Limit {
+            resource,
+            observed,
+            limit,
+        }
+    }
+    fn digest(path: String, _expected: String, _actual: String) -> Self {
+        Self::Digest(path)
+    }
+}
+
+impl fmt::Display for ReadFailure {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Io { path, source } => write!(formatter, "{}: {source}", path.display()),
+            Self::Unconfined(text) => write!(
+                formatter,
+                "target path must be a confined relative path: {text}"
+            ),
+            Self::Limit {
+                resource,
+                observed,
+                limit,
+            } => write!(
+                formatter,
+                "{resource:?} {observed} exceeds the validation read ceiling {limit}"
+            ),
+            Self::Digest(path) => write!(formatter, "source hash mismatch: {path}"),
+        }
+    }
+}
 
 #[derive(Clone, Debug, Deserialize)]
 pub(crate) struct Manifest {
@@ -77,7 +154,8 @@ pub(crate) fn load(options: &Request) -> Result<Loaded, String> {
         .manifest
         .clone()
         .unwrap_or_else(|| options.repo.join("validation/corpus/manifest.json"));
-    let bytes = bounded_read(&path, MAX_MANIFEST)?;
+    let bytes = Files::read(&path, MAX_MANIFEST, ReadResource::ManifestBytes)
+        .map_err(|error| error.to_string())?;
     if crate::digest::sha256(&bytes) != MANIFEST_SHA256 {
         return Err("manifest identity differs from the trusted pinned target".into());
     }
@@ -127,44 +205,15 @@ pub(crate) fn load(options: &Request) -> Result<Loaded, String> {
     })
 }
 
+/// Whether the regular file `relative` names, confined to `root`, holds at
+/// most the source ceiling of bytes with the SHA-256 `expected`.
 fn verify(root: &Path, relative: &str, expected: &str) -> Result<(), String> {
-    let path = Path::new(relative);
-    if path
-        .components()
-        .any(|component| !matches!(component, Component::Normal(_)))
-    {
-        return Err(format!(
-            "target path must be a confined relative path: {relative}"
-        ));
-    }
-    let actual = root
-        .join(path)
-        .canonicalize()
-        .map_err(|error| format!("{relative}: {error}"))?;
-    if !actual.starts_with(root) {
-        return Err(format!("target symlink leaves corpus: {relative}"));
-    }
-    let bytes = bounded_read(&actual, MAX_SOURCE)?;
-    if crate::digest::sha256(&bytes) != expected {
-        return Err(format!("source hash mismatch: {relative}"));
-    }
-    Ok(())
-}
-
-fn bounded_read(path: &Path, maximum: u64) -> Result<Vec<u8>, String> {
-    let mut bytes = Vec::new();
-    std::fs::File::open(path)
-        .map_err(|error| format!("{}: {error}", path.display()))?
-        .take(maximum + 1)
-        .read_to_end(&mut bytes)
-        .map_err(|error| error.to_string())?;
-    if u64::try_from(bytes.len()).map_err(|error| error.to_string())? > maximum {
-        return Err(format!(
-            "input exceeds validation read ceiling: {}",
-            path.display()
-        ));
-    }
-    Ok(bytes)
+    let sealed = || {
+        let path = Files::confined(root, relative)?;
+        let bytes = Files::read(&path, MAX_SOURCE, ReadResource::SourceBytes)?;
+        Files::digest(relative, &bytes, expected)
+    };
+    sealed().map_err(|error: ReadFailure| error.to_string())
 }
 
 #[cfg(test)]
@@ -210,6 +259,25 @@ mod tests {
                 .unwrap_err()
                 .contains("confined relative path")
         );
+    }
+
+    #[test]
+    fn target_paths_follow_the_shared_confinement_rule() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir(root.path().join("dir")).unwrap();
+        std::fs::write(root.path().join("dir/source.lp"), "original.").unwrap();
+        let canonical = root.path().canonicalize().unwrap();
+        let expected = crate::digest::sha256(b"original.");
+        verify(&canonical, "dir/source.lp", &expected).unwrap();
+        // Separators that a platform could read differently, and a name that
+        // is not a regular file, are refused before any digest is compared.
+        for unconfined in ["dir//source.lp", "dir\\source.lp", "C:source.lp", "dir"] {
+            let refusal = verify(&canonical, unconfined, &expected).unwrap_err();
+            assert!(
+                refusal.contains("confined relative path"),
+                "{unconfined}: {refusal}"
+            );
+        }
     }
 
     #[test]
