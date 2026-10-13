@@ -11,14 +11,14 @@
 
 use std::collections::BTreeSet;
 
-use crate::support::atom_models::Models;
+use crate::support::atom_models::{self, Models, atom};
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
-use zetesis_core::{Atom, Predicate, TemplateTerm, ValueLimits};
+use zetesis_core::{Atom, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit, admit_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
 };
 
 struct Case {
@@ -51,35 +51,6 @@ fn model(atoms: &Json) -> BTreeSet<Atom> {
         .collect();
     assert_eq!(result.len(), items.len(), "distinct atoms within a model");
     result
-}
-
-fn atom(source: &str) -> Atom {
-    // Parsing complete atoms preserves strings and numeric identities; output
-    // atoms are never split at whitespace or compared through display filters.
-    let input = admit(format!("{source}."), AdmissionOptions::default())
-        .expect("campaign atoms belong to the scalar profile");
-    assert_eq!(input.program().templates().len(), 1);
-    let head = input
-        .program()
-        .templates()
-        .at(0)
-        .unwrap()
-        .head()
-        .expect("ground atom");
-    let values = head
-        .terms()
-        .iter()
-        .map(|term| match term {
-            TemplateTerm::Constant(value) => value.to_value(ValueLimits::default()).unwrap(),
-            TemplateTerm::Variable(_) => panic!("oracle atom must be ground"),
-        })
-        .collect();
-    let predicate = head.predicate();
-    Atom::new(
-        Predicate::with_sign(predicate.name(), predicate.arity(), predicate.sign()).unwrap(),
-        values,
-    )
-    .expect("canonical atom arity")
 }
 
 fn exhaustive(input: &AdmittedFormula) -> Models {
@@ -155,12 +126,7 @@ fn external(source: &str) -> Option<Models> {
         "clingo failed: {}",
         String::from_utf8_lossy(run.stderr())
     );
-    Some(
-        oracle::objective_free_models(&json)
-            .iter()
-            .map(|atoms| atoms.iter().map(|spelling| atom(spelling)).collect())
-            .collect(),
-    )
+    Some(atom_models::clingo_models(&json))
 }
 
 #[test]

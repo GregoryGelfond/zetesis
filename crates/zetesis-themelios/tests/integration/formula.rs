@@ -1,7 +1,7 @@
 //! Finite source-to-Ferraris admission preserves support, scopes, and evidence.
 
-use crate::support::atom_models::Models;
 use crate::support::atom_models::answer_sets;
+use crate::support::atom_models::{self, Models};
 use crate::support::objective_boundaries;
 
 use std::collections::BTreeSet;
@@ -440,42 +440,7 @@ fn clingo(source: &str) -> Models {
         &[0, 10, 20, 30],
         oracle::Limits::default(),
     );
-    let json = oracle::json(&run);
-    assert_eq!(json["Models"]["More"], "no", "oracle exhausted");
-    let mut models = BTreeSet::new();
-    for call in json["Call"].as_array().expect("calls") {
-        if let Some(witnesses) = call["Witnesses"].as_array() {
-            for witness in witnesses {
-                let mut facts = String::new();
-                for atom in witness["Value"].as_array().expect("atoms") {
-                    facts.push_str(atom.as_str().expect("atom identity"));
-                    facts.push_str(".\n");
-                }
-                let admitted = admit_extended(
-                    facts,
-                    AdmissionOptions::default(),
-                    ExpansionLimits::default(),
-                )
-                .expect("original scalar atom identities");
-                let model = admitted
-                    .program()
-                    .templates()
-                    .iter()
-                    .map(|template| {
-                        template
-                            .head()
-                            .expect("fact")
-                            .key(&[] as &[zetesis_core::Value])
-                            .expect("ground source pattern")
-                            .to_atom(zetesis_core::ValueLimits::default())
-                            .expect("ground")
-                    })
-                    .collect();
-                assert!(models.insert(model));
-            }
-        }
-    }
-    models
+    atom_models::clingo_models(&oracle::json(&run))
 }
 
 #[test]

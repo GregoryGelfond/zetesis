@@ -2,9 +2,13 @@
 //!
 //! A test that compares zetesis with clingo finds clingo ([`executable`]),
 //! runs it within bounds on a source ([`run`], [`run_accepting`]) or on
-//! program files ([`run_in`]), and decodes its JSON report ([`json`],
-//! [`model_records`], [`answers()`]); [`records`] does all three for a complete
-//! enumeration. Each test keeps the clingo arguments its comparison needs.
+//! program files ([`run_in`]), and decodes its JSON report ([`json`]): as
+//! complete records of atoms and costs ([`model_records`]), as full models
+//! ([`full_models`], [`objective_free_models`]), from a witness's parts
+//! ([`atoms`], [`costs`]), or as `zetesis-validation` reads it ([`answers()`]).
+//! [`records`] runs and decodes a complete enumeration in one call, and
+//! [`parsed`] reads decoded models into a test's own atom type. Each test keeps
+//! the clingo arguments its comparison needs.
 //!
 //! The crate depends on `zetesis-validation`, whose bounded process capture
 //! runs clingo, and on nothing that solves, so a test reaches clingo without
@@ -362,15 +366,45 @@ pub fn atoms(values: &Value) -> BTreeSet<String> {
     atoms
 }
 
-/// A witness's costs, absent when the program has no objective.
+/// A witness's costs: absent when the report omits them or gives `null`, as
+/// for a program without an objective.
 ///
 /// # Panics
-/// Panics if a cost is not an integer.
+/// Panics if present costs are not an array of integers.
 #[must_use]
 pub fn costs(values: &Value) -> Option<Vec<i64>> {
-    values
-        .as_array()
-        .map(|values| values.iter().map(|value| value.as_i64().unwrap()).collect())
+    if values.is_null() {
+        return None;
+    }
+    let values = values.as_array().expect("costs are an array of integers");
+    Some(values.iter().map(|value| value.as_i64().unwrap()).collect())
+}
+
+/// `models` with every atom spelling read by `parse` into a test's own atom
+/// type, which must keep every atom of a model, and every model, distinct.
+///
+/// # Panics
+/// Panics if two spellings of one model, or two models, read as one.
+#[must_use]
+pub fn parsed<T: Ord>(models: &Models, mut parse: impl FnMut(&str) -> T) -> BTreeSet<BTreeSet<T>> {
+    let parsed: BTreeSet<BTreeSet<T>> = models
+        .iter()
+        .map(|model| {
+            let atoms: BTreeSet<T> = model.iter().map(|spelling| parse(spelling)).collect();
+            assert_eq!(
+                atoms.len(),
+                model.len(),
+                "parsing keeps a model's atoms distinct"
+            );
+            atoms
+        })
+        .collect();
+    assert_eq!(
+        parsed.len(),
+        models.len(),
+        "parsing keeps the models distinct"
+    );
+    parsed
 }
 
 /// The answers a run reports, as `zetesis-validation` reads a clingo JSON
@@ -457,6 +491,37 @@ mod tests {
         let mut incomplete = report(&Value::Null);
         incomplete["Models"]["More"] = json!("yes");
         let _ = full_models(&incomplete);
+    }
+
+    #[test]
+    fn absent_and_null_costs_are_no_costs() {
+        assert_eq!(costs(&Value::Null), None);
+        assert_eq!(costs(&json!({})["Costs"]), None);
+        assert_eq!(costs(&json!([2, -1])), Some(vec![2, -1]));
+    }
+
+    #[test]
+    #[should_panic(expected = "costs are an array of integers")]
+    fn malformed_costs_are_refused() {
+        let _ = costs(&json!("3"));
+    }
+
+    #[test]
+    fn parsed_models_keep_every_model_and_atom() {
+        let models = full_models(&report(&Value::Null));
+        let upper = parsed(&models, str::to_uppercase);
+        let expected: BTreeSet<BTreeSet<String>> = [vec!["A"], vec!["B", "C"]]
+            .iter()
+            .map(|atoms| atoms.iter().map(|&atom| atom.to_owned()).collect())
+            .collect();
+        assert_eq!(upper, expected);
+    }
+
+    #[test]
+    #[should_panic(expected = "parsing keeps a model's atoms distinct")]
+    fn parsing_that_merges_atoms_is_refused() {
+        let models = full_models(&report(&Value::Null));
+        let _ = parsed(&models, |_| 0);
     }
 
     /// The shell stands in for clingo in the tests of a run's contract.

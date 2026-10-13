@@ -5,12 +5,11 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use crate::support::atom_models::{Models, answer_sets};
+use crate::support::atom_models::{self, Models, answer_sets};
 use crate::support::bundle_fixtures::Fixture;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
-use zetesis_core::Atom;
 use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions, BundleLimits,
@@ -358,46 +357,7 @@ fn external(directory: &Path) -> Models {
         &oracle::DECIDED,
         oracle::Limits::default(),
     );
-    let json = oracle::json(&run);
-    oracle::objective_free_models(&json)
-        .iter()
-        .map(|atoms| atoms.iter().map(|spelling| oracle_atom(spelling)).collect())
-        .collect()
-}
-
-fn oracle_atom(source: &str) -> Atom {
-    // Parse each complete canonical atom separately, never split strings on
-    // whitespace. Only scalar atoms from this campaign are expected here.
-    let input =
-        admit(format!("{source}."), AdmissionOptions::default()).expect("oracle scalar atom");
-    assert_eq!(input.program().templates().len(), 1);
-    let head = input
-        .program()
-        .templates()
-        .at(0)
-        .unwrap()
-        .head()
-        .expect("oracle fact");
-    let values = head
-        .terms()
-        .iter()
-        .map(|term| match term {
-            zetesis_core::TemplateTerm::Constant(value) => value
-                .to_value(zetesis_core::ValueLimits::default())
-                .unwrap(),
-            zetesis_core::TemplateTerm::Variable(_) => panic!("oracle atom is ground"),
-        })
-        .collect();
-    Atom::new(
-        zetesis_core::Predicate::with_sign(
-            head.predicate().name(),
-            head.predicate().arity(),
-            head.predicate().sign(),
-        )
-        .unwrap(),
-        values,
-    )
-    .expect("oracle arity")
+    atom_models::clingo_models(&oracle::json(&run))
 }
 
 fn compare(fixture: &Fixture) {
