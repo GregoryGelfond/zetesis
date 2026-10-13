@@ -1,356 +1,506 @@
 legacy=false
 command zetesis | An answer-set solver
+  settings=["subcommand_required", "disable_help_subcommand"] aliases=[]
   command solve | Find answer sets; use - explicitly for standard input
+    settings=["disable_help_flag", "disable_version_flag"] aliases=[]
     arg backend long=Some("backend") short=None aliases=None values=["cpu", "gpu", "metal", "vulkan"] defaults=["cpu"] hidden=false short_help_hidden=false heading=Some("Execution")
+      index=None action=Set num_args=None value_names=Some(["BACKEND"]) delimiter=None terminator=None parser=Backend flags=[] conflicts=[]
       help "Choose the execution backend: cpu (the default) or gpu"
       long "Execution backend: cpu (the default) or gpu.\n\nValues:\n  cpu     CPU execution (the default)\n  gpu     A GPU through the platform's native API: Metal on macOS, Vulkan elsewhere\n  metal   A GPU through Metal (macOS)\n  vulkan  A GPU through Vulkan (Linux; also other platforms with a Vulkan driver, unqualified there)\n\nAn unavailable GPU fails; device failure does not silently retry on CPU."
     arg grounder long=Some("grounder") short=None aliases=None values=["auto", "lazy", "eager"] defaults=["auto"] hidden=false short_help_hidden=false heading=Some("Execution")
+      index=None action=Set num_args=None value_names=Some(["GROUNDER"]) delimiter=None terminator=None parser=Grounder flags=[] conflicts=[]
       help "Grounding mode, independent of execution backend"
       long "Grounding mode, independent of execution backend.\n\n`eager` instantiates every rule before solving. `lazy` instantiates on demand: relational source joins on CPU or GPU, or, for formula inputs, a producer core checked by the selected backend with eligible constraints streamed on the host. Terminal definitions (derived predicates nothing reads) can be reconstructed per answer. Objectives require complete constraint checks before scoring and disable terminal deferral. Table joins are refused. `auto` admits relational source joins where it can, else instantiates an eager base and defers terminal definitions. Resource allowances still apply."
     arg formula_joins long=Some("formula-joins") short=None aliases=None values=["indexed", "table"] defaults=["indexed"] hidden=false short_help_hidden=true heading=Some("Advanced controls")
+      index=None action=Set num_args=None value_names=Some(["FORMULA_JOINS"]) delimiter=None terminator=None parser=JoinStrategy flags=[] conflicts=[]
       help "Positive joins during eager formula grounding"
       long "Positive joins during eager formula grounding.\n\nTable reuses support masks for eligible flat patterns. Relational source grounding and support-growth rounds retain indexed joins. Preparation consumes the configured support storage and records grounding work."
     arg source_batching long=Some("source-batching") short=None aliases=None values=["independent", "union", "worlds"] defaults=["independent"] hidden=false short_help_hidden=true heading=Some("Advanced controls")
+      index=None action=Set num_args=None value_names=Some(["SOURCE_BATCHING"]) delimiter=None terminator=None parser=SourceBatching flags=[] conflicts=[]
       help "Advanced relational CPU source batching. Union/worlds require lazy or auto grounding and CPU execution. A stopped shared batch publishes no candidate checks; independent remains the default"
       long ""
     arg oracle long=Some("oracle") short=None aliases=None values=["auto", "closure", "countermodel"] defaults=["auto"] hidden=false short_help_hidden=true heading=Some("Advanced controls")
+      index=None action=Set num_args=None value_names=Some(["ORACLE"]) delimiter=None terminator=None parser=Oracle flags=[] conflicts=[]
       help "Advanced oracle selection. Auto preserves answer-set semantics while selecting an applicable reduct procedure. Explicit hardware and grounder requests are always honored or refused"
       long ""
     arg search long=Some("search") short=None aliases=None values=["regions", "clauses"] defaults=["regions"] hidden=false short_help_hidden=true heading=Some("Advanced controls")
+      index=None action=Set num_args=None value_names=Some(["SEARCH"]) delimiter=None terminator=None parser=SearchMethod flags=[] conflicts=[]
       help "Advanced formula search method, for proposing candidates and for the reduct's proper-subset query alike. Regions, the default, narrow the candidate space and the reduct's subsets by the theory's readings; clauses is the classical search over a clause form, with its own batched completion under the shared thread and memory allowance. The reduct decides membership either way"
       long ""
     arg stats long=Some("stats") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=Some("Output")
+      index=None action=SetTrue num_args=None value_names=Some(["STATS"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
       help "Print grounding, solving and execution statistics on stderr"
       long "Print grounding, solving and execution statistics on stderr.\n\nReport version, settings, completion, available counters and total driver elapsed time on stderr. Answer-set output on stdout is unchanged."
     arg json long=Some("json") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=Some("Output")
+      index=None action=SetTrue num_args=None value_names=Some(["JSON"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
       help "Stream a versioned JSON document with full models, shown channels and coverage"
       long ""
     arg color long=Some("color") short=None aliases=None values=["auto", "always", "never"] defaults=["auto"] hidden=false short_help_hidden=false heading=Some("Output")
+      index=None action=Set num_args=None value_names=Some(["COLOR"]) delimiter=None terminator=None parser=ColorMode flags=[] conflicts=[]
       help "Style human headings and solve metadata"
       long "Style human headings and solve metadata.\n\nAuto follows each stream's terminal capability, `NO_COLOR` and `TERM`. JSON is always plain."
     arg time_limit long=Some("time-limit") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Limits")
+      index=None action=Set num_args=None value_names=Some(["DURATION"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
       help "Cooperative process deadline after input loading: seconds, or a whole number with s, m or h"
       long "Cooperative process deadline after input loading: seconds, or a whole number with s, m or h.\n\nZero requests an immediate stop. No deadline is imposed when omitted. A timer thread marks the deadline and checked work boundaries observe the mark as they observe cancellation, without reading the clock. Blocking source I/O, frontend operations and a running GPU kernel cannot be preempted. Library callers supply their own Cancellation instead of this process option."
     arg memory long=Some("memory") short=None aliases=Some(["memory-budget"]) values=[] defaults=["<host>"] hidden=false short_help_hidden=true heading=Some("Limits")
+      index=None action=Set num_args=None value_names=Some(["SIZE"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
       help "Memory allowance in bytes, or a whole number with KiB, MiB, GiB or TiB"
       long "Memory allowance in bytes, or a whole number with KiB, MiB, GiB or TiB.\n\nBounds named capacities during input, grounding, solving and publication; it is not a resident-memory limit. The default is half of the memory available to the process: physical memory, or on Linux the memory limit of its control group when that is lower; two gibibytes when the host does not report it."
     arg models long=Some("models") short=None aliases=None values=[] defaults=["1"] hidden=true short_help_hidden=false heading=None
+      index=None action=Set num_args=None value_names=Some(["MODELS"]) delimiter=None terminator=None parser=usize flags=[] conflicts=[]
       help "Maximum models to display; 0 requests all"
       long "Maximum models to display; 0 requests all.\n\nWithout objectives this stops search early. Optimization seeks exhaustion and then displays this many tied optima; interrupted runs may display incumbents without proving an optimum."
     arg workers long=Some("threads") short=None aliases=Some(["workers"]) values=[] defaults=["auto"] hidden=false short_help_hidden=false heading=Some("Execution")
+      index=None action=Set num_args=None value_names=Some(["auto|N"]) delimiter=None terminator=None parser=NonZeroUsize flags=[] conflicts=[]
       help "Host threads; auto uses available parallelism, falling back to one"
       long "Host threads; auto uses available parallelism, falling back to one.\n\nThe shared policy assigns worker and scratch capacity within the memory allowance. Parallel answer order can vary; the answer-set family does not."
     arg help long=Some("help") short=Some('h') aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Help")
+      index=None action=HelpShort num_args=None value_names=None delimiter=None terminator=None parser=String flags=["global"] conflicts=[]
       help "Show everyday solving options"
       long ""
     arg help-all long=Some("help-all") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Help")
+      index=None action=HelpLong num_args=None value_names=None delimiter=None terminator=None parser=String flags=["global"] conflicts=[]
       help "Show all execution and output options"
       long ""
     arg input long=None short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+      index=Some(1) action=Set num_args=None value_names=Some(["FILE"]) delimiter=None terminator=None parser=PathBuf flags=["required"] conflicts=[]
       help "First original input file, or `-` alone for standard input"
       long ""
     arg additional_inputs long=None short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+      index=Some(2) action=Append num_args=Some(1..) value_names=Some(["FILE"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
       help "Additional original input files, in argument order"
       long "Additional original input files, in argument order.\n\nStandard input cannot be combined with file roots in this source-bundle profile."
     arg answers long=Some("answers") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Answers")
+      index=None action=Set num_args=None value_names=Some(["N"]) delimiter=None terminator=None parser=NonZeroUsize flags=[] conflicts=["all", "models"]
       help "Display at most N answer sets [default: 1]"
       long "Display at most N answer sets (default: 1). Without objectives, stop after this many answers. Optimization still seeks a proved optimum, then displays up to N tied optima; an interrupted run may report unproved incumbents."
     arg all long=Some("all") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Answers")
+      index=None action=SetTrue num_args=None value_names=None delimiter=None terminator=None parser=String flags=[] conflicts=["answers", "models"]
       help "Enumerate all answer sets, or all tied optima when optimizing"
       long ""
   command test | Check example programs or an execution device
+    settings=["subcommand_required", "arg_required_else_help", "disable_version_flag"] aliases=[]
     command corpus | Compare all 94 local corpus cases with external clingo
+      settings=["disable_version_flag"] aliases=[]
+      group CorpusOptions args=[] multiple=true required=false
+      group ProcessOptions args=["timeout_seconds", "capture_bytes"] multiple=true required=false
+      group ViewOptions args=["json", "stats", "color", "report"] multiple=true required=false
       arg repo long=Some("repo") short=None aliases=None values=[] defaults=["."] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["REPO"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Checkout containing examples/correctness and its pinned manifest"
         long ""
       arg clingo long=Some("clingo") short=None aliases=None values=[] defaults=["clingo"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["CLINGO"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "External clingo executable, resolved through PATH for a bare name"
         long ""
       arg zetesis long=Some("zetesis") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["ZETESIS"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Modern zetesis executable; omitted uses the current executable's solve command"
         long ""
       arg backend long=Some("backend") short=None aliases=None values=["cpu", "gpu", "metal", "vulkan"] defaults=["cpu"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["BACKEND"]) delimiter=None terminator=None parser=Backend flags=[] conflicts=[]
         help "Execution backend: cpu (the default), gpu, metal or vulkan. GPU checks use the general eager formula route"
         long ""
       arg timeout_seconds long=Some("timeout-seconds") short=None aliases=None values=[] defaults=["30"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["TIMEOUT_SECONDS"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
         help "Maximum elapsed seconds for each native or reference child"
         long ""
       arg capture_bytes long=Some("capture-bytes") short=None aliases=None values=[] defaults=["8388608"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["CAPTURE_BYTES"]) delimiter=None terminator=None parser=usize flags=[] conflicts=[]
         help "Maximum combined stdout/stderr bytes captured from each child"
         long ""
       arg json long=Some("json") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=SetTrue num_args=None value_names=Some(["JSON"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
         help "Emit the workflow's structured report or compact evidence view on stdout"
         long ""
       arg stats long=Some("stats") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=SetTrue num_args=None value_names=Some(["STATS"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
         help "Show optional elapsed-time details; off by default. Backend checks always capture route telemetry internally as check evidence"
         long ""
       arg color long=Some("color") short=None aliases=None values=["auto", "always", "never"] defaults=["auto"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["COLOR"]) delimiter=None terminator=None parser=ColorMode flags=[] conflicts=[]
         help "Human styling; JSON is always plain"
         long ""
       arg report long=Some("report") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["REPORT"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Also retain the structured evidence at a new path; existing files are refused"
         long ""
     command backend | Check three fixed full answer families and actual CPU or Metal execution
+      settings=["disable_version_flag"] aliases=[]
+      group BackendOptions args=[] multiple=true required=false
+      group ProcessOptions args=["timeout_seconds", "capture_bytes"] multiple=true required=false
+      group ViewOptions args=["json", "stats", "color", "report"] multiple=true required=false
       arg backend long=Some("backend") short=None aliases=None values=["cpu", "gpu", "metal", "vulkan"] defaults=["cpu"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["BACKEND"]) delimiter=None terminator=None parser=Backend flags=[] conflicts=[]
         help "Exact CPU or physical GPU route (cpu, gpu, metal or vulkan); no implicit fallback"
         long ""
       arg zetesis long=Some("zetesis") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["ZETESIS"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Modern zetesis executable; omitted uses this installed executable"
         long ""
       arg timeout_seconds long=Some("timeout-seconds") short=None aliases=None values=[] defaults=["30"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["TIMEOUT_SECONDS"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
         help "Maximum elapsed seconds for each native or reference child"
         long ""
       arg capture_bytes long=Some("capture-bytes") short=None aliases=None values=[] defaults=["8388608"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["CAPTURE_BYTES"]) delimiter=None terminator=None parser=usize flags=[] conflicts=[]
         help "Maximum combined stdout/stderr bytes captured from each child"
         long ""
       arg json long=Some("json") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=SetTrue num_args=None value_names=Some(["JSON"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
         help "Emit the workflow's structured report or compact evidence view on stdout"
         long ""
       arg stats long=Some("stats") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=SetTrue num_args=None value_names=Some(["STATS"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
         help "Show optional elapsed-time details; off by default. Backend checks always capture route telemetry internally as check evidence"
         long ""
       arg color long=Some("color") short=None aliases=None values=["auto", "always", "never"] defaults=["auto"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["COLOR"]) delimiter=None terminator=None parser=ColorMode flags=[] conflicts=[]
         help "Human styling; JSON is always plain"
         long ""
       arg report long=Some("report") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["REPORT"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Also retain the structured evidence at a new path; existing files are refused"
         long ""
     command scalability | Qualify maintained workloads across CPU thread counts; requires --report
+      settings=["disable_version_flag"] aliases=[]
+      group ScalabilityOptions args=[] multiple=true required=false
+      group ProcessOptions args=["timeout_seconds", "capture_bytes"] multiple=true required=false
+      group ViewOptions args=["json", "stats", "color", "report"] multiple=true required=false
+      group scalability_report args=["report"] multiple=false required=true
       arg root long=None short=None aliases=None values=[] defaults=["examples/correctness"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["ROOT"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Verified correctness catalog used by the three unchanged corpus cases"
         long ""
       arg examples long=Some("examples") short=None aliases=None values=[] defaults=["examples"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["EXAMPLES"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Authored examples root; metadata and source digests are checked"
         long ""
       arg include_einstein long=Some("include-einstein") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=SetTrue num_args=None value_names=Some(["INCLUDE_EINSTEIN"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
         help "Include the unchanged Einstein riddle in the workload selection"
         long ""
       arg zetesis long=Some("zetesis") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["ZETESIS"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Modern zetesis executable; omitted uses this installed executable's solve"
         long ""
       arg clingo long=Some("clingo") short=None aliases=None values=[] defaults=["clingo"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["CLINGO"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "External clingo used for one complete qualification per workload"
         long ""
       arg threads long=Some("threads") short=None aliases=None values=[] defaults=["1,2,4,8,14"] hidden=false short_help_hidden=false heading=None
+        index=None action=Append num_args=Some(1..) value_names=Some(["THREADS"]) delimiter=Some(',') terminator=None parser=NonZeroUsize flags=[] conflicts=[]
         help "CPU region thread counts, one through eight profiles, each at most 256"
         long ""
       arg memory long=Some("memory") short=None aliases=None values=[] defaults=["<host>"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["SIZE"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
         help "Native memory allowance in bytes or binary units; omitted, the solver's default"
         long ""
       arg time_limit long=Some("time-limit") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["SECONDS"]) delimiter=None terminator=None parser=NonZeroU64 flags=[] conflicts=[]
         help "Cooperative native deadline in whole seconds, separate from the child timeout"
         long ""
       arg campaign_seconds long=Some("campaign-seconds") short=None aliases=None values=[] defaults=["1800"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["CAMPAIGN_SECONDS"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
         help "Total campaign scheduling deadline, including all qualification children"
         long ""
       arg total_capture_bytes long=Some("total-capture-bytes") short=None aliases=None values=[] defaults=["536870912"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["TOTAL_CAPTURE_BYTES"]) delimiter=None terminator=None parser=usize flags=[] conflicts=[]
         help "Combined retained captures across the complete campaign"
         long ""
       arg report_bytes long=Some("report-bytes") short=None aliases=None values=[] defaults=["1073741824"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["REPORT_BYTES"]) delimiter=None terminator=None parser=usize flags=[] conflicts=[]
         help "Serialized complete evidence ceiling"
         long ""
       arg timeout_seconds long=Some("timeout-seconds") short=None aliases=None values=[] defaults=["30"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["TIMEOUT_SECONDS"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
         help "Maximum elapsed seconds for each native or reference child"
         long ""
       arg capture_bytes long=Some("capture-bytes") short=None aliases=None values=[] defaults=["8388608"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["CAPTURE_BYTES"]) delimiter=None terminator=None parser=usize flags=[] conflicts=[]
         help "Maximum combined stdout/stderr bytes captured from each child"
         long ""
       arg json long=Some("json") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=SetTrue num_args=None value_names=Some(["JSON"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
         help "Emit the workflow's structured report or compact evidence view on stdout"
         long ""
       arg stats long=Some("stats") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=SetTrue num_args=None value_names=Some(["STATS"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
         help "Show optional elapsed-time details; off by default. Backend checks always capture route telemetry internally as check evidence"
         long ""
       arg color long=Some("color") short=None aliases=None values=["auto", "always", "never"] defaults=["auto"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["COLOR"]) delimiter=None terminator=None parser=ColorMode flags=[] conflicts=[]
         help "Human styling; JSON is always plain"
         long ""
       arg report long=Some("report") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["REPORT"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Also retain the structured evidence at a new path; existing files are refused"
         long ""
   command devices | List available execution devices
+    settings=["disable_version_flag"] aliases=[]
   command help | Show help for a command
+    settings=["disable_version_flag"] aliases=[]
     arg topic long=None short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+      index=None action=Set num_args=Some(0..) value_names=Some(["COMMAND"]) delimiter=None terminator=None parser=String flags=[] conflicts=[]
       help ""
       long ""
     arg advanced long=Some("advanced") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+      index=None action=SetTrue num_args=None value_names=None delimiter=None terminator=None parser=String flags=[] conflicts=[]
       help "Show every solve control and its resource contract"
       long ""
   command version | Show the program version
+    settings=["disable_version_flag"] aliases=[]
 legacy=true
 command zetesis | An answer-set solver
+  settings=["subcommand_required", "disable_help_subcommand"] aliases=[]
   command solve | Find answer sets; use - explicitly for standard input
+    settings=["disable_help_flag", "disable_version_flag"] aliases=[]
     arg backend long=Some("backend") short=None aliases=None values=["cpu", "gpu", "metal", "vulkan"] defaults=["cpu"] hidden=false short_help_hidden=false heading=Some("Execution")
+      index=None action=Set num_args=None value_names=Some(["BACKEND"]) delimiter=None terminator=None parser=Backend flags=[] conflicts=[]
       help "Choose the execution backend: cpu (the default) or gpu"
       long "Execution backend: cpu (the default) or gpu.\n\nValues:\n  cpu     CPU execution (the default)\n  gpu     A GPU through the platform's native API: Metal on macOS, Vulkan elsewhere\n  metal   A GPU through Metal (macOS)\n  vulkan  A GPU through Vulkan (Linux; also other platforms with a Vulkan driver, unqualified there)\n\nAn unavailable GPU fails; device failure does not silently retry on CPU."
     arg grounder long=Some("grounder") short=None aliases=None values=["auto", "lazy", "eager"] defaults=["auto"] hidden=false short_help_hidden=false heading=Some("Execution")
+      index=None action=Set num_args=None value_names=Some(["GROUNDER"]) delimiter=None terminator=None parser=Grounder flags=[] conflicts=[]
       help "Grounding mode, independent of execution backend"
       long "Grounding mode, independent of execution backend.\n\n`eager` instantiates every rule before solving. `lazy` instantiates on demand: relational source joins on CPU or GPU, or, for formula inputs, a producer core checked by the selected backend with eligible constraints streamed on the host. Terminal definitions (derived predicates nothing reads) can be reconstructed per answer. Objectives require complete constraint checks before scoring and disable terminal deferral. Table joins are refused. `auto` admits relational source joins where it can, else instantiates an eager base and defers terminal definitions. Resource allowances still apply."
     arg formula_joins long=Some("formula-joins") short=None aliases=None values=["indexed", "table"] defaults=["indexed"] hidden=false short_help_hidden=true heading=Some("Advanced controls")
+      index=None action=Set num_args=None value_names=Some(["FORMULA_JOINS"]) delimiter=None terminator=None parser=JoinStrategy flags=[] conflicts=[]
       help "Positive joins during eager formula grounding"
       long "Positive joins during eager formula grounding.\n\nTable reuses support masks for eligible flat patterns. Relational source grounding and support-growth rounds retain indexed joins. Preparation consumes the configured support storage and records grounding work."
     arg source_batching long=Some("source-batching") short=None aliases=None values=["independent", "union", "worlds"] defaults=["independent"] hidden=false short_help_hidden=true heading=Some("Advanced controls")
+      index=None action=Set num_args=None value_names=Some(["SOURCE_BATCHING"]) delimiter=None terminator=None parser=SourceBatching flags=[] conflicts=[]
       help "Advanced relational CPU source batching. Union/worlds require lazy or auto grounding and CPU execution. A stopped shared batch publishes no candidate checks; independent remains the default"
       long ""
     arg oracle long=Some("oracle") short=None aliases=None values=["auto", "closure", "countermodel"] defaults=["auto"] hidden=false short_help_hidden=true heading=Some("Advanced controls")
+      index=None action=Set num_args=None value_names=Some(["ORACLE"]) delimiter=None terminator=None parser=Oracle flags=[] conflicts=[]
       help "Advanced oracle selection. Auto preserves answer-set semantics while selecting an applicable reduct procedure. Explicit hardware and grounder requests are always honored or refused"
       long ""
     arg search long=Some("search") short=None aliases=None values=["regions", "clauses"] defaults=["regions"] hidden=false short_help_hidden=true heading=Some("Advanced controls")
+      index=None action=Set num_args=None value_names=Some(["SEARCH"]) delimiter=None terminator=None parser=SearchMethod flags=[] conflicts=[]
       help "Advanced formula search method, for proposing candidates and for the reduct's proper-subset query alike. Regions, the default, narrow the candidate space and the reduct's subsets by the theory's readings; clauses is the classical search over a clause form, with its own batched completion under the shared thread and memory allowance. The reduct decides membership either way"
       long ""
     arg stats long=Some("stats") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=Some("Output")
+      index=None action=SetTrue num_args=None value_names=Some(["STATS"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
       help "Print grounding, solving and execution statistics on stderr"
       long "Print grounding, solving and execution statistics on stderr.\n\nReport version, settings, completion, available counters and total driver elapsed time on stderr. Answer-set output on stdout is unchanged."
     arg json long=Some("json") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=Some("Output")
+      index=None action=SetTrue num_args=None value_names=Some(["JSON"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
       help "Stream a versioned JSON document with full models, shown channels and coverage"
       long ""
     arg color long=Some("color") short=None aliases=None values=["auto", "always", "never"] defaults=["auto"] hidden=false short_help_hidden=false heading=Some("Output")
+      index=None action=Set num_args=None value_names=Some(["COLOR"]) delimiter=None terminator=None parser=ColorMode flags=[] conflicts=[]
       help "Style human headings and solve metadata"
       long "Style human headings and solve metadata.\n\nAuto follows each stream's terminal capability, `NO_COLOR` and `TERM`. JSON is always plain."
     arg time_limit long=Some("time-limit") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Limits")
+      index=None action=Set num_args=None value_names=Some(["DURATION"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
       help "Cooperative process deadline after input loading: seconds, or a whole number with s, m or h"
       long "Cooperative process deadline after input loading: seconds, or a whole number with s, m or h.\n\nZero requests an immediate stop. No deadline is imposed when omitted. A timer thread marks the deadline and checked work boundaries observe the mark as they observe cancellation, without reading the clock. Blocking source I/O, frontend operations and a running GPU kernel cannot be preempted. Library callers supply their own Cancellation instead of this process option."
     arg memory long=Some("memory") short=None aliases=Some(["memory-budget"]) values=[] defaults=["<host>"] hidden=false short_help_hidden=true heading=Some("Limits")
+      index=None action=Set num_args=None value_names=Some(["SIZE"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
       help "Memory allowance in bytes, or a whole number with KiB, MiB, GiB or TiB"
       long "Memory allowance in bytes, or a whole number with KiB, MiB, GiB or TiB.\n\nBounds named capacities during input, grounding, solving and publication; it is not a resident-memory limit. The default is half of the memory available to the process: physical memory, or on Linux the memory limit of its control group when that is lower; two gibibytes when the host does not report it."
     arg models long=Some("models") short=None aliases=None values=[] defaults=["1"] hidden=true short_help_hidden=false heading=None
+      index=None action=Set num_args=None value_names=Some(["MODELS"]) delimiter=None terminator=None parser=usize flags=[] conflicts=[]
       help "Maximum models to display; 0 requests all"
       long "Maximum models to display; 0 requests all.\n\nWithout objectives this stops search early. Optimization seeks exhaustion and then displays this many tied optima; interrupted runs may display incumbents without proving an optimum."
     arg workers long=Some("threads") short=None aliases=Some(["workers"]) values=[] defaults=["auto"] hidden=false short_help_hidden=false heading=Some("Execution")
+      index=None action=Set num_args=None value_names=Some(["auto|N"]) delimiter=None terminator=None parser=NonZeroUsize flags=[] conflicts=[]
       help "Host threads; auto uses available parallelism, falling back to one"
       long "Host threads; auto uses available parallelism, falling back to one.\n\nThe shared policy assigns worker and scratch capacity within the memory allowance. Parallel answer order can vary; the answer-set family does not."
     arg help long=Some("help") short=Some('h') aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Help")
+      index=None action=HelpShort num_args=None value_names=None delimiter=None terminator=None parser=String flags=["global"] conflicts=[]
       help "Show everyday solving options"
       long ""
     arg help-all long=Some("help-all") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Help")
+      index=None action=HelpLong num_args=None value_names=None delimiter=None terminator=None parser=String flags=["global"] conflicts=[]
       help "Show all execution and output options"
       long ""
     arg input long=None short=None aliases=None values=[] defaults=["-"] hidden=false short_help_hidden=false heading=None
+      index=Some(1) action=Set num_args=None value_names=Some(["FILE"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
       help "First original input file, or `-` alone for standard input"
       long ""
     arg additional_inputs long=None short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+      index=Some(2) action=Append num_args=Some(1..) value_names=Some(["FILE"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
       help "Additional original input files, in argument order"
       long "Additional original input files, in argument order.\n\nStandard input cannot be combined with file roots in this source-bundle profile."
     arg answers long=Some("answers") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Answers")
+      index=None action=Set num_args=None value_names=Some(["N"]) delimiter=None terminator=None parser=NonZeroUsize flags=[] conflicts=["all", "models"]
       help "Display at most N answer sets [default: 1]"
       long "Display at most N answer sets (default: 1). Without objectives, stop after this many answers. Optimization still seeks a proved optimum, then displays up to N tied optima; an interrupted run may report unproved incumbents."
     arg all long=Some("all") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Answers")
+      index=None action=SetTrue num_args=None value_names=None delimiter=None terminator=None parser=String flags=[] conflicts=["answers", "models"]
       help "Enumerate all answer sets, or all tied optima when optimizing"
       long ""
   command test | Check example programs or an execution device
+    settings=["subcommand_required", "arg_required_else_help", "disable_version_flag"] aliases=[]
     command corpus | Compare all 94 local corpus cases with external clingo
+      settings=["disable_version_flag"] aliases=[]
+      group CorpusOptions args=[] multiple=true required=false
+      group ProcessOptions args=["timeout_seconds", "capture_bytes"] multiple=true required=false
+      group ViewOptions args=["json", "stats", "color", "report"] multiple=true required=false
       arg repo long=Some("repo") short=None aliases=None values=[] defaults=["."] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["REPO"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Checkout containing examples/correctness and its pinned manifest"
         long ""
       arg clingo long=Some("clingo") short=None aliases=None values=[] defaults=["clingo"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["CLINGO"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "External clingo executable, resolved through PATH for a bare name"
         long ""
       arg zetesis long=Some("zetesis") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["ZETESIS"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Modern zetesis executable; omitted uses the current executable's solve command"
         long ""
       arg backend long=Some("backend") short=None aliases=None values=["cpu", "gpu", "metal", "vulkan"] defaults=["cpu"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["BACKEND"]) delimiter=None terminator=None parser=Backend flags=[] conflicts=[]
         help "Execution backend: cpu (the default), gpu, metal or vulkan. GPU checks use the general eager formula route"
         long ""
       arg timeout_seconds long=Some("timeout-seconds") short=None aliases=None values=[] defaults=["30"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["TIMEOUT_SECONDS"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
         help "Maximum elapsed seconds for each native or reference child"
         long ""
       arg capture_bytes long=Some("capture-bytes") short=None aliases=None values=[] defaults=["8388608"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["CAPTURE_BYTES"]) delimiter=None terminator=None parser=usize flags=[] conflicts=[]
         help "Maximum combined stdout/stderr bytes captured from each child"
         long ""
       arg json long=Some("json") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=SetTrue num_args=None value_names=Some(["JSON"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
         help "Emit the workflow's structured report or compact evidence view on stdout"
         long ""
       arg stats long=Some("stats") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=SetTrue num_args=None value_names=Some(["STATS"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
         help "Show optional elapsed-time details; off by default. Backend checks always capture route telemetry internally as check evidence"
         long ""
       arg color long=Some("color") short=None aliases=None values=["auto", "always", "never"] defaults=["auto"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["COLOR"]) delimiter=None terminator=None parser=ColorMode flags=[] conflicts=[]
         help "Human styling; JSON is always plain"
         long ""
       arg report long=Some("report") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["REPORT"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Also retain the structured evidence at a new path; existing files are refused"
         long ""
     command backend | Check three fixed full answer families and actual CPU or Metal execution
+      settings=["disable_version_flag"] aliases=[]
+      group BackendOptions args=[] multiple=true required=false
+      group ProcessOptions args=["timeout_seconds", "capture_bytes"] multiple=true required=false
+      group ViewOptions args=["json", "stats", "color", "report"] multiple=true required=false
       arg backend long=Some("backend") short=None aliases=None values=["cpu", "gpu", "metal", "vulkan"] defaults=["cpu"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["BACKEND"]) delimiter=None terminator=None parser=Backend flags=[] conflicts=[]
         help "Exact CPU or physical GPU route (cpu, gpu, metal or vulkan); no implicit fallback"
         long ""
       arg zetesis long=Some("zetesis") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["ZETESIS"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Modern zetesis executable; omitted uses this installed executable"
         long ""
       arg timeout_seconds long=Some("timeout-seconds") short=None aliases=None values=[] defaults=["30"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["TIMEOUT_SECONDS"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
         help "Maximum elapsed seconds for each native or reference child"
         long ""
       arg capture_bytes long=Some("capture-bytes") short=None aliases=None values=[] defaults=["8388608"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["CAPTURE_BYTES"]) delimiter=None terminator=None parser=usize flags=[] conflicts=[]
         help "Maximum combined stdout/stderr bytes captured from each child"
         long ""
       arg json long=Some("json") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=SetTrue num_args=None value_names=Some(["JSON"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
         help "Emit the workflow's structured report or compact evidence view on stdout"
         long ""
       arg stats long=Some("stats") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=SetTrue num_args=None value_names=Some(["STATS"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
         help "Show optional elapsed-time details; off by default. Backend checks always capture route telemetry internally as check evidence"
         long ""
       arg color long=Some("color") short=None aliases=None values=["auto", "always", "never"] defaults=["auto"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["COLOR"]) delimiter=None terminator=None parser=ColorMode flags=[] conflicts=[]
         help "Human styling; JSON is always plain"
         long ""
       arg report long=Some("report") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["REPORT"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Also retain the structured evidence at a new path; existing files are refused"
         long ""
     command scalability | Qualify maintained workloads across CPU thread counts; requires --report
+      settings=["disable_version_flag"] aliases=[]
+      group ScalabilityOptions args=[] multiple=true required=false
+      group ProcessOptions args=["timeout_seconds", "capture_bytes"] multiple=true required=false
+      group ViewOptions args=["json", "stats", "color", "report"] multiple=true required=false
+      group scalability_report args=["report"] multiple=false required=true
       arg root long=None short=None aliases=None values=[] defaults=["examples/correctness"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["ROOT"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Verified correctness catalog used by the three unchanged corpus cases"
         long ""
       arg examples long=Some("examples") short=None aliases=None values=[] defaults=["examples"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["EXAMPLES"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Authored examples root; metadata and source digests are checked"
         long ""
       arg include_einstein long=Some("include-einstein") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=SetTrue num_args=None value_names=Some(["INCLUDE_EINSTEIN"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
         help "Include the unchanged Einstein riddle in the workload selection"
         long ""
       arg zetesis long=Some("zetesis") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["ZETESIS"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Modern zetesis executable; omitted uses this installed executable's solve"
         long ""
       arg clingo long=Some("clingo") short=None aliases=None values=[] defaults=["clingo"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["CLINGO"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "External clingo used for one complete qualification per workload"
         long ""
       arg threads long=Some("threads") short=None aliases=None values=[] defaults=["1,2,4,8,14"] hidden=false short_help_hidden=false heading=None
+        index=None action=Append num_args=Some(1..) value_names=Some(["THREADS"]) delimiter=Some(',') terminator=None parser=NonZeroUsize flags=[] conflicts=[]
         help "CPU region thread counts, one through eight profiles, each at most 256"
         long ""
       arg memory long=Some("memory") short=None aliases=None values=[] defaults=["<host>"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["SIZE"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
         help "Native memory allowance in bytes or binary units; omitted, the solver's default"
         long ""
       arg time_limit long=Some("time-limit") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["SECONDS"]) delimiter=None terminator=None parser=NonZeroU64 flags=[] conflicts=[]
         help "Cooperative native deadline in whole seconds, separate from the child timeout"
         long ""
       arg campaign_seconds long=Some("campaign-seconds") short=None aliases=None values=[] defaults=["1800"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["CAMPAIGN_SECONDS"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
         help "Total campaign scheduling deadline, including all qualification children"
         long ""
       arg total_capture_bytes long=Some("total-capture-bytes") short=None aliases=None values=[] defaults=["536870912"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["TOTAL_CAPTURE_BYTES"]) delimiter=None terminator=None parser=usize flags=[] conflicts=[]
         help "Combined retained captures across the complete campaign"
         long ""
       arg report_bytes long=Some("report-bytes") short=None aliases=None values=[] defaults=["1073741824"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["REPORT_BYTES"]) delimiter=None terminator=None parser=usize flags=[] conflicts=[]
         help "Serialized complete evidence ceiling"
         long ""
       arg timeout_seconds long=Some("timeout-seconds") short=None aliases=None values=[] defaults=["30"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["TIMEOUT_SECONDS"]) delimiter=None terminator=None parser=u64 flags=[] conflicts=[]
         help "Maximum elapsed seconds for each native or reference child"
         long ""
       arg capture_bytes long=Some("capture-bytes") short=None aliases=None values=[] defaults=["8388608"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["CAPTURE_BYTES"]) delimiter=None terminator=None parser=usize flags=[] conflicts=[]
         help "Maximum combined stdout/stderr bytes captured from each child"
         long ""
       arg json long=Some("json") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=SetTrue num_args=None value_names=Some(["JSON"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
         help "Emit the workflow's structured report or compact evidence view on stdout"
         long ""
       arg stats long=Some("stats") short=None aliases=None values=["true", "false"] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=SetTrue num_args=None value_names=Some(["STATS"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
         help "Show optional elapsed-time details; off by default. Backend checks always capture route telemetry internally as check evidence"
         long ""
       arg color long=Some("color") short=None aliases=None values=["auto", "always", "never"] defaults=["auto"] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["COLOR"]) delimiter=None terminator=None parser=ColorMode flags=[] conflicts=[]
         help "Human styling; JSON is always plain"
         long ""
       arg report long=Some("report") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+        index=None action=Set num_args=None value_names=Some(["REPORT"]) delimiter=None terminator=None parser=PathBuf flags=[] conflicts=[]
         help "Also retain the structured evidence at a new path; existing files are refused"
         long ""
   command devices | List available execution devices
+    settings=["disable_version_flag"] aliases=[]
   command help | Show help for a command
+    settings=["disable_version_flag"] aliases=[]
     arg topic long=None short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+      index=None action=Set num_args=Some(0..) value_names=Some(["COMMAND"]) delimiter=None terminator=None parser=String flags=[] conflicts=[]
       help ""
       long ""
     arg advanced long=Some("advanced") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
+      index=None action=SetTrue num_args=None value_names=None delimiter=None terminator=None parser=String flags=[] conflicts=[]
       help "Show every solve control and its resource contract"
       long ""
   command version | Show the program version
+    settings=["disable_version_flag"] aliases=[]
