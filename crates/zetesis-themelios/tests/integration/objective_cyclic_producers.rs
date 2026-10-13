@@ -28,40 +28,7 @@ fn cyclic_producers_preserve_full_scored_answers() {
 
 #[test]
 fn cyclic_producers_keeps_the_original_reduct_subject() {
-    for case in source_cases::cases(CASES) {
-        let program = case
-            .source
-            .split("#minimize")
-            .next()
-            .unwrap()
-            .split("#maximize")
-            .next()
-            .unwrap()
-            .split(":~")
-            .next()
-            .unwrap();
-        let original = reference::admit(program, &FormulaLimits::default()).unwrap();
-        let observed = reference::admit(&case.source, &FormulaLimits::default()).unwrap();
-        assert_eq!(original.atoms(), observed.atoms(), "{}", case.name);
-        assert_eq!(
-            (original.theory().nodes(), original.theory().operands()),
-            (observed.theory().nodes(), observed.theory().operands()),
-            "{}",
-            case.name
-        );
-        assert_eq!(
-            original.theory().roots(),
-            observed.theory().roots(),
-            "{}",
-            case.name
-        );
-        assert_eq!(
-            original.formula_origins(),
-            observed.formula_origins(),
-            "{}",
-            case.name
-        );
-    }
+    source_cases::objectives_keep_the_original_reduct_subject(CASES);
 }
 
 #[test]

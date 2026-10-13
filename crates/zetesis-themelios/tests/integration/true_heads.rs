@@ -3,8 +3,8 @@
 use std::collections::BTreeSet;
 use std::fs::{self};
 
-use crate::support::finite_bindings::{holds, remap, values};
-use crate::support::head_models::{clingo, complete, expected, limited, manual_holds, selected};
+use crate::support::finite_bindings::{holds, values};
+use crate::support::head_models::{self, complete, expected, limited, manual_holds, selected};
 use crate::support::objective_boundaries;
 use crate::support::thresholds::first_success;
 use serde_json::{Value as Json, json};
@@ -41,54 +41,7 @@ fn complete_models_match_explicit_families_and_recorded_reference_expectations()
 
 #[test]
 fn source_expansions_preserve_every_original_and_frozen_pair() {
-    let mut pairs = 0;
-    for case in cases() {
-        let source = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
-        let expanded = admit(
-            case["expanded"].as_str().unwrap(),
-            &FormulaLimits::default(),
-        )
-        .unwrap();
-        assert_eq!(
-            source.atoms().iter().collect::<BTreeSet<_>>(),
-            expanded.atoms().iter().collect::<BTreeSet<_>>(),
-            "{}: exact carrier",
-            case["name"]
-        );
-        assert!(source.atoms().len() <= 6);
-        for mask in 0..1_usize << source.atoms().len() {
-            let outer = values(source.theory(), mask, None);
-            let other = values(
-                expanded.theory(),
-                remap(mask, source.atoms(), expanded.atoms()),
-                None,
-            );
-            assert_eq!(
-                holds(source.theory(), &outer),
-                holds(expanded.theory(), &other)
-            );
-            for inner in 0..1_usize << source.atoms().len() {
-                assert_eq!(
-                    holds(
-                        source.theory(),
-                        &values(source.theory(), inner, Some(&outer))
-                    ),
-                    holds(
-                        expanded.theory(),
-                        &values(
-                            expanded.theory(),
-                            remap(inner, source.atoms(), expanded.atoms()),
-                            Some(&other)
-                        )
-                    ),
-                    "{}: M={mask}, J={inner}",
-                    case["name"]
-                );
-                pairs += 1;
-            }
-        }
-    }
-    assert!(pairs > 1_000);
+    head_models::expansions_preserve_every_original_and_frozen_pair(&cases());
 }
 // Every M-false subtree becomes falsum, including non-atomic implications.
 // This evaluates JSON trees directly, without a production DAG or compiler.
@@ -401,15 +354,5 @@ fn duplicate_included_true_heads_retain_each_source_origin() {
 #[test]
 #[ignore = "requires clingo: fresh clingo original and expanded sources match complete models; each original and expansion has a bounded complete capture"]
 fn fresh_clingo_original_and_expanded_sources_match_complete_models() {
-    for case in cases() {
-        let predicted = expected(&case["models"]);
-        for field in ["source", "expanded"] {
-            assert_eq!(
-                clingo(case[field].as_str().unwrap()),
-                predicted,
-                "{}: {field}",
-                case["name"]
-            );
-        }
-    }
+    head_models::clingo_matches_every_source_and_expansion(&cases());
 }

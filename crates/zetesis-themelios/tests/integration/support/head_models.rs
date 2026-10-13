@@ -6,13 +6,13 @@ use std::time::Duration;
 
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::canonical;
+use zetesis_reference_support::{admit, canonical};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
     admit_formula,
 };
 
-use super::finite_bindings::{Models, holds, values};
+use super::finite_bindings::{Models, holds, remap, values};
 
 /// A model as the set of its atoms' spellings.
 pub(crate) type Names = BTreeSet<String>;
@@ -128,4 +128,75 @@ pub(crate) fn selected(admitted: &AdmittedFormula, mask: usize) -> Names {
         .filter(|(i, _)| mask & (1 << i) != 0)
         .map(|(_, atom)| canonical(atom))
         .collect()
+}
+
+/// Every case's source and its explicit expansion (`source` and `expanded`)
+/// have the same atoms and agree on satisfaction in each interpretation M and,
+/// for each J, on whether J satisfies the reduct by M; the fixture checks more
+/// than a thousand such pairs.
+pub(crate) fn expansions_preserve_every_original_and_frozen_pair(cases: &[Json]) {
+    let mut pairs = 0;
+    for case in cases {
+        let source = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
+        let expanded = admit(
+            case["expanded"].as_str().unwrap(),
+            &FormulaLimits::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            source.atoms().iter().collect::<BTreeSet<_>>(),
+            expanded.atoms().iter().collect::<BTreeSet<_>>(),
+            "{}: exact carrier",
+            case["name"]
+        );
+        assert!(source.atoms().len() <= 6);
+        for mask in 0..1_usize << source.atoms().len() {
+            let outer = values(source.theory(), mask, None);
+            let other = values(
+                expanded.theory(),
+                remap(mask, source.atoms(), expanded.atoms()),
+                None,
+            );
+            assert_eq!(
+                holds(source.theory(), &outer),
+                holds(expanded.theory(), &other)
+            );
+            for inner in 0..1_usize << source.atoms().len() {
+                assert_eq!(
+                    holds(
+                        source.theory(),
+                        &values(source.theory(), inner, Some(&outer))
+                    ),
+                    holds(
+                        expanded.theory(),
+                        &values(
+                            expanded.theory(),
+                            remap(inner, source.atoms(), expanded.atoms()),
+                            Some(&other)
+                        )
+                    ),
+                    "{}: M={mask}, J={inner}",
+                    case["name"]
+                );
+                pairs += 1;
+            }
+        }
+    }
+    assert!(pairs > 1_000);
+}
+
+/// Clingo's complete models of every case's source and of its expansion are
+/// the ones the case records.
+pub(crate) fn clingo_matches_every_source_and_expansion(cases: &[Json]) {
+    for case in cases {
+        let predicted = expected(&case["models"]);
+        for field in ["source", "expanded"] {
+            assert_eq!(
+                clingo(case[field].as_str().unwrap()),
+                predicted,
+                "{}: {field}",
+                case["name"]
+            );
+        }
+    }
 }
