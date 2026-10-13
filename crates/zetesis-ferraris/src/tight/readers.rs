@@ -64,16 +64,18 @@ impl Reader {
     }
 }
 
-/// Ordered rows over one entry vector: row `r` is `entries[offsets[r]..offsets[r + 1]]`.
+/// Ordered lists over one entry vector, one per slot: list `s` is
+/// `entries[offsets[s]..offsets[s + 1]]`. A slot is a node, an atom or a numeric
+/// row, by relation.
 #[derive(Debug)]
-struct Rows<T> {
+struct Lists<T> {
     offsets: Vec<usize>,
     entries: Vec<T>,
 }
 
-impl<T: Copy> Rows<T> {
-    fn row(&self, row: usize) -> &[T] {
-        &self.entries[self.offsets[row]..self.offsets[row + 1]]
+impl<T: Copy> Lists<T> {
+    fn list(&self, slot: usize) -> &[T] {
+        &self.entries[self.offsets[slot]..self.offsets[slot + 1]]
     }
 
     fn bytes(&self) -> u128 {
@@ -86,25 +88,25 @@ impl<T: Copy> Rows<T> {
 /// every numeric row of one theory, for one producer list.
 #[derive(Debug)]
 pub(super) struct Readers {
-    of_nodes: Rows<Reader>,
-    atom_nodes: Rows<usize>,
-    guards: Rows<usize>,
+    of_nodes: Lists<Reader>,
+    atom_nodes: Lists<usize>,
+    guards: Lists<usize>,
 }
 
 impl Readers {
     /// Readers of `node`'s truth, in node, row, producer and root order of discovery.
     pub(super) fn of(&self, node: usize) -> &[Reader] {
-        self.of_nodes.row(node)
+        self.of_nodes.list(node)
     }
 
     /// The atom nodes reading `atom`'s membership.
     pub(super) fn atom_nodes(&self, atom: usize) -> &[usize] {
-        self.atom_nodes.row(atom)
+        self.atom_nodes.list(atom)
     }
 
     /// The guard nodes reading `row`'s measure.
     pub(super) fn guards(&self, row: usize) -> &[usize] {
-        self.guards.row(row)
+        self.guards.list(row)
     }
 
     /// Reader entries over all nodes.
@@ -123,48 +125,52 @@ impl Readers {
     }
 
     /// Build the index in two charged passes over the same incidence stream:
-    /// one counts each relation's rows, the other places their entries. Each
+    /// one counts each relation's lists, the other places their entries. Each
     /// pass visits every node and its operands or conditions once per row,
     /// every producer and every root position, so the work is linear in the
-    /// theory. Storage is checked against `max_bytes` (with `base` bytes already
-    /// held) before the entries are allocated.
+    /// theory. Storage is admitted against `max_bytes`, with `base` bytes
+    /// already held, before each allocation: the counts and a pass's row marks
+    /// first, then the offsets, placement cursors and entries beside them.
+    /// Returns the index and the most logical bytes the build held at once.
     pub(super) fn build(
         theory: &Theory,
         producers: &[TightProducer],
         base: u128,
         max_bytes: u64,
-        work: &mut Meter<'_>,
-    ) -> Result<Self, TightError> {
+        meter: &mut Meter<'_>,
+    ) -> Result<(Self, u64), TightError> {
         let nodes = theory.nodes().len();
         let atoms = theory.atom_count();
         let rows = theory.parts().rows().len();
+        let counts = (nodes + atoms + rows) as u128 * size_of::<usize>() as u128;
+        let marks = rows.div_ceil(64) as u128 * size_of::<u64>() as u128;
+        bytes(base + counts + marks, max_bytes)?;
         let mut readers = Counted::new(nodes)?;
         let mut atom_nodes = Counted::new(atoms)?;
         let mut guards = Counted::new(rows)?;
-        incidences(theory, producers, work, |incidence| match incidence {
+        incidences(theory, producers, meter, |incidence| match incidence {
             Incidence::Reader(node, _) => readers.count(node),
             Incidence::AtomNode(atom, _) => atom_nodes.count(atom),
             Incidence::Guard(row, _) => guards.count(row),
         })?;
-        bytes(
-            base + readers.bytes::<Reader>()?
-                + atom_nodes.bytes::<usize>()?
-                + guards.bytes::<usize>()?,
-            max_bytes,
-        )?;
+        let placed = readers.placed_bytes::<Reader>()?
+            + atom_nodes.placed_bytes::<usize>()?
+            + guards.placed_bytes::<usize>()?;
+        let peak = bytes(base + counts + marks + placed, max_bytes)?;
         let mut readers = readers.placement(Reader(0))?;
         let mut atom_nodes = atom_nodes.placement(0)?;
         let mut guards = guards.placement(0)?;
-        incidences(theory, producers, work, |incidence| match incidence {
+        incidences(theory, producers, meter, |incidence| match incidence {
             Incidence::Reader(node, reader) => readers.place(node, reader),
             Incidence::AtomNode(atom, node) => atom_nodes.place(atom, node),
             Incidence::Guard(row, node) => guards.place(row, node),
         })?;
-        Ok(Self {
+        let index = Self {
             of_nodes: readers.finish()?,
             atom_nodes: atom_nodes.finish()?,
             guards: guards.finish()?,
-        })
+        };
+        Ok((index, peak))
     }
 }
 
@@ -185,20 +191,20 @@ enum Incidence {
 fn incidences(
     theory: &Theory,
     producers: &[TightProducer],
-    work: &mut Meter<'_>,
+    meter: &mut Meter<'_>,
     mut emit: impl FnMut(Incidence) -> Result<(), TightError>,
 ) -> Result<(), TightError> {
     let view = theory.view();
     let mut seen = filled(theory.parts().rows().len().div_ceil(64), 0_u64)?;
     for index in 0..view.len() {
-        work.tick()?;
+        meter.tick()?;
         let node = view.node(index).map_err(|_| Stop::InvalidProgram)?;
         match node {
             NodeView::Atom(atom) => emit(Incidence::AtomNode(atom, index))?,
             NodeView::False => {}
             NodeView::And(operands) | NodeView::Or(operands) => {
                 for &operand in operands {
-                    work.tick()?;
+                    meter.tick()?;
                     emit(Incidence::Reader(
                         operand,
                         Reader::new(ReaderKind::Node, index)?,
@@ -207,7 +213,7 @@ fn incidences(
             }
             NodeView::Implies(antecedent, consequent) => {
                 for operand in [antecedent, consequent] {
-                    work.tick()?;
+                    meter.tick()?;
                     emit(Incidence::Reader(
                         operand,
                         Reader::new(ReaderKind::Node, index)?,
@@ -219,7 +225,7 @@ fn incidences(
                 emit(Incidence::Guard(row, index))?;
                 if first(&mut seen, row)? {
                     for &condition in threshold.conditions {
-                        work.tick()?;
+                        meter.tick()?;
                         emit(Incidence::Reader(
                             condition,
                             Reader::new(ReaderKind::Row, row)?,
@@ -232,7 +238,7 @@ fn incidences(
                 emit(Incidence::Guard(row, index))?;
                 if first(&mut seen, row)? {
                     for &condition in cut.row.conditions {
-                        work.tick()?;
+                        meter.tick()?;
                         emit(Incidence::Reader(
                             condition,
                             Reader::new(ReaderKind::Row, row)?,
@@ -243,7 +249,7 @@ fn incidences(
         }
     }
     for (index, producer) in producers.iter().enumerate() {
-        work.tick()?;
+        meter.tick()?;
         if let Some(body) = producer.body {
             emit(Incidence::Reader(
                 body,
@@ -252,7 +258,7 @@ fn incidences(
         }
     }
     for (position, &root) in theory.roots().iter().enumerate() {
-        work.tick()?;
+        meter.tick()?;
         emit(Incidence::Reader(
             root,
             Reader::new(ReaderKind::Root, position)?,
@@ -291,20 +297,20 @@ fn first(seen: &mut [u64], row: usize) -> Result<bool, TightError> {
     Ok(fresh)
 }
 
-/// Row lengths counted in the first pass.
+/// List lengths counted in the first pass, one per slot.
 struct Counted {
     counts: Vec<usize>,
 }
 
 impl Counted {
-    fn new(rows: usize) -> Result<Self, TightError> {
+    fn new(slots: usize) -> Result<Self, TightError> {
         Ok(Self {
-            counts: filled(rows, 0)?,
+            counts: filled(slots, 0)?,
         })
     }
 
-    fn count(&mut self, row: usize) -> Result<(), TightError> {
-        let count = self.counts.get_mut(row).ok_or(Stop::InvalidProgram)?;
+    fn count(&mut self, slot: usize) -> Result<(), TightError> {
+        let count = self.counts.get_mut(slot).ok_or(Stop::InvalidProgram)?;
         *count = count.checked_add(1).ok_or(Stop::InvalidProgram)?;
         Ok(())
     }
@@ -316,17 +322,20 @@ impl Counted {
             .ok_or_else(|| Stop::InvalidProgram.into())
     }
 
-    fn bytes<T>(&self) -> Result<u128, TightError> {
-        Ok((self.counts.len() as u128 + 1) * size_of::<usize>() as u128
-            + self.total()? as u128 * size_of::<T>() as u128)
+    /// The bytes [`Self::placement`] allocates: offsets, cursors and entries.
+    fn placed_bytes<T>(&self) -> Result<u128, TightError> {
+        Ok(
+            (2 * self.counts.len() as u128 + 1) * size_of::<usize>() as u128
+                + self.total()? as u128 * size_of::<T>() as u128,
+        )
     }
 
-    /// Prefix sums become each row's start; entries are allocated once.
+    /// Prefix sums become each list's start; entries are allocated once.
     fn placement<T: Copy>(self, blank: T) -> Result<Placement<T>, TightError> {
         let total = self.total()?;
         let mut offsets = filled(self.counts.len() + 1, 0)?;
-        for (row, &count) in self.counts.iter().enumerate() {
-            offsets[row + 1] = offsets[row] + count;
+        for (slot, &count) in self.counts.iter().enumerate() {
+            offsets[slot + 1] = offsets[slot] + count;
         }
         let mut cursors = filled(self.counts.len(), 0)?;
         cursors.copy_from_slice(&offsets[..self.counts.len()]);
@@ -338,7 +347,7 @@ impl Counted {
     }
 }
 
-/// Second-pass placement: each row fills its interval in stream order.
+/// Second-pass placement: each list fills its interval in stream order.
 struct Placement<T> {
     offsets: Vec<usize>,
     cursors: Vec<usize>,
@@ -346,9 +355,9 @@ struct Placement<T> {
 }
 
 impl<T: Copy> Placement<T> {
-    fn place(&mut self, row: usize, entry: T) -> Result<(), TightError> {
-        let cursor = self.cursors.get_mut(row).ok_or(Stop::InvalidProgram)?;
-        if *cursor >= self.offsets[row + 1] {
+    fn place(&mut self, slot: usize, entry: T) -> Result<(), TightError> {
+        let cursor = self.cursors.get_mut(slot).ok_or(Stop::InvalidProgram)?;
+        if *cursor >= self.offsets[slot + 1] {
             return Err(Stop::InvalidProgram.into());
         }
         self.entries[*cursor] = entry;
@@ -357,7 +366,7 @@ impl<T: Copy> Placement<T> {
     }
 
     /// Both passes read the same stream, so every interval is exactly full.
-    fn finish(self) -> Result<Rows<T>, TightError> {
+    fn finish(self) -> Result<Lists<T>, TightError> {
         if self
             .cursors
             .iter()
@@ -366,7 +375,7 @@ impl<T: Copy> Placement<T> {
         {
             return Err(Stop::InvalidProgram.into());
         }
-        Ok(Rows {
+        Ok(Lists {
             offsets: self.offsets,
             entries: self.entries,
         })

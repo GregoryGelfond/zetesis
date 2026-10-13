@@ -47,8 +47,10 @@ and both endpoints. The shared
 [numeric workspace](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/numeric_evaluation.rs)
 retains one completed reduction per authoritative row during a whole-theory CPU
 pass: either a checked weighted sum or a pair of extrema, interpreted by the
-row's domain. Reuse requires completed predecessor truth and is invalidated
-between passes; every frozen guard separately applies its original truth gate.
+row's domain. Reuse requires completed predecessor truth. A complete pass
+invalidates every row first; an update of a retained tight evaluation
+invalidates exactly the rows whose conditions changed, before re-evaluating any
+of their guards. Every frozen guard separately applies its original truth gate.
 Admission records whether any numeric node is present, so unused raw descriptors
 alone require no workspace. This shape flag, compact slot encoding, completed-only
 publication and reset/work/storage receipts are additional Rust obligations;
@@ -234,16 +236,22 @@ worker-local `TightWorkspace`. A complete check gives every formula node fresh
 truth, while conjunctions and disjunctions stop reading operands at the first
 decisive value. With the plan's readers index, a later check updates the
 retained evaluation instead: it re-evaluates, in node order, exactly the nodes
-with a changed operand and maintains support counts and the false-root and
-unsupported-atom sets. That this update equals `TightEvaluation.values` of the
-new candidate (by induction over the node order), and that the maintained sets
-equal their definitions, is argued in the Rust documentation and checked by a
-differential property against complete evaluation; the Lean laws below do not
-cover the update.
-All original roots and producers remain covered. Support is reset before reuse;
-the final check intersects each candidate word with the complement of its
-support word, returning the first unsupported atom. Work counts visited operand
-prefixes and support words. Existing `TightEvaluation` laws still require exact
+with a changed input and maintains support counts and the false-root and
+unsupported-atom sets. `TightEvaluation.updated_values_exact` proves the
+node-table rule: re-evaluating, in table order, exactly the nodes whose inputs
+changed and keeping every other node's retained truth yields
+`TightEvaluation.values` of the new candidate. The worklist and reverse index
+that realize the rule, row re-reduction and the maintained support counts and
+sets are argued in the source documentation of `TightWorkspace` and its update
+and checked by a differential property against complete evaluation; no Lean law
+covers them.
+All original roots and producers remain covered. On the complete route support
+is reset before reuse, and the final check intersects each candidate word with
+the complement of its support word, returning the first unsupported atom; an
+update reports the least atom of its maintained unsupported set, the same
+witness. Work counts visited operand prefixes and support words on the complete
+route, and the update units `TightCheckLimits::max_work` lists on the update
+route. Existing `TightEvaluation` laws still require exact
 original truth, complete producers and valid ranks. They do not prove the Rust
 workspace's allocation, packing, reset or retained-capacity behavior; those
 boundaries have regression checks. The separately extracted general evaluator
@@ -1556,8 +1564,9 @@ Returning unused grants before an idle wait, releasing blocked
 sends before joining on iterator drop, and counting joined certificate checks
 are Rust lifecycle and accounting obligations, beyond permit conservation. The
 bounded subprocess regressions in `zetesis-sat/tests/integration/parallel_regions.rs` exercise
-shutdown and idle grants; the certificate regressions compare complete scalar
-and parallel work and reject an insufficient shared allowance. An injected
+shutdown and idle grants; the certificate regressions compare scalar and
+parallel region and construction work, bound checking work by the checks'
+reservations, and reject an insufficient shared allowance. An injected
 worker unwind also checks that idle peers wake and coverage remains incomplete.
 
 The native parallel walk keeps one deque per worker. Its owner removes the
@@ -3024,10 +3033,12 @@ Candidate export splits each stored 64-bit word into ordered low and high
 32-bit words. Only words covering the declared atom universe are exported;
 unused final bits remain zero. Atom enumeration visits set bits in increasing
 order. Both operations retain the original interpretation's theory identity.
-Both tight checkers find unsupported atoms from each candidate word intersected
-with the complement of its support word. The CPU visits words in ascending
-order and stops at the first nonempty difference; the shader reduces the first
-set bit of every nonempty difference. Both yield the least unsupported atom;
+On their complete routes both tight checkers find unsupported atoms from each
+candidate word intersected with the complement of its support word. The CPU
+visits words in ascending order and stops at the first nonempty difference; the
+shader reduces the first set bit of every nonempty difference. The CPU update
+route reports the least atom of its maintained unsupported set instead. All
+yield the least unsupported atom;
 an original-root failure still takes precedence. `support_true_iff` states the
 corresponding per-atom support obligation. The concrete word conversion,
 set-bit iterator, witness reduction and their resource bounds require separate

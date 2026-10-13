@@ -472,10 +472,30 @@ query. A false root remains an original-model failure; missing support returns
 immutable theory identity and has separate producer, dependency, logical-byte
 and work limits. An incomplete scan never supplies a successful certificate.
 
+`TightPlan::prepare_updates` adds a reverse index to the plan: for every node,
+the connectives, numeric rows, producer bodies and root positions that read it;
+for every atom, its atom nodes; for every row, its guards. A `TightWorkspace`
+that completed a check under such a plan keeps that evaluation and updates it for
+the next candidate of the same theory: it re-evaluates, in ascending node order,
+exactly the nodes with an input whose value changed, withdraws the measures of
+rows whose conditions changed, and maintains support counts and the
+unsupported-atom and false-root sets. Readers have larger indices than what they
+read, so every re-evaluation reads final inputs and each node is re-evaluated at
+most once; each summary is a count over its inputs and moves with each changed
+input. A completed check's verdict and witness therefore equal a complete
+evaluation's. A large change, another theory or a check after an interrupted
+one evaluates completely. `TightPlan::check_work_bound` bounds a check by either
+route. The mechanism comments in [the workspace](src/tight/evaluate.rs) carry
+the full argument.
+
 `proofs/Zetesis/TightPlans.lean` proves the formula-level satisfaction/support
 characterization for this grammar, including original choices in both branch
 orders. It does not prove the Rust extractor, rank implementation or missing
-lazy source coverage. Tests compare finite trees and their materialized reducts,
+lazy source coverage. `proofs/Zetesis/TightEvaluation.lean` proves that
+re-evaluating exactly the nodes whose inputs changed yields the new candidate's
+node truth (`updated_values_exact`); the worklist, the index, row re-reduction
+and the maintained summaries are Rust obligations, checked by a differential
+property against complete evaluation. Tests compare finite trees and their materialized reducts,
 validate rank/root/identity/resource boundaries, and exercise the ordinary
 candidate batch protocol.
 

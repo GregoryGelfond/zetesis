@@ -181,8 +181,8 @@ completion. These are fixed-observation library-model results; changing runtime
 observations and their source-checked context projection remain separate.
 
 The native control path uses a borrowed `CancellationPoll` view. The owning
-`Cancellation::poll` prepares this view and delegates to its poll; tight work
-retains the view between operation boundaries. Every extracted tick predates
+`Cancellation::poll` prepares this view and delegates to its poll; a metered
+operation's meter retains the view between operation boundaries. Every extracted tick predates
 metered polling: the extracted `tight::Work::tick` and `oracle::Work::tick` poll
 before every charged operation, as their recorded source did, while the current
 Rust ticks observe control at `POLL_INTERVAL` boundaries and before a limit

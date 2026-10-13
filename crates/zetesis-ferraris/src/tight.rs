@@ -26,8 +26,9 @@ pub struct TightPlanLimits {
     /// the readers index [`TightPlan::prepare_updates`] adds to it.
     pub max_bytes: u64,
     /// Charged node, root, edge and rank operations during certification, and
-    /// the node, operand, condition, producer and root visits of each pass
-    /// that builds the readers index.
+    /// the node, operand, condition, producer and root visits of each pass that
+    /// builds the readers index. Compilation and the index build each run under
+    /// this limit separately.
     pub max_work: u64,
 }
 
@@ -202,13 +203,16 @@ impl TightProducer {
 /// Construction accounting for a successfully checked class certificate.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TightPlanStatistics {
-    /// Charged certification operations.
+    /// Charged certification operations, and the readers index's passes when
+    /// [`TightPlan::prepare_updates`] built it.
     pub work: u64,
     /// Positive dependency graph edges, including formula-node edges.
     pub dependencies: usize,
-    /// Conservative simultaneous logical payload bound during construction.
+    /// Conservative simultaneous logical payload bound during construction,
+    /// including the readers index's build.
     pub construction_bytes: u64,
-    /// Retained producer and rank payload; shared theory storage is excluded.
+    /// Retained producer, rank and readers-index payload; shared theory storage
+    /// is excluded.
     pub resident_bytes: u64,
 }
 
@@ -256,16 +260,21 @@ impl TightPlan {
 
     /// Build the reverse index that lets a reused [`TightWorkspace`] bring its
     /// retained complete evaluation up to the next candidate instead of
-    /// evaluating it completely. Two charged passes over nodes, operands,
-    /// numeric conditions, producers and root positions; the index is checked
-    /// against `limits.max_bytes` together with the plan's resident bytes before
-    /// its entries are allocated. Returns whether the index exists afterwards: a
-    /// plan whose index does not fit keeps complete evaluation, and building it
-    /// again is a no-op. Construction work and resident bytes include the index.
+    /// evaluating it completely. The build makes two charged passes over nodes,
+    /// operands, numeric conditions, producers and root positions. It is
+    /// attempted only when `limits.max_work` covers twice the nodes, operand
+    /// occurrences, producers and roots, so a build the allowance cannot finish
+    /// spends nothing. Its construction vectors and the finished index are
+    /// admitted against `limits.max_bytes`, together with the plan's resident
+    /// bytes, before they are allocated. Returns whether the index exists
+    /// afterwards: when either allowance does not cover the build, the plan keeps
+    /// complete evaluation, and a later call with larger limits may build it.
+    /// Construction work, construction bytes and resident bytes include the
+    /// index.
     ///
     /// # Errors
-    /// Refuses the work limit, cancellation, deadlines and allocation; the plan
-    /// is unchanged then.
+    /// Refuses cancellation, deadlines and allocation; the plan is unchanged
+    /// then.
     pub fn prepare_updates(
         &mut self,
         limits: TightPlanLimits,
@@ -277,38 +286,52 @@ impl TightPlan {
                 work: 0,
             };
         }
-        let base = u128::from(self.statistics.resident_bytes);
-        let metered =
-            cancellation.metered(limits.max_work, |meter| {
-                match readers::Readers::build(
-                    &self.theory,
-                    &self.producers,
-                    base,
-                    limits.max_bytes,
-                    meter,
-                ) {
-                    Ok(readers) => Ok(Some(readers)),
-                    Err(TightError::Limit(TightResource::Bytes)) => Ok(None),
-                    Err(error) => Err(error),
-                }
-            });
-        let result = metered.result.and_then(|readers| {
-            let Some(readers) = readers else {
-                return Ok(false);
+        if u128::from(limits.max_work) < self.index_work_bound() {
+            return TightAttempt {
+                result: Ok(false),
+                work: 0,
             };
-            self.statistics.resident_bytes = bytes(base + readers.bytes(), limits.max_bytes)?;
-            self.statistics.work = self
-                .statistics
+        }
+        let base = u128::from(self.statistics.resident_bytes);
+        let Self {
+            theory,
+            producers,
+            readers,
+            statistics,
+            ..
+        } = self;
+        let metered = cancellation.metered(limits.max_work, |meter| {
+            let (index, peak) =
+                match readers::Readers::build(theory, producers, base, limits.max_bytes, meter) {
+                    Ok(built) => built,
+                    Err(TightError::Limit(TightResource::Bytes)) => return Ok(false),
+                    Err(error) => return Err(error),
+                };
+            let resident = bytes(base + index.bytes(), limits.max_bytes)?;
+            let work = statistics
                 .work
-                .checked_add(metered.charged)
+                .checked_add(meter.charged())
                 .ok_or(TightError::Limit(TightResource::Work))?;
-            self.readers = Some(readers);
+            statistics.resident_bytes = resident;
+            statistics.construction_bytes = statistics.construction_bytes.max(peak);
+            statistics.work = work;
+            *readers = Some(index);
             Ok(true)
         });
         TightAttempt {
-            result,
+            result: metered.result,
             work: metered.charged,
         }
+    }
+
+    /// The most work building the readers index can charge: two passes, each
+    /// visiting every node, operand occurrence, producer and root at most once.
+    fn index_work_bound(&self) -> u128 {
+        let theory = &self.theory;
+        2 * (theory.nodes().len() as u128
+            + theory.parts().occurrences() as u128
+            + self.producers.len() as u128
+            + theory.roots().len() as u128)
     }
 
     /// The most work any one [`TightWorkspace`] check can charge under this
@@ -360,7 +383,7 @@ impl TightPlan {
         let occurrences = theory.parts().occurrences() as u128;
         let summaries = self.producers.len() as u128 + roots + words;
         let difference = 2 * words + atoms + readers.atom_node_count() as u128;
-        let propagation = 2 * nodes + 2 * occurrences + readers.reader_count() as u128;
+        let propagation = nodes + 2 * occurrences + readers.reader_count() as u128;
         let verdict = theory.roots().len().div_ceil(64) as u128 + words;
         Some(summaries + difference + propagation + verdict)
     }

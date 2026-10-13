@@ -446,8 +446,7 @@ fn joined_workers_report_their_certificate_checks() {
 #[test]
 fn parallel_certificates_charge_the_scalar_regions_and_construction() {
     // Checking work depends on what each worker checked before (its retained
-    // evaluation), so only region and construction work match the scalar run;
-    // every check stays within the plan's per-check bound.
+    // evaluation), so only region and construction work match the scalar run.
     let (scalar_models, scalar, scalar_exhausted) = certified_family(1, Limits::default());
     let (parallel_models, parallel, parallel_exhausted) = certified_family(3, Limits::default());
     assert!(scalar_exhausted && parallel_exhausted);
@@ -458,15 +457,33 @@ fn parallel_certificates_charge_the_scalar_regions_and_construction() {
     );
     let (scalar, parallel) = (scalar.certified.unwrap(), parallel.certified.unwrap());
     assert_eq!(parallel.construction_work, scalar.construction_work);
-    let plan = zetesis_ferraris::TightPlan::compile(
-        &choices(5),
-        TightPlanLimits::default(),
-        &Cancellation::default(),
-    )
-    .unwrap();
-    for certified in [scalar, parallel] {
+}
+
+#[test]
+fn checking_work_stays_within_the_reservations_of_its_checks() {
+    // Each certified check reserves the run's own plan bound; the work the
+    // checks charged together stays within what they reserved.
+    for worker_count in [1, 3] {
+        let mut search = StableModels::with_region_workers(
+            &choices(5),
+            workers(worker_count),
+            Limits::default(),
+            Cancellation::default(),
+        )
+        .unwrap();
+        assert!(
+            search
+                .enable_certified_checking(TightPlanLimits::default())
+                .unwrap()
+        );
+        assert_eq!(family(&mut search).len(), 32);
+        let bound = search
+            .prepared_tight_certificate()
+            .unwrap()
+            .check_work_bound();
+        let certified = search.statistics().certified.unwrap();
         assert_eq!(certified.checks, 32);
-        assert!(u128::from(certified.checking_work) <= 32 * plan.check_work_bound());
+        assert!(u128::from(certified.checking_work) <= 32 * bound);
     }
 }
 
@@ -515,10 +532,15 @@ fn tight_check_storage_is_local_to_each_worker() {
 
 #[test]
 fn certificate_work_cannot_exceed_the_shared_ceiling() {
+    // Region, construction and decision work do not depend on the schedule,
+    // unlike checking work, which follows each worker's retained evaluation. A
+    // ceiling one unit below them alone therefore denies the enumeration
+    // whatever the checks cost, and every check that starts must fit beneath it.
     let (_, scalar, _) = certified_family(1, Limits::default());
+    let checking = scalar.certified.unwrap().checking_work;
     let limits = Limits {
         search: SearchLimits {
-            max_work: scalar.search.work - 1,
+            max_work: scalar.search.work - checking - 1,
             ..SearchLimits::default()
         },
         ..Limits::default()
@@ -535,7 +557,7 @@ fn certificate_work_cannot_exceed_the_shared_ceiling() {
     assert!(matches!(last, Some(Err(Incomplete::WorkLimit))), "{last:?}");
     assert!(
         !search.exhausted(),
-        "full enumeration requires the missing certificate work"
+        "full enumeration requires more than the ceiling admits"
     );
     let statistics = search.statistics();
     let certificate = statistics.certified.unwrap();

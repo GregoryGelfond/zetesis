@@ -1664,6 +1664,11 @@ import Zetesis
 #print axioms Zetesis.TightEvaluation.unsupported_refutes
 #print axioms Zetesis.TightEvaluation.computed_verdict_sound
 #print axioms Zetesis.TightEvaluation.completed_computation_exact
+#print axioms Zetesis.TightEvaluation.unchanged_inputs_keep_truth
+#print axioms Zetesis.TightEvaluation.update_step_appends_truth
+#print axioms Zetesis.TightEvaluation.update_fold_pairs
+#print axioms Zetesis.TightEvaluation.updated_values_exact
+#print axioms Zetesis.TightEvaluation.update_retains_old_values
 #print axioms Zetesis.TightPlans.original_of_reduct
 #print axioms Zetesis.TightPlans.negation_frozen
 #print axioms Zetesis.TightPlans.body_reduct_of_positive

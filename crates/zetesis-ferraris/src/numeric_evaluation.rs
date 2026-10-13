@@ -3,18 +3,21 @@
 //! One 16-byte slot holds either an `i128` sum or two `u64` extrema. The immutable
 //! `NumericRow` domain determines its interpretation; the slot is never a second
 //! row authority. Byte conversions are safe Rust, with no union or casts.
-//! Validity is reset before each complete original or frozen evaluation pass. An
-//! update of a retained tight evaluation instead withdraws exactly the rows whose
-//! conditions changed; the other rows keep measures equal to their reductions
-//! under the current candidate.
+//! One invariant governs reads: a row whose validity bit is set holds its exact
+//! measure under the node truth its owner currently holds. A complete original
+//! or frozen evaluation pass clears every bit first and sets each as it reduces
+//! the row. An update of a retained tight evaluation clears the bit of every row
+//! with a changed condition before any of its guards is re-evaluated, since a
+//! row's conditions precede its guards; every surviving bit is therefore still
+//! exact.
 
 use crate::{ExtremaMeasure, ExtremumCut, NumericDomain, Theory, Threshold};
 use zetesis_cpu::Stop;
 
 /// Capacity survives passes; valid bits survive only into an update of the
-/// evaluation that published them. Measure cells remain safely initialized after
-/// interruption, but are readable only after the current pass, or the update,
-/// has published their bit. The cache borrows no subject or source data.
+/// evaluation that published them, under the invariant the module states.
+/// Measure cells remain safely initialized after interruption, but a cell is
+/// read only while its bit is set. The cache borrows no subject or source data.
 #[derive(Debug, Default)]
 pub(crate) struct NumericRowScratch {
     measures: Vec<Measure>,
@@ -190,9 +193,11 @@ impl NumericRowScratch {
     }
 
     /// Domain interpretation is fixed by the admitted descriptor before this
-    /// call. Reset cleared validity for this exact pass. All children precede
-    /// the first referencing guard, so its complete measure remains valid for
-    /// later guards even when unrelated rows are evaluated between them.
+    /// call. A set bit holds the row's exact measure under the current truth
+    /// (the module's invariant); otherwise the row is reduced now. All children
+    /// precede the first referencing guard, so its complete measure remains
+    /// valid for later guards even when unrelated rows are evaluated between
+    /// them.
     #[inline]
     fn cached<E: From<Stop>>(
         &mut self,

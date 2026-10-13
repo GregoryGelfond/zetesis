@@ -50,28 +50,27 @@ impl TightPlan {
 
 /// Reusable truth and support storage for tight-certificate checks.
 ///
-/// A workspace keeps, after a check that completed, the complete evaluation of
-/// the candidate it checked, together with a handle to that candidate's theory.
-/// When the plan has its readers index ([`TightPlan::prepare_updates`]), the next
-/// check of a candidate of the same theory updates that evaluation: it
-/// re-evaluates, in ascending node order, exactly the nodes with an operand
-/// whose truth changed, and maintains support counts and the false-root and
-/// unsupported-atom sets, so its verdict and witness are those of a complete
-/// evaluation of the new candidate. A check whose candidate differs in more
-/// atoms than an eighth of the theory's atoms (and at least 64), a different
-/// theory, a plan without the
-/// index, or a check after an interrupted one evaluates completely, recomputing
-/// every formula truth. An interrupted check leaves nothing a later check can
-/// read. Each conjunction or disjunction reads operands only
-/// through its first decisive value. Checks are bounded by nodes, operand
-/// occurrences, tested roots, producers and packed candidate words. Numeric nodes
-/// read and charge every physical occurrence once per authoritative row and pass,
-/// including repeats and zero weights, even
-/// for endpoint constants. Dense measure growth and packed-validity resets are
-/// charged; old measures are inaccessible until completed in the current pass. Truth uses
-/// one byte per node; support uses one bit per atom, rounded to 32-bit words.
-/// Each concurrent checker owns an exclusive workspace; immutable plans may be
-/// shared.
+/// A complete check gives every formula node its truth in admitted order. Each
+/// conjunction or disjunction reads operands only through its first decisive
+/// value. Numeric nodes read and charge every physical occurrence once per
+/// authoritative row and pass, including repeats and zero weights, even for
+/// endpoint constants; dense measure growth and packed-validity resets are
+/// charged. Truth uses one byte per node, and the complete route's support one
+/// bit per atom, rounded to 32-bit words.
+///
+/// When the plan has its readers index ([`TightPlan::prepare_updates`]), a
+/// workspace keeps, after a check that completed, the complete evaluation of the
+/// candidate it checked together with a handle to that candidate's theory, and
+/// the next check of a candidate of the same theory updates it. The update
+/// re-evaluates, in ascending node order, exactly the nodes with an input whose
+/// value changed, keeps the measures of rows none of whose conditions changed,
+/// and maintains a four-byte support count per atom and the unsupported-atom and
+/// false-root sets, so its verdict and witness are those of a complete
+/// evaluation of the new candidate. A candidate that differs in more atoms than
+/// an eighth of the theory's atoms (and at least 64), a different theory, a plan
+/// without the index, or a check after an interrupted one evaluates completely.
+/// An interrupted check leaves nothing a later check can read. Each concurrent
+/// checker owns an exclusive workspace; immutable plans may be shared.
 #[derive(Debug, Default)]
 pub struct TightWorkspace {
     values: Vec<u8>,
@@ -82,6 +81,14 @@ pub struct TightWorkspace {
 
 /// The complete evaluation a workspace keeps between checks of one theory, and
 /// the summaries an update maintains from it.
+///
+/// Each summary is a count over its inputs: a support count over its atom's
+/// producers, a missing flag over its atom's membership and support count, a
+/// false-root flag over its node's truth, and the two set counts over those
+/// flags. An update visits each changed input once, with its old and new value,
+/// and moves the count it feeds by one in the matching direction. Membership is
+/// applied before propagation, so a missing flag sees each of its two inputs
+/// change exactly when that input changes.
 #[derive(Debug, Default)]
 struct Retained {
     /// Present exactly when node truth and the row measures are the complete
@@ -135,10 +142,17 @@ impl TightWorkspace {
     /// Check original satisfaction and ranked support using retained storage.
     ///
     /// Identity failure precedes cancellation, which precedes storage admission.
-    /// Work and error attribution match [`TightPlan::check_accounted`]. Byte
-    /// ceilings include existing capacity, even for a smaller subsequent theory;
-    /// checks do not shrink storage. Every outcome retains its charged work and
-    /// leaves actual capacity observable through [`Self::retained_bytes`].
+    /// A completed check's verdict and witness are always those of
+    /// [`TightPlan::check_accounted`]. Under a plan without the readers index,
+    /// work and error attribution match it as well. Under a plan with the index,
+    /// work and logical bytes are this workspace's own: an update charges its
+    /// update units, a complete evaluation that keeps its result also charges
+    /// the kept candidate and queued-mark words, retained storage counts against
+    /// the byte ceiling, and every check stays within
+    /// [`TightPlan::check_work_bound`]. Byte ceilings include existing capacity,
+    /// even for a smaller subsequent theory; checks do not shrink storage. Every
+    /// outcome retains its charged work and leaves actual capacity observable
+    /// through [`Self::retained_bytes`].
     #[must_use]
     pub fn check(
         &mut self,
@@ -172,22 +186,25 @@ impl TightWorkspace {
         plan: &TightPlan,
         candidate: &Interpretation,
         limits: TightCheckLimits,
-        work: &mut Meter<'_>,
+        meter: &mut Meter<'_>,
         retain: bool,
     ) -> Result<TightCheck, TightError> {
         if !plan.theory.same_instance(candidate.theory()) {
             return Err(Stop::WrongProgram.into());
         }
-        work.poll()?;
+        meter.poll()?;
         // Taken for the whole check: an interrupted update or evaluation leaves
-        // nothing a later check could read as a complete evaluation.
+        // nothing a later check could read as a complete evaluation. The same
+        // theory instance also authenticates the retained summaries, which the
+        // last plan's producers computed: a plan's producers and readers are
+        // functions of its theory alone.
         let previous = self.retained.theory.take();
         if retain
             && let Some(readers) = plan.readers.as_ref()
             && previous
                 .as_ref()
                 .is_some_and(|theory| theory.same_instance(&plan.theory))
-            && let Some(check) = self.update(plan, readers, candidate, limits, work)?
+            && let Some(check) = self.update(plan, readers, candidate, limits, meter)?
         {
             self.retained.theory = previous;
             return Ok(check);
@@ -196,7 +213,7 @@ impl TightWorkspace {
             plan,
             candidate,
             limits,
-            work,
+            meter,
             retain && plan.readers.is_some(),
         )
     }
@@ -208,7 +225,7 @@ impl TightWorkspace {
         plan: &TightPlan,
         candidate: &Interpretation,
         limits: TightCheckLimits,
-        work: &mut Meter<'_>,
+        meter: &mut Meter<'_>,
         keep: bool,
     ) -> Result<TightCheck, TightError> {
         self.admit(plan, limits.max_bytes)?;
@@ -229,15 +246,15 @@ impl TightWorkspace {
             candidate,
             &mut self.values,
             &mut self.numeric,
-            work,
+            meter,
         )?;
         let logical_bytes = if keep {
-            self.keep(plan, candidate, limits, work)?
+            self.keep(plan, candidate, limits, meter)?
         } else {
             logical_bytes
         };
         let (verdict, logical_bytes) =
-            if let Some(root) = false_root(&plan.theory, &self.values, work)? {
+            if let Some(root) = false_root(&plan.theory, &self.values, meter)? {
                 (TightVerdict::NotModel { root }, logical_bytes)
             } else {
                 self.supported.clear();
@@ -247,8 +264,8 @@ impl TightWorkspace {
                     .map_err(|_| Stop::Allocation)?;
                 let logical_bytes = self.admit(plan, limits.max_bytes)?;
                 self.supported.resize(words, 0);
-                mark_support(&plan.producers, &self.values, &mut self.supported, work)?;
-                let verdict = match unsupported_atom(candidate, &self.supported, work)? {
+                mark_support(&plan.producers, &self.values, &mut self.supported, meter)?;
+                let verdict = match unsupported_atom(candidate, &self.supported, meter)? {
                     Some(unsupported_atom) => TightVerdict::Residual { unsupported_atom },
                     None => TightVerdict::Stable,
                 };
@@ -259,20 +276,16 @@ impl TightWorkspace {
         }
         Ok(TightCheck {
             verdict,
-            work: work.charged(),
+            work: meter.charged(),
             logical_bytes,
         })
     }
 
-    /// The bytes every vector of this workspace would hold, with `more` words
-    /// requested beyond their present capacities.
+    /// The bytes this workspace holds under `plan`, counting each vector at
+    /// the larger of its capacity and what a complete check requires, with
+    /// `more` bytes requested beyond them: the one measure every admission uses.
     fn requested(&self, plan: &TightPlan, more: u128) -> u128 {
-        u128::from(plan.statistics.resident_bytes)
-            + self.values.capacity() as u128
-            + self.supported.capacity() as u128 * size_of::<u32>() as u128
-            + self.numeric.retained_bytes()
-            + self.retained.bytes()
-            + more
+        self.truth_support_bytes(plan) + self.numeric.required_bytes(&plan.theory) + more
     }
 
     /// Keep the evaluated candidate's words and an empty update scratch, one
@@ -283,7 +296,7 @@ impl TightWorkspace {
         plan: &TightPlan,
         candidate: &Interpretation,
         limits: TightCheckLimits,
-        work: &mut Meter<'_>,
+        meter: &mut Meter<'_>,
     ) -> Result<u64, TightError> {
         let words = candidate.words.len();
         let marks = plan.theory.nodes().len().div_ceil(64);
@@ -306,11 +319,11 @@ impl TightWorkspace {
             .try_reserve_exact(marks)
             .map_err(|_| Stop::Allocation)?;
         for &word in &candidate.words {
-            work.tick()?;
+            meter.tick()?;
             retained.candidate.push(word);
         }
         for _ in 0..marks {
-            work.tick()?;
+            meter.tick()?;
             retained.queued.push(0);
         }
         self.admit(plan, limits.max_bytes)
@@ -322,7 +335,7 @@ impl TightWorkspace {
         &mut self,
         plan: &TightPlan,
         limits: TightCheckLimits,
-        work: &mut Meter<'_>,
+        meter: &mut Meter<'_>,
     ) -> Result<(), TightError> {
         let atoms = plan.theory.atom_count();
         let roots = plan.theory.roots();
@@ -357,7 +370,7 @@ impl TightWorkspace {
         retained.missing.resize(atoms.div_ceil(64), 0);
         retained.false_roots.resize(roots.len().div_ceil(64), 0);
         for producer in &plan.producers {
-            work.tick()?;
+            meter.tick()?;
             if producer.body.is_none_or(|body| self.values[body] != 0) {
                 let count = &mut retained.support[producer.head];
                 *count = count.checked_add(1).ok_or(Stop::InvalidProgram)?;
@@ -365,7 +378,7 @@ impl TightWorkspace {
         }
         retained.false_root_count = 0;
         for (position, &root) in roots.iter().enumerate() {
-            work.tick()?;
+            meter.tick()?;
             if self.values[root] == 0 {
                 retained.false_roots[position / 64] |= 1 << (position % 64);
                 retained.false_root_count += 1;
@@ -373,7 +386,7 @@ impl TightWorkspace {
         }
         retained.missing_count = 0;
         for (word, &present) in retained.candidate.iter().enumerate() {
-            work.tick()?;
+            meter.tick()?;
             let mut remaining = present;
             while remaining != 0 {
                 let atom = word * 64 + remaining.trailing_zeros() as usize;
@@ -398,7 +411,7 @@ impl TightWorkspace {
         readers: &Readers,
         candidate: &Interpretation,
         limits: TightCheckLimits,
-        work: &mut Meter<'_>,
+        meter: &mut Meter<'_>,
     ) -> Result<Option<TightCheck>, TightError> {
         // First pass: find the changed words and count changed atoms, with no
         // change to the retained state.
@@ -406,7 +419,7 @@ impl TightWorkspace {
         let mut changed_atoms = 0_usize;
         self.retained.changed.clear();
         for (word, &present) in candidate.words.iter().enumerate() {
-            work.tick()?;
+            meter.tick()?;
             let changed = self.retained.candidate[word] ^ present;
             if changed != 0 {
                 changed_atoms += changed.count_ones() as usize;
@@ -428,29 +441,35 @@ impl TightWorkspace {
             }
         }
         if !self.retained.summarized {
-            self.summarize(plan, limits, work)?;
+            self.summarize(plan, limits, meter)?;
         }
         let logical_bytes = self.admit(plan, limits.max_bytes)?;
         // Second pass: apply the changed words.
         for position in 0..self.retained.changed.len() {
-            work.tick()?;
+            meter.tick()?;
             let index = self.retained.changed[position];
             let present = candidate.words[index];
             let mut changed = self.retained.candidate[index] ^ present;
             self.retained.candidate[index] = present;
             while changed != 0 {
-                work.tick()?;
+                meter.tick()?;
                 let atom = index * 64 + changed.trailing_zeros() as usize;
                 changed &= changed - 1;
                 self.presence(atom, present & (1 << (atom % 64)) != 0);
                 for &node in readers.atom_nodes(atom) {
-                    work.tick()?;
+                    meter.tick()?;
                     self.queue(node, plan, limits)?;
                 }
             }
         }
+        // Invariant: every node below the least queued node holds its truth under
+        // the new candidate, and a node is queued exactly when one of its inputs
+        // changed: an operand's truth, a row's measure, or an atom node's
+        // membership. A reader has a larger index than everything it reads, so
+        // ascending pops re-evaluate each node from final inputs, and a popped
+        // node is never queued again: each is re-evaluated at most once.
         while let Some(Reverse(node)) = self.retained.pending.pop() {
-            work.tick()?;
+            meter.tick()?;
             self.retained.queued[node / 64] &= !(1 << (node % 64));
             let truth = evaluate_node(
                 &plan.theory,
@@ -458,21 +477,21 @@ impl TightWorkspace {
                 candidate,
                 &self.values,
                 &mut self.numeric,
-                work,
+                meter,
             )?;
             if truth == (self.values[node] != 0) {
                 continue;
             }
             self.values[node] = u8::from(truth);
             for &reader in readers.of(node) {
-                work.tick()?;
+                meter.tick()?;
                 let index = reader.index();
                 match reader.kind() {
                     ReaderKind::Node => self.queue(index, plan, limits)?,
                     ReaderKind::Row => {
                         self.numeric.invalidate(index)?;
                         for &guard in readers.guards(index) {
-                            work.tick()?;
+                            meter.tick()?;
                             self.queue(guard, plan, limits)?;
                         }
                     }
@@ -484,18 +503,18 @@ impl TightWorkspace {
         let retained = &self.retained;
         let verdict = if retained.false_root_count > 0 {
             TightVerdict::NotModel {
-                root: plan.theory.roots()[first_set(&retained.false_roots, work)?],
+                root: plan.theory.roots()[first_set(&retained.false_roots, meter)?],
             }
         } else if retained.missing_count > 0 {
             TightVerdict::Residual {
-                unsupported_atom: first_set(&retained.missing, work)?,
+                unsupported_atom: first_set(&retained.missing, meter)?,
             }
         } else {
             TightVerdict::Stable
         };
         Ok(Some(TightCheck {
             verdict,
-            work: work.charged(),
+            work: meter.charged(),
             logical_bytes,
         }))
     }
@@ -579,10 +598,7 @@ impl TightWorkspace {
     }
 
     fn admit(&self, plan: &TightPlan, limit: u64) -> Result<u64, TightError> {
-        bytes(
-            self.truth_support_bytes(plan) + self.numeric.required_bytes(&plan.theory),
-            limit,
-        )
+        bytes(self.requested(plan, 0), limit)
     }
 
     fn truth_support_bytes(&self, plan: &TightPlan) -> u128 {
@@ -599,35 +615,33 @@ impl TightWorkspace {
 
 /// The truth of node `$index` from the truth of its operands, which precede it:
 /// the one rule a complete pass applies to every node and an update to each
-/// node it re-evaluates. It is a macro rather than a function so that both
-/// per-node loops receive the rule inline. Compiled as a function with two
-/// callers, it stayed out of line, and a call on every node made a complete
-/// check of the wide Mastermind control take 3.5 ms instead of 2.15 ms.
+/// node it re-evaluates. A macro, so that both per-node loops receive the rule
+/// inline.
 macro_rules! node_truth {
-    ($theory:expr, $view:expr, $index:expr, $candidate:expr, $values:expr, $numeric:expr, $work:expr) => {
+    ($theory:expr, $view:expr, $index:expr, $candidate:expr, $values:expr, $numeric:expr, $meter:expr) => {
         match $view.node($index).map_err(|_| Stop::InvalidProgram)? {
             NodeView::Atom(atom) => $candidate.contains(atom),
             NodeView::False => false,
-            NodeView::And(operands) => evaluate_operands(operands, $values, true, $work)?,
-            NodeView::Or(operands) => evaluate_operands(operands, $values, false, $work)?,
+            NodeView::And(operands) => evaluate_operands(operands, $values, true, $meter)?,
+            NodeView::Or(operands) => evaluate_operands(operands, $values, false, $meter)?,
             NodeView::Threshold(threshold) => {
                 $numeric.threshold::<TightError>($theory, $index, threshold, |child| {
-                    $work.tick()?;
+                    $meter.tick()?;
                     Ok($values[child] != 0)
                 })?
             }
             NodeView::ExtremumCut(cut) => {
                 cut.rule.holds(
                     $numeric.extremum::<TightError>($theory, $index, cut, |child| {
-                        $work.tick()?;
+                        $meter.tick()?;
                         Ok($values[child] != 0)
                     })?,
                 )
             }
             NodeView::Implies(a, b) => {
-                $work.tick()?;
+                $meter.tick()?;
                 let left = $values[a];
-                $work.tick()?;
+                $meter.tick()?;
                 let right = $values[b];
                 left == 0 || right != 0
             }
@@ -645,13 +659,13 @@ fn evaluate_truth(
     candidate: &Interpretation,
     values: &mut Vec<u8>,
     numeric: &mut NumericRowScratch,
-    work: &mut Meter<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<(), TightError> {
-    numeric.reset(theory, || work.tick())?;
+    numeric.reset(theory, || meter.tick())?;
     let view = theory.view();
     for index in 0..view.len() {
-        work.tick()?;
-        let truth = node_truth!(theory, view, index, candidate, values, numeric, work);
+        meter.tick()?;
+        let truth = node_truth!(theory, view, index, candidate, values, numeric, meter);
         values.push(u8::from(truth));
     }
     Ok(())
@@ -664,11 +678,11 @@ fn evaluate_node(
     candidate: &Interpretation,
     values: &[u8],
     numeric: &mut NumericRowScratch,
-    work: &mut Meter<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<bool, TightError> {
     let view = theory.view();
     Ok(node_truth!(
-        theory, view, index, candidate, values, numeric, work
+        theory, view, index, candidate, values, numeric, meter
     ))
 }
 
@@ -679,10 +693,10 @@ fn evaluate_node(
 fn false_root(
     theory: &Theory,
     values: &[u8],
-    work: &mut Meter<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<Option<usize>, TightError> {
     for &root in theory.roots() {
-        work.tick()?;
+        meter.tick()?;
         if values[root] == 0 {
             return Ok(Some(root));
         }
@@ -697,10 +711,10 @@ fn mark_support(
     producers: &[TightProducer],
     values: &[u8],
     supported: &mut [u32],
-    work: &mut Meter<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<(), TightError> {
     for producer in producers {
-        work.tick()?;
+        meter.tick()?;
         if producer.body.is_none_or(|body| values[body] != 0) {
             supported[producer.head / 32] |= 1 << (producer.head % 32);
         }
@@ -714,11 +728,11 @@ fn mark_support(
 fn unsupported_atom(
     candidate: &Interpretation,
     supported: &[u32],
-    work: &mut Meter<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<Option<usize>, TightError> {
     let mut present = candidate.words32();
     for (word, &support) in supported.iter().enumerate() {
-        work.tick()?;
+        meter.tick()?;
         let missing = present
             .next()
             .expect("support and candidate cover the same admitted atom universe")
@@ -730,17 +744,16 @@ fn unsupported_atom(
     Ok(None)
 }
 
-/// The most changed atoms an update takes on; beyond it a complete evaluation
-/// is expected to cost less. An execution choice: both routes return the same
-/// verdict.
+/// The most changed atoms an update takes on; a larger change evaluates
+/// completely. An execution choice: both routes return the same verdict.
 pub(super) fn large_change(atoms: usize) -> usize {
     (atoms / 8).max(64)
 }
 
 /// The least set position of a packed set, one charged operation per word read.
-fn first_set(words: &[u64], work: &mut Meter<'_>) -> Result<usize, TightError> {
+fn first_set(words: &[u64], meter: &mut Meter<'_>) -> Result<usize, TightError> {
     for (index, &word) in words.iter().enumerate() {
-        work.tick()?;
+        meter.tick()?;
         if word != 0 {
             return Ok(index * 64 + word.trailing_zeros() as usize);
         }
@@ -753,10 +766,10 @@ fn evaluate_operands(
     operands: &[usize],
     values: &[u8],
     conjunction: bool,
-    work: &mut Meter<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<bool, TightError> {
     for &child in operands {
-        work.tick()?;
+        meter.tick()?;
         let truth = values[child] != 0;
         // A false conjunct or true disjunct determines this node, irrespective
         // of the remaining operands. Other DAG nodes still get their own truth.

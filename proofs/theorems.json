@@ -8320,6 +8320,31 @@
     "line": 284
   },
   {
+    "name": "Zetesis.TightEvaluation.unchanged_inputs_keep_truth",
+    "file": "Zetesis/TightEvaluation.lean",
+    "line": 339
+  },
+  {
+    "name": "Zetesis.TightEvaluation.update_step_appends_truth",
+    "file": "Zetesis/TightEvaluation.lean",
+    "line": 370
+  },
+  {
+    "name": "Zetesis.TightEvaluation.update_fold_pairs",
+    "file": "Zetesis/TightEvaluation.lean",
+    "line": 382
+  },
+  {
+    "name": "Zetesis.TightEvaluation.updated_values_exact",
+    "file": "Zetesis/TightEvaluation.lean",
+    "line": 396
+  },
+  {
+    "name": "Zetesis.TightEvaluation.update_retains_old_values",
+    "file": "Zetesis/TightEvaluation.lean",
+    "line": 401
+  },
+  {
     "name": "Zetesis.TightPlans.original_of_reduct",
     "file": "Zetesis/TightPlans.lean",
     "line": 91

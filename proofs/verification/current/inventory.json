@@ -8321,6 +8321,31 @@
       "name": "Zetesis.TightEvaluation.completed_computation_exact"
     },
     {
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 339,
+      "name": "Zetesis.TightEvaluation.unchanged_inputs_keep_truth"
+    },
+    {
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 370,
+      "name": "Zetesis.TightEvaluation.update_step_appends_truth"
+    },
+    {
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 382,
+      "name": "Zetesis.TightEvaluation.update_fold_pairs"
+    },
+    {
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 396,
+      "name": "Zetesis.TightEvaluation.updated_values_exact"
+    },
+    {
+      "file": "Zetesis/TightEvaluation.lean",
+      "line": 401,
+      "name": "Zetesis.TightEvaluation.update_retains_old_values"
+    },
+    {
       "file": "Zetesis/TightPlans.lean",
       "line": 91,
       "name": "Zetesis.TightPlans.original_of_reduct"
@@ -9063,7 +9088,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "db6a191a3793984f7585b0133fc08408303e6e71dd536e26363b0cd9a9ae2fd6",
+    "Audit.lean": "fbd464c35706b70689426b5c70b629fdd754e307ab5392b7ee014268e6b625a4",
     "Zetesis.lean": "2e2f2ccb2a9b8d979235c671cad5431b1930402cb17dd520c396b67b4b702abb",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
@@ -9238,7 +9263,7 @@
     "Zetesis/ThresholdResidues.lean": "a0bd983d7b61a16118467bd7076b7315b45cc63a338f90520a4b8e2586c535d5",
     "Zetesis/Thresholds.lean": "271ba89d3885ecf242dca61cc0ce8998f7b0f36db6a4df907ed1d4f7bd075a85",
     "Zetesis/TightBodyRecognition.lean": "fc2f7e335c6fb1d96f807f073ba54afa1e3c6ea37da6003f89e8733599c1ccdb",
-    "Zetesis/TightEvaluation.lean": "a8dfdd3824eae4fdd35696869d47e56cb26ae1d931e0a0442a68f29498822864",
+    "Zetesis/TightEvaluation.lean": "5102023a074986acc36c816d3f67dca68e7ff0654b448c017f05c17a63a0dd6a",
     "Zetesis/TightPlans.lean": "6324a09643454c507c4daf1a287ec082545b621e52bea3196026043ea99bac98",
     "Zetesis/Transformers.lean": "e01d5f8de5ca692d1efdc79db7c433d20d832fc551cac37742b33fd2fc148648",
     "Zetesis/TrueHeads.lean": "56df61283a0abbe6ded83b72c89a76b99952b0f5abee72efab9f7acbc1ce4060",

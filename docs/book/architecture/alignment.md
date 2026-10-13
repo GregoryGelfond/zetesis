@@ -292,8 +292,11 @@ compilation contract.
 The same CPU numeric workspace reduces both extrema once per row and
 interpretation, then tests its guards. One compact slot holds either an exact
 sum or the two extrema, as specified by the authoritative row's domain. Packed
-validity bits prevent reuse across passes or theory owners; each frozen guard
-also retains its own original-truth gate. An admission-derived flag avoids row
+validity bits mark the rows whose measures are exact for the truth currently
+held: a complete pass clears them first, and an update of a retained tight
+evaluation clears the bits of rows whose conditions changed before any of their
+guards is re-evaluated, so no measure survives a change of its conditions or of
+the theory owner. Each frozen guard also retains its own original-truth gate. An admission-derived flag avoids row
 scratch when no numeric node is present. Fresh initialization, resets, physical
 row reads and actual retained capacities remain charged. Candidate propagation borrows prefixes of sorted distinct-condition columns and uses the
 existing connective counters. The authoritative row still retains every tuple

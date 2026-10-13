@@ -315,9 +315,10 @@ impl StableModels {
         stats.construction_work += attempt.work;
         match attempt.result {
             Ok(mut plan) => {
-                // CPU checking reuses each worker's retained evaluation; a plan
-                // whose index does not fit, or whose preparation runs out of
-                // work, still checks every candidate completely.
+                // CPU checking reuses each worker's retained evaluation. The
+                // index is built only when the remaining certificate work covers
+                // its build, so building never spends the checks' allowance; a
+                // plan whose index does not fit checks every candidate completely.
                 if usage == Use::Cpu {
                     limits.max_work = limits.max_work.min(self.remaining_certificate_work());
                     let prepared = plan.prepare_updates(limits, &self.cancellation);
