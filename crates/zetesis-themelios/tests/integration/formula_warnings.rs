@@ -1,8 +1,7 @@
 //! Successful admission retains bounded warnings and original source evidence.
 
 use crate::support::admission;
-use crate::support::resource_limits;
-use zetesis_reference_support::BundleFixture;
+use zetesis_reference_support::{BundleFixture, resource_limits};
 
 use zetesis_test_support::fixtures::ZERO_DIVISOR as SOURCE;
 use zetesis_themelios::base::{diagnostic::Severity, source::SourceId};

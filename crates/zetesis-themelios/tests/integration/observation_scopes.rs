@@ -4,8 +4,8 @@ use crate::support::observation_reference;
 
 use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
-use zetesis_reference_support::{admit, formula};
-use zetesis_themelios::observation::{AdmissionLimits, ErrorKind, Feature, Limits, Resource};
+use zetesis_reference_support::{admit, formula, resource_limits};
+use zetesis_themelios::observation::{ErrorKind, Feature, Limits, Resource};
 use zetesis_themelios::{FormulaFailure, FormulaLimits};
 
 fn rendered(source: &str) -> String {
@@ -58,17 +58,10 @@ fn cardinality_keys_pay_their_complete_admission_cost() {
         ("p.r. #show. #show N:N={p;not q;not not r}.", 23, "3"),
         ("p. #show. #show N:N={p}. #show f(N):N={p}.", 19, "1 f(1)"),
     ] {
-        // Observation resources, not formula ones, so the observation limit names its field.
-        let run = |max_nodes| {
+        let run = |max_nodes: u32| {
             admit(
                 source,
-                &FormulaLimits {
-                    observation: AdmissionLimits {
-                        max_nodes,
-                        ..AdmissionLimits::default()
-                    },
-                    ..FormulaLimits::default()
-                },
+                &resource_limits::formula_observation(Resource::Nodes, u64::from(max_nodes)),
             )
         };
         let input = run(nodes).unwrap_or_else(|error| panic!("{source}: {error}"));

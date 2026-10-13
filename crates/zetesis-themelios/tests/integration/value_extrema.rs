@@ -1,10 +1,9 @@
 //! Complete-value extrema against full source models and an independent reduct.
 use crate::support::clingo_reports;
 use crate::support::finite_bindings as reference;
-use crate::support::resource_limits;
 use crate::support::upstream;
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::admit;
+use zetesis_reference_support::{admit, resource_limits};
 
 use reference::{exhaustive, native};
 use serde_json::Value as Json;
@@ -123,7 +122,6 @@ fn value_carrier_and_cache_limits_refuse_without_a_partial_formula() {
 #[test]
 fn equal_first_values_share_proposals_but_retain_complete_tuple_limit_counts() {
     let source = "{p;q}.r(M):-M=#min{f(1),a:p;f(1),b:q}.";
-    // Two limits at once, each then lowered alone, so their fields are named here.
     let limits = FormulaLimits {
         max_assignment_values: 2,
         max_aggregate_cache_elements: 2,

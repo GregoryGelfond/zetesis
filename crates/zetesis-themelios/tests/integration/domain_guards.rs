@@ -1,9 +1,8 @@
 //! Optional domains preserve complete theories while avoiding impossible prefixes.
 
-use crate::support::resource_limits;
 use std::cell::{Cell, RefCell};
 use std::fmt::Write;
-use zetesis_reference_support::prepare;
+use zetesis_reference_support::{prepare, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
 use zetesis_domain::Status;

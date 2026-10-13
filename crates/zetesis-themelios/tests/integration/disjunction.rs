@@ -3,7 +3,7 @@
 
 use crate::support::head_models::{Names, expected, manual_holds, truth};
 use crate::support::objective_dependency_records as objective_dependencies;
-use crate::support::resource_limits;
+use zetesis_reference_support::{admit, canonical, resource_limits};
 
 use std::time::Duration;
 
@@ -13,7 +13,6 @@ use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits as OracleLimits, models, models_reduct};
-use zetesis_reference_support::{admit, canonical};
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,

@@ -1,12 +1,11 @@
 //! Lifted objectives score verified stable models without supplying support.
 
-use crate::support::resource_limits;
 use std::collections::BTreeSet;
+use zetesis_reference_support::{admit, formula, resource_limits};
 
 use zetesis_core::{Atom, AtomCatalog, Model, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_objective::{Score, evaluate};
-use zetesis_reference_support::{admit, formula};
 use zetesis_sat::{Limits as SearchLimits, StableModels};
 use zetesis_test_support::repository;
 use zetesis_themelios::{
@@ -286,14 +285,8 @@ fn original_objective_budgets_count_occurrences_before_canonicalization() {
             ..
         }
     ));
-    // The tuple width is refused as an objective admission resource, not a formula one.
-    let limits = FormulaLimits {
-        objective: zetesis_objective::AdmissionLimits {
-            max_tuple_width: 1,
-            ..zetesis_objective::AdmissionLimits::default()
-        },
-        ..FormulaLimits::default()
-    };
+    let limits =
+        resource_limits::formula_objective(zetesis_objective::AdmissionResource::TupleWidth, 1);
     assert!(
         matches!(
             admit("#minimize{1,a,b:p}.", &limits),

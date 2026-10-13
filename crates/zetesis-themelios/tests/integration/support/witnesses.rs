@@ -2,8 +2,7 @@
 //! for the witness propositions.
 
 use super::finite_bindings::native;
-use crate::support::resource_limits;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{formula, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,

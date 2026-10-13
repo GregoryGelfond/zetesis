@@ -4,12 +4,11 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::support::admission;
 use crate::support::atom_models::{self, Models, answer_sets};
-use crate::support::resource_limits;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Atom;
-use zetesis_reference_support::BundleFixture;
+use zetesis_reference_support::{BundleFixture, resource_limits};
 use zetesis_themelios::{
     AdmissionOptions, Admitted, BundleAdmissionError, BundleAdmissionOptions, ExpansionFailure,
     ExpansionLimits, ExpansionResource, OutputSelection, SourceDirective, admit,

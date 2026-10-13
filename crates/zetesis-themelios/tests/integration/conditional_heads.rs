@@ -1,14 +1,13 @@
 //! Conditional heads preserve finite existential scope and original reducts.
 
 use crate::support::finite_bindings as reference;
-use crate::support::resource_limits;
+use zetesis_reference_support::{admit, canonical, formula, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
 use crate::support::finite_bindings::expected;
 use reference::{external, holds, native, values};
 use std::collections::BTreeSet;
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{admit, canonical, formula};
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &[(&str, &[&[&str]])] = &[

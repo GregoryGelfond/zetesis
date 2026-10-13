@@ -1,6 +1,5 @@
 //! Closed nonnumeric weights supply neither a numeric key nor a priority slot.
 
-use crate::support::resource_limits;
 use crate::support::source_cases;
 use zetesis_test_support::thresholds::first_success;
 mod sources;
@@ -10,8 +9,8 @@ use std::collections::BTreeSet;
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Model, Value};
 use zetesis_cpu::Cancellation;
-use zetesis_objective::{AdmissionError, AdmissionLimits, AdmissionResource};
-use zetesis_reference_support::{admit, exhaustive};
+use zetesis_objective::{AdmissionError, AdmissionResource};
+use zetesis_reference_support::{admit, exhaustive, resource_limits};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits,
@@ -141,15 +140,12 @@ fn ignored_templates_retain_source_limits() {
 
 const IGNORED_SHAPE: &str = "p(1).q(2).#minimize{#inf@7,x,y:p(X),q(Y),X!=0,Y!=0}.";
 
-fn ignored_shape_limit(
-    resource: AdmissionResource,
-    configure: impl Fn(&mut AdmissionLimits, usize),
-) {
+fn ignored_shape_limit(resource: AdmissionResource) {
     let attempt = |maximum| {
-        // Objective admission resources, not formula ones, so the caller names their fields.
-        let mut limits = FormulaLimits::default();
-        configure(&mut limits.objective, maximum);
-        admit(IGNORED_SHAPE, &limits)
+        admit(
+            IGNORED_SHAPE,
+            &resource_limits::formula_objective(resource, maximum),
+        )
     };
     let exact = attempt(2).unwrap();
     assert!(!exact.objectives().is_present());
@@ -169,30 +165,22 @@ fn ignored_shape_limit(
 
 #[test]
 fn ignored_objectives_retain_tuple_limits() {
-    ignored_shape_limit(AdmissionResource::TupleWidth, |limits, maximum| {
-        limits.max_tuple_width = maximum;
-    });
+    ignored_shape_limit(AdmissionResource::TupleWidth);
 }
 
 #[test]
 fn ignored_objectives_retain_positive_body_limits() {
-    ignored_shape_limit(AdmissionResource::PositiveBody, |limits, maximum| {
-        limits.max_positive_body = maximum;
-    });
+    ignored_shape_limit(AdmissionResource::PositiveBody);
 }
 
 #[test]
 fn ignored_objectives_retain_filter_limits() {
-    ignored_shape_limit(AdmissionResource::Filters, |limits, maximum| {
-        limits.max_filters = maximum;
-    });
+    ignored_shape_limit(AdmissionResource::Filters);
 }
 
 #[test]
 fn ignored_objectives_retain_variable_limits() {
-    ignored_shape_limit(AdmissionResource::Variables, |limits, maximum| {
-        limits.max_variables_per_template = maximum;
-    });
+    ignored_shape_limit(AdmissionResource::Variables);
 }
 
 #[test]

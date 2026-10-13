@@ -5,8 +5,8 @@ mod integer_comparisons;
 mod lending_rows;
 mod support_demand;
 
-use crate::support::resource_limits;
 use std::cell::{Cell, RefCell};
+use zetesis_reference_support::resource_limits;
 
 use zetesis_test_support::repository;
 use zetesis_themelios::ProgramSite;

@@ -1,8 +1,7 @@
 //! Numeric min/max source translation, generated sentinels and total observers.
-use crate::support::resource_limits;
 use crate::support::source_cases;
 use zetesis_core::Value;
-use zetesis_reference_support::{admit, exhaustive};
+use zetesis_reference_support::{admit, exhaustive, resource_limits};
 use zetesis_themelios::{FormulaLimits, FormulaResource};
 
 fn cases() -> Vec<source_cases::Case> {

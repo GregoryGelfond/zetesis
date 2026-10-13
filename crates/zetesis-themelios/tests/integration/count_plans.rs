@@ -1,12 +1,11 @@
 //! Optional source-count plans preserve the original reduct subject.
 
 use crate::support::finite_bindings as reference;
-use crate::support::resource_limits;
+use zetesis_reference_support::{BundleFixture, canonical, prepared, resource_limits};
 
 use reference::{exhaustive, external, holds, native, values};
 use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{BundleFixture, canonical, prepared};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionLimits,
     FormulaLimits, FormulaResource, prepare_formula,

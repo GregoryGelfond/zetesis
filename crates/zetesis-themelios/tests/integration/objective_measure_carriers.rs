@@ -1,13 +1,12 @@
 //! Source priority carriers are distinct from realized aggregate values.
 
-use crate::support::resource_limits;
 use crate::support::source_cases;
+use zetesis_reference_support::{admit, exhaustive, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 
 use proptest::prelude::*;
-use zetesis_reference_support::{admit, exhaustive};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 

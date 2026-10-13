@@ -1,11 +1,10 @@
 //! Constructor patterns retain exact source atoms through finite extraction.
 use crate::support::finite_bindings as reference;
-use crate::support::resource_limits;
 use crate::support::thresholds::minimum_preparation_bytes;
 use reference::{Models, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::{admit, canonical, formula, prepared};
+use zetesis_reference_support::{admit, canonical, formula, prepared, resource_limits};
 use zetesis_themelios::{
     AdmissionOptions, AnalysisBasis, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,

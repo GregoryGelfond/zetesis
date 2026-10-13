@@ -1,6 +1,7 @@
 //! Evaluated objective fields share one complete source binding.
 
 use crate::support::source_cases;
+use zetesis_reference_support::resource_limits;
 
 use std::collections::BTreeSet;
 use zetesis_reference_support as reference;
@@ -114,7 +115,6 @@ fn source_exclusion_precedes_field_evaluation() {
 #[test]
 fn resolved_fields_retain_template_ceiling() {
     let source = "p(1;2).#minimize{X+1,X+1:p(X)}.";
-    // Two objective limits at once, so their fields are named here.
     let mut limits = FormulaLimits::default();
     limits.objective.max_templates = 2;
     limits.objective.max_tuple_width = 1;
@@ -140,16 +140,16 @@ fn resolved_fields_retain_template_ceiling() {
 #[test]
 fn resolved_fields_retain_tuple_width_ceiling() {
     let source = "p(1;2).#minimize{X+1,X+1:p(X)}.";
-    // The tuple width is refused as an objective admission resource, not a formula one.
-    let mut limits = FormulaLimits::default();
-    limits.objective.max_tuple_width = 1;
+    let mut limits =
+        resource_limits::formula_objective(zetesis_objective::AdmissionResource::TupleWidth, 1);
     let input = reference::admit(source, &limits).unwrap();
     assert_eq!(input.objectives().templates().len(), 2);
     assert_eq!(
         reference::exhaustive(&input).iter().next().unwrap().1,
         Some(vec![5])
     );
-    limits.objective.max_tuple_width = 0;
+    limits =
+        resource_limits::formula_objective(zetesis_objective::AdmissionResource::TupleWidth, 0);
     assert!(matches!(
         reference::admit(source, &limits).unwrap_err(),
         zetesis_themelios::FormulaFailure::Objective {

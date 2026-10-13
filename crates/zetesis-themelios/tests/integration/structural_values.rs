@@ -1,12 +1,11 @@
 //! Closed structures remain complete semantic atom and contribution identities.
 use crate::support::finite_bindings as reference;
 use crate::support::objective_plans;
-use crate::support::resource_limits;
 use reference::{Models, exhaustive, native};
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{admit, formula};
+use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_themelios::{AdmissionOptions, ExpansionResource, FormulaLimits, admit_formula};
 fn expected(models: &[&[&str]]) -> Models {
     models

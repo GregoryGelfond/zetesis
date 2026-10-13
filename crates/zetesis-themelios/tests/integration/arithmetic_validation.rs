@@ -5,10 +5,10 @@
 //! other reached arithmetic failures refuse the program. Incomplete
 //! relational prefixes have no such duty.
 
-use crate::support::resource_limits;
 use std::collections::BTreeSet;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
+use zetesis_reference_support::resource_limits;
 use zetesis_themelios::{
     ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource, observation::EvaluationError,
 };
@@ -335,7 +335,6 @@ fn missing_positive_extensions_skip_scoped_validation() {
 
 #[test]
 fn rule_validation_uses_no_objective_scratch_allowance() {
-    // Both objective scratch limits at once, so their fields are named here.
     let limits = FormulaLimits {
         max_objective_formula_atoms: 0,
         max_objective_formula_nodes: 0,

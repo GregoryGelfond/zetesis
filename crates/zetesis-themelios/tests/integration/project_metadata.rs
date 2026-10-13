@@ -1,8 +1,7 @@
 //! Source declarations stay separate from completed fixed-domain projection.
 
-use crate::support::resource_limits;
 use zetesis_core::Predicate;
-use zetesis_reference_support::{admit, formula};
+use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_test_support::programs::unary as atom;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
@@ -77,7 +76,6 @@ fn project_metadata_records_the_explicit_domain() {
 
 #[test]
 fn absent_project_heads_leave_an_explicit_empty_domain() {
-    // Both projection limits at once, so their fields are named here.
     let result = admit(
         "p(1).#project q(X):p(X).",
         &FormulaLimits {

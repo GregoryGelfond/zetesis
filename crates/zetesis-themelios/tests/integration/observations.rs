@@ -11,7 +11,7 @@ use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{Interpretation, check};
-use zetesis_reference_support::{BundleFixture, admit};
+use zetesis_reference_support::{BundleFixture, admit, resource_limits};
 use zetesis_themelios::observation::{ErrorKind, Feature, Limits, Resource};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
@@ -421,72 +421,19 @@ fn public_model_spelling_is_validated_before_output() {
 
 #[test]
 fn all_source_ceilings_preflight_owned_templates_and_origin_copies() {
-    use zetesis_themelios::observation::AdmissionLimits;
-    // Observation resources, not formula ones, so their limits name their fields.
-    for (limits, resource) in [
-        (
-            AdmissionLimits {
-                max_directives: 0,
-                ..Default::default()
-            },
-            Resource::Directives,
-        ),
-        (
-            AdmissionLimits {
-                max_nodes: 0,
-                ..Default::default()
-            },
-            Resource::Nodes,
-        ),
-        (
-            AdmissionLimits {
-                max_depth: 0,
-                ..Default::default()
-            },
-            Resource::Depth,
-        ),
-        (
-            AdmissionLimits {
-                max_bytes: 0,
-                ..Default::default()
-            },
-            Resource::Bytes,
-        ),
-        (
-            AdmissionLimits {
-                max_variables: 0,
-                ..Default::default()
-            },
-            Resource::Variables,
-        ),
-        (
-            AdmissionLimits {
-                max_body_elements: 0,
-                ..Default::default()
-            },
-            Resource::BodyElements,
-        ),
-        (
-            AdmissionLimits {
-                max_arity: 0,
-                ..Default::default()
-            },
-            Resource::Arity,
-        ),
-        (
-            AdmissionLimits {
-                max_origins: 0,
-                ..Default::default()
-            },
-            Resource::Origins,
-        ),
+    for resource in [
+        Resource::Directives,
+        Resource::Nodes,
+        Resource::Depth,
+        Resource::Bytes,
+        Resource::Variables,
+        Resource::BodyElements,
+        Resource::Arity,
+        Resource::Origins,
     ] {
         let result = admit(
             "p(1). #show f(X):p(X).",
-            &FormulaLimits {
-                observation: limits,
-                ..Default::default()
-            },
+            &resource_limits::formula_observation(resource, 0),
         );
         assert!(
             matches!(result, Err(FormulaFailure::Observation { error }) if matches!(error.kind(), ErrorKind::Limit { resource: actual, .. } if *actual == resource)),

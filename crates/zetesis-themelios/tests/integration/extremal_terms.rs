@@ -3,8 +3,7 @@
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Term, Value};
 use zetesis_reference_support as reference;
-use zetesis_reference_support::normal_answer_sets;
-use zetesis_reference_support::{canonical, exhaustive};
+use zetesis_reference_support::{canonical, exhaustive, normal_answer_sets};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{AdmissionOptions, FormulaLimits, admit};
 

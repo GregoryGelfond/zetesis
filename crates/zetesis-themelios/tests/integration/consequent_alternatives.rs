@@ -1,13 +1,12 @@
 //! Universal rows and existential consequent alternatives have separate scopes.
 use crate::support::finite_bindings as reference;
 use crate::support::formula_trees::{Formula, world};
-use crate::support::resource_limits;
 use crate::support::upstream;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::{BundleFixture, canonical, formula, prepared};
+use zetesis_reference_support::{BundleFixture, canonical, formula, prepared, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, AnalysisBasis, ExpansionLimits, ExpansionResource,

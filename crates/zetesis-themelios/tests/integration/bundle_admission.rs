@@ -7,11 +7,10 @@ use std::path::Path;
 
 use crate::support::atom_models::{self, Models, answer_sets};
 use crate::support::bundle_fixtures;
-use crate::support::resource_limits;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::BundleFixture;
+use zetesis_reference_support::{BundleFixture, resource_limits};
 use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions, BundleLimits,

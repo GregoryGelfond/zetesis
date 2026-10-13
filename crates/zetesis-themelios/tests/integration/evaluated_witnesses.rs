@@ -1,13 +1,12 @@
 //! Local witness rows distinguish captured inputs from closed evaluated values.
 use crate::support::finite_bindings as reference;
-use crate::support::resource_limits;
 use crate::support::witnesses::{self, limited};
+use zetesis_reference_support::{canonical, formula, prepare, prepared, resource_limits};
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use reference::{Models, holds, native, values};
-use zetesis_reference_support::{canonical, formula, prepare, prepared};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
     FormulaResource, admit_formula,

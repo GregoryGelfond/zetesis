@@ -1,9 +1,8 @@
 //! Canonical relational preparation preserves the existing compiler's semantics.
 
-use crate::support::resource_limits;
 use crate::support::unevaluable_directives::{objective, projection};
 use std::{collections::BTreeSet, sync::Arc, time::Instant};
-use zetesis_reference_support::normal_answer_sets;
+use zetesis_reference_support::{normal_answer_sets, resource_limits};
 
 use zetesis_core::{GroundProgram, Model, Seed, StaticLimits};
 use zetesis_cpu::{

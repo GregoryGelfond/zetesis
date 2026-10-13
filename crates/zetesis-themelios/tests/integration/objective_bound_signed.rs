@@ -7,6 +7,7 @@ use zetesis_core::{Atom, AtomPattern, Model, Predicate, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AggregateErrorKind, AggregateLimits, Interpretation, Node, Theory, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, evaluate};
+use zetesis_reference_support::resource_limits;
 use zetesis_sat::StableModels;
 use zetesis_themelios::objective_bound::{
     ObjectiveBound, ObjectiveBoundErrorKind as Kind, ObjectiveBoundLimits, ObjectiveBoundResource,
@@ -164,10 +165,7 @@ fn permits(bound: &ObjectiveBound, mask: usize) -> bool {
 
 fn no_subsets() -> ObjectiveBoundLimits {
     ObjectiveBoundLimits {
-        aggregate: AggregateLimits {
-            max_subsets: 0,
-            ..AggregateLimits::default()
-        },
+        aggregate: resource_limits::aggregate(AggregateErrorKind::SubsetLimit, 0),
         ..ObjectiveBoundLimits::default()
     }
 }

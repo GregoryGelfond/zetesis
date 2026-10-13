@@ -1,7 +1,7 @@
 //! Logical bounds compare finite numeric measures without changing permissions.
 
 use crate::support::admission;
-use crate::support::resource_limits;
+use zetesis_reference_support::{canonical, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -11,7 +11,6 @@ use cases::{BOUNDS, RELATIONS, sources};
 use reference::{Models, expected, external, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,

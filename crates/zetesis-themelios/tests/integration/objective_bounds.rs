@@ -8,7 +8,7 @@ use zetesis_core::{Model, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, evaluate};
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{formula, resource_limits};
 use zetesis_sat::StableModels;
 use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::objective_bound::{
@@ -305,10 +305,7 @@ fn optional_bound_failures_do_not_poison_the_plan_or_theory() {
     let plan = plan(&input);
     let incumbent = score(&input, 3);
     let limits = ObjectiveBoundLimits {
-        aggregate: zetesis_ferraris::AggregateLimits {
-            max_states: 0,
-            ..zetesis_ferraris::AggregateLimits::default()
-        },
+        aggregate: resource_limits::aggregate(zetesis_ferraris::AggregateErrorKind::StateLimit, 0),
         ..ObjectiveBoundLimits::default()
     };
     assert!(matches!(

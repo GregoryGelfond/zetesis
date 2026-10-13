@@ -123,10 +123,10 @@ fn finite_expansion_is_automatic_and_respects_its_own_limits() {
         zetesis_themelios::AdmissionOptions::default(),
     )
     .unwrap()
-    .admit_extended(zetesis_themelios::ExpansionLimits {
-        max_templates: 2,
-        ..Default::default()
-    })
+    .admit_extended(zetesis_reference_support::resource_limits::expansion(
+        zetesis_themelios::ExpansionResource::Templates,
+        2,
+    ))
     .unwrap_err();
     assert!(matches!(
         error.error(),

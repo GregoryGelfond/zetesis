@@ -1,9 +1,9 @@
 //! Native metadata consumers use canonical vocabulary through the frontend alone.
 
 use crate::support::admission;
-use crate::support::resource_limits;
 use zetesis_core::{Atom, Model, Predicate, Sign, Value};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::resource_limits;
 use zetesis_themelios::base::source::{Source, SourceId};
 use zetesis_themelios::base::span::{ByteOffset, Location, Span};
 use zetesis_themelios::logical::program::{Const, Program, Show, Statement};

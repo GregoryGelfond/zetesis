@@ -2,8 +2,8 @@
 //! Exact external records complement a separate finite definition evaluator.
 
 use crate::support::admission;
-use crate::support::resource_limits;
 use std::collections::BTreeSet;
+use zetesis_reference_support::{BundleFixture, canonical, resource_limits};
 
 use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected};
 use crate::support::finite_bindings::{Models, exhaustive, native, values};
@@ -13,7 +13,6 @@ use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::NodeView as Node;
-use zetesis_reference_support::{BundleFixture, canonical};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
     ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,

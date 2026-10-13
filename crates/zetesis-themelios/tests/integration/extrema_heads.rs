@@ -1,7 +1,7 @@
 //! Extrema heads retain permissions independently of selected logical values.
 
 use crate::support::admission;
-use crate::support::resource_limits;
+use zetesis_reference_support::{canonical, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -14,7 +14,6 @@ use cases::sources;
 use reference::{Models, holds, native, values};
 use themelios_base::source::SourceId;
 use themelios_program::term::EvalError;
-use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,

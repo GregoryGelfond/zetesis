@@ -3,7 +3,7 @@
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
 use crate::support::finite_bindings::remap;
-use crate::support::resource_limits;
+use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;

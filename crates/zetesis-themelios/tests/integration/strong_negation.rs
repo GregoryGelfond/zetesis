@@ -7,13 +7,12 @@ use crate::support::answer_records::Record;
 use crate::support::clingo_reports::{optimal, optimal_witnesses};
 use crate::support::finite_bindings::{holds, values};
 use crate::support::objective_boundaries;
-use crate::support::resource_limits;
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Model, Sign};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
-use zetesis_reference_support::{BundleFixture, canonical};
+use zetesis_reference_support::{BundleFixture, canonical, resource_limits};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
     ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit,

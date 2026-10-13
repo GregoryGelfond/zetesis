@@ -10,10 +10,9 @@ use zetesis_themelios::{
 };
 
 use crate::support::admission;
-use crate::support::resource_limits;
 use crate::support::source_cases;
 use zetesis_reference_support as reference;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{formula, resource_limits};
 
 fn cases() -> Vec<source_cases::Case> {
     source_cases::cases(include_str!("../fixtures/maximize.jsonl"))

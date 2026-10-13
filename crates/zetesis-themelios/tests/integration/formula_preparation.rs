@@ -1,9 +1,8 @@
 //! Preparation preserves source evidence and budgets before materialization.
 
-use zetesis_reference_support::{BundleFixture, formula, prepared};
+use zetesis_reference_support::{BundleFixture, formula, prepared, resource_limits};
 
 use crate::support::grounding_observers::Observer;
-use crate::support::resource_limits;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaBundleFailure, FormulaFailure, FormulaLimits, FormulaResource,

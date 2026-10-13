@@ -2,7 +2,7 @@
 
 use crate::support::admission;
 use crate::support::objective_dependency_records as objective_dependencies;
-use crate::support::resource_limits;
+use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 mod cases;

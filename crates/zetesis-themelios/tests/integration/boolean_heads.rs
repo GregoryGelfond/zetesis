@@ -1,7 +1,7 @@
 //! Boolean heads retain their original truth without supplying atom support.
 
 use crate::support::objective_dependency_records as objective_dependencies;
-use crate::support::resource_limits;
+use zetesis_reference_support::{BundleFixture, admit, canonical, formula, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
 mod cases;
@@ -16,7 +16,6 @@ use cases::CASES;
 use proptest::prelude::*;
 use reference::{Models, external, holds, native, values};
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{BundleFixture, admit, canonical, formula};
 use zetesis_themelios::{
     AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula, admit_formula,

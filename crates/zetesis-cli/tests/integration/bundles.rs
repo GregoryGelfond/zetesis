@@ -297,10 +297,10 @@ fn combined_expansion_budget_applies_across_original_files() {
     let error = zetesis_themelios::admit_bundle_extended(
         fixture.bundle(),
         zetesis_themelios::BundleAdmissionOptions::default(),
-        zetesis_themelios::ExpansionLimits {
-            max_templates: 3,
-            ..Default::default()
-        },
+        zetesis_reference_support::resource_limits::expansion(
+            zetesis_themelios::ExpansionResource::Templates,
+            3,
+        ),
     )
     .unwrap_err();
     assert!(matches!(

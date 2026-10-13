@@ -1,7 +1,7 @@
 //! Base membership becomes original membership only after full reconstruction.
 
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
-use zetesis_reference_support::{formula, prepared};
+use zetesis_reference_support::{formula, prepared, resource_limits};
 
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::{Cancellation, Stop};
@@ -459,10 +459,7 @@ fn reconstruction_work_refusal_preserves_the_checked_prefix() {
     assert!(costliest > 0);
     let exact = terminal_with_limits(
         OPTIONAL,
-        &FormulaLimits {
-            max_work: admission + costliest,
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::Work, admission + costliest),
     );
     let complete = collect(PreparedInput::terminal(&exact));
     assert_eq!(family(&complete), expected());
@@ -477,10 +474,7 @@ fn reconstruction_work_refusal_preserves_the_checked_prefix() {
     assert_eq!(exact_receipt.work, completed_work);
     let limited = terminal_with_limits(
         OPTIONAL,
-        &FormulaLimits {
-            max_work: admission + costliest - 1,
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::Work, admission + costliest - 1),
     );
     let mut session = Session::new(
         PreparedInput::terminal(&limited),
@@ -586,10 +580,7 @@ fn refused_terminal_base_grounding_keeps_its_composite_route() {
             OPTIONAL.into(),
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                max_support_rounds: 0,
-                ..FormulaLimits::default()
-            },
+            resource_limits::formula(FormulaResource::SupportRounds, 0),
         )
         .unwrap();
         let failure = prepared

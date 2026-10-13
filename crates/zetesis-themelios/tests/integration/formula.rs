@@ -3,14 +3,13 @@
 use crate::support::atom_models::answer_sets;
 use crate::support::atom_models::{self, Models};
 use crate::support::objective_boundaries;
-use crate::support::resource_limits;
+use zetesis_reference_support::{BundleFixture, admit, formula, resource_limits};
 
 use std::collections::BTreeSet;
 
 use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
-use zetesis_reference_support::{BundleFixture, admit, formula};
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,

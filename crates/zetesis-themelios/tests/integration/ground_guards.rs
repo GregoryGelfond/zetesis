@@ -2,11 +2,10 @@
 //! Exact external records complement a separate finite definition evaluator.
 
 use std::collections::BTreeSet;
-use zetesis_reference_support::BundleFixture;
+use zetesis_reference_support::{BundleFixture, resource_limits};
 
 use crate::support::clingo_reports::{enumerated, expected};
 use crate::support::finite_bindings::{exhaustive, holds, native, remap, values};
-use crate::support::resource_limits;
 use crate::support::sourced_admission::{SOURCE, input, options};
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;

@@ -3,7 +3,7 @@
 mod cases;
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
-use crate::support::resource_limits;
+use zetesis_reference_support::{canonical, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
@@ -12,7 +12,6 @@ use cases::{CASES, CLINGO_DIFFERENCES};
 use reference::{Models, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionFailure, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,

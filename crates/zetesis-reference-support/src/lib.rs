@@ -1,8 +1,9 @@
 //! Test support over `zetesis-themelios`: admission of a source under default
 //! or given limits, the native reference the zetesis workspace's tests compare
 //! with clingo (every answer set of a small program, found by checking each
-//! candidate against the reduct), preparation and hybrid grounding, and
-//! source-bundle fixtures.
+//! candidate against the reduct), preparation and hybrid grounding,
+//! source-bundle fixtures, and the limit each typed resource is counted
+//! against.
 //!
 //! [`admit`] admits a source under given formula limits, the rest at their
 //! defaults, [`formula`] under the default limits throughout and [`normal`] on
@@ -13,8 +14,11 @@
 //! finds a normal program's answer sets by exhausting its candidates, each
 //! checked against the reduct (`zetesis_cpu::check`). [`prepare`] prepares a
 //! source under the default options and limits, [`prepared`] when preparation
-//! must accept it, and [`hybrid`] grounds it for hybrid execution; [`BundleFixture`] writes a source bundle into a temporary
-//! directory for the tests that load or run one. The crate stands above
+//! must accept it, and [`hybrid`] grounds it for hybrid execution;
+//! [`BundleFixture`] writes a source bundle into a temporary directory for the
+//! tests that load or run one. [`resource_limits`] sets and reads, by
+//! resource, the limit each typed resource a refusal reports is counted
+//! against. The crate stands above
 //! `zetesis-themelios`, so only the tests that need that closure compile it.
 //! It is not published or installed.
 
@@ -29,6 +33,7 @@ use zetesis_themelios::{
 
 mod bundle;
 pub use bundle::BundleFixture;
+pub mod resource_limits;
 
 /// An atom as clingo spells it: a leading `-` for strong negation, and
 /// arguments in clingo's notation, strings quoted.

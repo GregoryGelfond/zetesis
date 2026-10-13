@@ -1,9 +1,9 @@
 //! Located admission refusals name the file, line and column through the
 //! canonical source view, for a single file and an included one alike.
 
-use zetesis_reference_support::BundleFixture;
+use zetesis_reference_support::{BundleFixture, resource_limits};
 use zetesis_themelios::{
-    BundleAdmissionOptions, ExpansionLimits, FormulaLimits, admit_bundle_formula,
+    BundleAdmissionOptions, ExpansionLimits, FormulaResource, admit_bundle_formula,
 };
 
 /// A choice and a count aggregate: formula admission, whose work ceiling a
@@ -16,10 +16,7 @@ fn refusal(files: &[(&str, &str)]) -> String {
         fixture.write(name, text);
     }
     let bundle = fixture.bundle();
-    let limits = FormulaLimits {
-        max_work: 20,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::Work, 20);
     let failure = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),
@@ -57,10 +54,7 @@ fn a_program_wide_refusal_claims_no_line_or_column() {
         "{ a(1..3) }.\nb(X) :- a(X).\nc(X) :- b(X).\nd :- #count{ X : c(X) } >= 2.\n",
     );
     let bundle = fixture.bundle();
-    let limits = FormulaLimits {
-        max_support_rounds: 1,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::SupportRounds, 1);
     let failure = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

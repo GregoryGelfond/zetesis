@@ -1,10 +1,9 @@
 //! Aliased numeric extrema retain tuple activity and separate head permissions.
 
 use crate::support::head_element_reference as reference;
-use crate::support::resource_limits;
+use zetesis_reference_support::{admit, formula, resource_limits};
 
 use reference::{Selection, expected, external, models};
-use zetesis_reference_support::{admit, formula};
 use zetesis_themelios::{FormulaFailure, FormulaResource};
 
 const CASES: &[(&str, &[&[&str]])] = &[

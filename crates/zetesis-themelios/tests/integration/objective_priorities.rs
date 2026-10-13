@@ -1,9 +1,8 @@
 //! Finite priorities partition complete eligible objective rows.
 
-use crate::support::resource_limits;
 use crate::support::source_cases;
+use zetesis_reference_support::{admit, exhaustive, resource_limits};
 
-use zetesis_reference_support::{admit, exhaustive};
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource,
     ProfileFeature,

@@ -2,14 +2,13 @@
 
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
-use crate::support::resource_limits;
+use zetesis_reference_support::{admit, canonical, formula, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
 use proptest::prelude::*;
 use reference::{Models, exhaustive, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{admit, canonical, formula};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionResource, FormulaFailure,
     FormulaLimits, FormulaResource, admit_formula,

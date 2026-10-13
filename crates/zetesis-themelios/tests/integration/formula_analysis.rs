@@ -1,9 +1,8 @@
 //! The retained upstream analysis describes the exact bounded source projection;
 //! its class/safety verdicts neither replace native scope checks nor lift quotas.
 
-use crate::support::resource_limits;
 use std::collections::BTreeSet;
-use zetesis_reference_support::{BundleFixture, admit};
+use zetesis_reference_support::{BundleFixture, admit, resource_limits};
 
 use themelios_analysis::{Analysis, Verdict};
 use themelios_base::source::SourceId;
@@ -20,7 +19,6 @@ fn admit_with(text: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, For
 
 #[test]
 fn empty_and_exact_structure_ceilings_are_inclusive() {
-    // Both analysis limits at once, each then lowered alone, so their fields are named here.
     admit_with(
         "",
         &FormulaLimits {

@@ -3,7 +3,7 @@
 use crate::support::finite_bindings::{Models, holds, remap, values};
 use crate::support::head_models::{complete, expected, limited, manual_holds, selected};
 use crate::support::objective_dependency_records as objective_dependencies;
-use crate::support::resource_limits;
+use zetesis_reference_support::{BundleFixture, admit, canonical, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
@@ -11,7 +11,6 @@ use std::time::Duration;
 
 use serde_json::{Value as Json, json};
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{BundleFixture, admit, canonical};
 use zetesis_themelios::{
     AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula, admit_extended,

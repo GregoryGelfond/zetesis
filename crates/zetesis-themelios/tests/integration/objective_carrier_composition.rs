@@ -1,7 +1,7 @@
 //! Independent observers preserve previously established source carriers.
 
 use crate::support::priority_contracts;
-use crate::support::resource_limits;
+use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use zetesis_reference_support as reference;

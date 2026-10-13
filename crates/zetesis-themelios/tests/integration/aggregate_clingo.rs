@@ -12,8 +12,7 @@
 use crate::support::atom_models::atom;
 use crate::support::finite_bindings::Models;
 use crate::support::objective_dependency_records as objective_dependencies;
-use crate::support::resource_limits;
-use zetesis_reference_support::{admit, formula};
+use zetesis_reference_support::{admit, formula, resource_limits};
 
 use std::collections::BTreeSet;
 
@@ -21,7 +20,7 @@ use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, Model};
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{AggregateErrorKind, AggregateLimits, Interpretation, Limits, check};
+use zetesis_ferraris::{AggregateErrorKind, Interpretation, Limits, check};
 use zetesis_themelios::{
     AdmissionFailure, AdmittedFormula, ExpansionFailure, FormulaFailure, FormulaLimits,
     FormulaResource, ProfileFeature,
@@ -213,44 +212,16 @@ fn aggregate_translation_refusals_identify_original_rule_and_resource() {
     let rule = "a :- #sum{1:p;-1:q} >= 0.";
     let source = format!("p.\nq.\n{rule}");
     // The default budgets admit the reference; each case below lowers one.
-    // These are refused as aggregate errors, not by resource, so they name their fields.
     let input = formula(&source);
-    for (aggregate, expected) in [
-        (
-            AggregateLimits {
-                max_nodes: 0,
-                ..AggregateLimits::default()
-            },
-            AggregateErrorKind::NodeLimit,
-        ),
-        (
-            AggregateLimits {
-                max_work: 0,
-                ..AggregateLimits::default()
-            },
-            AggregateErrorKind::WorkLimit,
-        ),
-        (
-            AggregateLimits {
-                max_states: 0,
-                ..AggregateLimits::default()
-            },
-            AggregateErrorKind::StateLimit,
-        ),
-        (
-            AggregateLimits {
-                max_subsets: 1,
-                ..AggregateLimits::default()
-            },
-            AggregateErrorKind::SubsetLimit,
-        ),
+    for (expected, limit) in [
+        (AggregateErrorKind::NodeLimit, 0),
+        (AggregateErrorKind::WorkLimit, 0),
+        (AggregateErrorKind::StateLimit, 0),
+        (AggregateErrorKind::SubsetLimit, 1),
     ] {
         let error = admit(
             &source,
-            &FormulaLimits {
-                aggregate,
-                ..FormulaLimits::default()
-            },
+            &resource_limits::formula_aggregate(expected, limit),
         )
         .expect_err("bounded constructor refusal, never semantic UNSAT");
         let FormulaFailure::Aggregate { error, location } = error else {

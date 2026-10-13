@@ -3,9 +3,8 @@
 use std::collections::BTreeSet;
 
 use crate::support::atom_models::Models;
-use crate::support::resource_limits;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{admit, formula};
+use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_sat::{Limits, StableModels};
 use zetesis_test_support::repository;
 use zetesis_themelios::{
@@ -139,16 +138,14 @@ fn aggregate_limits_and_original_rule_evidence_are_independent() {
             ..
         })
     ));
-    // An aggregate's own work limit is refused as an aggregate error, not by resource.
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_work = 0;
+    let limits =
+        resource_limits::formula_aggregate(zetesis_ferraris::AggregateErrorKind::WorkLimit, 0);
     assert!(matches!(
         admit(source, &limits),
         Err(FormulaFailure::Aggregate { .. })
     ));
-    // An aggregate's subset limit is refused as an aggregate error, not by resource.
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_subsets = 1;
+    let limits =
+        resource_limits::formula_aggregate(zetesis_ferraris::AggregateErrorKind::SubsetLimit, 1);
     assert!(matches!(
         admit("{a;b}. q :- #sum{-1:a;1:b}=0.", &limits),
         Err(FormulaFailure::Aggregate { .. })

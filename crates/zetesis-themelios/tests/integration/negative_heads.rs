@@ -7,10 +7,9 @@ use crate::support::head_models::{
     Names, clingo, complete, expected, limited, manual_holds, selected, truth,
 };
 use crate::support::objective_boundaries;
-use crate::support::resource_limits;
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{BundleFixture, admit, canonical};
+use zetesis_reference_support::{BundleFixture, admit, canonical, resource_limits};
 use zetesis_themelios::{
     AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula,

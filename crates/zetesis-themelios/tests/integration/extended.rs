@@ -4,7 +4,7 @@ use std::collections::BTreeSet;
 
 use crate::support::admission;
 use crate::support::atom_models::ground_atom;
-use crate::support::resource_limits;
+use zetesis_reference_support::resource_limits;
 
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Span};
@@ -360,7 +360,6 @@ fn independent_expansion_budgets_and_zero_limits_are_enforced() {
             matches!(admit_extended(text.to_owned(), AdmissionOptions::default(), limits), Err(ExpansionFailure::Limit { resource, .. }) if resource == expected)
         );
     }
-    // Every expansion limit at once, so each field is named here.
     let empty = ExpansionLimits {
         max_constants: 0,
         max_term_work: 0,

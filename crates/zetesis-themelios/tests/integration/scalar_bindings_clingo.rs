@@ -4,10 +4,9 @@
 //! historical integer-maximum singleton-range timeout is deliberately excluded.
 
 use std::collections::BTreeSet;
-use zetesis_reference_support::{admit, formula};
+use zetesis_reference_support::{admit, formula, resource_limits};
 
 use crate::support::finite_bindings::Models;
-use crate::support::resource_limits;
 use crate::support::unsigned_spellings::atom_text;
 use serde_json::Value as Json;
 use themelios_program::term::EvalError;

@@ -1,9 +1,8 @@
 //! Invariant aggregate values discharge generated priority obligations.
 
-use crate::support::resource_limits;
 use crate::support::source_cases;
+use zetesis_reference_support::{admit, exhaustive, resource_limits};
 
-use zetesis_reference_support::{admit, exhaustive};
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = r#"{"name":"mandatory_count","source":"a.n(N):-N=#count{1:a}.#minimize{1@N:n(N)}.","priorities":[1],"records":[[["a","n(1)"],[1]]]}

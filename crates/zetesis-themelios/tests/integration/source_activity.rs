@@ -1,9 +1,8 @@
 //! Rich source activity shares scoped lowering and preserves independent literals.
 
-use crate::support::resource_limits;
-use zetesis_reference_support::{admit, formula};
+use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_test_support::thresholds::first_success;
-use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
+use zetesis_themelios::{FormulaFailure, FormulaResource};
 
 #[test]
 fn constant_aggregate_producers_exclude_negative_domains() {
@@ -55,9 +54,8 @@ fn source_activity_keeps_the_original_formula_owner() {
 #[test]
 fn rich_activity_does_not_retain_model_query_nodes() {
     let source = "q:-1=#count{1}.#minimize{1:not q}.";
-    // Condition nodes are refused as an objective admission resource, not a formula one.
-    let mut limits = FormulaLimits::default();
-    limits.objective.max_condition_nodes = 0;
+    let limits =
+        resource_limits::formula_objective(zetesis_objective::AdmissionResource::ConditionNodes, 0);
     let admitted = admit(source, &limits).unwrap();
     assert!(admitted.objectives().templates().is_empty());
     assert!(admitted.objectives().priorities().is_empty());

@@ -2,6 +2,7 @@
 //! resource refusals, and stable-model semantics across the two reduct oracles.
 
 use std::collections::BTreeSet;
+use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use clap::Parser;
@@ -207,21 +208,19 @@ fn source_limits_preserve_typed_admission_refusals() {
 
 #[test]
 fn undefined_arithmetic_and_expansion_limits_remain_refusals() {
-    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, admit_extended};
+    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, ExpansionResource, admit_extended};
     for source in ["p(1/0).", "p(2147483647+1)."] {
         assert!(matches!(
             assert_refused_without_output(source, &options(&[])),
             RunError::Expansion(ExpansionFailure::Evaluation { .. })
         ));
     }
-    let configure: [fn(&mut ExpansionLimits); 3] = [
-        |limits| limits.max_term_work = 0,
-        |limits| limits.max_templates = 0,
-        |limits| limits.max_values = 0,
-    ];
-    for configure in configure {
-        let mut limits = ExpansionLimits::default();
-        configure(&mut limits);
+    for resource in [
+        ExpansionResource::TermWork,
+        ExpansionResource::Templates,
+        ExpansionResource::Values,
+    ] {
+        let limits = resource_limits::expansion(resource, 0);
         assert!(matches!(
             admit_extended("p(1..2).".into(), AdmissionOptions::default(), limits),
             Err(ExpansionFailure::Limit { .. })
@@ -232,13 +231,7 @@ fn undefined_arithmetic_and_expansion_limits_remain_refusals() {
         FormulaResource::Atoms,
         FormulaResource::Roots,
     ] {
-        let mut limits = zetesis_themelios::FormulaLimits::default();
-        match resource {
-            FormulaResource::Substitutions => limits.max_substitutions = 0,
-            FormulaResource::Atoms => limits.theory.max_atoms = 0,
-            FormulaResource::Roots => limits.theory.max_roots = 0,
-            _ => unreachable!(),
-        }
+        let limits = resource_limits::formula(resource, 0);
         let (result, output) = crate::support::prepared::bounded_admission(
             "1 {a;b} 1.",
             ExpansionLimits::default(),
@@ -255,18 +248,14 @@ fn undefined_arithmetic_and_expansion_limits_remain_refusals() {
 fn formula_work_admission_is_inclusive() {
     let source = "a|b. c:-a. c:-b.";
     let attempt = |work: u64| {
-        let limits = zetesis_themelios::FormulaLimits {
-            max_work: work,
-            ..Default::default()
-        };
         crate::support::prepared::bounded_admission(
             source,
             zetesis_themelios::ExpansionLimits::default(),
-            &limits,
+            &resource_limits::formula(FormulaResource::Work, work),
         )
     };
     let low = first_success(
-        zetesis_themelios::FormulaLimits::default().max_work,
+        resource_limits::formula_default(FormulaResource::Work),
         |middle| match attempt(middle).0 {
             Ok(report) => {
                 assert_eq!(report.completion, Completion::Exhausted);
@@ -305,14 +294,11 @@ fn support_byte_limit_is_inclusive() {
         crate::support::prepared::bounded_admission(
             source,
             zetesis_themelios::ExpansionLimits::default(),
-            &zetesis_themelios::FormulaLimits {
-                max_support_bytes: bytes,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::SupportBytes, bytes),
         )
     };
     let low = first_success(
-        zetesis_themelios::FormulaLimits::default().max_support_bytes,
+        resource_limits::formula_default(FormulaResource::SupportBytes),
         |middle| match attempt(middle).0 {
             Ok(report) => {
                 assert_eq!(report.completion, Completion::Exhausted);
@@ -324,7 +310,7 @@ fn support_byte_limit_is_inclusive() {
                 limit,
                 location,
             })) => {
-                assert_eq!(limit, middle as u128);
+                assert_eq!(limit, u128::from(middle));
                 assert!(observed > limit);
                 assert_eq!(
                     location.location().unwrap().source,
@@ -344,7 +330,7 @@ fn support_byte_limit_is_inclusive() {
     let (result, output) = attempt(low - 1);
     assert!(output.is_empty());
     assert!(
-        matches!(result,Err(RunError::FormulaAdmission(FormulaFailure::Limit{resource:FormulaResource::SupportBytes,observed,limit,..})) if observed==low as u128 && limit==(low-1) as u128)
+        matches!(result,Err(RunError::FormulaAdmission(FormulaFailure::Limit{resource:FormulaResource::SupportBytes,observed,limit,..})) if observed==u128::from(low) && limit==u128::from(low-1))
     );
 }
 

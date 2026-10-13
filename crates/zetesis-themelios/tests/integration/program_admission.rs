@@ -1,10 +1,9 @@
 //! The typed relational boundary shares source semantics without a text roundtrip.
 
 use std::collections::BTreeSet;
-use zetesis_reference_support::normal_answer_sets;
+use zetesis_reference_support::{canonical, normal_answer_sets};
 
 use zetesis_core::Program as NativeProgram;
-use zetesis_reference_support::canonical;
 use zetesis_themelios::logical::{
     program::{Atom, Program, Rule, Script, Statement},
     provenance::Origin,

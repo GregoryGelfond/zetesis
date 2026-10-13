@@ -1,7 +1,7 @@
 //! Delta support coverage agrees with complete finite source substitutions.
 
-use crate::support::resource_limits;
 use std::cell::Cell;
+use zetesis_reference_support::resource_limits;
 
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;

@@ -3,9 +3,9 @@
 //! all bound is a test, not a generator, and a round's new rows are joined
 //! first.
 
-use crate::support::resource_limits;
 use std::cell::Cell;
 use std::fmt::Write as _;
+use zetesis_reference_support::resource_limits;
 
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{

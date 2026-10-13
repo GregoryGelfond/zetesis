@@ -1,10 +1,9 @@
 //! Source pools retain whole-rule products, local groups and bounded evidence.
 use crate::support::finite_bindings as reference;
-use crate::support::resource_limits;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
-use zetesis_reference_support::{BundleFixture, canonical, formula};
+use zetesis_reference_support::{BundleFixture, canonical, formula, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
@@ -771,7 +770,7 @@ fn zero_arity_disjunct_carriers_have_an_independent_preclone_node_ceiling() {
 fn compact_source_refuses_an_oversized_materialized_pool() {
     let arguments = ["(0;1)"; 12].join(",");
     let source = format!("p(f({arguments})).");
-    // Lifts three limits so that only the family bytes can refuse, so the fields are named here.
+    // Lifts three limits so that only the family bytes can refuse.
     let error = limited(
         &source,
         ExpansionLimits {

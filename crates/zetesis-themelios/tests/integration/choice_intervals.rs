@@ -4,7 +4,7 @@ use crate::support::answer_records::Record;
 use crate::support::clingo_reports::{optimal, optimal_witnesses};
 use crate::support::finite_bindings::{holds, remap, values};
 use crate::support::objective_dependency_records as objective_dependencies;
-use crate::support::resource_limits;
+use zetesis_reference_support::{BundleFixture, admit, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
@@ -14,7 +14,6 @@ use themelios_program::term::EvalError;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{BundleFixture, admit};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,

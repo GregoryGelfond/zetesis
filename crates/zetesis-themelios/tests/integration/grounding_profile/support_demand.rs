@@ -2,7 +2,7 @@
 //! no join reads keeps none, and every probe a join makes finds its posting.
 
 use super::{Observer, compile};
-use crate::support::resource_limits;
+use zetesis_reference_support::resource_limits;
 use zetesis_themelios::{FormulaLimits, FormulaResource};
 
 #[test]

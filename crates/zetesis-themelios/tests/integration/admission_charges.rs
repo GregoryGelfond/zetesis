@@ -1,9 +1,8 @@
 //! Admission charges count the operations the formula route performs, so a
 //! ceiling refuses a program for its size, not for an allowance's shape.
 
-use crate::support::resource_limits;
 use std::fmt::Write as _;
-use zetesis_reference_support::{admit, formula};
+use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
 use zetesis_themelios::{

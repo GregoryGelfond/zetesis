@@ -1,7 +1,7 @@
 //! Complete formula and frozen-reduct comparison against explicit Cartesian rules.
 
-use crate::support::resource_limits;
 use crate::support::stable_models;
+use zetesis_reference_support::{admit, formula, resource_limits};
 
 use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -11,7 +11,6 @@ use stable_models::stable;
 use zetesis_core::Value;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
-use zetesis_reference_support::{admit, formula};
 use zetesis_test_support::programs::atom;
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{

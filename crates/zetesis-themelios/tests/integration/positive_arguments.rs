@@ -1,11 +1,10 @@
 //! Evaluated positive arguments consume bindings and retain actual source atoms.
 use crate::support::finite_bindings as reference;
-use crate::support::resource_limits;
 use crate::support::thresholds::minimum_preparation_bytes as minimum_bytes;
 use reference::{Models, native};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::{admit, formula, prepare, prepared};
+use zetesis_reference_support::{admit, formula, prepare, prepared, resource_limits};
 use zetesis_themelios::{
     AdmissionOptions, AnalysisBasis, ExpansionFailure, ExpansionLimits, FormulaFailure,
     FormulaLimits, FormulaResource, admit_formula,

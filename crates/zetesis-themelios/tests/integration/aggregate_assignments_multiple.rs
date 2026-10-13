@@ -5,8 +5,8 @@
 use crate::support::clingo_reports::enumerated;
 use crate::support::finite_bindings::{Models, exhaustive, native};
 use crate::support::objective_dependency_records as objective_dependencies;
-use crate::support::resource_limits;
 use crate::support::sourced_admission::{SOURCE, input, options};
+use zetesis_reference_support::resource_limits;
 
 use std::collections::BTreeSet;
 

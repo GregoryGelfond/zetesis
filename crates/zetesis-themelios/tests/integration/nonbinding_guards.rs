@@ -1,7 +1,7 @@
 //! Completed nonbinding guards preserve comparison and default-negation semantics.
 
 use crate::support::admission;
-use crate::support::resource_limits;
+use zetesis_reference_support::{canonical, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -14,7 +14,6 @@ use crate::support::objective_boundaries;
 use cases::sources;
 use reference::{Models, exhaustive, holds, native, values};
 use themelios_base::source::SourceId;
-use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
     FormulaResource, FormulaWarning, admit_formula, prepare_formula,

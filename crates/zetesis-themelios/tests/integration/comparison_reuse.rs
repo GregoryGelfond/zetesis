@@ -1,7 +1,7 @@
 //! A comparison certificate belongs to one completed nongenerative binding.
 
-use crate::support::resource_limits;
 use crate::support::source_cases;
+use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use themelios_program::term::EvalError;

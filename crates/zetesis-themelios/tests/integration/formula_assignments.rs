@@ -6,10 +6,9 @@ use std::collections::BTreeSet;
 
 use crate::support::atom_models::Models;
 use crate::support::objective_boundaries;
-use crate::support::resource_limits;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{admit, formula as input};
+use zetesis_reference_support::{admit, formula as input, resource_limits};
 use zetesis_sat::{Limits, StableModels};
 use zetesis_test_support::repository;
 use zetesis_themelios::{

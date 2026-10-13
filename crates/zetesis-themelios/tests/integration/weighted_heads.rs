@@ -1,7 +1,7 @@
 //! Weighted head permissions remain independent of numeric contributions.
 
 use crate::support::admission;
-use crate::support::resource_limits;
+use zetesis_reference_support::{canonical, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -14,7 +14,6 @@ use cases::CASES;
 use reference::{Models, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,

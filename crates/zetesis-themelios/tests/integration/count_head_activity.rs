@@ -2,7 +2,7 @@
 
 mod cases;
 use crate::support::finite_bindings as reference;
-use crate::support::resource_limits;
+use zetesis_reference_support::{admit, canonical, formula, prepared, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
@@ -11,7 +11,6 @@ use std::fmt::Write as _;
 use cases::CASES;
 use reference::{Models, holds, native, values};
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{admit, canonical, formula, prepared};
 use zetesis_themelios::{
     AdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionFailure, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula,

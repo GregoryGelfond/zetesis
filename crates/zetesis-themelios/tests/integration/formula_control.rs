@@ -1,12 +1,11 @@
 //! Canonical preparation separates input inspection, purpose and runtime control.
 
-use crate::support::resource_limits;
 use crate::support::unevaluable_directives::{objective, projection};
 use std::{cell::Cell, collections::BTreeSet, sync::Arc, time::Instant};
+use zetesis_reference_support::{exhaustive, resource_limits};
 
 use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
-use zetesis_reference_support::exhaustive;
 use zetesis_themelios::logical::{
     Name, Symbol, Term,
     program::{

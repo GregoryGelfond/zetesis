@@ -5,9 +5,8 @@ use std::collections::BTreeSet;
 use crate::support::finite_bindings::{holds, values};
 use crate::support::head_models::{self, complete, expected, limited, manual_holds, selected};
 use crate::support::objective_boundaries;
-use crate::support::resource_limits;
 use serde_json::{Value as Json, json};
-use zetesis_reference_support::{BundleFixture, admit};
+use zetesis_reference_support::{BundleFixture, admit, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,

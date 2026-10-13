@@ -1,8 +1,8 @@
 //! Complete objective observations through total predicate renamings.
 
 use crate::support::finite_bindings::holds;
-use crate::support::resource_limits;
 use crate::support::source_cases;
+use zetesis_reference_support::{admit, canonical, exhaustive, prepared, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
 use crate::support::finite_bindings::values as truth;
@@ -12,7 +12,6 @@ use source_cases::cases;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{admit, canonical, exhaustive, prepared};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 

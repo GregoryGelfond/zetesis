@@ -1,7 +1,7 @@
 //! Completed outer values select original negative formulas, never support tests.
 
 use crate::support::admission;
-use crate::support::resource_limits;
+use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;

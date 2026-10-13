@@ -1,14 +1,13 @@
 //! Completed priority presence for flat extrema observers.
 
-use crate::support::resource_limits;
 use crate::support::source_cases;
+use zetesis_reference_support::{admit, exhaustive, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
 use crate::support::fixtures::OBJECTIVE_EXTREMA_REFUSALS as HISTORICAL;
 use source_cases::cases;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
-use zetesis_reference_support::{admit, exhaustive};
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource,
 };

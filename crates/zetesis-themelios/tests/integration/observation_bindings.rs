@@ -5,9 +5,9 @@ use crate::support::observation_reference;
 use zetesis_core::{Atom, Model, Predicate, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, check};
-use zetesis_reference_support::{admit, formula};
+use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_themelios::observation::{
-    AdmissionLimits, ErrorKind, EvaluationError, Feature, Limits, Resource, Symbol,
+    ErrorKind, EvaluationError, Feature, Limits, Resource, Symbol,
 };
 use zetesis_themelios::{AdmittedFormula, FormulaFailure, FormulaLimits};
 
@@ -335,17 +335,10 @@ fn structural_binding_reserves_its_complete_value_slot() {
 }
 
 fn assert_complete_value_slot(source: &str, slots: u32) {
-    // Observation resources, not formula ones, so the observation limit names its field.
-    let run = |max_variables| {
+    let run = |max_variables: u32| {
         admit(
             source,
-            &FormulaLimits {
-                observation: AdmissionLimits {
-                    max_variables,
-                    ..AdmissionLimits::default()
-                },
-                ..FormulaLimits::default()
-            },
+            &resource_limits::formula_observation(Resource::Variables, u64::from(max_variables)),
         )
     };
     assert_eq!(display(&run(slots).unwrap(), &Model::default()), ["1"]);
@@ -370,17 +363,10 @@ fn moved_operands_charge_their_retained_guard_nodes() {
         ("#show. #show X:X=1..2.", 10),
         ("#show. #show X:f(X)=#min{f(1)}.", 12),
     ] {
-        // Observation resources, not formula ones, so the observation limit names its field.
-        let run = |max_nodes| {
+        let run = |max_nodes: u32| {
             admit(
                 source,
-                &FormulaLimits {
-                    observation: AdmissionLimits {
-                        max_nodes,
-                        ..AdmissionLimits::default()
-                    },
-                    ..FormulaLimits::default()
-                },
+                &resource_limits::formula_observation(Resource::Nodes, u64::from(max_nodes)),
             )
         };
         run(nodes).unwrap_or_else(|error| panic!("{source}: {error}"));

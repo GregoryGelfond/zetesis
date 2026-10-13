@@ -1,10 +1,9 @@
 //! Local witnesses retain complete atoms under structural selection.
 use crate::support::finite_bindings as reference;
-use crate::support::resource_limits;
 use crate::support::witnesses::{self, limited};
 use reference::{Models, native, values};
 use std::collections::BTreeSet;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::{canonical, formula, resource_limits};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
     FormulaLimits, FormulaResource, admit_formula,

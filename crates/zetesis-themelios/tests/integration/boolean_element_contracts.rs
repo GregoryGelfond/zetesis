@@ -6,12 +6,11 @@
 //! a physical lowering. Clingo agreement is separate empirical corroboration.
 
 use crate::support::objective_dependency_records as objective_dependencies;
-use crate::support::resource_limits;
+use zetesis_reference_support::{BundleFixture, admit, formula, prepared, resource_limits};
 
 use crate::support::head_element_reference as reference;
 
 use reference::{Selection, cost_records, expected, external, models};
-use zetesis_reference_support::{BundleFixture, admit, formula, prepared};
 use zetesis_themelios::{
     AnalysisBasis, BundleAdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionFailure,
     ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula,

@@ -1,8 +1,8 @@
 //! Conditional alternatives stay inside their local quantifier in weak bodies.
 
 use crate::support::priority_contracts;
-use crate::support::resource_limits;
 use crate::support::source_cases;
+use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use themelios_program::program::{Arguments, BodyElement, LiteralInner, Statement};
@@ -185,9 +185,8 @@ fn mixed_pooled_rows_preserve_complete_costs_and_warnings() {
 #[test]
 fn retained_pooled_conditions_still_obey_their_node_limit() {
     let source = "d(0).p(0).:~p(X;1/X):d(X).[1]";
-    // Condition nodes are refused as an objective admission resource, not a formula one.
-    let mut limits = FormulaLimits::default();
-    limits.objective.max_condition_nodes = 0;
+    let limits =
+        resource_limits::formula_objective(zetesis_objective::AdmissionResource::ConditionNodes, 0);
     let error = reference::admit(source, &limits).unwrap_err();
     assert!(
         matches!(

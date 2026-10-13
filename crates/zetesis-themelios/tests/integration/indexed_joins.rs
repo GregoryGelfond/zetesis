@@ -1,9 +1,8 @@
 //! Bound-column probes restrict work without replacing full relational matching.
 
-use crate::support::resource_limits;
 use std::cell::Cell;
 use std::fmt::Write;
-use zetesis_reference_support::{admit, formula};
+use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 
 use zetesis_themelios::ProgramSite;

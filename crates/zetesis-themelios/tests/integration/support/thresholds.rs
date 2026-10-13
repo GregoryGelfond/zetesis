@@ -1,6 +1,6 @@
 //! The least scalar-byte ceiling under which a source prepares.
 
-use crate::support::resource_limits;
+use zetesis_reference_support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits,

@@ -1,9 +1,8 @@
 //! Boolean elements retain activity without introducing producer atoms.
 
 use crate::support::admission;
-use crate::support::resource_limits;
 use std::collections::BTreeSet;
-use zetesis_reference_support::prepared;
+use zetesis_reference_support::{prepared, resource_limits};
 
 use super::{Models, native};
 use crate::support::finite_bindings::expected;

@@ -1,8 +1,7 @@
 //! Generative scalar instructions preserve scoped bindings and whole-model identity.
 
-use crate::support::resource_limits;
 use std::collections::BTreeSet;
-use zetesis_reference_support::{admit, formula};
+use zetesis_reference_support::{admit, formula, resource_limits};
 
 use zetesis_core::{Atom, Predicate, Value};
 use zetesis_cpu::Cancellation;

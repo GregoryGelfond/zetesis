@@ -1,8 +1,7 @@
 //! Positive sums and ignored tuple contributions retain original reduct semantics.
-use crate::support::resource_limits;
 use crate::support::source_cases;
+use zetesis_reference_support::{admit, exhaustive, resource_limits};
 
-use zetesis_reference_support::{admit, exhaustive};
 use zetesis_themelios::{FormulaLimits, FormulaResource};
 
 fn cases() -> Vec<source_cases::Case> {

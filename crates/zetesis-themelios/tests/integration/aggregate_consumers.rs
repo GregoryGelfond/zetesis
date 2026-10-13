@@ -1,11 +1,11 @@
 //! Finite substitutions keep each aggregate equality; proposals are not truth.
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
-use crate::support::resource_limits;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use themelios_base::source::SourceId;
+use zetesis_reference_support::{canonical, resource_limits};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
@@ -13,7 +13,6 @@ use zetesis_themelios::{
 };
 
 use crate::support::objective_dependency_records as objective_dependencies;
-use zetesis_reference_support::canonical;
 
 const SOURCE: SourceId = SourceId::new(113);
 fn options() -> AdmissionOptions {
