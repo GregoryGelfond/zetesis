@@ -9,6 +9,7 @@ use crate::support::clingo_reports::optimal;
 use crate::support::finite_bindings::{holds, values};
 use crate::support::objective_boundaries;
 use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
 use zetesis_core::{Model, Sign};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
@@ -128,6 +129,7 @@ fn reference(raw: &Json) -> Vec<Record> {
         .iter()
         .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
         .map(|witness| {
+            // A display is a multiset: clingo repeats a value two show directives select.
             let mut atoms: Vec<_> = witness["Value"]
                 .as_array()
                 .unwrap()
@@ -135,10 +137,7 @@ fn reference(raw: &Json) -> Vec<Record> {
                 .map(|atom| atom.as_str().unwrap().to_owned())
                 .collect();
             atoms.sort();
-            let costs = witness["Costs"]
-                .as_array()
-                .map(|costs| costs.iter().map(|cost| cost.as_i64().unwrap()).collect());
-            (atoms, costs)
+            (atoms, oracle::costs(&witness["Costs"]))
         })
         .collect();
     assert_eq!(
@@ -149,12 +148,7 @@ fn reference(raw: &Json) -> Vec<Record> {
         "SATISFIABLE" => assert!(records.iter().all(|(_, costs)| costs.is_none())),
         "UNSATISFIABLE" => assert!(records.is_empty()),
         "OPTIMUM FOUND" => {
-            let cost: Vec<_> = raw["Models"]["Costs"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|value| value.as_i64().unwrap())
-                .collect();
+            let cost = oracle::costs(&raw["Models"]["Costs"]).expect("an optimum's costs");
             let first = records
                 .iter()
                 .position(|(_, found)| found.as_ref() == Some(&cost))

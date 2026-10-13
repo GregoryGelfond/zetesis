@@ -84,6 +84,7 @@ fn reference(result: &str, summary: &Json, witnesses: &[Json]) -> Vec<Record> {
     let mut records: Vec<Record> = witnesses
         .iter()
         .map(|witness| {
+            // A display is a multiset: clingo repeats a value two show directives select.
             let mut values: Vec<String> = witness["Value"]
                 .as_array()
                 .unwrap()
@@ -96,10 +97,7 @@ fn reference(result: &str, summary: &Json, witnesses: &[Json]) -> Vec<Record> {
                 })
                 .collect();
             values.sort();
-            let costs = witness["Costs"]
-                .as_array()
-                .map(|costs| costs.iter().map(|cost| cost.as_i64().unwrap()).collect());
-            (values, costs)
+            (values, oracle::costs(&witness["Costs"]))
         })
         .collect();
     match result {

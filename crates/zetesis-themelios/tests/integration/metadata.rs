@@ -315,11 +315,9 @@ fn oracle_json(output: &[u8]) -> Displays {
     for call in json["Call"].as_array().expect("oracle calls") {
         if let Some(witnesses) = call["Witnesses"].as_array() {
             for witness in witnesses {
-                let shown = witness["Value"]
-                    .as_array()
-                    .expect("whole atom values")
+                let shown = oracle::atoms(&witness["Value"])
                     .iter()
-                    .map(|atom| atom_models::atom(atom.as_str().expect("atom string")))
+                    .map(|atom| atom_models::atom(atom))
                     .collect();
                 *displays.entry(shown).or_default() += 1;
             }

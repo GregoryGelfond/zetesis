@@ -12,6 +12,7 @@ use std::fs::{self};
 
 use serde_json::Value as Json;
 use themelios_program::term::EvalError;
+use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::admit;
@@ -117,17 +118,8 @@ fn reference(raw: &Json) -> Vec<Record> {
         .iter()
         .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
         .map(|witness| {
-            let mut atoms: Vec<_> = witness["Value"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|atom| atom.as_str().unwrap().to_owned())
-                .collect();
-            atoms.sort();
-            let costs = witness["Costs"]
-                .as_array()
-                .map(|costs| costs.iter().map(|cost| cost.as_i64().unwrap()).collect());
-            (atoms, costs)
+            let atoms = oracle::atoms(&witness["Value"]).into_iter().collect();
+            (atoms, oracle::costs(&witness["Costs"]))
         })
         .collect();
     assert_eq!(
@@ -135,12 +127,7 @@ fn reference(raw: &Json) -> Vec<Record> {
         records.len() as u64
     );
     if raw["Result"] == "OPTIMUM FOUND" {
-        let best: Vec<_> = raw["Models"]["Costs"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|cost| cost.as_i64().unwrap())
-            .collect();
+        let best = oracle::costs(&raw["Models"]["Costs"]).expect("an optimum's costs");
         let first = records
             .iter()
             .position(|(_, cost)| cost.as_ref() == Some(&best))

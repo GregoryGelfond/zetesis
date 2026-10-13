@@ -102,17 +102,7 @@ fn expected(case: &Json) -> Records {
         .as_array()
         .unwrap()
         .iter()
-        .map(|record| {
-            (
-                record[0]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|atom| atom.as_str().unwrap().to_owned())
-                    .collect(),
-                costs(&record[1]),
-            )
-        })
+        .map(|record| (oracle::atoms(&record[0]), costs(&record[1])))
         .collect();
     records.sort();
     records
@@ -349,17 +339,7 @@ fn original_file_sets_match_fresh_complete_clingo_optima() {
                     .as_array()
                     .into_iter()
                     .flatten()
-                    .map(|witness| {
-                        (
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect(),
-                            costs(&witness["Costs"]),
-                        )
-                    })
+                    .map(|witness| (oracle::atoms(&witness["Value"]), costs(&witness["Costs"])))
             })
             .collect();
         assert_eq!(

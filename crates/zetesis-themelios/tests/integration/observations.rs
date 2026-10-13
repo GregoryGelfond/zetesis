@@ -6,6 +6,7 @@ use std::time::{Duration, Instant};
 use crate::support::answer_records::Record;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
+use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{Interpretation, check};
@@ -64,6 +65,7 @@ fn reference(case: &Json) -> Vec<Record> {
     let mut records: Vec<Record> = witnesses
         .iter()
         .map(|witness| {
+            // A display is a multiset: clingo repeats a value two show directives select.
             let mut values: Vec<String> = witness["Value"]
                 .as_array()
                 .unwrap()
@@ -71,20 +73,12 @@ fn reference(case: &Json) -> Vec<Record> {
                 .map(|value| value.as_str().unwrap().to_owned())
                 .collect();
             values.sort();
-            let costs = witness["Costs"]
-                .as_array()
-                .map(|costs| costs.iter().map(|cost| cost.as_i64().unwrap()).collect());
-            (values, costs)
+            (values, oracle::costs(&witness["Costs"]))
         })
         .collect();
     if case["reference_result"] == "OPTIMUM FOUND" {
         let summary = &case["reference_summary"];
-        let best: Vec<_> = summary["Costs"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|cost| cost.as_i64().unwrap())
-            .collect();
+        let best = oracle::costs(&summary["Costs"]).expect("an optimum's costs");
         let first = records
             .iter()
             .position(|(_, cost)| cost.as_ref() == Some(&best))

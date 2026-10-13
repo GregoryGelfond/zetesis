@@ -370,11 +370,7 @@ fn normalized_reference(raw: &Json) -> (String, Models, Option<Vec<i64>>) {
     ));
     let costs: Vec<Option<Vec<i64>>> = witnesses
         .iter()
-        .map(|witness| {
-            witness["Costs"]
-                .as_array()
-                .map(|costs| costs.iter().map(|x| x.as_i64().unwrap()).collect())
-        })
+        .map(|witness| oracle::costs(&witness["Costs"]))
         .collect();
     let best = costs.iter().min().cloned().flatten();
     assert!(

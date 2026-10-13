@@ -38,26 +38,8 @@ fn models(items: &Json) -> Models {
         .as_array()
         .expect("recorded complete models")
         .iter()
-        .map(model)
+        .map(oracle::atoms)
         .collect()
-}
-
-fn model(items: &Json) -> BTreeSet<String> {
-    items
-        .as_array()
-        .expect("whole canonical atom identities")
-        .iter()
-        .map(|atom| atom.as_str().expect("canonical atom").to_owned())
-        .collect()
-}
-
-fn costs(items: &Json) -> Option<Vec<i64>> {
-    items.as_array().map(|costs| {
-        costs
-            .iter()
-            .map(|cost| cost.as_i64().expect("integer cost"))
-            .collect()
-    })
 }
 
 fn cases() -> Vec<Case> {
@@ -70,7 +52,7 @@ fn cases() -> Vec<Case> {
                 source: row[1].as_str().expect("source program").to_owned(),
                 valid: row[2].as_bool().expect("source validity"),
                 models: models(&row[3]),
-                costs: costs(&row[4]),
+                costs: oracle::costs(&row[4]),
             }
         })
         .collect()
@@ -347,7 +329,12 @@ fn compare_external(case: &Case) {
         return;
     }
     assert_eq!(json["Models"]["More"], "no", "{}", case.name);
-    assert_eq!(costs(&json["Models"]["Costs"]), case.costs, "{}", case.name);
+    assert_eq!(
+        oracle::costs(&json["Models"]["Costs"]),
+        case.costs,
+        "{}",
+        case.name
+    );
     let witnesses: Vec<_> = json["Call"]
         .as_array()
         .expect("reference calls")
@@ -360,8 +347,8 @@ fn compare_external(case: &Case) {
     );
     let actual: Models = witnesses
         .iter()
-        .filter(|witness| costs(&witness["Costs"]) == case.costs)
-        .map(|witness| model(&witness["Value"]))
+        .filter(|witness| oracle::costs(&witness["Costs"]) == case.costs)
+        .map(|witness| oracle::atoms(&witness["Value"]))
         .collect();
     assert_eq!(actual, case.models, "{}: {}", case.name, case.source);
     if case.costs.is_some() {

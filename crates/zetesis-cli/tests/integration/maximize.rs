@@ -392,20 +392,8 @@ fn clingo(case: &Case) -> Records {
     let mut result = Vec::new();
     for call in json["Call"].as_array().unwrap() {
         for witness in call["Witnesses"].as_array().into_iter().flatten() {
-            let mut values: Vec<String> = witness["Value"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|value| value.as_str().unwrap().to_owned())
-                .collect();
-            values.sort();
-            let costs = witness["Costs"].as_array().map(|values| {
-                values
-                    .iter()
-                    .map(|value| value.as_i64().unwrap())
-                    .collect::<Vec<_>>()
-            });
-            result.push((values, costs));
+            let values = oracle::atoms(&witness["Value"]).into_iter().collect();
+            result.push((values, oracle::costs(&witness["Costs"])));
         }
     }
     assert_eq!(
