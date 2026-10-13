@@ -1,4 +1,9 @@
-//! Bounded candidate values from complete, canonical full-tuple local joins.
+//! An aggregate assignment's carrier: the measure of every selection that
+//! contains its required tuples and lies within its possible ones. [`carrier`]
+//! computes it from numeric contributions and [`extrema_carrier`] from extremum
+//! values. Joins propose an assignment's values through [`values`], from
+//! complete, canonical full-tuple local joins; final grounding's assignment
+//! families and the objective refinement call the two operations directly.
 mod counts;
 mod sums;
 #[cfg(test)]
@@ -20,6 +25,16 @@ use themelios_program::term::EvalError;
 use zetesis_core::catalog::{AssignmentSlice, TermKey, TermRef};
 use zetesis_core::{Value, ValueNodeRef};
 
+/// The proposed values of the assignment `aggregate` under the outer
+/// `assignment`, in ascending term order: the carrier of the full tuples its
+/// elements' local joins yield over `support`, each coalesced once. A tuple is
+/// required when an element whose condition the join decides yields it, so no
+/// support changes the required tuples. Final grounding's assignment family is
+/// the carrier of the same required tuples over a support that contains this
+/// one, and a carrier only grows with its possible tuples, so the family has a
+/// root for every value proposed here. Charges work and storage as it reduces
+/// the tuples; refuses as the local joins, the endpoint guard and the carrier
+/// operations do, or on the aggregate-element ceiling per distinct tuple.
 pub(crate) fn values(
     aggregate: &AggregateIr,
     assignment: &Binding,
@@ -393,6 +408,15 @@ pub(crate) fn contribution(
 /// per distinct value and storage through its buffers; returns the values in
 /// ascending order. Extremum contributions are terms, not numbers, and go to
 /// [`extrema_carrier`].
+///
+/// Precondition: each side holds at most one contribution per distinct full
+/// tuple, its reduction by [`contribution`] under `function`, and no tuple
+/// contributes to both sides; `#count` counts contributions, never their
+/// values. Every caller coalesces full tuples before reducing them: [`values`]
+/// in one term selection, with each tuple on the side its required selection
+/// names; final grounding by ground key, with one required flag per key; and
+/// the objective refinement in its sorted closed tuples, where an optional
+/// occurrence of a required key adds no contribution.
 pub(crate) fn carrier(
     function: AggregateFunction,
     required: impl IntoIterator<Item = i32>,
@@ -402,9 +426,6 @@ pub(crate) fn carrier(
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<Binding<'static>, FormulaFailure> {
-    // Both callers supply one contribution per coalesced full tuple: `values`
-    // uses `contribution(Count, _)`, and final grounding uses the same function
-    // (or unit atom keys) before grouping. Count never consumes tuple weights.
     let positive = |weight: &i32| function != AggregateFunction::SumPlus || *weight > 0;
     let numbers = match function {
         AggregateFunction::Count => {
