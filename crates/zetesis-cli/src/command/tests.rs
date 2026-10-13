@@ -1,12 +1,15 @@
 //! The command-line grammar is the same in every build profile, so that the
 //! default install's front and its GPU sibling read an invocation identically.
-//! The test renders the command tree in a canonical form and compares it with
-//! one committed record; it runs in every population that builds the CLI, so
-//! a feature-gated difference in what it renders fails one of them. It renders
-//! what decides how an invocation is read (each command's settings, aliases
-//! and argument groups; each argument's names, position, requirement, action,
-//! value count, value names, delimiters, parser type, possible values,
-//! defaults and conflicts) and its help text.
+//! The test renders the command tree as clap builds it for parsing, in a
+//! canonical form, and compares it with one committed record; it runs in every
+//! population that builds the CLI, so a feature-gated difference in what it
+//! renders fails one of them. It renders each command's parse settings,
+//! aliases and argument groups, and each argument's names, position,
+//! requirement, action, value count, value names, delimiters, parsed type,
+//! possible values, defaults and conflicts, with its help text. Clap's
+//! requirements between arguments, overrides, missing-value and conditional
+//! defaults and environment fallbacks are not rendered; the CLI uses none of
+//! them.
 
 use super::command;
 use clap::{Arg, Command};
@@ -15,8 +18,9 @@ use std::fmt::Write as _;
 /// The record, beside the crate's other test data.
 const RECORD: &str = include_str!("../../tests/fixtures/command-tree.txt");
 
-/// Arguments whose default the host determines, rendered as a fixed marker.
-const HOST_DEFAULTS: [&str; 1] = ["memory"];
+/// The arguments, by command and id, whose default the host determines,
+/// rendered as a fixed marker.
+const HOST_DEFAULTS: [(&str, &str); 1] = [("solve", "memory")];
 
 fn render(command: &Command, depth: usize, out: &mut String) {
     let indent = "  ".repeat(depth);
@@ -66,6 +70,7 @@ fn render(command: &Command, depth: usize, out: &mut String) {
             command.is_allow_negative_numbers_set(),
         ),
         ("args_override_self", command.is_args_override_self()),
+        ("propagate_version", command.is_propagate_version_set()),
     ];
     let set: Vec<&str> = settings
         .iter()
@@ -96,7 +101,7 @@ fn render(command: &Command, depth: usize, out: &mut String) {
 fn render_argument(command: &Command, argument: &Arg, depth: usize, out: &mut String) {
     let indent = "  ".repeat(depth);
     let id = argument.get_id().as_str();
-    let defaults: Vec<String> = if HOST_DEFAULTS.contains(&id) {
+    let defaults: Vec<String> = if HOST_DEFAULTS.contains(&(command.get_name(), id)) {
         vec!["<host>".to_owned()]
     } else {
         argument
@@ -203,13 +208,16 @@ fn parsed_type(argument: &Arg) -> &'static str {
     .unwrap_or_else(|| panic!("name the value type of {}'s parser", argument.get_id()))
 }
 
-/// The canonical form of both grammars the CLI parses: the task-scoped one and
-/// the legacy file-first one.
+/// The canonical form of both grammars the CLI parses, the task-scoped one and
+/// the legacy file-first one, each as clap builds it: with the values clap
+/// derives and propagates before parsing.
 fn canonical() -> String {
     let mut out = String::new();
     for legacy in [false, true] {
         let _ = writeln!(out, "legacy={legacy}");
-        render(&command(legacy), 0, &mut out);
+        let mut built = command(legacy);
+        built.build();
+        render(&built, 0, &mut out);
     }
     out
 }
