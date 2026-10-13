@@ -30,7 +30,7 @@ pub struct ReductPreparationLimits {
 
 impl ReductPreparationLimits {
     /// Default ceiling for named preparation or standalone worker capacity.
-    pub const DEFAULT_BYTES: u64 = 64 * 1024 * 1024;
+    pub(crate) const DEFAULT_BYTES: u64 = 64 * 1024 * 1024;
 }
 
 impl Default for ReductPreparationLimits {

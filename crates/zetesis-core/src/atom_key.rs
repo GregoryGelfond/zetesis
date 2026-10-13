@@ -271,7 +271,7 @@ impl<'a> AtomKey<'a> {
     /// Compare with a canonical or ingress atom view without materialization.
     /// Predicate and argument contents determine order across independent stores.
     #[must_use]
-    pub fn compare_ref(&self, atom: AtomRef<'_>) -> Ordering {
+    pub(crate) fn compare_ref(&self, atom: AtomRef<'_>) -> Ordering {
         compare(self, &atom)
     }
 

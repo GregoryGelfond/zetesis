@@ -78,7 +78,7 @@ pub struct RunFailure {
 impl RunFailure {
     /// Discard additional evidence for the original convenience API.
     #[must_use]
-    pub fn into_cause(self) -> RunError {
+    pub(crate) fn into_cause(self) -> RunError {
         *self.cause
     }
 }

@@ -1112,7 +1112,7 @@ impl<'a> AtomRef<'a> {
     ///
     /// # Errors
     /// Returns the first callback refusal before its operation.
-    pub fn compare_key_with<E>(
+    pub(crate) fn compare_key_with<E>(
         self,
         other: &crate::AtomKey<'_>,
         mut before: impl FnMut() -> Result<(), E>,

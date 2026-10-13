@@ -101,19 +101,4 @@ impl<'a> CatalogRead<'a> {
 #[cfg(test)]
 mod tests;
 
-impl CatalogRead<'_> {
-    /// Borrow the constructor shape of an admitted predicate without copying its name.
-    /// # Errors
-    /// Refuses ingress, foreign predicates, or inaccessible newer predicates.
-    pub fn constructor_of_predicate(
-        self,
-        predicate: super::PredicateRef<'_>,
-    ) -> Result<DeclaredConstructor, ReadError> {
-        let id = self.selected_predicate(predicate)?;
-        let data = self
-            .0
-            .predicate_constructor(id)
-            .ok_or(ReadError::OutsidePrefix)?;
-        Ok(DeclaredConstructor::new(self.0, data))
-    }
-}
+impl CatalogRead<'_> {}

@@ -86,7 +86,7 @@ impl ProgramSite {
 
     /// Retain the statement identity while selecting a real parsed coordinate.
     #[must_use]
-    pub const fn with_location(self, location: Location) -> Self {
+    pub(crate) const fn with_location(self, location: Location) -> Self {
         Self {
             location: Some(location),
             ..self
@@ -95,7 +95,7 @@ impl ProgramSite {
 
     /// Retain a real coordinate while identifying its original statement.
     #[must_use]
-    pub const fn with_statement(self, statement: StatementId) -> Self {
+    pub(crate) const fn with_statement(self, statement: StatementId) -> Self {
         Self {
             statement: Some(statement),
             ..self

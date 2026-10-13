@@ -250,7 +250,7 @@ impl Model {
     /// Returns `None` on arithmetic overflow. Retention accounts this per model
     /// entry, even when a cloned model physically shares its selection vector.
     #[must_use]
-    pub fn selection_payload_bytes(&self) -> Option<usize> {
+    pub(crate) fn selection_payload_bytes(&self) -> Option<usize> {
         LENGTH_BYTES.checked_add(self.0.positions.len().checked_mul(LENGTH_BYTES)?)
     }
 }

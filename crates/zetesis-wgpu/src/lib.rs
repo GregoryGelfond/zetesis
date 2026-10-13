@@ -271,21 +271,6 @@ impl GpuOracle {
         Self::new_selected(options, GpuSelection::default())
     }
 
-    /// Create an oracle using only the Metal backend, with no API fallback.
-    /// The returned adapter identity is checked to report Metal explicitly.
-    ///
-    /// # Errors
-    /// Returns the same failure classes as [`Self::new`], including adapter
-    /// absence on platforms or execution environments without accessible Metal.
-    pub fn new_metal(options: GpuOptions) -> Result<Self, GpuError> {
-        Self::new_selected(
-            options,
-            GpuSelection {
-                api: zetesis_backend::GpuApi::Metal,
-            },
-        )
-    }
-
     /// Select an adapter of the requested API and validate its compute device.
     /// The requested API is never silently replaced by another.
     ///

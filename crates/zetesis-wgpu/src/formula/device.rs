@@ -6,7 +6,6 @@ use super::transport::Resident;
 use super::{FormulaBatchStats, FormulaCheck, FormulaLimits, GateProjection, GpuFormulaProfile};
 use crate::runtime::ErrorScopes;
 use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
-use zetesis_backend::GpuApi;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
 
@@ -29,32 +28,6 @@ struct PreparedCall {
     stats: FormulaBatchStats,
 }
 impl GpuFormulaOracle {
-    /// Require Metal and the requested physical-device policy.
-    ///
-    /// # Errors
-    /// Refuses unavailable/refused adapters, insufficient capabilities, device
-    /// creation and pipeline validation. No different API or CPU is substituted.
-    pub fn new_metal(options: GpuOptions) -> Result<Self, GpuError> {
-        Self::new_metal_with_projection(options, GateProjection::default())
-    }
-
-    /// Require physical Metal with an explicitly selected gate implementation.
-    ///
-    /// Owns a new device/pipeline and initially no resident theory or transport.
-    /// Enumerated borrows its shader; Bitwise reserves and assembles one fixed
-    /// source. Device creation and compilation have driver-dependent allocation
-    /// and duration, outside dispatch limits.
-    /// Existing constructors retain [`GateProjection::Enumerated`].
-    ///
-    /// # Errors
-    /// Refuses unavailable adapters, insufficient capabilities, source allocation,
-    /// device creation or validation. It substitutes neither another API nor CPU.
-    pub fn new_metal_with_projection(
-        options: GpuOptions,
-        projection: GateProjection,
-    ) -> Result<Self, GpuError> {
-        Self::new_selected_with_projection(options, GpuSelection { api: GpuApi::Metal }, projection)
-    }
     /// Select a native adapter and create this profile's separate device/pipeline.
     ///
     /// # Errors

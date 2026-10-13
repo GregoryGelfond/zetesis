@@ -30,7 +30,7 @@ mod tests;
 /// Rule header words: head tag and three antecedent lengths.
 pub const RECORD_HEADER_WORDS: usize = 4;
 /// A head tag of zero denotes a constraint; atom IDs are encoded plus one.
-pub const CONSTRAINT_HEAD: u32 = 0;
+pub(crate) const CONSTRAINT_HEAD: u32 = 0;
 
 // Snapshots, frozen seeds, pending deltas, one result and offered-head validation.
 const ROUND_MASK_VECTORS: usize = 5;

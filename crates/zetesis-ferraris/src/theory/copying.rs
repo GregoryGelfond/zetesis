@@ -87,7 +87,7 @@ impl FormulaView<'_> {
     ///
     /// # Errors
     /// Refuses failed reservations or overflow in declared logical occurrences.
-    pub fn try_to_parts(self) -> Result<FormulaParts, AdmissionError> {
+    pub(crate) fn try_to_parts(self) -> Result<FormulaParts, AdmissionError> {
         let nodes = copy(self.nodes)?;
         let operands = copy(self.operands)?;
         let numeric = self.numeric.try_clone()?;

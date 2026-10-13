@@ -1036,15 +1036,6 @@ impl Narrower {
             + shared
     }
 
-    /// Associative reads and class-membership visits used to authenticate native
-    /// witness equality once. Candidate sorting, allocation and other index setup
-    /// remain constructor preparation; this receipt is separate from [`Self::work`]
-    /// and does not add a constructor cancellation or work-quota contract.
-    #[must_use]
-    pub fn extremum_witness_preparation_work(&self) -> u64 {
-        self.equal_extrema.preparation_work()
-    }
-
     /// Direct Boolean parents followed by ordinal-cut parents. The ordinal
     /// incidences are streamed from compact row postings, never materialized.
     fn logical_parents(&self, node: usize) -> impl DoubleEndedIterator<Item = usize> + Clone + '_ {

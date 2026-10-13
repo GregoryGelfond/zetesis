@@ -206,7 +206,7 @@ impl SourceBundle {
     }
     /// Working directory captured before any root or include lookup.
     #[must_use]
-    pub fn working_directory(&self) -> &Path {
+    pub(crate) fn working_directory(&self) -> &Path {
         &self.working_directory
     }
     /// First explicit source identity; a loaded bundle always has source 0.

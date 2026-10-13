@@ -125,7 +125,7 @@ impl<'a> IntoIterator for InstanceAtoms<'a> {
 }
 
 /// Exact double-ended iteration over checked keys in source occurrence order.
-pub type InstanceAtomIter<'a> = Copied<slice::Iter<'a, AtomKey<'a>>>;
+pub(crate) type InstanceAtomIter<'a> = Copied<slice::Iter<'a, AtomKey<'a>>>;
 
 /// Progress retained for both complete and interrupted scans.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

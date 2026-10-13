@@ -65,7 +65,10 @@ impl Contract {
     ///
     /// # Errors
     /// Refuses witnesses inconsistent with an unsatisfiable contract.
-    pub fn with_witnesses(mut self, mut witnesses: Vec<Vec<String>>) -> Result<Self, super::Error> {
+    pub(crate) fn with_witnesses(
+        mut self,
+        mut witnesses: Vec<Vec<String>>,
+    ) -> Result<Self, super::Error> {
         for witness in &mut witnesses {
             witness.sort();
         }
@@ -75,7 +78,7 @@ impl Contract {
     }
     /// The complete family of final optimum ties with `count` answers at `cost`.
     #[must_use]
-    pub fn optimal_family(count: std::num::NonZeroU64, cost: Vec<i64>) -> Self {
+    pub(crate) fn optimal_family(count: std::num::NonZeroU64, cost: Vec<i64>) -> Self {
         Self {
             satisfiability: Satisfiability::Sat,
             family: Family::Optimal,

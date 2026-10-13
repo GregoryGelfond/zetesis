@@ -232,21 +232,6 @@ impl<'a> Read<'a> {
             _ => None,
         }
     }
-    pub(crate) fn predicate_constructor(
-        self,
-        id: PredicateId,
-    ) -> Option<crate::catalog::ConstructorData> {
-        if !self.contains_predicate(id) {
-            return None;
-        }
-        let segment = self.vocabulary_segment(id.0 as usize, |counts| counts.predicates)?;
-        let signature = segment.predicates[id.0 as usize - segment.start.predicates];
-        Some(crate::catalog::ConstructorData::Function {
-            name: signature.name,
-            sign: signature.sign,
-            arity: signature.arity,
-        })
-    }
     pub(crate) fn predicate(self, id: PredicateId) -> Option<Predicate<'a>> {
         if !self.contains_predicate(id) {
             return None;

@@ -116,6 +116,13 @@ fn repeated_class(atoms: usize) -> Theory {
     finish(nodes, atoms, vec![])
 }
 
+/// The reads a complete preparation of `index`'s classes makes.
+fn preparation_work(index: &Narrower) -> u64 {
+    let mut work = Work::new(u64::MAX);
+    EqualWitnesses::prepare_with_work(index, &mut work).unwrap();
+    work.spent
+}
+
 #[test]
 fn class_storage_depends_on_members_not_expanded_leaves() {
     let mut receipts = Vec::new();
@@ -130,7 +137,7 @@ fn class_storage_depends_on_members_not_expanded_leaves() {
             + classes.classes.capacity() * size_of::<std::ops::Range<usize>>()
             + classes.by_chain.capacity() * size_of::<(usize, usize)>();
         assert_eq!(classes.retained_bytes(), expected as u128);
-        receipts.push((classes.retained_bytes(), classes.preparation_work()));
+        receipts.push((classes.retained_bytes(), preparation_work(&index)));
     }
     assert_eq!(receipts[0].0, receipts[1].0);
     assert!(receipts[0].1 < receipts[1].1);
@@ -146,7 +153,7 @@ fn authentication_refuses_every_incomplete_work_prefix() {
     let theory = finish(nodes, 8, vec![]);
     let index = Narrower::new(&theory);
     let expected = &index.equal_extrema;
-    let receipt = expected.preparation_work();
+    let receipt = preparation_work(&index);
     // This checks the private metered operation, not a new constructor quota.
     for budget in 0..receipt {
         let mut work = Work::new(budget);

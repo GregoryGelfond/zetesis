@@ -10,7 +10,7 @@
 //! of B unequal fingerprint collisions can require O(B²) exact comparisons, each
 //! visiting the compared cones. These are constructor preparation costs, not
 //! the logical N+occurrence indexing receipt. The constructor has no independent
-//! cancellation contract; completed reads are exposed in `preparation_work`.
+//! cancellation contract.
 
 use std::ops::Range;
 
@@ -27,15 +27,11 @@ pub(in crate::regions) struct EqualWitnesses {
     members: Vec<usize>,
     classes: Vec<Range<usize>>,
     by_chain: Vec<(usize, usize)>,
-    preparation_work: u64,
 }
 
 impl EqualWitnesses {
     pub(in crate::regions) fn prepare(index: &Narrower) -> Result<Self, Stop> {
-        let mut work = Work::new(u64::MAX);
-        let mut result = Self::prepare_with_work(index, &mut work)?;
-        result.preparation_work = work.spent;
-        Ok(result)
+        Self::prepare_with_work(index, &mut Work::new(u64::MAX))
     }
 
     fn prepare_with_work(index: &Narrower, work: &mut Work<'_>) -> Result<Self, Stop> {
@@ -122,10 +118,6 @@ impl EqualWitnesses {
         self.members.capacity() as u128 * size_of::<usize>() as u128
             + self.classes.capacity() as u128 * size_of::<Range<usize>>() as u128
             + self.by_chain.capacity() as u128 * size_of::<(usize, usize)>() as u128
-    }
-
-    pub(in crate::regions) fn preparation_work(&self) -> u64 {
-        self.preparation_work
     }
 
     fn members(&self, chain: usize, work: &mut Work<'_>) -> Result<&[usize], Stop> {

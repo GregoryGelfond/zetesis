@@ -94,7 +94,7 @@ impl Default for CompletionExecutor {
 
 impl CompletionExecutor {
     /// Default aggregate logical scratch ceiling for bounded completion batches.
-    pub const DEFAULT_SCRATCH_BYTES: u64 = 256 * 1024 * 1024;
+    pub(crate) const DEFAULT_SCRATCH_BYTES: u64 = 256 * 1024 * 1024;
 
     /// Requested parametric storage estimated from the original theory.
     ///

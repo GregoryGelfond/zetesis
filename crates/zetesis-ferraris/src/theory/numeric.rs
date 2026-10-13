@@ -497,15 +497,6 @@ impl FormulaParts {
     pub fn extremum_cuts(&self) -> &[ExtremumCutDescriptor] {
         &self.numeric.cuts
     }
-
-    /// Borrow one ordinal row from its authoritative columns in constant time.
-    ///
-    /// # Errors
-    /// Refuses missing rows, wrong domains, invalid carrier size or column spans.
-    /// Full rank range and child topology validation remain admission's task.
-    pub fn extremum_row(&self, row: usize) -> Result<ExtremumRow<'_>, AdmissionError> {
-        self.numeric.extremum_row(row)
-    }
 }
 
 /// Checks topology and arithmetic together, visiting every supplied occurrence.
