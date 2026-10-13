@@ -200,8 +200,8 @@ impl Plan {
 
 /// One emission's output under construction, its limits and its meter.
 /// Cardinality lowering, an operation of another arrangement that polls before
-/// every step, runs under the meter's remaining allowance and its reported work
-/// is counted afterwards.
+/// every step, runs under the smaller of its per-translation work ceiling and
+/// the meter's remaining allowance, and its reported work is counted afterwards.
 struct Builder<'a, 'c> {
     nodes: FormulaNodes,
     roots: Vec<usize>,

@@ -3,7 +3,10 @@
 //! emission's own refusals are, it becomes the stop.
 
 use super::{Builder, RestrictionErrorKind, RestrictionLimits};
-use crate::{AdmissionError, AggregateComparison, AggregateElement, FormulaNodes, NodeView};
+use crate::{
+    AdmissionError, AggregateComparison, AggregateElement, AggregateErrorKind, FormulaNodes,
+    NodeView,
+};
 use zetesis_cpu::{Cancellation, Refusal, Stop};
 
 /// Run `test` on an emitter whose meter has admitted seven operations, which is
@@ -161,4 +164,30 @@ fn a_refused_lowering_counts_the_work_it_did() {
     .unwrap();
     assert!(matches!(refusal, Err(RestrictionErrorKind::Aggregate(_))));
     assert_eq!(charged, limits.max_work);
+}
+
+#[test]
+fn a_lowering_refused_at_its_own_ceiling_stays_below_the_limit() {
+    let members = [0, 1, 2, 3];
+    let lowering = lowering_work(&members, 2, RestrictionLimits::default());
+    // The per-translation ceiling falls one operation short of the lowering's
+    // work, far inside the emission's remaining allowance.
+    let mut limits = RestrictionLimits::default();
+    limits.aggregate.max_work = lowering - 1;
+    let (refusal, charged) = with_builder(limits, false, |builder| {
+        let refusal = builder.lower(&members, 2).map(|_| ());
+        Ok((refusal, builder.meter.charged()))
+    })
+    .unwrap();
+    assert!(matches!(
+        refusal,
+        Err(RestrictionErrorKind::Aggregate(error))
+            if error.kind() == AggregateErrorKind::WorkLimit
+    ));
+    // Seven charged before, one per atom node, and the lowering's work up to
+    // the ceiling that bound it.
+    assert_eq!(
+        charged,
+        7 + members.len() as u64 + limits.aggregate.max_work
+    );
 }
