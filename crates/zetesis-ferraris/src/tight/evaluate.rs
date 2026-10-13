@@ -70,12 +70,13 @@ impl TightPlan {
 /// false-root sets, so its verdict and witness are those of a complete
 /// evaluation of the new candidate. A candidate that differs in more atoms than
 /// an eighth of the theory's atoms (and at least 64), a different theory, or a
-/// plan without the index evaluates completely. A check refused or stopped after
-/// its first observation of control (for its storage, its work, an allocation
-/// or a later stop) leaves nothing a later check can read, so the next check
-/// evaluates completely; one refused before it, for a foreign theory or at that
-/// observation, changes nothing. Each concurrent checker owns
-/// an exclusive workspace; immutable plans may be shared.
+/// plan without the index evaluates completely. A check that ends after its
+/// first observation of control (refused for its storage or its work, failing an
+/// allocation, or stopped at a later observation) leaves nothing the next check
+/// reads, so the next check evaluates completely; a check refused for a foreign
+/// theory, or stopped at that first observation, changes nothing. Each
+/// concurrent checker owns an exclusive workspace; immutable plans may be
+/// shared.
 #[derive(Debug, Default)]
 pub struct TightWorkspace {
     values: Vec<u8>,

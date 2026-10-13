@@ -44,7 +44,8 @@ Notable changes by release. Versions follow Semantic Versioning.
 - A CPU tight certificate check updates the worker's retained evaluation of its
   previous candidate, re-evaluating only the formula nodes whose inputs changed,
   instead of evaluating the whole theory for every candidate; a large change,
-  another theory or a check after an interrupted one still evaluates completely.
+  another theory, or a check after one refused or stopped past its first
+  observation of control still evaluates completely.
   Verdicts and their witnesses equal a complete evaluation's, and a Lean law
   proves the node-table update rule. `TightPlan::check_work_bound` bounds every
   check on either route; a reused `TightWorkspace`'s work and logical bytes now

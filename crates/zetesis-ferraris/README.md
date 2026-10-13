@@ -483,10 +483,10 @@ unsupported-atom and false-root sets. Readers have larger indices than what they
 read, so every re-evaluation reads final inputs and each node is re-evaluated at
 most once; each summary is a count over its inputs and moves with each changed
 input. A completed check's verdict and witness therefore equal a complete
-evaluation's. A large change, another theory or a check after an interrupted
-one evaluates completely. `TightPlan::check_work_bound` bounds a check by either
-route. The mechanism comments in [the workspace](src/tight/evaluate.rs) carry
-the full argument.
+evaluation's. A large change, another theory, or a check after one refused or
+stopped past its first observation of control evaluates completely.
+`TightPlan::check_work_bound` bounds a check by either route. The mechanism
+comments in [the workspace](src/tight/evaluate.rs) carry the full argument.
 
 `proofs/Zetesis/TightPlans.lean` proves the formula-level satisfaction/support
 characterization for this grammar, including original choices in both branch
