@@ -6945,34 +6945,39 @@
     "line": 221
   },
   {
+    "name": "Zetesis.SourceMeasures.assembled_split",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 241
+  },
+  {
     "name": "Zetesis.SourceMeasures.required_sum_carrier_membership",
     "file": "Zetesis/SourceMeasures.lean",
-    "line": 239
+    "line": 275
   },
   {
     "name": "Zetesis.SourceMeasures.required_count_carrier_membership",
     "file": "Zetesis/SourceMeasures.lean",
-    "line": 295
+    "line": 316
   },
   {
     "name": "Zetesis.SourceSupport.unchanged_round_closed",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 64
+    "line": 69
   },
   {
     "name": "Zetesis.SourceSupport.stages_inside_closed",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 74
+    "line": 79
   },
   {
     "name": "Zetesis.SourceSupport.stable_inside_closed",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 107
+    "line": 112
   },
   {
     "name": "Zetesis.SourceSupport.completed_activity_covers",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 127
+    "line": 132
   },
   {
     "name": "Zetesis.StorageOwners.sum_within_reservations",

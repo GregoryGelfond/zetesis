@@ -6947,32 +6947,37 @@
     },
     {
       "file": "Zetesis/SourceMeasures.lean",
-      "line": 239,
+      "line": 241,
+      "name": "Zetesis.SourceMeasures.assembled_split"
+    },
+    {
+      "file": "Zetesis/SourceMeasures.lean",
+      "line": 275,
       "name": "Zetesis.SourceMeasures.required_sum_carrier_membership"
     },
     {
       "file": "Zetesis/SourceMeasures.lean",
-      "line": 295,
+      "line": 316,
       "name": "Zetesis.SourceMeasures.required_count_carrier_membership"
     },
     {
       "file": "Zetesis/SourceSupport.lean",
-      "line": 64,
+      "line": 69,
       "name": "Zetesis.SourceSupport.unchanged_round_closed"
     },
     {
       "file": "Zetesis/SourceSupport.lean",
-      "line": 74,
+      "line": 79,
       "name": "Zetesis.SourceSupport.stages_inside_closed"
     },
     {
       "file": "Zetesis/SourceSupport.lean",
-      "line": 107,
+      "line": 112,
       "name": "Zetesis.SourceSupport.stable_inside_closed"
     },
     {
       "file": "Zetesis/SourceSupport.lean",
-      "line": 127,
+      "line": 132,
       "name": "Zetesis.SourceSupport.completed_activity_covers"
     },
     {
@@ -9118,7 +9123,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "75f65413ada9c1ec6a078cd9fb85462fcc1271561067632f5ce06287559cabcf",
+    "Audit.lean": "a9d84eba7b848ec1c8c2088c0e8690ab1fd22efca3471486718c7d75183fcbcc",
     "Zetesis.lean": "2e2f2ccb2a9b8d979235c671cad5431b1930402cb17dd520c396b67b4b702abb",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
@@ -9268,8 +9273,8 @@
     "Zetesis/SignedObjectiveBounds.lean": "9a196ef4647a4999a96373134d80c92ecd940d4c3ee7dc7c173545a2a4816045",
     "Zetesis/SingletonHeads.lean": "a07c6c50041c0771175b98fa6d9d2d56ecb4c9c29ad09205acf44f44fcabe147",
     "Zetesis/SourceContributions.lean": "be9baa860c0caafeaba1068e269b8cec5531cce91a5dd694232e98847ee394df",
-    "Zetesis/SourceMeasures.lean": "f3efcf3078e1f9aef71bf9c7b1636d2e6d8647539987b3a0c7cdee30321e6ace",
-    "Zetesis/SourceSupport.lean": "02ff18894b8be7cb0f26d51c2db0848b54dcf745909f987706f8d1ea453d599d",
+    "Zetesis/SourceMeasures.lean": "aa2ac749f53f7da168919ea0097f142c10667d5204f8cfef83c5bdd2e612c892",
+    "Zetesis/SourceSupport.lean": "eb3d037d67fe4d098d88077cc5e809b698acc6ece19e810e8e358d874a3e0c9f",
     "Zetesis/StorageOwners.lean": "6319788182043ddcfaf40d79ab7de9a052b1bb719679031042f4002b20d3be22",
     "Zetesis/StratifiedEvaluation.lean": "4cd3e24702fbdb9a466741251bc16ed01f3ebc7081b0151311392410b4f08a00",
     "Zetesis/StreamedConsequences.lean": "f97832fa54107182163fff427a6a30a50e3306a686bf7fa7ae6121e8975591c2",

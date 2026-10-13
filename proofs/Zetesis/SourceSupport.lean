@@ -27,8 +27,13 @@ tuple set any model's frozen reading sees, which contains the required keys and
 lies within the possible ones. Three ingredients carry this: coverage by
 `SourceMeasures.actual_value_covered`, monotonicity in the possible keys by
 `SourceMeasures.possible_extension`, and the closed forms that tie the runtime
-operations to `SourceMeasures.carrier` (`required_count_carrier_membership`,
-`required_sum_carrier_membership`). Their original equalities remain in the theory.
+count and sum operations to `SourceMeasures.carrier`
+(`required_count_carrier_membership`, `required_sum_carrier_membership`). The
+ordered-extremum closed form for `#min` and `#max` with required keys is not yet
+stated: without required keys their proposals are the family
+`ValueExtrema.completed_candidate_coverage` covers, and with required keys they
+are checked against exhaustive reduct enumeration and the clingo campaign.
+Their original equalities remain in the theory.
 These are the ingredients of the projection argument, not a formal refinement
 of parsing, local binding plans, checked arithmetic or the Rust fixed-point
 loop. An interrupted or resource-exhausted loop supplies no closure result.

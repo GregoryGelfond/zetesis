@@ -1389,6 +1389,7 @@ import Zetesis
 #print axioms Zetesis.SourceMeasures.weighted_perm
 #print axioms Zetesis.SourceMeasures.length_filter_split
 #print axioms Zetesis.SourceMeasures.required_part_perm
+#print axioms Zetesis.SourceMeasures.assembled_split
 #print axioms Zetesis.SourceMeasures.required_sum_carrier_membership
 #print axioms Zetesis.SourceMeasures.required_count_carrier_membership
 #print axioms Zetesis.SourceSupport.unchanged_round_closed
