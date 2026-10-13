@@ -644,6 +644,10 @@ impl ParallelRegions {
 
     /// A worker's existing snapshot may finish under the old generation;
     /// future snapshots see this replacement and all permanent restrictions.
+    ///
+    /// This follows `Bound::tightened`'s order but stays separate from it: the
+    /// charge lands on the workers' shared allowance, synchronized first, and
+    /// is accounted to the caller's budget even when refused.
     pub(crate) fn tighten(
         &mut self,
         restriction: &Theory,

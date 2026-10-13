@@ -10,8 +10,9 @@ default-run = "zetesis-maintenance"
 
 [dependencies]
 clap.workspace = true
-# Named for its feature alone: syn's spans report lines and columns outside a
-# procedural macro only with span-locations.
+# The library names it for span-locations: syn's spans report lines and
+# columns outside a procedural macro only with that feature. The
+# authored-lint test also reads its token types.
 proc-macro2 = { version = "1.0.107", features = ["span-locations"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true

@@ -142,7 +142,9 @@ pub(crate) fn parse(stderr: &str) -> Result<Option<PhaseTimings>, String> {
 
 impl Measurement {
     /// Read one `calls=…; elapsed_ns=…; complete=…` record of an attempted
-    /// phase or stage, refusing one without a call with `uncalled`.
+    /// phase or stage, refusing one without a call with `uncalled`, which
+    /// each record kind passes so that its retained diagnostic keeps its
+    /// text.
     pub(crate) fn read(value: &str, uncalled: &'static str) -> Result<Self, &'static str> {
         let (calls, remainder) = value
             .strip_prefix("calls=")

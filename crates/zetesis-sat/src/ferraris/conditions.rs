@@ -40,9 +40,10 @@ impl Bound {
     }
 
     /// Prepare the bound `restriction` makes at `generation` and charge its
-    /// preparation to `budget` and to the search's `work` counter, committing
+    /// preparation to `budget` and to the search's `work` counter, installing
     /// nothing: a caller installs the bound only once this returns it, so a
-    /// stop at any step leaves the previous bound in force.
+    /// stop after a charge leaves that charge in place and the previous bound
+    /// in force.
     pub(super) fn tightened(
         restriction: &Theory,
         generation: u64,
