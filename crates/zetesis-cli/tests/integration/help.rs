@@ -1,4 +1,6 @@
-//! Both help views expose the shared public resource controls.
+//! The everyday help shows the everyday solving options; the full help adds
+//! the algorithm choices and the memory allowance, whose default it states as a
+//! rule rather than as this host's figure.
 
 use clap::Parser;
 use zetesis_cli::{Options, Oracle};
@@ -23,7 +25,6 @@ fn default_help_shows_everyday_solving_options() {
         "--json",
         "--color",
         "--threads",
-        "--memory",
         "--time-limit",
         "--help",
         "--version",
@@ -34,6 +35,19 @@ fn default_help_shows_everyday_solving_options() {
         );
     }
     assert!(!short.contains("--oracle"));
+    assert!(!short.contains("--memory"));
+}
+
+#[test]
+fn full_help_states_the_memory_default_as_a_rule() {
+    let full = help("--help-all");
+    let memory = full
+        .split("--memory <SIZE>")
+        .nth(1)
+        .and_then(|rest| rest.split("\n      --").next())
+        .expect("the full help lists the memory allowance");
+    assert!(memory.contains("half of the memory available to the process"));
+    assert!(!memory.contains("[default:"), "{memory}");
 }
 
 #[test]

@@ -20,6 +20,17 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Read the host's memory on macOS with one `sysctlbyname` call for `hw.memsize`
+  instead of running `/usr/sbin/sysctl`, so no invocation starts a child process
+  and the reading takes microseconds rather than about a millisecond. It is the
+  one foreign call zetesis makes, named in the authored-lints audit.
+- The default memory allowance is half of the memory available to the process:
+  physical memory, or on Linux the memory limit of its control group when that
+  is lower, as inside a container. It no longer rises to two gibibytes on a host
+  or container with less than four; two gibibytes remains the default when the
+  host does not report its memory. `--stats` reports the memory available to the
+  process, and `--memory` is listed under `--help-all`, where its default is
+  stated as this rule.
 - Reuse aggregate bounds when one native contribution row extends another,
   preserving answer sets while narrowing candidates before reduct checking.
 - Share native min/max rows across comparisons and retain deductions across shared

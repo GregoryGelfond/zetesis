@@ -10,7 +10,10 @@
 //! without argument parsing or complete-family buffering. [`HumanRenderer`] and
 //! [`JsonRenderer`] use that same contract; semantic evidence stays independent
 //! of the renderer's acknowledgement.
-#![forbid(unsafe_code)]
+// Denied rather than forbidden: the one named foreign-interface exception, the
+// host-memory reading in `options.rs`, is expected in place and listed by the
+// authored-lints audit.
+#![deny(unsafe_code)]
 
 mod options;
 mod command;

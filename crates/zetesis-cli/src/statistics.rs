@@ -32,7 +32,7 @@ fn header(
     )?;
     writeln!(
         sink,
-        "  memory allowance: {} bytes (host physical memory {}); shared policy for named input, grounding, solving and output capacities; not resident memory",
+        "  memory allowance: {} bytes (memory available to the process {}); shared policy for named input, grounding, solving and output capacities; not resident memory",
         options.memory,
         crate::options::host_memory()
             .map_or_else(|| "unreported".to_owned(), |bytes| bytes.to_string())

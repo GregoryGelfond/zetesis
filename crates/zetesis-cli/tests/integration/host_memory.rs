@@ -37,7 +37,7 @@ fn the_host_memory_probe_ignores_a_sysctl_on_path() {
     assert!(result.status.success(), "{result:?}");
     let diagnostics = String::from_utf8(result.stderr).unwrap();
     let reported = diagnostics
-        .split("(host physical memory ")
+        .split("(memory available to the process ")
         .nth(1)
         .and_then(|rest| rest.split(')').next())
         .expect("the statistics header reports the host memory reading");

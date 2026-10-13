@@ -24,7 +24,12 @@ struct Exception {
 }
 
 /// The named exceptions.
-const EXCEPTIONS: &[Exception] = &[];
+const EXCEPTIONS: &[Exception] = &[Exception {
+    file: "crates/zetesis-cli/src/options.rs",
+    item: "read_host_memory",
+    lint: "unsafe_code",
+    constraint: "macOS reports physical memory only through sysctl: one sysctlbyname call for hw.memsize into a fixed eight-byte buffer",
+}];
 
 /// Whether `exception` names `suppression`, found in `file`.
 fn names(exception: &Exception, file: &str, suppression: &Suppression) -> bool {
