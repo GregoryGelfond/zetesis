@@ -437,10 +437,12 @@ fn work_limits_are_exact_for_sat_and_unsat_proofs() {
                 (Solve::Sat(_), true) | (Solve::Unsat, false)
             )
         };
-        let sufficient = first_success(10_000, |middle| match run(middle) {
-            Solve::Inconclusive(Incomplete::WorkLimit) => false,
-            result if completed(&result) => true,
-            result => panic!("unexpected result at work ceiling {middle}: {result:?}"),
+        let sufficient = first_success(SearchLimits::default().max_work, |middle| {
+            match run(middle) {
+                Solve::Inconclusive(Incomplete::WorkLimit) => false,
+                result if completed(&result) => true,
+                result => panic!("unexpected result at work ceiling {middle}: {result:?}"),
+            }
         });
         assert!(completed(&run(sufficient)));
         assert!(matches!(
