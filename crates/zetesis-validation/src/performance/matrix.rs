@@ -82,6 +82,11 @@ pub struct Report {
     executed: Option<FileSeal>,
     #[serde(skip_serializing_if = "Option::is_none")]
     executed_after: Option<Change>,
+    /// The rule that settles each native run's named executable against the
+    /// native seal; `executed` and its recheck come from it when the campaign
+    /// closes.
+    #[serde(skip)]
+    executables: crate::selected::identity::Executables,
     metadata: Vec<serialization::MatrixCapture>,
     samples: Vec<Sample>,
     total_capture_bytes: usize,

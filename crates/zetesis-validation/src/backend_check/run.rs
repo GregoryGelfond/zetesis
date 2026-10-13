@@ -62,7 +62,7 @@ pub(super) fn run(request: &Request, cancelled: &AtomicBool) -> Result<Report, E
     // Primary binaries are read incrementally by the maintained identity owner.
     let executable = identity::seal(&request.executable, EXECUTABLE_BYTES)
         .map_err(|error| Error::Identity(error.to_string()))?;
-    let mut executed = None;
+    let mut executables = identity::Executables::new(&executable, EXECUTABLE_BYTES);
     let directory = tempfile::tempdir().map_err(Error::Io)?;
     for fixture in &FIXTURES {
         std::fs::write(directory.path().join(fixture.name), fixture.source).map_err(Error::Io)?;
@@ -77,7 +77,7 @@ pub(super) fn run(request: &Request, cancelled: &AtomicBool) -> Result<Report, E
             Backend::Cpu,
             cancelled,
         );
-        settle(&mut reference, executable.canonical(), &mut executed);
+        settle(&mut reference, &mut executables);
         let selected = if reference.decision == Decision::Passed {
             let mut selected = attempt(
                 request,
@@ -87,7 +87,7 @@ pub(super) fn run(request: &Request, cancelled: &AtomicBool) -> Result<Report, E
                 request.backend,
                 cancelled,
             );
-            settle(&mut selected, executable.canonical(), &mut executed);
+            settle(&mut selected, &mut executables);
             Some(selected)
         } else {
             None
@@ -115,6 +115,7 @@ pub(super) fn run(request: &Request, cancelled: &AtomicBool) -> Result<Report, E
         }
     }
     let input_cleanup_failure = directory.close().err().map(|error| error.to_string());
+    let (executed, executed_after) = executables.close();
     Ok(Report {
         schema: 1,
         format: "zetesis-backend-check",
@@ -123,8 +124,8 @@ pub(super) fn run(request: &Request, cancelled: &AtomicBool) -> Result<Report, E
         expected_cases: FIXTURES.len(),
         executable_after: identity::recheck(&executable),
         executable,
-        executed_after: executed.as_ref().map(identity::recheck),
         executed,
+        executed_after,
         cases,
         input_cleanup_failure,
     })
@@ -133,11 +134,13 @@ pub(super) fn run(request: &Request, cancelled: &AtomicBool) -> Result<Report, E
 /// The largest executable a check seals.
 const EXECUTABLE_BYTES: usize = 256 * 1024 * 1024;
 
-/// Settle the executable `attempt` names as having done its work against the
-/// `invoked` one, refusing its evidence when the settlement does.
-fn settle(attempt: &mut Attempt, invoked: &Path, executed: &mut Option<selected::FileSeal>) {
-    if let Err(detail) =
-        identity::settle_executed(&attempt.executed, invoked, executed, EXECUTABLE_BYTES)
+/// Settle the executable a passing `attempt`'s statistics name, refusing its
+/// evidence when the settlement does.
+fn settle(attempt: &mut Attempt, executables: &mut identity::Executables) {
+    if let Some(Err(detail)) = attempt
+        .executed
+        .as_ref()
+        .map(|named| executables.settle(named))
     {
         attempt.decision = Decision::InvalidReport;
         attempt.detail = Some(detail);
@@ -196,7 +199,7 @@ fn attempt(
         family: None,
         observation: None,
         cleanup: None,
-        executed: selected::identity::Named::Omitted,
+        executed: None,
     };
     let output = match process::invoke_with_cancellation(
         process::Invocation {
@@ -232,7 +235,7 @@ fn attempt(
         Ok((family, observation, executed)) if result.cleanup.is_none() => {
             result.family = Some(family);
             result.observation = Some(observation);
-            result.executed = executed;
+            result.executed = Some(executed);
             result.decision = Decision::Passed;
         }
         Ok(_) => {

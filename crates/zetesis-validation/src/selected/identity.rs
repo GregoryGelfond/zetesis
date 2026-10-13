@@ -223,8 +223,7 @@ pub(crate) fn recheck(before: &FileSeal) -> Change {
     }
 }
 
-/// What a native run's JSON statistics say about the executable that did its
-/// work.
+/// What a native run's statistics say about the executable that did its work.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Named {
     /// No `executable` key: a build that predates the key, which arrived with
@@ -236,12 +235,12 @@ pub(crate) enum Named {
     Path(PathBuf),
 }
 
-/// What `document`, a native run's JSON report, names as its executable.
-pub(crate) fn named(document: &serde_json::Value) -> Named {
-    match document
-        .get("statistics")
-        .and_then(|statistics| statistics.get("executable"))
-    {
+/// What a native run's JSON statistics object, `statistics`, names as its
+/// executable. The caller passes a report's statistics object, which it has
+/// read for the run's other evidence; a report without one names nothing it
+/// could settle.
+pub(crate) fn named(statistics: &serde_json::Value) -> Named {
+    match statistics.get("executable") {
         None => Named::Omitted,
         Some(value) => value
             .as_str()
@@ -249,49 +248,73 @@ pub(crate) fn named(document: &serde_json::Value) -> Named {
     }
 }
 
-/// Settle the executable a native run names as having done its work against
-/// the campaign's sealed `native` executable. A run naming the native
-/// executable, or naming none because it predates the key, changes nothing.
-/// The first other executable a run names, as when the default install's front
-/// hands a GPU run to its sibling, is sealed at that report into `other`,
-/// within `limit` bytes; later runs may name the native executable or that one.
-///
-/// # Errors
-/// Returns why the run's evidence is refused: it could not resolve its own
-/// executable, which after a hand-off would be the sibling; the executable it
-/// names could not be sealed; or it names a third executable, beside the
-/// native one and the other one sealed earlier.
-pub(crate) fn settle_executed(
-    named: &Named,
-    native: &Path,
-    other: &mut Option<FileSeal>,
+/// The executables a report's native runs name, settled against the native
+/// executable it sealed and invoked. A run naming the native executable, or
+/// naming none because it predates the key, changes nothing. The first other
+/// executable a run names, as when the default install's front hands a GPU run
+/// to its sibling, is sealed at that report; later runs may name the native
+/// executable or that one.
+#[derive(Debug)]
+pub(crate) struct Executables {
+    native: PathBuf,
+    other: Option<FileSeal>,
     limit: usize,
-) -> Result<(), String> {
-    let named = match named {
-        Named::Omitted => return Ok(()),
-        Named::Unresolved => {
-            return Err("this run could not name the executable that did its work".to_owned());
+}
+
+impl Executables {
+    /// The rule for runs of the native executable sealed as `native`, sealing
+    /// another within `limit` bytes.
+    pub(crate) fn new(native: &FileSeal, limit: usize) -> Self {
+        Self {
+            native: native.canonical().to_owned(),
+            other: None,
+            limit,
         }
-        Named::Path(path) if path == native => return Ok(()),
-        Named::Path(path) => path,
-    };
-    match other {
-        None => {
-            *other = Some(seal(named, limit).map_err(|error| {
-                format!(
-                    "the executable this run names, {}, could not be sealed: {error}",
-                    named.display()
-                )
-            })?);
-            Ok(())
+    }
+
+    /// Settle what one native run's statistics name.
+    ///
+    /// # Errors
+    /// Returns why the run's evidence is refused: it could not resolve its own
+    /// executable, which after a hand-off would be the sibling; the executable
+    /// it names could not be sealed; or it names a third executable, beside the
+    /// native one and the other one sealed earlier.
+    pub(crate) fn settle(&mut self, named: &Named) -> Result<(), String> {
+        let named = match named {
+            Named::Omitted => return Ok(()),
+            Named::Unresolved => {
+                return Err("this run could not name the executable that did its work".to_owned());
+            }
+            Named::Path(path) if *path == self.native => return Ok(()),
+            Named::Path(path) => path,
+        };
+        match &self.other {
+            None => {
+                self.other = Some(seal(named, self.limit).map_err(|error| {
+                    format!(
+                        "the executable this run names, {}, could not be sealed: {error}",
+                        named.display()
+                    )
+                })?);
+                Ok(())
+            }
+            Some(seal) if seal.canonical() == named => Ok(()),
+            Some(seal) => Err(format!(
+                "this run names {}, but an earlier run named {} besides the native {}",
+                named.display(),
+                seal.canonical().display(),
+                self.native.display()
+            )),
         }
-        Some(seal) if seal.canonical() == named => Ok(()),
-        Some(seal) => Err(format!(
-            "this run names {}, but an earlier run named {} besides the native {}",
-            named.display(),
-            seal.canonical().display(),
-            native.display()
-        )),
+    }
+
+    /// The other executable runs named, as sealed at its first report, and
+    /// its recheck now; both absent when no run named one. The value names no
+    /// other executable afterwards.
+    pub(crate) fn close(&mut self) -> (Option<FileSeal>, Option<Change>) {
+        let other = self.other.take();
+        let after = other.as_ref().map(recheck);
+        (other, after)
     }
 }
 

@@ -65,7 +65,9 @@ pub struct Attempt {
     pub(super) family: Option<Family>,
     pub(super) observation: Option<Observation>,
     pub(super) cleanup: Option<Cleanup>,
-    pub(super) executed: selected::identity::Named,
+    /// What a passing run's statistics name as its executable; absent until a
+    /// passing run's report is read.
+    pub(super) executed: Option<selected::identity::Named>,
 }
 impl Attempt {
     /// Checked disposition of this child.
@@ -93,8 +95,8 @@ impl Attempt {
     #[must_use]
     pub fn executed(&self) -> Option<&Path> {
         match &self.executed {
-            selected::identity::Named::Path(path) => Some(path),
-            selected::identity::Named::Omitted | selected::identity::Named::Unresolved => None,
+            Some(selected::identity::Named::Path(path)) => Some(path),
+            _ => None,
         }
     }
 }

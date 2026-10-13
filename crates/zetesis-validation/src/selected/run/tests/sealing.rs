@@ -112,3 +112,13 @@ fn disappeared_admitted_sources_keep_their_io_cause() {
     assert!(!path.exists());
     assert!(!fixture.report.exists());
 }
+
+#[test]
+fn the_native_seal_is_at_its_named_position() {
+    let fixture = Fixture::new();
+    let sealed = seals(&fixture.corpus, &fixture.request()).unwrap();
+    assert_eq!(
+        sealed[NATIVE_SEAL].canonical(),
+        fixture.native.canonicalize().unwrap()
+    );
+}

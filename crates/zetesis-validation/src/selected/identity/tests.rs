@@ -212,9 +212,9 @@ fn non_utf8_symlink_targets_are_refused() {
     );
 }
 
-/// Two files standing in for the native executable and the one it hands
-/// runs to, and a third.
-fn executables() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
+/// Files standing in for the native executable, the one it hands runs to,
+/// and a third, with the rule for runs of the first.
+fn executables() -> (tempfile::TempDir, Executables, PathBuf, PathBuf, PathBuf) {
     let directory = tempfile::tempdir().unwrap();
     let path = |name: &str| {
         let path = directory.path().join(name);
@@ -222,82 +222,77 @@ fn executables() -> (tempfile::TempDir, PathBuf, PathBuf, PathBuf) {
         path.canonicalize().unwrap()
     };
     let (native, sibling, third) = (path("native"), path("sibling"), path("third"));
-    (directory, native, sibling, third)
+    let rule = Executables::new(&seal(&native, 1024).unwrap(), 1024);
+    (directory, rule, native, sibling, third)
 }
 
 #[test]
-fn a_report_names_its_executable_by_key() {
-    let named = |document: serde_json::Value| super::named(&document);
-    assert_eq!(named(serde_json::json!({"statistics": {}})), Named::Omitted);
+fn a_statistics_object_names_its_executable_by_key() {
+    let named = |statistics: serde_json::Value| super::named(&statistics);
+    assert_eq!(named(serde_json::json!({})), Named::Omitted);
     assert_eq!(
-        named(serde_json::json!({"statistics": null})),
-        Named::Omitted
-    );
-    assert_eq!(
-        named(serde_json::json!({"statistics": {"executable": null}})),
+        named(serde_json::json!({"executable": null})),
         Named::Unresolved
     );
     assert_eq!(
-        named(serde_json::json!({"statistics": {"executable": "/opt/zetesis"}})),
+        named(serde_json::json!({"executable": "/opt/zetesis"})),
         Named::Path("/opt/zetesis".into())
     );
 }
 
 #[test]
 fn runs_naming_the_native_executable_or_none_seal_nothing() {
-    let (_directory, native, _, _) = executables();
-    let mut other = None;
-    for named in [Named::Path(native.clone()), Named::Omitted] {
-        settle_executed(&named, &native, &mut other, 1024).unwrap();
+    let (_directory, mut rule, native, _, _) = executables();
+    for named in [Named::Path(native), Named::Omitted] {
+        rule.settle(&named).unwrap();
     }
-    assert!(other.is_none());
+    let (sealed, after) = rule.close();
+    assert!(sealed.is_none() && after.is_none());
 }
 
 #[test]
 fn a_run_that_cannot_name_its_executable_is_refused() {
     // After a hand-off the run that cannot name itself is the sibling, so it
     // cannot count as the native executable.
-    let (_directory, native, _, _) = executables();
-    let refusal = settle_executed(&Named::Unresolved, &native, &mut None, 1024).unwrap_err();
+    let (_directory, mut rule, _, _, _) = executables();
+    let refusal = rule.settle(&Named::Unresolved).unwrap_err();
     assert!(refusal.contains("could not name"), "{refusal}");
 }
 
 #[test]
 fn runs_alternating_with_one_other_executable_seal_it_once() {
-    let (_directory, native, sibling, _) = executables();
-    let mut other = None;
+    let (_directory, mut rule, native, sibling, _) = executables();
     for named in [
         Named::Path(native.clone()),
         Named::Path(sibling.clone()),
-        Named::Path(native.clone()),
+        Named::Path(native),
         Named::Path(sibling.clone()),
     ] {
-        settle_executed(&named, &native, &mut other, 1024).unwrap();
+        rule.settle(&named).unwrap();
     }
-    let sealed = other.unwrap();
+    let (sealed, after) = rule.close();
+    let sealed = sealed.unwrap();
     assert_eq!(sealed.canonical(), sibling);
     assert_eq!(sealed.bytes(), "sibling".len() as u64);
+    assert!(after.unwrap().unchanged());
 }
 
 #[test]
 fn a_run_naming_a_third_executable_is_refused() {
-    let (_directory, native, sibling, third) = executables();
-    let mut other = None;
-    settle_executed(&Named::Path(sibling.clone()), &native, &mut other, 1024).unwrap();
-    let refusal =
-        settle_executed(&Named::Path(third.clone()), &native, &mut other, 1024).unwrap_err();
-    assert!(refusal.contains(&third.display().to_string()), "{refusal}");
-    assert!(
-        refusal.contains(&sibling.display().to_string()),
-        "{refusal}"
-    );
-    assert_eq!(other.unwrap().canonical(), sibling);
+    let (_directory, mut rule, native, sibling, third) = executables();
+    rule.settle(&Named::Path(sibling.clone())).unwrap();
+    let refusal = rule.settle(&Named::Path(third.clone())).unwrap_err();
+    for path in [&third, &sibling, &native] {
+        assert!(refusal.contains(&path.display().to_string()), "{refusal}");
+    }
+    assert_eq!(rule.close().0.unwrap().canonical(), sibling);
 }
 
 #[test]
 fn an_executable_that_cannot_be_sealed_is_refused() {
-    let (directory, native, _, _) = executables();
-    let missing = directory.path().join("missing");
-    let refusal = settle_executed(&Named::Path(missing), &native, &mut None, 1024).unwrap_err();
+    let (directory, mut rule, _, _, _) = executables();
+    let refusal = rule
+        .settle(&Named::Path(directory.path().join("missing")))
+        .unwrap_err();
     assert!(refusal.contains("could not be sealed"), "{refusal}");
 }

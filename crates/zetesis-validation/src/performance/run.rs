@@ -153,6 +153,10 @@ pub(super) fn checked_seal(path: &Path, limit: usize, expected: &str) -> Result<
     Ok(seal)
 }
 
+/// The position of the native executable's seal among a performance report's
+/// sealed inputs: [`seals`] places it first.
+pub(in crate::performance) const NATIVE_SEAL: usize = 0;
+
 /// Seal the native executable, the reference executable when one takes part,
 /// the corpus manifest and license, and the selected sources, in that order:
 /// retained-report readers take the prefix by position.

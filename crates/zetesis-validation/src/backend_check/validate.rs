@@ -78,7 +78,11 @@ pub(super) fn capture(
     )
     .map_err(|error| (Decision::InvalidExecution, error))?;
     execution(&observation, fixture.oracle).map_err(|error| (Decision::InvalidExecution, error))?;
-    Ok((family, observation, selected::identity::named(&document)))
+    Ok((
+        family,
+        observation,
+        selected::identity::named(&document["statistics"]),
+    ))
 }
 
 fn family(bytes: &[u8]) -> Result<Family, answers::Error> {

@@ -82,7 +82,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -230,7 +230,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -357,7 +357,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -471,7 +471,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -577,7 +577,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -692,7 +692,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -879,7 +879,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -946,7 +946,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -1013,7 +1013,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -1282,7 +1282,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -1449,7 +1449,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -1563,7 +1563,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -1676,7 +1676,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -1789,7 +1789,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -2046,7 +2046,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -2166,7 +2166,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -2298,7 +2298,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -2394,7 +2394,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -2568,7 +2568,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -2676,7 +2676,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -2774,7 +2774,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -3187,7 +3187,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -4448,7 +4448,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",
@@ -5665,7 +5665,7 @@
         "optimization": null,
         "error": null
       },
-      "statistics": null
+      "statistics": {}
     },
     "reference": {
       "Solver": "clingo version 5.8.2",

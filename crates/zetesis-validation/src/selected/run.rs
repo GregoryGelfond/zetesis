@@ -204,6 +204,8 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
     }
     let corpus = curated::open(request.corpus, request.limits.corpus).map_err(Error::Corpus)?;
     let before = seals(&corpus, request)?;
+    let mut executables =
+        identity::Executables::new(&before[NATIVE_SEAL], request.limits.max_executable_bytes);
     let destination = publication::prepare(request.report, corpus.root(), &before)?;
     let directory = tempfile::tempdir()
         .map_err(|source| identity::io(Path::new("temporary campaign directory"), source))?;
@@ -258,8 +260,7 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
         let (decision, detail) = settled(
             compare::case(case, &reference, native.as_ref(), request.limits),
             native.as_ref(),
-            &mut report,
-            request.limits.max_executable_bytes,
+            &mut executables,
         );
         report.cases.push(CaseResult {
             id: case.id().into(),
@@ -274,7 +275,7 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
         }
     }
     report.after = report.before.iter().map(identity::recheck).collect();
-    report.executed_after = report.executed.as_ref().map(identity::recheck);
+    (report.executed, report.executed_after) = executables.close();
     if let Err(error) = directory.close() {
         report
             .faults
@@ -283,28 +284,32 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
     Ok(report)
 }
 
-/// A passing case's decision once its native run's named executable is
-/// settled against the sealed native executable, the second of the campaign's
-/// inputs; a refused settlement makes the case an invalid report.
+/// The position of the native executable's seal among the campaign's sealed
+/// inputs: [`seals`] places the reference first and the native second.
+const NATIVE_SEAL: usize = 1;
+
+/// A passing case's decision once the executable its native run's statistics
+/// name is settled by `executables`; a report without statistics, or a refused
+/// settlement, makes the case an invalid report.
 fn settled(
     (decision, detail): (Decision, Option<String>),
     native: Option<&InvocationRecord>,
-    report: &mut Report,
-    limit: usize,
+    executables: &mut identity::Executables,
 ) -> (Decision, Option<String>) {
     let Some(native) = native.filter(|_| decision == Decision::Pass) else {
         return (decision, detail);
     };
-    let named = serde_json::from_slice(native.stdout())
-        .map_or(identity::Named::Omitted, |document| {
-            identity::named(&document)
-        });
-    match identity::settle_executed(
-        &named,
-        report.before[1].canonical(),
-        &mut report.executed,
-        limit,
-    ) {
+    let statistics = serde_json::from_slice::<serde_json::Value>(native.stdout())
+        .ok()
+        .map(|document| document["statistics"].clone())
+        .filter(serde_json::Value::is_object);
+    let Some(statistics) = statistics else {
+        return (
+            Decision::InvalidReport,
+            Some("the native report carries no statistics to name its executable".to_owned()),
+        );
+    };
+    match executables.settle(&identity::named(&statistics)) {
         Ok(()) => (decision, detail),
         Err(refusal) => (Decision::InvalidReport, Some(refusal)),
     }

@@ -68,6 +68,10 @@ pub(super) fn campaign(
         .flat_map(|case| case.input.corpus_source_paths())
         .collect();
     let before = seal_inputs(&corpus, &sources, request, workloads)?;
+    let executables = identity::Executables::new(
+        &before[super::super::run::NATIVE_SEAL],
+        request.limits.max_executable_bytes,
+    );
     let destination = publication::prepare(request.report, corpus.root(), &before)?;
     let directory = tempfile::tempdir()
         .map_err(|e| super::super::io(Path::new("private matrix sources"), e))?;
@@ -105,6 +109,7 @@ pub(super) fn campaign(
         after: Vec::new(),
         executed: None,
         executed_after: None,
+        executables,
         metadata: Vec::new(),
         samples: Vec::new(),
         total_capture_bytes: 0,
@@ -141,7 +146,7 @@ pub(super) fn campaign(
 /// campaign finished, keeping each failure as a fault.
 fn close(report: &mut Report, directory: tempfile::TempDir) {
     report.after = report.before.iter().map(identity::recheck).collect();
-    report.executed_after = report.executed.as_ref().map(identity::recheck);
+    (report.executed, report.executed_after) = report.executables.close();
     if let Err(error) = directory.close() {
         report.faults.push(Fault::InputCleanup(error.to_string()));
     }
@@ -583,7 +588,7 @@ fn execute(
 }
 /// Check `sample` against its workload's census, then settle the executable
 /// a native run named as having done its work against the native executable
-/// the campaign sealed, which comes first among its inputs.
+/// the campaign sealed.
 fn qualified(
     census: &mut Census,
     sample: &mut Sample,
@@ -592,14 +597,13 @@ fn qualified(
     curtailed: Curtailed,
     report: &mut Report,
 ) -> Result<(), (Decision, String)> {
-    let executed = census.check(sample, contract, request, curtailed)?;
-    identity::settle_executed(
-        &executed,
-        report.before[0].canonical(),
-        &mut report.executed,
-        request.limits.max_executable_bytes,
-    )
-    .map_err(|detail| (Decision::InvalidReport, detail))
+    let Some(named) = census.check(sample, contract, request, curtailed)? else {
+        return Ok(());
+    };
+    report
+        .executables
+        .settle(&named)
+        .map_err(|detail| (Decision::InvalidReport, detail))
 }
 fn arguments<'a>(
     request: &Request<'a>,
@@ -642,8 +646,9 @@ fn arguments<'a>(
 struct Qualified {
     display: answers::ReportedAnswers,
     native: Option<answers::native_json::NativeAnswers>,
-    /// What a native run's statistics name as the executable that did its work.
-    executed: identity::Named,
+    /// What a native run's statistics name as the executable that did its
+    /// work; absent for a reference run, which is not a native run.
+    executed: Option<identity::Named>,
 }
 
 /// One workload's completed answer baselines. Neither a failed reference nor a
@@ -663,7 +668,7 @@ impl Census {
         contract: Option<&examples::Contract>,
         request: &Request<'_>,
         curtailed: Curtailed,
-    ) -> Result<identity::Named, (Decision, String)> {
+    ) -> Result<Option<identity::Named>, (Decision, String)> {
         let answer = qualify(
             sample,
             contract,
@@ -745,7 +750,7 @@ fn qualify(
                 answers::clingo_json(capture.stdout(), request.limits.answers)
                     .map_err(|error| invalid(&error))?,
                 None,
-                identity::Named::Omitted,
+                None,
             )
         }
         Producer::Native { profile } => {
@@ -765,7 +770,7 @@ fn qualify(
                 )
                 .map_err(|e| (Decision::InvalidTelemetry, e))?,
             );
-            let executed = identity::named(&document);
+            let executed = Some(identity::named(&document["statistics"]));
             (display, Some(native), executed)
         }
     };
