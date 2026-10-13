@@ -119,7 +119,6 @@ fn absent_native_capture_cannot_pass_a_case() {
     assert!(detail.unwrap().contains("unresolved child cleanup"));
 }
 
-/// A completed native run whose statistics name `executable`.
 /// A completed native run whose report is `document`.
 fn reporting(document: &serde_json::Value) -> InvocationRecord {
     let mut record = complete(0);
@@ -127,6 +126,7 @@ fn reporting(document: &serde_json::Value) -> InvocationRecord {
     record
 }
 
+/// A completed native run whose statistics name `executable`.
 fn naming(executable: &Path) -> InvocationRecord {
     reporting(&serde_json::json!({"statistics": {"executable": executable.to_str().unwrap()}}))
 }

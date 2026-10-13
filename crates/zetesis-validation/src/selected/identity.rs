@@ -213,23 +213,25 @@ pub(crate) fn recheck(before: &FileSeal) -> Change {
     }
 }
 
-/// What a native run's statistics say about the executable that did its work.
+/// What a native run's report says about the executable that did its work.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) enum Named {
-    /// The report carries no statistics object, so it names nothing the rule
-    /// could settle.
+    /// The report carries no statistics object, so the rule has no
+    /// `executable` key to read.
     NoStatistics,
     /// No `executable` key: a build that predates the key, which arrived with
     /// the default install's front, so it cannot have handed the run off.
     Omitted,
-    /// `null`: the run could not resolve its own executable's path.
+    /// `null`, or any other value that is not a path: the run did not name its
+    /// executable's resolved path.
     Unresolved,
     /// The executable's path, resolved through links.
     Path(PathBuf),
 }
 
 /// What a native run's report names as its executable, read from the report's
-/// `statistics` value: absent or not an object, the report names nothing.
+/// `statistics` value: absent or not an object, the report carries no
+/// statistics.
 pub(crate) fn named(statistics: &serde_json::Value) -> Named {
     let Some(statistics) = statistics.as_object() else {
         return Named::NoStatistics;
@@ -266,14 +268,14 @@ impl Executables {
         }
     }
 
-    /// Settle what one native run's statistics name.
+    /// Settle what one native run's report names.
     ///
     /// # Errors
     /// Returns why the run's evidence is refused: its report carries no
-    /// statistics object to name its executable; it could not resolve its own
-    /// executable, which after a hand-off would be the sibling; the executable
-    /// it names could not be sealed; or it names a third executable, beside the
-    /// native one and the other one sealed earlier.
+    /// statistics object to name its executable; it did not name its
+    /// executable's resolved path, so after a hand-off it may be the sibling;
+    /// the executable it names could not be sealed; or it names a third
+    /// executable, beside the native one and the other one sealed earlier.
     pub(crate) fn settle(&mut self, named: &Named) -> Result<(), String> {
         let named = match named {
             Named::NoStatistics => {

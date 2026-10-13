@@ -1,4 +1,5 @@
-//! Adversarial contracts for the private corpus boundary.
+//! Adversarial contracts for the private corpus boundary and for the rule
+//! that settles the executables native runs name.
 
 use super::*;
 
@@ -241,14 +242,14 @@ fn a_statistics_object_names_its_executable_by_key() {
 }
 
 #[test]
-fn a_report_without_a_statistics_object_names_nothing() {
+fn statistics_that_are_not_an_object_read_as_no_statistics() {
     let named = |statistics: serde_json::Value| super::named(&statistics);
     assert_eq!(named(serde_json::Value::Null), Named::NoStatistics);
     assert_eq!(named(serde_json::json!("statistics")), Named::NoStatistics);
 }
 
 #[test]
-fn a_run_whose_report_names_nothing_is_refused() {
+fn a_run_whose_report_has_no_statistics_is_refused() {
     // Counting it as the native executable would attribute a handed-off GPU
     // run to the front.
     let (_directory, mut rule, _, _, _) = executables();
