@@ -166,7 +166,7 @@ fn solve_argument(argument: Arg) -> Arg {
         "models" => argument.hide(true),
         "backend" => argument
             .value_name("BACKEND")
-            .help("Choose the execution backend: cpu (the default), gpu, metal or vulkan")
+            .help("Choose the execution backend: cpu (the default) or gpu")
             .help_heading("Execution"),
         "workers" => argument
             .visible_alias(None::<&str>)
@@ -179,7 +179,6 @@ fn solve_argument(argument: Arg) -> Arg {
             .visible_alias(None::<&str>)
             .long("memory")
             .alias("memory-budget")
-            .hide_short_help(false)
             .help_heading("Limits"),
         "time_limit" => argument.help_heading("Limits"),
         "stats" | "json" | "color" => argument.help_heading("Output"),

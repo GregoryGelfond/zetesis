@@ -1,6 +1,7 @@
-//! The everyday help shows the everyday solving options; the full help adds
-//! the algorithm choices and the memory allowance, whose default it states as a
-//! rule rather than as this host's figure.
+//! The everyday help shows the everyday solving options, with the CPU or a GPU
+//! as the backend; the full help adds the algorithm choices, the GPU APIs by
+//! name and the memory allowance, whose default it states as a rule rather than
+//! as this host's figure.
 
 use clap::Parser;
 use zetesis_cli::{Options, Oracle};
@@ -36,6 +37,22 @@ fn default_help_shows_everyday_solving_options() {
     }
     assert!(!short.contains("--oracle"));
     assert!(!short.contains("--memory"));
+}
+
+#[test]
+fn everyday_help_offers_the_cpu_or_a_gpu() {
+    let short = help("--help");
+    let backend = short
+        .lines()
+        .find(|line| line.contains("--backend"))
+        .expect("the everyday help lists the backend");
+    assert!(backend.contains("cpu (the default) or gpu"), "{backend}");
+    assert!(!short.contains("metal") && !short.contains("vulkan"));
+}
+
+#[test]
+fn full_help_names_the_gpu_apis() {
+    assert!(help("--help-all").contains("`metal` or `vulkan` names the API instead"));
 }
 
 #[test]

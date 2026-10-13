@@ -90,11 +90,11 @@ matters. The reduct remains the criterion for accepting an answer.
 
 | Option | Default and meaning |
 | --- | --- |
-| `--backend cpu` | CPU execution. `gpu` uses the platform's native API (Metal on macOS, Vulkan elsewhere); `metal` and `vulkan` name one. A GPU request is honored or refused. |
+| `--backend cpu` | CPU execution, or `gpu`, which uses the platform's native API (Metal on macOS, Vulkan elsewhere). The full help also lists `metal` and `vulkan`, which name the API. A GPU request is honored or refused. |
 | `--threads auto` | The host's available parallelism; one if availability is unknown. |
 | `--grounder auto` | Prefer lazy source joins where admitted; formula admission can defer eligible terminal definitions and ground the remaining rules eagerly. |
 | `--time-limit DURATION` | No deadline when omitted; accepts whole seconds or `s`, `m`, `h`. |
-| `--memory SIZE` | Host-based allowance for named storage; accepts bytes or `B`, `KiB`, `MiB`, `GiB`, `TiB`. |
+| `--memory SIZE` | Allowance for named storage, derived from the host by default; accepts bytes or `B`, `KiB`, `MiB`, `GiB`, `TiB`. Listed under `--help-all`. |
 
 For formula inputs, automatic admission can reconstruct terminal positive
 definitions from each verified base answer. It returns full original answers;
@@ -126,7 +126,7 @@ A stopped check is incomplete, never an accepted answer or an UNSAT result.
 
 ```sh
 zetesis solve program.lp --backend cpu --threads 4
-zetesis solve program.lp --backend metal --grounder eager --all
+zetesis solve program.lp --backend gpu --grounder eager --all
 zetesis solve program.lp --time-limit 30s --memory 4GiB
 ```
 
@@ -147,8 +147,10 @@ cannot be preempted. Bare numeric durations retain their historical meaning in
 seconds. Fractional values and overflowing unit conversions are rejected.
 
 The public resource controls are `--threads`, `--memory` and the optional
-`--time-limit`. The memory allowance defaults to half of reported physical
-memory, with a minimum of two GiB; an unavailable reading falls back to two GiB.
+`--time-limit`. The memory allowance defaults to half of the memory available to
+the process: its physical memory, or on Linux the memory limit of its control
+group when that is lower, as inside a container. When the host does not report
+its memory, the allowance is two GiB.
 It determines named capacities for source loading, grounding, solving and
 output. These capacities do not cover every allocation and can overlap;
 the allowance is not a process RSS cap. Closure workers share a collective

@@ -47,11 +47,12 @@ pub struct Options {
     /// cannot be combined with file roots in this source-bundle profile.
     #[arg(value_name = "FILE")]
     pub additional_inputs: Vec<PathBuf>,
-    /// Execution backend: cpu (the default), gpu, metal or vulkan.
+    /// Execution backend: cpu (the default) or gpu.
     ///
     /// `gpu` uses the platform's native API: Metal on macOS, Vulkan elsewhere.
-    /// An unavailable GPU fails; device failure does not silently retry on CPU.
-    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
+    /// `metal` or `vulkan` names the API instead. An unavailable GPU fails;
+    /// device failure does not silently retry on CPU.
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu", hide_possible_values = true)]
     pub backend: Backend,
     /// Grounding mode, independent of execution backend.
     ///

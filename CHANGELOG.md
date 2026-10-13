@@ -31,6 +31,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   host does not report its memory. `--stats` reports the memory available to the
   process, and `--memory` is listed under `--help-all`, where its default is
   stated as this rule.
+- The everyday help offers `--backend cpu` or `gpu`, where `gpu` takes the
+  platform's native API; `metal` and `vulkan`, which name the API, are listed
+  under `--help-all`. Every spelling is still accepted.
 - Reuse aggregate bounds when one native contribution row extends another,
   preserving answer sets while narrowing candidates before reduct checking.
 - Share native min/max rows across comparisons and retain deductions across shared
