@@ -363,22 +363,13 @@ impl RegionSearch {
         generation: u64,
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
-        budget.cancellation.poll()?;
-        let bound = Bound::prepare(
+        let bound = Bound::tightened(
             restriction,
             generation,
             self.native_byte_limit,
-            budget.cancellation,
+            budget,
+            &mut self.statistics.counts.work,
         )?;
-        budget.charge(bound.work())?;
-        let work = self
-            .statistics
-            .counts
-            .work
-            .checked_add(bound.work())
-            .ok_or(Incomplete::CounterOverflow)?;
-        self.statistics.counts.work = work;
-        budget.cancellation.poll()?;
         self.restrictions.bound = Some(bound);
         Ok(())
     }

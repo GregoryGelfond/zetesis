@@ -38,6 +38,32 @@ impl Bound {
     pub(super) fn work(&self) -> u64 {
         self.index.1.work()
     }
+
+    /// Prepare the bound `restriction` makes at `generation` and charge its
+    /// preparation to `budget` and to the search's `work` counter, committing
+    /// nothing: a caller installs the bound only once this returns it, so a
+    /// stop at any step leaves the previous bound in force.
+    pub(super) fn tightened(
+        restriction: &Theory,
+        generation: u64,
+        native_byte_limit: u64,
+        budget: &mut crate::search::Budget<'_>,
+        work: &mut u64,
+    ) -> Result<Self, Incomplete> {
+        budget.cancellation.poll()?;
+        let bound = Self::prepare(
+            restriction,
+            generation,
+            native_byte_limit,
+            budget.cancellation,
+        )?;
+        budget.charge(bound.work())?;
+        *work = work
+            .checked_add(bound.work())
+            .ok_or(Incomplete::CounterOverflow)?;
+        budget.cancellation.poll()?;
+        Ok(bound)
+    }
 }
 
 #[derive(Clone, Debug)]
