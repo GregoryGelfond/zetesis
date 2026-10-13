@@ -12,9 +12,8 @@ use zetesis_cli::{
     publish_prepared, run_with_diagnostics, run_with_renderer,
 };
 use zetesis_cpu::Cancellation;
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaLimits, GroundingPhase, admit_formula,
-};
+use zetesis_reference_support::formula;
+use zetesis_themelios::GroundingPhase;
 
 struct Rendered {
     report: Report,
@@ -212,13 +211,7 @@ fn source_json_renderer_does_not_request_timings() {
 
 #[test]
 fn prepared_json_renderer_does_not_request_timings() {
-    let admitted = admit_formula(
-        "p.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("p.");
     let config = PublicationConfig {
         solve: crate::support::options::serial_config(),
         ..Default::default()

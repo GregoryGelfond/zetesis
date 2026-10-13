@@ -1,6 +1,7 @@
 //! Anonymous default-negated arguments project complete relation identities.
 
 use std::collections::BTreeSet;
+use zetesis_reference_support::formula;
 
 use zetesis_core::Atom;
 use zetesis_cpu::Cancellation;
@@ -10,13 +11,7 @@ use zetesis_themelios::{
 };
 
 fn models(source: &str) -> BTreeSet<BTreeSet<Atom>> {
-    let input = admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"));
+    let input = formula(source);
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("admitted theory");
     let result = search

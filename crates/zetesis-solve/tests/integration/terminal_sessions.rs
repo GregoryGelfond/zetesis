@@ -1,7 +1,7 @@
 //! Base membership becomes original membership only after full reconstruction.
 
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
-use zetesis_reference_support::prepared;
+use zetesis_reference_support::{formula, prepared};
 
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::{Cancellation, Stop};
@@ -13,7 +13,7 @@ use zetesis_solve::{
 use zetesis_test_support::programs::unary as atom;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaMaterialization,
-    FormulaResource, TerminalFormula, admit_formula, prepare_formula,
+    FormulaResource, TerminalFormula, prepare_formula,
 };
 
 const OPTIONAL: &str = "{seed(1);seed(2)}. receipt(X):-seed(X).";
@@ -118,13 +118,7 @@ fn ground_only_definitions_preserve_complete_families() {
         else {
             panic!("ground-only definitions require complete materialization");
         };
-        let original = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let original = formula(source);
         for input in [
             PreparedInput::formula(&owner),
             PreparedInput::formula(&original),
@@ -150,13 +144,7 @@ fn retained_ground_facts_preserve_terminal_families() {
         possible_base,
         Model::new([atom("closed", 7), atom("seed", 1)]).unwrap()
     );
-    let original = admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let original = formula(source);
     let expected = BTreeSet::from([
         Model::new([atom("closed", 7)]).unwrap(),
         Model::new([atom("closed", 7), atom("seed", 1), atom("receipt", 1)]).unwrap(),
@@ -175,13 +163,7 @@ fn retained_ground_facts_preserve_terminal_families() {
 #[test]
 fn reconstruction_uses_answer_truth_not_possible_support() {
     let owner = terminal(OPTIONAL);
-    let original = admit_formula(
-        OPTIONAL.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let original = formula(OPTIONAL);
     let reference = Session::builder(
         PreparedInput::formula(&original),
         config(),
@@ -246,13 +228,7 @@ fn facts_and_multiple_producers_preserve_the_full_family() {
         "seed(1). :-seed(1). receipt(X):-seed(X).",
     ] {
         let owner = terminal(source);
-        let original = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let original = formula(source);
         let mut families = Vec::new();
         for input in [
             PreparedInput::formula(&original),

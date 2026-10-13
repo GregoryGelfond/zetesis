@@ -4,13 +4,12 @@ use serde_json::{Value as Json, json};
 use zetesis_core::catalog::AtomCatalog;
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_test_support::programs::atom;
+use zetesis_themelios::OutputSelection;
 use zetesis_themelios::observation::json::{self, AtomTable};
 use zetesis_themelios::observation::{
     Limits, ModelView, ObservationProgram, Symbol, SymbolSign, ViewError, ViewLimits,
-};
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaLimits, OutputSelection, admit_formula,
 };
 
 #[test]
@@ -316,13 +315,7 @@ impl ObservationFixture {
     }
 
     fn with_directives(model: Model, source: &str) -> Self {
-        let admitted = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let admitted = formula(source);
         Self {
             model,
             program: admitted.metadata().observations().clone(),

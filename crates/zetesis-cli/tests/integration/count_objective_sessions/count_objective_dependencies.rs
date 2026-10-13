@@ -1,6 +1,7 @@
 //! Count-head activity determines complete model scores before optimum selection.
 
 use std::{collections::BTreeSet, num::NonZeroUsize};
+use zetesis_reference_support::formula;
 
 use zetesis_core::Value;
 use zetesis_cpu::Cancellation;
@@ -8,9 +9,7 @@ use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, Oracle, PreparedInput, SearchMethod,
     SemanticOutcome, Session, SolveConfig, Subject, WorldView, WorldViewLimits,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_themelios::AdmittedFormula;
 
 use super::{Record, atom};
 
@@ -56,13 +55,7 @@ const CASES: &[Case] = &[
 
 impl Case {
     fn admit(&self) -> AdmittedFormula {
-        let input = admit_formula(
-            self.source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_or_else(|error| panic!("{}: {error}", self.source));
+        let input = formula(self.source);
         assert_eq!(input.source().expect("source input").text(), self.source);
         input
     }

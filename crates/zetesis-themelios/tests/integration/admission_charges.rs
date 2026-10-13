@@ -3,6 +3,7 @@
 
 use crate::support::limits;
 use std::fmt::Write as _;
+use zetesis_reference_support::formula;
 use zetesis_test_support::thresholds::first_success;
 
 use zetesis_themelios::{
@@ -97,15 +98,7 @@ fn binding_frames_are_not_charged_to_the_cumulative_budget() {
 }
 
 fn scalar_usage(source: &str) -> usize {
-    admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-    .expansion_usage()
-    .scalar_bytes
+    formula(source).expansion_usage().scalar_bytes
 }
 
 #[test]

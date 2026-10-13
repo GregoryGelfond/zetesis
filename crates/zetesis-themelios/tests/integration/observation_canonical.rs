@@ -1,17 +1,11 @@
 //! Canonical observation execution across independently admitted input owners.
 use zetesis_core::{Atom, Model, Predicate, Value};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_themelios::observation::{ErrorKind, Limits, Resource};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 fn source(text: &str) -> zetesis_themelios::AdmittedFormula {
-    admit_formula(
-        text.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
+    formula(text)
 }
 #[test]
 fn foreign_model_values_keep_their_types_in_output() {

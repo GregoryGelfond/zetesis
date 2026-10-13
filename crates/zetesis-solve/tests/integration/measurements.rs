@@ -3,6 +3,7 @@
 use crate::support::sessions::config as cpu_config;
 use std::{sync::mpsc, thread, time::Duration};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_solve::{
     Completion, ExecutionObservation, ExecutionObserver, GroundingOutcome, GroundingPhase,
     GroundingWork, PreparedInput, Session, SolveConfig, SolveMeasurements, SolvePhase, SolveStage,
@@ -513,15 +514,7 @@ fn stages_only_observers_ignore_detailed_callbacks() {
 
 #[test]
 fn stages_only_sessions_disable_detailed_search_clocks() {
-    use zetesis_themelios::{ExpansionLimits, FormulaLimits, admit_formula};
-
-    let admitted = admit_formula(
-        "a | b.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("a | b.");
     let owner = SolveMeasurements::stages_only();
     let mut session = Session::builder(
         PreparedInput::formula(&admitted),

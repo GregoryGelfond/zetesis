@@ -7,7 +7,8 @@ use zetesis_cli::{
 };
 use zetesis_core::{GroundProgram, Seed, StaticLimits, WordError};
 use zetesis_cpu::{BatchError, BatchOracle, Cancellation, Limits};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit, admit_formula};
+use zetesis_reference_support::formula;
+use zetesis_themelios::{AdmissionOptions, admit};
 
 fn config() -> SolveConfig {
     SolveConfig {
@@ -116,13 +117,7 @@ fn io_observer_failure_keeps_its_writer_kind() {
 
 #[test]
 fn prepared_refusal_keeps_the_requested_policy() {
-    let owner = admit_formula(
-        "a | b.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let owner = formula("a | b.");
     let original = Session::new(
         PreparedInput::formula(&owner),
         SolveConfig {

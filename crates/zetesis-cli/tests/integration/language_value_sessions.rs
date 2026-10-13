@@ -18,11 +18,11 @@ use zetesis_cli::{
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Value, ValueLimits};
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{admit, canonical, exhaustive};
+use zetesis_reference_support::{admit, canonical, exhaustive, formula};
 use zetesis_sat::Incomplete;
 use zetesis_test_support::programs::atom;
 use zetesis_test_support::records::Records;
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
+use zetesis_themelios::FormulaLimits;
 
 #[test]
 #[ignore = "requires clingo: projected conditionals match original source records"]
@@ -157,13 +157,7 @@ fn source_extensions_preserve_complete_session_records() {
     let mut observed_batched_work = false;
     let mut observed_pruning = false;
     for (source, expected) in language_value_sources::SOURCES.into_iter().zip(&EXPECTED) {
-        let input = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let input = formula(source);
         for workers in [1, 4] {
             for batch in [1, 7] {
                 for pruning in [false, true] {

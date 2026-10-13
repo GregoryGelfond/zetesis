@@ -2,11 +2,11 @@
 
 use std::collections::BTreeSet;
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionResources, GpuApi, PreparedInput,
     ProjectionLimits, Session, SolveConfig, WorldViewLimits,
 };
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 pub(super) fn check(
     selection: AnswerSelection,
@@ -14,13 +14,7 @@ pub(super) fn check(
     resources: &ExecutionResources,
 ) {
     // The fixed facts place the changing bit beyond a packed-word boundary.
-    let owner = admit_formula(
-        "d(1..70).{p;q}.#project d/1.#project p:not absent.#minimize{1@1:not q}.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let owner = formula("d(1..70).{p;q}.#project d/1.#project p:not absent.#minimize{1@1:not q}.");
     assert_eq!(owner.projection().atoms().len(), 71);
     let full = Session::builder(
         PreparedInput::formula(&owner),

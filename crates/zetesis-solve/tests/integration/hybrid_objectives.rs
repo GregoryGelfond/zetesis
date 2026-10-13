@@ -2,7 +2,7 @@
 
 use crate::support::models::ScoredFamily as Family;
 use std::{convert::Infallible, num::NonZeroUsize};
-use zetesis_reference_support::hybrid;
+use zetesis_reference_support::{formula, hybrid};
 
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
@@ -11,9 +11,7 @@ use zetesis_solve::{
     SolveConfig,
 };
 use zetesis_test_support::programs::model;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_themelios::AdmittedFormula;
 
 const PRIORITIES: &str = include_str!("../fixtures/hybrid-objectives/priorities.lp");
 const FALLBACK: &str = include_str!("../fixtures/hybrid-objectives/fallback.lp");
@@ -33,13 +31,7 @@ fn config() -> SolveConfig {
 }
 
 fn eager(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
+    formula(source)
 }
 
 fn capture(

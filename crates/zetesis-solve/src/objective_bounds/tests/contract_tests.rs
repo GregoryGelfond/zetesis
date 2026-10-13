@@ -1,15 +1,14 @@
 //! Optional pruning must preserve the original reduct and recover transactionally.
 
 use std::collections::BTreeSet;
+use zetesis_reference_support::formula;
 
 use super::by_clauses;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_objective::Score;
 use zetesis_sat::{Limits, StableModels};
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_themelios::AdmittedFormula;
 
 use super::{Bounds, Preparation};
 use crate::countermodel::Input;
@@ -17,13 +16,7 @@ use crate::execution_observation::Observer;
 use crate::{ExecutionObservation, ExecutionObserver, SolveConfig};
 
 fn admitted(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
+    formula(source)
 }
 
 fn input(admitted: &AdmittedFormula) -> Input<'_> {

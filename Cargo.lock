@@ -2111,6 +2111,7 @@ dependencies = [
  "self_cell",
  "zetesis-cpu",
  "zetesis-ferraris",
+ "zetesis-reference-support",
  "zetesis-test-support",
  "zetesis-themelios",
  "zetesis-theory-support",

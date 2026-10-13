@@ -10,8 +10,8 @@ use crate::{
 };
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
+use zetesis_reference_support::formula;
 use zetesis_sat::{Incomplete, StableModels};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 /// One native answer followed by an execution stop outside the iterator.
 /// This exercises session finalization independently of native error cleanup.
@@ -46,13 +46,9 @@ impl MembershipExecution for StopAfterAnswer {
 
 #[test]
 fn terminal_outcomes_settle_workers_before_caching_receipts() {
-    let owner = admit_formula(
-        include_str!("../../../tests/fixtures/completion/choices.lp").into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let owner = formula(include_str!(
+        "../../../tests/fixtures/completion/choices.lp"
+    ));
     for (models, failure) in [(1, false), (0, false), (0, true)] {
         let config = SolveConfig {
             backend: Backend::Cpu,

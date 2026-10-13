@@ -2,8 +2,8 @@
 
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_themelios::observation::{ErrorKind, Limits, Resource};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 fn term_model(capacity: usize) -> Model {
     let mut nodes = Vec::with_capacity(capacity);
@@ -20,13 +20,7 @@ fn term_model(capacity: usize) -> Model {
 }
 
 fn observation() -> zetesis_themelios::AdmittedFormula {
-    admit_formula(
-        "#show X:p(X).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
+    formula("#show X:p(X).")
 }
 
 #[test]
@@ -160,13 +154,7 @@ fn construction_limit_includes_conversion_stack() {
 #[test]
 fn template_construction_uses_storage_preflight() {
     use zetesis_themelios::observation::{ConstructionLimits, Symbol};
-    let admitted = admit_formula(
-        "#show f(1).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("#show f(1).");
     let required = 4 * std::mem::size_of::<Symbol>() + 2;
     let program = admitted.metadata().observations();
     assert!(

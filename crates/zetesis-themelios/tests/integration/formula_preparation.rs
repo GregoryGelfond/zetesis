@@ -1,6 +1,6 @@
 //! Preparation preserves source evidence and budgets before materialization.
 
-use zetesis_reference_support::{BundleFixture, prepared};
+use zetesis_reference_support::{BundleFixture, formula, prepared};
 
 use crate::support::grounding_observers::Observer;
 use zetesis_themelios::{
@@ -87,13 +87,7 @@ fn grounding_resumes_the_expansion_budget() {
     // Preparation charges source metadata; structural matching then reserves
     // capture-delta cells. Canonical term lookups do not copy scalar payloads.
     let source = "p(f(\"x\")). q(X) :- p(f(X)).";
-    let baseline = admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let baseline = formula(source);
     let exact_bytes = baseline.expansion_usage().scalar_bytes;
     assert!(matches!(
         prepare_formula(
@@ -234,13 +228,7 @@ fn explicit_preparation_preserves_the_admitted_theory() {
         "n(N) :- N=#sum{}.",
         "{p}. #minimize{1@2:p}.",
     ] {
-        let expected = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let expected = formula(source);
         let prepared = prepared(source);
         let analysis = prepared.source_analysis().clone();
         let metadata = prepared.metadata().clone();
@@ -395,13 +383,7 @@ fn explicit_base_preserves_prepared_bundle_semantics() {
     .unwrap();
     assert_eq!(prepared.bundle().sources().len(), 2);
     let actual = prepared.ground().unwrap();
-    let expected = admit_formula(
-        "p(1..2). #show q/1. q(X):-p(X).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let expected = formula("p(1..2). #show q/1. q(X):-p(X).");
     assert_eq!(actual.atoms(), expected.atoms());
     assert_eq!(
         (actual.theory().nodes(), actual.theory().operands()),
@@ -496,17 +478,7 @@ fn bundle_definitions_share_one_preparation_budget() {
     ));
     retained_preparation_failure(&error, entry, child);
     let admitted = limited(2).unwrap().ground().unwrap();
-    assert_eq!(
-        admitted.atoms(),
-        admit_formula(
-            "p(1,2).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-        .atoms()
-    );
+    assert_eq!(admitted.atoms(), formula("p(1,2).").atoms());
 }
 
 #[test]
@@ -652,13 +624,7 @@ fn a_formula_admission_reports_the_charges_its_preparation_made() {
     // their argument plus three for their sizes; the rule is charged one
     // template. The receipt is the one the extended profile reports, from
     // the one budget.
-    let admitted = admit_formula(
-        "p(1..3). q :- p(X).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("p(1..3). q :- p(X).");
     let usage = admitted.expansion_usage();
     assert_eq!(usage.templates, 4);
     assert_eq!(usage.values, 6);

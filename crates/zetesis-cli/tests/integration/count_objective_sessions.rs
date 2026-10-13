@@ -3,6 +3,7 @@
 use crate::support::clingo_report;
 use crate::support::count_objective_sources;
 use crate::support::session_records::Record;
+use zetesis_reference_support::formula;
 mod count_objective_dependencies;
 
 use count_objective_sources::{INCONSISTENT, SATISFIABLE};
@@ -17,7 +18,6 @@ use zetesis_core::{Value, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_sat::Incomplete;
 use zetesis_test_support::programs::atom;
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 struct Case {
     source: &'static str,
@@ -93,13 +93,7 @@ fn prepared_sessions_preserve_complete_model_records() {
     let mut observed_pruning = false;
     let mut observed_batched_work = false;
     for case in CASES {
-        let input = admit_formula(
-            case.source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let input = formula(case.source);
         for workers in [1, 4] {
             for batch in [1, 8] {
                 for pruning in [false, true] {
@@ -194,13 +188,7 @@ fn bounded_config(workers: usize, batch: usize, pruning: bool) -> SolveConfig {
 
 #[test]
 fn completion_refusal_retains_pending_candidates() {
-    let input = admit_formula(
-        SATISFIABLE[0].into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let input = formula(SATISFIABLE[0]);
     for workers in [2, 4] {
         for batch in [3, 5] {
             for pruning in [false, true] {
@@ -244,13 +232,7 @@ fn completion_refusal_retains_pending_candidates() {
 
 #[test]
 fn candidate_ceiling_retains_an_unproved_incumbent() {
-    let input = admit_formula(
-        SATISFIABLE[0].into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let input = formula(SATISFIABLE[0]);
     // The independent atom d selects n(0) or n(1); all three nonempty
     // subsets of {a,b} remain allowed. Two candidates cannot exhaust them.
     let original_models: BTreeSet<Record> = [0, 1]

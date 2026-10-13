@@ -18,6 +18,7 @@ zetesis-themelios.workspace = true
 proptest.workspace = true
 zetesis-test-support.workspace = true
 zetesis-theory-support.workspace = true
+zetesis-reference-support.workspace = true
 
 [lints]
 workspace = true

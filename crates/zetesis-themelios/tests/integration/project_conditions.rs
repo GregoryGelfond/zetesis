@@ -1,29 +1,14 @@
 //! A fixed projection domain uses complete scoped source activity.
 
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
+use zetesis_reference_support::formula;
 
 fn domain(source: &str) -> usize {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
-    .projection()
-    .atoms()
-    .len()
+    formula(source).projection().atoms().len()
 }
 
 #[test]
 fn domain_order_applies_the_complete_permutation() {
-    let input = admit_formula(
-        r"d(1..3).p(0..2).#project p((X+1)\3):d(X).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let input = formula(r"d(1..3).p(0..2).#project p((X+1)\3):d(X).");
     let values: Vec<_> = input
         .projection()
         .atoms()

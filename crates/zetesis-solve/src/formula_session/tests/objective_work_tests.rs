@@ -11,19 +11,12 @@ use crate::{
 use std::io;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
+use zetesis_reference_support::formula;
+use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::objective_bound::{ObjectivePlan, ObjectivePlanLimits};
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
 
 fn owner() -> AdmittedFormula {
-    admit_formula(
-        "{a}. #minimize {1,a:a}.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
+    formula("{a}. #minimize {1,a:a}.")
 }
 fn input(owner: &AdmittedFormula) -> Input<'_> {
     Input {

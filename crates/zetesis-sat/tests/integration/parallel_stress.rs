@@ -14,10 +14,10 @@
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::time::{Duration, Instant};
+use zetesis_reference_support::formula;
 
 use zetesis_ferraris::Theory;
 use zetesis_sat::{Cancellation, Limits, StableModels};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 /// A standalone eight-queens encoding: 92 answer sets, enough independent
 /// choices to expose a substantial branching tree.
@@ -35,15 +35,7 @@ const RUNS: usize = 16;
 const HANG_GUARD: Duration = Duration::from_mins(1);
 
 fn theory() -> Theory {
-    admit_formula(
-        QUEENS.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .theory()
-    .clone()
+    formula(QUEENS).theory().clone()
 }
 
 /// Enumerate the complete family under `workers` region walkers. Asserts the

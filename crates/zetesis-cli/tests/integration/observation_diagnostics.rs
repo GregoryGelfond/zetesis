@@ -2,7 +2,7 @@
 
 use crate::support::bundles::process;
 use std::error::Error as _;
-use zetesis_reference_support::BundleFixture;
+use zetesis_reference_support::{BundleFixture, formula};
 
 use clap::Parser;
 use zetesis_cli::{
@@ -12,7 +12,6 @@ use zetesis_cli::{
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::base::source::{Source, SourceId};
 use zetesis_themelios::observation::{Error, ErrorKind, EvaluationError};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits};
 
 const SOURCE: &str = "p(k).\n#show ok : p(_).\n#show sh(X+1) : p(X).\n";
 const DIRECTIVE: &str = "#show sh(X+1) : p(X).";
@@ -228,13 +227,7 @@ fn unlocated_cancellation_never_acquires_an_invented_source() {
 fn source_attachment_preserves_the_library_refusal() {
     use zetesis_themelios::observation::Limits;
 
-    let admitted = zetesis_themelios::admit_formula(
-        "#show 1/0.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("#show 1/0.");
     let mut error = admitted
         .metadata()
         .observations()

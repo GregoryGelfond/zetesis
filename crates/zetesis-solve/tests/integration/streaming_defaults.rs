@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
+use zetesis_reference_support::formula;
 
 use crate::support::sessions::config;
 use zetesis_core::Predicate;
@@ -11,7 +12,6 @@ use zetesis_solve::{
     AnswerSet, Completion, Interruption, Oracle, PreparedInput, SemanticOutcome, Session,
     SolveConfig,
 };
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 const PATH_VERTICES: u32 = 24;
 
@@ -58,13 +58,9 @@ struct Observed {
 }
 
 fn stream(vertices: u32, configuration: SolveConfig) -> Observed {
-    let owner = admit_formula(
-        format!("#const n={vertices}. {{ selected(1..n) }}. :- selected(X), selected(X+1)."),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let owner = formula(&format!(
+        "#const n={vertices}. {{ selected(1..n) }}. :- selected(X), selected(X+1)."
+    ));
     let mut remaining = path_family(vertices);
     assert_eq!(remaining.len(), path_count(vertices));
     let mut session = Session::builder(

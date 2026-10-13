@@ -1,6 +1,7 @@
 //! Generative scalar instructions preserve scoped bindings and whole-model identity.
 
 use std::collections::BTreeSet;
+use zetesis_reference_support::formula;
 
 use zetesis_core::{Atom, Predicate, Value};
 use zetesis_cpu::Cancellation;
@@ -11,13 +12,7 @@ use zetesis_themelios::{
 };
 
 fn models(source: &str) -> BTreeSet<BTreeSet<Atom>> {
-    let admitted = admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"));
+    let admitted = formula(source);
     let mut search = StableModels::new(
         admitted.theory(),
         Limits::default(),

@@ -4,6 +4,7 @@
 //! historical integer-maximum singleton-range timeout is deliberately excluded.
 
 use std::collections::BTreeSet;
+use zetesis_reference_support::formula;
 
 use crate::support::finite_bindings::Models;
 use crate::support::unsigned_spellings::atom_text;
@@ -249,13 +250,8 @@ fn nonnumeric_fact_ranges_match_clingo() {
             native: "admit".into(),
             expected: Models::from([BTreeSet::new()]),
         };
-        let input = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .expect("defined nonnumeric endpoints");
+        // Nonnumeric endpoints are defined, so the source is admitted.
+        let input = formula(source);
         assert_eq!(exhaustive(&input), case.expected, "{source}");
         assert_eq!(clingo(&case), case.expected, "{source}");
     }

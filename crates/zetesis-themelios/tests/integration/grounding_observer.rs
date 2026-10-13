@@ -1,6 +1,7 @@
 //! Optional materialization observation preserves admission and failure behavior.
 
 use crate::support::grounding_observers::Observer;
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula,
     admit_formula_with_grounding_observer,
@@ -18,13 +19,7 @@ fn exact_grounding_boundary_preserves_success_and_retains_failed_attempts() {
         Some(&observer),
     )
     .unwrap();
-    let plain = admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let plain = formula(source);
     assert_eq!(measured.atoms(), plain.atoms());
     assert_eq!(
         (measured.theory().nodes(), measured.theory().operands()),

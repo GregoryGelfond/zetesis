@@ -4,7 +4,7 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     Interpretation, TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightVerdict,
 };
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
+use zetesis_reference_support::formula;
 
 #[test]
 fn source_normal_choice_and_frozen_aggregate_guards_are_certified() {
@@ -18,13 +18,7 @@ fn source_normal_choice_and_frozen_aggregate_guards_are_certified() {
         ("{a;b}. c :- not #count{1:a;2:b} = 1.", 4),
         ("a :- not not a.", 2),
     ] {
-        let admitted = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let admitted = formula(source);
         let theory = admitted.theory();
         let plan = TightPlan::compile(theory, TightPlanLimits::default(), &Cancellation::default())
             .unwrap_or_else(|error| panic!("{source}: {error}"));
@@ -67,13 +61,7 @@ fn source_class_labels_cannot_hide_positive_aggregate_or_conditional_dependencie
         "p :- p:p.",
         "a|b. a:-b. b:-a.",
     ] {
-        let admitted = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let admitted = formula(source);
         let result = TightPlan::compile(
             admitted.theory(),
             TightPlanLimits::default(),

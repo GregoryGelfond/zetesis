@@ -8,8 +8,8 @@ use crate::{
     SolvePhase,
 };
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_sat::{PhaseMeasurement, SearchPhaseTimings};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 fn phases(timing: SearchPhaseTimings) -> [(SolvePhase, PhaseMeasurement); 5] {
     [
@@ -23,13 +23,7 @@ fn phases(timing: SearchPhaseTimings) -> [(SolvePhase, PhaseMeasurement); 5] {
 
 #[test]
 fn interleaved_sessions_preserve_all_phase_attempts() {
-    let admitted = admit_formula(
-        "a | b.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("a | b.");
     let measurements = SolveMeasurements::new(true);
     measurements.measure(SolvePhase::CandidateGeneration, || ());
     let caller = measurements.snapshot().unwrap();

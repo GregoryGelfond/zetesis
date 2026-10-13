@@ -12,6 +12,7 @@
 use crate::support::atom_models::atom;
 use crate::support::finite_bindings::Models;
 use crate::support::objective_dependency_records as objective_dependencies;
+use zetesis_reference_support::formula;
 
 use std::collections::BTreeSet;
 
@@ -206,13 +207,8 @@ fn recorded_aggregate_comparisons_match_exhaustive_reduct_models() {
 fn aggregate_translation_refusals_identify_original_rule_and_resource() {
     let rule = "a :- #sum{1:p;-1:q} >= 0.";
     let source = format!("p.\nq.\n{rule}");
-    let input = admit_formula(
-        source.clone(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .expect("reference admission with complete budgets");
+    // The default budgets admit the reference; each case below lowers one.
+    let input = formula(&source);
     for (aggregate, expected) in [
         (
             AggregateLimits {

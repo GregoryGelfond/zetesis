@@ -1,22 +1,15 @@
 //! Finite expression alternatives retain typed results and honest refusal prefixes.
 
 use std::collections::BTreeSet;
+use zetesis_reference_support::formula;
 
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
+use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::observation::{ErrorKind, EvaluationError, Limits, Resource};
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
 
 fn input(expression: &str) -> AdmittedFormula {
-    admit_formula(
-        format!("#show. #show {expression}."),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
+    formula(&format!("#show. #show {expression}."))
 }
 
 fn display(expression: &str) -> BTreeSet<String> {

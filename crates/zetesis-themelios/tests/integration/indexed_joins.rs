@@ -3,6 +3,7 @@
 use crate::support::limits;
 use std::cell::Cell;
 use std::fmt::Write;
+use zetesis_reference_support::formula;
 use zetesis_test_support::thresholds::first_success;
 
 use zetesis_themelios::ProgramSite;
@@ -297,13 +298,8 @@ fn invalid_arithmetic_on_unextendable_prefixes_does_not_refuse_the_source() {
         "a(0;1).b(1;2).p(X):-a(X),b(X),1/X>0.",
         "a(1;2147483647).b(1;2).p(X):-a(X),b(X),X+1>0.",
     ] {
-        let input = admit_formula(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .expect("dead relational prefix cannot justify scalar refusal");
+        // A dead relational prefix cannot justify a scalar refusal.
+        let input = formula(source);
         let mut search =
             StableModels::new(input.theory(), Limits::default(), Cancellation::default())
                 .expect("theory");
@@ -354,13 +350,7 @@ fn a_false_filter_excludes_the_body_assignment() {
     // The empty positive join has one substitution. 1=2 is defined and false
     // over it, so the assignment that would overflow the i32 scalar N is
     // never reached. The family is {a,b}, as the external reference records.
-    let input = admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .expect("the excluded substitution reaches no assignment");
+    let input = formula(source);
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("theory");
     let mut families = Vec::new();

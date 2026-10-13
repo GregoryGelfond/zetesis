@@ -2,21 +2,14 @@
 
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_reference_support::formula;
+use zetesis_themelios::AdmittedFormula;
 
 use super::{Incumbents, OptimizationStop};
 use crate::{Backend, Interruption, PreparedInput, Session, SolveConfig};
 
 fn fixture() -> (AdmittedFormula, Model, Model) {
-    let owner = admit_formula(
-        "a | b. c :- b. #minimize {2,k:a;1,k:b}.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let owner = formula("a | b. c :- b. #minimize {2,k:a;1,k:b}.");
     // Use genuinely checked answers; order the two verified models explicitly
     // so this retention test does not assume a SAT enumeration order.
     let mut answers = Session::enumerate(
