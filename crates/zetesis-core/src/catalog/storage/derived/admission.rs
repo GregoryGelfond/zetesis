@@ -154,7 +154,7 @@ impl DerivedTerms<'_> {
             ConstructorData::Tuple { arity } => ValueNodeRef::Tuple { arity },
         };
         work.step()?;
-        if nodes::arity(descriptor) != slots.len() {
+        if descriptor.arity() != slots.len() {
             return Err(Fault::Shape.into());
         }
         nodes::ceiling(

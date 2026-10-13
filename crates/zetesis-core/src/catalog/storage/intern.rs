@@ -4,7 +4,7 @@ use crate::catalog::{ConstructorData, Limits, PredicateRef};
 use crate::{Sign, ValueNodeRef, ValueResource};
 
 use super::control::Work;
-use super::nodes::{Compound, Kind, arity, ceiling, node_measures, normalized};
+use super::nodes::{Compound, Kind, ceiling, node_measures, normalized};
 use super::segments::{Columns, Locator, Signature, Text};
 use super::{AtomId, Failure, Fault, PredicateId, Store, TermId, TextId, budget, next_id};
 
@@ -145,7 +145,7 @@ impl Store {
     ) -> Result<TermId, Failure<E>> {
         work.step()?;
         self.budget.check()?;
-        if arity(descriptor) != children.len() {
+        if descriptor.arity() != children.len() {
             return Err(Fault::Shape.into());
         }
         let descriptor = normalized(descriptor)?;
@@ -254,7 +254,7 @@ impl Store {
         work: &mut Work<'_, E>,
     ) -> Result<Option<TermId>, Failure<E>> {
         work.step()?;
-        if arity(descriptor) != children.len() {
+        if descriptor.arity() != children.len() {
             return Err(Fault::Shape.into());
         }
         let descriptor = normalized(descriptor)?;

@@ -262,7 +262,7 @@ impl<'a> TermRef<'a> {
         while remaining != 0 {
             before()?;
             let node = nodes[end].view();
-            remaining = remaining - 1 + compare::arity(node);
+            remaining = remaining - 1 + node.arity();
             end += 1;
         }
         Ok(Some(Self(TermSource::Nodes(&nodes[position..end]))))
@@ -328,7 +328,7 @@ impl<'a> TermRef<'a> {
             return Self::new(snapshot, child);
         }
         let nodes = self.flat_nodes()?;
-        if index >= compare::arity(nodes[0].view()) {
+        if index >= nodes[0].view().arity() {
             return None;
         }
         let mut start = 1;
@@ -348,7 +348,7 @@ impl<'a> TermRef<'a> {
             return stored.child_end(index);
         }
         let nodes = self.flat_nodes()?;
-        if index >= compare::arity(nodes[0].view()) {
+        if index >= nodes[0].view().arity() {
             return None;
         }
         let mut end = 1;
@@ -1403,7 +1403,7 @@ fn subtree_end(nodes: &[ValueNode], start: usize) -> usize {
     let mut pending = 1;
     let mut end = start;
     while pending != 0 {
-        pending = pending - 1 + compare::arity(nodes[end].view());
+        pending = pending - 1 + nodes[end].view().arity();
         end += 1;
     }
     end
@@ -1426,7 +1426,7 @@ fn flat_depth_with<E>(
             let mut siblings = 0;
             for candidate in (0..ancestor).rev() {
                 before()?;
-                let children = compare::arity(nodes[candidate].view());
+                let children = nodes[candidate].view().arity();
                 if children > siblings {
                     ancestor = candidate;
                     depth += 1;

@@ -51,36 +51,26 @@ pub(crate) fn reserve<E>(
         .max(frames.capacity().saturating_mul(2))
         .max(4);
     let old = frames.capacity() as u128 * size_of::<Frame>() as u128;
-    bound(old + target as u128 * size_of::<Frame>() as u128, limit)?;
+    super::ceiling(
+        ValueResource::Bytes,
+        old + target as u128 * size_of::<Frame>() as u128,
+        limit,
+    )
+    .map_err(ValueWriteError::Storage)?;
     // Relocation work is admitted even when the allocator can grow in place.
     before(frames.len() as u128 + 1).map_err(ValueWriteError::Stopped)?;
     frames
         .try_reserve_exact(target - frames.len())
         .map_err(|_| ValueWriteError::Storage(ValueError::Allocation))?;
-    bound(
+    super::ceiling(
+        ValueResource::Bytes,
         old + frames.capacity() as u128 * size_of::<Frame>() as u128,
         limit,
     )
-}
-fn bound<E>(observed: u128, limit: usize) -> Result<(), ValueWriteError<E>> {
-    if observed > limit as u128 {
-        Err(ValueWriteError::Storage(ValueError::Limit {
-            resource: ValueResource::Bytes,
-            observed,
-            limit,
-        }))
-    } else {
-        Ok(())
-    }
-}
-fn arity(node: ValueNodeRef<'_>) -> usize {
-    match node {
-        ValueNodeRef::Function { arity, .. } | ValueNodeRef::Tuple { arity } => arity,
-        _ => 0,
-    }
+    .map_err(ValueWriteError::Storage)
 }
 fn opens(node: ValueNodeRef<'_>) -> bool {
-    arity(node) != 0 || matches!(node, ValueNodeRef::Tuple { .. })
+    node.arity() != 0 || matches!(node, ValueNodeRef::Tuple { .. })
 }
 fn emit<E>(
     output: &mut impl Write,
@@ -166,7 +156,7 @@ pub(crate) fn node<E>(
             return Err(ValueWriteError::Storage(ValueError::Allocation));
         }
         frames.push((
-            arity(node),
+            node.arity(),
             true,
             matches!(node, ValueNodeRef::Tuple { arity: 1 }),
         ));

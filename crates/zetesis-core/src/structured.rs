@@ -373,10 +373,7 @@ impl ValueNode {
         usize::try_from(self.view().canonical_bytes()).expect("admitted node encoding length")
     }
     fn arity(&self) -> usize {
-        match self {
-            Self::Function { arity, .. } | Self::Tuple { arity } => *arity,
-            _ => 0,
-        }
+        self.view().arity()
     }
 }
 

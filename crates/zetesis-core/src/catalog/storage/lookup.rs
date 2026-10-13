@@ -2,7 +2,7 @@
 //! capability, never to the shared writer or snapshot payload.
 
 use super::control::Work;
-use super::nodes::{Measures, arity, ceiling, descriptor_measures};
+use super::nodes::{Measures, ceiling, descriptor_measures};
 use super::{Failure, Fault, Read, Store, TermId, budget};
 use crate::catalog::{Limits, TermRef};
 use crate::{ValueNodeRef, ValueResource};
@@ -116,7 +116,7 @@ impl<'a> TermLookup<'a> {
                         .ok_or(Fault::Overflow)?,
                     limits.max_bytes,
                 )?;
-                let children = arity(descriptor);
+                let children = descriptor.arity();
                 let start = ids.len().checked_sub(children).ok_or(Fault::Shape)?;
                 work.steps(children)?;
                 ids[start..].reverse();
