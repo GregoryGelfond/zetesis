@@ -207,12 +207,7 @@ fn tuple_limits_count_distinct_complete_keys() {
 
 #[test]
 fn original_sources_remain_owned() {
-    for &(source, _) in CASES {
-        assert_eq!(
-            formula(source).source().expect("source input").text(),
-            source
-        );
-    }
+    reference::sources_remain_owned(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 fn threshold(mut succeeds: impl FnMut(u64) -> bool) -> u64 {

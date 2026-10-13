@@ -54,9 +54,7 @@ fn source_carriers_preserve_complete_scored_answers() {
 #[test]
 #[ignore = "requires clingo: original sources match complete clingo records"]
 fn original_sources_match_complete_clingo_records() {
-    for case in source_cases::cases(CASES.trim()) {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    source_cases::clingo_matches_every_case(&source_cases::cases(CASES.trim()));
 }
 
 proptest! {

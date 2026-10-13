@@ -247,9 +247,7 @@ fn undefined_negative_arguments_refuse_admission() {
 
 #[test]
 fn original_sources_remain_owned() {
-    for &(source, _) in CASES {
-        assert_eq!(input(source).source().expect("source input").text(), source);
-    }
+    reference::sources_remain_owned(CASES.iter().map(|&(source, _)| source), input);
 }
 
 #[test]

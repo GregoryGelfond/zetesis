@@ -10,7 +10,6 @@ use zetesis_themelios::{
 };
 
 use crate::support::source_cases;
-use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
 use zetesis_reference_support::formula;
 
@@ -191,7 +190,5 @@ fn maximizing_occurrences_obey_the_original_objective_element_ceiling() {
 #[test]
 #[ignore = "requires clingo: fresh clingo confirms every recorded mixed direction contract; 242 bounded complete model/cost cases"]
 fn fresh_clingo_confirms_every_recorded_mixed_direction_contract() {
-    for case in cases() {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    source_cases::clingo_matches_every_case(&cases());
 }

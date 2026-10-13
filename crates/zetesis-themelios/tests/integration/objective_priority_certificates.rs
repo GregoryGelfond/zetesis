@@ -2,7 +2,6 @@
 
 use crate::support::source_cases;
 
-use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{admit, exhaustive};
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
@@ -110,10 +109,7 @@ fn certificates_preserve_original_equalities() {
 #[test]
 #[ignore = "requires clingo: original sources match complete clingo records"]
 fn original_sources_match_complete_clingo_records() {
-    for case in source_cases::cases(CASES.trim())
-        .into_iter()
-        .chain(source_cases::cases(CHANGING_ORDER.trim()))
-    {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    let mut cases = source_cases::cases(CASES.trim());
+    cases.extend(source_cases::cases(CHANGING_ORDER.trim()));
+    source_cases::clingo_matches_every_case(&cases);
 }

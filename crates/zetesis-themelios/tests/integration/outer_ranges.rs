@@ -251,9 +251,13 @@ fn false_filters_cannot_hide_undefined_endpoints() {
 
 #[test]
 fn original_sources_remain_owned() {
-    for &(source, _) in CASES.iter().chain(cases::BOUNDARIES) {
-        assert_eq!(input(source).source().expect("source input").text(), source);
-    }
+    reference::sources_remain_owned(
+        CASES
+            .iter()
+            .chain(cases::BOUNDARIES)
+            .map(|&(source, _)| source),
+        input,
+    );
 }
 
 proptest::proptest! {

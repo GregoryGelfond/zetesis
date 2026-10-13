@@ -2,7 +2,6 @@
 
 use crate::support::source_cases;
 
-use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{admit, exhaustive};
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource,
@@ -160,7 +159,5 @@ fn specialization_limits_are_inclusive() {
 #[test]
 #[ignore = "requires clingo: priority sources match complete clingo records"]
 fn priority_sources_match_complete_clingo_records() {
-    for case in source_cases::cases(CASES.trim()) {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    source_cases::clingo_matches_every_case(&source_cases::cases(CASES.trim()));
 }

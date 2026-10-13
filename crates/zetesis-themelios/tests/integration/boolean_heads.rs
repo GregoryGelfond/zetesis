@@ -36,12 +36,7 @@ fn stability_matches_independent_subset_enumeration() {
 
 #[test]
 fn original_source_text_is_retained() {
-    for &(source, _) in CASES {
-        assert_eq!(
-            formula(source).source().expect("source input").text(),
-            source
-        );
-    }
+    reference::sources_remain_owned(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]

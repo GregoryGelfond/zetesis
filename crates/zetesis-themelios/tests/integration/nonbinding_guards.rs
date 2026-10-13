@@ -188,12 +188,8 @@ fn empty_extremum_bounds_keep_their_logical_order() {
 
 #[test]
 fn original_sources_remain_owned() {
-    for (source, _) in sources() {
-        assert_eq!(
-            input(&source).source().expect("source input").text(),
-            source
-        );
-    }
+    let sources = sources();
+    reference::sources_remain_owned(sources.iter().map(|(source, _)| source.as_str()), input);
 }
 
 #[test]

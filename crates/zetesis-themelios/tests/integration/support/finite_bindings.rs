@@ -150,6 +150,16 @@ pub(crate) fn external(source: &str, valid: bool) -> Json {
     oracle::json(&run)
 }
 
+/// Every source's admission keeps the source's text as its own.
+pub(crate) fn sources_remain_owned<'a>(
+    sources: impl IntoIterator<Item = &'a str>,
+    input: impl Fn(&str) -> AdmittedFormula,
+) {
+    for source in sources {
+        assert_eq!(input(source).source().expect("source input").text(), source);
+    }
+}
+
 /// Every source's native models are its models by exhaustive reduct
 /// checking.
 pub(crate) fn stability_matches_exhaustion<'a>(

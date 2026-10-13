@@ -221,9 +221,7 @@ fn mixed_consumers_keep_the_defined_family() {
 
 #[test]
 fn original_sources_remain_owned() {
-    for &(source, _) in CASES {
-        assert_eq!(input(source).source().expect("source input").text(), source);
-    }
+    reference::sources_remain_owned(CASES.iter().map(|&(source, _)| source), input);
 }
 
 proptest::proptest! {
