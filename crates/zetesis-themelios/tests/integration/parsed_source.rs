@@ -1,5 +1,6 @@
 //! Original source ownership across explicit profile attempts.
 
+use crate::support::admission;
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure,
@@ -7,14 +8,7 @@ use zetesis_themelios::{
 };
 
 fn input(text: &str) -> ParsedSource {
-    ParsedSource::new(
-        text.into(),
-        AdmissionOptions {
-            source_id: SourceId::new(19),
-            ..AdmissionOptions::default()
-        },
-    )
-    .unwrap()
+    ParsedSource::new(text.into(), admission::options(SourceId::new(19))).unwrap()
 }
 
 #[test]
@@ -133,10 +127,7 @@ fn source_limits_precede_parsing() {
 #[test]
 fn syntax_refusal_retains_all_original_diagnostics() {
     let text = "% original é\r\n{a,b :- q.\r\nq :- c.\r\n";
-    let options = AdmissionOptions {
-        source_id: SourceId::new(19),
-        ..AdmissionOptions::default()
-    };
+    let options = admission::options(SourceId::new(19));
     let error = ParsedSource::new(text.into(), options).unwrap_err();
     let AdmissionFailure::Syntax(syntax) = error else {
         panic!("expected syntax refusal")

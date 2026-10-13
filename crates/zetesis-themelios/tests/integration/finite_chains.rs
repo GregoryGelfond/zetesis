@@ -1,5 +1,6 @@
 //! Finite affine chains preserve the complete correlated source guard.
 
+use crate::support::admission;
 use crate::support::finite_bindings as reference;
 use crate::support::limits;
 use zetesis_test_support::thresholds::first_success;
@@ -255,14 +256,9 @@ fn deferred_coefficient_capacity_preserves_reached_arithmetic_errors() {
 
 #[test]
 fn coefficient_capacity_is_a_located_analysis_limit() {
-    let result = admit_formula(
-        "p(X):-0<2147483647*(2147483647*(2147483647*X))<2.".into(),
-        AdmissionOptions {
-            source_id: SourceId::new(101),
-            ..Default::default()
-        },
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
+    let result = admission::admit(
+        SourceId::new(101),
+        "p(X):-0<2147483647*(2147483647*(2147483647*X))<2.",
     );
     assert!(
         matches!(result, Err(FormulaFailure::Limit {

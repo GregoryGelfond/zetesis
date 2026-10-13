@@ -2,6 +2,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
+use crate::support::admission;
 use crate::support::atom_models::{self, Models, answer_sets};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
@@ -138,10 +139,7 @@ fn equal_displays_do_not_collapse_full_model_identity_or_counts() {
 #[test]
 fn duplicate_metadata_occurrences_keep_their_original_spans() {
     let source = "#show p/1.\r\n#show p/1.\r\n#defined q/2. #defined q/2.";
-    let options = AdmissionOptions {
-        source_id: SourceId::new(91),
-        ..AdmissionOptions::default()
-    };
+    let options = admission::options(SourceId::new(91));
     let accepted = admit_extended(source.to_owned(), options, ExpansionLimits::default())
         .expect("located metadata");
     assert_eq!(accepted.metadata().directives().len(), 4);

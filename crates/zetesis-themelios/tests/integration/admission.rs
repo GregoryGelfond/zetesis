@@ -1,6 +1,7 @@
 //! Boundary laws against real themelios parsing and raising. These fixtures test
 //! source admission and normalized structure, not solver outcomes.
 
+use crate::support::admission;
 use themelios_base::source::SourceId;
 use zetesis_core::{Filter, Term, Value};
 use zetesis_themelios::{
@@ -438,10 +439,7 @@ fn core_limits_remain_an_independent_admission_door() {
 
 #[test]
 fn syntax_refusal_preserves_dependency_diagnostics_and_source_identity() {
-    let options = AdmissionOptions {
-        source_id: SourceId::new(42),
-        ..AdmissionOptions::default()
-    };
+    let options = admission::options(SourceId::new(42));
     let error = admit("p(.".to_owned(), options).expect_err("broken source");
     assert!(matches!(error, AdmissionFailure::Syntax(_)));
     let diagnostics = error.diagnostics();

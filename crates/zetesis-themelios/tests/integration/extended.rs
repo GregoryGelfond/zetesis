@@ -2,6 +2,7 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::admission;
 use crate::support::atom_models::ground_atom;
 
 use themelios_base::source::SourceId;
@@ -172,10 +173,7 @@ fn scalar_normalization_preserves_relational_bindings_and_frozen_gates() {
 #[test]
 fn expansion_retains_original_rule_spans_and_source_bytes() {
     let text = "#const n=2.\r\n% no regenerated source\r\np(1..n).\r\np(1..n).";
-    let options = AdmissionOptions {
-        source_id: SourceId::new(81),
-        ..AdmissionOptions::default()
-    };
+    let options = admission::options(SourceId::new(81));
     let input = admit_extended(text.to_owned(), options, ExpansionLimits::default())
         .expect("located expansion");
     assert_eq!(input.source().text(), text);

@@ -5,10 +5,11 @@ use std::collections::BTreeSet;
 use themelios_base::source::SourceId;
 use themelios_program::program::{Direction, Statement};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula,
+    AdmissionFailure, AdmittedFormula, ExpansionFailure, FormulaFailure, FormulaLimits,
+    FormulaResource, ProfileFeature,
 };
 
+use crate::support::admission;
 use crate::support::source_cases;
 use zetesis_reference_support as reference;
 use zetesis_reference_support::formula;
@@ -65,16 +66,7 @@ fn objective_directions_leave_the_original_atom_catalog_and_reduct_dag_unchanged
 #[test]
 fn maximizing_source_direction_and_original_provenance_are_retained() {
     let source = "v(-2). v(2). {s(W):v(W)}. #maximize{W@7,k:s(W),W!=0}.";
-    let input = admit_formula(
-        source.into(),
-        AdmissionOptions {
-            source_id: SourceId::new(77),
-            ..AdmissionOptions::default()
-        },
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let input = admission::admit(SourceId::new(77), source).unwrap();
     assert_eq!(input.source().expect("source input").text(), source);
     assert_eq!(input.objective_declarations().len(), 1);
     assert!(input.analyzed_program().statements().any(|statement| {

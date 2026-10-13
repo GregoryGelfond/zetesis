@@ -13,6 +13,7 @@ use zetesis_themelios::{
     admit, admit_bundle_formula, admit_extended, admit_formula,
 };
 
+use crate::support::admission;
 use crate::support::source_cases;
 use zetesis_reference_support as reference;
 use zetesis_reference_support::formula;
@@ -40,16 +41,7 @@ fn complete_model_cost_records_match_independent_clingo_evidence() {
 #[test]
 fn original_weak_declarations_and_body_spans_survive_owned_normalization() {
     let source = "{p(1);p(2)}. :~ p(X),X!=2. [3@1,X]";
-    let input = admit_formula(
-        source.to_owned(),
-        AdmissionOptions {
-            source_id: SourceId::new(77),
-            ..AdmissionOptions::default()
-        },
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .expect("weak objective");
+    let input = admission::admit(SourceId::new(77), source).expect("weak objective");
     assert_eq!(input.source().expect("source input").text(), source);
     assert_eq!(input.objective_declarations().len(), 1);
     assert!(

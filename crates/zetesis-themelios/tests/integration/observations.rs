@@ -3,6 +3,7 @@
 use std::fs::{self};
 use std::time::{Duration, Instant};
 
+use crate::support::admission;
 use crate::support::answer_records::Record;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
@@ -226,14 +227,9 @@ fn every_outside_profile_source_has_an_explicit_typed_refusal() {
 #[test]
 fn metadata_preserves_the_original_formula_and_source_identity() {
     let plain = admit("p(1). {q}. a:-missing.", &FormulaLimits::default()).unwrap();
-    let observed = admit_formula(
-        "p(1). {q}. a:-missing. #show f(X):p(X). #show f(X):p(X). #show missing.".into(),
-        AdmissionOptions {
-            source_id: SourceId::new(71),
-            ..Default::default()
-        },
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
+    let observed = admission::admit(
+        SourceId::new(71),
+        "p(1). {q}. a:-missing. #show f(X):p(X). #show f(X):p(X). #show missing.",
     )
     .unwrap();
     assert_eq!(plain.atoms(), observed.atoms());

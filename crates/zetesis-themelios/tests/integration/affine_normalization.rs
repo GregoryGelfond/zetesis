@@ -1,14 +1,12 @@
 //! Source normalization precedes affine binding without replacing checked evaluation.
 
+use crate::support::admission;
 use crate::support::finite_bindings as reference;
 
 use reference::{Models, exhaustive, native};
 use themelios_base::source::SourceId;
 use themelios_program::term::EvalError;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaResource, admit_formula,
-};
+use zetesis_themelios::{AdmittedFormula, ExpansionFailure, FormulaFailure, FormulaResource};
 use zetesis_validation::answers;
 
 struct Case {
@@ -61,16 +59,10 @@ const CONSEQUENT_INTERVAL: Case = Case {
     models: &[&[], &["p(1)"], &["p(2)", "q"], &["p(1)", "p(2)", "q"]],
 };
 
+const SOURCE: SourceId = SourceId::new(29);
+
 fn admit(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions {
-            source_id: SourceId::new(29),
-            ..AdmissionOptions::default()
-        },
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
+    admission::admit(SOURCE, source)
 }
 
 fn expected(case: &Case) -> Models {
@@ -146,7 +138,7 @@ fn assert_unsafe(source: &str) {
     let error = admit(source).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::UnsafeVariable { location, .. }
-            if location.location().expect("parsed source").source == SourceId::new(29)),
+            if location.location().expect("parsed source").source == SOURCE),
         "{source}: {error}"
     );
 }
@@ -186,7 +178,7 @@ fn assert_capacity(source: &str) {
             limit: 64,
             observed: 94,
             location,
-        } if location.location().expect("parsed source").source == SourceId::new(29)),
+        } if location.location().expect("parsed source").source == SOURCE),
         "{source}: {error}"
     );
     let location = error.diagnostics()[0].primary().location;
@@ -211,7 +203,7 @@ fn assert_evaluation(source: &str, expected: &EvalError) {
     assert!(
         matches!(&error, FormulaFailure::Expansion(
             ExpansionFailure::Evaluation { error, location }
-        ) if error == expected && location.location().expect("parsed source").source == SourceId::new(29)),
+        ) if error == expected && location.location().expect("parsed source").source == SOURCE),
         "{source}: {error}"
     );
 }

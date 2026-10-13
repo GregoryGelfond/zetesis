@@ -1,18 +1,16 @@
 //! A syntax refusal retains enough information for a caller-owned source view.
 
+use crate::support::admission;
 use themelios_base::{diagnostic::ToDiagnostic, source::SourceId};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, SyntaxFailure, admit, admit_extended, prepare_formula,
+    AdmissionFailure, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
+    SyntaxFailure, admit, admit_extended, prepare_formula,
 };
 
 const SOURCE: &str = "% original é\r\n{a,b :- q.\r\nq :- c.\r\n";
 
 fn failures() -> [AdmissionFailure; 3] {
-    let options = AdmissionOptions {
-        source_id: SourceId::new(7),
-        ..AdmissionOptions::default()
-    };
+    let options = admission::options(SourceId::new(7));
     let direct = admit(SOURCE.to_owned(), options).unwrap_err();
     let ExpansionFailure::Admission(extended) =
         admit_extended(SOURCE.to_owned(), options, ExpansionLimits::default()).unwrap_err()

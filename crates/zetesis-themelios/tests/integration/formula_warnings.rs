@@ -1,25 +1,19 @@
 //! Successful admission retains bounded warnings and original source evidence.
 
+use crate::support::admission;
 use std::fs;
 
 use zetesis_test_support::fixtures::ZERO_DIVISOR as SOURCE;
 use zetesis_themelios::base::{diagnostic::Severity, source::SourceId};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, SourceBundle,
-    admit_bundle_formula, admit_formula,
+    AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionLimits, FormulaFailure,
+    FormulaLimits, FormulaResource, FormulaWarning, SourceBundle, admit_bundle_formula,
 };
 
+const SOURCE_ID: SourceId = SourceId::new(7);
+
 fn admit(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions {
-            source_id: SourceId::new(7),
-            ..AdmissionOptions::default()
-        },
-        ExpansionLimits::default(),
-        *limits,
-    )
+    admission::admit_with(SOURCE_ID, source, ExpansionLimits::default(), limits)
 }
 
 #[test]
@@ -30,7 +24,7 @@ fn warnings_retain_their_original_locations() {
     };
     assert_eq!(
         location.location().expect("parsed source").source,
-        SourceId::new(7)
+        SOURCE_ID
     );
     assert_eq!(warning.site(), *location);
     assert_eq!(

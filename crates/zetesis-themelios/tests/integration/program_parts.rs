@@ -1,5 +1,6 @@
 //! Explicit base sections preserve the original single-shot program.
 
+use crate::support::admission;
 use crate::support::finite_bindings as reference;
 
 use reference::native;
@@ -147,14 +148,7 @@ fn nonbase_parts_remain_located_refusals() {
             delimiter.to_owned(),
             format!("p. {delimiter} #program base. q."),
         ] {
-            let error = admit(
-                source.clone(),
-                AdmissionOptions {
-                    source_id: SourceId::new(61),
-                    ..AdmissionOptions::default()
-                },
-            )
-            .unwrap_err();
+            let error = admit(source.clone(), admission::options(SourceId::new(61))).unwrap_err();
             let AdmissionFailure::Profile { feature, location } = error else {
                 panic!("expected a program-part refusal: {error}");
             };
