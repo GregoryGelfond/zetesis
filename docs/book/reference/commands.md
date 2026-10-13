@@ -205,9 +205,10 @@ Eager rule/table rows cover rule instantiation, rather than every grounding phas
 Different work units and search subtotals must not be added together. Unavailable
 receipts remain unavailable, even when hardware or instrumentation was requested.
 The full counter catalog remains in JSON statistics, the compatibility record
-view and the typed library values. Both name the executable that did the work,
-resolved through links (`executable`), and the record view's `GPU compiled`
-describes that executable. In a default install, CPU runs name the `zetesis` you
+view and the typed library values. The JSON statistics and the record view also
+name the executable that did the work, resolved through links (`executable`),
+and the record view's `GPU compiled` describes that executable; the human tables
+and the typed library values name no executable. In a default install, CPU runs name the `zetesis` you
 run, built without GPU support, and GPU runs name the GPU-capable build in
 `zetesis-libexec` that it hands them to.
 

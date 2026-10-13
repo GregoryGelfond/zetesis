@@ -612,8 +612,8 @@ without one does not compile. The command-line grammar is the same in every
 build profile, which a test checks against one recorded rendering of the
 command tree, so the two executables read an invocation identically. A front
 that cannot run its full build reports `gpu_executable_unavailable`, and never
-serves the request on the CPU instead. Statistics name the executable that did
-the work. A CPU-only install has no full build and refuses GPU requests with
+serves the request on the CPU instead. The JSON statistics and the record view
+name the executable that did the work. A CPU-only install has no full build and refuses GPU requests with
 `backend_unavailable`; a single build with GPU support, as Cargo installs it,
 never hands off.
 

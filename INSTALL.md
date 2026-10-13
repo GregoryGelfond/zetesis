@@ -75,7 +75,8 @@ needs a Vulkan driver. Vulkan has not yet been qualified on physical hardware.
 
 `zetesis test backend --backend gpu` checks a default install end to end: the
 `zetesis` you run, its hand-off to the GPU-capable build and the device itself.
-With `--stats`, statistics name the executable that did the work.
+With `--json` or `--report NEW.json`, its report names the GPU-capable build
+that did the GPU work (`executed`).
 
 ## Contributing
 

@@ -11,11 +11,11 @@ Notable changes by release. Versions follow Semantic Versioning.
   loading it, and it hands each request that needs a GPU (a GPU backend, or
   `zetesis devices`) to the GPU-capable build installed beside it in
   `zetesis-libexec`, which takes over the same process. A front that cannot run
-  that build fails with the new kind `gpu_executable_unavailable`; statistics
-  now name the executable that did the work (`executable`). The installer
-  finishes every build before replacing anything, replaces each executable by
-  rename, with the `zetesis` you run last, and reports an old GPU build it
-  cannot remove instead of failing.
+  that build fails with the new kind `gpu_executable_unavailable`; JSON
+  statistics and the record view now name the executable that did the work
+  (`executable`). The installer finishes every build before replacing anything,
+  replaces each executable by rename, with the `zetesis` you run last, and
+  reports an old GPU build it cannot remove instead of failing.
 - Backend checks, benchmark campaigns and the selected clingo comparison seal
   the executable their runs name as having done the work when it is not the
   one they invoked, as after a hand-off, and record it beside the invoked one
