@@ -1,13 +1,12 @@
 //! Preparation preserves source evidence and budgets before materialization.
 
-use std::fs;
+use zetesis_reference_support::BundleFixture;
 
 use crate::support::grounding_observers::Observer;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, ExpansionResource, FormulaBundleFailure, FormulaFailure, FormulaLimits,
-    FormulaResource, InputLimit, SourceBundle, admit_bundle_formula, admit_formula,
-    prepare_bundle_formula, prepare_formula,
+    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
+    ExpansionResource, FormulaBundleFailure, FormulaFailure, FormulaLimits, FormulaResource,
+    InputLimit, admit_bundle_formula, admit_formula, prepare_bundle_formula, prepare_formula,
 };
 
 #[test]
@@ -322,26 +321,15 @@ fn grounding_observation_closes_after_a_refusal() {
     assert_eq!(*observer.0.borrow(), [true, false]);
 }
 
-fn bundle_fixture() -> tempfile::TempDir {
-    let directory = tempfile::tempdir().unwrap();
-    fs::write(
-        directory.path().join("entry.lp"),
-        "#include \"child.lp\". #show q/1. q(X):-p(X).",
-    )
-    .unwrap();
-    fs::write(directory.path().join("child.lp"), "p(1..2).").unwrap();
-    directory
-}
-
-fn load(directory: &tempfile::TempDir) -> SourceBundle {
-    SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap()
+fn bundle_fixture() -> BundleFixture {
+    preparation_fixture("#include \"child.lp\". #show q/1. q(X):-p(X).", "p(1..2).")
 }
 
 #[test]
 fn bundle_preparation_preserves_all_original_sources() {
     let fixture = bundle_fixture();
     let prepared = prepare_bundle_formula(
-        load(&fixture),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),
@@ -355,7 +343,7 @@ fn bundle_preparation_preserves_all_original_sources() {
     let metadata = prepared.metadata().clone();
     let actual = prepared.ground().unwrap();
     let expected = admit_bundle_formula(
-        load(&fixture),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),
@@ -386,7 +374,7 @@ fn bundle_preparation_preserves_all_original_sources() {
 fn bundle_grounding_refusals_retain_source_evidence() {
     let fixture = bundle_fixture();
     let prepared = prepare_bundle_formula(
-        load(&fixture),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits {
@@ -418,15 +406,12 @@ fn bundle_grounding_refusals_retain_source_evidence() {
 
 #[test]
 fn explicit_base_preserves_prepared_bundle_semantics() {
-    let fixture = bundle_fixture();
-    fs::write(
-        fixture.path().join("entry.lp"),
+    let fixture = preparation_fixture(
         "#program base. #include \"child.lp\". #show q/1. q(X):-p(X). #program base.",
-    )
-    .unwrap();
-    fs::write(fixture.path().join("child.lp"), "#program base. p(1..2).").unwrap();
+        "#program base. p(1..2).",
+    );
     let prepared = prepare_bundle_formula(
-        load(&fixture),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),
@@ -454,7 +439,7 @@ fn explicit_base_preserves_prepared_bundle_semantics() {
 fn bundle_preparation_refusals_retain_source_evidence() {
     let fixture = bundle_fixture();
     let error = prepare_bundle_formula(
-        load(&fixture),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits {
@@ -473,10 +458,10 @@ fn bundle_preparation_refusals_retain_source_evidence() {
     ));
 }
 
-fn preparation_fixture(entry: &str, child: &str) -> tempfile::TempDir {
-    let fixture = tempfile::tempdir().unwrap();
-    fs::write(fixture.path().join("entry.lp"), entry).unwrap();
-    fs::write(fixture.path().join("child.lp"), child).unwrap();
+fn preparation_fixture(entry: &str, child: &str) -> BundleFixture {
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", entry);
+    fixture.write("child.lp", child);
     fixture
 }
 
@@ -514,7 +499,7 @@ fn bundle_definitions_share_one_preparation_budget() {
     let fixture = preparation_fixture(entry, child);
     let limited = |max_constants| {
         prepare_bundle_formula(
-            load(&fixture),
+            fixture.bundle(),
             BundleAdmissionOptions::default(),
             ExpansionLimits {
                 max_constants,
@@ -555,7 +540,7 @@ fn bundle_metadata_counts_original_occurrences() {
     let fixture = preparation_fixture(entry, child);
     let limited = |max_metadata_statements| {
         prepare_bundle_formula(
-            load(&fixture),
+            fixture.bundle(),
             BundleAdmissionOptions::default(),
             ExpansionLimits {
                 max_metadata_statements,
@@ -587,7 +572,7 @@ fn bundle_objectives_share_one_preparation_budget() {
     let fixture = preparation_fixture(entry, child);
     let limited = |max_templates| {
         prepare_bundle_formula(
-            load(&fixture),
+            fixture.bundle(),
             BundleAdmissionOptions::default(),
             ExpansionLimits::default(),
             FormulaLimits {
@@ -628,7 +613,7 @@ fn duplicate_definitions_precede_later_metadata_refusal() {
     let child = "#const same=1. #show p/0.";
     let fixture = preparation_fixture(entry, child);
     let error = prepare_bundle_formula(
-        load(&fixture),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits {
             max_metadata_statements: 0,
@@ -668,7 +653,7 @@ fn bundle_raise_failure_retains_the_loaded_catalog() {
     let child = "q(2147483648).";
     let fixture = preparation_fixture(entry, child);
     let error = prepare_bundle_formula(
-        load(&fixture),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),

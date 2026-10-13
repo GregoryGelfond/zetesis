@@ -7,16 +7,14 @@ use crate::support::objective_dependency_records as objective_dependencies;
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
-use std::fs::{self};
 use std::time::Duration;
 
 use serde_json::{Value as Json, json};
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{admit, canonical};
+use zetesis_reference_support::{BundleFixture, admit, canonical};
 use zetesis_themelios::{
-    AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, SourceBundle,
-    admit_bundle_formula, admit_extended,
+    AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula, admit_extended,
 };
 
 fn cases() -> Vec<Json> {
@@ -355,16 +353,11 @@ fn validation_limits(source: &str) {
 
 #[test]
 fn duplicate_included_count_groups_retain_each_source_origin() {
-    let directory = tempfile::tempdir().unwrap();
+    let fixture = BundleFixture::new();
     let rule = "1#count{X:p(X):X=1..4}2.";
-    fs::write(
-        directory.path().join("entry.lp"),
-        format!("#include \"other.lp\".\n{rule}"),
-    )
-    .unwrap();
-    fs::write(directory.path().join("other.lp"), rule).unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    fixture.write("entry.lp", &format!("#include \"other.lp\".\n{rule}"));
+    fixture.write("other.lp", rule);
+    let bundle = fixture.bundle();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

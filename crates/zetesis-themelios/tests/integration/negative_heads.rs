@@ -1,7 +1,6 @@
 //! Default-negated heads preserve original formulas and only positive support.
 
 use std::collections::BTreeSet;
-use std::fs::{self};
 
 use crate::support::finite_bindings::{Models, holds, values};
 use crate::support::head_models::{
@@ -10,11 +9,10 @@ use crate::support::head_models::{
 use crate::support::objective_boundaries;
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{admit, canonical};
+use zetesis_reference_support::{BundleFixture, admit, canonical};
 use zetesis_themelios::{
-    AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, SourceBundle,
-    admit_bundle_formula,
+    AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -365,16 +363,11 @@ fn singleton_head_limit_counts_one_literal() {
 
 #[test]
 fn negative_heads_keep_original_duplicate_bundle_origins() {
-    let directory = tempfile::tempdir().unwrap();
+    let fixture = BundleFixture::new();
     let rule = "not not a(1..2)|b.";
-    fs::write(
-        directory.path().join("entry.lp"),
-        format!("#include \"other.lp\".\n{rule}"),
-    )
-    .unwrap();
-    fs::write(directory.path().join("other.lp"), rule).unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    fixture.write("entry.lp", &format!("#include \"other.lp\".\n{rule}"));
+    fixture.write("other.lp", rule);
+    let bundle = fixture.bundle();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

@@ -3,7 +3,6 @@
 
 use crate::support::admission;
 use std::collections::BTreeSet;
-use std::fs::{self};
 
 use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected};
 use crate::support::finite_bindings::{exhaustive, holds, native, remap, values};
@@ -11,11 +10,11 @@ use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::canonical;
+use zetesis_reference_support::{BundleFixture, canonical};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    ProfileFeature, SourceBundle, admit_bundle_formula, admit_formula,
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
+    admit_bundle_formula, admit_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(101);
@@ -255,15 +254,13 @@ fn interrupted_generator_construction_never_returns_a_partial_program() {
 
 #[test]
 fn generated_include_rules_keep_original_identity_and_display_selection() {
-    let directory = tempfile::tempdir().unwrap();
-    let root = directory.path().join("root.lp");
-    let rules = directory.path().join("rules.lp");
+    let fixture = BundleFixture::new();
     let source = "#include \"rules.lp\". #show p/1.";
     let rule = "p(X):-not not X=1<2.";
-    fs::write(&root, source).unwrap();
-    fs::write(&rules, rule).unwrap();
+    fixture.write("entry.lp", source);
+    fixture.write("rules.lp", rule);
     let program = admit_bundle_formula(
-        SourceBundle::load(&root, BundleLimits::default()).unwrap(),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),

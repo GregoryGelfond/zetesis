@@ -1,13 +1,13 @@
 //! Successful admission retains bounded warnings and original source evidence.
 
 use crate::support::admission;
-use std::fs;
+use zetesis_reference_support::BundleFixture;
 
 use zetesis_test_support::fixtures::ZERO_DIVISOR as SOURCE;
 use zetesis_themelios::base::{diagnostic::Severity, source::SourceId};
 use zetesis_themelios::{
-    AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaResource, FormulaWarning, SourceBundle, admit_bundle_formula,
+    AdmittedFormula, BundleAdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits,
+    FormulaResource, FormulaWarning, admit_bundle_formula,
 };
 
 const SOURCE_ID: SourceId = SourceId::new(7);
@@ -144,19 +144,17 @@ fn warning_retention_exhaustion_refuses_admission() {
 
 #[test]
 fn bundle_warning_view_uses_retained_original_bytes() {
-    let directory = tempfile::tempdir().unwrap();
-    let entry = directory.path().join("entry.lp");
-    let child = directory.path().join("child.lp");
-    fs::write(&entry, "#include \"child.lp\".\n").unwrap();
-    fs::write(&child, SOURCE).unwrap();
-    let bundle = SourceBundle::load(&entry, BundleLimits::default()).unwrap();
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", "#include \"child.lp\".\n");
+    fixture.write("child.lp", SOURCE);
+    let bundle = fixture.bundle();
     let source_id = bundle
         .sources()
         .iter()
         .find(|source| source.id() != bundle.entry())
         .unwrap()
         .id();
-    fs::write(&child, "replacement.\n").unwrap();
+    fixture.write("child.lp", "replacement.\n");
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

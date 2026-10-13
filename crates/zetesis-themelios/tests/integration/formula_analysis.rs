@@ -2,16 +2,15 @@
 //! its class/safety verdicts neither replace native scope checks nor lift quotas.
 
 use std::collections::BTreeSet;
-use std::fs;
+use zetesis_reference_support::BundleFixture;
 
 use themelios_analysis::{Analysis, Verdict};
 use themelios_base::source::SourceId;
 use themelios_program::program::Statement;
 use themelios_program::provenance::Origin;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, SourceBundle, admit_bundle_formula,
-    admit_formula,
+    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionLimits, FormulaFailure,
+    FormulaLimits, FormulaResource, admit_bundle_formula, admit_formula,
 };
 
 fn admit_with(text: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
@@ -145,15 +144,10 @@ fn unknown_class_verdict_does_not_remove_the_support_round_ceiling() {
 
 #[test]
 fn duplicate_bundle_facts_keep_every_source_origin_in_the_analyzed_projection() {
-    let directory = tempfile::tempdir().expect("fixture directory");
-    fs::write(
-        directory.path().join("entry.lp"),
-        "#include \"child.lp\". p(1). q(X):-p(X).",
-    )
-    .expect("entry source");
-    fs::write(directory.path().join("child.lp"), "p(1). #show p/1.").expect("child source");
-    let bundle = SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default())
-        .expect("bounded includes");
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", "#include \"child.lp\". p(1). q(X):-p(X).");
+    fixture.write("child.lp", "p(1). #show p/1.");
+    let bundle = fixture.bundle();
     let input = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),
@@ -197,5 +191,5 @@ fn duplicate_bundle_facts_keep_every_source_origin_in_the_analyzed_projection() 
         }
     }
     assert!(duplicate, "canonical fact merges both original locations");
-    directory.close().expect("fixture cleanup");
+    fixture.close();
 }

@@ -1,22 +1,21 @@
 //! Weak constraints share the exact existing positive objective semantics.
 
 use std::collections::BTreeSet;
-use std::fs;
 
 use themelios_base::source::SourceId;
 use themelios_program::program::Statement;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, InputLimit, SourceBundle,
-    admit, admit_bundle_formula, admit_extended, admit_formula,
+    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
+    FormulaFailure, FormulaLimits, FormulaResource, InputLimit, admit, admit_bundle_formula,
+    admit_extended, admit_formula,
 };
 
 use crate::support::admission;
 use crate::support::source_cases;
 use zetesis_reference_support as reference;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{BundleFixture, formula};
 
 fn cases() -> Vec<source_cases::Case> {
     source_cases::cases(include_str!("../fixtures/weak-objectives.jsonl"))
@@ -168,15 +167,10 @@ fn unsupported_weak_scopes_remain_typed_refusals() {
 
 #[test]
 fn weak_and_minimize_keys_coalesce_across_original_include_sources() {
-    let directory = tempfile::tempdir().unwrap();
-    fs::write(
-        directory.path().join("main.lp"),
-        "#include \"child.lp\". {a;b}. :~a.[2@1,k]",
-    )
-    .expect("entry source");
-    fs::write(directory.path().join("child.lp"), "#minimize{2@1,k:b}.").expect("child source");
-    let bundle = SourceBundle::load(directory.path().join("main.lp"), BundleLimits::default())
-        .expect("original graph");
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", "#include \"child.lp\". {a;b}. :~a.[2@1,k]");
+    fixture.write("child.lp", "#minimize{2@1,k:b}.");
+    let bundle = fixture.bundle();
     let input = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),
@@ -209,7 +203,7 @@ fn weak_and_minimize_keys_coalesce_across_original_include_sources() {
     .expect("global tuple identity");
     assert_eq!(evaluation.score().costs(), &[(1, 2)]);
     assert_eq!(evaluation.contributions().len(), 1);
-    directory.close().expect("fixture cleanup");
+    fixture.close();
 }
 
 #[test]

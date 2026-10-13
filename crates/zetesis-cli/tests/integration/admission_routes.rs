@@ -5,7 +5,8 @@ use zetesis_cli::{
     Completion, Options, RunError, run_bundle_with_diagnostics, run_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
-use zetesis_themelios::{AdmissionFailure, BundleLimits, ExpansionFailure, SourceBundle};
+use zetesis_reference_support::BundleFixture;
+use zetesis_themelios::{AdmissionFailure, ExpansionFailure};
 use zetesis_validation::answers::native_json;
 
 const SPELLING_BYTES: usize = 8 * 1024;
@@ -44,10 +45,9 @@ fn automatic_formula_routing_preserves_complete_answers() {
             let mut diagnostics = Vec::new();
             let options = options();
             let report = if bundled {
-                let directory = tempfile::tempdir().unwrap();
-                let path = directory.path().join("projection.lp");
-                std::fs::write(&path, source).unwrap();
-                let bundle = SourceBundle::load(&path, BundleLimits::default()).unwrap();
+                let fixture = BundleFixture::new();
+                fixture.write("entry.lp", source);
+                let bundle = fixture.bundle();
                 run_bundle_with_diagnostics(
                     bundle,
                     &options,

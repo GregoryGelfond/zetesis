@@ -1,6 +1,5 @@
 //! Independent complete display multisets; observation never changes the reduct.
 
-use std::fs::{self};
 use std::time::{Duration, Instant};
 
 use crate::support::admission;
@@ -11,7 +10,7 @@ use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{Interpretation, check};
-use zetesis_reference_support::admit;
+use zetesis_reference_support::{BundleFixture, admit};
 use zetesis_themelios::observation::{ErrorKind, Feature, Limits, Resource};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
@@ -523,18 +522,13 @@ fn all_source_ceilings_preflight_owned_templates_and_origin_copies() {
 
 #[test]
 fn original_bundle_constants_and_duplicate_locations_remain_separate_from_terms() {
-    let directory = tempfile::tempdir().unwrap();
-    fs::write(
-        directory.path().join("root.lp"),
+    let fixture = BundleFixture::new();
+    fixture.write(
+        "entry.lp",
         "#include \"other.lp\". #const k=2. p(k). #show. #show f(X):p(X).",
-    )
-    .unwrap();
-    fs::write(directory.path().join("other.lp"), "#show f(X):p(X).").unwrap();
-    let bundle = zetesis_themelios::SourceBundle::load(
-        directory.path().join("root.lp"),
-        zetesis_themelios::BundleLimits::default(),
-    )
-    .unwrap();
+    );
+    fixture.write("other.lp", "#show f(X):p(X).");
+    let bundle = fixture.bundle();
     let input = zetesis_themelios::admit_bundle_formula(
         bundle,
         zetesis_themelios::BundleAdmissionOptions::default(),
@@ -578,7 +572,7 @@ fn original_bundle_constants_and_duplicate_locations_remain_separate_from_terms(
                 .starts_with("#show")
         );
     }
-    directory.close().unwrap();
+    fixture.close();
 }
 
 #[test]

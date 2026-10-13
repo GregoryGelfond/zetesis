@@ -2,18 +2,17 @@
 
 use crate::support::limits;
 use std::collections::BTreeSet;
-use std::fs::{self};
 
 use crate::support::finite_bindings::{holds, values};
 use crate::support::head_models::{self, complete, expected, limited, manual_holds, selected};
 use crate::support::objective_boundaries;
 use serde_json::{Value as Json, json};
-use zetesis_reference_support::admit;
+use zetesis_reference_support::{BundleFixture, admit};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, InputLimit,
-    SourceBundle, admit_bundle_formula, admit_extended,
+    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, InputLimit,
+    admit_bundle_formula, admit_extended,
 };
 
 fn cases() -> Vec<Json> {
@@ -306,16 +305,11 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
 
 #[test]
 fn duplicate_included_true_heads_retain_each_source_origin() {
-    let directory = tempfile::tempdir().unwrap();
+    let fixture = BundleFixture::new();
     let rule = "p(1..2):#true;q:#true.";
-    fs::write(
-        directory.path().join("entry.lp"),
-        format!("#include \"other.lp\".\n{rule}"),
-    )
-    .unwrap();
-    fs::write(directory.path().join("other.lp"), rule).unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    fixture.write("entry.lp", &format!("#include \"other.lp\".\n{rule}"));
+    fixture.write("other.lp", rule);
+    let bundle = fixture.bundle();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

@@ -12,9 +12,7 @@ use zetesis_cli::{
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::base::source::{Source, SourceId};
 use zetesis_themelios::observation::{Error, ErrorKind, EvaluationError};
-use zetesis_themelios::{
-    AdmissionOptions, BundleLimits, ExpansionLimits, FormulaLimits, SourceBundle,
-};
+use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits};
 
 const SOURCE: &str = "p(k).\n#show ok : p(_).\n#show sh(X+1) : p(X).\n";
 const DIRECTIVE: &str = "#show sh(X+1) : p(X).";
@@ -108,7 +106,7 @@ fn observation_failure_preserves_verified_unpublished_evidence() {
 #[test]
 fn included_error_retains_loaded_bytes_after_disk_changes() {
     let fixture = included_source();
-    let bundle = SourceBundle::load(fixture.path("entry.lp"), BundleLimits::default()).unwrap();
+    let bundle = fixture.bundle();
     let child = bundle
         .sources()
         .iter()

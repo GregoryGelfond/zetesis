@@ -4,7 +4,7 @@ use crate::support::limits;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::{BundleFixture, canonical, formula};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
@@ -495,23 +495,12 @@ fn pool_cases_match_declared_clingo_families() {
 
 #[test]
 fn include_origins_survive_duplicate_rules_and_choice_groups() {
-    use zetesis_themelios::{
-        BundleAdmissionOptions, BundleLimits, SourceBundle, admit_bundle_formula,
-    };
-    let directory = tempfile::tempdir().unwrap();
+    use zetesis_themelios::{BundleAdmissionOptions, admit_bundle_formula};
+    let fixture = BundleFixture::new();
     for rule in ["p(one;2);q.", "1{p(one;2)}1."] {
-        std::fs::write(
-            directory.path().join("entry.lp"),
-            format!("#include \"data.lp\".\n{rule}"),
-        )
-        .unwrap();
-        std::fs::write(
-            directory.path().join("data.lp"),
-            format!("#const one=1.\n{rule}"),
-        )
-        .unwrap();
-        let bundle =
-            SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+        fixture.write("entry.lp", &format!("#include \"data.lp\".\n{rule}"));
+        fixture.write("data.lp", &format!("#const one=1.\n{rule}"));
+        let bundle = fixture.bundle();
         let admitted = admit_bundle_formula(
             bundle,
             BundleAdmissionOptions::default(),

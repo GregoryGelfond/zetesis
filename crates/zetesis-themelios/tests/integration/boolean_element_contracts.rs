@@ -10,11 +10,11 @@ use crate::support::objective_dependency_records as objective_dependencies;
 use crate::support::head_element_reference as reference;
 
 use reference::{Selection, cost_records, expected, external, models};
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{BundleFixture, formula};
 use zetesis_themelios::{
-    AdmissionOptions, AnalysisBasis, BundleAdmissionOptions, BundleLimits, CountPlanLimits,
-    CountPlanStatus, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, SourceBundle, admit_bundle_formula, admit_formula, prepare_formula,
+    AdmissionOptions, AnalysisBasis, BundleAdmissionOptions, CountPlanLimits, CountPlanStatus,
+    ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
+    admit_bundle_formula, admit_formula, prepare_formula,
 };
 
 const CASES: &[(&str, &[&[&str]])] = &[
@@ -372,15 +372,10 @@ fn bundle_origins_do_not_multiply_activity() {
         ("2{not not #true;not not #true;a}2.", 1, true),
         ("2{not #false}2.", 0, false),
     ] {
-        let directory = tempfile::tempdir().unwrap();
-        std::fs::write(
-            directory.path().join("first.lp"),
-            format!("#include \"second.lp\".\n{rule}"),
-        )
-        .unwrap();
-        std::fs::write(directory.path().join("second.lp"), rule).unwrap();
-        let bundle =
-            SourceBundle::load(directory.path().join("first.lp"), BundleLimits::default()).unwrap();
+        let fixture = BundleFixture::new();
+        fixture.write("entry.lp", &format!("#include \"second.lp\".\n{rule}"));
+        fixture.write("second.lp", rule);
+        let bundle = fixture.bundle();
         let admitted = admit_bundle_formula(
             bundle,
             BundleAdmissionOptions::default(),
@@ -438,19 +433,13 @@ fn bundle_origins_do_not_multiply_activity() {
 #[test]
 fn reordered_bundle_rules_preserve_occurrences() {
     let rules = ["1{#true;a}1.", "2{#true;#true;b}2."];
-    let directory = tempfile::tempdir().unwrap();
-    std::fs::write(
-        directory.path().join("first.lp"),
-        format!("#include \"second.lp\".\n{}{}", rules[0], rules[1]),
-    )
-    .unwrap();
-    std::fs::write(
-        directory.path().join("second.lp"),
-        format!("{}{}", rules[1], rules[0]),
-    )
-    .unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("first.lp"), BundleLimits::default()).unwrap();
+    let fixture = BundleFixture::new();
+    fixture.write(
+        "entry.lp",
+        &format!("#include \"second.lp\".\n{}{}", rules[0], rules[1]),
+    );
+    fixture.write("second.lp", &format!("{}{}", rules[1], rules[0]));
+    let bundle = fixture.bundle();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),
@@ -504,15 +493,13 @@ fn merged_bundle_rules_keep_original_multiplicity() {
         ["1{not #false}1.", "1{not #false;not #false}1."],
         ["1{not not #true;not not #true}1.", "1{not not #true}1."],
     ] {
-        let directory = tempfile::tempdir().unwrap();
-        std::fs::write(
-            directory.path().join("first.lp"),
-            format!("#include \"second.lp\".\n{}", rules[0]),
-        )
-        .unwrap();
-        std::fs::write(directory.path().join("second.lp"), rules[1]).unwrap();
-        let bundle =
-            SourceBundle::load(directory.path().join("first.lp"), BundleLimits::default()).unwrap();
+        let fixture = BundleFixture::new();
+        fixture.write(
+            "entry.lp",
+            &format!("#include \"second.lp\".\n{}", rules[0]),
+        );
+        fixture.write("second.lp", rules[1]);
+        let bundle = fixture.bundle();
         let admitted = admit_bundle_formula(
             bundle,
             BundleAdmissionOptions::default(),

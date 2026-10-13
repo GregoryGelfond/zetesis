@@ -2,18 +2,17 @@
 
 use crate::support::limits;
 use std::collections::BTreeSet;
-use std::fs::{self};
 
 use crate::support::finite_bindings::{holds, values};
 use crate::support::head_models::{self, complete, expected, limited, manual_holds, selected};
 use crate::support::objective_boundaries;
 use serde_json::{Value as Json, json};
-use zetesis_reference_support::admit;
+use zetesis_reference_support::{BundleFixture, admit};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
-    ProfileFeature, SourceBundle, admit_bundle_formula,
+    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
+    admit_bundle_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -349,15 +348,10 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
 #[test]
 fn generated_instances_preserve_every_duplicate_source_origin() {
     for rule in ["1{p(X+1..X+2):X=1}1.", "a(X+1)|b:-X=1."] {
-        let directory = tempfile::tempdir().unwrap();
-        fs::write(
-            directory.path().join("entry.lp"),
-            format!("#include \"other.lp\".\n{rule}"),
-        )
-        .unwrap();
-        fs::write(directory.path().join("other.lp"), rule).unwrap();
-        let bundle =
-            SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+        let fixture = BundleFixture::new();
+        fixture.write("entry.lp", &format!("#include \"other.lp\".\n{rule}"));
+        fixture.write("other.lp", rule);
+        let bundle = fixture.bundle();
         let admitted = admit_bundle_formula(
             bundle,
             BundleAdmissionOptions::default(),

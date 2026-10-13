@@ -2,7 +2,6 @@
 
 use crate::support::atom_models::answer_sets;
 use std::collections::BTreeSet;
-use std::fs::{self};
 
 use crate::support::answer_records::Record;
 use crate::support::clingo_reports::optimal;
@@ -13,11 +12,11 @@ use zetesis_clingo_support as oracle;
 use zetesis_core::{Model, Sign};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
-use zetesis_reference_support::canonical;
+use zetesis_reference_support::{BundleFixture, canonical};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    ProfileFeature, SourceBundle, admit, admit_bundle_formula, admit_extended, admit_formula,
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit,
+    admit_bundle_formula, admit_extended, admit_formula,
 };
 
 const SIGNED_ANONYMOUS_PROJECTIONS: [(&str, &str); 2] = [
@@ -477,15 +476,10 @@ fn coherence_roots_are_bounded_and_keep_both_original_source_locations() {
 
 #[test]
 fn opposite_signs_across_bundle_files_share_coherence_and_original_provenance() {
-    let directory = tempfile::tempdir().unwrap();
-    fs::write(
-        directory.path().join("entry.lp"),
-        "#include \"negative.lp\". p(1).",
-    )
-    .unwrap();
-    fs::write(directory.path().join("negative.lp"), "-p(1).").unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", "#include \"negative.lp\". p(1).");
+    fixture.write("negative.lp", "-p(1).");
+    let bundle = fixture.bundle();
     let input = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

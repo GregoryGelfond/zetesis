@@ -9,6 +9,8 @@ use zetesis_themelios::{
     AdmissionOptions, BundleError, BundleLimits, BundleResource, BundleSource, SourceBundle, admit,
 };
 
+// The loader's own tests write raw bytes and inspect every load's error, which
+// the shared bundle fixture's text sources and loading entry do not provide.
 struct Fixture {
     directory: tempfile::TempDir,
 }

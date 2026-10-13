@@ -2,7 +2,7 @@
 //! Exact external records complement a separate finite definition evaluator.
 
 use std::collections::BTreeSet;
-use std::fs::{self};
+use zetesis_reference_support::BundleFixture;
 
 use crate::support::clingo_reports::{enumerated, expected};
 use crate::support::finite_bindings::{exhaustive, holds, native, remap, values};
@@ -10,9 +10,8 @@ use crate::support::sourced_admission::{SOURCE, input, options};
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
-    BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, SourceBundle, admit_bundle_formula,
-    admit_formula,
+    BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
+    FormulaLimits, FormulaResource, admit_bundle_formula, admit_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -219,14 +218,12 @@ fn incomplete_guard_construction_and_ground_evaluation_have_located_limits() {
 
 #[test]
 fn bundle_guards_keep_original_sources_signatures_and_rule_origins() {
-    let directory = tempfile::tempdir().unwrap();
-    let root = directory.path().join("root.lp");
-    let rules = directory.path().join("rules.lp");
+    let fixture = BundleFixture::new();
     let source = "#include \"rules.lp\". d(1..3). #show p/1. #defined d/1.";
     let rule = "p(X):-d(X),not 0<X<3.";
-    fs::write(&root, source).unwrap();
-    fs::write(&rules, rule).unwrap();
-    let bundle = SourceBundle::load(&root, BundleLimits::default()).unwrap();
+    fixture.write("entry.lp", source);
+    fixture.write("rules.lp", rule);
+    let bundle = fixture.bundle();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

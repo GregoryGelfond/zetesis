@@ -57,6 +57,14 @@ impl BundleFixture {
         SourceBundle::load(self.path("entry.lp"), BundleLimits::default())
             .expect("loaded source graph")
     }
+
+    /// Remove the directory now, for a test that checks the removal.
+    ///
+    /// # Panics
+    /// Panics if the directory cannot be removed.
+    pub fn close(self) {
+        self.directory.close().expect("bundle fixture removal");
+    }
 }
 
 impl Default for BundleFixture {
@@ -76,5 +84,14 @@ mod tests {
         fixture.write("nested/child.lp", "p.\n");
         assert!(fixture.path("nested/child.lp").is_file());
         assert_eq!(fixture.bundle().sources().len(), 2);
+    }
+
+    #[test]
+    fn a_closed_fixture_removes_its_directory() {
+        let fixture = BundleFixture::new();
+        fixture.write("entry.lp", "p.\n");
+        let directory = fixture.directory().to_owned();
+        fixture.close();
+        assert!(!directory.exists());
     }
 }

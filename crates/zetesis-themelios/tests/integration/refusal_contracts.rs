@@ -337,6 +337,8 @@ fn formula_resource_failures_keep_the_actual_nested_admission_cause() {
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
 }
 
+// The refusals compare canonical paths and decode raw bytes, which the shared
+// bundle fixture's temporary directory and text sources do not provide.
 struct Fixture(tempfile::TempDir);
 impl Fixture {
     /// A directory under the canonical temporary directory, so its paths are

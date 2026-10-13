@@ -5,17 +5,16 @@ use crate::support::atom_models::{self, Models};
 use crate::support::objective_boundaries;
 
 use std::collections::BTreeSet;
-use std::fs;
 
 use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{BundleFixture, formula};
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, SourceBundle,
-    admit_bundle_formula, admit_extended, admit_formula,
+    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
+    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_bundle_formula,
+    admit_extended, admit_formula,
 };
 
 fn models(theory: &Theory, atoms: zetesis_core::catalog::Atoms<'_>) -> Models {
@@ -360,30 +359,14 @@ fn queens_source_admits_eighty_original_atoms_with_output_metadata() {
     );
 }
 
-struct Fixture(tempfile::TempDir);
-impl Fixture {
-    fn new() -> Self {
-        Self(tempfile::tempdir().expect("fixture"))
-    }
-    fn bundle(&self) -> SourceBundle {
-        SourceBundle::load(self.0.path().join("entry.lp"), BundleLimits::default())
-            .expect("original include graph")
-    }
-}
-
 #[test]
 fn bundle_constants_scopes_metadata_and_failures_keep_original_files() {
-    let fixture = Fixture::new();
-    fs::write(
-        fixture.0.path().join("entry.lp"),
+    let fixture = BundleFixture::new();
+    fixture.write(
+        "entry.lp",
         "#include \"data.lp\". 1{a(X):d(X)}1. #show a/1.",
-    )
-    .expect("entry");
-    fs::write(
-        fixture.0.path().join("data.lp"),
-        "#const n=2. d(1..n). #defined a/1.",
-    )
-    .expect("included data");
+    );
+    fixture.write("data.lp", "#const n=2. d(1..n). #defined a/1.");
     let admitted = admit_bundle_formula(
         fixture.bundle(),
         BundleAdmissionOptions::default(),
@@ -411,8 +394,7 @@ fn bundle_constants_scopes_metadata_and_failures_keep_original_files() {
                 .is_ok()
         );
     }
-    fs::write(fixture.0.path().join("data.lp"), "d(1). 1{b(X):not d(X)}1.")
-        .expect("unsafe included source");
+    fixture.write("data.lp", "d(1). 1{b(X):not d(X)}1.");
     let error = admit_bundle_formula(
         fixture.bundle(),
         BundleAdmissionOptions::default(),

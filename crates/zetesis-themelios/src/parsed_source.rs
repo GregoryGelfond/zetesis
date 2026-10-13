@@ -323,6 +323,7 @@ mod tests {
 
     #[test]
     fn bundle_relational_admission_observes_control() {
+        // The shared bundle fixture is built over this crate, so its unit tests write their own.
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("entry.lp");
         std::fs::write(&path, "p(1..3).").unwrap();
@@ -348,6 +349,7 @@ mod tests {
 
     #[test]
     fn bundle_formula_materialization_retains_preparation_control() {
+        // The shared bundle fixture is built over this crate, so its unit tests write their own.
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("entry.lp");
         std::fs::write(&path, "a | b.").unwrap();

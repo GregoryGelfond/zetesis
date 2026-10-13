@@ -3,7 +3,6 @@
 
 use crate::support::admission;
 use std::collections::BTreeSet;
-use std::fs::{self};
 
 use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected};
 use crate::support::finite_bindings::{Models, exhaustive, native, values};
@@ -13,11 +12,11 @@ use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::NodeView as Node;
-use zetesis_reference_support::canonical;
+use zetesis_reference_support::{BundleFixture, canonical};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    ProfileFeature, SourceBundle, admit_bundle_formula, admit_formula,
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
+    admit_bundle_formula, admit_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(97);
@@ -282,14 +281,12 @@ fn partial_local_iteration_never_certifies_vacuity_and_exact_caps_are_inclusive(
 
 #[test]
 fn included_conditionals_preserve_original_locations_and_output_selection() {
-    let directory = tempfile::tempdir().unwrap();
-    let root = directory.path().join("root.lp");
-    let rules = directory.path().join("rules.lp");
+    let fixture = BundleFixture::new();
     let source = "#include \"rules.lp\". d(1..2).p(1..2).#show q/0.";
     let conditional = "q:-p(X):d(X).";
-    fs::write(&root, source).unwrap();
-    fs::write(&rules, conditional).unwrap();
-    let bundle = SourceBundle::load(&root, BundleLimits::default()).unwrap();
+    fixture.write("entry.lp", source);
+    fixture.write("rules.lp", conditional);
+    let bundle = fixture.bundle();
     let program = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

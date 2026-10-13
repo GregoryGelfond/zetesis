@@ -8,19 +8,17 @@ use crate::support::objective_dependency_records as objective_dependencies;
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
-use std::fs::{self};
 
 use serde_json::Value as Json;
 use themelios_program::term::EvalError;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::admit;
+use zetesis_reference_support::{BundleFixture, admit};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaResource, ProfileFeature, SourceBundle, admit_bundle_formula, admit_extended,
-    admit_formula,
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
+    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
+    ProfileFeature, admit_bundle_formula, admit_extended, admit_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -535,20 +533,11 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
 
 #[test]
 fn normalized_bundle_constants_and_duplicate_rules_keep_original_origins() {
-    let directory = tempfile::tempdir().unwrap();
+    let fixture = BundleFixture::new();
     let rule = "1{p(l..u)}1.";
-    fs::write(
-        directory.path().join("entry.lp"),
-        format!("#include \"data.lp\".\n{rule}"),
-    )
-    .unwrap();
-    fs::write(
-        directory.path().join("data.lp"),
-        format!("#const l=1.#const u=2.\n{rule}"),
-    )
-    .unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    fixture.write("entry.lp", &format!("#include \"data.lp\".\n{rule}"));
+    fixture.write("data.lp", &format!("#const l=1.#const u=2.\n{rule}"));
+    let bundle = fixture.bundle();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

@@ -1,39 +1,36 @@
 //! Ordered roots share original identities, source budgets and global constants.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use themelios_base::source::SourceId;
+use zetesis_reference_support::BundleFixture;
 use zetesis_test_support::harness;
 use zetesis_themelios::{
     BundleAdmissionError, BundleAdmissionOptions, BundleError, BundleLimits, BundleResource,
     ExpansionLimits, IncludeResolution, SourceBundle, admit_bundle_extended,
 };
 
-struct Fixture(tempfile::TempDir);
+/// Bundle sources loaded from several roots at once.
+struct Fixture(BundleFixture);
 impl Fixture {
     fn new() -> Self {
-        Self(tempfile::tempdir().expect("fixture directory"))
+        Self(BundleFixture::new())
     }
     fn write(&self, name: &str, source: &str) -> PathBuf {
-        let path = self.0.path().join(name);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, source).unwrap();
-        path
+        self.0.write(name, source);
+        self.0.path(name)
     }
     fn load(&self, roots: &[&str]) -> SourceBundle {
         SourceBundle::load_many(
-            roots.iter().map(|root| self.0.path().join(root)),
+            roots.iter().map(|root| self.0.path(root)),
             BundleLimits::default(),
         )
         .unwrap()
     }
     /// Remove the directory, failing the test if it cannot be removed.
     fn close(self) {
-        self.0
-            .close()
-            .expect("only this fixture's original sources");
+        self.0.close();
     }
 }
 
@@ -54,7 +51,7 @@ fn ordered_occurrences_and_shared_includes_keep_unique_original_sources() {
     assert_eq!(bundle.sources().len(), 3);
     assert_eq!(
         bundle.roots()[1].requested_path(),
-        fixture.0.path().join("second.lp")
+        fixture.0.path("second.lp")
     );
     let expected_bytes: usize = bundle
         .sources()
@@ -177,10 +174,7 @@ fn later_root_parse_and_semantic_refusals_keep_original_source_ids() {
     fixture.write("first.lp", "p.");
     fixture.write("second.lp", "broken(.");
     let error = SourceBundle::load_many(
-        [
-            fixture.0.path().join("first.lp"),
-            fixture.0.path().join("second.lp"),
-        ],
+        [fixture.0.path("first.lp"), fixture.0.path("second.lp")],
         BundleLimits::default(),
     )
     .unwrap_err();
@@ -294,7 +288,7 @@ fn cwd_resolution_is_captured_before_loading_and_retained_for_admission() {
     let result = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", name.as_str(), "--test-threads=1"])
         .env(CHILD, "1")
-        .current_dir(fixture.0.path())
+        .current_dir(fixture.0.directory())
         .stdin(Stdio::null())
         .output()
         .unwrap();

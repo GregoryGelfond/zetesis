@@ -5,7 +5,7 @@ use crate::support::finite_bindings as reference;
 use reference::{exhaustive, external, holds, native, values};
 use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::canonical;
+use zetesis_reference_support::{BundleFixture, canonical};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionLimits,
     FormulaLimits, prepare_formula,
@@ -434,18 +434,10 @@ fn optional_planning_preserves_grounding_round_failures() {
 
 #[test]
 fn bundle_plans_retain_resolvable_premise_origins() {
-    let directory = tempfile::tempdir().unwrap();
-    std::fs::write(
-        directory.path().join("entry.lp"),
-        "#include \"groups.lp\".2{a;b;c;d}2.",
-    )
-    .unwrap();
-    std::fs::write(directory.path().join("groups.lp"), "{a;b}1.{c;d}1.").unwrap();
-    let bundle = zetesis_themelios::SourceBundle::load(
-        directory.path().join("entry.lp"),
-        zetesis_themelios::BundleLimits::default(),
-    )
-    .unwrap();
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", "#include \"groups.lp\".2{a;b;c;d}2.");
+    fixture.write("groups.lp", "{a;b}1.{c;d}1.");
+    let bundle = fixture.bundle();
     let input = zetesis_themelios::prepare_bundle_formula(
         bundle,
         zetesis_themelios::BundleAdmissionOptions::default(),
@@ -477,14 +469,10 @@ fn bundle_plans_retain_resolvable_premise_origins() {
 
 #[test]
 fn included_source_refusal_keeps_bundle_ownership() {
-    let directory = tempfile::tempdir().unwrap();
+    let fixture = BundleFixture::new();
     let source = SOURCES[0];
-    std::fs::write(directory.path().join("input.lp"), source).unwrap();
-    let bundle = zetesis_themelios::SourceBundle::load(
-        directory.path().join("input.lp"),
-        zetesis_themelios::BundleLimits::default(),
-    )
-    .unwrap();
+    fixture.write("entry.lp", source);
+    let bundle = fixture.bundle();
     let input = zetesis_themelios::prepare_bundle_formula(
         bundle,
         zetesis_themelios::BundleAdmissionOptions::default(),
@@ -627,18 +615,10 @@ fn optional_planning_preserves_objective_templates() {
 
 #[test]
 fn stopped_bundle_planning_keeps_original_sources() {
-    let directory = tempfile::tempdir().unwrap();
-    std::fs::write(
-        directory.path().join("entry.lp"),
-        "#include \"groups.lp\".2{a;b;c;d}2.",
-    )
-    .unwrap();
-    std::fs::write(directory.path().join("groups.lp"), "{a;b}1.{c;d}1.").unwrap();
-    let bundle = zetesis_themelios::SourceBundle::load(
-        directory.path().join("entry.lp"),
-        zetesis_themelios::BundleLimits::default(),
-    )
-    .unwrap();
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", "#include \"groups.lp\".2{a;b;c;d}2.");
+    fixture.write("groups.lp", "{a;b}1.{c;d}1.");
+    let bundle = fixture.bundle();
     let input = zetesis_themelios::prepare_bundle_formula(
         bundle,
         zetesis_themelios::BundleAdmissionOptions::default(),

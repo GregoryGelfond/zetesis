@@ -7,7 +7,7 @@ use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::{BundleFixture, canonical, formula};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, AnalysisBasis, ExpansionLimits, ExpansionResource,
@@ -984,13 +984,10 @@ fn projected_alternatives_retain_parsed_atom_origins() {
 
 #[test]
 fn prepared_bundle_retains_analysis_basis() {
-    use zetesis_themelios::{
-        BundleAdmissionOptions, BundleLimits, SourceBundle, prepare_bundle_formula,
-    };
-    let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("input.lp");
-    std::fs::write(&path, "{p(1..2)}.q:-p(1;2):#true.").unwrap();
-    let bundle = SourceBundle::load(&path, BundleLimits::default()).unwrap();
+    use zetesis_themelios::{BundleAdmissionOptions, prepare_bundle_formula};
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", "{p(1..2)}.q:-p(1;2):#true.");
+    let bundle = fixture.bundle();
     let prepared = prepare_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

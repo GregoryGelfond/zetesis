@@ -16,11 +16,10 @@ use cases::CASES;
 use proptest::prelude::*;
 use reference::{Models, external, holds, native, values};
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{admit, canonical, formula};
+use zetesis_reference_support::{BundleFixture, admit, canonical, formula};
 use zetesis_themelios::{
-    AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, SourceBundle,
-    admit_bundle_formula, admit_formula,
+    AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula, admit_formula,
 };
 
 #[test]
@@ -347,16 +346,11 @@ fn tautologies_preserve_term_work_accounting() {
 
 #[test]
 fn duplicate_boolean_heads_retain_original_file_identity() {
-    let directory = tempfile::tempdir().unwrap();
+    let fixture = BundleFixture::new();
     let rule = "#true|p(1..2).";
-    std::fs::write(
-        directory.path().join("entry.lp"),
-        format!("#include \"other.lp\".\n{rule}"),
-    )
-    .unwrap();
-    std::fs::write(directory.path().join("other.lp"), rule).unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    fixture.write("entry.lp", &format!("#include \"other.lp\".\n{rule}"));
+    fixture.write("other.lp", rule);
+    let bundle = fixture.bundle();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),
