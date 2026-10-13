@@ -16,6 +16,9 @@ missing_docs = "deny"
 unused = { level = "deny", priority = -1 }
 unused_must_use = "deny"
 dead_code = "deny"
+# An item's declared visibility is the reach it has: pub only where a crate
+# root exports it.
+unreachable_pub = "deny"
 
 [workspace.lints.clippy]
 pedantic = { level = "deny", priority = -1 }

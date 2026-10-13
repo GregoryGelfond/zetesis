@@ -171,6 +171,9 @@ implementation; a passing command does not justify hiding an unused operation
 or weakening a check. Do not suppress
 `dead_code`, its `unused` parent group or `warnings`, whether with `allow` or
 `expect`. Do not manufacture uses or widen visibility to evade these checks.
+Declare each item at the visibility it has: the workspace denies
+`unreachable_pub`, so `pub` marks only what a crate root exports, and an export
+that nothing outside its crate needs is narrowed or, unused, removed.
 Shared test helpers should expose cohesive operations and be compiled only by
 the consumers that need them. Helpers that several crates' tests share live in
 internal support crates, each over one dependency closure, so a test build
