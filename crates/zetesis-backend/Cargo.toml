@@ -1,11 +1,11 @@
 [package]
 name = "zetesis-backend"
 version.workspace = true
+description = "The backend vocabulary every zetesis tool shares: CPU, or a GPU through Metal or Vulkan."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-description = "The backend vocabulary every zetesis tool shares: CPU, or a GPU through Metal or Vulkan."
 
 [dependencies]
 clap = { workspace = true, optional = true }

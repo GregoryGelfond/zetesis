@@ -1,10 +1,10 @@
 [package]
 name = "zetesis-domain"
 version.workspace = true
+description = "Conservative argument domains over borrowed themelios programs."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Conservative argument domains over borrowed themelios programs."
 publish = false
 
 [dependencies]

@@ -1,11 +1,11 @@
 [package]
 name = "zetesis-presentation"
 version.workspace = true
+description = "Explicit styling and readable tables for zetesis result views."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
-description = "Explicit styling and readable tables for zetesis result views."
 
 [dependencies]
 clap = { workspace = true, optional = true }

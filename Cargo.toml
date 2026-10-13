@@ -32,6 +32,7 @@ zetesis-clingo-support = { path = "crates/zetesis-clingo-support" }
 zetesis-reference-support = { path = "crates/zetesis-reference-support" }
 zetesis-theory-support = { path = "crates/zetesis-theory-support" }
 zetesis-core = { path = "crates/zetesis-core" }
+zetesis-domain = { path = "crates/zetesis-domain" }
 zetesis-backend = { path = "crates/zetesis-backend" }
 zetesis-themelios = { path = "crates/zetesis-themelios" }
 zetesis-cpu = { path = "crates/zetesis-cpu" }

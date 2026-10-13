@@ -1,10 +1,10 @@
 [package]
 name = "zetesis-clingo-support"
 version.workspace = true
+description = "Clingo, the external comparison oracle, for the zetesis workspace's tests."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Clingo, the external comparison oracle, for the zetesis workspace's tests."
 publish = false
 
 [dependencies]

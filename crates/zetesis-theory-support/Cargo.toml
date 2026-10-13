@@ -1,10 +1,10 @@
 [package]
 name = "zetesis-theory-support"
 version.workspace = true
+description = "Helpers the zetesis workspace's tests share over the Ferraris theories."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
-description = "Helpers the zetesis workspace's tests share over the Ferraris theories."
 publish = false
 
 [dependencies]

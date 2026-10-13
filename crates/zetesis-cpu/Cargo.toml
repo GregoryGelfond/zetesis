@@ -1,6 +1,7 @@
 [package]
 name = "zetesis-cpu"
 version.workspace = true
+description = "Exact reduct checking on the CPU: lazy and dense static oracles, streamed complete candidates and a bounded Rayon pool."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

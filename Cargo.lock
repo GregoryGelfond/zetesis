@@ -2018,7 +2018,6 @@ dependencies = [
 name = "zetesis-engine"
 version = "0.5.0"
 dependencies = [
- "themelios-base",
  "themelios-macros",
  "themelios-program",
  "themelios-query",

@@ -1,14 +1,17 @@
 [package]
 name = "zetesis-maintenance"
-default-run = "zetesis-maintenance"
 version.workspace = true
+description = "Repository assurance, independent of solver execution and answer semantics."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish = false
+default-run = "zetesis-maintenance"
 
 [dependencies]
 clap.workspace = true
+# Named for its feature alone: syn's spans report lines and columns outside a
+# procedural macro only with span-locations.
 proc-macro2 = { version = "=1.0.107", features = ["span-locations"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -16,7 +19,7 @@ sha2 = "0.10"
 syn = { version = "=2.0.119", features = ["full"] }
 regex = "1"
 zetesis-backend = { workspace = true, features = ["clap"] }
-zetesis-validation = { path = "../zetesis-validation" }
+zetesis-validation.workspace = true
 
 [dev-dependencies]
 tempfile = "3"

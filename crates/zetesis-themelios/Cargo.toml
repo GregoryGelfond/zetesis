@@ -5,6 +5,7 @@ description = "The checked finite relational source boundary for zetesis."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+publish = false
 
 [dependencies]
 zetesis-core.workspace = true
@@ -12,14 +13,14 @@ zetesis-ferraris.workspace = true
 zetesis-objective.workspace = true
 zetesis-cpu.workspace = true
 hashbrown.workspace = true
-zetesis-domain = { path = "../zetesis-domain" }
+zetesis-domain.workspace = true
 themelios-base.workspace = true
 themelios-syntax.workspace = true
 themelios-program.workspace = true
 themelios-analysis.workspace = true
 
 [dev-dependencies]
-zetesis-validation = { path = "../zetesis-validation" }
+zetesis-validation.workspace = true
 proptest = "1.11"
 zetesis-sat.workspace = true
 serde_json = "=1.0.151"
