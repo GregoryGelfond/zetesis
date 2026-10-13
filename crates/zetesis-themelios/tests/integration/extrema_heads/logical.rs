@@ -129,7 +129,7 @@ impl Selection {
             && permissions
     }
 
-    pub fn source(&self) -> String {
+    pub(super) fn source(&self) -> String {
         let function = if self.maximum { "#max" } else { "#min" };
         let mut source = format!("{{g;o}}.a:-g.c:-g.{function}{{");
         for (index, &(value, key, head, condition)) in self.rows.iter().enumerate() {
@@ -168,7 +168,7 @@ impl Selection {
         source
     }
 
-    pub fn check_frozen(&self) {
+    pub(super) fn check_frozen(&self) {
         let source = self.source();
         let admitted = input(&source);
         let names: Vec<_> = admitted.atoms().iter().map(canonical).collect();

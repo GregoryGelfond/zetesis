@@ -20,12 +20,12 @@ pub(super) struct ModelRows<'a> {
 }
 
 impl<'a> ModelRows<'a> {
-    pub fn new(model: &'a Model, work: &mut Work<'_>) -> Result<Self, Error> {
+    pub(super) fn new(model: &'a Model, work: &mut Work<'_>) -> Result<Self, Error> {
         work.step(1)?;
         Ok(Self { model })
     }
 
-    pub fn get(&self, row: usize) -> AtomRef<'a> {
+    pub(super) fn get(&self, row: usize) -> AtomRef<'a> {
         self.model.atoms().at(row).expect("admitted model row")
     }
 
@@ -57,7 +57,7 @@ impl<'a> ModelRows<'a> {
         Ok(lower..upper)
     }
 
-    pub fn predicate<'predicate>(
+    pub(super) fn predicate<'predicate>(
         &self,
         predicate: impl Into<PredicateRef<'predicate>>,
         work: &mut Work<'_>,
@@ -78,7 +78,7 @@ pub(super) struct AtomChoices {
 }
 
 impl AtomChoices {
-    pub fn new(
+    pub(super) fn new(
         patterns: &[Pattern],
         rows: &ModelRows<'_>,
         metadata: crate::metadata::Read<'_>,
@@ -103,7 +103,7 @@ impl AtomChoices {
         })
     }
 
-    pub fn next(&mut self, work: &mut Work<'_>) -> Result<Option<(usize, usize)>, Error> {
+    pub(super) fn next(&mut self, work: &mut Work<'_>) -> Result<Option<(usize, usize)>, Error> {
         while let Some(range) = self.ranges.get(self.alternative) {
             work.step(1)?;
             if self.position < range.len() {

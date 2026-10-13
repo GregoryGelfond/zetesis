@@ -70,7 +70,7 @@ pub fn analyze(program: &Program, limits: Limits) -> Analysis<'_> {
 }
 
 impl<'p> Engine<'p> {
-    pub fn work(&mut self) -> Result<(), Stop> {
+    pub(crate) fn work(&mut self) -> Result<(), Stop> {
         self.steps(1)
     }
     fn steps(&mut self, count: usize) -> Result<(), Stop> {
@@ -80,7 +80,7 @@ impl<'p> Engine<'p> {
         stats.work = u64::try_from(observed).expect("bounded by u64 ceiling");
         Ok(())
     }
-    pub fn bytes(&mut self, bytes: usize) -> Result<(), Stop> {
+    pub(crate) fn bytes(&mut self, bytes: usize) -> Result<(), Stop> {
         let stats = &mut self.result.statistics;
         let observed = u128::from(stats.inspected_bytes) + bytes as u128;
         check(
@@ -91,7 +91,7 @@ impl<'p> Engine<'p> {
         stats.inspected_bytes = u64::try_from(observed).expect("bounded by u64 ceiling");
         Ok(())
     }
-    pub fn links(&mut self, count: usize) -> Result<(), Stop> {
+    pub(crate) fn links(&mut self, count: usize) -> Result<(), Stop> {
         let stats = &mut self.result.statistics;
         let observed = stats.links as u128 + count as u128;
         check(Resource::Links, observed, self.limits.max_links as u128)?;
@@ -217,7 +217,7 @@ impl<'p> Engine<'p> {
         }
         Ok(changed)
     }
-    pub fn symbol(&mut self, symbol: &'p Symbol) -> Result<bool, Stop> {
+    pub(crate) fn symbol(&mut self, symbol: &'p Symbol) -> Result<bool, Stop> {
         if self.limits.max_symbol_nodes == 0 || self.limits.max_symbol_depth == 0 {
             return Ok(false);
         }

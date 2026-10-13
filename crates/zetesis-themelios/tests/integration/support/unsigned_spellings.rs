@@ -1,7 +1,7 @@
 //! Atoms spelled as clingo spells them, for programs without strong negation.
 
 /// `atom` as clingo spells it, without a strong-negation sign.
-pub fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
+pub(crate) fn atom_text<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
     let atom = atom.into();
     let name = atom.predicate().name();
     if atom.values().is_empty() {

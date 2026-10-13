@@ -6,7 +6,7 @@ use zetesis_validation::answers;
 
 /// Capture a complete unchanged-source clingo report for the requested family.
 /// All-family mode ignores costs; optimum mode reconciles every optimal tie.
-pub fn complete(original: &str, selection: AnswerSelection) -> answers::ReportedAnswers {
+pub(crate) fn complete(original: &str, selection: AnswerSelection) -> answers::ReportedAnswers {
     let mode = match selection {
         AnswerSelection::All => "--opt-mode=ignore",
         AnswerSelection::Optimal => "--opt-mode=optN",

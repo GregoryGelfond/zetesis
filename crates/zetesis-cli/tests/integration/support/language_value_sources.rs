@@ -2,7 +2,7 @@
 
 /// All programs share the same finite pair carrier and local arithmetic witness.
 /// Their exact originals are also used by physical-device qualification.
-pub const SOURCES: [&str; 10] = [
+pub(crate) const SOURCES: [&str; 10] = [
     include_str!("../../fixtures/language-values/true-disjunct.lp"),
     include_str!("../../fixtures/language-values/false-disjunct.lp"),
     include_str!("../../fixtures/language-values/negated-false.lp"),

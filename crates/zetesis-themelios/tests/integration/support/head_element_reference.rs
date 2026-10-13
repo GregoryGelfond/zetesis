@@ -217,7 +217,7 @@ impl Selection {
             && permissions
     }
 
-    pub fn source(&self) -> String {
+    pub(crate) fn source(&self) -> String {
         let function = ["#min", "#max", "#count", "#sum", "#sum+", ""][usize::from(self.measure)];
         let mut source = format!("{{g;o}}.a:-g.c:-g.{}{function}{{", self.lower);
         for (index, &(value, key, head, condition)) in self.rows.iter().enumerate() {
@@ -249,7 +249,7 @@ impl Selection {
         source
     }
 
-    pub fn check_frozen(&self) {
+    pub(crate) fn check_frozen(&self) {
         let source = self.source();
         let admitted = formula(&source);
         let names: Vec<_> = admitted.atoms().iter().map(canonical).collect();

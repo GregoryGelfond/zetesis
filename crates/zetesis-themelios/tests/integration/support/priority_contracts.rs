@@ -16,7 +16,7 @@ fn reference(row: &Json) -> Records {
         .collect()
 }
 
-pub fn check(fixture: &str) {
+pub(crate) fn check(fixture: &str) {
     let cases = source_cases::cases(fixture);
     for (case, line) in cases.into_iter().zip(fixture.lines()) {
         let row: Json = serde_json::from_str(line).unwrap();
@@ -97,7 +97,7 @@ pub fn check(fixture: &str) {
     }
 }
 
-pub fn fresh(fixture: &str) {
+pub(crate) fn fresh(fixture: &str) {
     for line in fixture.lines() {
         let row: Json = serde_json::from_str(line).unwrap();
         assert_eq!(

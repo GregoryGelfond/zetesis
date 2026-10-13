@@ -8,10 +8,10 @@ use zetesis_themelios::{
 };
 
 /// The source identity both modules admit under.
-pub const SOURCE: SourceId = SourceId::new(83);
+pub(crate) const SOURCE: SourceId = SourceId::new(83);
 
 /// The default admission options under [`SOURCE`].
-pub fn options() -> AdmissionOptions {
+pub(crate) fn options() -> AdmissionOptions {
     AdmissionOptions {
         source_id: SOURCE,
         ..Default::default()
@@ -19,7 +19,7 @@ pub fn options() -> AdmissionOptions {
 }
 
 /// `source` admitted under [`options`] and the default limits.
-pub fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
+pub(crate) fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
     admit_formula(
         source.into(),
         options(),

@@ -7,7 +7,7 @@ use zetesis_themelios::{
 
 /// The least threshold at which `attempt` succeeds, found by doubling and then
 /// bisecting; `attempt` must succeed at every threshold above its least.
-pub fn first_success(mut attempt: impl FnMut(u64) -> bool) -> u64 {
+pub(crate) fn first_success(mut attempt: impl FnMut(u64) -> bool) -> u64 {
     let mut high = 1;
     while !attempt(high) {
         high *= 2;
@@ -27,7 +27,7 @@ pub fn first_success(mut attempt: impl FnMut(u64) -> bool) -> u64 {
 
 /// The least `max_scalar_bytes` under which `source` prepares; one byte
 /// less refuses it for its scalar bytes.
-pub fn minimum_preparation_bytes(source: &str) -> usize {
+pub(crate) fn minimum_preparation_bytes(source: &str) -> usize {
     let prepare = |cap| {
         prepare_formula(
             source.into(),

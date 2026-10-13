@@ -4,7 +4,7 @@ use zetesis_ferraris::{Node, Theory};
 use zetesis_theory_support::theories::theory;
 
 /// p | q <- d.  d.  r <- not p.  :- q, r.  s | not s.
-pub fn mixed() -> Theory {
+pub(crate) fn mixed() -> Theory {
     let nodes = vec![
         Node::atom(0),           // d
         Node::atom(1),           // p

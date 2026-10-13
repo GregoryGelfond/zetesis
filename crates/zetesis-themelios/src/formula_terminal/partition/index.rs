@@ -31,7 +31,7 @@ pub(super) struct Defined<'d> {
 }
 
 impl<'d> Defined<'d> {
-    pub fn index(
+    pub(super) fn index(
         all: &'d [&'d WithProvenance<Statement>],
         context: &mut Context<'_, '_>,
     ) -> Result<Self, FormulaFailure> {
@@ -66,7 +66,7 @@ impl<'d> Defined<'d> {
 
     /// Whether a definition's head has the predicate's name and arity, as
     /// `matching::signature` compares them with the sign ignored.
-    pub fn defines(
+    pub(super) fn defines(
         &self,
         predicate: PredicateRef<'_>,
         context: &mut Context<'_, '_>,
@@ -88,7 +88,7 @@ impl<'d> Defined<'d> {
     /// The index range of definitions carrying the site's parsed coordinate.
     /// Constructed sites have no parsed hint; whole-rule matching remains the
     /// independent correspondence check for every site.
-    pub fn origin(
+    pub(super) fn origin(
         &self,
         origin: ProgramSite,
         context: &mut Context<'_, '_>,
@@ -103,12 +103,12 @@ impl<'d> Defined<'d> {
     }
 
     /// The definition position of the origin entry at `index`.
-    pub fn position(&self, index: usize) -> usize {
+    pub(super) fn position(&self, index: usize) -> usize {
         self.origins.values[index].1
     }
 
     /// Number of origin entries, for per-origin cursors.
-    pub fn origin_entries(&self) -> usize {
+    pub(super) fn origin_entries(&self) -> usize {
         self.origins.values.len()
     }
 }

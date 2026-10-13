@@ -4,7 +4,7 @@
 use zetesis_core::{Atom, AtomCatalog, Predicate, Value};
 
 /// Spends one step of `remaining`, failing once none is left.
-pub fn before(remaining: &mut usize) -> Result<(), ()> {
+pub(crate) fn before(remaining: &mut usize) -> Result<(), ()> {
     if *remaining == 0 {
         return Err(());
     }
@@ -13,7 +13,7 @@ pub fn before(remaining: &mut usize) -> Result<(), ()> {
 }
 
 /// The catalog of the one atom `p(value)`.
-pub fn catalog(value: Value) -> AtomCatalog {
+pub(crate) fn catalog(value: Value) -> AtomCatalog {
     AtomCatalog::new(vec![
         Atom::new(Predicate::new("p", 1).unwrap(), vec![value]).unwrap(),
     ])

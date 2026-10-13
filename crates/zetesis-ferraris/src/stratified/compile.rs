@@ -39,19 +39,19 @@ pub(super) struct Graph {
 }
 
 impl Graph {
-    pub fn vertices(&self) -> usize {
+    pub(super) fn vertices(&self) -> usize {
         self.offsets.len() - 1
     }
 
-    pub fn outgoing(&self, vertex: usize) -> &[Edge] {
+    pub(super) fn outgoing(&self, vertex: usize) -> &[Edge] {
         &self.edges[self.offsets[vertex]..self.offsets[vertex + 1]]
     }
 
-    pub fn incoming(&self, vertex: usize) -> &[usize] {
+    pub(super) fn incoming(&self, vertex: usize) -> &[usize] {
         &self.sources[self.reverse_offsets[vertex]..self.reverse_offsets[vertex + 1]]
     }
 
-    pub fn release(self, budget: &mut Budget<'_, '_>) -> Result<(), StratifiedError> {
+    pub(super) fn release(self, budget: &mut Budget<'_, '_>) -> Result<(), StratifiedError> {
         budget.release(self.offsets)?;
         budget.release(self.edges)?;
         budget.release(self.reverse_offsets)?;

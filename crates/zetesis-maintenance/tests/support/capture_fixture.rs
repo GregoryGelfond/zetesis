@@ -59,7 +59,7 @@ fn lake(root: &Path, arguments: &[String], mode: &str) -> Result<(), String> {
     }
     Ok(())
 }
-pub fn run(tool: &str, arguments: &[String]) -> Result<(), String> {
+pub(crate) fn run(tool: &str, arguments: &[String]) -> Result<(), String> {
     let root = root()?;
     let mode =
         fs::read_to_string(root.join(".capture-fixture")).map_err(|error| error.to_string())?;

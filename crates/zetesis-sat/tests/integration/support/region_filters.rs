@@ -16,16 +16,16 @@ use zetesis_theory_support::theories::theory;
 use super::batching::residual;
 
 #[derive(Clone, Copy, Debug)]
-pub enum Route {
+pub(crate) enum Route {
     Scalar,
     Producers,
     Native,
 }
 
-pub const ROUTES: [Route; 3] = [Route::Scalar, Route::Producers, Route::Native];
+pub(crate) const ROUTES: [Route; 3] = [Route::Scalar, Route::Producers, Route::Native];
 
 impl Route {
-    pub fn search(self, theory: &Theory, cancellation: Cancellation) -> StableModels {
+    pub(crate) fn search(self, theory: &Theory, cancellation: Cancellation) -> StableModels {
         let workers = NonZeroUsize::new(4).unwrap();
         match self {
             Self::Scalar => StableModels::new(theory, Limits::default(), cancellation),
@@ -42,7 +42,7 @@ impl Route {
         .unwrap()
     }
 
-    pub fn collect(self, search: &mut StableModels) -> BTreeSet<Vec<usize>> {
+    pub(crate) fn collect(self, search: &mut StableModels) -> BTreeSet<Vec<usize>> {
         let mut answers = BTreeSet::new();
         if matches!(self, Self::Producers) {
             while !search.exhausted() {
@@ -69,7 +69,7 @@ impl Route {
     }
 }
 
-pub fn choices(atoms: usize) -> Theory {
+pub(crate) fn choices(atoms: usize) -> Theory {
     let mut nodes = vec![Node::falsum()];
     let mut roots = Vec::new();
     for atom in 0..atoms {
@@ -85,7 +85,7 @@ pub fn choices(atoms: usize) -> Theory {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum Condition {
+pub(crate) enum Condition {
     Pass,
     ForbidHeld(usize),
     Require(usize),
@@ -97,14 +97,14 @@ pub enum Condition {
 }
 
 #[derive(Debug)]
-pub struct Filter {
+pub(crate) struct Filter {
     subject: Theory,
     condition: Condition,
     pub live: AtomicUsize,
 }
 
 impl Filter {
-    pub fn new(subject: &Theory, condition: Condition) -> Arc<Self> {
+    pub(crate) fn new(subject: &Theory, condition: Condition) -> Arc<Self> {
         Arc::new(Self {
             subject: subject.clone(),
             condition,

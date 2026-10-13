@@ -371,7 +371,7 @@ impl Counters {
         self.observed.record(event);
     }
     #[inline]
-    pub fn work(
+    pub(crate) fn work(
         &mut self,
         limits: &FormulaLimits,
         location: ProgramSite,
@@ -1575,7 +1575,7 @@ impl<'a, 'source> Join<'a, 'source> {
         join.decide(computation, limits, budget, counters, location)?;
         Ok(join)
     }
-    pub fn new(
+    pub(crate) fn new(
         literals: &'a [LiteralIr],
         prefix: &Binding,
         variables: usize,
@@ -1994,7 +1994,7 @@ impl<'a, 'source> Join<'a, 'source> {
             location,
         )
     }
-    pub fn next(
+    pub(crate) fn next(
         &mut self,
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,

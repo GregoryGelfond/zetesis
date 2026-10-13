@@ -5,4 +5,4 @@ use std::collections::BTreeSet;
 use zetesis_core::Atom;
 
 /// A model's atoms, with its (priority, cost) pairs when the session optimizes.
-pub type Record = (BTreeSet<Atom>, Option<Vec<(i32, i64)>>);
+pub(crate) type Record = (BTreeSet<Atom>, Option<Vec<(i32, i64)>>);

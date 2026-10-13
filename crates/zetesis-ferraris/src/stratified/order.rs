@@ -18,7 +18,7 @@ pub(super) struct Schedule {
 }
 
 impl Schedule {
-    pub fn release(self, budget: &mut Budget<'_, '_>) -> Result<(), StratifiedError> {
+    pub(super) fn release(self, budget: &mut Budget<'_, '_>) -> Result<(), StratifiedError> {
         budget.release(self.vertices)?;
         budget.release(self.offsets)?;
         budget.release(self.component)

@@ -5,22 +5,28 @@ use std::collections::BTreeSet;
 use super::source_cases::Case;
 use zetesis_test_support::records::Records;
 
-pub const WEIGHTS: [&str; 9] = [
+pub(super) const WEIGHTS: [&str; 9] = [
     "foo", "-foo", "\"text\"", "\"\"", "f(1)", "-f(1)", "(1,2)", "#inf", "#sup",
 ];
 
-pub const PROGRAM: &str = "{a;b}.";
+pub(super) const PROGRAM: &str = "{a;b}.";
 
 #[derive(Clone, Copy, Debug)]
-pub enum Direction {
+pub(super) enum Direction {
     Minimize,
     Maximize,
     Weak,
 }
 
-pub const DIRECTIONS: [Direction; 3] = [Direction::Minimize, Direction::Maximize, Direction::Weak];
+pub(super) const DIRECTIONS: [Direction; 3] =
+    [Direction::Minimize, Direction::Maximize, Direction::Weak];
 
-pub fn directive(direction: Direction, weight: &str, priority: i32, condition: &str) -> String {
+pub(super) fn directive(
+    direction: Direction,
+    weight: &str,
+    priority: i32,
+    condition: &str,
+) -> String {
     let tuple = format!("{weight}@{priority},k");
     match direction {
         Direction::Weak => format!(":~{condition}.[{tuple}]"),
@@ -40,7 +46,7 @@ pub fn directive(direction: Direction, weight: &str, priority: i32, condition: &
     }
 }
 
-pub struct LiteralCase {
+pub(super) struct LiteralCase {
     pub reference: Case,
     pub priorities: Vec<i32>,
 }
@@ -62,7 +68,7 @@ fn records(mixed: bool) -> Records {
         .collect()
 }
 
-pub fn cases() -> Vec<LiteralCase> {
+pub(super) fn cases() -> Vec<LiteralCase> {
     let mut cases = Vec::new();
     for (index, weight) in WEIGHTS.into_iter().enumerate() {
         for direction in DIRECTIONS {

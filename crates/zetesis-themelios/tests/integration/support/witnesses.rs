@@ -7,7 +7,7 @@ use zetesis_themelios::{
 };
 
 /// `source` admitted under the default options with `expansion` and `limits`.
-pub fn limited(
+pub(crate) fn limited(
     source: &str,
     expansion: ExpansionLimits,
     limits: &FormulaLimits,

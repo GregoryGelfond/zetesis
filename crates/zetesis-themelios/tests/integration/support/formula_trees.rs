@@ -7,7 +7,7 @@ use zetesis_reference_support::canonical;
 
 /// A separate tree definition, with no production DAG construction or reduct API.
 #[derive(Clone)]
-pub enum Formula {
+pub(crate) enum Formula {
     False,
     Atom(String),
     And(Box<Self>, Box<Self>),
@@ -15,22 +15,22 @@ pub enum Formula {
     Implies(Box<Self>, Box<Self>),
 }
 impl Formula {
-    pub fn atom(name: impl Into<String>) -> Self {
+    pub(crate) fn atom(name: impl Into<String>) -> Self {
         Self::Atom(name.into())
     }
-    pub fn implies(left: Self, right: Self) -> Self {
+    pub(crate) fn implies(left: Self, right: Self) -> Self {
         Self::Implies(Box::new(left), Box::new(right))
     }
-    pub fn and(left: Self, right: Self) -> Self {
+    pub(crate) fn and(left: Self, right: Self) -> Self {
         Self::And(Box::new(left), Box::new(right))
     }
-    pub fn truth() -> Self {
+    pub(crate) fn truth() -> Self {
         Self::implies(Self::False, Self::False)
     }
-    pub fn sign(self, count: usize) -> Self {
+    pub(crate) fn sign(self, count: usize) -> Self {
         (0..count).fold(self, |value, _| Self::implies(value, Self::False))
     }
-    pub fn original(&self, world: &BTreeSet<String>) -> bool {
+    pub(crate) fn original(&self, world: &BTreeSet<String>) -> bool {
         match self {
             Self::False => false,
             Self::Atom(atom) => world.contains(atom),
@@ -39,7 +39,7 @@ impl Formula {
             Self::Implies(left, right) => !left.original(world) || right.original(world),
         }
     }
-    pub fn frozen(&self, outer: &BTreeSet<String>, inner: &BTreeSet<String>) -> bool {
+    pub(crate) fn frozen(&self, outer: &BTreeSet<String>, inner: &BTreeSet<String>) -> bool {
         if !self.original(outer) {
             return false;
         }
@@ -54,7 +54,7 @@ impl Formula {
 }
 
 /// The spellings of the atoms of `atoms` whose bits `mask` sets.
-pub fn world(atoms: zetesis_core::catalog::Atoms<'_>, mask: usize) -> BTreeSet<String> {
+pub(crate) fn world(atoms: zetesis_core::catalog::Atoms<'_>, mask: usize) -> BTreeSet<String> {
     atoms
         .iter()
         .enumerate()

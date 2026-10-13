@@ -8,7 +8,7 @@ use zetesis_themelios::observation::Limits;
 
 /// The words of the observations `source` shows in the model holding every
 /// one of its atoms.
-pub fn shown(source: &str) -> Vec<String> {
+pub(crate) fn shown(source: &str) -> Vec<String> {
     let input = formula(source);
     let model = Model::from_positions(input.atom_catalog(), 0..input.atoms().len()).unwrap();
     input

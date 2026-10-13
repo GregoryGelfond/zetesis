@@ -24,7 +24,11 @@ pub(crate) struct RetainedSource {
 }
 
 impl RetainedSource {
-    pub fn write(&self, output: &mut fmt::Formatter<'_>, diagnostic: &Diagnostic) -> fmt::Result {
+    pub(crate) fn write(
+        &self,
+        output: &mut fmt::Formatter<'_>,
+        diagnostic: &Diagnostic,
+    ) -> fmt::Result {
         let context = Context {
             name: &self.name,
             source: &self.source,

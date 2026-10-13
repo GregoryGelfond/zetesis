@@ -15,10 +15,10 @@ use zetesis_themelios::{
 use super::finite_bindings::{Models, holds, values};
 
 /// A model as the set of its atoms' spellings.
-pub type Names = BTreeSet<String>;
+pub(crate) type Names = BTreeSet<String>;
 
 /// The atom spellings of one clingo witness value.
-pub fn names(value: &Json) -> Names {
+pub(crate) fn names(value: &Json) -> Names {
     value
         .as_array()
         .unwrap()
@@ -28,12 +28,12 @@ pub fn names(value: &Json) -> Names {
 }
 
 /// The models a fixture records, each a list of atom spellings.
-pub fn expected(value: &Json) -> Models {
+pub(crate) fn expected(value: &Json) -> Models {
     value.as_array().unwrap().iter().map(names).collect()
 }
 
 /// `source` admitted with the given options and limits.
-pub fn limited(
+pub(crate) fn limited(
     source: &str,
     options: AdmissionOptions,
     expansion: ExpansionLimits,
@@ -44,7 +44,7 @@ pub fn limited(
 
 /// Whether the fixture formula `formula` holds in `tested`: in the reduct by
 /// `frozen` when one is given.
-pub fn truth(formula: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
+pub(crate) fn truth(formula: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
     if frozen.is_some_and(|outer| !truth(formula, outer, None)) {
         return false;
     }
@@ -66,7 +66,7 @@ pub fn truth(formula: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
 
 /// clingo's models of `source`, from a decided run of clingo 5.8 that
 /// enumerated them all without projection or costs.
-pub fn clingo(source: &str) -> Models {
+pub(crate) fn clingo(source: &str) -> Models {
     let run = oracle::run(
         source,
         &["--models=0", "--outf=2"],
@@ -114,7 +114,7 @@ pub fn clingo(source: &str) -> Models {
 
 /// Every answer set of `admitted` (at most six atoms), by the exhaustive reduct
 /// check.
-pub fn complete(admitted: &AdmittedFormula) -> Models {
+pub(crate) fn complete(admitted: &AdmittedFormula) -> Models {
     assert!(admitted.atoms().len() <= 6, "tiny exhaustive carrier");
     let mut result = Models::new();
     for mask in 0..1_usize << admitted.atoms().len() {
@@ -143,7 +143,7 @@ pub fn complete(admitted: &AdmittedFormula) -> Models {
 
 /// Whether every root of the fixture theory `theory` holds in `tested`: in the
 /// reduct by `frozen` when one is given.
-pub fn manual_holds(theory: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
+pub(crate) fn manual_holds(theory: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
     theory["roots"]
         .as_array()
         .unwrap()
@@ -152,7 +152,7 @@ pub fn manual_holds(theory: &Json, tested: &Names, frozen: Option<&Names>) -> bo
 }
 
 /// The spellings of `admitted`'s atoms whose bits `mask` sets.
-pub fn selected(admitted: &AdmittedFormula, mask: usize) -> Names {
+pub(crate) fn selected(admitted: &AdmittedFormula, mask: usize) -> Names {
     admitted
         .atoms()
         .iter()

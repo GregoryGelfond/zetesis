@@ -19,21 +19,21 @@ pub(super) struct Context<'a, 'source> {
 }
 
 impl<'a> Context<'a, '_> {
-    pub fn work(&mut self) -> Result<(), FormulaFailure> {
+    pub(super) fn work(&mut self) -> Result<(), FormulaFailure> {
         self.counters.work(self.limits, self.location)
     }
 
     /// Charge `amount` steps of one bulk operation before performing it.
-    pub fn charge(&mut self, amount: u128) -> Result<(), FormulaFailure> {
+    pub(super) fn charge(&mut self, amount: u128) -> Result<(), FormulaFailure> {
         self.counters
             .charge_work(amount, self.limits, self.location)
     }
 
-    pub fn pattern(&mut self, pattern: Pattern) -> Result<PatternRef<'a>, FormulaFailure> {
+    pub(super) fn pattern(&mut self, pattern: Pattern) -> Result<PatternRef<'a>, FormulaFailure> {
         pattern.get(self.components, self.limits, self.counters, self.location)
     }
 
-    pub fn text(&mut self, left: &str, right: &str) -> Result<bool, FormulaFailure> {
+    pub(super) fn text(&mut self, left: &str, right: &str) -> Result<bool, FormulaFailure> {
         let mut left = left.bytes();
         let mut right = right.bytes();
         loop {
@@ -46,7 +46,7 @@ impl<'a> Context<'a, '_> {
         }
     }
 
-    pub fn reserve<T>(
+    pub(super) fn reserve<T>(
         &mut self,
         values: &mut Vec<T>,
         additional: usize,
@@ -71,7 +71,7 @@ pub(super) struct Scratch<T> {
 }
 
 impl<T> Scratch<T> {
-    pub fn new(context: &Context<'_, '_>) -> Result<Self, FormulaFailure> {
+    pub(super) fn new(context: &Context<'_, '_>) -> Result<Self, FormulaFailure> {
         let mut lease = context.admission.lease();
         lease.observe(size_of::<Self>(), context.location)?;
         context.admission.storage_observed(
@@ -88,7 +88,7 @@ impl<T> Scratch<T> {
         })
     }
 
-    pub fn reserve(
+    pub(super) fn reserve(
         &mut self,
         additional: usize,
         context: &mut Context<'_, '_>,
@@ -101,11 +101,11 @@ impl<T> Scratch<T> {
         )
     }
 
-    pub fn into_values(self) -> Vec<T> {
+    pub(super) fn into_values(self) -> Vec<T> {
         self.values
     }
 
-    pub fn retain_existing(
+    pub(super) fn retain_existing(
         &mut self,
         bytes: usize,
         context: &Context<'_, '_>,
@@ -123,11 +123,15 @@ impl<T> Scratch<T> {
         )
     }
 
-    pub fn into_leased_values(self) -> (Vec<T>, StorageLease) {
+    pub(super) fn into_leased_values(self) -> (Vec<T>, StorageLease) {
         (self.values, self.lease)
     }
 
-    pub fn push(&mut self, value: T, context: &mut Context<'_, '_>) -> Result<(), FormulaFailure> {
+    pub(super) fn push(
+        &mut self,
+        value: T,
+        context: &mut Context<'_, '_>,
+    ) -> Result<(), FormulaFailure> {
         // Spare capacity is already leased; only growth needs a reservation.
         if self.values.len() == self.values.capacity() {
             context.reserve(&mut self.values, 1, &mut self.lease, size_of::<Self>())?;

@@ -7,14 +7,14 @@ pub(super) struct Terms {
     bytes: u128,
 }
 impl Terms {
-    pub fn new(read: TermRead<'_>) -> Self {
+    pub(super) fn new(read: TermRead<'_>) -> Self {
         Self {
             values: read.assignment(),
             order: Vec::new(),
             bytes: 0,
         }
     }
-    pub fn insert(
+    pub(super) fn insert(
         &mut self,
         key: &TermKey,
         metric: Metric,
@@ -60,7 +60,7 @@ impl Terms {
         self.order.insert(lower, slot);
         Ok(())
     }
-    pub fn export(self, ctx: &mut Interpreter<'_, '_, '_>) -> Result<Vec<Symbol>, Error> {
+    pub(super) fn export(self, ctx: &mut Interpreter<'_, '_, '_>) -> Result<Vec<Symbol>, Error> {
         ctx.work.step(self.order.len() as u128)?;
         let mut result = ctx.work.reserve(self.order.len())?;
         for slot in self.order {

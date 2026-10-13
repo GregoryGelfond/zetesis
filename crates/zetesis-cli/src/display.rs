@@ -23,7 +23,7 @@ pub(crate) struct Display<'a> {
     prepared: Option<PreparedSelection<'a>>,
 }
 impl<'a> Display<'a> {
-    pub fn new(
+    pub(crate) fn new(
         selection: &'a OutputSelection,
         observations: &'a ObservationProgram,
         limits: zetesis_themelios::observation::Limits,
@@ -38,7 +38,7 @@ impl<'a> Display<'a> {
         }
     }
 
-    pub fn write(
+    pub(crate) fn write(
         &mut self,
         renderer: &mut impl AnswerRenderer,
         number: usize,

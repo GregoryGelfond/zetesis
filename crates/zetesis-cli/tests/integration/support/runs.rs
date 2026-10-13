@@ -7,7 +7,7 @@ use zetesis_cpu::Cancellation;
 
 /// The detailed run of `source` under `options`, which must succeed, with its
 /// output and diagnostics.
-pub fn detailed(source: &str, options: &Options) -> (Report, String, String) {
+pub(crate) fn detailed(source: &str, options: &Options) -> (Report, String, String) {
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_detailed_with_diagnostics(
@@ -27,7 +27,10 @@ pub fn detailed(source: &str, options: &Options) -> (Report, String, String) {
 
 /// The run of `source` enumerating every model under `arguments`, with its
 /// output and diagnostics.
-pub fn enumerated(source: &str, arguments: &[&str]) -> (Result<Report, RunError>, String, String) {
+pub(crate) fn enumerated(
+    source: &str,
+    arguments: &[&str],
+) -> (Result<Report, RunError>, String, String) {
     let options = Options::try_parse_from(
         ["zetesis", "--models", "0"]
             .into_iter()

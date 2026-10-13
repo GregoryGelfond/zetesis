@@ -3,10 +3,10 @@
 use super::Models;
 use crate::support::finite_bindings::expected;
 
-pub const RELATIONS: [&str; 6] = ["=", "!=", "<", "<=", ">", ">="];
+pub(super) const RELATIONS: [&str; 6] = ["=", "!=", "<", "<=", ">", ">="];
 
 // These are source-order facts, independent of Value's representation/order.
-pub const BOUNDS: [(&str, [bool; 6]); 7] = [
+pub(super) const BOUNDS: [(&str, [bool; 6]); 7] = [
     ("#inf", [false, true, false, false, true, true]),
     ("word", [false, true, true, true, false, false]),
     ("\"#inf\"", [false, true, true, true, false, false]),
@@ -16,7 +16,7 @@ pub const BOUNDS: [(&str, [bool; 6]); 7] = [
     ("#sup", [false, true, true, true, false, false]),
 ];
 
-pub fn sources() -> Vec<(String, Models)> {
+pub(super) fn sources() -> Vec<(String, Models)> {
     let optional = expected(&[&[], &["a"], &["b"], &["a", "b"]]);
     let mut result = Vec::new();
     for (bound, accepted) in BOUNDS {

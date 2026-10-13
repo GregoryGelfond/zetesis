@@ -2,7 +2,7 @@
 //! exercise it.
 
 /// The stable models of `theory`, enumerated by the clause forms.
-pub fn by_clauses(
+pub(crate) fn by_clauses(
     theory: &zetesis_ferraris::Theory,
     limits: zetesis_sat::Limits,
     cancellation: zetesis_sat::Cancellation,

@@ -12,7 +12,7 @@ use crate::limits::check;
 use crate::{Context, Resource, UnknownReason, Widening};
 
 impl<'p> Engine<'p> {
-    pub fn compile(&mut self) -> Result<(), Failure> {
+    pub(crate) fn compile(&mut self) -> Result<(), Failure> {
         for part in self.result.program.parts() {
             self.result.context = Some(Context::Part(part));
             self.work()?;

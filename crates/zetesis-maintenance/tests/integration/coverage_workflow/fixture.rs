@@ -6,14 +6,15 @@ use std::{
     path::{Path, PathBuf},
 };
 
-pub const TABLE: &str = include_str!("../../../src/coverage/physical-selection.txt");
-pub const VULKAN_TABLE: &str = include_str!("../../../src/coverage/physical-selection-vulkan.txt");
+pub(super) const TABLE: &str = include_str!("../../../src/coverage/physical-selection.txt");
+pub(super) const VULKAN_TABLE: &str =
+    include_str!("../../../src/coverage/physical-selection-vulkan.txt");
 use zetesis_maintenance::coverage::SUPPORT_SOURCES;
-pub struct Fixture {
+pub(super) struct Fixture {
     pub directory: tempfile::TempDir,
 }
 impl Fixture {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         let directory = tempfile::tempdir_in(std::env::temp_dir().canonicalize().unwrap()).unwrap();
         let fixture = Self { directory };
         for (name, bytes) in [
@@ -81,22 +82,22 @@ impl Fixture {
         }
         fixture
     }
-    pub fn root(&self) -> &Path {
+    pub(super) fn root(&self) -> &Path {
         self.directory.path()
     }
-    pub fn write(&self, path: &str, bytes: &[u8]) {
+    pub(super) fn write(&self, path: &str, bytes: &[u8]) {
         let path = self.root().join(path);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, bytes).unwrap();
     }
-    pub fn read(&self, path: &str) -> String {
+    pub(super) fn read(&self, path: &str) -> String {
         fs::read_to_string(self.root().join(path)).unwrap()
     }
-    pub fn executable(&self, path: &str) {
+    pub(super) fn executable(&self, path: &str) {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(self.root().join(path), fs::Permissions::from_mode(0o700)).unwrap();
     }
-    pub fn tool(&self, path: &str, role: &str) {
+    pub(super) fn tool(&self, path: &str, role: &str) {
         let script = format!(
             "#!/bin/sh\nexec '{}' '{}' \"$@\"\n",
             env!("CARGO_BIN_EXE_zetesis-maintenance-fixture"),
@@ -105,7 +106,7 @@ impl Fixture {
         self.write(path, script.as_bytes());
         self.executable(path);
     }
-    pub fn command(&self, script: &str) -> Command {
+    pub(super) fn command(&self, script: &str) -> Command {
         let mut command = Command::new("/bin/sh");
         command.arg(script).current_dir(self.root());
         for (key, _) in env::vars_os() {
@@ -134,7 +135,12 @@ impl Fixture {
     }
     /// Run the coverage script in `mode`, with the physical stage of
     /// `backend`, `metal` or `vulkan`, when one is named.
-    pub fn coverage(&self, mode: &str, backend: Option<&str>, changes: &[(&str, &str)]) -> Output {
+    pub(super) fn coverage(
+        &self,
+        mode: &str,
+        backend: Option<&str>,
+        changes: &[(&str, &str)],
+    ) -> Output {
         let mut command = self.command("scripts/coverage.sh");
         command.arg(mode);
         for &(key, value) in changes {
@@ -145,7 +151,7 @@ impl Fixture {
         }
         command.bounded_output()
     }
-    pub fn calls(&self) -> Vec<Value> {
+    pub(super) fn calls(&self) -> Vec<Value> {
         let path = self.root().join("calls.jsonl");
         if path.exists() {
             self.read("calls.jsonl")
@@ -156,11 +162,11 @@ impl Fixture {
             Vec::new()
         }
     }
-    pub fn assert_status(&self, expected: &str) {
+    pub(super) fn assert_status(&self, expected: &str) {
         assert_eq!(self.read("target/coverage/status.txt").trim(), expected);
         assert!(!self.root().join("target/coverage/.lock").exists());
     }
-    pub fn assert_preflight_failure(&self, result: &Output) {
+    pub(super) fn assert_preflight_failure(&self, result: &Output) {
         assert!(
             !result.status.success(),
             "{}",
@@ -170,7 +176,7 @@ impl Fixture {
         assert!(self.calls().is_empty());
         assert!(self.read("target/coverage/floors.tsv").is_empty());
     }
-    pub fn assert_physical_failure(&self, backend: &str, group: &str) {
+    pub(super) fn assert_physical_failure(&self, backend: &str, group: &str) {
         self.assert_status("incomplete");
         assert!(
             self.root()
@@ -212,7 +218,7 @@ impl Fixture {
         }
         assert_eq!(self.calls(), expected);
     }
-    pub fn assert_complete_schedule(&self, mode: &str, backend: Option<&str>, floor: &str) {
+    pub(super) fn assert_complete_schedule(&self, mode: &str, backend: Option<&str>, floor: &str) {
         assert_eq!(
             self.read("target/coverage/floors.tsv"),
             if mode == "gate" {
@@ -334,12 +340,12 @@ impl Fixture {
     }
 }
 /// The backends a physical stage can run.
-pub const BACKENDS: [&str; 2] = ["metal", "vulkan"];
-pub fn groups() -> Vec<Vec<&'static str>> {
+pub(super) const BACKENDS: [&str; 2] = ["metal", "vulkan"];
+pub(super) fn groups() -> Vec<Vec<&'static str>> {
     TABLE.lines().map(|row| row.split('|').collect()).collect()
 }
 /// The reviewed selection's rows of `backend`.
-pub fn groups_of(backend: &str) -> Vec<Vec<&'static str>> {
+pub(super) fn groups_of(backend: &str) -> Vec<Vec<&'static str>> {
     match backend {
         "metal" => groups(),
         "vulkan" => vulkan_groups(),
@@ -347,14 +353,14 @@ pub fn groups_of(backend: &str) -> Vec<Vec<&'static str>> {
     }
 }
 /// Where the fixture keeps `backend`'s reviewed selection.
-pub fn table_path(backend: &str) -> &'static str {
+pub(super) fn table_path(backend: &str) -> &'static str {
     match backend {
         "metal" => "crates/zetesis-maintenance/src/coverage/physical-selection.txt",
         "vulkan" => "crates/zetesis-maintenance/src/coverage/physical-selection-vulkan.txt",
         other => panic!("no reviewed selection for {other}"),
     }
 }
-pub fn vulkan_groups() -> Vec<Vec<&'static str>> {
+pub(super) fn vulkan_groups() -> Vec<Vec<&'static str>> {
     VULKAN_TABLE
         .lines()
         .map(|row| row.split('|').collect())

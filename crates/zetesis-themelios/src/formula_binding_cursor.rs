@@ -79,7 +79,7 @@ pub(super) fn target(literal: &LiteralIr) -> Option<usize> {
 }
 
 impl<'a, 'source> Cursor<'a, 'source> {
-    pub fn new(
+    pub(crate) fn new(
         literals: &'a [LiteralIr],
         values: Binding<'static>,
         support: &'a Support<'source>,
@@ -470,7 +470,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         &self.values
     }
 
-    pub fn next(
+    pub(crate) fn next(
         &mut self,
         evaluation: &mut Evaluation,
         computation: &mut Computation<'_, '_>,

@@ -9,13 +9,13 @@ use zetesis_cli::{
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, ParsedSource};
 
-pub fn config(arguments: &[&str]) -> PublicationConfig {
+pub(crate) fn config(arguments: &[&str]) -> PublicationConfig {
     PublicationConfig::from(&super::options::serial(arguments))
 }
 
 /// These callers test publication of a supported formula, independently of
 /// source-admission failures and the CLI's relational/formula route selection.
-pub fn formula(
+pub(crate) fn formula(
     source: &str,
     config: &PublicationConfig,
     renderer: &mut impl AnswerRenderer,
@@ -39,7 +39,7 @@ pub fn formula(
     .map_err(zetesis_cli::PublicationFailure::into_legacy)
 }
 
-pub fn human(
+pub(crate) fn human(
     source: &str,
     config: &PublicationConfig,
     output: &mut impl Write,
@@ -60,7 +60,7 @@ pub fn human(
 }
 
 /// Explicit relational admission for closure tests; no formula fallback.
-pub fn relational(
+pub(crate) fn relational(
     source: &str,
     config: &PublicationConfig,
     renderer: &mut impl AnswerRenderer,
@@ -83,7 +83,7 @@ pub fn relational(
     .map_err(zetesis_cli::PublicationFailure::into_legacy)
 }
 
-pub fn formula_run(
+pub(crate) fn formula_run(
     source: &str,
     arguments: &[&str],
     configure: impl FnOnce(&mut PublicationConfig),
@@ -107,7 +107,7 @@ pub fn formula_run(
     )
 }
 
-pub fn relational_human(
+pub(crate) fn relational_human(
     source: &str,
     config: &PublicationConfig,
     output: &mut impl Write,
@@ -129,7 +129,7 @@ pub fn relational_human(
 
 /// Bounded source admission remains a typed library operation. A refusal never
 /// reaches the renderer; the ordinary CLI's policy is tested separately.
-pub fn bounded_admission(
+pub(crate) fn bounded_admission(
     source: &str,
     expansion: ExpansionLimits,
     limits: &FormulaLimits,

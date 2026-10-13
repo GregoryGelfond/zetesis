@@ -79,7 +79,7 @@ fn aggregate(elements: &[Truth], accepts: bool) -> Truth {
 
 /// The first two rows alias one complete tuple. Unsigned atomic permissions
 /// remain separate; the signed atom and Boolean rows do not supply producers.
-pub fn check(bound: &str, relation: &str, accepts: bool, measure: usize, context: usize) {
+pub(super) fn check(bound: &str, relation: &str, accepts: bool, measure: usize, context: usize) {
     let function = ["", "#count", "#sum", "#sum+"][measure];
     let weight = if measure == 3 { 2 } else { -2 };
     let source = if context == 0 {

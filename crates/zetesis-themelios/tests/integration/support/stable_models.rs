@@ -9,7 +9,7 @@ use zetesis_themelios::AdmittedFormula;
 
 /// Every stable model of the formula, each as its atoms: the search must
 /// exhaust the family and return each model once.
-pub fn stable(input: &AdmittedFormula) -> BTreeSet<BTreeSet<Atom>> {
+pub(crate) fn stable(input: &AdmittedFormula) -> BTreeSet<BTreeSet<Atom>> {
     let mut search =
         StableModels::new(input.theory(), Limits::default(), Cancellation::default()).unwrap();
     let mut result = BTreeSet::new();
