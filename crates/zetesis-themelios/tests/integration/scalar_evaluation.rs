@@ -163,31 +163,8 @@ fn arithmetic_refusals_retain_the_source_rule() {
 #[test]
 #[ignore = "requires clingo: scalar models match clingo"]
 fn scalar_models_match_clingo() {
-    for &(source, _) in CASES {
-        let output = reference::external(source, true);
-        assert_eq!(output["Models"]["More"], "no");
-        let mut models = reference::Models::new();
-        for witness in output["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-        {
-            assert!(
-                models.insert(
-                    witness["Value"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|atom| atom.as_str().unwrap().to_owned())
-                        .collect()
-                )
-            );
-        }
-        assert_eq!(
-            output["Models"]["Number"].as_u64().unwrap(),
-            models.len() as u64
-        );
-        assert_eq!(reference::native(&formula(source)), models, "{source}");
-    }
+    reference::original_sources_match_clingo_full_models(
+        CASES.iter().map(|&(source, _)| source),
+        formula,
+    );
 }

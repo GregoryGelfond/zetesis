@@ -17,19 +17,14 @@ use super::finite_bindings::{Models, holds, values};
 /// A model as the set of its atoms' spellings.
 pub(crate) type Names = BTreeSet<String>;
 
-/// The atom spellings of one clingo witness value.
-pub(crate) fn names(value: &Json) -> Names {
+/// The models a fixture records, each a list of atom spellings.
+pub(crate) fn expected(value: &Json) -> Models {
     value
         .as_array()
         .unwrap()
         .iter()
-        .map(|atom| atom.as_str().unwrap().to_owned())
+        .map(oracle::atoms)
         .collect()
-}
-
-/// The models a fixture records, each a list of atom spellings.
-pub(crate) fn expected(value: &Json) -> Models {
-    value.as_array().unwrap().iter().map(names).collect()
 }
 
 /// `source` admitted with the given options and limits.
@@ -82,34 +77,7 @@ pub(crate) fn clingo(source: &str) -> Models {
             .unwrap()
             .starts_with("clingo version 5.8.")
     );
-    assert!(matches!(
-        raw["Result"].as_str().unwrap(),
-        "SATISFIABLE" | "UNSATISFIABLE"
-    ));
-    assert_eq!(raw["Models"]["More"], "no");
-    let witnesses: Vec<_> = raw["Call"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-        .collect();
-    assert_eq!(
-        raw["Models"]["Number"].as_u64().unwrap(),
-        witnesses.len() as u64
-    );
-    let models: Models = witnesses
-        .iter()
-        .map(|witness| {
-            assert!(witness["Costs"].is_null());
-            names(&witness["Value"])
-        })
-        .collect();
-    assert_eq!(
-        models.len(),
-        witnesses.len(),
-        "fixtures show complete models without projection"
-    );
-    models
+    oracle::objective_free_models(&raw)
 }
 
 /// Every answer set of `admitted` (at most six atoms), by the exhaustive reduct

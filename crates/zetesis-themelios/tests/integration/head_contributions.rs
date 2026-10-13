@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 use cases::{CASES, CLINGO_DIFFERENCES};
 use reference::{Models, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
+use zetesis_clingo_support as oracle;
 use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
@@ -451,28 +452,7 @@ fn source_comparisons_preserve_complete_records() {
     for &(source, _) in CASES {
         let result = external(source, true);
         assert_eq!(result["Solver"], "clingo version 5.8.2");
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    assert!(witness.get("Costs").is_none());
-                    assert!(
-                        expected.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
+        let expected = oracle::objective_free_models(&result);
         let actual = native(&input(source));
         if let Some((_, records)) = CLINGO_DIFFERENCES.iter().find(|(case, _)| *case == source) {
             let recorded: Models = records

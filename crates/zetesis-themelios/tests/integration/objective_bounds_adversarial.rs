@@ -7,7 +7,6 @@ use std::time::Duration;
 
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
-use zetesis_clingo_support::costs;
 use zetesis_core::{Model, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check, models};
@@ -39,19 +38,10 @@ fn cases() -> Vec<Case> {
                     .as_array()
                     .unwrap()
                     .iter()
-                    .map(|row| (names(&row[0]), costs(&row[1])))
+                    .map(|row| (oracle::atoms(&row[0]), oracle::costs(&row[1])))
                     .collect(),
             }
         })
-        .collect()
-}
-
-fn names(value: &Json) -> BTreeSet<String> {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|atom| atom.as_str().unwrap().to_owned())
         .collect()
 }
 
@@ -517,21 +507,7 @@ fn clingo(source: &str) -> Records {
             max_output_bytes: 2 * 65_536,
         },
     );
-    let value = oracle::json(&run);
-    assert_eq!(value["Models"]["More"], "no");
-    let mut records = Records::new();
-    let mut count = 0_u64;
-    for witness in value["Call"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-    {
-        assert!(records.insert((names(&witness["Value"]), costs(&witness["Costs"]))));
-        count += 1;
-    }
-    assert_eq!(value["Models"]["Number"].as_u64(), Some(count));
-    records
+    oracle::model_records(&oracle::json(&run))
 }
 
 #[test]

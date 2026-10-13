@@ -2,7 +2,6 @@
 //! record: every model, every model or the refusal of an unsafe source, and the
 //! optimal models.
 
-use std::collections::BTreeSet;
 use std::time::Duration;
 
 use serde_json::Value as Json;
@@ -66,23 +65,12 @@ pub(crate) fn optimal(source: &str) -> Json {
     ))
 }
 
-/// The distinct atom spellings of one report witness.
-pub(crate) fn json_model(values: &Json) -> BTreeSet<String> {
-    let atoms = values.as_array().unwrap();
-    let result: BTreeSet<_> = atoms
-        .iter()
-        .map(|atom| atom.as_str().unwrap().to_owned())
-        .collect();
-    assert_eq!(result.len(), atoms.len(), "full atom identities are unique");
-    result
-}
-
 /// The models a fixture row records from clingo.
 pub(crate) fn expected(row: &Json) -> Models {
     row["models"]
         .as_array()
         .unwrap()
         .iter()
-        .map(json_model)
+        .map(oracle::atoms)
         .collect()
 }

@@ -1,7 +1,7 @@
 //! Finite signed source disjunctions retain their original reduct.
 //! Hand-written formula trees are independent of source normalization and SAT.
 
-use crate::support::head_models::{Names, expected, names, truth};
+use crate::support::head_models::{Names, expected, truth};
 use crate::support::objective_dependency_records as objective_dependencies;
 
 use std::time::Duration;
@@ -44,7 +44,7 @@ fn holds(theory: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
         .all(|root| truth(root, tested, frozen))
 }
 fn manual_models(theory: &Json) -> Models {
-    let atoms: Vec<_> = names(&theory["atoms"]).into_iter().collect();
+    let atoms: Vec<_> = oracle::atoms(&theory["atoms"]).into_iter().collect();
     assert!(atoms.len() <= 8, "tiny independent exhaustive carrier");
     (0..1 << atoms.len())
         .filter_map(|mask| {
@@ -393,7 +393,7 @@ fn normalized_reference(raw: &Json) -> (String, Models, Option<Vec<i64>>) {
         .iter()
         .zip(costs)
         .filter(|(_, cost)| cost == &best)
-        .map(|(witness, _)| names(&witness["Value"]))
+        .map(|(witness, _)| oracle::atoms(&witness["Value"]))
         .collect();
     (result, models, best)
 }

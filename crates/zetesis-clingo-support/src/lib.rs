@@ -350,15 +350,16 @@ pub fn objective_free_models(report: &Value) -> Models {
 /// A witness's atoms, as their spellings.
 ///
 /// # Panics
-/// Panics if `values` is not an array of strings.
+/// Panics if `values` is not an array of strings, or names an atom twice.
 #[must_use]
 pub fn atoms(values: &Value) -> BTreeSet<String> {
-    values
-        .as_array()
-        .unwrap()
+    let values = values.as_array().unwrap();
+    let atoms: BTreeSet<String> = values
         .iter()
         .map(|atom| atom.as_str().unwrap().into())
-        .collect()
+        .collect();
+    assert_eq!(atoms.len(), values.len(), "full atom identities are unique");
+    atoms
 }
 
 /// A witness's costs, absent when the program has no objective.

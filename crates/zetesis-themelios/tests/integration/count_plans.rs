@@ -3,6 +3,7 @@
 use crate::support::finite_bindings as reference;
 
 use reference::{exhaustive, external, holds, native, values};
+use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::canonical;
 use zetesis_themelios::{
@@ -188,27 +189,7 @@ fn unsupported_premises_produce_no_plan() {
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
     for source in SOURCES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = reference::Models::new();
-        for call in result["Call"].as_array().unwrap() {
-            for model in call["Witnesses"].as_array().into_iter().flatten() {
-                assert!(
-                    expected.insert(
-                        model["Value"]
-                            .as_array()
-                            .unwrap()
-                            .iter()
-                            .map(|v| v.as_str().unwrap().to_owned())
-                            .collect()
-                    )
-                );
-            }
-        }
-        assert_eq!(
-            result["Models"]["Number"].as_u64(),
-            Some(u64::try_from(expected.len()).unwrap())
-        );
+        let expected = oracle::full_models(&external(source, true));
         assert_eq!(native(&admitted(source, true)), expected, "{source}");
     }
 }

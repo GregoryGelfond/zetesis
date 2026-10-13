@@ -7,6 +7,7 @@ mod semantics;
 use cases::{BOUNDS, RELATIONS, sources};
 use reference::{Models, exhaustive, expected, external, holds, native, values};
 use themelios_base::source::SourceId;
+use zetesis_clingo_support as oracle;
 use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionFailure,
@@ -67,29 +68,9 @@ fn original_sources_match_declared_answers() {
     let cases = sources();
     let mut total = 0;
     for (source, expected) in &cases {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut models = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            for witness in call["Witnesses"].as_array().into_iter().flatten() {
-                assert!(witness["Costs"].is_null());
-                assert!(
-                    models.insert(
-                        witness["Value"]
-                            .as_array()
-                            .unwrap()
-                            .iter()
-                            .map(|atom| atom.as_str().unwrap().to_owned())
-                            .collect()
-                    )
-                );
-                count += 1;
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
+        let models = oracle::objective_free_models(&external(source, true));
         assert_eq!(&models, expected, "{source}");
-        total += count;
+        total += models.len();
     }
     println!("complete_sources={} full_models={total}", cases.len());
 }

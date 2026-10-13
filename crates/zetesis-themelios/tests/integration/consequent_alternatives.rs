@@ -572,34 +572,13 @@ fn preparation_identifies_dependency_projection() {
 #[ignore = "requires clingo: complete sources match clingo"]
 fn complete_sources_match_clingo() {
     let case = corpus_case();
-    let mut sources: Vec<_> = CASES.iter().map(|(source, _)| *source).collect();
-    sources.push(case.source());
-    let mut total = 0;
-    for source in sources {
-        let output = reference::external(source, true);
-        assert_eq!(output["Models"]["More"], "no");
-        let expected: Models = output["Call"]
-            .as_array()
-            .unwrap()
+    reference::original_sources_match_clingo_full_models(
+        CASES
             .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .map(|witness| {
-                witness["Value"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|atom| atom.as_str().unwrap().to_owned())
-                    .collect()
-            })
-            .collect();
-        assert_eq!(
-            usize::try_from(output["Models"]["Number"].as_u64().unwrap()).unwrap(),
-            expected.len()
-        );
-        assert_eq!(native(&formula(source)), expected, "{source}");
-        total += expected.len();
-    }
-    println!("complete_models={total}");
+            .map(|(source, _)| *source)
+            .chain([case.source()]),
+        formula,
+    );
 }
 
 fn first_cap(mut admit: impl FnMut(usize) -> Result<AdmittedFormula, FormulaFailure>) -> usize {

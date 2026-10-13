@@ -4,10 +4,11 @@
 use std::collections::BTreeSet;
 use std::fs::{self};
 
-use crate::support::clingo_reports::{enumerated, expected, json_model};
-use crate::support::finite_bindings::{Models, exhaustive, holds, native, remap, values};
+use crate::support::clingo_reports::{enumerated, expected};
+use crate::support::finite_bindings::{exhaustive, holds, native, remap, values};
 use crate::support::sourced_admission::{SOURCE, input, options};
 use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
     BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, SourceBundle, admit_bundle_formula,
@@ -283,32 +284,9 @@ fn bundle_guards_keep_original_sources_signatures_and_rule_origins() {
 #[ignore = "requires clingo: ground guards match clingo; exact sources and complete full-model replay"]
 fn ground_guards_match_clingo() {
     for row in cases() {
-        let actual = enumerated(row["source"].as_str().unwrap());
-        assert_eq!(actual["Models"]["More"], "no");
-        let witnesses: Vec<_> = actual["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .collect();
-        let records: Models = witnesses
-            .iter()
-            .map(|witness| {
-                assert!(witness["Costs"].is_null());
-                json_model(&witness["Value"])
-            })
-            .collect();
-        assert_eq!(records.len(), witnesses.len());
-        assert_eq!(
-            actual["Models"]["Number"].as_u64(),
-            Some(witnesses.len() as u64)
-        );
+        let source = row["source"].as_str().unwrap();
+        let records = oracle::objective_free_models(&enumerated(source));
         assert_eq!(records, expected(&row), "{}", row["name"]);
-        assert_eq!(
-            native(&input(row["source"].as_str().unwrap()).unwrap()),
-            records,
-            "{}",
-            row["name"]
-        );
+        assert_eq!(native(&input(source).unwrap()), records, "{}", row["name"]);
     }
 }

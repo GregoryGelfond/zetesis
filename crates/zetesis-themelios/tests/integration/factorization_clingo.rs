@@ -26,22 +26,6 @@ struct Case {
     records: Records,
 }
 
-fn names(value: &Json) -> BTreeSet<String> {
-    let raw = value.as_array().expect("complete canonical atom list");
-    let names: BTreeSet<_> = raw
-        .iter()
-        .map(|value| value.as_str().unwrap().to_owned())
-        .collect();
-    assert_eq!(names.len(), raw.len(), "no duplicate full-model atoms");
-    names
-}
-
-fn costs(value: &Json) -> Option<Vec<i64>> {
-    value
-        .as_array()
-        .map(|costs| costs.iter().map(|cost| cost.as_i64().unwrap()).collect())
-}
-
 fn cases() -> Vec<Case> {
     include_str!("../fixtures/factorization-campaign.jsonl")
         .lines()
@@ -52,7 +36,7 @@ fn cases() -> Vec<Case> {
             let raw = value["models"].as_array().unwrap();
             let records: Records = raw
                 .iter()
-                .map(|row| (names(&row[0]), costs(&row[1])))
+                .map(|row| (oracle::atoms(&row[0]), oracle::costs(&row[1])))
                 .collect();
             assert_eq!(records.len(), raw.len(), "raw full-model multiplicity");
             Case {
@@ -170,23 +154,7 @@ fn clingo(source: &str) -> Records {
     );
     let value = oracle::json(&run);
     assert_eq!(value["Result"], "SATISFIABLE");
-    assert_eq!(value["Models"]["More"], "no");
-    let mut records = Records::new();
-    let mut count = 0_u64;
-    for witness in value["Call"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-    {
-        assert!(
-            records.insert((names(&witness["Value"]), costs(&witness["Costs"]))),
-            "raw complete model count cannot hide duplicates"
-        );
-        count += 1;
-    }
-    assert_eq!(value["Models"]["Number"].as_u64(), Some(count));
-    records
+    oracle::model_records(&value)
 }
 
 #[test]

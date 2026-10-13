@@ -494,26 +494,10 @@ fn unsafe_or_undefined_alternatives_remain_located_refusals() {
 #[test]
 #[ignore = "requires clingo: pool cases match declared clingo families"]
 fn pool_cases_match_declared_clingo_families() {
-    for &(source, _) in CASES {
-        let raw = reference::external(source, true);
-        assert_eq!(raw["Models"]["More"], "no");
-        let models: Models = raw["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .map(|model| {
-                model["Value"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|atom| atom.as_str().unwrap().to_owned())
-                    .collect()
-            })
-            .collect();
-        let native = native(&formula(source));
-        assert_eq!(native, models, "{source}");
-    }
+    reference::original_sources_match_clingo_full_models(
+        CASES.iter().map(|&(source, _)| source),
+        formula,
+    );
 }
 
 #[test]

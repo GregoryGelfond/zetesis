@@ -10,6 +10,7 @@ use crate::support::finite_bindings as formula;
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
+use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{canonical, formula};
 
 pub(crate) fn models(source: &str) -> formula::Models {
@@ -29,30 +30,11 @@ pub(crate) fn expected(records: &[&[&str]]) -> formula::Models {
 
 pub(crate) fn external(source: &str) {
     let result = formula::external(source, true);
-    assert_eq!(result["Models"]["More"], "no");
-    let mut records = BTreeSet::new();
-    let mut count = 0;
-    for call in result["Call"].as_array().unwrap() {
-        for witness in call["Witnesses"].as_array().into_iter().flatten() {
-            let costs: Option<Vec<i64>> = witness["Costs"]
-                .as_array()
-                .map(|values| values.iter().map(|value| value.as_i64().unwrap()).collect());
-            assert!(
-                records.insert((
-                    witness["Value"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|value| value.as_str().unwrap().to_owned())
-                        .collect(),
-                    costs,
-                ))
-            );
-            count += 1;
-        }
-    }
-    assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-    assert_eq!(cost_records(source), records, "{source}");
+    assert_eq!(
+        cost_records(source),
+        oracle::model_records(&result),
+        "{source}"
+    );
 }
 
 pub(crate) fn cost_records(source: &str) -> BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)> {

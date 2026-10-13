@@ -13,6 +13,7 @@ use std::collections::BTreeSet;
 use cases::CASES;
 use proptest::prelude::*;
 use reference::{Models, exhaustive, external, holds, native, values};
+use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{admit, canonical, formula};
 use zetesis_themelios::{
     AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,
@@ -64,32 +65,10 @@ fn boolean_constants_introduce_no_atoms() {
 fn original_sources_match_clingo_full_models() {
     let mut models = 0;
     for &(source, records) in CASES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut actual = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    assert!(witness["Costs"].is_null());
-                    count += 1;
-                    assert!(
-                        actual.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|value| value.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
+        let actual = oracle::objective_free_models(&external(source, true));
         assert_eq!(actual, expected(records), "{source}");
         assert_eq!(native(&formula(source)), actual, "{source}");
-        models += count;
+        models += actual.len();
     }
     println!("complete_sources={} full_models={models}", CASES.len());
 }

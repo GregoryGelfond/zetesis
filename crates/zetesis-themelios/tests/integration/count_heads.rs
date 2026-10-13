@@ -1,7 +1,7 @@
 //! Checked finite tuple/atom count heads preserve complete models and frozen reducts.
 
 use crate::support::finite_bindings::{Models, holds, remap, values};
-use crate::support::head_models::{complete, expected, limited, manual_holds, names, selected};
+use crate::support::head_models::{complete, expected, limited, manual_holds, selected};
 use crate::support::objective_dependency_records as objective_dependencies;
 use crate::support::thresholds::first_success;
 
@@ -422,34 +422,7 @@ fn clingo(source: &str) -> Models {
             .unwrap()
             .starts_with("clingo version 5.8.")
     );
-    assert!(matches!(
-        raw["Result"].as_str().unwrap(),
-        "SATISFIABLE" | "UNSATISFIABLE"
-    ));
-    assert_eq!(raw["Models"]["More"], "no");
-    let witnesses: Vec<_> = raw["Call"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-        .collect();
-    assert_eq!(
-        raw["Models"]["Number"].as_u64().unwrap(),
-        witnesses.len() as u64
-    );
-    let models: Models = witnesses
-        .iter()
-        .map(|witness| {
-            assert!(witness["Costs"].is_null());
-            names(&witness["Value"])
-        })
-        .collect();
-    assert_eq!(
-        models.len(),
-        witnesses.len(),
-        "fixtures show complete models without projection"
-    );
-    models
+    oracle::objective_free_models(&raw)
 }
 #[test]
 #[ignore = "requires clingo: fresh clingo original and expanded sources match complete models; each original and expansion has a bounded complete capture"]

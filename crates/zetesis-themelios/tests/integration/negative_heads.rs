@@ -4,9 +4,10 @@ use std::collections::BTreeSet;
 use std::fs::{self};
 
 use crate::support::finite_bindings::{Models, holds, values};
-use crate::support::head_models::{Names, clingo, expected, limited, names};
+use crate::support::head_models::{Names, clingo, expected, limited};
 use crate::support::objective_boundaries;
 use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
 use zetesis_core::Sign;
 use zetesis_reference_support::admit;
 use zetesis_themelios::{
@@ -128,7 +129,11 @@ fn original_support_augmentation_and_frozen_formulas_are_distinct_contracts() {
             assert_eq!(complete(&admitted), expected(&case["models"]));
             continue;
         }
-        assert_eq!(actual_atoms, names(&case["atoms"]), "{source}: carrier");
+        assert_eq!(
+            actual_atoms,
+            oracle::atoms(&case["atoms"]),
+            "{source}: carrier"
+        );
         for mask in 0..1_usize << admitted.atoms().len() {
             let model = selected(&admitted, mask);
             let outer = values(admitted.theory(), mask, None);
@@ -207,7 +212,7 @@ fn singleton_heads_preserve_original_formulas() {
             .unwrap_or_else(|error| panic!("{source}: {error}"));
         assert_eq!(
             admitted.atoms().iter().map(name).collect::<Names>(),
-            names(&case["atoms"])
+            oracle::atoms(&case["atoms"])
         );
         for mask in 0..1_usize << admitted.atoms().len() {
             let model = selected(&admitted, mask);

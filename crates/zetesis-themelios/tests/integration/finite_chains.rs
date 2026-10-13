@@ -5,6 +5,7 @@ use crate::support::finite_bindings as reference;
 use proptest::prelude::*;
 use reference::{Models, exhaustive, holds, native, values};
 use themelios_base::source::SourceId;
+use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
@@ -395,44 +396,17 @@ proptest! {
 #[ignore = "requires clingo: original chains match complete clingo answers"]
 fn original_chains_match_complete_clingo_answers() {
     for &(source, atoms) in CASES {
-        let record = reference::external(source, true);
-        let models: Models = record["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .map(|witness| {
-                witness["Value"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|atom| atom.as_str().unwrap().to_owned())
-                    .collect()
-            })
-            .collect();
+        let models = oracle::full_models(&reference::external(source, true));
         assert_eq!(models, expected(atoms), "{source}");
         assert_eq!(native(&formula(source)), models, "{source}");
     }
     for &(source, expanded) in LOCAL_CASES {
-        let record = reference::external(source, true);
-        let native_record = reference::external(expanded, true);
-        let answers = |record: &serde_json::Value| -> Models {
-            record["Call"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-                .map(|witness| {
-                    witness["Value"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|atom| atom.as_str().unwrap().to_owned())
-                        .collect()
-                })
-                .collect()
-        };
-        assert_eq!(answers(&record), answers(&native_record), "{source}");
-        assert_eq!(native(&formula(source)), answers(&record), "{source}");
+        let models = oracle::full_models(&reference::external(source, true));
+        assert_eq!(
+            oracle::full_models(&reference::external(expanded, true)),
+            models,
+            "{source}"
+        );
+        assert_eq!(native(&formula(source)), models, "{source}");
     }
 }

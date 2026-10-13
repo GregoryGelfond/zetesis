@@ -3,8 +3,9 @@
 use crate::support::finite_bindings as reference;
 
 use crate::support::finite_bindings::expected;
-use reference::{Models, exhaustive, external, holds, native, values};
+use reference::{exhaustive, external, holds, native, values};
 use std::collections::BTreeSet;
+use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{admit, canonical, formula};
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
@@ -67,26 +68,7 @@ fn original_occurrences_keep_their_source() {
 fn original_sources_match_clingo_full_models() {
     let mut models = 0;
     for &(source, records) in CASES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut actual = Models::new();
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    assert!(witness["Costs"].is_null());
-                    assert!(
-                        actual.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
+        let actual = oracle::objective_free_models(&external(source, true));
         assert_eq!(actual, expected(records), "{source}");
         assert_eq!(native(&formula(source)), actual, "{source}");
         models += actual.len();

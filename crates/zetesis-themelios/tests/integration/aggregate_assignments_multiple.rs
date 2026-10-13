@@ -2,7 +2,7 @@
 //! in the original formula. The reference evaluator implements the finite
 //! reduct definition without the production reduct masks or countermodel search.
 
-use crate::support::clingo_reports::{enumerated, json_model};
+use crate::support::clingo_reports::enumerated;
 use crate::support::finite_bindings::{Models, exhaustive, native};
 use crate::support::objective_dependency_records as objective_dependencies;
 use crate::support::sourced_admission::{SOURCE, input, options};
@@ -10,6 +10,7 @@ use crate::support::sourced_admission::{SOURCE, input, options};
 use std::collections::BTreeSet;
 
 use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
     ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
     FormulaResource, admit_formula,
@@ -23,7 +24,12 @@ fn cases() -> Vec<Json> {
 }
 
 fn expected(row: &Json) -> Models {
-    row[2].as_array().unwrap().iter().map(json_model).collect()
+    row[2]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(oracle::atoms)
+        .collect()
 }
 
 #[test]
@@ -229,26 +235,7 @@ fn multiple_aggregate_assignments_match_clingo() {
                 .unwrap()
                 .starts_with("clingo version ")
         );
-        assert_eq!(result["Models"]["More"], "no", "{}", row[0]);
-        let witnesses: Vec<_> = result["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .collect();
-        let actual: Models = witnesses
-            .iter()
-            .map(|witness| json_model(&witness["Value"]))
-            .collect();
-        assert_eq!(
-            actual.len(),
-            witnesses.len(),
-            "complete semantic multiplicity"
-        );
-        assert_eq!(
-            result["Models"]["Number"].as_u64().unwrap(),
-            u64::try_from(actual.len()).unwrap()
-        );
+        let actual = oracle::full_models(&result);
         assert_eq!(actual, expected(&row), "{}: {source}", row[0]);
         assert_eq!(actual, native(&input(source).unwrap()), "{}", row[0]);
         assert_eq!(

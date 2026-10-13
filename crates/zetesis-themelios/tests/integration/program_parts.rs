@@ -2,9 +2,7 @@
 
 use crate::support::finite_bindings as reference;
 
-use std::collections::BTreeSet;
-
-use reference::{Models, exhaustive, external, native};
+use reference::{exhaustive, native};
 use themelios_base::source::SourceId;
 use zetesis_reference_support::formula;
 use zetesis_themelios::{
@@ -62,29 +60,10 @@ fn explicit_base_matches_exhaustive_reduct_checking() {
 #[test]
 #[ignore = "requires clingo: explicit base matches clingo full models"]
 fn explicit_base_matches_clingo_full_models() {
-    for &(source, _) in CASES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    let model: BTreeSet<_> = witness["Value"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|atom| atom.as_str().unwrap().to_owned())
-                        .collect();
-                    assert!(expected.insert(model), "duplicate full model");
-                }
-            }
-        }
-        assert_eq!(
-            result["Models"]["Number"].as_u64(),
-            Some(expected.len() as u64)
-        );
-        assert_eq!(native(&formula(source)), expected, "{source}");
-    }
+    reference::original_sources_match_clingo_full_models(
+        CASES.iter().map(|&(source, _)| source),
+        formula,
+    );
 }
 
 #[test]

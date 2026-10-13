@@ -1,7 +1,7 @@
 //! Local witnesses retain complete atoms under structural selection.
 use crate::support::finite_bindings as reference;
 use crate::support::witnesses::limited;
-use reference::{Models, exhaustive, external, native, values};
+use reference::{Models, exhaustive, native, values};
 use std::collections::BTreeSet;
 use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
@@ -222,40 +222,12 @@ fn conditional_truth_matches_quantified_witnesses() {
 #[test]
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
-    let mut total = 0;
-    for source in CASES
-        .iter()
-        .map(|&(source, _)| source)
-        .chain(NEGATIVE_ANONYMOUS_CASES.iter().map(|&(source, _)| source))
-    {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    assert!(
-                        expected.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&formula(source)), expected, "{source}");
-        total += count;
-    }
-    println!(
-        "complete_sources={} full_models={total}",
-        CASES.len() + NEGATIVE_ANONYMOUS_CASES.len()
+    reference::original_sources_match_clingo_full_models(
+        CASES
+            .iter()
+            .map(|&(source, _)| source)
+            .chain(NEGATIVE_ANONYMOUS_CASES.iter().map(|&(source, _)| source)),
+        formula,
     );
 }
 

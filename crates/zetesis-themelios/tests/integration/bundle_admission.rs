@@ -415,35 +415,10 @@ fn external(directory: &Path) -> Models {
         oracle::Limits::default(),
     );
     let json = oracle::json(&run);
-    assert_eq!(
-        json["Models"]["More"], "no",
-        "complete external enumeration"
-    );
-    assert!(matches!(
-        json["Result"].as_str(),
-        Some("SATISFIABLE" | "UNSATISFIABLE")
-    ));
-    let mut models = BTreeSet::new();
-    for call in json["Call"].as_array().expect("oracle calls") {
-        if let Some(witnesses) = call["Witnesses"].as_array() {
-            for witness in witnesses {
-                let atoms = witness["Value"]
-                    .as_array()
-                    .expect("oracle atom identities")
-                    .iter()
-                    .map(|value| oracle_atom(value.as_str().expect("whole atom string")))
-                    .collect();
-                assert!(models.insert(atoms), "distinct oracle models");
-            }
-        }
-    }
-    assert_eq!(
-        u64::try_from(models.len()).expect("model count"),
-        json["Models"]["Number"]
-            .as_u64()
-            .expect("oracle model count")
-    );
-    models
+    oracle::objective_free_models(&json)
+        .iter()
+        .map(|atoms| atoms.iter().map(|spelling| oracle_atom(spelling)).collect())
+        .collect()
 }
 
 fn oracle_atom(source: &str) -> Atom {

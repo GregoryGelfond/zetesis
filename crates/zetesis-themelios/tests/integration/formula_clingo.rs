@@ -155,28 +155,12 @@ fn external(source: &str) -> Option<Models> {
         "clingo failed: {}",
         String::from_utf8_lossy(run.stderr())
     );
-    assert!(matches!(
-        json["Result"].as_str(),
-        Some("SATISFIABLE" | "UNSATISFIABLE")
-    ));
-    assert_eq!(json["Models"]["More"], "no", "exhaustive oracle coverage");
-    let mut models = Models::new();
-    for call in json["Call"].as_array().expect("oracle calls") {
-        if let Some(witnesses) = call["Witnesses"].as_array() {
-            for witness in witnesses {
-                assert!(
-                    models.insert(model(&witness["Value"])),
-                    "unique oracle model"
-                );
-            }
-        }
-    }
-    assert_eq!(
-        u64::try_from(models.len()).expect("bounded model count"),
-        json["Models"]["Number"].as_u64().expect("oracle count"),
-        "complete identity-preserving model count"
-    );
-    Some(models)
+    Some(
+        oracle::objective_free_models(&json)
+            .iter()
+            .map(|atoms| atoms.iter().map(|spelling| atom(spelling)).collect())
+            .collect(),
+    )
 }
 
 #[test]

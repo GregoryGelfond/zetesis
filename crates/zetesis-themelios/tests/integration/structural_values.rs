@@ -1,7 +1,7 @@
 //! Closed structures remain complete semantic atom and contribution identities.
 use crate::support::finite_bindings as reference;
 use reference::{Models, exhaustive, native};
-use std::collections::BTreeSet;
+use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
@@ -195,22 +195,7 @@ fn unsupported_structural_sources_remain_refused() {
 #[ignore = "requires clingo: closed structures match clingo; original structural sources with exact full models"]
 fn closed_structures_match_clingo() {
     for (source, wanted) in cases() {
-        let out = reference::external(source, true);
-        assert_eq!(out["Models"]["More"], "no");
-        let models: Models = out["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|c| c["Witnesses"].as_array().into_iter().flatten())
-            .map(|w| {
-                w["Value"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|a| a.as_str().unwrap().to_owned())
-                    .collect::<BTreeSet<_>>()
-            })
-            .collect();
+        let models = oracle::full_models(&reference::external(source, true));
         assert_eq!(models, wanted, "{source}");
         assert_eq!(native(&formula(source)), wanted);
     }

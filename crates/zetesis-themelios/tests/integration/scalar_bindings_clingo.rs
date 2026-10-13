@@ -41,18 +41,10 @@ fn cases() -> Vec<Case> {
                     .as_array()
                     .expect("recorded models")
                     .iter()
-                    .map(atoms)
+                    .map(oracle::atoms)
                     .collect(),
             }
         })
-        .collect()
-}
-fn atoms(values: &Json) -> BTreeSet<String> {
-    values
-        .as_array()
-        .expect("complete canonical atom identities")
-        .iter()
-        .map(|value| value.as_str().expect("canonical ground atom").to_owned())
         .collect()
 }
 // This fixed corpus has scalar numbers, simple symbols and ordinary quoted
@@ -223,26 +215,7 @@ fn clingo(case: &Case) -> Models {
         assert!(String::from_utf8_lossy(run.stderr()).contains("unsafe"));
         return Models::new();
     }
-    assert_eq!(json["Models"]["More"].as_str(), Some("no"));
-    assert!(matches!(
-        json["Result"].as_str(),
-        Some("SATISFIABLE" | "UNSATISFIABLE")
-    ));
-    let mut models = Models::new();
-    let mut count = 0;
-    for call in json["Call"].as_array().expect("oracle calls") {
-        if let Some(witnesses) = call["Witnesses"].as_array() {
-            for witness in witnesses {
-                count += 1;
-                assert!(
-                    models.insert(atoms(&witness["Value"])),
-                    "duplicate full model"
-                );
-            }
-        }
-    }
-    assert_eq!(json["Models"]["Number"].as_u64(), Some(count));
-    models
+    oracle::objective_free_models(&json)
 }
 #[test]
 #[ignore = "requires clingo: scalar and interval reference models and unsafe cases match fresh clingo; 118 bounded reference source programs"]

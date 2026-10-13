@@ -1,7 +1,7 @@
 //! Positive tuple matching preserves full source atoms and frozen semantics.
 use crate::support::finite_bindings as reference;
 use crate::support::finite_bindings::expected as models;
-use reference::{Models, exhaustive, external, holds, native, values};
+use reference::{exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
@@ -150,34 +150,12 @@ fn every_frozen_pair_matches_explicit_ground_rules() {
 #[test]
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
-    for source in [PROJECTION, EXTREMA_SOURCE]
-        .into_iter()
-        .chain(CASES.iter().map(|&(source, _)| source))
-    {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    assert!(
-                        expected.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&formula(source)), expected, "{source}");
-    }
+    reference::original_sources_match_clingo_full_models(
+        [PROJECTION, EXTREMA_SOURCE]
+            .into_iter()
+            .chain(CASES.iter().map(|&(source, _)| source)),
+        formula,
+    );
 }
 
 #[test]

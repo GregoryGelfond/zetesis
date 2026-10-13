@@ -4,11 +4,12 @@
 use std::collections::BTreeSet;
 use std::fs::{self};
 
-use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected, json_model};
+use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected};
 use crate::support::finite_bindings::{Models, exhaustive, native, values};
 use crate::support::formula_trees::{Formula, world};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
+use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::NodeView as Node;
 use zetesis_reference_support::canonical;
@@ -364,25 +365,11 @@ fn conditional_body_matches_clingo() {
             continue;
         }
         valid += 1;
-        assert_eq!(actual["Models"]["More"], "no");
-        let witnesses: Vec<_> = actual["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .collect();
-        let models: Models = witnesses
-            .iter()
-            .map(|witness| json_model(&witness["Value"]))
-            .collect();
-        assert_eq!(models.len(), witnesses.len());
-        assert_eq!(
-            actual["Models"]["Number"].as_u64(),
-            Some(witnesses.len() as u64)
-        );
+        let records = oracle::model_records(&actual);
+        let models: Models = records.iter().map(|(atoms, _)| atoms.clone()).collect();
         assert_eq!(models, expected(&row), "{}", row["name"]);
         if row["native"] == "admit" {
-            assert!(witnesses.iter().all(|witness| witness["Costs"].is_null()));
+            assert!(records.iter().all(|(_, costs)| costs.is_none()));
             assert_eq!(
                 native(&input(row["source"].as_str().unwrap()).unwrap()),
                 models,

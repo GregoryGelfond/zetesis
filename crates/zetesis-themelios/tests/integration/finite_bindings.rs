@@ -12,6 +12,7 @@ use zetesis_themelios::{
 };
 
 use reference::{Models, exhaustive, holds, native, values};
+use zetesis_clingo_support as oracle;
 
 const SOURCE: SourceId = SourceId::new(113);
 
@@ -357,31 +358,7 @@ fn finite_bindings_match_clingo() {
             .map(|(source, specified)| (source.into(), exhaustive(&input(specified)))),
     );
     for (source, expected) in cases {
-        let actual = reference::external(&source, true);
-        assert_eq!(actual["Models"]["More"], "no", "{source}");
-        let witnesses: Vec<_> = actual["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .collect();
-        assert!(witnesses.iter().all(|witness| witness["Costs"].is_null()));
-        let models: Models = witnesses
-            .iter()
-            .map(|witness| {
-                witness["Value"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|atom| atom.as_str().unwrap().to_owned())
-                    .collect()
-            })
-            .collect();
-        assert_eq!(models.len(), witnesses.len(), "full models are unique");
-        assert_eq!(
-            actual["Models"]["Number"].as_u64().unwrap(),
-            u64::try_from(models.len()).unwrap()
-        );
+        let models = oracle::objective_free_models(&reference::external(&source, true));
         assert_eq!(models, expected, "{source}");
         assert_eq!(native(&input(&source)), expected, "{source}");
     }

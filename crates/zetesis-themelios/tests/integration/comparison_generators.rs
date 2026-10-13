@@ -4,10 +4,11 @@
 use std::collections::BTreeSet;
 use std::fs::{self};
 
-use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected, json_model};
-use crate::support::finite_bindings::{Models, exhaustive, holds, native, remap, values};
+use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected};
+use crate::support::finite_bindings::{exhaustive, holds, native, remap, values};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
+use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::canonical;
 use zetesis_themelios::{
@@ -333,23 +334,7 @@ fn comparison_generators_match_clingo() {
             continue;
         }
         valid += 1;
-        assert_eq!(actual["Models"]["More"], "no");
-        let witnesses: Vec<_> = actual["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .collect();
-        assert!(witnesses.iter().all(|witness| witness["Costs"].is_null()));
-        let models: Models = witnesses
-            .iter()
-            .map(|witness| json_model(&witness["Value"]))
-            .collect();
-        assert_eq!(models.len(), witnesses.len());
-        assert_eq!(
-            actual["Models"]["Number"].as_u64(),
-            Some(witnesses.len() as u64)
-        );
+        let models = oracle::objective_free_models(&actual);
         assert_eq!(models, expected(&row), "{}", row["name"]);
         // Keep the historical fixture and fresh oracle checks unchanged;
         // the mixed-family policy now admits this row with one warning.

@@ -428,28 +428,13 @@ fn construction_scalar_bytes_have_an_inclusive_limit() {
 #[ignore = "requires clingo: complete models match clingo"]
 fn complete_models_match_clingo() {
     let competition = competition();
-    for source in CASES
-        .iter()
-        .map(|(source, _)| *source)
-        .chain([competition.as_str()])
-    {
-        let result = reference::external(source, true);
-        let models: Models = result["Call"]
-            .as_array()
-            .unwrap()
+    reference::original_sources_match_clingo_full_models(
+        CASES
             .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .map(|witness| {
-                witness["Value"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|atom| atom.as_str().unwrap().to_owned())
-                    .collect()
-            })
-            .collect();
-        assert_eq!(native(&formula(source)), models, "{source}");
-    }
+            .map(|(source, _)| *source)
+            .chain([competition.as_str()]),
+        formula,
+    );
 }
 
 proptest::proptest! {
