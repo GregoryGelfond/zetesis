@@ -4,7 +4,7 @@ use zetesis_cpu::{Cancellation, Stop};
 
 use crate::numeric_evaluation::NumericRowScratch;
 use crate::oracle::{Work, evaluate, failed_root, identities, reserve};
-use crate::{Interpretation, Limits, Statistics, Theory};
+use crate::{Interpretation, Limits, Theory};
 
 /// The Ferraris reduct of an immutable theory in one fixed interpretation.
 ///
@@ -52,21 +52,16 @@ impl<'a> FrozenReduct<'a> {
         limits: Limits,
         cancellation: &Cancellation,
     ) -> Result<Self, Stop> {
-        cancellation.settle(Self::freeze_with(candidate, limits, cancellation))
+        cancellation
+            .metered(limits.max_work, |meter| {
+                Self::freeze_with(candidate, Work::new(limits.max_subsets, meter))
+            })
+            .result
     }
 
-    /// [`Self::new`] before its exit settles a resource refusal.
-    fn freeze_with(
-        candidate: &'a Interpretation,
-        limits: Limits,
-        cancellation: &Cancellation,
-    ) -> Result<Self, Stop> {
-        cancellation.poll()?;
-        let mut work = Work {
-            limits,
-            cancellation,
-            statistics: Statistics::default(),
-        };
+    /// [`Self::new`] charged to `work`.
+    fn freeze_with(candidate: &'a Interpretation, mut work: Work<'_, '_>) -> Result<Self, Stop> {
+        work.meter.poll()?;
         let mut numeric = NumericRowScratch::default();
         numeric.reserve(candidate.theory())?;
         Self::freeze(candidate, &mut numeric, &mut work)
@@ -107,23 +102,17 @@ impl<'a> FrozenReduct<'a> {
         limits: Limits,
         cancellation: &Cancellation,
     ) -> Result<bool, Stop> {
-        cancellation.settle(self.satisfaction(tested, limits, cancellation))
+        cancellation
+            .metered(limits.max_work, |meter| {
+                self.satisfaction(tested, Work::new(limits.max_subsets, meter))
+            })
+            .result
     }
 
-    /// [`Self::is_satisfied_by`] before its exit settles a resource refusal.
-    fn satisfaction(
-        &self,
-        tested: &Interpretation,
-        limits: Limits,
-        cancellation: &Cancellation,
-    ) -> Result<bool, Stop> {
+    /// [`Self::is_satisfied_by`] charged to `work`.
+    fn satisfaction(&self, tested: &Interpretation, mut work: Work<'_, '_>) -> Result<bool, Stop> {
         identities(self.theory(), tested)?;
-        cancellation.poll()?;
-        let mut work = Work {
-            limits,
-            cancellation,
-            statistics: Statistics::default(),
-        };
+        work.meter.poll()?;
         let mut values = reserve(self.truth.len())?;
         let mut numeric = NumericRowScratch::default();
         numeric.reserve(self.theory())?;
@@ -136,7 +125,7 @@ impl<'a> FrozenReduct<'a> {
     pub(super) fn freeze(
         candidate: &'a Interpretation,
         numeric: &mut NumericRowScratch,
-        work: &mut Work<'_>,
+        work: &mut Work<'_, '_>,
     ) -> Result<Self, Stop> {
         let mut truth = reserve(candidate.theory().nodes().len())?;
         evaluate(
@@ -157,7 +146,7 @@ impl<'a> FrozenReduct<'a> {
         tested: &Interpretation,
         values: &mut Vec<bool>,
         numeric: &mut NumericRowScratch,
-        work: &mut Work<'_>,
+        work: &mut Work<'_, '_>,
     ) -> Result<bool, Stop> {
         evaluate(
             self.theory(),

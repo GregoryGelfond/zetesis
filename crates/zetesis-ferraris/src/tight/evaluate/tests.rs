@@ -39,16 +39,11 @@ fn checks_retain_their_scratch_allocations() {
 fn decisive_operands_do_not_require_suffix_work() {
     let cancellation = Cancellation::default();
     for (conjunction, values) in [(true, [0, 1, 1]), (false, [1, 0, 0])] {
-        let mut work = Work {
-            used: Charged(0),
-            max: 1,
-            cancellation: cancellation.polling(),
-        };
-        assert_eq!(
-            evaluate_operands(&[0, 1, 2], &values, conjunction, &mut work),
-            Ok(!conjunction),
-        );
-        assert_eq!(work.used.0, 1);
+        let metered = cancellation.metered(1, |meter| {
+            evaluate_operands(&[0, 1, 2], &values, conjunction, meter)
+        });
+        assert_eq!(metered.result, Ok(!conjunction));
+        assert_eq!(metered.charged, 1);
     }
 }
 
@@ -58,15 +53,12 @@ fn nondecisive_operands_require_the_complete_group() {
     for conjunction in [false, true] {
         let values = [u8::from(conjunction); 3];
         for max in [2, 3] {
-            let mut work = Work {
-                used: Charged(0),
-                max,
-                cancellation: cancellation.polling(),
-            };
-            let result = evaluate_operands(&[0, 1, 2], &values, conjunction, &mut work);
-            assert_eq!(work.used.0, max);
+            let metered = cancellation.metered(max, |meter| {
+                evaluate_operands(&[0, 1, 2], &values, conjunction, meter)
+            });
+            assert_eq!(metered.charged, max);
             assert_eq!(
-                result,
+                metered.result,
                 if max == 3 {
                     Ok(conjunction)
                 } else {

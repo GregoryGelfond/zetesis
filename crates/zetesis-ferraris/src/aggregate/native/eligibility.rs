@@ -1,6 +1,6 @@
 //! Actual occurrence masks acquired with the existing topological formula evaluator.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, Meter, Stop};
 
 use super::{
     Error, ErrorKind, Group, GroupRef, Reduction, ReductionLimits, Resource, Statistics, add, bytes,
@@ -130,14 +130,12 @@ impl<'a> GroupRef<'a> {
         cancellation: &Cancellation,
     ) -> Result<Eligibility<'a>, Error> {
         let mut statistics = Statistics::default();
-        let result = cancellation.settle(self.acquire(
-            candidate,
-            tested,
-            limits,
-            cancellation,
-            &mut statistics,
-        ));
-        result
+        let metered = cancellation.metered(limits.max_work, |meter| {
+            self.acquire(candidate, tested, limits, &mut statistics, meter)
+        });
+        statistics.work = metered.charged;
+        metered
+            .result
             .map(|(original, frozen)| Eligibility {
                 group: self,
                 candidate,
@@ -154,10 +152,10 @@ impl<'a> GroupRef<'a> {
         candidate: &Interpretation,
         tested: Option<&Interpretation>,
         limits: EligibilityLimits,
-        cancellation: &Cancellation,
         statistics: &mut Statistics,
+        meter: &mut Meter<'_>,
     ) -> Result<(Vec<bool>, Option<Vec<bool>>), ErrorKind> {
-        cancellation.poll().map_err(ErrorKind::Stopped)?;
+        meter.poll().map_err(ErrorKind::Stopped)?;
         if !self.data.theory.same_instance(candidate.theory())
             || tested.is_some_and(|tested| !self.data.theory.same_instance(tested.theory()))
         {
@@ -181,25 +179,16 @@ impl<'a> GroupRef<'a> {
         if statistics.peak_bytes > limits.max_bytes {
             return Err(ErrorKind::Limit(Resource::Bytes));
         }
-        let mut work = oracle::Work {
-            limits: oracle::Limits {
-                max_work: limits.max_work,
-                max_subsets: 0,
-            },
-            cancellation,
-            statistics: oracle::Statistics::default(),
-        };
-        let result = observations(
+        let mut work = oracle::Work::new(0, meter);
+        let observations = observations(
             *self,
             candidate,
             tested,
             limits.max_bytes,
             statistics,
             &mut work,
-        );
-        statistics.work = work.statistics.work;
-        let observations = result?;
-        cancellation.poll().map_err(ErrorKind::Stopped)?;
+        )?;
+        work.meter.poll().map_err(ErrorKind::Stopped)?;
         Ok(observations)
     }
 }
@@ -299,7 +288,7 @@ fn observations(
     tested: Option<&Interpretation>,
     limit: u64,
     statistics: &mut Statistics,
-    work: &mut oracle::Work<'_>,
+    work: &mut oracle::Work<'_, '_>,
 ) -> Result<(Vec<bool>, Option<Vec<bool>>), ErrorKind> {
     let mut buffers = Observations::default();
     buffers.reserve(
@@ -342,7 +331,7 @@ fn project(
     group: GroupRef<'_>,
     nodes: &[bool],
     mask: &mut Vec<bool>,
-    work: &mut oracle::Work<'_>,
+    work: &mut oracle::Work<'_, '_>,
 ) -> Result<(), ErrorKind> {
     for tuple in &group.data.tuples {
         work.tick().map_err(stopped)?;

@@ -8,11 +8,14 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 - Prime-sieve and subset-sum examples in the maintained correctness and scaling
   comparisons, with complete-answer checks against clingo.
-- `Cancellation::charge` and `Cancellation::settle`, with their `CancellationPoll`
-  forms, `ChargeError`, the `Refusal` classification and `POLL_INTERVAL`, give
+- `Cancellation::metered` runs a metered computation with a `Meter`, which holds
+  the computation's local work limit, and settles its outcome where it returns.
+  With `ChargeError`, the `Refusal` classification and `POLL_INTERVAL`, it gives
   metered computations one rule for charging work, observing control and letting
-  a requested stop take precedence over resource refusals. The error type of
-  each metered operation implements `Refusal`.
+  a requested stop take precedence over resource refusals. A nested metered
+  computation charges the enclosing meter; `Meter::remaining` and `Meter::absorb`
+  count the reported work of a nested operation that meters itself another way.
+  The error type of each metered operation implements `Refusal`.
 
 ### Changed
 

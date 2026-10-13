@@ -1,7 +1,7 @@
 //! Necessary support for complete mixed ordinary/atomic-choice theories.
 
 use crate::{AdmissionError, AdmissionLimits, ExtremumCut, FormulaNodes, NodeView, Theory};
-use zetesis_cpu::{Cancellation, Refusal, Stop};
+use zetesis_cpu::{Cancellation, Meter, Refusal, Stop};
 
 #[cfg(test)]
 mod tests;
@@ -106,30 +106,31 @@ pub fn support_restriction(
     limits: SupportLimits,
     cancellation: &Cancellation,
 ) -> SupportAttempt {
-    let mut builder = Builder {
-        limits,
-        cancellation,
-        work: 0,
-        nodes: FormulaNodes::default(),
-    };
-    let result = cancellation.settle(builder.build(theory));
+    let metered = cancellation.metered(limits.max_work, |meter| {
+        Builder {
+            limits,
+            meter,
+            nodes: FormulaNodes::default(),
+        }
+        .build(theory)
+    });
     SupportAttempt {
-        result,
-        work: builder.work,
+        result: metered.result,
+        work: metered.charged,
     }
 }
 
-struct Builder<'a> {
+/// One construction's limits, meter and the restriction under construction.
+struct Builder<'a, 'c> {
     limits: SupportLimits,
-    cancellation: &'a Cancellation,
-    work: u64,
+    meter: &'a mut Meter<'c>,
     nodes: FormulaNodes,
 }
 
-impl Builder<'_> {
+impl Builder<'_, '_> {
     fn tick(&mut self) -> Result<(), SupportError> {
-        self.cancellation
-            .charge(&mut self.work, self.limits.max_work)
+        self.meter
+            .charge()
             .map_err(|error| error.into_stop().into())
     }
 
@@ -199,7 +200,7 @@ impl Builder<'_> {
     }
 
     fn applicable(&mut self, theory: &Theory) -> Result<bool, SupportError> {
-        self.cancellation.poll()?;
+        self.meter.poll()?;
         if theory.atom_count() > self.limits.admission.max_atoms
             || theory.atom_count() > self.limits.admission.max_roots
             || theory.nodes().len() > self.limits.admission.max_nodes

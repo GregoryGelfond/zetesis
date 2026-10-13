@@ -1,45 +1,48 @@
-//! The certificate's work limit observes a requested stop before refusing, and
-//! settling one of its other resource refusals reports the stop; that
-//! compilation, certification and checks settle at their exits is read from
-//! their code, not tested here.
+//! The certificate's work limit observes a requested stop before refusing, and a
+//! byte refusal settled where a metered operation returns, as the certificate's
+//! own refusals are, becomes a requested stop.
 
-use super::{Charged, TightError, TightResource, Work, bytes};
+use super::{Tick, TightError, TightResource, bytes};
 use zetesis_cpu::{Cancellation, Refusal, Stop};
 
 #[test]
 fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
-    let tick = |cancellation: &Cancellation| {
-        Work {
-            used: Charged(7),
-            max: 7,
-            cancellation: cancellation.polling(),
-        }
-        .tick()
+    // The tick's own report, returned as a value so the exit leaves it alone.
+    let tick = |stop: bool| {
+        let cancellation = Cancellation::default();
+        cancellation
+            .metered(7, |meter| {
+                for _ in 0..7 {
+                    meter.charge().unwrap();
+                }
+                if stop {
+                    cancellation.cancel();
+                }
+                Ok::<_, TightError>(meter.tick())
+            })
+            .result
+            .unwrap()
     };
-    let cancellation = Cancellation::default();
-    assert_eq!(
-        tick(&cancellation),
-        Err(TightError::Limit(TightResource::Work))
-    );
-    cancellation.cancel();
-    assert_eq!(
-        tick(&cancellation),
-        Err(TightError::Stopped(Stop::Cancelled))
-    );
+    assert_eq!(tick(false), Err(TightError::Limit(TightResource::Work)));
+    assert_eq!(tick(true), Err(TightError::Stopped(Stop::Cancelled)));
 }
 
 #[test]
 fn a_byte_refusal_settles_to_a_requested_stop() {
     assert_eq!(bytes(8, 8), Ok(8));
-    let refusal = bytes(9, 8);
-    assert_eq!(refusal, Err(TightError::Limit(TightResource::Bytes)));
-    let cancellation = Cancellation::default();
-    assert_eq!(cancellation.settle(refusal), refusal);
-    cancellation.cancel();
-    assert_eq!(
-        cancellation.settle(refusal),
-        Err(TightError::Stopped(Stop::Cancelled))
-    );
+    let refused = |stop: bool| {
+        let cancellation = Cancellation::default();
+        cancellation
+            .metered(u64::MAX, |_| {
+                if stop {
+                    cancellation.cancel();
+                }
+                bytes(9, 8)
+            })
+            .result
+    };
+    assert_eq!(refused(false), Err(TightError::Limit(TightResource::Bytes)));
+    assert_eq!(refused(true), Err(TightError::Stopped(Stop::Cancelled)));
 }
 
 #[test]

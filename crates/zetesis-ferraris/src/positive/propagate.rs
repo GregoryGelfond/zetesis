@@ -11,7 +11,7 @@ pub(super) fn complete(
     theory: &Theory,
     graph: &mut Graph,
     words: &mut [u64],
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<(), PositiveError> {
     seed(theory, graph, budget)?;
     let mut next = 0;
@@ -48,7 +48,7 @@ fn activate(
     vertex: usize,
     atoms: usize,
     graph: &mut Graph,
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<(), PositiveError> {
     if graph.states[vertex] != State::True {
         budget.tick()?;
@@ -63,7 +63,11 @@ fn activate(
     Ok(())
 }
 
-fn seed(theory: &Theory, graph: &mut Graph, budget: &mut Budget<'_>) -> Result<(), PositiveError> {
+fn seed(
+    theory: &Theory,
+    graph: &mut Graph,
+    budget: &mut Budget<'_, '_>,
+) -> Result<(), PositiveError> {
     for index in 0..theory.view().len() {
         budget.tick()?;
         let node = theory

@@ -16,8 +16,8 @@ producer proofs remain separate. Historical source records do not qualify change
 native operations.
 
 The native control representation uses a borrowed `CancellationPoll` view:
-the owning poll delegates through it, and tight work retains it for repeated
-polls. The conversion retains the represented flag references and slot identity
+the owning poll delegates through it, and a metered operation's meter retains it
+for repeated polls. The conversion retains the represented flag references and slot identity
 under the same fixed per-invocation observation model. It adds no concurrent
 atomic, Rust lifetime, timer or dynamic-response guarantee. The historical
 `Evaluator` results below keep their original control representation.

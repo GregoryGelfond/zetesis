@@ -646,8 +646,8 @@ uses the existing body recognizer. The native outer classifier, exact syntax
 recognition and producer composition remain separate obligations.
 
 The native production control path borrows a `CancellationPoll` view. The owning
-poll delegates through that view, and tight work retains it between operation
-boundaries. The borrowing conversion preserves the represented flag references
+poll delegates through that view, and a metered operation's meter retains it
+between operation boundaries. The borrowing conversion preserves the represented flag references
 and slot identity under the same fixed per-invocation observation contract.
 This correspondence does not extend to concurrent atomic behavior, Rust borrow
 lifetimes, timers or eventual response to changing control flags.

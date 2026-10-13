@@ -4,8 +4,8 @@ use std::{fmt, mem::size_of_val};
 
 use crate::numeric_evaluation::NumericRowScratch;
 use crate::oracle::{Work, evaluate, failed_root};
-use crate::{Interpretation, Limits, Statistics, Theory};
-use zetesis_cpu::{Cancellation, Refusal, Stop};
+use crate::{Interpretation, Limits, Theory};
+use zetesis_cpu::{Cancellation, Meter, Refusal, Stop};
 
 /// Per-evaluation bounds, including storage retained from earlier evaluations.
 #[derive(Clone, Copy, Debug)]
@@ -142,18 +142,48 @@ impl EvaluationWorkspace {
         limits: EvaluationLimits,
         cancellation: &Cancellation,
     ) -> EvaluationAttempt<'a> {
-        let mut work = Work {
-            limits: Limits {
-                max_work: limits.max_work,
-                max_subsets: 0,
-            },
+        let metered = cancellation.metered(limits.max_work, |meter| {
+            self.evaluate_into(
+                interpretation,
+                limits.max_bytes,
+                cancellation,
+                &mut Work::new(0, meter),
+            )
+        });
+        self.attempt(interpretation, metered.result, metered.charged)
+    }
+
+    /// Evaluate as [`Self::evaluate`] does, as part of an enclosing metered
+    /// operation: the evaluation charges that operation's meter, so its work
+    /// counts toward that operation's limit, the meter's cadence continues
+    /// through it, and the enclosing operation's exit settles its outcome.
+    /// The attempt reports the work charged here.
+    pub(crate) fn evaluate_within<'a>(
+        &'a mut self,
+        interpretation: &'a Interpretation,
+        max_bytes: usize,
+        cancellation: &Cancellation,
+        meter: &mut Meter<'_>,
+    ) -> EvaluationAttempt<'a> {
+        let before = meter.charged();
+        let result = self.evaluate_into(
+            interpretation,
+            max_bytes,
             cancellation,
-            statistics: Statistics::default(),
-        };
-        let result =
-            cancellation.settle(self.evaluate_into(interpretation, limits.max_bytes, &mut work));
+            &mut Work::new(0, meter),
+        );
+        let work = meter.charged() - before;
+        self.attempt(interpretation, result, work)
+    }
+
+    fn attempt<'a>(
+        &'a self,
+        interpretation: &'a Interpretation,
+        result: Result<Option<usize>, EvaluationError>,
+        work: u64,
+    ) -> EvaluationAttempt<'a> {
         EvaluationAttempt {
-            work: work.statistics.work,
+            work,
             retained_bytes: self.retained_bytes(),
             result: result.map(|failed_root| FormulaEvaluation {
                 interpretation,
@@ -167,10 +197,11 @@ impl EvaluationWorkspace {
         &mut self,
         interpretation: &Interpretation,
         max_bytes: usize,
-        work: &mut Work<'_>,
+        cancellation: &Cancellation,
+        work: &mut Work<'_, '_>,
     ) -> Result<Option<usize>, EvaluationError> {
         let theory = interpretation.theory();
-        self.reserve(theory, max_bytes, work.cancellation)?;
+        self.reserve(theory, max_bytes, cancellation)?;
         evaluate(
             theory,
             interpretation,

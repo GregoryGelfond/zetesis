@@ -14,7 +14,7 @@ mod validation;
 use std::{fmt, mem::size_of};
 
 use crate::{Interpretation, Theory};
-use zetesis_cpu::{Cancellation, ChargeError, Refusal, Stop};
+use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
 
 /// Independent limits for complete-root classification and least closure.
 #[derive(Clone, Copy, Debug)]
@@ -229,26 +229,30 @@ impl PositivePlan {
         limits: PositivePlanLimits,
         cancellation: &Cancellation,
     ) -> PositiveAttempt {
-        let mut budget = Budget {
-            limits,
-            cancellation,
-            statistics: PositivePlanStatistics::default(),
-            current_bytes: 0,
-        };
-        let result = cancellation.settle(compile::build(theory, &mut budget));
-        let result = result.map(|(least, failed_constraint)| {
-            budget.statistics.retained_bytes = size_of::<Self>() as u128
+        let mut statistics = PositivePlanStatistics::default();
+        let metered = cancellation.metered(limits.max_work, |meter| {
+            compile::build(
+                theory,
+                &mut Budget {
+                    limits,
+                    cancellation,
+                    meter,
+                    statistics: &mut statistics,
+                    current_bytes: 0,
+                },
+            )
+        });
+        statistics.work = metered.charged;
+        let result = metered.result.map(|(least, failed_constraint)| {
+            statistics.retained_bytes = size_of::<Self>() as u128
                 + least.words.capacity() as u128 * size_of::<u64>() as u128;
             Self {
                 least,
                 failed_constraint,
-                statistics: budget.statistics,
+                statistics,
             }
         });
-        PositiveAttempt {
-            result,
-            statistics: budget.statistics,
-        }
+        PositiveAttempt { result, statistics }
     }
 
     /// Exact immutable original theory; equality of independently built theories
@@ -287,25 +291,25 @@ pub struct PositiveAttempt {
     pub statistics: PositivePlanStatistics,
 }
 
-struct Budget<'a> {
+/// One compilation's limits, meter, statistics and simultaneous bytes. The
+/// statistics' work is the meter's, filled in where the compilation returns.
+struct Budget<'a, 'c> {
     limits: PositivePlanLimits,
-    cancellation: &'a Cancellation,
-    statistics: PositivePlanStatistics,
+    cancellation: &'c Cancellation,
+    meter: &'a mut Meter<'c>,
+    statistics: &'a mut PositivePlanStatistics,
     current_bytes: u128,
 }
 
-impl Budget<'_> {
+impl Budget<'_, '_> {
     fn tick(&mut self) -> Result<(), PositiveError> {
-        match self
-            .cancellation
-            .charge(&mut self.statistics.work, self.limits.max_work)
-        {
+        match self.meter.charge() {
             Ok(()) => Ok(()),
             Err(ChargeError::Stopped(stop)) => Err(stop.into()),
             Err(ChargeError::WorkLimit) => Err(PositiveError::Limit {
                 resource: PositiveResource::Work,
-                observed: u128::from(self.statistics.work) + 1,
-                limit: u128::from(self.limits.max_work),
+                observed: u128::from(self.meter.charged()) + 1,
+                limit: u128::from(self.meter.limit()),
             }),
         }
     }
@@ -340,7 +344,7 @@ impl Budget<'_> {
     }
 
     fn reserve<T>(&mut self, count: usize) -> Result<Vec<T>, PositiveError> {
-        self.cancellation.poll()?;
+        self.meter.poll()?;
         let requested = self
             .current_bytes
             .checked_add(count as u128 * size_of::<T>() as u128)

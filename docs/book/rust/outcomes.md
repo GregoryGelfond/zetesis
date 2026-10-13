@@ -320,30 +320,47 @@ Repeated polls can retain `Cancellation::polling()`'s borrowed
 `CancellationPoll` view. Preparing the view resolves the token's flag references
 and slot identity once, without allocation or reference-count updates. Each poll
 still reads the live flags in the same order. The view borrows the token; it
-neither owns a run guard nor extends a deadline. Tight certificate preparation
-and formula checking retain this view.
+neither owns a run guard nor extends a deadline. Every metered operation's meter
+retains this view for its repeated polls.
 
-Operations that charge work per formula node or edge observe control at metered
-boundaries: before their first charged operation and at least once every
-`zetesis_cpu::POLL_INTERVAL` (256) charged operations thereafter, so at most 255
-further charged operations follow a requested stop. A refused work charge
-observes control first, and each operation settles its outcome at its exit: when
-it would report a resource refusal (work, storage, a named ceiling, a size the
-host cannot represent, or an allocation), it observes control and reports a
-requested stop instead. A requested stop therefore takes precedence over every
-resource refusal; errors about the program's shape, identity or invariants are
-reported as found. `Cancellation::charge` carries the cadence, and
-`Cancellation::settle` with each error type's `Refusal` classification carries the
-precedence; both have `CancellationPoll` forms. These operations are original and
-frozen formula evaluation (with the exhaustive reference check and native
-aggregate eligibility), the tight, positive and stratified certificates, support
-construction, partition construction and restriction emission, and static closure
-checks; each settles its outcome where it returns. Narrowing observes control at
-the same interval through its quota. Coarser operations, such as objective
-reduction and search decisions, still poll before every charged step. A
-computation that completes between two boundaries may return its complete result
-before observing a stop requested since its last observation; static closure
-checks and partition construction poll again before returning a completed result.
+Metered operations charge work per formula node or edge against a local work
+limit and observe control at metered boundaries: before their first charged
+operation and at least once every `zetesis_cpu::POLL_INTERVAL` (256) charged
+operations thereafter, so at most 255 further charged operations follow a
+requested stop. A refused work charge observes control first, and each operation
+settles its outcome at its exit: when it would report a resource refusal (work,
+storage, a named ceiling, a size the host cannot represent, or an allocation), it
+observes control and reports a requested stop instead. A requested stop
+therefore takes precedence over every resource refusal; errors about the
+program's shape, identity or invariants are reported as found. These operations
+are original and frozen formula evaluation (with the exhaustive reference check
+and native aggregate eligibility), the tight, positive and stratified
+certificates, support construction, partition construction and restriction
+emission, and static closure checks. Each charges a `zetesis_cpu::Meter`, which
+carries the cadence, and runs inside `Cancellation::metered`, the only source of
+a meter, which settles the outcome where the operation returns with its error
+type's `Refusal` classification; none of them can skip the precedence.
+
+A metered operation that runs another's body passes it its own meter. The
+positive and stratified certificates evaluate original truth this way, so the
+evaluation's work counts toward the certificate's limit, the cadence continues
+through it, and the certificate's exit settles both. Restriction emission lowers
+cardinality bounds through aggregate lowering, an operation of another
+arrangement that polls before every step: the lowering runs under the meter's
+remaining allowance, and the work it reports is counted when it returns.
+
+Narrowing meters its reads through a second arrangement: permits from a
+`NarrowingQuota`, at most `NARROWING_BATCH` (`POLL_INTERVAL`) at a time. A quota
+that polls control does so when it grants a batch; the solver's quota observes
+control before every grant, so a requested stop takes precedence over its
+exhausted allowance. The library's fixed-ceiling route (`Narrower::narrow_known`,
+`Narrower::narrow_frozen_known` and `producers`) has no quota: it observes
+control once, before its first read, and refuses its ceiling without observing
+control again. Coarser operations, such as objective reduction, search decisions
+and aggregate lowering, still poll before every charged step. A computation that
+completes between two boundaries may return its complete result before observing
+a stop requested since its last observation; static closure checks and partition
+construction poll again before returning a completed result.
 
 Cancellation is observed at cooperative polling boundaries, not by forcibly
 terminating arbitrary work. A future deadline owns a timer that sets an expiry

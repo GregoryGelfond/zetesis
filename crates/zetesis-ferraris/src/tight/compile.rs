@@ -1,11 +1,11 @@
 use std::mem::size_of;
 
 use super::{
-    Charged, TightAttempt, TightError, TightPlan, TightPlanLimits, TightPlanStatistics,
-    TightProducer, TightProducerKind, TightResource, Work, bytes, filled, reserve,
+    Tick, TightAttempt, TightError, TightPlan, TightPlanLimits, TightPlanStatistics, TightProducer,
+    TightProducerKind, TightResource, bytes, filled, reserve,
 };
 use crate::{ExtremumCut, NodeView, Theory, Threshold};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, Meter, Stop};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Body {
@@ -56,15 +56,11 @@ impl TightPlan {
         limits: TightPlanLimits,
         cancellation: &Cancellation,
     ) -> TightAttempt<Self> {
-        let mut work = Work {
-            used: Charged(0),
-            max: limits.max_work,
-            cancellation: cancellation.polling(),
-        };
-        let result = cancellation.settle(build(theory, None, limits, &mut work));
+        let metered =
+            cancellation.metered(limits.max_work, |meter| build(theory, None, limits, meter));
         TightAttempt {
-            result,
-            work: work.used.0,
+            result: metered.result,
+            work: metered.charged,
         }
     }
 
@@ -80,16 +76,15 @@ impl TightPlan {
         limits: TightPlanLimits,
         cancellation: &Cancellation,
     ) -> Result<Self, TightError> {
-        let mut work = Work {
-            used: Charged(0),
-            max: limits.max_work,
-            cancellation: cancellation.polling(),
-        };
-        cancellation.settle(build(theory, Some(ranks), limits, &mut work))
+        cancellation
+            .metered(limits.max_work, |meter| {
+                build(theory, Some(ranks), limits, meter)
+            })
+            .result
     }
 }
 
-fn classify(theory: &Theory, work: &mut Work<'_>) -> Result<Vec<Body>, TightError> {
+fn classify(theory: &Theory, work: &mut Meter<'_>) -> Result<Vec<Body>, TightError> {
     let mut classes = reserve(theory.nodes().len())?;
     for index in 0..theory.view().len() {
         classify_step(theory, index, &mut classes, work)?;
@@ -102,7 +97,7 @@ fn classify_step(
     theory: &Theory,
     index: usize,
     classes: &mut Vec<Body>,
-    work: &mut Work<'_>,
+    work: &mut Meter<'_>,
 ) -> Result<(), TightError> {
     work.tick()?;
     let class = classify_node(theory, index, classes, work)?;
@@ -116,7 +111,7 @@ fn classify_node(
     theory: &Theory,
     index: usize,
     classes: &[Body],
-    work: &mut Work<'_>,
+    work: &mut Meter<'_>,
 ) -> Result<Body, TightError> {
     match theory
         .view()
@@ -148,7 +143,7 @@ fn classify_node(
 fn classify_cut(
     cut: ExtremumCut<'_>,
     classes: &[Body],
-    work: &mut Work<'_>,
+    work: &mut Meter<'_>,
 ) -> Result<Body, TightError> {
     if cut.endpoint_truth().is_some() {
         return Ok(Body::Frozen);
@@ -170,7 +165,7 @@ fn classify_cut(
 fn classify_threshold(
     threshold: Threshold<'_>,
     classes: &[Body],
-    work: &mut Work<'_>,
+    work: &mut Meter<'_>,
 ) -> Result<Body, TightError> {
     let mut total = 0_i128;
     let mut class = Body::Frozen;
@@ -197,7 +192,7 @@ fn classify_threshold(
 fn classify_operands(
     operands: &[usize],
     classes: &[Body],
-    work: &mut Work<'_>,
+    work: &mut Meter<'_>,
 ) -> Result<Body, TightError> {
     let mut class = Body::Frozen;
     for &child in operands {
@@ -256,7 +251,7 @@ fn extract(
     theory: &Theory,
     classes: &[Body],
     limits: TightPlanLimits,
-    work: &mut Work<'_>,
+    work: &mut Meter<'_>,
 ) -> Result<Vec<TightProducer>, TightError> {
     let mut count = 0usize;
     for &root in theory.roots() {
@@ -287,7 +282,7 @@ fn each_dependency(
     theory: &Theory,
     classes: &[Body],
     producers: &[TightProducer],
-    work: &mut Work<'_>,
+    work: &mut Meter<'_>,
     mut visit: impl FnMut(usize, usize, bool) -> Result<(), TightError>,
 ) -> Result<(), TightError> {
     let offset = theory.atom_count();
@@ -345,9 +340,9 @@ fn build(
     theory: &Theory,
     proposed: Option<&[usize]>,
     limits: TightPlanLimits,
-    work: &mut Work<'_>,
+    work: &mut Meter<'_>,
 ) -> Result<TightPlan, TightError> {
-    work.cancellation.poll()?;
+    work.poll()?;
     bytes(
         theory.nodes().len() as u128 * size_of::<Body>() as u128,
         limits.max_bytes,
@@ -396,7 +391,7 @@ fn build(
         producers,
         ranks,
         statistics: TightPlanStatistics {
-            work: work.used.0,
+            work: work.charged(),
             dependencies,
             construction_bytes,
             resident_bytes,
@@ -410,7 +405,7 @@ fn derive_ranks(
     producers: &[TightProducer],
     vertices: usize,
     dependency_count: usize,
-    work: &mut Work<'_>,
+    work: &mut Meter<'_>,
 ) -> Result<Vec<usize>, TightError> {
     let mut links = filled(vertices, END)?;
     let mut indegrees = filled(vertices, 0usize)?;
@@ -478,7 +473,7 @@ fn validate_ranks(
     classes: &[Body],
     producers: &[TightProducer],
     ranks: &[usize],
-    work: &mut Work<'_>,
+    work: &mut Meter<'_>,
 ) -> Result<(), TightError> {
     if ranks.len() != theory.atom_count() {
         return Err(TightError::RankShape);
@@ -543,7 +538,7 @@ fn validate_ranks(
 fn maximum_operand(
     operands: &[usize],
     maximum: &[usize],
-    work: &mut Work<'_>,
+    work: &mut Meter<'_>,
 ) -> Result<usize, TightError> {
     let mut value = 0;
     for &child in operands {

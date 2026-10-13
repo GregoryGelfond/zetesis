@@ -7,9 +7,7 @@ use super::{
     compile::{Graph, Kind},
     order::Schedule,
 };
-use crate::{
-    EvaluationError, EvaluationLimits, EvaluationWorkspace, Interpretation, NodeView, Theory,
-};
+use crate::{EvaluationError, EvaluationWorkspace, Interpretation, NodeView, Theory};
 use zetesis_cpu::Stop;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -24,7 +22,7 @@ pub(super) fn consequences(
     kinds: &[Kind],
     graph: &Graph,
     schedule: &Schedule,
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Vec<u64>, StratifiedError> {
     let mut states = budget.reserve(graph.vertices())?;
     for _ in 0..theory.atom_count() {
@@ -96,7 +94,7 @@ fn propagate(
     graph: &Graph,
     schedule: &Schedule,
     progress: &mut Progress<'_>,
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<(), StratifiedError> {
     let mut next = 0;
     while let Some(&vertex) = progress.queue.get(next) {
@@ -132,7 +130,7 @@ fn publish(
     atoms: usize,
     states: &mut [State],
     words: &mut [u64],
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<(), StratifiedError> {
     if states[vertex] != State::True {
         budget.tick()?;
@@ -149,9 +147,9 @@ fn publish(
 
 pub(super) fn validate(
     consequences: &Interpretation,
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Option<usize>, StratifiedError> {
-    budget.cancellation.poll()?;
+    budget.meter.poll()?;
     // All graph, scheduling and closure vectors have been released. Only the
     // final plan and its packed interpretation overlap exact original evaluation.
     let base = size_of::<StratifiedPlan>() as u128
@@ -160,25 +158,15 @@ pub(super) fn validate(
     budget.observe_bytes(base + workspace.retained_bytes())?;
     let available = usize::try_from(budget.limits.max_bytes as u128 - base)
         .map_err(|_| StratifiedError::Overflow)?;
-    let attempt = workspace.evaluate(
-        consequences,
-        EvaluationLimits {
-            max_work: budget.limits.max_work - budget.statistics.work,
-            max_bytes: available,
-        },
-        budget.cancellation,
-    );
-    budget.statistics.work = budget
-        .statistics
-        .work
-        .checked_add(attempt.work)
-        .ok_or(StratifiedError::Overflow)?;
+    // Evaluation charges this check's meter.
+    let attempt =
+        workspace.evaluate_within(consequences, available, budget.cancellation, budget.meter);
     let capacity = budget.observe_bytes(base + attempt.retained_bytes);
     let truth = attempt.result.map_err(|error| match error {
         EvaluationError::Stopped(Stop::WorkLimit) => StratifiedError::Limit {
             resource: StratifiedResource::Work,
-            observed: u128::from(budget.statistics.work) + 1,
-            limit: u128::from(budget.limits.max_work),
+            observed: u128::from(budget.meter.charged()) + 1,
+            limit: u128::from(budget.meter.limit()),
         },
         EvaluationError::Stopped(stop) => StratifiedError::Stopped(stop),
         EvaluationError::Storage { required, .. } => StratifiedError::Limit {
@@ -206,6 +194,6 @@ pub(super) fn validate(
             return Err(StratifiedError::InvalidClosure { root });
         }
     }
-    budget.cancellation.poll()?;
+    budget.meter.poll()?;
     Ok(failed)
 }

@@ -18,7 +18,7 @@ pub(super) struct Schedule {
 }
 
 impl Schedule {
-    pub fn release(self, budget: &mut Budget<'_>) -> Result<(), StratifiedError> {
+    pub fn release(self, budget: &mut Budget<'_, '_>) -> Result<(), StratifiedError> {
         budget.release(self.vertices)?;
         budget.release(self.offsets)?;
         budget.release(self.component)
@@ -28,7 +28,7 @@ impl Schedule {
 pub(super) fn compile(
     graph: &Graph,
     atoms: usize,
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Schedule, StratifiedError> {
     let finished = finishing_order(graph, budget)?;
     let schedule = components(graph, &finished, budget)?;
@@ -53,7 +53,10 @@ pub(super) fn compile(
     Ok(schedule)
 }
 
-fn finishing_order(graph: &Graph, budget: &mut Budget<'_>) -> Result<Vec<usize>, StratifiedError> {
+fn finishing_order(
+    graph: &Graph,
+    budget: &mut Budget<'_, '_>,
+) -> Result<Vec<usize>, StratifiedError> {
     let mut seen = budget.filled(graph.vertices(), false)?;
     let mut stack: Vec<Frame> = budget.reserve(graph.vertices())?;
     let mut finished = budget.reserve(graph.vertices())?;
@@ -94,7 +97,7 @@ fn finishing_order(graph: &Graph, budget: &mut Budget<'_>) -> Result<Vec<usize>,
 fn components(
     graph: &Graph,
     finished: &[usize],
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Schedule, StratifiedError> {
     let mut assigned = budget.filled(graph.vertices(), false)?;
     // A component coordinate is read only after its vertex has been assigned.

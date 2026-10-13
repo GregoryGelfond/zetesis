@@ -1,10 +1,9 @@
 use super::{
-    Charged, TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightVerdict, Work,
-    bytes,
+    Tick, TightAttempt, TightCheck, TightCheckLimits, TightError, TightPlan, TightVerdict, bytes,
 };
 use crate::numeric_evaluation::NumericRowScratch;
 use crate::{Interpretation, NodeView, Theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, Meter, Stop};
 
 #[cfg(test)]
 mod tests;
@@ -86,15 +85,12 @@ impl TightWorkspace {
         limits: TightCheckLimits,
         cancellation: &Cancellation,
     ) -> TightAttempt<TightCheck> {
-        let mut work = Work {
-            used: Charged(0),
-            max: limits.max_work,
-            cancellation: cancellation.polling(),
-        };
-        let result = cancellation.settle(self.evaluate(plan, candidate, limits, &mut work));
+        let metered = cancellation.metered(limits.max_work, |meter| {
+            self.evaluate(plan, candidate, limits, meter)
+        });
         TightAttempt {
-            result,
-            work: work.used.0,
+            result: metered.result,
+            work: metered.charged,
         }
     }
 
@@ -103,12 +99,12 @@ impl TightWorkspace {
         plan: &TightPlan,
         candidate: &Interpretation,
         limits: TightCheckLimits,
-        work: &mut Work<'_>,
+        work: &mut Meter<'_>,
     ) -> Result<TightCheck, TightError> {
         if !plan.theory.same_instance(candidate.theory()) {
             return Err(Stop::WrongProgram.into());
         }
-        work.cancellation.poll()?;
+        work.poll()?;
         self.admit(plan, limits.max_bytes)?;
         // Explicit byte cells give candidate tiles a fixed payload bound.
         // Rust's Vec<bool> also stores byte-sized elements; it is not bit-packed.
@@ -134,7 +130,7 @@ impl TightWorkspace {
             if self.values[root] == 0 {
                 return Ok(TightCheck {
                     verdict: TightVerdict::NotModel { root },
-                    work: work.used.0,
+                    work: work.charged(),
                     logical_bytes,
                 });
             }
@@ -164,14 +160,14 @@ impl TightWorkspace {
                     verdict: TightVerdict::Residual {
                         unsupported_atom: word * 32 + missing.trailing_zeros() as usize,
                     },
-                    work: work.used.0,
+                    work: work.charged(),
                     logical_bytes,
                 });
             }
         }
         Ok(TightCheck {
             verdict: TightVerdict::Stable,
-            work: work.used.0,
+            work: work.charged(),
             logical_bytes,
         })
     }
@@ -196,12 +192,15 @@ impl TightWorkspace {
 
 /// Write each formula truth in admitted topological order. The caller clears
 /// and reserves the target first; a stopped prefix is never membership evidence.
+/// The pass stays out of line so that its per-node loop, not its caller,
+/// receives the inlined operand reads.
+#[inline(never)]
 fn evaluate_truth(
     theory: &Theory,
     candidate: &Interpretation,
     values: &mut Vec<u8>,
     numeric: &mut NumericRowScratch,
-    work: &mut Work<'_>,
+    work: &mut Meter<'_>,
 ) -> Result<(), TightError> {
     numeric.reset(theory, || work.tick())?;
     let view = theory.view();
@@ -239,11 +238,12 @@ fn evaluate_truth(
     Ok(())
 }
 
+#[inline]
 fn evaluate_operands(
     operands: &[usize],
     values: &[u8],
     conjunction: bool,
-    work: &mut Work<'_>,
+    work: &mut Meter<'_>,
 ) -> Result<bool, TightError> {
     for &child in operands {
         work.tick()?;

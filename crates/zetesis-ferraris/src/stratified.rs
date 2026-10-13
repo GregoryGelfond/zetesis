@@ -14,7 +14,7 @@ mod tests;
 use std::{fmt, mem::size_of};
 
 use crate::{Interpretation, Theory};
-use zetesis_cpu::{Cancellation, ChargeError, Refusal, Stop};
+use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
 
 /// Bounds for checked classification, stratification and direct evaluation.
 #[derive(Clone, Copy, Debug)]
@@ -213,27 +213,30 @@ impl StratifiedPlan {
         limits: StratifiedPlanLimits,
         cancellation: &Cancellation,
     ) -> StratifiedAttempt {
-        let mut budget = Budget {
-            limits,
-            cancellation,
-            statistics: StratifiedPlanStatistics::default(),
-            current_bytes: 0,
-        };
-        let result = cancellation
-            .settle(compile::build(theory, &mut budget))
-            .map(|(consequences, failed_constraint)| {
-                budget.statistics.retained_bytes = size_of::<Self>() as u128
-                    + consequences.words.capacity() as u128 * size_of::<u64>() as u128;
-                Self {
-                    consequences,
-                    failed_constraint,
-                    statistics: budget.statistics,
-                }
-            });
-        StratifiedAttempt {
-            result,
-            statistics: budget.statistics,
-        }
+        let mut statistics = StratifiedPlanStatistics::default();
+        let metered = cancellation.metered(limits.max_work, |meter| {
+            compile::build(
+                theory,
+                &mut Budget {
+                    limits,
+                    cancellation,
+                    meter,
+                    statistics: &mut statistics,
+                    current_bytes: 0,
+                },
+            )
+        });
+        statistics.work = metered.charged;
+        let result = metered.result.map(|(consequences, failed_constraint)| {
+            statistics.retained_bytes = size_of::<Self>() as u128
+                + consequences.words.capacity() as u128 * size_of::<u64>() as u128;
+            Self {
+                consequences,
+                failed_constraint,
+                statistics,
+            }
+        });
+        StratifiedAttempt { result, statistics }
     }
 
     /// Exact original owner. Independently equal theories have different atom IDs.
@@ -271,25 +274,25 @@ pub struct StratifiedAttempt {
     pub statistics: StratifiedPlanStatistics,
 }
 
-struct Budget<'a> {
+/// One compilation's limits, meter, statistics and simultaneous bytes. The
+/// statistics' work is the meter's, filled in where the compilation returns.
+struct Budget<'a, 'c> {
     limits: StratifiedPlanLimits,
-    cancellation: &'a Cancellation,
-    statistics: StratifiedPlanStatistics,
+    cancellation: &'c Cancellation,
+    meter: &'a mut Meter<'c>,
+    statistics: &'a mut StratifiedPlanStatistics,
     current_bytes: u128,
 }
 
-impl Budget<'_> {
+impl Budget<'_, '_> {
     fn tick(&mut self) -> Result<(), StratifiedError> {
-        match self
-            .cancellation
-            .charge(&mut self.statistics.work, self.limits.max_work)
-        {
+        match self.meter.charge() {
             Ok(()) => Ok(()),
             Err(ChargeError::Stopped(stop)) => Err(stop.into()),
             Err(ChargeError::WorkLimit) => Err(StratifiedError::Limit {
                 resource: StratifiedResource::Work,
-                observed: u128::from(self.statistics.work) + 1,
-                limit: u128::from(self.limits.max_work),
+                observed: u128::from(self.meter.charged()) + 1,
+                limit: u128::from(self.meter.limit()),
             }),
         }
     }
@@ -324,7 +327,7 @@ impl Budget<'_> {
     }
 
     fn reserve<T>(&mut self, count: usize) -> Result<Vec<T>, StratifiedError> {
-        self.cancellation.poll()?;
+        self.meter.poll()?;
         let requested = self
             .current_bytes
             .checked_add(count as u128 * size_of::<T>() as u128)

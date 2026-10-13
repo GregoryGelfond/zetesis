@@ -51,7 +51,7 @@ impl Graph {
         &self.sources[self.reverse_offsets[vertex]..self.reverse_offsets[vertex + 1]]
     }
 
-    pub fn release(self, budget: &mut Budget<'_>) -> Result<(), StratifiedError> {
+    pub fn release(self, budget: &mut Budget<'_, '_>) -> Result<(), StratifiedError> {
         budget.release(self.offsets)?;
         budget.release(self.edges)?;
         budget.release(self.reverse_offsets)?;
@@ -61,9 +61,9 @@ impl Graph {
 
 pub(super) fn build(
     theory: &Theory,
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<(Interpretation, Option<usize>), StratifiedError> {
-    budget.cancellation.poll()?;
+    budget.meter.poll()?;
     // Reserve all concurrently held vector headers, including temporary graph
     // cursors and component DFS storage. Capacity is admitted separately.
     let headers = size_of::<StratifiedPlan>()
@@ -90,7 +90,7 @@ pub(super) fn build(
     Ok((consequences, failed_constraint))
 }
 
-fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, StratifiedError> {
+fn classify(theory: &Theory, budget: &mut Budget<'_, '_>) -> Result<Vec<Kind>, StratifiedError> {
     let mut kinds: Vec<Kind> = budget.reserve(theory.nodes().len())?;
     let view = theory.view();
     for index in 0..view.len() {
@@ -132,7 +132,7 @@ fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, Strat
 fn resolved_kind(
     kinds: &[Kind],
     mut index: usize,
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Kind, StratifiedError> {
     while let Kind::Alias(child) = kinds[index] {
         budget.tick()?;
@@ -146,7 +146,7 @@ fn resolved_kind(
 fn classify_cut(
     cut: ExtremumCut<'_>,
     kinds: &[Kind],
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Kind, StratifiedError> {
     if let Some(truth) = cut.endpoint_truth() {
         return Ok(if truth { Kind::True } else { Kind::False });
@@ -174,7 +174,7 @@ fn classify_cut(
 fn classify_threshold(
     threshold: Threshold<'_>,
     kinds: &[Kind],
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Kind, StratifiedError> {
     let mut total = 0_i128;
     let mut smallest = i128::MAX;
@@ -213,7 +213,7 @@ fn classify_threshold(
 fn graph(
     theory: &Theory,
     kinds: &[Kind],
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Graph, StratifiedError> {
     let vertices = theory
         .atom_count()
@@ -279,8 +279,8 @@ fn graph(
 fn edges(
     theory: &Theory,
     kinds: &[Kind],
-    budget: &mut Budget<'_>,
-    mut visit: impl FnMut(usize, Edge, &mut Budget<'_>) -> Result<(), StratifiedError>,
+    budget: &mut Budget<'_, '_>,
+    mut visit: impl FnMut(usize, Edge, &mut Budget<'_, '_>) -> Result<(), StratifiedError>,
 ) -> Result<(), StratifiedError> {
     let atoms = theory.atom_count();
     let view = theory.view();
@@ -373,7 +373,7 @@ fn producer(
     theory: &Theory,
     root: usize,
     kinds: &[Kind],
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Option<(usize, usize)>, StratifiedError> {
     let view = theory.view();
     match view.node(root).map_err(|_| Stop::InvalidProgram)? {

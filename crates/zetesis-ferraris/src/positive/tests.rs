@@ -244,18 +244,26 @@ fn false_producer_from_an_invalid_closure_is_a_refusal() {
     let owner = theory(1, vec![Node::atom(0)], vec![0]);
     let not_closed = Interpretation::new(&owner, []).unwrap();
     let cancellation = Cancellation::default();
-    let mut budget = Budget {
-        limits: PositivePlanLimits::default(),
-        cancellation: &cancellation,
-        statistics: PositivePlanStatistics::default(),
-        current_bytes: 0,
-    };
+    let limits = PositivePlanLimits::default();
+    let mut statistics = PositivePlanStatistics::default();
+    let metered = cancellation.metered(limits.max_work, |meter| {
+        validation::complete(
+            &not_closed,
+            &mut Budget {
+                limits,
+                cancellation: &cancellation,
+                meter,
+                statistics: &mut statistics,
+                current_bytes: 0,
+            },
+        )
+    });
     assert_eq!(
-        validation::complete(&not_closed, &mut budget),
+        metered.result,
         Err(PositiveError::InvalidClosure { root: 0 })
     );
-    assert_eq!(budget.statistics.work, 2); // One node and its false original root.
-    assert_eq!(budget.statistics.retained_bytes, 0);
+    assert_eq!(metered.charged, 2); // One node and its false original root.
+    assert_eq!(statistics.retained_bytes, 0);
 }
 
 #[test]
@@ -496,59 +504,72 @@ fn empty_theory_keeps_its_exact_owner() {
     assert_eq!(complete.statistics().derived_atoms, 0);
 }
 
-/// A preparation budget that has charged seven operations, which is not a
-/// metered boundary.
-fn budget(cancellation: &Cancellation, max_work: u64) -> Budget<'_> {
-    Budget {
-        limits: PositivePlanLimits {
-            max_work,
-            ..PositivePlanLimits::default()
-        },
-        cancellation,
-        statistics: PositivePlanStatistics {
-            work: 7,
-            ..PositivePlanStatistics::default()
-        },
-        current_bytes: 0,
-    }
-}
-
 #[test]
 fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
-    let cancellation = Cancellation::default();
+    // Seven charged operations is not a metered boundary. The tick's own
+    // report is returned as a value so the exit leaves it alone.
+    let tick = |stop: bool| {
+        let cancellation = Cancellation::default();
+        let limits = PositivePlanLimits {
+            max_work: 7,
+            ..PositivePlanLimits::default()
+        };
+        let mut statistics = PositivePlanStatistics::default();
+        cancellation
+            .metered(limits.max_work, |meter| {
+                for _ in 0..7 {
+                    meter.charge().unwrap();
+                }
+                if stop {
+                    cancellation.cancel();
+                }
+                Ok::<_, PositiveError>(
+                    Budget {
+                        limits,
+                        cancellation: &cancellation,
+                        meter,
+                        statistics: &mut statistics,
+                        current_bytes: 0,
+                    }
+                    .tick(),
+                )
+            })
+            .result
+            .unwrap()
+    };
     assert_eq!(
-        budget(&cancellation, 7).tick(),
+        tick(false),
         Err(PositiveError::Limit {
             resource: PositiveResource::Work,
             observed: 8,
             limit: 7,
         })
     );
-    cancellation.cancel();
-    assert_eq!(
-        budget(&cancellation, 7).tick(),
-        Err(PositiveError::Stopped(Stop::Cancelled))
-    );
+    assert_eq!(tick(true), Err(PositiveError::Stopped(Stop::Cancelled)));
 }
 
 #[test]
 fn a_ceiling_refusal_settles_to_a_requested_stop() {
-    let refusal = Budget::ceiling(PositiveResource::Dependencies, 2, 1);
+    let refused = |stop: bool| {
+        let cancellation = Cancellation::default();
+        cancellation
+            .metered(u64::MAX, |_| {
+                if stop {
+                    cancellation.cancel();
+                }
+                Budget::ceiling(PositiveResource::Dependencies, 2, 1)
+            })
+            .result
+    };
     assert_eq!(
-        refusal,
+        refused(false),
         Err(PositiveError::Limit {
             resource: PositiveResource::Dependencies,
             observed: 2,
             limit: 1,
         })
     );
-    let cancellation = Cancellation::default();
-    assert_eq!(cancellation.settle(refusal), refusal);
-    cancellation.cancel();
-    assert_eq!(
-        cancellation.settle(refusal),
-        Err(PositiveError::Stopped(Stop::Cancelled))
-    );
+    assert_eq!(refused(true), Err(PositiveError::Stopped(Stop::Cancelled)));
 }
 
 #[test]

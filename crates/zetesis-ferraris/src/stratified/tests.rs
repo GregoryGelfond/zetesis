@@ -509,17 +509,25 @@ fn final_evaluation_cannot_certify_an_invalid_closure() {
     let owner = theory(1, vec![Node::atom(0)], vec![0]);
     let wrong = Interpretation::new(&owner, []).unwrap();
     let cancellation = Cancellation::default();
-    let mut budget = Budget {
-        limits: StratifiedPlanLimits::default(),
-        cancellation: &cancellation,
-        statistics: StratifiedPlanStatistics::default(),
-        current_bytes: 0,
-    };
+    let limits = StratifiedPlanLimits::default();
+    let mut statistics = StratifiedPlanStatistics::default();
+    let metered = cancellation.metered(limits.max_work, |meter| {
+        evaluate::validate(
+            &wrong,
+            &mut Budget {
+                limits,
+                cancellation: &cancellation,
+                meter,
+                statistics: &mut statistics,
+                current_bytes: 0,
+            },
+        )
+    });
     assert_eq!(
-        evaluate::validate(&wrong, &mut budget),
+        metered.result,
         Err(StratifiedError::InvalidClosure { root: 0 })
     );
-    assert_eq!(budget.statistics.retained_bytes, 0);
+    assert_eq!(statistics.retained_bytes, 0);
 }
 
 #[test]
@@ -541,57 +549,73 @@ fn deep_shared_bodies_do_not_require_recursive_walks() {
     assert!(complete.statistics().work < 100 * owner.nodes().len() as u64);
 }
 
-/// A preparation budget that has charged seven operations, which is not a
-/// metered boundary.
-fn budget(cancellation: &Cancellation, max_work: u64) -> Budget<'_> {
-    Budget {
-        limits: StratifiedPlanLimits {
-            max_work,
-            ..StratifiedPlanLimits::default()
-        },
-        cancellation,
-        statistics: StratifiedPlanStatistics {
-            work: 7,
-            ..StratifiedPlanStatistics::default()
-        },
-        current_bytes: 0,
-    }
-}
-
 #[test]
 fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
-    let cancellation = Cancellation::default();
+    // Seven charged operations is not a metered boundary. The tick's own
+    // report is returned as a value so the exit leaves it alone.
+    let tick = |stop: bool| {
+        let cancellation = Cancellation::default();
+        let limits = StratifiedPlanLimits {
+            max_work: 7,
+            ..StratifiedPlanLimits::default()
+        };
+        let mut statistics = StratifiedPlanStatistics::default();
+        cancellation
+            .metered(limits.max_work, |meter| {
+                for _ in 0..7 {
+                    meter.charge().unwrap();
+                }
+                if stop {
+                    cancellation.cancel();
+                }
+                Ok::<_, StratifiedError>(
+                    Budget {
+                        limits,
+                        cancellation: &cancellation,
+                        meter,
+                        statistics: &mut statistics,
+                        current_bytes: 0,
+                    }
+                    .tick(),
+                )
+            })
+            .result
+            .unwrap()
+    };
     assert_eq!(
-        budget(&cancellation, 7).tick(),
+        tick(false),
         Err(StratifiedError::Limit {
             resource: StratifiedResource::Work,
             observed: 8,
             limit: 7,
         })
     );
-    cancellation.cancel();
-    assert_eq!(
-        budget(&cancellation, 7).tick(),
-        Err(StratifiedError::Stopped(Stop::Cancelled))
-    );
+    assert_eq!(tick(true), Err(StratifiedError::Stopped(Stop::Cancelled)));
 }
 
 #[test]
 fn a_ceiling_refusal_settles_to_a_requested_stop() {
-    let refusal = Budget::ceiling(StratifiedResource::Dependencies, 2, 1);
+    let refused = |stop: bool| {
+        let cancellation = Cancellation::default();
+        cancellation
+            .metered(u64::MAX, |_| {
+                if stop {
+                    cancellation.cancel();
+                }
+                Budget::ceiling(StratifiedResource::Dependencies, 2, 1)
+            })
+            .result
+    };
     assert_eq!(
-        refusal,
+        refused(false),
         Err(StratifiedError::Limit {
             resource: StratifiedResource::Dependencies,
             observed: 2,
             limit: 1,
         })
     );
-    let cancellation = Cancellation::default();
-    assert_eq!(cancellation.settle(refusal), refusal);
-    cancellation.cancel();
     assert_eq!(
-        cancellation.settle(refusal),
+        refused(true),
         Err(StratifiedError::Stopped(Stop::Cancelled))
     );
 }

@@ -10,7 +10,7 @@ pub use evaluate::TightWorkspace;
 use std::fmt;
 
 use crate::Theory;
-use zetesis_cpu::{ChargeError, Refusal, Stop};
+use zetesis_cpu::{ChargeError, Meter, Refusal, Stop};
 
 /// Admission bounds for the optional class certificate. Logical bytes cover the
 /// plan and all construction vectors, excluding the borrowed theory, allocator
@@ -281,29 +281,23 @@ pub struct TightAttempt<T> {
     pub work: u64,
 }
 
-/// Work charged by one certificate operation. Each charge stores the count and
-/// the next reads it back, and a paired load of the count with a neighbouring
-/// field cannot be forwarded from that pending store on aarch64, stalling every
-/// charge. The count opens a 16-byte aligned cell whose other eight bytes are
-/// padding, so no field follows it within such a pair; the cell does not govern
-/// the field before it, which the layout of [`Work`] decides.
-#[repr(align(16))]
-struct Charged(u64);
-
-/// The certificate's charged work, its limit and its control.
-struct Work<'a> {
-    used: Charged,
-    max: u64,
-    cancellation: zetesis_cpu::CancellationPoll<'a>,
+/// A certificate operation's charge, in the certificate's error vocabulary.
+///
+/// The other metered contexts name this charge `tick` on a context that holds
+/// their meter. The certificate has no such context: its operations take the
+/// meter itself, so a per-node loop reaches the count through one reference
+/// instead of two, which a complete check of a wide theory measurably feels.
+trait Tick {
+    fn tick(&mut self) -> Result<(), TightError>;
 }
-impl Work<'_> {
+
+impl Tick for Meter<'_> {
+    #[inline]
     fn tick(&mut self) -> Result<(), TightError> {
-        self.cancellation
-            .charge(&mut self.used.0, self.max)
-            .map_err(|error| match error {
-                ChargeError::Stopped(stop) => stop.into(),
-                ChargeError::WorkLimit => TightError::Limit(TightResource::Work),
-            })
+        self.charge().map_err(|error| match error {
+            ChargeError::Stopped(stop) => stop.into(),
+            ChargeError::WorkLimit => TightError::Limit(TightResource::Work),
+        })
     }
 }
 
