@@ -6,7 +6,7 @@ use zetesis_core::Atom;
 fn prepare(source: &str, reuse: bool) -> Preparation {
     let mut preparation = testing::prepare(source);
     if !reuse {
-        for rule in &mut preparation.program.rules {
+        for rule in preparation.program.rules_without_facts_mut() {
             if let Some(plan) = &mut rule.bindings {
                 // The reference changes only the producer-continuation policy.
                 // Generator readiness, carrier reuse and formula keys agree.
@@ -217,7 +217,7 @@ fn rich_heads_keep_complete_support_traversal() {
     let preparation = prepare("d(a).d(b). {p}. q(N);r(N) :- d(_),N=#count{1:p}.", true);
     let plan = preparation
         .program
-        .rules
+        .rules_without_facts()
         .iter()
         .find_map(|rule| rule.bindings.as_ref())
         .unwrap();

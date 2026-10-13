@@ -24,6 +24,8 @@ pub(crate) use retained::{RetainedGrounding, ground_retained};
 #[cfg(test)]
 mod assignment_families;
 #[cfg(test)]
+mod fact_declines;
+#[cfg(test)]
 mod constants;
 
 use crate::formula_support::family::Warnings;
@@ -253,7 +255,7 @@ fn instantiate(
     use crate::GroundingPhase;
 
     let crate::formula::Preparation {
-        program: prepared,
+        program: mut prepared,
         catalog: source_catalog,
         accounting,
         budget: mut expansion_budget,
@@ -293,6 +295,8 @@ fn instantiate(
         )?
     };
     drop(domains);
+    // Streaming keeps constraints alone, and a fact is never one.
+    let keep = schedule.keep(prepared.rules_without_facts());
     let PublishedEmission {
         projection,
         emission,
@@ -303,7 +307,7 @@ fn instantiate(
         retained_account,
         streamed,
         catalog: open,
-    } = pending.publish(catalog, limits, location, schedule.keep(&prepared.rules))?;
+    } = pending.publish(catalog, limits, location, keep)?;
     let expansion = budget.usage();
     let (constraints, retained) = if let Some((accounting, output_storage)) = retained_account {
         (
@@ -314,7 +318,7 @@ fn instantiate(
                 budget: expansion_budget,
                 output_storage,
                 streamed: matches!(schedule, Schedule::HybridRetained).then(|| {
-                    let mut rules = prepared.rules;
+                    let mut rules = prepared.take_rules_without_facts();
                     rules.retain(crate::formula_hybrid::eligible);
                     (rules, streamed_instances)
                 }),
@@ -324,7 +328,7 @@ fn instantiate(
         (
             streamed.map(|support| {
                 Schedule::retain_constraints(
-                    prepared.rules,
+                    prepared.take_rules_without_facts(),
                     support,
                     streamed_instances,
                     limits,
@@ -485,7 +489,7 @@ fn emit<'source>(
         Ok::<_, FormulaFailure>(builder)
     })?;
     let streamed_instances =
-        builder.instantiate_rules(&prepared.rules, domains, support, profile, schedule)?;
+        builder.instantiate_items(prepared.items(), domains, support, profile, schedule)?;
     let (emission, counters) = builder.finish(profile, location)?;
     Ok(PendingEmission {
         projection,
@@ -652,31 +656,69 @@ impl GroundAggregate {
     }
 }
 impl Builder<'_, '_, '_> {
-    fn instantiate_rules(
+    fn instantiate_items(
         &mut self,
-        rules: &[RuleIr],
+        items: &crate::formula_facts::Items,
         domains: Option<&crate::formula_domains::Domains<'_>>,
         support: &Support<'_>,
         profile: &Profile<'_>,
         schedule: Schedule<'_>,
     ) -> Result<u64, FormulaFailure> {
         let mut streamed_instances = 0;
-        for (index, rule) in rules.iter().enumerate() {
-            profile.phase(
-                crate::GroundingPhase::RuleInstantiation,
-                Some(rule.location),
-                || {
-                    if matches!(schedule, Schedule::Hybrid | Schedule::HybridRetained)
-                        && crate::formula_hybrid::eligible(rule)
-                    {
-                        self.capture_constraint(rule, support, &mut streamed_instances)
-                    } else {
-                        self.instantiate_rule(rule, index, domains, support)
-                    }
-                },
-            )?;
+        for item in items.iter() {
+            match item {
+                crate::formula_facts::Item::Rule(index, rule) => profile.phase(
+                    crate::GroundingPhase::RuleInstantiation,
+                    Some(rule.location),
+                    || {
+                        if matches!(schedule, Schedule::Hybrid | Schedule::HybridRetained)
+                            && crate::formula_hybrid::eligible(rule)
+                        {
+                            self.capture_constraint(rule, support, &mut streamed_instances)
+                        } else {
+                            self.instantiate_rule(rule, index, domains, support)
+                        }
+                    },
+                )?,
+                // A fact is never a streamed constraint.
+                crate::formula_facts::Item::Facts(product) => profile.phase(
+                    crate::GroundingPhase::RuleInstantiation,
+                    Some(product.location()),
+                    || self.facts(product),
+                )?,
+            }
         }
         Ok(streamed_instances)
+    }
+
+    /// Emit each fact row as `Builder::normal` emits a fact rule's one passing
+    /// row: the head atom, the node `⊤ → head`, its root with the statement's
+    /// evidence as the root's own vector, the head's producer and its origins.
+    /// No join, factoring, continuation, producer-rule, range, witness or
+    /// domain-guard attempt is made: each declines on a body-free ground rule.
+    fn facts(
+        &mut self,
+        product: crate::formula_facts::FactProduct<'_>,
+    ) -> Result<(), FormulaFailure> {
+        let mut head = formula_support::facts::FactHead::new(
+            product,
+            self.computation,
+            self.limits,
+            &mut self.counters,
+            product.location(),
+        )?;
+        for row in product.rows() {
+            let location = row.location();
+            // The row's step, and its head atom's, as for a fact rule's row.
+            self.work(location)?;
+            self.work(location)?;
+            let atom = head.atom(row, self.computation, self.limits, &mut self.counters)?;
+            let atom = self.atom_identity(&atom, location)?;
+            let formula = self.node(Node::Implies(VERUM, atom), location)?;
+            self.root_at(formula, Cow::Borrowed(row.evidence()), location)?;
+            self.producer_at(atom, VERUM, row.evidence(), location)?;
+        }
+        Ok(())
     }
 
     /// Retain every atom identity a streamed instance can read, without its
@@ -1514,27 +1556,35 @@ impl Builder<'_, '_, '_> {
         antecedent: usize,
         rule: &RuleIr,
     ) -> Result<(), FormulaFailure> {
-        self.work(rule.location)?;
+        self.producer_at(head, antecedent, &rule.origins, rule.location)
+    }
+    fn producer_at(
+        &mut self,
+        head: usize,
+        antecedent: usize,
+        origins: &[ProgramSite],
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        self.work(location)?;
         let Node::Atom(atom) = self.nodes.view().node(head).expect("owned node") else {
             unreachable!("head is an atom");
         };
-        self.metadata.producer(
-            atom,
-            antecedent,
-            &mut self.counters,
-            self.limits,
-            rule.location,
-        )?;
-        self.record_head_origins(atom, rule)
+        self.metadata
+            .producer(atom, antecedent, &mut self.counters, self.limits, location)?;
+        self.record_origins(atom, origins)
     }
     fn head_origins(&mut self, head: usize, rule: &RuleIr) -> Result<(), FormulaFailure> {
         let Node::Atom(atom) = self.nodes.view().node(head).expect("owned node") else {
             unreachable!("head occurrence is an atom");
         };
-        self.record_head_origins(atom, rule)
+        self.record_origins(atom, &rule.origins)
     }
-    fn record_head_origins(&mut self, atom: usize, rule: &RuleIr) -> Result<(), FormulaFailure> {
-        for &location in &rule.origins {
+    fn record_origins(
+        &mut self,
+        atom: usize,
+        origins: &[ProgramSite],
+    ) -> Result<(), FormulaFailure> {
+        for &location in origins {
             self.metadata
                 .origin(atom, location, self.budget, &mut self.counters, self.limits)?;
         }

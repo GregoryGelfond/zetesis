@@ -33,6 +33,22 @@ impl<'a> Context<'a, '_> {
         pattern.get(self.components, self.limits, self.counters, self.location)
     }
 
+    /// A fact product's predicate.
+    pub(super) fn predicate(
+        &mut self,
+        predicate: crate::formula_support::components::Predicate,
+    ) -> Result<zetesis_core::catalog::PredicateRef<'a>, FormulaFailure> {
+        predicate.get(self.components, self.limits, self.counters, self.location)
+    }
+
+    /// A fact cell's value.
+    pub(super) fn scalar(
+        &mut self,
+        scalar: crate::formula_support::components::Scalar,
+    ) -> Result<zetesis_core::catalog::TermRef<'a>, FormulaFailure> {
+        scalar.get(self.components, self.limits, self.counters, self.location)
+    }
+
     pub(super) fn text(&mut self, left: &str, right: &str) -> Result<bool, FormulaFailure> {
         let mut left = left.bytes();
         let mut right = right.bytes();
@@ -99,10 +115,6 @@ impl<T> Scratch<T> {
             &mut self.lease,
             size_of::<Self>(),
         )
-    }
-
-    pub(super) fn into_values(self) -> Vec<T> {
-        self.values
     }
 
     pub(super) fn retain_existing(

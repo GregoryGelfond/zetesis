@@ -704,7 +704,7 @@ fn multiple_aggregates_require_conservative_eligibility() {
     assert_eq!(prepared.objectives.len(), 1);
     assert!(prepared.objectives[0].needs_eligibility_query);
     let plans: Vec<_> = prepared
-        .rules
+        .rules_without_facts_mut()
         .iter_mut()
         .filter_map(|rule| rule.bindings.as_mut())
         .collect();
@@ -729,7 +729,7 @@ fn multiple_aggregates_require_conservative_eligibility() {
         .unwrap();
     assert!(
         crate::formula_objective_dependencies::check(
-            &prepared.rules,
+            &prepared.items,
             &mut prepared.objectives,
             &prepared.analysis,
             components,

@@ -17,7 +17,7 @@ struct Capture {
 fn capture(limits: &FormulaLimits) -> Capture {
     let mut prepared = prepare("closed(7). d(2). d(X):-p(X). p(1). z:-p(1).");
     let source = prepared.program.analyzed.clone();
-    let rules = prepared.program.rules.as_ptr();
+    let rules = prepared.program.rules_without_facts().as_ptr();
     let expansion = prepared.budget.usage();
     let analysis = zetesis_domain::terminal::analyze(
         &prepared.program.analyzed,
@@ -59,7 +59,7 @@ fn capture(limits: &FormulaLimits) -> Capture {
     // Neither an output buffer nor either private policy buffer may leak after
     // its result is consumed. A partly refined mask never rewrites its owners.
     assert_eq!(context.counters.workspace_bytes(), workspace);
-    assert_eq!(prepared.program.rules.as_ptr(), rules);
+    assert_eq!(prepared.program.rules_without_facts().as_ptr(), rules);
     assert_eq!(prepared.program.analyzed, source);
     assert_eq!(prepared.budget.usage(), expansion);
     Capture {
@@ -68,7 +68,7 @@ fn capture(limits: &FormulaLimits) -> Capture {
         work: context.counters.accounting.work,
         peak: observer.0.get().support_peak_bytes.unwrap(),
         certified,
-        selected: selected.into_values(),
+        selected: selected.values,
     }
 }
 

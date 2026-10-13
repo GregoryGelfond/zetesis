@@ -20,7 +20,7 @@ struct Collected {
 
 fn rule(program: &crate::formula_ir::Prepared) -> &RuleIr {
     program
-        .rules
+        .rules_without_facts()
         .iter()
         .find(|rule| {
             rule.body

@@ -93,6 +93,42 @@ impl<'source> Context<'_, '_, 'source> {
     ) -> Result<bool, FormulaFailure> {
         left.equals_ref_with(right, || self.inspect())
     }
+    /// Whether a fact product's predicate is `predicate`, read once for all its rows.
+    fn product_predicate(
+        &mut self,
+        product: crate::formula_facts::FactProduct<'_>,
+        predicate: PredicateRef<'_>,
+    ) -> Result<bool, FormulaFailure> {
+        let head = self.computation.static_predicate(
+            product.predicate(),
+            self.limits,
+            self.counters,
+            self.location,
+        )?;
+        self.inspect()?;
+        self.same_predicate(head, predicate)
+    }
+    /// Whether a fact row's constants are the closed atom's, column by column.
+    fn same_row(
+        &mut self,
+        row: crate::formula_facts::Row<'_>,
+        atom: PatternRef<'_>,
+    ) -> Result<bool, FormulaFailure> {
+        self.inspect()?;
+        for (column, cell) in row.cells().enumerate() {
+            self.inspect()?;
+            let value =
+                self.computation
+                    .static_scalar(cell, self.limits, self.counters, self.location)?;
+            let Some(TemplateTerm::Constant(expected)) = atom.terms().at(column) else {
+                return Ok(false);
+            };
+            if !value.equals_ref_with(expected, || self.inspect())? {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
     fn same_atom(
         &mut self,
         left: PatternRef<'_>,
@@ -257,8 +293,23 @@ fn activity(
         return Ok(None);
     }
     let mut activity = Activity::Absent;
-    for producer in &prepared.rules {
+    for item in prepared.items().iter() {
         context.inspect()?;
+        let producer = match item {
+            crate::formula_facts::Item::Rule(_, rule) => rule,
+            crate::formula_facts::Item::Facts(product) => {
+                // A fact row is a closed producer with an empty body.
+                if !context.product_predicate(product, atom.predicate())? {
+                    continue;
+                }
+                for row in product.rows() {
+                    if context.same_row(row, atom)? {
+                        activity = Activity::Required;
+                    }
+                }
+                continue;
+            }
+        };
         match &producer.head {
             HeadIr::Normal(Some(head)) => {
                 let head = context.pattern(*head)?;
@@ -360,7 +411,8 @@ fn transport<'source>(
     context.retain_predicate(&mut reachable, predicate)?;
     loop {
         let previous = reachable.len();
-        for rule in &prepared.rules {
+        // A transport is a rule with one body atom, and a fact has no body.
+        for rule in prepared.rules_without_facts() {
             context.inspect()?;
             let HeadIr::Normal(Some(head)) = &rule.head else {
                 continue;
@@ -412,8 +464,18 @@ fn unique(
     context: &mut Context<'_, '_, '_>,
 ) -> Result<bool, FormulaFailure> {
     let mut occurrences = 0;
-    for rule in &prepared.rules {
+    for item in prepared.items().iter() {
         context.inspect()?;
+        let rule = match item {
+            crate::formula_facts::Item::Rule(_, rule) => rule,
+            crate::formula_facts::Item::Facts(product) => {
+                // Each fact row is one normal producer occurrence.
+                if context.product_predicate(product, predicate)? {
+                    occurrences += product.len();
+                }
+                continue;
+            }
+        };
         match &rule.head {
             HeadIr::Normal(Some(head)) => {
                 let head = context.pattern(*head)?;

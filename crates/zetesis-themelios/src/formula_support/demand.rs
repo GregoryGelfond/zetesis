@@ -74,7 +74,12 @@ impl Demand {
             location,
             found: HashMap::new(),
         };
-        for rule in prepared.rules.iter().chain(&prepared.projection) {
+        // Demand comes from body literals, and a fact has none.
+        for rule in prepared
+            .rules_without_facts()
+            .iter()
+            .chain(&prepared.projection)
+        {
             walk.rule(rule)?;
         }
         for objective in &prepared.objectives {

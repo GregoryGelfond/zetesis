@@ -31,6 +31,7 @@ pub(crate) use acyclic::{Exact, evaluate_acyclic};
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_binding::Binding;
+use crate::formula_facts::{FactProduct, Item};
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::formula_support::{
     self, CompletedQueries, Computation, Counters, Join, SourceAtom, SourceSelection, StorageLease,
@@ -141,6 +142,21 @@ impl Context<'_, '_, '_> {
         self.counters
             .charge_work(actual.len() as u128, self.limits, self.location)?;
         Ok(actual == expected.name.as_str())
+    }
+
+    /// Whether a fact product's predicate is `expected`, read once for its rows.
+    fn produces_facts(
+        &mut self,
+        product: FactProduct<'_>,
+        expected: &Signature,
+    ) -> Result<bool, FormulaFailure> {
+        let predicate = self.computation.static_predicate(
+            product.predicate(),
+            self.limits,
+            self.counters,
+            self.location,
+        )?;
+        self.matches_signature(predicate, expected)
     }
 
     fn produces(&mut self, rule: &RuleIr, expected: &Signature) -> Result<bool, FormulaFailure> {
@@ -364,8 +380,9 @@ impl SourceEligibility {
         temporary: usize,
         context: &mut Context<'_, '_, '_>,
     ) -> Result<(), FormulaFailure> {
+        // A fact product is a precise producer: a normal head over an empty body.
         let mut precise = true;
-        for rule in &prepared.rules {
+        for rule in prepared.rules_without_facts() {
             context.work()?;
             if !context.produces(rule, predicate)? {
                 continue;
@@ -380,12 +397,23 @@ impl SourceEligibility {
             };
         }
         if precise {
-            for rule in &prepared.rules {
+            for item in prepared.items().iter() {
                 context.work()?;
-                if !context.produces(rule, predicate)? {
-                    continue;
+                match item {
+                    Item::Rule(_, rule) => {
+                        if !context.produces(rule, predicate)? {
+                            continue;
+                        }
+                        self.rule(rule, predicate, support, temporary, context)?;
+                    }
+                    Item::Facts(product) => {
+                        context.location = product.location();
+                        if !context.produces_facts(product, predicate)? {
+                            continue;
+                        }
+                        self.facts(product, temporary, context)?;
+                    }
                 }
-                self.rule(rule, predicate, support, temporary, context)?;
             }
         } else {
             // Unsupported head classification retains completed Support as an
@@ -498,6 +526,30 @@ impl SourceEligibility {
                 }
                 HeadIr::Normal(None) => unreachable!("only producer heads selected"),
             }
+        }
+        Ok(())
+    }
+
+    /// Retain each fact row with activity `Required`, which is what [`Self::rule`]
+    /// retains for a fact rule's one empty binding: the producer activity of an
+    /// empty body.
+    fn facts(
+        &mut self,
+        product: FactProduct<'_>,
+        temporary: usize,
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<(), FormulaFailure> {
+        let mut head = crate::formula_support::facts::FactHead::new(
+            product,
+            context.computation,
+            context.limits,
+            context.counters,
+            context.location,
+        )?;
+        for row in product.rows() {
+            context.location = row.location();
+            let atom = head.atom(row, context.computation, context.limits, context.counters)?;
+            self.stage(&atom, Activity::Required, temporary, context)?;
         }
         Ok(())
     }

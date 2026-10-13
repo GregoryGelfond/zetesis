@@ -15,6 +15,12 @@
 #[cfg(test)]
 mod tests;
 
+/// Whether range-multiple selection runs, as it does unless a test disables it.
+#[cfg(test)]
+pub(crate) fn selection_enabled() -> bool {
+    !tests::disabled()
+}
+
 use std::ops::RangeInclusive;
 
 use themelios_program::program::{DefaultNegation, Relation};

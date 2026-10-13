@@ -8,7 +8,7 @@ fn continuation_owner_accounts_for_exact_storage() {
         "d(1;2). q(N) :- d(_), N=#count{1:d(1)}.",
         |prepared, support, computation, counters| {
             let rule = prepared
-                .rules
+                .rules_without_facts()
                 .iter()
                 .find(|rule| rule.bindings.is_some())
                 .unwrap();

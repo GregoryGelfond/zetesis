@@ -407,6 +407,12 @@ impl fmt::Debug for PreparedFormulaBundle {
 }
 
 impl PreparedFormulaBundle {
+    /// The preparation, for tests that read the prepared program.
+    #[cfg(test)]
+    pub(crate) fn preparation(&self) -> &Preparation {
+        &self.preparation
+    }
+
     /// Bundle counterpart of [`PreparedFormula::ground_adaptive`].
     ///
     /// # Errors

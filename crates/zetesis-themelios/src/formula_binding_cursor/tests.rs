@@ -18,7 +18,7 @@ fn with_cursor<T>(
     let mut result = None;
     testing::with_completed_source(source, |prepared, support, computation, counters| {
         let rule = prepared
-            .rules
+            .rules_without_facts()
             .iter()
             .find(|rule| rule.bindings.is_some())
             .unwrap();
@@ -161,7 +161,7 @@ fn unavailable_inputs_discard_dependent_carriers() {
     let preparation = testing::prepare(source);
     let location = preparation
         .program
-        .rules
+        .rules_without_facts()
         .iter()
         .find(|rule| rule.bindings.is_some())
         .unwrap()
@@ -271,7 +271,7 @@ fn changed_relational_inputs_refresh_proposals() {
         "d(0;1). {a}. q(X,N) :- d(X), N=#sum{X:a}.",
         |prepared, support, computation, counters| {
             let rule = prepared
-                .rules
+                .rules_without_facts()
                 .iter()
                 .find(|rule| rule.bindings.is_some())
                 .unwrap();

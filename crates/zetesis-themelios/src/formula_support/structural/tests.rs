@@ -46,7 +46,7 @@ fn query_rows(
     counters: &mut super::super::Counters,
 ) -> Run {
     query_rule(
-        program.rules.last().unwrap(),
+        program.rules_without_facts().last().unwrap(),
         support,
         computation,
         counters,
@@ -205,7 +205,7 @@ const BOUND: &str = "k(1).p(f(g(1),g(1))).p(other(1)).r(X):-k(X),p(f(g(X),g(X)))
 #[test]
 fn query_work_refusals_leave_incoming_bindings_unchanged() {
     testing::with_completed_source(BOUND, |program, support, computation, counters| {
-        let rule = program.rules.last().unwrap();
+        let rule = program.rules_without_facts().last().unwrap();
         let location = rule.location;
         let mut attempt = |allowance: Option<u64>| {
             let limits = FormulaLimits::default();
@@ -423,7 +423,7 @@ fn frozen_queries_use_the_same_structural_postings() {
     .unwrap();
     let closed = completed
         .into_streamed(
-            &preparation.program.rules,
+            preparation.program.rules_without_facts(),
             GroundingWork::new(&limits, &mut counters, location),
         )
         .unwrap();
@@ -463,7 +463,7 @@ fn query_envelope(
 ) -> (Result<usize, FormulaFailure>, Receipt) {
     let mut output = None;
     testing::with_completed_source(BOUND, |program, support, computation, counters| {
-        let rule = program.rules.last().unwrap();
+        let rule = program.rules_without_facts().last().unwrap();
         let location = rule.location;
         let limits = FormulaLimits::default();
         let mut join = Join::rule(

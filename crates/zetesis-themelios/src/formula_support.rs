@@ -40,6 +40,7 @@ mod continuations;
 mod delta;
 mod demand;
 mod factoring;
+pub(crate) mod facts;
 pub(crate) mod family;
 mod filters;
 mod keys;
@@ -48,6 +49,8 @@ mod membership;
 mod multiples;
 mod range_selection;
 pub(crate) use range_selection::Prepared as RangeSelection;
+#[cfg(test)]
+pub(crate) use range_selection::selection_enabled as range_selection_enabled;
 mod order;
 #[cfg(test)]
 mod postings;
@@ -571,12 +574,16 @@ fn complete(
         rounds += 1;
         counters.record(Event::SupportRound);
         let changed = {
+            // Rules alone are scheduled: a fact product has no producer slot,
+            // and enters support in the first round at its item position.
             let mut schedule = plan.as_ref().map_or_else(
-                || producers::Schedule::all(&prepared.rules),
+                || producers::Schedule::all(prepared.rules_without_facts()),
                 producers::ProducerPlan::schedule,
             );
+            let mut facts = (rounds == 1 && prepared.items().products().next().is_some())
+                .then(|| facts::FirstRound::new(prepared.items()));
             let mut selected = schedule.next(limits, counters, fallback)?;
-            if selected.is_none() && plan.is_some() {
+            if selected.is_none() && plan.is_some() && facts.is_none() {
                 // Every zero-input producer ran at bootstrap. Every subsequent
                 // new positive binding needs a changed predicate, whose complete
                 // posting would have selected its original producer. Thus this
@@ -593,7 +600,10 @@ fn complete(
             let support = Support::indexed(&relations, limits, counters, fallback)?;
             counters.observe_work(Event::SupportProductionWork, |counters| {
                 while let Some(index) = selected {
-                    let rule = &prepared.rules[index];
+                    if let Some(facts) = &mut facts {
+                        facts.before_rule(index, &mut delta, &support, limits, counters)?;
+                    }
+                    let rule = &prepared.rules_without_facts()[index];
                     counters.work(limits, rule.location)?;
                     counters.record(Event::SupportProducerVisit);
                     let mut variants = match &plan {
@@ -622,6 +632,9 @@ fn complete(
                         Context::new(&mut computation, limits, counters, rule.location),
                     )?;
                     selected = schedule.next(limits, counters, fallback)?;
+                }
+                if let Some(facts) = facts {
+                    facts.finish(&mut delta, &support, limits, counters)?;
                 }
                 Ok::<_, FormulaFailure>(())
             })?;
@@ -663,6 +676,8 @@ fn advance_round(
     counters.observe_work(Event::SupportOrderWork, |counters| {
         delta.order(limits, counters, location)
     })?;
+    #[cfg(test)]
+    facts::rounds::record(delta.atoms());
     if let Some(plan) = plan {
         counters.observe_work(Event::SupportWakeWork, |counters| {
             plan.advance(delta.atoms(), limits, counters, location)

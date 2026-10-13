@@ -256,7 +256,7 @@ fn computed_fixture(source: &str) -> (CompletedCatalog, crate::formula_ir::Prepa
             .unwrap();
         let mut computation = Computation::new(&mut append, queries.support());
         let rule = program
-            .rules
+            .rules_without_facts()
             .iter()
             .find(|rule| matches!(rule.head, HeadIr::Normal(None)))
             .unwrap();
@@ -300,7 +300,7 @@ fn values(
 fn retained_domains_avoid_repeated_preparation_work() {
     let (catalog, program) = computed_fixture("p(1..32).q(2). :-p(X),q(Y),X/2=Y.");
     let rule = program
-        .rules
+        .rules_without_facts()
         .iter()
         .find(|rule| matches!(rule.head, HeadIr::Normal(None)))
         .unwrap();
@@ -395,7 +395,7 @@ fn retained_domains_avoid_repeated_preparation_work() {
 fn refused_totality_releases_preparation_storage() {
     let (catalog, program) = computed_fixture("p(1..32).q(2). :-p(X),q(Y),X/2=Y.");
     let rule = program
-        .rules
+        .rules_without_facts()
         .iter()
         .find(|rule| matches!(rule.head, HeadIr::Normal(None)))
         .unwrap();
@@ -444,7 +444,7 @@ fn retained_domains_refuse_a_foreign_workspace() {
     ] {
         let (catalog, program) = computed_fixture(source);
         let rule = program
-            .rules
+            .rules_without_facts()
             .iter()
             .find(|rule| matches!(rule.head, HeadIr::Normal(None)))
             .unwrap();

@@ -7,7 +7,7 @@ mod assignment_plan_tests;
 mod shared_names_tests;
 
 #[cfg(test)]
-mod testing;
+pub(crate) mod testing;
 
 mod objective_scope;
 
@@ -17,6 +17,8 @@ mod comparison_forms;
 pub use comparison_forms::ComparisonForms;
 mod integer;
 pub(crate) use integer::{IntegerOperand, WithoutForm};
+
+mod facts;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -52,7 +54,9 @@ pub(crate) struct Prepared {
     pub analysis: themelios_analysis::Analysis,
     pub analysis_basis: crate::AnalysisBasis,
     pub analyzed: SourceProgram,
-    pub rules: Vec<RuleIr>,
+    /// The rules and fact products, reached through [`Self::items`] or, by a
+    /// reader that never sees facts, [`Self::rules_without_facts`].
+    items: crate::formula_facts::Items,
     pub projection: Vec<RuleIr>,
     pub project_selection: crate::ProjectSelection,
     pub objectives: Vec<ObjectiveIr>,
@@ -68,6 +72,46 @@ pub(crate) struct Prepared {
     /// How this program's comparison literals were compiled.
     pub comparison_forms: ComparisonForms,
 }
+impl Prepared {
+    /// The prepared program in item order: each rule, and each fact product
+    /// where its fact rules stood.
+    pub(crate) fn items(&self) -> &crate::formula_facts::Items {
+        &self.items
+    }
+
+    /// The rules alone, for a reader that never sees facts; each use states
+    /// why facts cannot reach it.
+    pub(crate) fn rules_without_facts(&self) -> &[RuleIr] {
+        self.items.rules()
+    }
+
+    /// The rules alone, for a refinement of rules that facts cannot reach.
+    #[cfg(test)]
+    pub(crate) fn rules_without_facts_mut(&mut self) -> &mut [RuleIr] {
+        self.items.rules_mut()
+    }
+
+    /// Move the rules out once the item sequence is no longer read: a
+    /// consumer of constraints alone, which facts never are.
+    pub(crate) fn take_rules_without_facts(&mut self) -> Vec<RuleIr> {
+        self.items.take_rules()
+    }
+
+    /// Move the items `selected` marks into their own sequence.
+    pub(crate) fn split_items(
+        &mut self,
+        selected: &[u8],
+    ) -> Result<crate::formula_facts::Items, std::collections::TryReserveError> {
+        self.items.split_off(selected)
+    }
+
+    /// The item sequence, for tests that edit the compiled program.
+    #[cfg(test)]
+    pub(crate) fn items_mut(&mut self) -> &mut crate::formula_facts::Items {
+        &mut self.items
+    }
+}
+
 /// One original objective element, before its pooled or weak-body alternatives.
 /// Its first lowered position is unique within the prepared objective vector;
 /// all alternatives remain contiguous. Diagnostic spans do not define identity.
@@ -577,7 +621,7 @@ impl PreparationContext<'_> {
             .source
             .components(limits, compiler.counters, fallback)?;
         let objective_extrema = crate::formula_objective_dependencies::check(
-            &parts.rules,
+            &parts.items,
             &mut parts.objectives,
             &analysis,
             components,
@@ -600,13 +644,15 @@ impl PreparationContext<'_> {
         compiler
             .source
             .finish(limits, compiler.counters, fallback)?;
+        // Fact products hold values, not literals, so no comparison is among
+        // them.
         let comparison_forms =
-            ComparisonForms::of(&parts.rules, &parts.projection, &parts.objectives);
+            ComparisonForms::of(parts.items.rules(), &parts.projection, &parts.objectives);
         Ok(Prepared {
             analysis,
             analysis_basis,
             analyzed,
-            rules: parts.rules,
+            items: parts.items,
             projection: parts.projection,
             project_selection,
             objectives: parts.objectives,
@@ -675,7 +721,7 @@ fn plan_constraint_replacements(
 /// declarations, and the projection nodes charged so far.
 #[derive(Default)]
 struct Parts {
-    rules: Vec<RuleIr>,
+    items: crate::formula_facts::Items,
     projection: Vec<RuleIr>,
     analyzed: Vec<WithProvenance<Statement>>,
     pool_projection_nodes: u128,
@@ -698,7 +744,9 @@ fn replace_constraints(
     asked: crate::formula_rewrite::Replacements,
     fallback: ProgramSite,
 ) -> Result<SourceProgram, FormulaFailure> {
-    parts.rules.retain(|rule| {
+    // Replacements are constraints, so no fact product is owned by an asked
+    // statement: the products stay, and the replacements' rules follow.
+    parts.items.retain_rules(|rule| {
         rule.location
             .statement_id()
             .is_none_or(|owner| !asked.contains_key(&owner))
@@ -1002,22 +1050,37 @@ impl Compiler<'_> {
                 (facts.len() as u128).saturating_mul(origins.len() as u128),
                 self.location,
             )?;
+            #[cfg(test)]
+            if facts::testing::facts_as_rules() {
+                while let Some(head) = facts.next(self.budget, self.location)? {
+                    parts.analyzed.push(crate::formula_analysis::fact(
+                        &head,
+                        statement,
+                        self.location,
+                    )?);
+                    let rule = self.fact_rule(&head, &origins)?;
+                    parts.items.push_rule(rule);
+                }
+                return Ok(());
+            }
+            self.facts(&facts, &origins, &mut parts.items)?;
             while let Some(head) = facts.next(self.budget, self.location)? {
                 parts.analyzed.push(crate::formula_analysis::fact(
                     &head,
                     statement,
                     self.location,
                 )?);
-                parts.rules.push(self.fact_rule(&head, &origins)?);
             }
         } else {
+            let start = parts.items.rules().len();
             self.source_rules(
                 statement,
                 &origins,
                 &mut parts.pool_projection_nodes,
-                &mut parts.rules,
+                parts.items.rules_vec(),
                 &mut parts.analyzed,
             )?;
+            parts.items.note_rules(start);
         }
         Ok(())
     }
@@ -1044,6 +1107,9 @@ impl Compiler<'_> {
         }
     }
 
+    /// The rule form of one expanded fact, kept for the reference path that
+    /// differential tests compare the fact arena against.
+    #[cfg(test)]
     fn fact_rule(
         &mut self,
         head: &zetesis_core::AtomPattern,
@@ -1587,6 +1653,7 @@ impl Compiler<'_> {
             })?;
         Ok(Expression::new(nodes))
     }
+    #[cfg(test)]
     fn admit_fact_pattern(
         &mut self,
         pattern: &zetesis_core::AtomPattern,

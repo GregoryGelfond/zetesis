@@ -258,7 +258,7 @@ fn scoped_and_generated_rows_keep_scoped_validation() {
     ] {
         testing::with_completed_source(source, |prepared, support, computation, counters| {
             let rule = prepared
-                .rules
+                .rules_without_facts()
                 .iter()
                 .find(|rule| !rule.body.is_empty())
                 .unwrap();

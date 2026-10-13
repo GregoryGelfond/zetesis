@@ -54,7 +54,7 @@ fn prepare(text: &str) -> crate::formula::Preparation {
 fn selected_rule(prepared: &mut crate::formula::Preparation) -> &mut RuleIr {
     prepared
         .program
-        .rules
+        .rules_without_facts_mut()
         .iter_mut()
         .find(|rule| !rule.body.is_empty())
         .unwrap()
@@ -119,7 +119,9 @@ fn all_terminal_producers_move_into_the_deferred_program() {
         panic!("eligible terminal definitions")
     };
     assert_eq!(deferred.len(), 2);
-    assert_eq!(base.program.rules.len(), 2);
+    // The facts p(1) and q(2) stay as two fact products.
+    assert_eq!(base.program.items().len(), 2);
+    assert!(base.program.rules_without_facts().is_empty());
     assert_eq!(original.program.statements().count(), original_count);
     assert_eq!(base.program.analyzed.statements().count(), 2);
     assert_eq!(
@@ -152,7 +154,7 @@ fn coalesced_source_carriers_cover_every_ir_occurrence() {
         origins: rule.origins.clone(),
         location: rule.location,
     };
-    prepared.program.rules.push(duplicate);
+    prepared.program.items_mut().push_rule(duplicate);
     let Partition {
         terminal: Some(Definitions {
             original, deferred, ..
@@ -171,11 +173,11 @@ fn missing_source_producers_prevent_partition() {
     let mut prepared = prepare("p(1). q(2). d(X):-p(X). d(X):-q(X).");
     let position = prepared
         .program
-        .rules
+        .rules_without_facts()
         .iter()
         .position(|rule| !rule.body.is_empty())
         .unwrap();
-    prepared.program.rules.remove(position);
+    prepared.program.items_mut().remove_rule(position);
     assert!(matches!(
         partition(prepared).unwrap(),
         Partition { terminal: None, .. }
@@ -211,10 +213,12 @@ fn omitted_body_occurrences_prevent_partition() {
 
 #[test]
 fn same_locations_do_not_establish_correspondence() {
-    let mut prepared = prepare("p(1). q(2). d(X):-p(X).");
+    // The body literal reuses the fact rule q(2)'s compiled head.
+    let mut prepared =
+        crate::formula_ir::testing::with_facts_as_rules(|| prepare("p(1). q(2). d(X):-p(X)."));
     let q = prepared
         .program
-        .rules
+        .rules_without_facts()
         .iter()
         .filter_map(|rule| match &rule.head {
             HeadIr::Normal(Some(atom)) if rule.body.is_empty() => Some(*atom),
@@ -361,7 +365,10 @@ fn typed_closed_compounds_remain_in_the_base() {
     else {
         panic!("closed producers avoid no binding enumeration")
     };
-    assert_eq!(base.program.rules.len(), 2);
+    // Ground compounds are scalar cells: the two statements form one run.
+    assert!(base.program.rules_without_facts().is_empty());
+    assert_eq!(base.program.items().len(), 1);
+    assert_eq!(base.program.items().occurrences(), 2);
     assert_eq!(base.program.analyzed, original);
 }
 
@@ -385,8 +392,9 @@ fn nested_constant_type_mismatches_prevent_partition() {
                 ..
             }
         ));
-        let mut prepared = prepare(&text);
-        assert_eq!(prepared.program.rules.len(), 4);
+        // Replace one fact rule's head by the other's, in the reference path.
+        let mut prepared = crate::formula_ir::testing::with_facts_as_rules(|| prepare(&text));
+        assert_eq!(prepared.program.rules_without_facts().len(), 4);
         assert_eq!(prepared.program.analyzed.statements().count(), 4);
         let mut counters = Counters::default();
         let components = prepared
@@ -396,7 +404,7 @@ fn nested_constant_type_mismatches_prevent_partition() {
             .unwrap();
         let facts: Vec<_> = prepared
             .program
-            .rules
+            .rules_without_facts()
             .iter()
             .enumerate()
             .filter_map(|(position, rule)| {
@@ -419,7 +427,20 @@ fn nested_constant_type_mismatches_prevent_partition() {
             })
             .collect();
         assert_eq!(facts.len(), 2);
-        prepared.program.rules[facts[0].0].head = HeadIr::Normal(Some(facts[1].1));
+        prepared.program.rules_without_facts_mut()[facts[0].0].head =
+            HeadIr::Normal(Some(facts[1].1));
+        assert!(
+            matches!(
+                partition(prepared).unwrap(),
+                Partition { terminal: None, .. }
+            ),
+            "{text}"
+        );
+        // The same replacement in the fact arena: the two d statements are one
+        // run, whose first row now holds the second row's value.
+        let mut prepared = prepare(&text);
+        let cells = prepared.program.items_mut().cells_mut();
+        cells[0] = cells[1];
         assert!(
             matches!(
                 partition(prepared).unwrap(),
@@ -447,7 +468,7 @@ fn reads_in_nested_conditions_prevent_partition() {
     let mut prepared = prepare(SOURCE);
     let head = prepared
         .program
-        .rules
+        .rules_without_facts()
         .iter()
         .find_map(|rule| match rule.head {
             HeadIr::Normal(Some(head)) if !rule.body.is_empty() => Some(head),
@@ -456,7 +477,7 @@ fn reads_in_nested_conditions_prevent_partition() {
         .unwrap();
     let condition = prepared
         .program
-        .rules
+        .rules_without_facts_mut()
         .iter_mut()
         .flat_map(|rule| rule.body.iter_mut())
         .find_map(|literal| match literal {
@@ -532,8 +553,12 @@ fn deferred(prepared: crate::formula::Preparation) -> Option<usize> {
 #[test]
 fn a_rule_without_origins_still_finds_its_definition() {
     // Origins only nominate candidates; without them every definition is tried.
-    let mut prepared = prepare("p(1). q(2). d(X):-p(X). d(X):-q(X).");
-    for rule in &mut prepared.program.rules {
+    // Fact products always carry their statement's evidence; this clears the
+    // origins of the fact rules of the reference path.
+    let mut prepared = crate::formula_ir::testing::with_facts_as_rules(|| {
+        prepare("p(1). q(2). d(X):-p(X). d(X):-q(X).")
+    });
+    for rule in prepared.program.rules_without_facts_mut() {
         rule.origins.clear();
     }
     assert_eq!(deferred(prepared), Some(2));
@@ -542,18 +567,23 @@ fn a_rule_without_origins_still_finds_its_definition() {
 #[test]
 fn reordered_occurrences_of_one_origin_still_correspond() {
     // The facts of one pooled statement share an origin; reversed, the outer
-    // two miss the definition at their own place and every one is tried.
-    let mut prepared = prepare("d(1;2;3). e(X):-d(X).");
+    // two miss the definition at their own place and every one is tried. A
+    // fact product's rows keep their order, so this edits fact rules.
+    let mut prepared =
+        crate::formula_ir::testing::with_facts_as_rules(|| prepare("d(1;2;3). e(X):-d(X)."));
     let facts: Vec<usize> = prepared
         .program
-        .rules
+        .rules_without_facts()
         .iter()
         .enumerate()
         .filter(|(_, rule)| rule.body.is_empty())
         .map(|(index, _)| index)
         .collect();
     assert_eq!(facts.len(), 3);
-    prepared.program.rules.swap(facts[0], facts[2]);
+    prepared
+        .program
+        .rules_without_facts_mut()
+        .swap(facts[0], facts[2]);
     assert_eq!(deferred(prepared), Some(1));
 }
 
@@ -564,17 +594,17 @@ fn a_definition_matched_only_by_an_earlier_rule_is_still_covered() {
     let mut prepared = prepare("p(1). d(X):-p(X). d(Y):-p(Y).");
     let first = prepared
         .program
-        .rules
+        .rules_without_facts()
         .iter()
         .position(|rule| !rule.body.is_empty())
         .unwrap();
     let second = prepared
         .program
-        .rules
+        .rules_without_facts()
         .iter()
         .rposition(|rule| !rule.body.is_empty())
         .unwrap();
     assert_ne!(first, second);
-    prepared.program.rules.remove(second);
+    prepared.program.items_mut().remove_rule(second);
     assert_eq!(deferred(prepared), Some(1));
 }

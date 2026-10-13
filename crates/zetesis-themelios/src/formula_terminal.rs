@@ -18,7 +18,6 @@ use zetesis_core::AtomCatalog;
 use zetesis_ferraris::Theory;
 
 use crate::formula::Compiled;
-use crate::formula_ir::RuleIr;
 use crate::formula_owner::Owner;
 use crate::formula_support::{AccountingBaseline, ClosedSource};
 use crate::{AnalysisBasis, FormulaLimits, ProgramSite, SourceBundle, SourceMetadata};
@@ -39,7 +38,7 @@ pub enum FormulaMaterialization<T> {
 
 pub(crate) struct Extension {
     original: partition::OriginalAnalysis,
-    deferred: Vec<RuleIr>,
+    deferred: crate::formula_facts::Items,
     /// Shared with a hybrid base's streamed support, when there is one.
     closed: Arc<ClosedSource>,
     baseline: AccountingBaseline,
@@ -259,7 +258,7 @@ impl TerminalFormula {
     /// Number of deferred lowered producer occurrences, including pool copies.
     #[must_use]
     pub fn deferred_templates(&self) -> usize {
-        self.0.extension.deferred.len()
+        self.0.extension.deferred.occurrences()
     }
 
     /// Original statement warnings established before answer reconstruction.

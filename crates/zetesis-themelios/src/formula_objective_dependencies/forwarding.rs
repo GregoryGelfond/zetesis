@@ -9,7 +9,7 @@ use themelios_program::symbol::Signature;
 use zetesis_core::{PatternRef, TemplateTerm};
 
 pub(super) fn certify(
-    rules: &[RuleIr],
+    items: &crate::formula_facts::Items,
     graph: &DependencyGraph,
     relevant: &BTreeSet<Signature>,
     generated: &mut BTreeMap<Signature, BTreeSet<usize>>,
@@ -19,7 +19,7 @@ pub(super) fn certify(
     if generated.is_empty() {
         return Ok(forwarded);
     }
-    let definitions = definitions(rules, context)?;
+    let definitions = definitions(items, context)?;
     for component in graph.components().filter(|group| !group.is_recursive()) {
         for producer in component.members() {
             if !relevant.contains(producer) || generated.contains_key(producer) {
@@ -51,18 +51,28 @@ pub(super) fn certify(
 
 /// Missing means no definition; None means competing producer occurrences.
 /// Default-negated choice operands never supply positive producer permission.
+/// A fact product is a producer no renaming certifies, so its predicate has no
+/// forwarding definition: as a sole fact rule's body-free shape was skipped.
 fn definitions<'rules>(
-    rules: &'rules [RuleIr],
+    items: &'rules crate::formula_facts::Items,
     context: &mut Context<'_, '_>,
 ) -> Result<BTreeMap<Signature, Option<&'rules RuleIr>>, FormulaFailure> {
     let mut definitions = BTreeMap::new();
-    for rule in rules {
-        context.location = rule.location;
-        for atom in heads(&rule.head, true) {
-            definitions
-                .entry(context.signature(atom)?)
-                .and_modify(|definition| *definition = None)
-                .or_insert(Some(rule));
+    for item in items.iter() {
+        match item {
+            crate::formula_facts::Item::Rule(_, rule) => {
+                context.location = rule.location;
+                for atom in heads(&rule.head, true) {
+                    definitions
+                        .entry(context.signature(atom)?)
+                        .and_modify(|definition| *definition = None)
+                        .or_insert(Some(rule));
+                }
+            }
+            crate::formula_facts::Item::Facts(product) => {
+                context.location = product.location();
+                definitions.insert(context.product_signature(product.predicate())?, None);
+            }
         }
     }
     Ok(definitions)

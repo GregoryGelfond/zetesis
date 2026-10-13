@@ -431,7 +431,9 @@ fn bundle_rule_locations_identify_retained_sources() {
         .iter()
         .filter_map(|record| record.location)
         .collect();
-    assert_eq!(locations.len(), 4);
+    // One instantiation phase per item: the two edge facts, stored as one
+    // run, and the two rules.
+    assert_eq!(locations.len(), 3);
     for location in locations {
         assert!(
             admitted

@@ -32,6 +32,12 @@ impl Facts {
         self.remaining
     }
 
+    /// The checked products in alternative order, read without advancing the
+    /// cursor: the fact arena admits each product's columns once.
+    pub(crate) fn products(&self) -> impl Iterator<Item = ProductView<'_>> {
+        self.products.iter().map(|product| ProductView { product })
+    }
+
     pub(crate) fn next(
         &mut self,
         budget: &Budget,
@@ -56,6 +62,30 @@ impl Facts {
         }
     }
 }
+
+/// One checked product of a family: its predicate, its columns and its row
+/// count, in the order [`Facts::next`] emits its rows (last argument fastest).
+pub(crate) struct ProductView<'a> {
+    product: &'a Product,
+}
+
+impl<'a> ProductView<'a> {
+    pub(crate) fn predicate(&self) -> &'a zetesis_core::Predicate {
+        self.product.predicate()
+    }
+
+    /// The product's row count before any row is emitted.
+    pub(crate) fn len(&self) -> usize {
+        self.product.len()
+    }
+
+    /// Each argument's segments, in emission order.
+    pub(crate) fn columns(&self) -> impl Iterator<Item = impl Iterator<Item = Cell<'a>>> {
+        self.product.columns().iter().map(columns::Column::cells)
+    }
+}
+
+pub(crate) use columns::Cell;
 
 pub(crate) fn facts(
     carrier: &WithProvenance<Statement>,

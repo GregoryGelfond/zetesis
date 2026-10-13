@@ -62,7 +62,7 @@ fn controlled<T>(
 
 fn partial_rule(prepared: &Prepared) -> &RuleIr {
     prepared
-        .rules
+        .rules_without_facts()
         .iter()
         .find(|rule| crate::formula_support::family::partial(&rule.body))
         .unwrap()
@@ -141,7 +141,7 @@ fn one_partial_sibling_keeps_the_whole_family_scan() {
     testing::with_completed_source(SIBLINGS, |program, support, computation, counters| {
         let location = partial_rule(program).location;
         let siblings: Vec<_> = program
-            .rules
+            .rules_without_facts()
             .iter()
             .filter(|rule| rule.location == location)
             .collect();

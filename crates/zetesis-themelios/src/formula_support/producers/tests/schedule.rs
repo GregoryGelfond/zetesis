@@ -122,7 +122,17 @@ fn chain(steps: i32) -> String {
 #[test]
 fn affected_rounds_avoid_repeated_producer_visits() {
     let steps = 64;
-    let prepared = chain(steps);
+    // Facts enter support without producer visits, so the producers a full
+    // traversal revisits every round are rules: the chain's, and eight more
+    // disconnected cycles that no fact ever enables.
+    let mut prepared = chain(steps);
+    for cycle in 0..8 {
+        write!(
+            prepared,
+            "l{cycle}(X):-r{cycle}(X).r{cycle}(X):-l{cycle}(X)."
+        )
+        .unwrap();
+    }
     let reference = measure(&prepared, false, &FormulaLimits::default()).unwrap();
     let scheduled = measure(&prepared, true, &FormulaLimits::default()).unwrap();
     let mut expected: Vec<_> = (0..steps)
@@ -132,11 +142,12 @@ fn affected_rounds_avoid_repeated_producer_visits() {
     expected.sort();
     assert_eq!(scheduled.atoms, expected);
     assert_eq!(scheduled.atoms, reference.atoms);
-    // 65 bootstrap facts; the recursive producer runs once per new reach row,
-    // including the final row without a successor. The disconnected cycle is
-    // never enabled. Full traversal instead visits all 68 producers in 66 rounds.
-    assert_eq!(reference.operations.support_producer_visits, Some(4_488));
-    assert_eq!(scheduled.operations.support_producer_visits, Some(130));
+    // The 65 facts enter the first round without a producer visit. The
+    // recursive producer runs once per new reach row, including the final row
+    // without a successor. The disconnected cycles are never enabled. Full
+    // traversal instead visits all 19 rules in each of the 66 rounds.
+    assert_eq!(reference.operations.support_producer_visits, Some(1_254));
+    assert_eq!(scheduled.operations.support_producer_visits, Some(65));
     assert_eq!(reference.operations.support_rounds, Some(66));
     assert_eq!(scheduled.operations.support_rounds, Some(66));
     assert_eq!(
@@ -170,8 +181,10 @@ fn terminal_predicates_avoid_an_unused_final_snapshot() {
     assert_eq!(reference.operations.support_rounds, Some(2));
     assert_eq!(scheduled.operations.support_snapshot_preparations, Some(1));
     assert_eq!(reference.operations.support_snapshot_preparations, Some(2));
-    assert_eq!(scheduled.operations.support_producer_visits, Some(2));
-    assert_eq!(reference.operations.support_producer_visits, Some(4));
+    // The facts enter the first round without a producer visit, and the
+    // constraint produces nothing.
+    assert_eq!(scheduled.operations.support_producer_visits, Some(0));
+    assert_eq!(reference.operations.support_producer_visits, Some(0));
 }
 
 #[test]
@@ -222,7 +235,7 @@ fn reverse_postings_preserve_signed_predicate_identity() {
         {
             assert!(previous.is_none_or(|previous| previous < index));
             previous = Some(index);
-            let HeadIr::Normal(Some(head)) = &prepared.rules[index].head else {
+            let HeadIr::Normal(Some(head)) = &prepared.rules_without_facts()[index].head else {
                 panic!("a posting must name a producer")
             };
             actual.push(
@@ -230,7 +243,7 @@ fn reverse_postings_preserve_signed_predicate_identity() {
                     components,
                     &limits,
                     &mut counters,
-                    prepared.rules[index].location,
+                    prepared.rules_without_facts()[index].location,
                 )
                 .unwrap()
                 .predicate()

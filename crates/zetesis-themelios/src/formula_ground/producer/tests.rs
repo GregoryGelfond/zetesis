@@ -230,7 +230,7 @@ fn fragment(source: &str) -> (Fragment, Counts) {
         testing::with_completed_source(source, |prepared, support, computation, counters| {
             let limits = FormulaLimits::default();
             let mut budget = crate::expansion::Budget::new(ExpansionLimits::default(), usize::MAX);
-            let location = prepared.rules.last().unwrap().location;
+            let location = prepared.rules_without_facts().last().unwrap().location;
             let mut builder = Builder::empty(
                 computation,
                 &limits,
@@ -243,7 +243,7 @@ fn fragment(source: &str) -> (Fragment, Counts) {
             .unwrap();
             builder.initialize(location).unwrap();
             let mut source_origins = Vec::new();
-            for (index, rule) in prepared.rules.iter().enumerate() {
+            for (index, rule) in prepared.rules_without_facts().iter().enumerate() {
                 if !rule.body.is_empty() {
                     source_origins.extend_from_slice(&rule.origins);
                     builder

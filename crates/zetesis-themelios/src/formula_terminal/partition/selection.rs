@@ -18,7 +18,9 @@ use super::{
     workspace::{Context, Scratch},
 };
 use crate::FormulaFailure;
+use crate::formula_facts::{Item, Row};
 use crate::formula_ir::{HeadIr, Prepared, RuleIr};
+use zetesis_core::catalog::PredicateRef;
 
 pub(super) fn select(
     prepared: &Prepared,
@@ -42,11 +44,31 @@ pub(super) fn select(
     // One reservation each: pushing into exact scratch one cell at a time
     // would copy and charge every earlier cell again.
     let mut producers = Scratch::new(context)?;
-    producers.reserve(prepared.rules.len(), context)?;
+    producers.reserve(prepared.items().len(), context)?;
     let mut selected = Scratch::new(context)?;
-    selected.reserve(prepared.rules.len(), context)?;
-    for rule in &prepared.rules {
+    selected.reserve(prepared.items().len(), context)?;
+    for item in prepared.items().iter() {
         context.work()?;
+        let rule = match item {
+            Item::Rule(_, rule) => rule,
+            Item::Facts(product) => {
+                let Some(selected_head) = product_head(
+                    product,
+                    &defined,
+                    &mut covered.values,
+                    &mut cursors.values,
+                    context,
+                )?
+                else {
+                    return Ok(None);
+                };
+                if selected_head {
+                    producers.push(item, context)?;
+                }
+                selected.push(u8::from(selected_head), context)?;
+                continue;
+            }
+        };
         if reads::rule(rule, &defined, context)? {
             return Ok(None);
         }
@@ -86,7 +108,7 @@ pub(super) fn select(
             )? {
                 return Ok(None);
             }
-            producers.push(rule, context)?;
+            producers.push(item, context)?;
         }
         selected.push(u8::from(selected_head), context)?;
     }
@@ -96,9 +118,9 @@ pub(super) fn select(
             continue;
         }
         let mut matched = false;
-        for rule in &producers.values {
+        for producer in &producers.values {
             context.work()?;
-            if matching::rule(reads::source(definition), rule, context)? {
+            if matches(reads::source(definition), *producer, context)? {
                 matched = true;
                 break;
             }
@@ -108,6 +130,91 @@ pub(super) fn select(
         }
     }
     Ok(Some(selected))
+}
+
+/// Whether a fact product's head is selected, or `None` when one of its rows
+/// corresponds to no definition. A fact reads nothing; each row of a selected
+/// product must correspond to its analyzed fact statement, as its fact rule did.
+fn product_head(
+    product: crate::formula_facts::FactProduct<'_>,
+    defined: &Defined<'_>,
+    covered: &mut [u8],
+    cursors: &mut [usize],
+    context: &mut Context<'_, '_>,
+) -> Result<Option<bool>, FormulaFailure> {
+    let predicate = context.predicate(product.predicate())?;
+    if !reads::selected(predicate, defined, context)? {
+        return Ok(Some(false));
+    }
+    for row in product.rows() {
+        if !correspond_row(row, predicate, defined, covered, cursors, context)? {
+            return Ok(None);
+        }
+    }
+    Ok(Some(true))
+}
+
+/// Whether `definition` matches the producer: a rule, or some row of a product.
+fn matches(
+    definition: &themelios_program::program::Rule,
+    producer: Item<'_>,
+    context: &mut Context<'_, '_>,
+) -> Result<bool, FormulaFailure> {
+    match producer {
+        Item::Rule(_, rule) => matching::rule(definition, rule, context),
+        Item::Facts(product) => {
+            let predicate = context.predicate(product.predicate())?;
+            for row in product.rows() {
+                context.work()?;
+                if matching::fact(definition, predicate, row, context)? {
+                    return Ok(true);
+                }
+            }
+            Ok(false)
+        }
+    }
+}
+
+/// Whether some definition matches the fact `row`, marking what it finds
+/// covered: positionally first, by the row's statement evidence, as for `rule`.
+fn correspond_row(
+    row: Row<'_>,
+    predicate: PredicateRef<'_>,
+    defined: &Defined<'_>,
+    covered: &mut [u8],
+    cursors: &mut [usize],
+    context: &mut Context<'_, '_>,
+) -> Result<bool, FormulaFailure> {
+    for &origin in row.evidence() {
+        context.work()?;
+        let range = defined.origin(origin, context)?;
+        if range.is_empty() {
+            continue;
+        }
+        let hint = range.start + cursors[range.start];
+        if hint < range.end {
+            cursors[range.start] += 1;
+            let position = defined.position(hint);
+            if matching::fact(
+                reads::source(defined.all[position]),
+                predicate,
+                row,
+                context,
+            )? {
+                covered[position] = 1;
+                return Ok(true);
+            }
+        }
+    }
+    let mut matched = false;
+    for (position, definition) in defined.all.iter().enumerate() {
+        context.work()?;
+        if matching::fact(reads::source(definition), predicate, row, context)? {
+            covered[position] = 1;
+            matched = true;
+        }
+    }
+    Ok(matched)
 }
 
 /// Whether some definition matches `rule`, marking what it finds covered.

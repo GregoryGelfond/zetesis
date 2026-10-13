@@ -63,7 +63,7 @@ fn normal_bodies_select_only_certified_complete_rows() {
         include_str!("../../../../../../tests/fixtures/column-totality/normal-selection.lp");
     testing::with_completed_source(source, |program, support, computation, counters| {
         let rule = program
-            .rules
+            .rules_without_facts()
             .iter()
             .find(|rule| {
                 matches!(rule.head, HeadIr::Normal(Some(_)))
@@ -104,7 +104,7 @@ fn generated_heads_remain_outside_body_totality() {
         include_str!("../../../../../../tests/fixtures/column-totality/false-generated-head.lp");
     testing::with_completed_source(source, |program, support, computation, counters| {
         let rule = program
-            .rules
+            .rules_without_facts()
             .iter()
             .find(|rule| rule.variables > rule.body_variables)
             .unwrap();

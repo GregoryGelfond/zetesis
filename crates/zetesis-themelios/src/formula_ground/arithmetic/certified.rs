@@ -28,7 +28,12 @@ pub(super) fn family(
     if tests::disabled() {
         return Ok(false);
     }
-    for rule in prepared.rules.iter().chain(&prepared.projection) {
+    // A fact holds no arithmetic: facts with evaluated arguments stay rules.
+    for rule in prepared
+        .rules_without_facts()
+        .iter()
+        .chain(&prepared.projection)
+    {
         counters.work(limits, location)?;
         if rule.location != location {
             continue;

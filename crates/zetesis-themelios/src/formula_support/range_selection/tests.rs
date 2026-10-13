@@ -55,7 +55,7 @@ fn controlled<T>(disabled: bool, run: impl FnOnce() -> T) -> (T, Control) {
 
 fn range_rule(program: &crate::formula_ir::Prepared) -> &RuleIr {
     program
-        .rules
+        .rules_without_facts()
         .iter()
         .find(|rule| {
             rule.body

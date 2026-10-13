@@ -97,6 +97,14 @@ impl Product {
         self.remaining
     }
 
+    pub(super) fn predicate(&self) -> &Predicate {
+        &self.predicate
+    }
+
+    pub(super) fn columns(&self) -> &[Column] {
+        &self.columns
+    }
+
     pub(super) fn is_empty(&self) -> bool {
         self.remaining == 0
     }

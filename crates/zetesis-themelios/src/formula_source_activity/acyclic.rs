@@ -3,6 +3,7 @@
 //! by source eligibility; only this stronger certificate permits exact output.
 
 use super::{Activity, Context, SourceEligibility};
+use crate::formula_facts::{FactProduct, Item};
 use crate::formula_ir::HeadIr;
 use crate::formula_support::{AcyclicPlan, Join, SourceAtom, SourceSelection, StorageLease};
 use crate::grounding_observer::Profile;
@@ -65,20 +66,53 @@ pub(crate) fn evaluate_acyclic(
     let mut result = SourceEligibility::new(context)?;
     result.exact = true;
     let mut consistent = true;
-    for &(_, index) in plan.rules() {
-        let rule = &source.rules[index];
-        context.location = rule.location;
-        consistent &= profile.phase(
-            GroundingPhase::RuleInstantiation,
-            Some(rule.location),
-            || result.rule_exact(rule, support, context),
-        )?;
+    for &(_, position) in plan.items() {
+        match source.items().get(position) {
+            Item::Rule(_, rule) => {
+                context.location = rule.location;
+                consistent &= profile.phase(
+                    GroundingPhase::RuleInstantiation,
+                    Some(rule.location),
+                    || result.rule_exact(rule, support, context),
+                )?;
+            }
+            Item::Facts(product) => {
+                context.location = product.location();
+                profile.phase(
+                    GroundingPhase::RuleInstantiation,
+                    Some(product.location()),
+                    || result.facts_exact(product, context),
+                )?;
+            }
+        }
     }
     consistent &= profile.phase(GroundingPhase::Coherence, None, || result.coherent(context))?;
     result.into_exact(consistent, context)
 }
 
 impl SourceEligibility {
+    /// Stage each fact row `Required`: a body-free rule's one passing binding
+    /// has that activity, since the fold over no literal starts from it.
+    fn facts_exact(
+        &mut self,
+        product: FactProduct<'_>,
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<(), FormulaFailure> {
+        let mut head = crate::formula_support::facts::FactHead::new(
+            product,
+            context.computation,
+            context.limits,
+            context.counters,
+            context.location,
+        )?;
+        for row in product.rows() {
+            context.location = row.location();
+            let atom = head.atom(row, context.computation, context.limits, context.counters)?;
+            self.stage_exact(&atom, Activity::Required, context)?;
+        }
+        Ok(())
+    }
+
     fn rule_exact(
         &mut self,
         rule: &crate::formula_ir::RuleIr,

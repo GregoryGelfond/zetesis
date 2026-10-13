@@ -92,7 +92,9 @@ pub(crate) fn analyze<'source>(
     }
     let before = counters.accounting.work;
     let mut candidates = Vec::new();
-    for rule in &prepared.rules {
+    // Candidates narrow a rule's variables, by rule index. A fact has no
+    // variable, so it has no candidates (`queries/domains.rs`, `for_rule`).
+    for rule in prepared.rules_without_facts() {
         candidates.push(Candidates::prepare(
             rule,
             &analysis,

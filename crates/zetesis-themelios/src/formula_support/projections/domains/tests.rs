@@ -15,7 +15,7 @@ fn with_join(
 ) {
     with_completed_source(source, |program, support, computation, counters| {
         let rule = program
-            .rules
+            .rules_without_facts()
             .iter()
             .find(|rule| matches!(rule.head, HeadIr::Normal(None)))
             .unwrap();

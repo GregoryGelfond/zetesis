@@ -8,7 +8,7 @@ use themelios_program::term::EvalError;
 
 fn constraints(program: &Prepared) -> impl Iterator<Item = &RuleIr> {
     program
-        .rules
+        .rules_without_facts()
         .iter()
         .filter(|rule| matches!(rule.head, HeadIr::Normal(None)))
 }

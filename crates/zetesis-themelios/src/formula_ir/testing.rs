@@ -1,9 +1,13 @@
-//! A compiler over an empty source, for tests of compiler-internal steps.
+//! Test support for the compiler: a compiler over an empty source, for tests
+//! of compiler-internal steps, and the switch that compiles facts as rules,
+//! for tests that compare fact products with the rule form.
 
 use themelios_base::source::{Source, SourceId};
 
 use super::{Budget, Compiler, Counters, SupportCatalog, domain};
 use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits, ProgramSite};
+
+pub(crate) use super::facts::testing::with_facts_as_rules;
 
 /// Run `work` with a compiler whose expansion budget has `limits`.
 pub(super) fn with_compiler<R>(

@@ -114,7 +114,7 @@ fn distinct_rule_bodies_cannot_share_selection() {
         "d(2). p(X) :- d(D),X=1..6,X\\D=0. q(X) :- d(D),X=1..8,X\\D=0.",
         |program, support, computation, counters| {
             let rules: Vec<_> = program
-                .rules
+                .rules_without_facts()
                 .iter()
                 .filter(|rule| {
                     rule.body

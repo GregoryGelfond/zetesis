@@ -239,7 +239,8 @@ pub(crate) fn check<'source>(
     if prepared.objective_extrema.is_empty() {
         return Ok(presence);
     }
-    for rule in &prepared.rules {
+    // Extrema are aggregates in rule bodies, and a fact has no body.
+    for rule in prepared.rules_without_facts() {
         for literal in &rule.body {
             let LiteralIr::Aggregate(aggregate) = literal else {
                 continue;
@@ -326,7 +327,8 @@ fn certify_priorities<'source>(
     if requested.is_empty() {
         return Ok(());
     }
-    for rule in &prepared.rules {
+    // A carrier is an aggregate assignment rule's body, and a fact has none.
+    for rule in prepared.rules_without_facts() {
         counters.work(limits, rule.location)?;
         let Some(carrier) = flat::carrier(
             prepared,

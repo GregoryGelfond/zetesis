@@ -70,7 +70,9 @@ fn input_capacity(
     counters: &mut Counters,
 ) -> Result<usize, FormulaFailure> {
     let mut input_count = 0_usize;
-    for rule in &prepared.rules {
+    // The plan has no slot for facts: support completion interns every fact
+    // product in its first round, and a fact has no input to wake it again.
+    for rule in prepared.rules_without_facts() {
         counters.work(limits, rule.location)?;
         if matches!(rule.head, HeadIr::Normal(Some(_))) {
             input_count = input_count
@@ -107,12 +109,12 @@ impl<'source> ProducerPlan<'source> {
         let mut inputs = Vec::new();
         let mut input_predicates = Vec::new();
         memory.add(size_of::<Vec<usize>>())?;
-        memory.reserve(&mut rules, prepared.rules.len())?;
+        memory.reserve(&mut rules, prepared.rules_without_facts().len())?;
         let input_count = input_capacity(prepared, limits, counters)?;
         memory.reserve(&mut inputs, input_count)?;
         memory.reserve(&mut input_predicates, input_count)?;
         let nodes = graph_nodes(prepared, &mut memory, limits, counters, location)?;
-        for rule in &prepared.rules {
+        for rule in prepared.rules_without_facts() {
             counters.work(limits, rule.location)?;
             let HeadIr::Normal(Some(head)) = &rule.head else {
                 rules.push(None);

@@ -24,7 +24,7 @@ impl Snapshot {
         // Conjunction order is immaterial for these flat, covered bodies. Give
         // the cursor a noncanonical occurrence order so its partition cannot
         // accidentally rely on the chosen execution depth or predicate order.
-        for rule in &mut preparation.program.rules {
+        for rule in preparation.program.rules_without_facts_mut() {
             rule.body.reverse();
         }
         Self {

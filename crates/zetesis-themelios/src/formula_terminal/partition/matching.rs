@@ -41,6 +41,42 @@ pub(super) fn signature(
     context.text(source.name.as_str(), actual.name())
 }
 
+/// Whether `source` is the body-free definition of the fact `row` of
+/// `predicate`: what [`rule`] decides for the row's fact rule, whose head is
+/// ground and whose body is empty.
+pub(super) fn fact(
+    source: &Rule,
+    predicate: PredicateRef<'_>,
+    row: crate::formula_facts::Row<'_>,
+    context: &mut Context<'_, '_>,
+) -> Result<bool, FormulaFailure> {
+    context.work()?;
+    let Some(source_head) = head(source) else {
+        return Ok(false);
+    };
+    context.work()?;
+    if source.body().get().elements().next().is_some() {
+        return Ok(false);
+    }
+    if !signature(source_head, predicate, false, context)? {
+        return Ok(false);
+    }
+    let Arguments::Single(arguments) = &source_head.arguments else {
+        return Ok(false);
+    };
+    for (argument, cell) in arguments.iter().zip(row.cells()) {
+        context.work()?;
+        let Term::Symbolic(symbol) = argument else {
+            return Ok(false);
+        };
+        let value = context.scalar(cell)?;
+        if !symbols::matches(symbol, value, context)? {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
 #[derive(Clone, Copy)]
 enum Slot<'a> {
     Vacant,

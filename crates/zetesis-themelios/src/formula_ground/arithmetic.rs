@@ -74,7 +74,12 @@ pub(crate) fn prepare<'a, 'source>(
     let mut warnings = Warnings::default();
     let affected = affected(prepared, support, computation, limits, budget, counters)?;
     let mut families: Vec<(ProgramSite, Evidence)> = Vec::new();
-    for rule in prepared.rules.iter().chain(&prepared.projection) {
+    // A fact holds no arithmetic: facts with evaluated arguments stay rules.
+    for rule in prepared
+        .rules_without_facts()
+        .iter()
+        .chain(&prepared.projection)
+    {
         counters.charge_work(affected.len() as u128, limits, rule.location)?;
         if !affected.contains(&rule.location) {
             continue;
@@ -140,7 +145,7 @@ fn affected<'a, 'source>(
 ) -> Result<Vec<ProgramSite>, FormulaFailure> {
     let mut affected = Vec::new();
     for (position, rule) in prepared
-        .rules
+        .rules_without_facts()
         .iter()
         .chain(&prepared.projection)
         .enumerate()
@@ -182,7 +187,7 @@ fn earlier_partial(
     counters: &mut Counters,
 ) -> Result<bool, FormulaFailure> {
     for previous in prepared
-        .rules
+        .rules_without_facts()
         .iter()
         .chain(&prepared.projection)
         .take(position)

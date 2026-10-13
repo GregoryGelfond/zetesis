@@ -7,7 +7,7 @@ use zetesis_ferraris::{Limits, models, models_reduct};
 
 /// Reproduce the prior cache boundary without changing the source or its joins.
 fn full_binding_keys(preparation: &mut crate::formula::Preparation) {
-    for rule in &mut preparation.program.rules {
+    for rule in preparation.program.rules_without_facts_mut() {
         if let Some(plan) = &mut rule.bindings {
             plan.retain_required_for_test(&rule.body);
         }
@@ -191,7 +191,7 @@ fn aggregate_families_do_not_cross_support_snapshots() {
     let mut preparation = testing::prepare("p(1). n(N) :- N=#count{X:p(X)}.");
     let aggregate = preparation
         .program
-        .rules
+        .rules_without_facts()
         .iter()
         .flat_map(|rule| &rule.body)
         .find_map(|literal| match literal {

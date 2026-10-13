@@ -31,7 +31,8 @@ fn failed_preparation_publishes_no_partial_plan() {
     std::sync::Arc::get_mut(&mut owner.0)
         .unwrap()
         .extension
-        .deferred[1]
+        .deferred
+        .rules_mut()[1]
         .head = crate::formula_ir::HeadIr::Normal(None);
     let model = selection(&owner);
     let mut cursor = owner.reconstruction().unwrap();

@@ -24,6 +24,14 @@ enum Segment {
     Interval(RangeInclusive<i32>),
 }
 
+/// A column's segment read in place: a checked scalar, or an `i32` interval
+/// whose values the column emits in ascending order.
+#[derive(Clone, Debug)]
+pub(crate) enum Cell<'a> {
+    Scalar(&'a Value),
+    Interval(RangeInclusive<i32>),
+}
+
 impl Segment {
     fn width(&self) -> u64 {
         match self {
@@ -95,6 +103,14 @@ impl Column {
             column.segments.push(segment);
         }
         Ok((column, payload))
+    }
+
+    /// The segments in emission order, without moving the column's cursor.
+    pub(super) fn cells(&self) -> impl Iterator<Item = Cell<'_>> {
+        self.segments.iter().map(|segment| match segment {
+            Segment::Scalar(value) => Cell::Scalar(value),
+            Segment::Interval(range) => Cell::Interval(range.clone()),
+        })
     }
 
     pub(super) fn value(&self) -> Value {

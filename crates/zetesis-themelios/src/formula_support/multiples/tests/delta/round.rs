@@ -265,7 +265,7 @@ fn each_variant_rechecks_its_own_divisor_readiness() {
     let mut snapshot = Snapshot::new(SOURCE);
     // Use canonical occurrence order here: d precedes n, independently of the
     // cardinality-based execution order that changes between these two pivots.
-    for rule in &mut snapshot.program.rules {
+    for rule in snapshot.program.rules_without_facts_mut() {
         rule.body.reverse();
     }
     snapshot.publish(

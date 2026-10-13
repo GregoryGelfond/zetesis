@@ -18,7 +18,8 @@ use themelios_program::program::Program;
 use zetesis_domain::terminal;
 
 use crate::formula::Preparation;
-use crate::formula_ir::{LiteralIr, RuleIr};
+use crate::formula_facts::{Item, Items};
+use crate::formula_ir::RuleIr;
 use crate::formula_support::{Counters, StorageLease};
 use crate::{AnalysisBasis, FormulaFailure, ProgramSite};
 use workspace::{Context, Scratch};
@@ -38,29 +39,24 @@ pub(super) struct Partition {
 
 pub(super) struct Definitions {
     pub(super) original: OriginalAnalysis,
-    pub(super) deferred: Vec<RuleIr>,
+    /// The deferred rules and fact products, in item order.
+    pub(super) deferred: Items,
     pub(super) deferred_storage: StorageLease,
 }
 
-/// Named retained capacities of the certified flat rules. The enclosing owner
-/// already contains the vector header. Canonical component payload is shared;
-/// upstream source AST/provenance follows its separate logical copy policy.
-pub(super) fn deferred_bytes(rules: &Vec<RuleIr>) -> u128 {
-    rules.capacity() as u128 * size_of::<RuleIr>() as u128
-        + rules
-            .iter()
-            .map(|rule| {
-                rule.body.capacity() as u128 * size_of::<LiteralIr>() as u128
-                    + rule.origins.capacity() as u128 * size_of::<ProgramSite>() as u128
-            })
-            .sum::<u128>()
+/// Named retained capacities of the certified flat rules and deferred fact
+/// products. The enclosing owner already contains the sequence's header.
+/// Canonical component payload is shared; upstream source AST/provenance
+/// follows its separate logical copy policy.
+pub(super) fn deferred_bytes(items: &Items) -> u128 {
+    items.retained_bytes()
 }
 
 struct Selection {
     source: Program,
     analysis: themelios_analysis::Analysis,
+    /// One flag per item: nonzero moves it into the deferred program.
     selected: Scratch<u8>,
-    base: Scratch<RuleIr>,
     deferred: Scratch<RuleIr>,
 }
 
@@ -71,32 +67,29 @@ pub(super) fn partition(mut preparation: Preparation) -> Result<Partition, Formu
     )
     .with_cancellation(preparation.budget.cancellation());
     let selected = prepare(&mut preparation, &mut counters)?;
-    let Some(mut selected) = selected else {
+    let Some(selected) = selected else {
         preparation.accounting = counters.into_accounting();
         return Ok(Partition {
             base: preparation,
             terminal: None,
         });
     };
-    // All allocations, component validation and movement permits precede these
-    // infallible moves. Each original IR occurrence remains present exactly once.
-    for (rule, selected_rule) in std::mem::take(&mut preparation.program.rules)
-        .into_iter()
-        .zip(&selected.selected.values)
-    {
-        if *selected_rule == 0 {
-            selected.base.values.push(rule);
-        } else {
-            selected.deferred.values.push(rule);
-        }
-    }
-    preparation.program.rules = selected.base.into_values();
+    // Component validation and movement permits precede the move, which
+    // reserves before it moves. Each original IR occurrence remains present
+    // exactly once: every rule and fact product, in item order.
+    let deferred = preparation
+        .program
+        .split_items(&selected.selected.values)
+        .map_err(|error| FormulaFailure::AtomAllocation {
+            error,
+            location: preparation.location,
+        })?;
     let original = OriginalAnalysis {
         program: std::mem::replace(&mut preparation.program.analyzed, selected.source),
         analysis: std::mem::replace(&mut preparation.program.analysis, selected.analysis),
         basis: preparation.program.analysis_basis,
     };
-    let (deferred, mut deferred_storage) = selected.deferred.into_leased_values();
+    let (_, mut deferred_storage) = selected.deferred.into_leased_values();
     deferred_storage.observe(
         usize::try_from(deferred_bytes(&deferred)).expect("admitted deferred capacity"),
         preparation.location,
@@ -174,22 +167,26 @@ fn prepare(
         &mut context,
     )?;
     drop(definitions);
-    let mut base = Scratch::new(&context)?;
-    let mut deferred = Scratch::new(&context)?;
-    let mut count = 0;
+    let mut deferred = Scratch::<RuleIr>::new(&context)?;
+    let mut count = 0_usize;
     let mut nested_bytes = 0_u128;
-    for (selected_rule, rule) in selected.values.iter().zip(&program.rules) {
+    for (selected_item, item) in selected.values.iter().zip(program.items().iter()) {
         context.work()?;
-        if *selected_rule != 0 {
+        if *selected_item != 0 {
             count += 1;
-            nested_bytes += rule.body.capacity() as u128 * size_of::<LiteralIr>() as u128
-                + rule.origins.capacity() as u128 * size_of::<ProgramSite>() as u128;
+            nested_bytes += match item {
+                Item::Rule(_, rule) => {
+                    size_of::<RuleIr>() as u128
+                        + rule.body.capacity() as u128
+                            * size_of::<crate::formula_ir::LiteralIr>() as u128
+                        + rule.origins.capacity() as u128 * size_of::<ProgramSite>() as u128
+                }
+                Item::Facts(product) => product.retained_bytes() as u128,
+            };
         }
     }
-    base.reserve(selected.values.len() - count, &mut context)?;
-    deferred.reserve(count, &mut context)?;
     let retained = nested_bytes
-        + deferred.values.capacity() as u128 * size_of::<RuleIr>() as u128
+        + count as u128 * crate::formula_facts::ITEM_BYTES as u128
         + size_of::<Scratch<RuleIr>>() as u128;
     let retained = usize::try_from(retained).map_err(|_| FormulaFailure::Limit {
         resource: crate::FormulaResource::SupportBytes,
@@ -207,7 +204,6 @@ fn prepare(
         source,
         analysis: source_analysis,
         selected,
-        base,
         deferred,
     }))
 }

@@ -143,7 +143,7 @@ pub(super) fn derive(
     }
 }
 
-fn emit(
+pub(super) fn emit(
     head: PatternRef<'_>,
     slots: &[Option<TermRef<'_>>],
     writer: &mut AtomInterner,

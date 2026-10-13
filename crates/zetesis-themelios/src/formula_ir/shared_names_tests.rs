@@ -53,7 +53,7 @@ fn objective_scopes_share_canonical_predicate_text() {
             .predicate()
     };
     let rule_pattern = prepared
-        .rules
+        .rules_without_facts()
         .iter()
         .flat_map(|rule| rule.body.iter())
         .filter_map(|literal| match literal {

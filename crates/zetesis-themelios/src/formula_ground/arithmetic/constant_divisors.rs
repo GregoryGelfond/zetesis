@@ -19,7 +19,12 @@ pub(super) fn deferred(
     prepared: &Prepared,
     mut context: Context<'_, &Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
-    for fragment in prepared.rules.iter().chain(&prepared.projection) {
+    // A fact holds no arithmetic: facts with evaluated arguments stay rules.
+    for fragment in prepared
+        .rules_without_facts()
+        .iter()
+        .chain(&prepared.projection)
+    {
         context
             .work
             .counters

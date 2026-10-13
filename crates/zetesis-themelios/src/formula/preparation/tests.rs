@@ -210,7 +210,7 @@ fn prepared_einstein_retains_a_terminal_flat_definition() {
         .unwrap();
     let rules: Vec<_> = preparation
         .program
-        .rules
+        .rules_without_facts()
         .iter()
         .filter(|rule| {
             let crate::formula_ir::HeadIr::Normal(Some(head)) = rule.head else {

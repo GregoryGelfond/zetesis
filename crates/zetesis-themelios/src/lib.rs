@@ -65,6 +65,7 @@ mod formula_conditional_ir;
 mod formula_conditional_projection;
 mod formula_consequent_ir;
 mod formula_factor;
+mod formula_facts;
 mod formula_ground;
 mod formula_guard;
 mod formula_head_aggregate;

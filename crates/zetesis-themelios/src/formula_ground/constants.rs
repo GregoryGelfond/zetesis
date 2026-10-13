@@ -227,21 +227,10 @@ fn producer_origins_preserve_atom_associations() {
                 span: Span::empty(ByteOffset::new(offset)),
             })
         };
-        let rule = |origins| RuleIr {
-            head: HeadIr::Normal(None),
-            body: vec![],
-            body_variables: 0,
-            bindings: None,
-            variables: 0,
-            location: location(),
-            origins,
-        };
         builder
-            .record_head_origins(0, &rule(vec![origin(8), origin(2), origin(8)]))
+            .record_origins(0, &[origin(8), origin(2), origin(8)])
             .unwrap();
-        builder
-            .record_head_origins(1, &rule(vec![origin(3)]))
-            .unwrap();
+        builder.record_origins(1, &[origin(3)]).unwrap();
         assert_eq!(
             builder.metadata.origins(0).collect::<Vec<_>>(),
             [location(), origin(2), origin(8)]
@@ -276,15 +265,6 @@ fn origin_insertion_obeys_the_work_ceiling() {
         source: SourceId::new(20),
         span: Span::empty(ByteOffset::new(0)),
     });
-    let rule = RuleIr {
-        head: HeadIr::Normal(None),
-        body: vec![],
-        body_variables: 0,
-        bindings: None,
-        variables: 0,
-        location: next,
-        origins: vec![next],
-    };
     for allowance in [1, 2] {
         Fixture::default().with(location(), |_, computation, counters| {
             let limits = FormulaLimits { max_work: counters.accounting.work + allowance, ..FormulaLimits::default() };
@@ -293,7 +273,7 @@ fn origin_insertion_obeys_the_work_ceiling() {
                 Purpose::Theory, None, location()).unwrap();
             builder.metadata.atom(location(), &mut builder.counters, builder.limits).unwrap();
             let before = builder.counters.accounting.work;
-            let result = builder.record_head_origins(0, &rule);
+            let result = builder.record_origins(0, &[next]);
             if allowance == 2 {
                 result.unwrap();
                 assert_eq!(builder.counters.accounting.work - before, 2);

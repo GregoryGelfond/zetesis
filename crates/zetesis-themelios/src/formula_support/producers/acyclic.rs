@@ -4,6 +4,7 @@
 //! strictly smaller component rank. No producer or negative edge is omitted.
 
 use super::{Memory, Node, find, graph_nodes, invalid};
+use crate::formula_facts::Item;
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared};
 use crate::formula_support::{Counters, SourceScope, StorageLease, SupportCatalog};
 use crate::{AnalysisBasis, FormulaFailure, FormulaLimits, ProgramSite};
@@ -12,8 +13,9 @@ use zetesis_core::relation::Failure;
 
 pub(crate) struct AcyclicPlan {
     scope: SourceScope,
-    // Component rank followed by original rule position. Constraints sort last.
-    rules: Vec<(usize, usize)>,
+    // Component rank followed by item position: a rule's, or a fact product's
+    // where its fact rules stood. Constraints sort last.
+    items: Vec<(usize, usize)>,
     _lease: StorageLease,
 }
 
@@ -33,9 +35,33 @@ impl AcyclicPlan {
         memory.add(0)?;
         let nodes = graph_nodes(source, &mut memory, limits, counters, location)?;
         let components = catalog.component_view(limits, counters, location)?;
-        let mut rules = Vec::new();
-        memory.reserve(&mut rules, source.rules.len())?;
-        for (index, rule) in source.rules.iter().enumerate() {
+        let mut items = Vec::new();
+        memory.reserve(&mut items, source.items().len())?;
+        for (position, item) in source.items().iter().enumerate() {
+            let rule = match item {
+                Item::Rule(_, rule) => rule,
+                Item::Facts(product) => {
+                    // A product's rows share its predicate, and so its rank;
+                    // a fact reads no predicate.
+                    let location = product.location();
+                    counters.work(limits, location)?;
+                    let view = components
+                        .ok_or_else(|| crate::formula_support::components::missing(location))?;
+                    let node = find(
+                        nodes.len(),
+                        |i| nodes[i].signature,
+                        product.predicate().get(view, limits, counters, location)?,
+                        limits,
+                        counters,
+                        location,
+                    )?;
+                    let rank = nodes[node]
+                        .component
+                        .ok_or_else(|| invalid(Failure::Owner, location))?;
+                    items.push((rank, position));
+                    continue;
+                }
+            };
             counters.work(limits, rule.location)?;
             let HeadIr::Normal(head) = &rule.head else {
                 unreachable!("class checked")
@@ -79,12 +105,12 @@ impl AcyclicPlan {
                     return Err(invalid(Failure::Owner, rule.location));
                 }
             }
-            rules.push((rank, index));
+            items.push((rank, position));
         }
         // Sort physical source positions with the shared bounded operation;
         // semantic signatures remain in the original analysis owner.
         crate::formula_support::sort::by(
-            &mut rules,
+            &mut items,
             crate::formula_support::GroundingWork::new(limits, counters, location),
             |left, right, _| Ok(left.cmp(right)),
         )?;
@@ -94,7 +120,7 @@ impl AcyclicPlan {
         lease.observe(memory.bytes, location)?;
         Ok(Some(Self {
             scope: catalog.source_scope().clone(),
-            rules,
+            items,
             _lease: lease,
         }))
     }
@@ -103,8 +129,9 @@ impl AcyclicPlan {
         self.scope.same(catalog.source_scope())
     }
 
-    pub(crate) fn rules(&self) -> &[(usize, usize)] {
-        &self.rules
+    /// The plan's (component rank, item position) entries, in scan order.
+    pub(crate) fn items(&self) -> &[(usize, usize)] {
+        &self.items
     }
 }
 
@@ -129,7 +156,8 @@ fn eligible(
             return Ok(false);
         }
     }
-    for rule in &source.rules {
+    // A fact product is a normal producer with an empty body: always in class.
+    for rule in source.rules_without_facts() {
         counters.work(limits, rule.location)?;
         if !matches!(rule.head, HeadIr::Normal(_))
             || rule.bindings.is_some()
