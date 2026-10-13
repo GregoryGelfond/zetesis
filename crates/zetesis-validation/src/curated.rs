@@ -108,7 +108,8 @@ pub enum Error {
         /// Observed SHA-256.
         actual: String,
     },
-    /// A relative path is not confined to the chosen root.
+    /// A relative path is not confined to the chosen root, or a file inside
+    /// it, named by its resolved path, is not a regular file.
     Path(String),
     /// A case, provenance, or model contract is inconsistent.
     Contract(String),
@@ -128,6 +129,11 @@ impl crate::corpus_files::Failure for Error {
     }
     fn unconfined(text: String) -> Self {
         Self::Path(text)
+    }
+    /// This corpus reports a file that is not regular under `Path` too,
+    /// naming it by its resolved path.
+    fn irregular(path: &Path) -> Self {
+        Self::Path(path.display().to_string())
     }
     fn limit(resource: Resource, observed: u128, limit: usize) -> Self {
         Self::Limit {
@@ -194,7 +200,8 @@ impl From<serde_json::Error> for Error {
 ///
 /// # Errors
 /// Refuses changed seals, malformed/duplicate contracts, unconfined paths,
-/// invalid UTF-8, missing files, or exceeded inclusive ceilings.
+/// files that are not regular files, invalid UTF-8, missing files, or exceeded
+/// inclusive ceilings.
 pub fn open(root: &Path, limits: Limits) -> Result<Corpus, Error> {
     let root = Files::canonical(root)?;
     let bytes = Files::read(

@@ -111,7 +111,8 @@ pub enum Error {
         /// Observed SHA-256.
         actual: String,
     },
-    /// An input path is not confined to its selected root.
+    /// An input path is not confined to its selected root, or a file inside
+    /// it, named by its resolved path, is not a regular file.
     Path(String),
     /// Provenance, dependencies, or a typed contract is inconsistent.
     Contract(String),
@@ -129,6 +130,11 @@ impl crate::corpus_files::Failure for Error {
     }
     fn unconfined(text: String) -> Self {
         Self::Path(text)
+    }
+    /// This corpus reports a file that is not regular under `Path` too,
+    /// naming it by its resolved path.
+    fn irregular(path: &Path) -> Self {
+        Self::Path(path.display().to_string())
     }
     fn limit(resource: Resource, observed: u128, limit: usize) -> Self {
         Self::Limit {
@@ -188,7 +194,8 @@ impl std::error::Error for Error {
 /// No upstream checkout, original corpus, external tool, or solver is consulted.
 ///
 /// # Errors
-/// Refuses changed bytes, unconfined paths, invalid metadata or exceeded limits.
+/// Refuses changed bytes, unconfined paths, files that are not regular files,
+/// invalid metadata or exceeded limits.
 pub fn load(root: &Path, limits: Limits) -> Result<Corpus, Error> {
     document::load(root, limits)
 }

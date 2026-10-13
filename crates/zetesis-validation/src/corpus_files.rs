@@ -25,11 +25,8 @@ pub(crate) trait Failure: Sized {
     /// The bytes named `path` have the SHA-256 `actual`, not their seal.
     fn digest(path: String, expected: String, actual: String) -> Self;
 
-    /// The file at `path` is not a regular file. A corpus that does not tell
-    /// this apart reports it as a name outside the corpus.
-    fn irregular(path: &Path) -> Self {
-        Self::unconfined(path.display().to_string())
-    }
+    /// The file at `path`, inside the corpus, is not a regular file.
+    fn irregular(path: &Path) -> Self;
 
     /// Refuse `observed` past the inclusive `limit` of `resource`.
     fn ceiling(resource: Self::Resource, observed: u128, limit: usize) -> Result<(), Self> {
