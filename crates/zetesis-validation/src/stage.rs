@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use super::phase::Measurement;
+use super::phase::{Measurement, integer};
 
 const HEADER: &str = "Stage timings: clock=host-monotonic; scope=driver; schema=1";
 const FOOTER: &str = "  stage scope: solving=setup_search_waits_scoring; source_loading=excluded; statistics_output=excluded; timer_overhead=not_separated; lazy_grounding=interleaved; kernel_time=unmeasured";
@@ -112,7 +112,7 @@ fn stage_measurement(label: &str, value: &str, mode: &str) -> Result<Option<Meas
     if value == "unmeasured" {
         Ok(None)
     } else {
-        measurement(value)
+        Measurement::read(value, "an attempted stage must record a call")
             .map(Some)
             .map_err(|reason| format!("stage {label}: {reason}"))
     }
@@ -123,38 +123,6 @@ fn field(line: &str, prefix: &str) -> Result<u64, String> {
         .ok_or("missing stage timing field")
         .and_then(integer)
         .map_err(str::to_owned)
-}
-
-fn measurement(value: &str) -> Result<Measurement, &'static str> {
-    let (calls, remainder) = value
-        .strip_prefix("calls=")
-        .and_then(|value| value.split_once("; elapsed_ns="))
-        .ok_or("missing calls or elapsed time")?;
-    let (elapsed, complete) = remainder
-        .split_once("; complete=")
-        .ok_or("missing measurement completeness")?;
-    let calls = integer(calls)?;
-    if calls == 0 {
-        return Err("an attempted stage must record a call");
-    }
-    Ok(Measurement {
-        calls,
-        elapsed_ns: integer(elapsed)?,
-        complete: match complete {
-            "true" => true,
-            "false" => false,
-            _ => return Err("invalid measurement completeness"),
-        },
-    })
-}
-
-fn integer(value: &str) -> Result<u64, &'static str> {
-    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
-        return Err("expected nonnegative integer timing counter");
-    }
-    value
-        .parse()
-        .map_err(|_| "timing counter exceeds u64 evidence profile")
 }
 
 #[cfg(test)]

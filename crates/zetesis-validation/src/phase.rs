@@ -125,8 +125,8 @@ pub(crate) fn parse(stderr: &str) -> Result<Option<PhaseTimings>, String> {
         let measured = if value == "unmeasured" {
             None
         } else {
-            let measured =
-                measurement(value).map_err(|reason| format!("phase {label}: {reason}"))?;
+            let measured = Measurement::read(value, "an attempted phase must record a call")
+                .map_err(|reason| format!("phase {label}: {reason}"))?;
             complete &= measured.complete;
             Some(measured)
         };
@@ -140,30 +140,35 @@ pub(crate) fn parse(stderr: &str) -> Result<Option<PhaseTimings>, String> {
     }))
 }
 
-fn measurement(value: &str) -> Result<Measurement, &'static str> {
-    let (calls, remainder) = value
-        .strip_prefix("calls=")
-        .and_then(|value| value.split_once("; elapsed_ns="))
-        .ok_or("missing calls or elapsed time")?;
-    let (elapsed, complete) = remainder
-        .split_once("; complete=")
-        .ok_or("missing measurement completeness")?;
-    let calls = integer(calls)?;
-    if calls == 0 {
-        return Err("an attempted phase must record a call");
+impl Measurement {
+    /// Read one `calls=…; elapsed_ns=…; complete=…` record of an attempted
+    /// phase or stage, refusing one without a call with `uncalled`.
+    pub(crate) fn read(value: &str, uncalled: &'static str) -> Result<Self, &'static str> {
+        let (calls, remainder) = value
+            .strip_prefix("calls=")
+            .and_then(|value| value.split_once("; elapsed_ns="))
+            .ok_or("missing calls or elapsed time")?;
+        let (elapsed, complete) = remainder
+            .split_once("; complete=")
+            .ok_or("missing measurement completeness")?;
+        let calls = integer(calls)?;
+        if calls == 0 {
+            return Err(uncalled);
+        }
+        Ok(Self {
+            calls,
+            elapsed_ns: integer(elapsed)?,
+            complete: match complete {
+                "true" => true,
+                "false" => false,
+                _ => return Err("invalid measurement completeness"),
+            },
+        })
     }
-    Ok(Measurement {
-        calls,
-        elapsed_ns: integer(elapsed)?,
-        complete: match complete {
-            "true" => true,
-            "false" => false,
-            _ => return Err("invalid measurement completeness"),
-        },
-    })
 }
 
-fn integer(value: &str) -> Result<u64, &'static str> {
+/// A recorded timing counter: a nonnegative decimal integer within `u64`.
+pub(crate) fn integer(value: &str) -> Result<u64, &'static str> {
     if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
         return Err("expected nonnegative integer timing counter");
     }
