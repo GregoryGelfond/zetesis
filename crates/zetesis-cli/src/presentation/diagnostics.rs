@@ -9,6 +9,7 @@ use std::{
 pub(crate) enum Label {
     Source,
     Oracle,
+    Comparisons,
     Grounding,
     Backend,
 }
@@ -17,6 +18,7 @@ impl Label {
         match self {
             Self::Source => "Source",
             Self::Oracle => "Oracle",
+            Self::Comparisons => "Comparisons",
             Self::Grounding => "Grounding",
             Self::Backend => "Backend",
         }

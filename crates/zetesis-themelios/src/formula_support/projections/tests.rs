@@ -33,13 +33,9 @@ fn with_expression(
 ) {
     let mut fixture = Fixture::default();
     let literals = [LiteralIr::Compare(
-        Expression {
-            nodes: nodes(&mut fixture),
-        },
+        Expression::new(nodes(&mut fixture)),
         Relation::Eq,
-        Expression {
-            nodes: vec![Operation::Variable(1)],
-        },
+        Expression::new(vec![Operation::Variable(1)]),
     )];
     fixture.with(location(), |_, computation, counters| {
         let limits = FormulaLimits::default();
@@ -518,13 +514,9 @@ fn descriptor_growth_releases_nested_leases() {
     let literals: Vec<_> = (0..6)
         .map(|_| {
             LiteralIr::Compare(
-                Expression {
-                    nodes: quotient(&mut fixture),
-                },
+                Expression::new(quotient(&mut fixture)),
                 Relation::Eq,
-                Expression {
-                    nodes: vec![Operation::Variable(1)],
-                },
+                Expression::new(vec![Operation::Variable(1)]),
             )
         })
         .collect();

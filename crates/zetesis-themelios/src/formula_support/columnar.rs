@@ -105,9 +105,7 @@ fn tuple(catalog: &mut SupportCatalog, arity: usize) -> super::components::Const
 }
 
 fn number(catalog: &mut SupportCatalog, value: i32) -> Expression {
-    Expression {
-        nodes: vec![constant(catalog, value)],
-    }
+    Expression::new(vec![constant(catalog, value)])
 }
 
 fn evaluate(
@@ -320,18 +318,14 @@ fn column_filters_retain_checked_binding_generation() {
         )),
         LiteralIr::Bind {
             target: 1,
-            value: Expression {
-                nodes: vec![
-                    Operation::Variable(0),
-                    constant(&mut support, 2),
-                    Operation::Binary(BinaryOp::Mul, 0, 1),
-                ],
-            },
+            value: Expression::new(vec![
+                Operation::Variable(0),
+                constant(&mut support, 2),
+                Operation::Binary(BinaryOp::Mul, 0, 1),
+            ]),
         },
         LiteralIr::Compare(
-            Expression {
-                nodes: vec![Operation::Variable(1)],
-            },
+            Expression::new(vec![Operation::Variable(1)]),
             Comparison::Gt,
             number(&mut support, 10),
         ),
@@ -353,13 +347,11 @@ fn column_filters_preserve_arithmetic_failures() {
             vec![number(&mut support, 1)],
         ),
         LiteralIr::TupleCompare(
-            vec![Expression {
-                nodes: vec![
-                    constant(&mut support, 1),
-                    constant(&mut support, 0),
-                    Operation::Binary(BinaryOp::Div, 0, 1),
-                ],
-            }],
+            vec![Expression::new(vec![
+                constant(&mut support, 1),
+                constant(&mut support, 0),
+                Operation::Binary(BinaryOp::Div, 0, 1),
+            ])],
             Comparison::Eq,
             vec![number(&mut support, 0)],
         ),

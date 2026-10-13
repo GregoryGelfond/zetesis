@@ -236,8 +236,9 @@ impl<'a> Projections<'a> {
         ProjectionValues::new(context).map(Self::Local)
     }
 
-    /// A cursor's projections: the prepared rule's complete-column map when one
-    /// is supplied, borrowed as [`Self::borrowed`] does, and otherwise its own.
+    /// A cursor's projections: the borrowed complete-column map of its prepared
+    /// rule or support round, when one is supplied, as [`Self::borrowed`]
+    /// borrows it, and otherwise its own.
     pub(super) fn for_cursor(
         total: Option<&'a ProjectionValues<'a>>,
         context: &Context<'_, &Computation<'_, '_>>,

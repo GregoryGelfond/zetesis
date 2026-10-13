@@ -384,12 +384,12 @@ fn structural_rows_are_selected_before_matching() {
 fn rejected_rows_do_not_evaluate_partial_scalars() {
     let mut fixture = Fixture::from_atoms([atom("p", &[0])], location());
     let one = fixture.scalar(&Value::Number(1), location());
-    let division = || Expression {
-        nodes: vec![
+    let division = || {
+        Expression::new(vec![
             Operation::Constant(one),
             Operation::Variable(0),
             Operation::Binary(BinaryOp::Div, 0, 1),
-        ],
+        ])
     };
     let rule = rule(
         vec![
@@ -438,9 +438,7 @@ fn rejected_rows_do_not_evaluate_partial_scalars() {
 fn empty_positive_inputs_keep_their_scalar_row() {
     let mut fixture = Fixture::default();
     let one = fixture.scalar(&Value::Number(1), location());
-    let constant = || Expression {
-        nodes: vec![Operation::Constant(one)],
-    };
+    let constant = || Expression::new(vec![Operation::Constant(one)]);
     let rule = rule(
         vec![LiteralIr::Compare(constant(), Relation::Eq, constant())],
         0,

@@ -76,12 +76,7 @@ fn borrowed_leaf_comparisons_preserve_term_order() {
                     } else {
                         Operation::Variable(1)
                     };
-                    let expressions = [
-                        Expression { nodes: vec![first] },
-                        Expression {
-                            nodes: vec![second],
-                        },
-                    ];
+                    let expressions = [Expression::new(vec![first]), Expression::new(vec![second])];
                     assert!(leaves([&expressions[0], &expressions[1]]).is_some());
                     fixture.with(location(), |_, computation, counters| {
                         let source = binding(
@@ -144,16 +139,12 @@ fn bounded_comparison(borrowed: bool, extra: u64, absent: Option<usize>) -> (Str
             ..Default::default()
         };
         let expressions = [
-            Expression {
-                nodes: vec![Operation::Variable(0)],
-            },
-            Expression {
-                nodes: vec![if absent == Some(1) {
-                    Operation::Variable(1)
-                } else {
-                    Operation::Constant(scalar)
-                }],
-            },
+            Expression::new(vec![Operation::Variable(0)]),
+            Expression::new(vec![if absent == Some(1) {
+                Operation::Variable(1)
+            } else {
+                Operation::Constant(scalar)
+            }]),
         ];
         let mut evaluation = Evaluation::default();
         evaluation.zero_divisor_failure(location());
@@ -202,9 +193,7 @@ fn borrowed_variable_refuses_a_foreign_owner() {
         binding(&[Some(Value::Number(7))], computation, counters, location())
     });
     Fixture::default().with(location(), |_, computation, counters| {
-        let expression = Expression {
-            nodes: vec![Operation::Variable(0)],
-        };
+        let expression = Expression::new(vec![Operation::Variable(0)]);
         let limits = FormulaLimits::default();
         let expected = owned_comparison(
             &mut Evaluation::default(),
@@ -234,16 +223,12 @@ fn mutable_expressions_keep_owned_comparison_results() {
     let one = fixture.scalar(&Value::Number(1), location());
     let two = fixture.scalar(&Value::Number(2), location());
     let expressions = [
-        Expression {
-            nodes: vec![Operation::Variable(0)],
-        },
-        Expression {
-            nodes: vec![
-                Operation::Constant(one),
-                Operation::Constant(two),
-                Operation::Binary(BinaryOp::Add, 0, 1),
-            ],
-        },
+        Expression::new(vec![Operation::Variable(0)]),
+        Expression::new(vec![
+            Operation::Constant(one),
+            Operation::Constant(two),
+            Operation::Binary(BinaryOp::Add, 0, 1),
+        ]),
     ];
     assert!(leaves([&expressions[0], &expressions[1]]).is_none());
     fixture.with(location(), |_, computation, counters| {
@@ -265,15 +250,11 @@ fn comparison_fallback_retains_undefined_arithmetic() {
     let mut fixture = Fixture::default();
     let zero = fixture.scalar(&Value::Number(0), location());
     let expressions = [
-        Expression {
-            nodes: vec![
-                Operation::Constant(zero),
-                Operation::Binary(BinaryOp::Div, 0, 0),
-            ],
-        },
-        Expression {
-            nodes: vec![Operation::Variable(0)],
-        },
+        Expression::new(vec![
+            Operation::Constant(zero),
+            Operation::Binary(BinaryOp::Div, 0, 0),
+        ]),
+        Expression::new(vec![Operation::Variable(0)]),
     ];
     assert!(leaves([&expressions[0], &expressions[1]]).is_none());
     fixture.with(location(), |_, computation, counters| {
@@ -302,9 +283,7 @@ fn cancellation_precedes_borrowed_variable_lookup() {
         let cancellation = zetesis_cpu::Cancellation::default();
         cancellation.cancel();
         counters.cancellation = Some(cancellation);
-        let expression = Expression {
-            nodes: vec![Operation::Variable(usize::MAX)],
-        };
+        let expression = Expression::new(vec![Operation::Variable(usize::MAX)]);
         let result = Evaluation::default().source_comparison(
             ([&expression, &expression], Relation::Eq),
             &source,
@@ -327,16 +306,12 @@ fn comparison_reuses_general_expression_scratch() {
     fixture.with(location(), |_, computation, counters| {
         let source = binding(&[Some(Value::Number(2))], computation, counters, location());
         let limits = FormulaLimits::default();
-        let general = Expression {
-            nodes: vec![
-                Operation::Constant(one),
-                Operation::Variable(0),
-                Operation::Binary(BinaryOp::Add, 0, 1),
-            ],
-        };
-        let leaf = Expression {
-            nodes: vec![Operation::Variable(0)],
-        };
+        let general = Expression::new(vec![
+            Operation::Constant(one),
+            Operation::Variable(0),
+            Operation::Binary(BinaryOp::Add, 0, 1),
+        ]);
+        let leaf = Expression::new(vec![Operation::Variable(0)]);
         let mut outcomes = Vec::new();
         for borrowed in [false, true] {
             let mut evaluation = Evaluation::default();

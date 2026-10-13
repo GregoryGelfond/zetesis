@@ -3,9 +3,7 @@
 use super::*;
 
 fn leaves() -> [Expression; 2] {
-    [0, 1].map(|slot| Expression {
-        nodes: vec![Operation::Variable(slot)],
-    })
+    [0, 1].map(|slot| Expression::new(vec![Operation::Variable(slot)]))
 }
 
 #[test]

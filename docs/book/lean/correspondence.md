@@ -2857,10 +2857,12 @@ comparisons, binding generators and final filters. Each evaluation returns a
 scoped term key and clears its prefix before the next borrow. Preserving expression
 order, complete-filter error precedence, work admission and cleanup is a concrete
 caller obligation. The reset law neither establishes source-family exclusions
-nor permits an earlier final filter to hide an independently required check. An integer comparison form borrows no workspace: its
-obligation is that its verdict equals the evaluator's on every row it decides,
-with every other row left to the evaluator, and that it charges its nodes and
-reads before the verdict is used; no Lean law states it.
+nor permits an earlier final filter to hide an independently required check.
+An integer comparison form borrows no workspace. Its obligations are that its
+verdict equals the evaluator's on every row it decides, with every other row
+left to the evaluator, and that it charges its constant, one unit per node and
+per variable step, before it evaluates, whether it then decides or declines; no
+Lean law states them.
 
 `EvaluationPrefix.remember_success_sound` states the invariant for retaining
 successful whole-expression results. It requires a pure partial evaluator and

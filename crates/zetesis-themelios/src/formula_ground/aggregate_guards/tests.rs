@@ -75,9 +75,7 @@ fn with_guards<T>(
         .iter()
         .map(|(relation, value)| AggregateGuard {
             relation: *relation,
-            bound: Expression {
-                nodes: vec![Operation::Constant(fixture.scalar(value, location()))],
-            },
+            bound: Expression::new(vec![Operation::Constant(fixture.scalar(value, location()))]),
         })
         .collect();
     fixture.with(location(), |_, computation, counters| {

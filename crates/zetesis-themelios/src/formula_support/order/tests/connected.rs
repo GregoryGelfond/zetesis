@@ -426,17 +426,13 @@ fn arithmetic_fixture(operator: BinaryOp, left: i32, right: i32) -> (Fixture, Ve
         atom(&mut fixture, "q", &[1]),
         atom(&mut fixture, "edge", &[0, 2]),
         LiteralIr::Compare(
-            Expression {
-                nodes: vec![
-                    Operation::Variable(0),
-                    Operation::Variable(2),
-                    Operation::Binary(operator, 0, 1),
-                ],
-            },
+            Expression::new(vec![
+                Operation::Variable(0),
+                Operation::Variable(2),
+                Operation::Binary(operator, 0, 1),
+            ]),
             Relation::Eq,
-            Expression {
-                nodes: vec![Operation::Variable(1)],
-            },
+            Expression::new(vec![Operation::Variable(1)]),
         ),
     ];
     (fixture, literals)

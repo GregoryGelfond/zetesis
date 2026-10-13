@@ -32,7 +32,7 @@ fn evaluate(
         let source: Vec<_> = assignment.iter().cloned().map(Some).collect();
         let source = binding(&source, computation, counters, location());
         let key = evaluation.expression(
-            &Expression { nodes },
+            &Expression::new(nodes),
             |slot| source.key(slot, location()),
             computation,
             &FormulaLimits::default(),
@@ -159,9 +159,7 @@ fn unwinding_clears_the_live_prefix() {
     fixture.with(location(), |_, computation, counters| {
         let result = catch_unwind(AssertUnwindSafe(|| {
             evaluation.expression(
-                &Expression {
-                    nodes: vec![Operation::Constant(earlier), Operation::Variable(0)],
-                },
+                &Expression::new(vec![Operation::Constant(earlier), Operation::Variable(0)]),
                 |_| panic!("injected variable lookup unwind"),
                 computation,
                 &FormulaLimits::default(),
@@ -284,9 +282,7 @@ fn repeated_reads_reuse_the_same_canonical_payload() {
         for _ in 0..3 {
             let key = evaluation
                 .expression(
-                    &Expression {
-                        nodes: vec![Operation::Variable(0)],
-                    },
+                    &Expression::new(vec![Operation::Variable(0)]),
                     |slot| source.key(slot, location()),
                     computation,
                     &FormulaLimits::default(),
@@ -317,9 +313,7 @@ fn work_refusal_precedes_variable_access() {
             ..Default::default()
         };
         let failure = evaluation.expression(
-            &Expression {
-                nodes: vec![Operation::Variable(0)],
-            },
+            &Expression::new(vec![Operation::Variable(0)]),
             |_| panic!("work must refuse before variable access"),
             computation,
             &bounded,
@@ -337,23 +331,21 @@ fn work_refusal_precedes_variable_access() {
     });
 }
 fn retry_expression(fixture: &mut Fixture) -> Expression {
-    Expression {
-        nodes: vec![
-            Operation::Constant(fixture.scalar(&Value::String("prefix".into()), location())),
-            Operation::Constant(fixture.scalar(&Value::Number(7), location())),
-            Operation::Constructor(Box::new(crate::formula_value::Constructor {
-                shape: fixture.constructor(
-                    ValueNodeRef::Function {
-                        name: "f",
-                        sign: Sign::Negative,
-                        arity: 3,
-                    },
-                    location(),
-                ),
-                arguments: vec![1, 0, 1],
-            })),
-        ],
-    }
+    Expression::new(vec![
+        Operation::Constant(fixture.scalar(&Value::String("prefix".into()), location())),
+        Operation::Constant(fixture.scalar(&Value::Number(7), location())),
+        Operation::Constructor(Box::new(crate::formula_value::Constructor {
+            shape: fixture.constructor(
+                ValueNodeRef::Function {
+                    name: "f",
+                    sign: Sign::Negative,
+                    arity: 3,
+                },
+                location(),
+            ),
+            arguments: vec![1, 0, 1],
+        })),
+    ])
 }
 #[test]
 fn every_work_stop_leaves_scratch_ready_for_retry() {
@@ -476,9 +468,7 @@ fn constant_reads_reuse_admitted_payload() {
         for _ in 0..3 {
             let key = evaluation
                 .expression(
-                    &Expression {
-                        nodes: vec![Operation::Constant(scalar)],
-                    },
+                    &Expression::new(vec![Operation::Constant(scalar)]),
                     |_| unreachable!(),
                     computation,
                     &limits,

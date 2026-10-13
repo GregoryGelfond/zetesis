@@ -3,6 +3,7 @@
 
 use super::{
     Comparisons, Computation, Counters, Coverage, Evaluation, Failures, Join, compare, comparison,
+    integer_comparisons,
 };
 use crate::ProgramSite;
 use crate::formula_binding::Binding;
@@ -55,11 +56,7 @@ impl Join<'_, '_> {
                 continue;
             }
             let result = if let Some((left, relation, right)) = comparison(literal) {
-                let base = self.storage_bytes() - self.integer_comparisons.capacity_bytes();
-                let decided = self.integer_comparisons.decide(
-                    &mut self.lease,
-                    base,
-                    (index, self.literals.len()),
+                let decided = integer_comparisons::decide(
                     ([left, right], relation),
                     &binding,
                     super::Context::new(&*computation, limits, counters, location),
@@ -201,6 +198,14 @@ fn pending_check(
     location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
     if let Some((left, relation, right)) = comparison(literal) {
+        // An unavailable generated input declines, like any unread slot.
+        if let Some(holds) = integer_comparisons::decide(
+            ([left, right], relation),
+            binding,
+            super::Context::new(&*computation, limits, counters, location),
+        )? {
+            return Ok(holds);
+        }
         let mut failures = Failures::default();
         let result = evaluation.source_partial(
             left,

@@ -159,3 +159,26 @@ fn real_domain_work_reaches_the_shared_output_view() {
     assert!(output.contains("grounding domain_analysis:"));
     assert!(output.contains("domain_rejected_rows=6;"));
 }
+
+#[test]
+fn integer_comparison_counters_keep_their_own_names() {
+    // X < 2 is decided by its form on p(1) and p(2) and declines on p(a):
+    // distinct nonzero counts, which a swapped name in the shared field view
+    // would exchange.
+    let measurements = SolveMeasurements::new(true);
+    let observer = measurements.grounding_observer().unwrap();
+    prepared("p(1). p(2). p(a). r(X) :- p(X), X < 2.")
+        .ground_with_observer(Some(&observer))
+        .unwrap();
+    let timings = measurements.snapshot().unwrap().grounding;
+    let rules = timings.get(GroundingPhase::RuleInstantiation).unwrap();
+    let fields = super::work_fields(&rules.work);
+    assert!(
+        fields.contains(&("integer_comparisons", Some(2))),
+        "{fields:?}"
+    );
+    assert!(
+        fields.contains(&("integer_comparison_declines", Some(1))),
+        "{fields:?}"
+    );
+}

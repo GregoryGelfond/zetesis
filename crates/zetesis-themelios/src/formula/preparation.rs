@@ -111,6 +111,13 @@ impl PreparedFormula {
         self.preparation.program.analysis_basis
     }
 
+    /// How the prepared program's comparison literals were compiled: with an
+    /// integer comparison form, or without one by reason, once per literal.
+    #[must_use]
+    pub fn comparison_forms(&self) -> crate::ComparisonForms {
+        self.preparation.program.comparison_forms
+    }
+
     /// Original canonical program before normalization or analysis projection.
     #[must_use]
     pub fn original_program(&self) -> &Program {
@@ -542,6 +549,13 @@ impl PreparedFormulaBundle {
     #[must_use]
     pub fn analysis_basis(&self) -> super::AnalysisBasis {
         self.preparation.program.analysis_basis
+    }
+
+    /// How the prepared program's comparison literals were compiled: with an
+    /// integer comparison form, or without one by reason, once per literal.
+    #[must_use]
+    pub fn comparison_forms(&self) -> crate::ComparisonForms {
+        self.preparation.program.comparison_forms
     }
 
     /// Original canonical program before normalization or analysis projection.

@@ -19,9 +19,13 @@ enum Input {
     Parsed(ParsedSource),
 }
 
-/// A program prepared by the shared library execution policy;
-/// the CLI only presents its warnings and failures.
-struct FormulaInput(zetesis_solve::PreparedExecution);
+/// A program prepared by the shared library execution policy, with how its
+/// preparation compiled its comparisons; the CLI only presents its warnings,
+/// receipts and failures.
+struct FormulaInput(
+    zetesis_solve::PreparedExecution,
+    zetesis_themelios::ComparisonForms,
+);
 
 impl FormulaInput {
     fn prepared(&self) -> crate::PreparedInput<'_> {
@@ -55,6 +59,23 @@ impl FormulaInput {
             }
             _ => Ok(()),
         }
+    }
+
+    /// The preparation receipt of the integer comparison forms, as a record.
+    fn comparison_forms(&self, diagnostics: &mut Diagnostics<impl Write>) -> std::io::Result<()> {
+        let forms = self.1;
+        diagnostics.metadata(
+            Label::Comparisons,
+            format_args!(
+                "with_integer_form={}; bound={}; constructor={}; nonnumeric_constant={}; argument_position={}; built_without_form={}",
+                forms.with_form,
+                forms.bound,
+                forms.constructor,
+                forms.nonnumeric_constant,
+                forms.argument_position,
+                forms.built_without_form
+            ),
+        )
     }
 
     fn retain_source(&self, failure: PublicationFailure) -> PublicationFailure {
@@ -110,6 +131,7 @@ impl FormulaInput {
         phases: &Recorder,
     ) -> Result<Progress, PublicationFailure> {
         self.warnings(diagnostics)?;
+        self.comparison_forms(diagnostics)?;
         crate::publication::solve(
             self.prepared(),
             None,
@@ -206,6 +228,7 @@ pub(crate) fn source(
                 .map_err(SourceFailure::into_error)?
                 .with_grounding_options(grounding_options(options))
                 .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()));
+            let forms = prepared.comparison_forms();
             let observer = observer
                 .as_ref()
                 .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver);
@@ -214,7 +237,7 @@ pub(crate) fn source(
                 &crate::SolveConfig::from(options),
                 observer,
             )
-            .map(FormulaInput)
+            .map(|execution| FormulaInput(execution, forms))
         });
     let admitted = match admitted {
         Ok(admitted) => admitted,
@@ -315,6 +338,7 @@ pub(crate) fn bundle(
             )?
             .with_grounding_options(grounding_options(options))
             .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()));
+            let forms = prepared.comparison_forms();
             let observer = observer
                 .as_ref()
                 .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver);
@@ -323,7 +347,7 @@ pub(crate) fn bundle(
                 &crate::SolveConfig::from(options),
                 observer,
             )
-            .map(FormulaInput)
+            .map(|execution| FormulaInput(execution, forms))
         });
     let admitted = match admitted {
         Ok(admitted) => admitted,

@@ -226,22 +226,18 @@ fn failed_scalars_never_lend_positive_evidence() {
         for divisor in [0, 1] {
             let mut fixture = Fixture::from_atoms([atom("p", &[divisor])], location());
             let one = fixture.scalar(&Value::Number(1), location());
-            let expression = Expression {
-                nodes: vec![
-                    Operation::Constant(one),
-                    Operation::Variable(0),
-                    Operation::Binary(BinaryOp::Div, 0, 1),
-                ],
-            };
+            let expression = Expression::new(vec![
+                Operation::Constant(one),
+                Operation::Variable(0),
+                Operation::Binary(BinaryOp::Div, 0, 1),
+            ]);
             let rule = rule(
                 vec![
                     pattern(&mut fixture, "p", &[0]),
                     LiteralIr::Compare(
                         expression,
                         Relation::Lt,
-                        Expression {
-                            nodes: vec![Operation::Constant(one)],
-                        },
+                        Expression::new(vec![Operation::Constant(one)]),
                     ),
                 ],
                 1,
@@ -286,12 +282,8 @@ fn generated_rows_keep_the_ordinary_truth_path() {
                 pattern(&mut fixture, "p", &[0]),
                 LiteralIr::Range {
                     target: 1,
-                    lower: Expression {
-                        nodes: vec![Operation::Constant(one)],
-                    },
-                    upper: Expression {
-                        nodes: vec![Operation::Variable(0)],
-                    },
+                    lower: Expression::new(vec![Operation::Constant(one)]),
+                    upper: Expression::new(vec![Operation::Variable(0)]),
                     binder: true,
                 },
             ],
@@ -628,13 +620,9 @@ fn an_unmapped_gap_retains_the_open_restriction() {
         ];
         if compare {
             body.push(LiteralIr::Compare(
-                Expression {
-                    nodes: vec![Operation::Variable(1)],
-                },
+                Expression::new(vec![Operation::Variable(1)]),
                 Relation::Neq,
-                Expression {
-                    nodes: vec![Operation::Variable(2)],
-                },
+                Expression::new(vec![Operation::Variable(2)]),
             ));
         }
         let rule = rule(body, 3);

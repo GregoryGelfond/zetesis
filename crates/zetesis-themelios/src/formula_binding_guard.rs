@@ -266,7 +266,7 @@ impl Compiler<'_> {
                 Operation::Absolute(operand) => Operation::Absolute(operand),
             });
         }
-        Ok(Expression { nodes })
+        Ok(Expression::new(nodes))
     }
 
     fn only_missing(

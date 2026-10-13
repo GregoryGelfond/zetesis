@@ -520,9 +520,6 @@ them. Checker preparation belongs to its first check's allowance.
 Checkers share a cumulative receipt, not a cumulative admission ceiling.
 Charges are admitted locally before their operations and published when
 preparation or a check returns, fails or unwinds, and when a checker drops.
-One bounded exception: an integer comparison form admits its charge after
-evaluating, at most 32 node operations and 32 variable reads with no
-allocation, and polls cancellation once per comparison at that charge.
 In-flight charges may remain local; live receipt fields are independent,
 monotone lower bounds. Joined receipts are exact until their fields saturate.
 Zero work charges still poll cancellation. The final outcome joins workers
@@ -568,31 +565,38 @@ arithmetic. Workspace admission and node work remain charged. Constructing
 composite results can allocate. This storage schedule has a separate
 [preservation law](../lean/correspondence.md).
 
-A join decides a comparison whose operands are integer arithmetic of at most
-sixteen nodes with an integer comparison form instead of this evaluator. At the
-comparison's first decision in a join, the join compiles each operand once,
-resolving its numeric constants; whether a literal has a form depends only on
-the literal, so every join that decides it takes the same route on the same
-values, and a refused reservation of the form's storage refuses rather than
-falling back. On each row the
+A comparison whose operands are integer arithmetic of at most sixteen nodes is
+decided with an integer comparison form instead of this evaluator. The compiler
+builds each comparison operand's
+[form](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ir/integer.rs)
+once, with the prepared program: a variable keeps its slot, a numeric constant
+becomes its value and an operation keeps its argument positions, eight bytes per
+step. Compiling charges one expansion `TermWork` unit per step and the form's
+bytes as `ScalarBytes`. An operand with a constructor, a nonnumeric constant,
+more than sixteen nodes or an argument naming a later node has no form, and
+neither has its comparison. Joins borrow the literal's form, so a row's route is
+a function of the literal and the row's values alone: every join that decides
+the literal, in capture and in a frozen check alike, takes the same route on the
+same values. Every evaluation site tries the
 [form](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/integer_comparisons.rs)
-reads the operands' variables, evaluates with the same checked operations in
-machine integers, and compares the two integers, which is the ASP order on
-numbers. It constructs no term and reads no projection. It records its
-evaluations as entered, then charges one unit per node and per variable read in
-a single admission before its verdict is used. A row with a variable that is
-unreadable or not a number, or with a failing operation, declines without a
-charge, and this evaluator then decides it with its own charges, diagnostics and
-failure order. Per join, compiling charges the literal states' initialization,
-each constant's lookup and each reservation, and retains eight bytes per body
-literal, per compiled node and per form. A comparison decided this way uses less
-work than the evaluator unless a projection would have answered it, so a work
-ceiling can be reached earlier or later than before. The grounding counters
-`integer_comparisons` and `integer_comparison_declines` count decided and
-declined rows; `integer_comparison_forms` and `comparisons_without_integer_form`
-count literals compiled with and without a form, once per join. A hybrid
-check's joins decide comparisons the same way but are not observed by these
-counters.
+first: the comparisons a join decides on its bound prefix, its complete-row
+filters and the checks of a row whose generator failed. On a row it admits one
+work charge of both forms' constant, one unit per node and per variable step,
+before evaluating; records its evaluations as entered and its nodes as admitted;
+reads the operands' variables; evaluates with the same checked operations in
+machine integers; and compares the two integers, which is the ASP order on
+numbers. It constructs no term and reads no projection. A row with a variable
+that is unbound, unavailable or not a number, or with a failing operation,
+declines after that charge, and this evaluator then decides it with its own
+charges, diagnostics and failure order. A comparison decided this way uses less
+work than the evaluator unless a projection would have answered it, and a row
+that declines is charged both, so a work ceiling can be reached earlier or later
+than before. The grounding counters `integer_comparisons` and
+`integer_comparison_declines` count decided and declined rows. The prepared and
+admitted formulas' `comparison_forms()` counts the program's comparison literals
+with a form, and without one by reason, once per literal; the statistics records
+print it. A hybrid check's joins decide comparisons the same way but are not
+observed by the grounding counters.
 
 A positive body is joined in an order chosen once per join, before a row is
 read, from what the body says: each relation's size, the variables each

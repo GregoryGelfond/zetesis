@@ -261,9 +261,7 @@ fn every_work_stop_returns_only_a_semantic_prefix() {
 }
 #[test]
 fn rejected_rows_remain_available_for_validation() {
-    let variable = |slot| Expression {
-        nodes: vec![Operation::Variable(slot)],
-    };
+    let variable = |slot| Expression::new(vec![Operation::Variable(slot)]);
     with_join(
         |fixture| {
             vec![
@@ -489,12 +487,8 @@ fn generated_rows(head: bool) {
         pattern(&mut fixture, "p", &[0]),
         LiteralIr::Range {
             target: 1,
-            lower: Expression {
-                nodes: vec![Operation::Constant(one)],
-            },
-            upper: Expression {
-                nodes: vec![Operation::Variable(0)],
-            },
+            lower: Expression::new(vec![Operation::Constant(one)]),
+            upper: Expression::new(vec![Operation::Variable(0)]),
             binder: true,
         },
     ];
@@ -693,13 +687,9 @@ fn selected_support(owned: bool, allowance: u64) -> Run {
                 pattern(fixture, "p", &[0, 1]),
                 pattern(fixture, "p", &[1, 2]),
                 LiteralIr::Compare(
-                    Expression {
-                        nodes: vec![Operation::Variable(0)],
-                    },
+                    Expression::new(vec![Operation::Variable(0)]),
                     Relation::Lt,
-                    Expression {
-                        nodes: vec![Operation::Variable(2)],
-                    },
+                    Expression::new(vec![Operation::Variable(2)]),
                 ),
             ]
         },

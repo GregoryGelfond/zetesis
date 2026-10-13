@@ -36,19 +36,25 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
-- Joins decide comparisons of integer arithmetic with machine integers: each such
-  comparison is compiled once per join into an integer comparison form, which
-  constructs no term and leaves every other row to the expression evaluator.
-  Verdicts and answers are unchanged. Grounding work falls for these comparisons,
-  except where a unary projection used to answer, which now costs one unit per
-  node and read; support bytes fall where a number would have been newly
-  constructed and rise by the forms' own storage, eight bytes per body literal,
-  compiled node and form in each join. A work or support-storage ceiling can
-  therefore be reached earlier or later than before. `GroundingWork` gains
-  `integer_comparisons`, `integer_comparison_declines`, `integer_comparison_forms`
-  and `comparisons_without_integer_form`, which the statistics' grounding
-  attribution reports.
-
+- Comparisons of integer arithmetic are decided with machine integers. The
+  compiler compiles each comparison operand of at most sixteen nodes once, with
+  the prepared program, into an integer comparison form; on a row whose operand
+  values are numbers, the form compares two machine integers, constructing no
+  term and reading no projection, and every other row falls back to the
+  expression evaluator. Verdicts and answers are unchanged. Preparation's
+  expansion receipts rise by the forms' steps (`TermWork`) and their eight bytes
+  per step (`ScalarBytes`); every compiled expression is 24 bytes larger, which
+  the charges that count the size of compiled literals reflect. Grounding work
+  falls for comparisons a form decides, except where a unary projection used to
+  answer; a row that falls back is charged the form's constant as well as the
+  evaluator's work; support bytes fall where a number would have been newly
+  constructed. A work or expansion ceiling can therefore be reached earlier or
+  later than before. `GroundingWork` gains `integer_comparisons` and
+  `integer_comparison_declines`, the rows decided and declined, which the
+  statistics' grounding attribution reports. `ComparisonForms`, from
+  `comparison_forms()` on the prepared and admitted formulas, counts the
+  comparison literals with a form and without one by reason, and the statistics
+  records print it.
 - An aggregate assignment now proposes its carrier: the measure of every
   selection that contains its required tuples, those from an element whose
   condition has no atom of either sign, and lies within its possible ones.

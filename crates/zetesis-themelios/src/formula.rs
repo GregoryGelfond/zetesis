@@ -751,6 +751,13 @@ impl AdmittedFormula {
         &self.compiled.expansion
     }
 
+    /// How the prepared program's comparison literals were compiled: with an
+    /// integer comparison form, or without one by reason, once per literal.
+    #[must_use]
+    pub fn comparison_forms(&self) -> crate::ComparisonForms {
+        self.compiled.comparison_forms
+    }
+
     /// How the key analysis behind [`Self::keyed_constraints`] ended: complete,
     /// or stopped by its work ceiling with every constraint not yet asked
     /// left as written.
@@ -891,6 +898,13 @@ impl AdmittedFormulaBundle {
     #[must_use]
     pub fn expansion_usage(&self) -> &crate::ExpansionUsage {
         &self.compiled.expansion
+    }
+
+    /// How the prepared program's comparison literals were compiled: with an
+    /// integer comparison form, or without one by reason, once per literal.
+    #[must_use]
+    pub fn comparison_forms(&self) -> crate::ComparisonForms {
+        self.compiled.comparison_forms
     }
 
     /// How the key analysis behind [`Self::keyed_constraints`] ended: complete,
@@ -1036,6 +1050,7 @@ pub(crate) struct Compiled {
     pub objective_declarations: Vec<ProgramSite>,
     pub keyed_constraints: usize,
     pub key_analysis: crate::KeyAnalysis,
+    pub comparison_forms: crate::ComparisonForms,
     pub expansion: crate::ExpansionUsage,
 }
 

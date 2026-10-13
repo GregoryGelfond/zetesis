@@ -12,20 +12,16 @@ use zetesis_core::{Value, ValueNodeRef};
 
 use crate::formula_support::Context;
 fn number(fixture: &mut Fixture, value: i32) -> Expression {
-    Expression {
-        nodes: vec![Operation::Constant(
-            fixture.scalar(&Value::Number(value), location()),
-        )],
-    }
+    Expression::new(vec![Operation::Constant(
+        fixture.scalar(&Value::Number(value), location()),
+    )])
 }
 fn increment(fixture: &mut Fixture, variable: usize) -> Expression {
-    Expression {
-        nodes: vec![
-            Operation::Variable(variable),
-            Operation::Constant(fixture.scalar(&Value::Number(1), location())),
-            Operation::Binary(BinaryOp::Add, 0, 1),
-        ],
-    }
+    Expression::new(vec![
+        Operation::Variable(variable),
+        Operation::Constant(fixture.scalar(&Value::Number(1), location())),
+        Operation::Binary(BinaryOp::Add, 0, 1),
+    ])
 }
 
 #[test]
@@ -165,13 +161,11 @@ fn false_filters_do_not_hide_later_arithmetic_errors() {
             vec![number(&mut fixture, 1)],
         ),
         LiteralIr::TupleCompare(
-            vec![Expression {
-                nodes: vec![
-                    Operation::Constant(fixture.scalar(&Value::Number(1), location())),
-                    Operation::Constant(fixture.scalar(&Value::Number(0), location())),
-                    Operation::Binary(BinaryOp::Div, 0, 1),
-                ],
-            }],
+            vec![Expression::new(vec![
+                Operation::Constant(fixture.scalar(&Value::Number(1), location())),
+                Operation::Constant(fixture.scalar(&Value::Number(0), location())),
+                Operation::Binary(BinaryOp::Div, 0, 1),
+            ])],
             Relation::Eq,
             vec![number(&mut fixture, 0)],
         ),

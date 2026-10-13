@@ -333,9 +333,9 @@ fn ineligible_certificates_do_not_hide_measure_errors() {
             measure: HeadMeasure::Min,
             guards: vec![crate::formula_ir::AggregateGuard {
                 relation: themelios_program::program::Relation::Ge,
-                bound: crate::formula_ir::Expression {
-                    nodes: vec![crate::formula_ir::Operation::Constant(zero)],
-                },
+                bound: crate::formula_ir::Expression::new(vec![
+                    crate::formula_ir::Operation::Constant(zero),
+                ]),
             }],
             elements: vec![signed],
         },

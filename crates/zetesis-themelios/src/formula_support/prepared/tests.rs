@@ -29,9 +29,7 @@ fn fixture() -> (CompletedCatalog, RuleIr) {
             )
             .unwrap();
     }
-    let variable = |slot| Expression {
-        nodes: vec![Operation::Variable(slot)],
-    };
+    let variable = |slot| Expression::new(vec![Operation::Variable(slot)]);
     let mut body: Vec<_> = [("p", 0), ("q", 1)]
         .into_iter()
         .map(|(name, slot)| {

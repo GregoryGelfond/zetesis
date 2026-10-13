@@ -124,14 +124,10 @@ impl Compiler<'_> {
     ) -> Result<Expression, FormulaFailure> {
         if let Some(value) = sentinel(term) {
             let key = self.value(&value)?;
-            return Ok(Expression {
-                nodes: vec![Operation::Constant(self.source.scalar_key(
-                    &key,
-                    self.limits,
-                    self.counters,
-                    self.location,
-                )?)],
-            });
+            return Ok(Expression::new(vec![Operation::Constant(
+                self.source
+                    .scalar_key(&key, self.limits, self.counters, self.location)?,
+            )]));
         }
         self.ranged_expression(term, variables, values)
     }

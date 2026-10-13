@@ -4,12 +4,12 @@
 //! use the shared interval fold; each alternative keeps its own local scope.
 
 use crate::formula_support::components::{Pattern, Term as CoreTerm};
-use themelios_program::program::{Arguments, Atom, DefaultNegation, Relation};
+use themelios_program::program::{Arguments, Atom, DefaultNegation};
 use themelios_program::term::{Term, Variable};
 
 use crate::formula::ceiling;
 use crate::formula_conditional_ir::{Alternative, ConsequentOperand};
-use crate::formula_ir::{Compiler, Expression, LiteralIr, Operation, Variables};
+use crate::formula_ir::{Compiler, LiteralIr, Variables};
 use crate::{FormulaFailure, FormulaResource};
 
 impl Compiler<'_> {
@@ -78,13 +78,7 @@ impl Compiler<'_> {
             } else {
                 let value = self.ranged_expression(term, local, bindings)?;
                 let target = self.consequent_slot(local)?;
-                bindings.push(LiteralIr::Compare(
-                    Expression {
-                        nodes: vec![Operation::Variable(target)],
-                    },
-                    Relation::Eq,
-                    value,
-                ));
+                bindings.push(self.generated_equality(target, value)?);
                 terms.push(CoreTerm::Variable(target));
             }
         }

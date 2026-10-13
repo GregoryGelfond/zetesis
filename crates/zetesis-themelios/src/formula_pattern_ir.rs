@@ -7,7 +7,7 @@ use zetesis_core::{Sign, ValueNodeRef};
 
 use crate::diagnostic::unsupported;
 use crate::formula::ceiling;
-use crate::formula_ir::{Compiler, Expression, LiteralIr, Operation, Variables};
+use crate::formula_ir::{Compiler, LiteralIr, Operation, Variables};
 use crate::formula_pattern::{ArgumentPattern, PatternAtom, PatternNode, push, reserve};
 use crate::{ExpansionResource, FormulaFailure, FormulaResource, ProfileFeature, compile};
 
@@ -325,12 +325,8 @@ impl Compiler<'_> {
             Some(captured) => captured,
             None => self.pattern_slot(&Variable::Anonymous, variables)?,
         };
-        checks.push(LiteralIr::ArgumentCheck {
-            captured: Expression {
-                nodes: vec![Operation::Variable(captured)],
-            },
-            value,
-        });
+        let check = self.captured_equality(captured, value)?;
+        checks.push(check);
         Ok(PatternNode::Slot(captured))
     }
 

@@ -387,7 +387,7 @@ fn copy_expression(
             Operation::Absolute(value) => Operation::Absolute(value),
         });
     }
-    Ok(Expression { nodes })
+    expression.copy_over(nodes, builder.budget, rule.location)
 }
 
 fn copy_literal(

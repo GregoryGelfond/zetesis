@@ -137,6 +137,7 @@ pub use formula::{
     prepare_bundle_formula, prepare_bundle_formula_with_cancellation, prepare_formula,
     prepare_program_formula, prepare_program_formula_with, validate_program_formula,
 };
+pub use formula_ir::ComparisonForms;
 pub use formula_warning::FormulaWarning;
 mod formula_hybrid;
 mod formula_terminal;

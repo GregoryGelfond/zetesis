@@ -27,9 +27,7 @@ fn atom(fixture: &mut Fixture, name: &str, variables: &[usize]) -> LiteralIr {
 }
 
 fn less(left: usize, right: usize) -> LiteralIr {
-    let variable = |variable| Expression {
-        nodes: vec![Operation::Variable(variable)],
-    };
+    let variable = |variable| Expression::new(vec![Operation::Variable(variable)]);
     LiteralIr::Compare(variable(left), Relation::Lt, variable(right))
 }
 

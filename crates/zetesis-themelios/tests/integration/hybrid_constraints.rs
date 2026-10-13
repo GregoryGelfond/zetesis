@@ -1,5 +1,6 @@
 //! Hybrid admission preserves original source validation and candidate identity.
 
+use std::cell::Cell;
 use std::fmt::Write;
 use zetesis_reference_support::{hybrid, prepare, prepared};
 
@@ -7,8 +8,9 @@ use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::{
     ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits, ConstraintCheckStatistics,
-    ConstraintVerdict, ExpansionFailure, FormulaFailure, FormulaResource, GroundingOptions,
-    HybridFeature, HybridFormula, JoinStrategy,
+    ConstraintVerdict, ExpansionFailure, FormulaFailure, FormulaResource, GroundingObserver,
+    GroundingOptions, GroundingOutcome, GroundingPhase, GroundingWork, HybridFeature,
+    HybridFormula, JoinStrategy, ProgramSite,
 };
 
 fn model(owner: &HybridFormula, selected: &[&str]) -> Model {
@@ -99,13 +101,51 @@ fn candidate_truth_is_distinct_from_possible_support() {
     ));
 }
 
+/// Sums the integer comparison receipts of every observed phase: rows decided
+/// by a form and rows that declined.
+#[derive(Default)]
+struct IntegerComparisons(Cell<(u64, u64)>);
+
+impl GroundingObserver for IntegerComparisons {
+    fn enter(&self) {}
+    fn exit(&self) {}
+    fn details_enabled(&self) -> bool {
+        true
+    }
+    fn phase_exit(
+        &self,
+        _phase: GroundingPhase,
+        _site: Option<ProgramSite>,
+        _outcome: GroundingOutcome,
+        work: GroundingWork,
+    ) {
+        let (decided, declined) = self.0.get();
+        self.0.set((
+            decided + work.integer_comparisons.unwrap(),
+            declined + work.integer_comparison_declines.unwrap(),
+        ));
+    }
+}
+
+/// `source` grounded for hybrid execution, with the rows its capture decided
+/// by integer comparison forms and the rows that declined. The frozen checks
+/// are not observed.
+fn captured(source: &str) -> (HybridFormula, (u64, u64)) {
+    let observer = IntegerComparisons::default();
+    let owner = prepared(source)
+        .ground_hybrid_with_observer(Some(&observer))
+        .unwrap();
+    assert!(owner.streamed_templates() > 0);
+    (owner, observer.0.get())
+}
+
 #[test]
 fn frozen_checks_decide_integer_comparisons_without_admitted_operands() {
-    // X - Y takes the values 0, -1 and -2, which no fact or head constructs.
-    // The append-lane capture decides the comparison with its integer form,
-    // admitting none of them, and so do the frozen checks.
-    let owner = hybrid("{q(1..3)}. :- q(X), q(Y), X - Y = 2.");
-    assert!(owner.streamed_templates() > 0);
+    // X - Y takes the values -2 to 2; no fact or head constructs -2, -1 or 0.
+    // Capture decides the comparison on its nine rows by its form, admitting
+    // none of them, and so do the frozen checks, which could not admit them.
+    let (owner, receipts) = captured("{q(1..3)}. :- q(X), q(Y), X - Y = 2.");
+    assert_eq!(receipts, (9, 0));
     assert!(matches!(
         verdict(&owner, &["q(1)", "q(3)"]),
         ConstraintVerdict::Violated { .. }
@@ -114,6 +154,20 @@ fn frozen_checks_decide_integer_comparisons_without_admitted_operands() {
         verdict(&owner, &["q(1)", "q(2)"]),
         ConstraintVerdict::Satisfied
     );
+}
+
+#[test]
+fn frozen_checks_of_a_rejected_row_decide_by_its_form() {
+    // Y = 10/X fails on X = 0, and that row's check X - 5 < 0 is decided by
+    // its form, in capture and in the frozen checks alike. No fact or head
+    // constructs X - 5 for any X: -5, -4 and -3 are never admitted.
+    let (owner, receipts) = captured("{p(0..2)}. :- p(X), Y = 10/X, X - 5 < 0.");
+    assert_eq!(receipts, (6, 0));
+    assert_eq!(verdict(&owner, &["p(0)"]), ConstraintVerdict::Satisfied);
+    assert!(matches!(
+        verdict(&owner, &["p(0)", "p(2)"]),
+        ConstraintVerdict::Violated { .. }
+    ));
 }
 
 #[test]

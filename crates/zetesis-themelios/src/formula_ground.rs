@@ -170,6 +170,7 @@ fn ground_with_schedule(
     let profile = Profile::new(observer);
     let keyed_constraints = preparation.program.keyed_constraints;
     let key_analysis = preparation.program.key_analysis;
+    let comparison_forms = preparation.program.comparison_forms;
     let location = preparation.location;
     let Instantiation {
         projection,
@@ -218,6 +219,7 @@ fn ground_with_schedule(
             objective_declarations,
             keyed_constraints,
             key_analysis,
+            comparison_forms,
             expansion,
         },
         constraints,

@@ -61,7 +61,6 @@ mod relations;
 mod rows;
 pub(crate) use factoring::Continuations;
 
-use integer_comparisons::IntegerComparisons;
 use std::borrow::Cow;
 
 use crate::ProgramSite;
@@ -1052,9 +1051,6 @@ pub(crate) struct Join<'a, 'source> {
     /// met it; released when that depth is undone.
     failure: Option<(usize, EvalError)>,
     evaluation: Evaluation,
-    /// Comparison literals decided with machine integers, compiled at their
-    /// first decision; empty until then.
-    integer_comparisons: IntegerComparisons,
     projections: projections::Projections<'a>,
     pending: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
     pending_head: Option<crate::formula_binding_cursor::Cursor<'a, 'source>>,
@@ -1716,7 +1712,6 @@ impl<'a, 'source> Join<'a, 'source> {
             verdicts: Vec::new(),
             failure: None,
             evaluation: Evaluation::default(),
-            integer_comparisons: IntegerComparisons::default(),
             projections: projections::Projections::for_cursor(
                 total,
                 &Context::new(computation, limits, counters, location),
@@ -1810,7 +1805,6 @@ impl<'a, 'source> Join<'a, 'source> {
             + self.resolutions.capacity() * size_of::<Resolution<'_>>()
             + self.changes.capacity() * size_of::<Vec<usize>>()
             + self.pattern_captures.capacity() * size_of::<(usize, TermRef<'_>)>()
-            + self.integer_comparisons.capacity_bytes()
             + self
                 .witnesses
                 .as_ref()
@@ -2816,14 +2810,9 @@ impl<'a, 'source> Join<'a, 'source> {
         let depth = self.depth;
         let mut passes = depth == 0 || self.verdicts[depth - 1];
         for index in self.plan.decisions.decided_at(depth) {
-            let literals = self.literals;
             let (left, relation, right) =
-                comparison(&literals[index]).expect("a decided literal is a comparison");
-            let base = self.storage_bytes() - self.integer_comparisons.capacity_bytes();
-            let decided = self.integer_comparisons.decide(
-                &mut self.lease,
-                base,
-                (index, literals.len()),
+                comparison(&self.literals[index]).expect("a decided literal is a comparison");
+            let decided = integer_comparisons::decide(
                 ([left, right], relation),
                 &self.values,
                 Context::new(&*computation, limits, counters, location),

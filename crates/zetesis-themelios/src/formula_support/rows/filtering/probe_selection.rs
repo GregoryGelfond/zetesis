@@ -206,19 +206,15 @@ fn replay_keeps_scalar_overflow_visible() {
         let zero = fixture.scalar(&Value::Number(0), location());
         let mut body = body(&mut fixture);
         body.push(LiteralIr::Compare(
-            Expression {
-                nodes: vec![
-                    Operation::Constant(maximum),
-                    Operation::Variable(1),
-                    Operation::Variable(2),
-                    Operation::Binary(BinaryOp::Mul, 1, 2),
-                    Operation::Binary(BinaryOp::Add, 0, 3),
-                ],
-            },
+            Expression::new(vec![
+                Operation::Constant(maximum),
+                Operation::Variable(1),
+                Operation::Variable(2),
+                Operation::Binary(BinaryOp::Mul, 1, 2),
+                Operation::Binary(BinaryOp::Add, 0, 3),
+            ]),
             Relation::Gt,
-            Expression {
-                nodes: vec![Operation::Constant(zero)],
-            },
+            Expression::new(vec![Operation::Constant(zero)]),
         ));
         let rule = rule(body, 3);
         let selection = Selection {
