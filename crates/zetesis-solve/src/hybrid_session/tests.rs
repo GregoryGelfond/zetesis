@@ -9,10 +9,7 @@ use crate::{
 };
 use zetesis_cpu::{Cancellation, Stop, regions::Region};
 use zetesis_sat::{Incomplete, RegionFilter};
-use zetesis_themelios::{
-    AdmissionOptions, ConstraintCheckCause, ExpansionLimits, FormulaLimits, HybridFormula,
-    prepare_formula,
-};
+use zetesis_themelios::{ConstraintCheckCause, HybridFormula};
 
 struct Fixture {
     owner: HybridFormula,
@@ -23,15 +20,7 @@ struct Fixture {
 
 impl Fixture {
     fn new() -> Self {
-        let owner = prepare_formula(
-            "{p;q}. :-p,not q.".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-        .ground_hybrid()
-        .unwrap();
+        let owner = zetesis_reference_support::hybrid("{p;q}. :-p,not q.");
         Self {
             owner,
             config: SolveConfig {

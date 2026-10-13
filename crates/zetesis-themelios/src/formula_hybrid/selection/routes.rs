@@ -11,10 +11,7 @@ use zetesis_sat::{
     RegionFeasibility, RegionFilter, RegionFilterWorker, StableModels,
 };
 
-use crate::{
-    AdmissionOptions, ConstraintCheckLimits, ConstraintChecker, ConstraintRegionVerdict,
-    ExpansionLimits, FormulaLimits, HybridFormula, prepare_formula,
-};
+use crate::{ConstraintCheckLimits, ConstraintChecker, ConstraintRegionVerdict, HybridFormula};
 
 #[derive(Debug)]
 struct Filter {
@@ -27,15 +24,7 @@ struct Filter {
 
 impl Filter {
     fn new(source: &str) -> Self {
-        let owner = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-        .ground_hybrid()
-        .unwrap();
+        let owner = crate::test_support::hybrid(source);
         assert!(owner.core().streamed_templates() > 0);
         Self {
             owner,

@@ -6,15 +6,7 @@ use crate::{ExpansionFailure, ExpansionResource, FormulaFailure};
 use zetesis_cpu::{Cancellation, Stop};
 
 fn owner() -> HybridFormula {
-    crate::prepare_formula(
-        "p. q. :-p,q.".into(),
-        crate::AdmissionOptions::default(),
-        crate::ExpansionLimits::default(),
-        crate::FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_hybrid()
-    .unwrap()
+    crate::test_support::hybrid("p. q. :-p,q.")
 }
 
 fn plan_work(

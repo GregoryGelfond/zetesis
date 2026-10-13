@@ -1329,15 +1329,7 @@ fn literal_atom(
 mod tests {
     #[test]
     fn binding_aliases_retain_distinct_positive_occurrences() {
-        let owner = crate::prepare_formula(
-            "{p(1)}. :-p(X),p(Y),X=Y.".into(),
-            crate::AdmissionOptions::default(),
-            crate::ExpansionLimits::default(),
-            crate::FormulaLimits::default(),
-        )
-        .unwrap()
-        .ground_hybrid()
-        .unwrap();
+        let owner = crate::test_support::hybrid("{p(1)}. :-p(X),p(Y),X=Y.");
         let mut checker = owner
             .checker(crate::ConstraintCheckLimits::default())
             .unwrap();
@@ -1372,15 +1364,7 @@ mod tests {
 
     #[test]
     fn impossible_predicates_prepare_no_join_plans() {
-        let owner = crate::prepare_formula(
-            "{p(1);p(2)}. :-p(X),X=2.".into(),
-            crate::AdmissionOptions::default(),
-            crate::ExpansionLimits::default(),
-            crate::FormulaLimits::default(),
-        )
-        .unwrap()
-        .ground_hybrid()
-        .unwrap();
+        let owner = crate::test_support::hybrid("{p(1);p(2)}. :-p(X),X=2.");
         let mut checker = owner
             .checker(crate::ConstraintCheckLimits::default())
             .unwrap();
@@ -1403,15 +1387,7 @@ mod tests {
     #[test]
     fn empty_stream_releases_completed_support() {
         for source in ["d(1..20).", "d(1..20). :-#count{X:d(X)}<1."] {
-            let owner = crate::prepare_formula(
-                source.into(),
-                crate::AdmissionOptions::default(),
-                crate::ExpansionLimits::default(),
-                crate::FormulaLimits::default(),
-            )
-            .unwrap()
-            .ground_hybrid()
-            .unwrap();
+            let owner = crate::test_support::hybrid(source);
             // The complete source has nonempty support. Absence proves that
             // neither its catalog nor an empty plan's spare capacity is retained.
             assert!(!owner.atom_catalog().atoms().is_empty());

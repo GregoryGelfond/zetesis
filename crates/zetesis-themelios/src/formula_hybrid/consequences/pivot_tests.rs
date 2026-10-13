@@ -2,18 +2,10 @@ use super::*;
 use crate::formula_ir::RuleIr;
 use crate::formula_support::testing::budget;
 use crate::formula_support::{Computation, PreparedRule};
-use crate::{AdmissionOptions, ConstraintCheckLimits, ExpansionLimits, FormulaLimits};
+use crate::{ConstraintCheckLimits, FormulaLimits};
 
 fn candidate(source: &str, other_held: Option<bool>) -> (crate::HybridFormula, Region) {
-    let owner = crate::prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_hybrid()
-    .unwrap();
+    let owner = crate::test_support::hybrid(source);
     let mut region = Region::all_open(owner.atom_catalog().atoms().len());
     for (position, atom) in owner.atom_catalog().atoms().iter().enumerate() {
         if atom.predicate().name() != "p" {
