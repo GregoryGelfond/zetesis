@@ -1,5 +1,7 @@
 use std::{cmp::Ordering, convert::Infallible};
 
+use crate::test_support::compare_terms;
+
 use crate::catalog::{Limits, TermRef, storage::Store};
 use crate::{Sign, Value, ValueLimits, ValueNode, ValueNodeRef};
 
@@ -49,22 +51,9 @@ fn name(term: TermRef<'_>) -> &str {
     name
 }
 
-fn compare<E>(
-    left: TermRef<'_>,
-    right: TermRef<'_>,
-    asp: bool,
-    before: impl FnMut() -> Result<(), E>,
-) -> Result<Ordering, E> {
-    if asp {
-        left.compare_terms_with(right, before)
-    } else {
-        left.compare_ref_with(right, before)
-    }
-}
-
 fn measured(left: TermRef<'_>, right: TermRef<'_>, asp: bool) -> (Ordering, usize) {
     let mut calls = 0;
-    let order = compare(left, right, asp, || {
+    let order = compare_terms(left, right, asp, || {
         calls += 1;
         Ok::<_, Infallible>(())
     })
@@ -104,7 +93,7 @@ fn separately_stored_equal_names_keep_byte_checks() {
             let (order, calls) = measured(left, right, asp);
             assert_eq!(order, Ordering::Equal);
             assert!(calls > name(left).len() + 1);
-            assert_eq!(compare(left, right, asp, || Err("stop")), Err("stop"));
+            assert_eq!(compare_terms(left, right, asp, || Err("stop")), Err("stop"));
         }
     });
 }
@@ -179,7 +168,7 @@ fn shared_text_comparison_preserves_each_stop() {
                 let (expected, total) = measured(left, right, asp);
                 for cutoff in 0..=total {
                     let mut accepted = 0;
-                    let result = compare(left, right, asp, || {
+                    let result = compare_terms(left, right, asp, || {
                         if accepted == cutoff {
                             Err(cutoff)
                         } else {

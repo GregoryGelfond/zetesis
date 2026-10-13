@@ -1,3 +1,4 @@
+use super::super::tests::limits;
 use super::*;
 use crate::atom_interner::AtomInterner;
 use crate::catalog::TermAssignment;
@@ -6,13 +7,6 @@ use crate::{
     Atom, Predicate, Sign, TemplateComponents, TemplateTerm, Value, ValueLimits, ValueNode,
 };
 use std::convert::Infallible;
-
-fn limits() -> Limits {
-    Limits {
-        max_atoms: 128,
-        max_bytes: 1 << 22,
-    }
-}
 
 fn unrestricted() -> TermLimits {
     TermLimits {

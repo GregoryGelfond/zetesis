@@ -9,7 +9,8 @@ use std::convert::Infallible;
 
 mod locations;
 
-fn limits() -> Limits {
+/// Prepared-interner limits ample for every fixture here.
+pub(super) fn limits() -> Limits {
     Limits {
         max_atoms: 128,
         max_bytes: 1 << 22,
