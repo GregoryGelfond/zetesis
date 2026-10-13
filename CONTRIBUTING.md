@@ -194,9 +194,10 @@ small-theory builder and the CPU reference a device's aggregates are compared
 with. `zetesis-clingo-support`, over `zetesis-validation` alone, finds clingo,
 runs it within bounds and decodes its reports, so a comparison reaches clingo
 without compiling a solver. `zetesis-reference-support`, over
-`zetesis-themelios`, enumerates a small program's answer sets through the
-reduct check, prepares a source and grounds it for hybrid execution, and writes
-the temporary source bundles several crates' tests load or run. A helper that
+`zetesis-themelios`, admits a source under default or given limits, enumerates
+a small program's answer sets through the reduct check, prepares a source and
+grounds it for hybrid execution, and writes the temporary source bundles
+several crates' tests load or run. A helper that
 only one crate's tests use stays in that crate's `tests/integration/support`.
 The support crates are not published, and every coverage report skips their
 sources.
