@@ -99,6 +99,13 @@ Notable changes by release. Versions follow Semantic Versioning.
   self-selecting narrowing the same ranking; `OriginalSubject::theory` and
   `OriginalSubject::choices` read the subject's parts.
 
+### Compatibility
+
+- Exhaustive Rust matches on `zetesis_cli::RunError` must handle the new
+  `GpuExecutableUnavailable` variant, and those on
+  `zetesis_validation::performance::matrix::Decision` its new
+  `GpuExecutableUnavailable` disposition.
+
 ## 0.5.0 — 2026-10-10
 
 ### Added
