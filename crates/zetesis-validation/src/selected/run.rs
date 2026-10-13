@@ -20,10 +20,10 @@ pub enum Decision {
     /// A child did not start, complete capture, or exit with an accepted code.
     InvocationFailure,
     /// A producer report is malformed, incomplete or exceeds normalization
-    /// limits, or the executable its statistics name was refused: none
-    /// (`null`, or a value that is not a path), a third one, beside the invoked
-    /// executable and the one an earlier run named, or one that could not be
-    /// sealed.
+    /// limits; or a passing native report carries no statistics object, or the
+    /// executable its statistics name was refused: none (`null`, or a value
+    /// that is not a path), a third one, beside the invoked executable and the
+    /// one an earlier run named, or one that could not be sealed.
     InvalidReport,
     /// A complete report differs from the full-model or helper contract.
     ModelMismatch,
