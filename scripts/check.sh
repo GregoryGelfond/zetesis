@@ -20,7 +20,7 @@ case "$mode" in portable|coverage|oracle|proofs|book|hardware|full) ;; *)
     printf '%s\n' "$usage" >&2
     exit 2 ;;
 esac
-repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+repo_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 cd -- "$repo_dir"
 if [ "$mode" = portable ] || [ "$mode" = full ]; then
     # Reject known temporary profiling markers in maintained crate Rust sources.

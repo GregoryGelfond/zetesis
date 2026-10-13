@@ -40,7 +40,7 @@ for argument in "$@"; do
             install_dir=$argument ;;
     esac
 done
-repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+repo_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
 install_dir=${install_dir:-"$HOME/.local/bin"}
 target_dir=${CARGO_TARGET_DIR:-"$repo_dir/target"}
 case "$install_dir" in /*) ;; *) install_dir="$PWD/$install_dir" ;; esac
