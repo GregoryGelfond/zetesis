@@ -591,6 +591,32 @@ limit or cancellation remains an incomplete result. Device statistics count
 actual device attempts and never include seeds checked only by the CPU. This
 policy leaves device scheduling separate from the reduct membership contract.
 
+### One install, two executables
+
+Linking the GPU stack starts the platform's graphics frameworks with every
+process, so an executable that can use a GPU pays that start on every run,
+including the CPU runs that are nearly all of them. The default install
+therefore holds two builds of the same source. The `zetesis` a user runs is
+built without the GPU stack (the CLI's `front` feature) and runs every CPU
+invocation itself. An invocation that opens a GPU device, a solve on a GPU
+backend or `zetesis devices`, it hands to the full build installed beside it in
+`zetesis-libexec/<identity>/zetesis`, before any input is read or output
+written, by replacing its own process; the arguments, standard streams,
+environment, process ID and exit status carry over, and the name the operating
+system reports stays `zetesis`. Test commands are not handed off: their GPU
+work runs in child processes, and each decides for itself.
+
+The identity is the full build's content, which the installer compiles into the
+front, so a front can find only the build installed with it; a front built
+without one does not compile. The command-line grammar is the same in every
+build profile, which a test checks against one recorded rendering of the
+command tree, so the two executables read an invocation identically. A front
+that cannot run its full build reports `gpu_executable_unavailable`, and never
+serves the request on the CPU instead. Statistics name the executable that did
+the work. A CPU-only install has no full build and refuses GPU requests with
+`backend_unavailable`; a single build with GPU support, as Cargo installs it,
+never hands off.
+
 ## Immutable rounds and commit boundaries
 
 Each lazy batch has independent frozen seeds and positive snapshots. All chunks

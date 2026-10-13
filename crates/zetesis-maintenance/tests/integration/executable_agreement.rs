@@ -55,6 +55,78 @@ fn the_installer_the_guide_and_the_packages_agree() {
 }
 
 #[test]
+fn the_installer_places_the_sibling_where_the_front_looks() {
+    install::check_sibling_directory(
+        &read("scripts/install.sh"),
+        &read("INSTALL.md"),
+        &read("crates/zetesis-cli/src/sibling.rs"),
+    )
+    .unwrap();
+}
+
+#[test]
+fn a_sibling_directory_the_front_does_not_look_in_is_refused() {
+    let installer = altered(
+        &read("scripts/install.sh"),
+        "libexec='zetesis-libexec'",
+        "libexec='zetesis-helpers'",
+    );
+    let refusal = install::check_sibling_directory(
+        &installer,
+        &read("INSTALL.md"),
+        &read("crates/zetesis-cli/src/sibling.rs"),
+    )
+    .unwrap_err()
+    .to_string();
+    assert!(refusal.contains("but the front looks in"), "{refusal}");
+}
+
+/// The packages the CLI's front profile resolves to, as `cargo tree` reports
+/// its normal dependencies.
+fn front_packages() -> Vec<String> {
+    let output = Command::new(env!("CARGO"))
+        .args([
+            "tree",
+            "--edges",
+            "normal",
+            "--package",
+            "zetesis-cli",
+            "--no-default-features",
+            "--features",
+            "front",
+            "--prefix",
+            "none",
+            "--offline",
+        ])
+        .arg("--manifest-path")
+        .arg(repository().join("Cargo.toml"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn the_front_profile_builds_without_the_gpu_stack() {
+    // The front exists so that CPU runs start without the GPU stack; a feature
+    // that brought it back would give up that start without failing a build.
+    let packages = front_packages();
+    assert!(packages.iter().any(|name| name == "zetesis-cli"));
+    for gpu in ["zetesis-wgpu", "wgpu"] {
+        assert!(!packages.iter().any(|name| name == gpu), "{gpu}");
+    }
+}
+
+#[test]
 fn a_tool_the_guide_does_not_describe_is_refused() {
     let guide = altered(
         &read("INSTALL.md"),

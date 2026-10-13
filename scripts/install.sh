@@ -7,6 +7,10 @@ set -eu
 # checks them against INSTALL.md and the packages' binary targets.
 packages='zetesis-cli zetesis-bench'
 tools='zetesis zetesis-bench'
+# The directory beside the tools that holds the default install's GPU-capable
+# zetesis, one subdirectory per install identity. The same regression checks it
+# against the directory the CLI looks in and against INSTALL.md.
+libexec='zetesis-libexec'
 
 usage='Usage: scripts/install.sh [--cpu-only] [binary-directory]'
 cpu_only=false
@@ -16,8 +20,10 @@ for argument in "$@"; do
         --help|-h)
             printf '%s\n' "$usage" \
                 "Installs $tools into binary-directory (default: \$HOME/.local/bin)." \
-                'Builds locked release binaries with GPU support: Metal on macOS, Vulkan elsewhere.' \
-                '--cpu-only builds zetesis without GPU support; it then runs on the CPU only.'
+                'Builds locked release binaries. zetesis runs on the CPU without loading the GPU stack' \
+                "and hands GPU requests to the GPU-capable zetesis it installs in $libexec beside it:" \
+                'Metal on macOS, Vulkan elsewhere.' \
+                "--cpu-only builds zetesis without GPU support and removes $libexec; it then runs on the CPU only."
             exit 0 ;;
         --cpu-only) cpu_only=true ;;
         -*)
@@ -43,29 +49,95 @@ if [ -z "$host_target" ]; then
     printf '%s\n' 'Could not determine the native Rust host target.' >&2
     exit 2
 fi
-if [ "$cpu_only" = true ]; then
-    features=--no-default-features
-    build='CPU-only build'
-else
-    features=
-    build='default build, with GPU support'
-fi
 selected=
 for package in $packages; do
     selected="$selected -p $package"
 done
+built=$target_dir/$host_target/release
+stage=$target_dir/install-stage
+
 # This installer produces runnable native binaries, overriding cross-build
 # defaults from CARGO_BUILD_TARGET or Cargo configuration deliberately. One
-# invocation unifies features; no selected package enables GPU support in
-# another, so --cpu-only is honoured. The option and package lists are split
-# into words deliberately.
-cargo build --locked --release --target "$host_target" \
-    --target-dir "$target_dir" $features $selected
+# invocation unifies features, and no selected package enables GPU support in
+# another. The option and package lists are split into words deliberately.
+build() {
+    cargo build --locked --release --target "$host_target" --target-dir "$target_dir" "$@"
+}
+
+# Copy $1 to $2 under a temporary name beside $2, then rename it into place, so
+# that $2 is replaced whole or not at all.
+place() {
+    temporary=$(dirname -- "$2")/.$(basename -- "$2").installing
+    install -m 755 "$1" "$temporary"
+    mv -f -- "$temporary" "$2"
+}
+
+# The SHA-256 of $1, in hexadecimal.
+digest() {
+    if command -v sha256sum > /dev/null 2>&1; then
+        sum=$(sha256sum -- "$1")
+    else
+        sum=$(shasum -a 256 -- "$1")
+    fi
+    printf '%s\n' "${sum%% *}"
+}
+
+# Every build finishes, and its executables are set aside, before anything in
+# the binary directory changes, so a failed build leaves the previous install
+# as it was.
+rm -rf -- "${stage:?}"
+mkdir -p -- "$stage"
+if [ "$cpu_only" = true ]; then
+    build --no-default-features $selected
+    for tool in $tools; do
+        cp -- "$built/$tool" "$stage/$tool"
+    done
+    report='CPU-only build'
+else
+    # The GPU-capable zetesis, set aside before the front's build reuses its
+    # artifact path; its content names the install.
+    build $selected
+    mkdir -p -- "$stage/sibling"
+    cp -- "$built/zetesis" "$stage/sibling/zetesis"
+    cp -- "$built/zetesis-bench" "$stage/zetesis-bench"
+    version=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -n 1)
+    hash=$(digest "$stage/sibling/zetesis")
+    identity=$version-$(printf '%s' "$hash" | cut -c 1-16)
+    # The front: zetesis without the GPU stack, naming the sibling it hands GPU
+    # requests to.
+    ZETESIS_SIBLING_IDENTITY=$identity cargo build --locked --release --target "$host_target" \
+        --target-dir "$target_dir" --no-default-features --features front -p zetesis-cli
+    cp -- "$built/zetesis" "$stage/zetesis"
+    # The front exists so that CPU runs start without a graphics framework.
+    if [ "$(uname -s)" = Darwin ] && otool -L "$stage/zetesis" | grep -q '\.framework/'; then
+        printf '%s\n' 'The CPU front links a framework, so it would start like the GPU build; not installing.' >&2
+        exit 1
+    fi
+    report="default build: zetesis hands GPU requests to $libexec/$identity/zetesis"
+fi
+
 mkdir -p -- "$install_dir"
-for tool in $tools; do
-    install -m 755 "$target_dir/$host_target/release/$tool" "$install_dir/$tool"
-done
-printf 'Installed %s into %s (%s)\n' "$tools" "$install_dir" "$build"
+if [ "$cpu_only" = true ]; then
+    for tool in $tools; do
+        place "$stage/$tool" "$install_dir/$tool"
+    done
+    rm -rf -- "${install_dir:?}/$libexec"
+else
+    # The sibling first and the front last, so that from the front's rename on
+    # its identity names an installed sibling.
+    mkdir -p -- "$install_dir/$libexec/$identity"
+    place "$stage/sibling/zetesis" "$install_dir/$libexec/$identity/zetesis"
+    for tool in $tools; do
+        place "$stage/$tool" "$install_dir/$tool"
+    done
+    for previous in "$install_dir/$libexec"/*; do
+        if [ -e "$previous" ] && [ "$previous" != "$install_dir/$libexec/$identity" ]; then
+            rm -rf -- "$previous"
+        fi
+    done
+fi
+rm -rf -- "${stage:?}"
+printf 'Installed %s into %s (%s)\n' "$tools" "$install_dir" "$report"
 case ":$PATH:" in
     *":$install_dir:"*) ;;
     *) printf 'Add this directory to PATH: %s\n' "$install_dir" ;;

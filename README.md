@@ -29,8 +29,11 @@ export PATH="$HOME/.local/bin:$PATH"
 zetesis --help
 ```
 
-The installer builds release executables and places them in `~/.local/bin`.
-Pass a directory to `scripts/install.sh` to choose another location. The initial
+The installer builds release executables and places them in `~/.local/bin`, with
+the GPU-capable build of zetesis in a `zetesis-libexec` directory beside them;
+the `zetesis` you run starts CPU runs without the GPU stack and hands GPU
+requests to it. Pass a directory to `scripts/install.sh` to choose another
+location. The initial
 build needs GitHub read access for the pinned themelios dependency; no sibling
 checkout is required. Installed commands do not need Rust or Cargo at runtime.
 [INSTALL.md](INSTALL.md) describes the installed tools, the CPU-only build,

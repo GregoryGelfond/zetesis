@@ -16,7 +16,10 @@ const HOST_DEFAULTS: [&str; 1] = ["memory"];
 
 fn render(command: &Command, depth: usize, out: &mut String) {
     let indent = "  ".repeat(depth);
-    let about = command.get_about().map(ToString::to_string).unwrap_or_default();
+    let about = command
+        .get_about()
+        .map(ToString::to_string)
+        .unwrap_or_default();
     let _ = writeln!(out, "{indent}command {} | {about}", command.get_name());
     for argument in command.get_arguments() {
         render_argument(argument, depth + 1, out);
@@ -54,7 +57,10 @@ fn render_argument(argument: &Arg, depth: usize, out: &mut String) {
         argument.is_hide_short_help_set(),
         argument.get_help_heading(),
     );
-    let help = argument.get_help().map(ToString::to_string).unwrap_or_default();
+    let help = argument
+        .get_help()
+        .map(ToString::to_string)
+        .unwrap_or_default();
     let long_help = argument
         .get_long_help()
         .map(ToString::to_string)

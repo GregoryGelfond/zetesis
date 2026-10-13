@@ -6,6 +6,14 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- The default install (`scripts/install.sh`) builds zetesis twice. The
+  `zetesis` you run is built without the GPU stack, so CPU runs start without
+  loading it, and it hands each request that needs a GPU (a GPU backend, or
+  `zetesis devices`) to the GPU-capable build installed beside it in
+  `zetesis-libexec`, which takes over the same process. A front that cannot run
+  that build fails with the new kind `gpu_executable_unavailable`; statistics
+  now name the executable that did the work. The installer finishes every
+  build before replacing anything and replaces each executable by rename.
 - Prime-sieve and subset-sum examples in the maintained correctness and scaling
   comparisons, with complete-answer checks against clingo.
 - `Cancellation::metered` runs a metered computation with a `Meter`, which holds

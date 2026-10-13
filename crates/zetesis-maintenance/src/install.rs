@@ -56,6 +56,39 @@ pub fn check(installer: &str, guide: &str, metadata: &[u8]) -> Result<(), Error>
     )
 }
 
+/// The constant through which the CLI names the directory of its GPU sibling.
+const LIBEXEC_CONSTANT: &str = "pub(crate) const LIBEXEC: &str = \"";
+
+/// Check that the installer places the GPU sibling in the directory the CLI's
+/// front looks in, and that INSTALL.md names that directory.
+///
+/// `installer` is the text of `scripts/install.sh`, `guide` the text of
+/// INSTALL.md and `front` the text of the CLI's `sibling.rs`.
+///
+/// # Errors
+/// Returns [`Error::Invalid`] naming the first disagreement or an unreadable
+/// name.
+pub fn check_sibling_directory(installer: &str, guide: &str, front: &str) -> Result<(), Error> {
+    let placed = list(installer, "libexec")?;
+    let looked_in = front
+        .lines()
+        .find_map(|line| line.trim().strip_prefix(LIBEXEC_CONSTANT))
+        .and_then(|rest| rest.strip_suffix("\";"))
+        .ok_or_else(|| {
+            Error::Invalid("the CLI's sibling.rs declares no LIBEXEC constant".to_owned())
+        })?;
+    require(
+        placed.len() == 1 && placed.contains(looked_in),
+        format!(
+            "the installer places the GPU sibling in {placed:?}, but the front looks in {looked_in:?}"
+        ),
+    )?;
+    require(
+        guide.contains(&format!("`{looked_in}`")),
+        format!("INSTALL.md does not name the {looked_in} directory"),
+    )
+}
+
 /// The words of the installer's one `NAME='…'` assignment.
 fn list(installer: &str, name: &str) -> Result<BTreeSet<String>, Error> {
     let prefix = format!("{name}='");
