@@ -2,6 +2,7 @@
 
 use crate::support::priority_contracts;
 use crate::support::source_cases;
+use zetesis_test_support::thresholds::first_success;
 
 use crate::support::fixtures::OBJECTIVE_LANGUAGE_BOUNDARIES as BOUNDARIES;
 use serde_json::Value as Json;
@@ -103,26 +104,19 @@ fn cyclic_completion_limits_are_inclusive() {
             }
             reference::admit(source, &limits)
         };
-        let (mut lower, mut upper) = (0, 65_536);
-        assert!(attempt(upper).is_ok());
-        while lower + 1 < upper {
-            let middle = lower + (upper - lower) / 2;
-            match attempt(middle) {
-                Ok(_) => upper = middle,
-                Err(FormulaFailure::Limit {
-                    resource: actual, ..
-                }) if actual == resource => {
-                    lower = middle;
-                }
-                Err(FormulaFailure::Aggregate { error, .. })
-                    if resource == FormulaResource::Work
-                        && error.kind() == zetesis_ferraris::AggregateErrorKind::WorkLimit =>
-                {
-                    lower = middle;
-                }
-                Err(error) => panic!("{resource:?}: unexpected refusal {error}"),
+        let upper = first_success(65_536, |middle| match attempt(middle) {
+            Ok(_) => true,
+            Err(FormulaFailure::Limit {
+                resource: actual, ..
+            }) if actual == resource => false,
+            Err(FormulaFailure::Aggregate { error, .. })
+                if resource == FormulaResource::Work
+                    && error.kind() == zetesis_ferraris::AggregateErrorKind::WorkLimit =>
+            {
+                false
             }
-        }
+            Err(error) => panic!("{resource:?}: unexpected refusal {error}"),
+        });
         assert_eq!(reference::exhaustive(&attempt(upper).unwrap()), expected);
         let error = attempt(upper - 1).unwrap_err();
         assert!(

@@ -1,6 +1,7 @@
 //! A comparison certificate belongs to one completed nongenerative binding.
 
 use crate::support::source_cases;
+use zetesis_test_support::thresholds::first_success;
 
 use themelios_program::term::EvalError;
 use zetesis_clingo_support as oracle;
@@ -94,8 +95,8 @@ fn reused_comparisons_keep_the_work_ceiling_inclusive() {
     // This test locates an inclusive work boundary, not a fixed cost target.
     // Start from an actually admitted endpoint under the public finite policy;
     // checked lookup operations may change the amount of work this source needs.
-    let mut upper = FormulaLimits::default().max_work;
-    let complete = admitted(upper).expect("finite comparison fixture is admitted");
+    let complete =
+        admitted(FormulaLimits::default().max_work).expect("finite comparison fixture is admitted");
     let expected = Records::from([(
         ["d(1)", "d(2)", "d(3)", "p(1,3)", "p(3,1)"]
             .into_iter()
@@ -114,16 +115,8 @@ fn reused_comparisons_keep_the_work_ceiling_inclusive() {
         }) if limit == u128::from(maximum) && observed > limit => false,
         Err(error) => panic!("expected only a work refusal at {maximum}: {error:?}"),
     };
-    let mut lower = 0;
-    while lower + 1 < upper {
-        let middle = lower + (upper - lower) / 2;
-        if has_enough_work(middle) {
-            upper = middle;
-        } else {
-            lower = middle;
-        }
-    }
-    assert_eq!(upper, lower + 1);
+    let upper = first_success(FormulaLimits::default().max_work, has_enough_work);
+    let lower = upper - 1;
     let exact = admitted(upper).expect("the exact work ceiling is inclusive");
     assert_eq!(reference::exhaustive(&exact), expected);
     for maximum in [0, lower] {

@@ -5,6 +5,7 @@ use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use themelios_base::source::SourceId;
+use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, admit_formula, prepare_formula,
@@ -456,32 +457,15 @@ fn preparation_limits_are_inclusive() {
             }
             result
         };
-        let mut lower = 0;
-        let mut upper = 16_384;
-        assert!(
+        let lower = first_success(16_384, |middle| {
             prepare_formula(
-                source.into(),
-                options(),
-                limits(upper),
-                FormulaLimits::default()
-            )
-            .is_ok()
-        );
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2;
-            if prepare_formula(
                 source.into(),
                 options(),
                 limits(middle),
                 FormulaLimits::default(),
             )
             .is_ok()
-            {
-                upper = middle;
-            } else {
-                lower = middle + 1;
-            }
-        }
+        });
         assert!(lower > 0);
         assert!(
             prepare_formula(

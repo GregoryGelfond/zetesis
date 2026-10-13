@@ -1,6 +1,7 @@
 //! Rich source activity shares scoped lowering and preserves independent literals.
 
 use zetesis_reference_support::{admit, formula};
+use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 #[test]
@@ -72,16 +73,7 @@ fn rich_activity_work_refusal_is_inclusive() {
             },
         )
     };
-    let (mut lower, mut upper) = (0, 65_536);
-    assert!(attempt(upper).is_ok());
-    while lower + 1 < upper {
-        let middle = lower + (upper - lower) / 2;
-        if attempt(middle).is_ok() {
-            upper = middle;
-        } else {
-            lower = middle;
-        }
-    }
+    let upper = first_success(65_536, |middle| attempt(middle).is_ok());
     let accepted = attempt(upper).unwrap();
     assert_eq!(accepted.projection().atoms().len(), 1);
     let failure = attempt(upper - 1).unwrap_err();

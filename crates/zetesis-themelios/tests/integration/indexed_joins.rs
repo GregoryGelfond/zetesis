@@ -1,8 +1,8 @@
 //! Bound-column probes restrict work without replacing full relational matching.
 
-use crate::support::thresholds::first_success;
 use std::cell::Cell;
 use std::fmt::Write;
+use zetesis_test_support::thresholds::first_success;
 
 use zetesis_themelios::ProgramSite;
 
@@ -126,20 +126,23 @@ fn selective_join_work_limit_is_inclusive() {
             },
         )
     };
-    let low = first_success(|max_work| match compile(max_work) {
-        Ok(_) => true,
-        Err(FormulaFailure::Limit {
-            resource: FormulaResource::Work,
-            observed,
-            limit,
-            ..
-        }) => {
-            assert_eq!(limit, u128::from(max_work));
-            assert!(observed > limit);
-            false
-        }
-        other => panic!("unexpected admission: {other:?}"),
-    });
+    let low = first_success(
+        FormulaLimits::default().max_work,
+        |max_work| match compile(max_work) {
+            Ok(_) => true,
+            Err(FormulaFailure::Limit {
+                resource: FormulaResource::Work,
+                observed,
+                limit,
+                ..
+            }) => {
+                assert_eq!(limit, u128::from(max_work));
+                assert!(observed > limit);
+                false
+            }
+            other => panic!("unexpected admission: {other:?}"),
+        },
+    );
     let Err(FormulaFailure::Limit {
         resource: FormulaResource::Work,
         observed,

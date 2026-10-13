@@ -1,7 +1,7 @@
 //! Selected complete rows preserve source grounding, evidence and finite refusals.
 
-use crate::support::thresholds::first_success;
 use std::cell::Cell;
+use zetesis_test_support::thresholds::first_success;
 
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
@@ -172,7 +172,14 @@ fn minimum(resource: FormulaResource) -> u64 {
             &Observation::default(),
         )
     };
-    first_success(|maximum| match compile(maximum) {
+    let ceiling = match resource {
+        FormulaResource::Work => FormulaLimits::default().max_work,
+        FormulaResource::SupportBytes => {
+            u64::try_from(FormulaLimits::default().max_support_bytes).unwrap()
+        }
+        _ => unreachable!("selected finite resource"),
+    };
+    first_success(ceiling, |maximum| match compile(maximum) {
         Ok(_) => true,
         Err(FormulaFailure::Limit {
             resource: found,

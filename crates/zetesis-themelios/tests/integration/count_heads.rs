@@ -3,7 +3,7 @@
 use crate::support::finite_bindings::{Models, holds, remap, values};
 use crate::support::head_models::{complete, expected, limited, manual_holds, selected};
 use crate::support::objective_dependency_records as objective_dependencies;
-use crate::support::thresholds::first_success;
+use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 use std::fs::{self};
@@ -303,7 +303,7 @@ fn checked_group_size_and_tuple_storage_obey_inclusive_limits() {
             &FormulaLimits::default(),
         )
     };
-    let threshold = first_success(|limit| attempt(limit).is_ok());
+    let threshold = first_success(1_u64 << 20, |limit| attempt(limit).is_ok());
     assert!(matches!(
         attempt(threshold - 1),
         Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
@@ -343,7 +343,7 @@ fn validation_limits(source: &str) {
                 &limits,
             )
         };
-        let threshold = first_success(|limit| attempt(limit).is_ok());
+        let threshold = first_success(1_u64 << 20, |limit| attempt(limit).is_ok());
         assert!(
             matches!(attempt(threshold-1), Err(FormulaFailure::Limit { resource: actual, observed, .. })
             if actual == resource && observed == u128::from(threshold))

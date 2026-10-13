@@ -3,6 +3,7 @@
 use crate::support::priority_contracts;
 use crate::support::source_cases;
 use zetesis_reference_support as reference;
+use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = include_str!("../fixtures/objective-scopes.jsonl");
@@ -211,16 +212,7 @@ fn scoped_formula_limits_are_inclusive() {
             }
             reference::admit(source, &limits)
         };
-        let (mut lower, mut upper) = (0, 65536);
-        assert!(attempt(upper).is_ok());
-        while lower + 1 < upper {
-            let middle = lower + (upper - lower) / 2;
-            if attempt(middle).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle;
-            }
-        }
+        let upper = first_success(65536, |middle| attempt(middle).is_ok());
         assert_eq!(reference::exhaustive(&attempt(upper).unwrap()), expected);
         let failure = attempt(upper - 1).unwrap_err();
         assert!(

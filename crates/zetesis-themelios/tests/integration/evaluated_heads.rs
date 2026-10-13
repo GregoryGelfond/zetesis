@@ -6,9 +6,9 @@ use std::fs::{self};
 use crate::support::finite_bindings::{holds, values};
 use crate::support::head_models::{self, complete, expected, limited, manual_holds, selected};
 use crate::support::objective_boundaries;
-use crate::support::thresholds::first_success;
 use serde_json::{Value as Json, json};
 use zetesis_reference_support::admit;
+use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
@@ -282,7 +282,7 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
                     &limits,
                 )
             };
-            let threshold = first_success(|limit| attempt(limit).is_ok());
+            let threshold = first_success(1_u64 << 20, |limit| attempt(limit).is_ok());
             assert!(
                 matches!(attempt(threshold - 1), Err(FormulaFailure::Limit { resource: actual, observed, .. }) if actual == resource && observed == u128::from(threshold))
             );
@@ -302,7 +302,7 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
                 &FormulaLimits::default(),
             )
         };
-        let threshold = first_success(|limit| attempt(limit).is_ok());
+        let threshold = first_success(1_u64 << 20, |limit| attempt(limit).is_ok());
         assert!(matches!(
             attempt(threshold - 1),
             Err(FormulaFailure::Expansion(ExpansionFailure::Limit {

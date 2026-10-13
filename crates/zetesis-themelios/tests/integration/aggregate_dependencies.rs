@@ -2,6 +2,7 @@
 
 use crate::support::admission;
 use crate::support::objective_dependency_records as objective_dependencies;
+use zetesis_test_support::thresholds::first_success;
 
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -284,32 +285,15 @@ fn grounding_limits_are_inclusive() {
             }
             limits
         };
-        let mut lower = 0;
-        let mut upper = 16_384;
-        assert!(
+        let lower = first_success(16_384, |middle| {
             admit_formula(
-                source.into(),
-                options(),
-                ExpansionLimits::default(),
-                limits(upper)
-            )
-            .is_ok()
-        );
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2;
-            if admit_formula(
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
                 limits(middle),
             )
             .is_ok()
-            {
-                upper = middle;
-            } else {
-                lower = middle + 1;
-            }
-        }
+        });
         assert!(lower > 0);
         assert_eq!(
             native(
@@ -355,32 +339,15 @@ fn scalar_storage_limit_is_inclusive() {
         max_scalar_bytes: ceiling,
         ..Default::default()
     };
-    let mut lower = 0;
-    let mut upper = 16_384;
-    assert!(
+    let lower = first_success(16_384, |middle| {
         admit_formula(
-            source.into(),
-            options(),
-            limits(upper),
-            FormulaLimits::default()
-        )
-        .is_ok()
-    );
-    while lower < upper {
-        let middle = lower + (upper - lower) / 2;
-        if admit_formula(
             source.into(),
             options(),
             limits(middle),
             FormulaLimits::default(),
         )
         .is_ok()
-        {
-            upper = middle;
-        } else {
-            lower = middle + 1;
-        }
-    }
+    });
     assert!(lower > 0);
     assert_eq!(
         native(

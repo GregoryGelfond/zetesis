@@ -2,6 +2,7 @@
 
 mod cases;
 use crate::support::finite_bindings as reference;
+use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -210,21 +211,6 @@ fn original_sources_remain_owned() {
     reference::sources_remain_owned(CASES.iter().map(|&(source, _)| source), formula);
 }
 
-fn threshold(mut succeeds: impl FnMut(u64) -> bool) -> u64 {
-    let mut lower = 0;
-    let mut upper = 65_536;
-    assert!(succeeds(upper));
-    while lower + 1 < upper {
-        let middle = lower + (upper - lower) / 2;
-        if succeeds(middle) {
-            upper = middle;
-        } else {
-            lower = middle;
-        }
-    }
-    upper
-}
-
 #[test]
 fn alias_work_limits_are_inclusive() {
     for source in ["1#count{1:a;1:b}1.", "{b;c}.1#count{1:a:b;2:a:c}1."] {
@@ -243,7 +229,7 @@ fn alias_work_limits_are_inclusive() {
                     limits,
                 )
             };
-            let maximum = threshold(|limit| attempt(limit).is_ok());
+            let maximum = first_success(65_536_u64, |limit| attempt(limit).is_ok());
             assert!(matches!(attempt(maximum - 1), Err(FormulaFailure::Limit {
                 resource: actual, limit, observed, ..
             }) if actual == resource && limit == u128::from(maximum - 1)
@@ -268,7 +254,7 @@ fn alias_storage_limits_are_inclusive() {
                 FormulaLimits::default(),
             )
         };
-        let maximum = threshold(|limit| attempt(limit).is_ok());
+        let maximum = first_success(65_536_u64, |limit| attempt(limit).is_ok());
         assert!(
             matches!(attempt(maximum - 1), Err(FormulaFailure::Expansion(
             ExpansionFailure::Limit {

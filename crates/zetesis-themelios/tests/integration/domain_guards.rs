@@ -1,8 +1,8 @@
 //! Optional domains preserve complete theories while avoiding impossible prefixes.
 
-use crate::support::thresholds::first_success;
 use std::cell::{Cell, RefCell};
 use std::fmt::Write;
+use zetesis_test_support::thresholds::first_success;
 
 use zetesis_domain::Status;
 use zetesis_themelios::ProgramSite;
@@ -552,11 +552,13 @@ fn exceeds_work(failure: &FormulaFailure, ceiling: u64) -> bool {
 // assumed.
 #[test]
 fn domain_analysis_is_charged_beyond_the_plain_admission_boundary() {
-    let least = first_success(|max_work| match fact(max_work, None) {
-        Ok(_) => true,
-        Err(failure) => {
-            assert!(exceeds_work(&failure, max_work), "{failure:?}");
-            false
+    let least = first_success(FormulaLimits::default().max_work, |max_work| {
+        match fact(max_work, None) {
+            Ok(_) => true,
+            Err(failure) => {
+                assert!(exceeds_work(&failure, max_work), "{failure:?}");
+                false
+            }
         }
     });
     let failure = fact(least, Some(DomainLimits::default())).unwrap_err();

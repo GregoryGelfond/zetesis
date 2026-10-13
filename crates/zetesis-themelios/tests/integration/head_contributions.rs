@@ -2,7 +2,7 @@
 
 mod cases;
 use crate::support::finite_bindings as reference;
-use crate::support::thresholds::first_success;
+use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 
@@ -378,7 +378,7 @@ fn selected_rows_obey_inclusive_work_limits() {
                 }
                 limited(source, ExpansionLimits::default(), &limits)
             };
-            let exact = first_success(|maximum| attempt(maximum).is_ok());
+            let exact = first_success(1_u64 << 20, |maximum| attempt(maximum).is_ok());
             let error = attempt(exact - 1).expect_err("inclusive boundary");
             assert!(
                 matches!(error, FormulaFailure::Limit { resource: actual, limit, observed, .. } if actual == resource && limit == u128::from(exact - 1) && observed == u128::from(exact)),
@@ -411,7 +411,7 @@ fn neutral_rows_obey_inclusive_expansion_limits() {
                 }
                 limited(source, limits, &FormulaLimits::default())
             };
-            let exact = first_success(|maximum| attempt(maximum).is_ok());
+            let exact = first_success(1_u64 << 20, |maximum| attempt(maximum).is_ok());
             let error = attempt(exact - 1).expect_err("inclusive source boundary");
             assert!(
                 matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, limit, observed, .. }) if actual == resource && limit == u128::from(exact - 1) && observed == u128::from(exact)),

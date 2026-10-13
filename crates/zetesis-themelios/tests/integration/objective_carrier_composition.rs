@@ -1,6 +1,7 @@
 //! Independent observers preserve previously established source carriers.
 
 use crate::support::priority_contracts;
+use zetesis_test_support::thresholds::first_success;
 
 use zetesis_reference_support as reference;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
@@ -39,16 +40,7 @@ fn composed_carrier_limits_are_inclusive() {
             }
             reference::admit(source, &limits)
         };
-        let (mut lower, mut upper) = (0, 65536);
-        assert!(attempt(upper).is_ok());
-        while lower + 1 < upper {
-            let middle = lower + (upper - lower) / 2;
-            if attempt(middle).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle;
-            }
-        }
+        let upper = first_success(65536, |middle| attempt(middle).is_ok());
         let input = attempt(upper).unwrap();
         // The fixed symbolic maximum excludes n(1), hence every p(N).
         // Carrier preparation still runs under both inclusive ceilings even

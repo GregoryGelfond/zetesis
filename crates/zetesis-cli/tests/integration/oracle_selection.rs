@@ -2,6 +2,7 @@
 //! resource refusals, and stable-model semantics across the two reduct oracles.
 
 use std::collections::BTreeSet;
+use zetesis_test_support::thresholds::first_success;
 
 use clap::Parser;
 use zetesis_cli::{
@@ -264,14 +265,12 @@ fn formula_work_admission_is_inclusive() {
             &limits,
         )
     };
-    let (mut low, mut high) = (0, zetesis_themelios::FormulaLimits::default().max_work);
-    assert!(attempt(high).0.is_ok());
-    while low < high {
-        let middle = low + (high - low) / 2;
-        match attempt(middle).0 {
+    let low = first_success(
+        zetesis_themelios::FormulaLimits::default().max_work,
+        |middle| match attempt(middle).0 {
             Ok(report) => {
                 assert_eq!(report.completion, Completion::Exhausted);
-                high = middle;
+                true
             }
             Err(RunError::FormulaAdmission(FormulaFailure::Limit {
                 resource: FormulaResource::Work,
@@ -281,12 +280,11 @@ fn formula_work_admission_is_inclusive() {
             })) => {
                 assert_eq!(limit, u128::from(middle));
                 assert!(observed > limit);
-                low = middle + 1;
+                false
             }
             other => panic!("unexpected source result: {other:?}"),
-        }
-    }
-    assert!(low > 0);
+        },
+    );
     let (result, output) = attempt(low);
     assert_eq!(result.unwrap().completion, Completion::Exhausted);
     assert_eq!(
@@ -313,17 +311,12 @@ fn support_byte_limit_is_inclusive() {
             },
         )
     };
-    let (mut low, mut high) = (
-        0,
+    let low = first_success(
         zetesis_themelios::FormulaLimits::default().max_support_bytes,
-    );
-    assert!(attempt(high).0.is_ok());
-    while low < high {
-        let middle = low + (high - low) / 2;
-        match attempt(middle).0 {
+        |middle| match attempt(middle).0 {
             Ok(report) => {
                 assert_eq!(report.completion, Completion::Exhausted);
-                high = middle;
+                true
             }
             Err(RunError::FormulaAdmission(FormulaFailure::Limit {
                 resource: FormulaResource::SupportBytes,
@@ -337,12 +330,11 @@ fn support_byte_limit_is_inclusive() {
                     location.location().unwrap().source,
                     zetesis_themelios::AdmissionOptions::default().source_id
                 );
-                low = middle + 1;
+                false
             }
             other => panic!("unexpected source result: {other:?}"),
-        }
-    }
-    assert!(low > 0);
+        },
+    );
     let (result, output) = attempt(low);
     assert_eq!(result.unwrap().completion, Completion::Exhausted);
     assert_eq!(

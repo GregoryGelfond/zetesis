@@ -2,6 +2,7 @@
 
 use crate::support::finite_bindings as reference;
 use crate::support::finite_bindings::remap;
+use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 
@@ -303,11 +304,9 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
 #[test]
 fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
     let source = "{p(X):0<X,X<3}.q:-p(Y):not not (Y,1)=(2,1).";
-    let mut lower = 0;
-    let mut upper = ExpansionLimits::default().max_term_work;
-    while lower < upper {
-        let limit = lower + (upper - lower) / 2;
-        match input_with(
+    let lower = first_success(
+        ExpansionLimits::default().max_term_work,
+        |limit| match input_with(
             source,
             ExpansionLimits {
                 max_term_work: limit,
@@ -315,15 +314,14 @@ fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
             },
             &FormulaLimits::default(),
         ) {
-            Ok(_) => upper = limit,
+            Ok(_) => true,
             Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
                 resource: ExpansionResource::TermWork,
                 ..
-            })) => lower = limit + 1,
+            })) => false,
             Err(error) => panic!("unexpected refusal: {error}"),
-        }
-    }
-    assert!(lower > 0);
+        },
+    );
     let error = input_with(
         source,
         ExpansionLimits {

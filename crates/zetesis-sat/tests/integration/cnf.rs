@@ -4,6 +4,7 @@
 //! they do not reuse the solver's propagation, branching, or backtracking logic.
 
 use std::time::Instant;
+use zetesis_test_support::thresholds::first_success;
 
 use zetesis_cpu::Cancellation;
 use zetesis_sat::{AdmissionLimits, Cnf, Incomplete, Literal, SearchLimits, Solve, solve};
@@ -436,18 +437,11 @@ fn work_limits_are_exact_for_sat_and_unsat_proofs() {
                 (Solve::Sat(_), true) | (Solve::Unsat, false)
             )
         };
-        assert!(matches!(run(0), Solve::Inconclusive(Incomplete::WorkLimit)));
-        let mut insufficient = 0;
-        let mut sufficient = 10_000;
-        assert!(completed(&run(sufficient)));
-        while sufficient - insufficient > 1 {
-            let middle = insufficient + (sufficient - insufficient) / 2;
-            match run(middle) {
-                Solve::Inconclusive(Incomplete::WorkLimit) => insufficient = middle,
-                result if completed(&result) => sufficient = middle,
-                result => panic!("unexpected result at work ceiling {middle}: {result:?}"),
-            }
-        }
+        let sufficient = first_success(10_000, |middle| match run(middle) {
+            Solve::Inconclusive(Incomplete::WorkLimit) => false,
+            result if completed(&result) => true,
+            result => panic!("unexpected result at work ceiling {middle}: {result:?}"),
+        });
         assert!(completed(&run(sufficient)));
         assert!(matches!(
             run(sufficient - 1),

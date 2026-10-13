@@ -6,6 +6,7 @@ use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use zetesis_reference_support::{canonical, formula};
+use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
@@ -389,20 +390,13 @@ fn construction_preserves_statement_origins() {
 #[test]
 fn construction_scalar_bytes_have_an_inclusive_limit() {
     let source = "d(1).p(long_constructor_name(X)):-d(X).";
-    let mut lower = 0;
-    let mut upper = 1 << 20;
-    while lower < upper {
-        let middle = lower + (upper - lower) / 2;
+    let lower = first_success(1 << 20, |middle| {
         let expansion = ExpansionLimits {
             max_scalar_bytes: middle,
             ..ExpansionLimits::default()
         };
-        if limited(source, expansion, &FormulaLimits::default()).is_ok() {
-            upper = middle;
-        } else {
-            lower = middle + 1;
-        }
-    }
+        limited(source, expansion, &FormulaLimits::default()).is_ok()
+    });
     let expansion = ExpansionLimits {
         max_scalar_bytes: lower,
         ..ExpansionLimits::default()

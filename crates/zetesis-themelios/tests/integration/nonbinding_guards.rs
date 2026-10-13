@@ -1,6 +1,7 @@
 //! Completed nonbinding guards preserve comparison and default-negation semantics.
 
 use crate::support::admission;
+use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
 mod truth;
@@ -228,17 +229,7 @@ fn grounding_limits_are_inclusive() {
                 limits(ceiling),
             )
         };
-        let mut lower = 0;
-        let mut upper = 16_384;
-        assert!(admit(upper).is_ok());
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2;
-            if admit(middle).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle + 1;
-            }
-        }
+        let lower = first_success(16_384, |middle| admit(middle).is_ok());
         assert!(lower > 0);
         assert_eq!(native(&admit(lower).unwrap()), native(&input(source)));
         let error = admit(lower - 1).unwrap_err();

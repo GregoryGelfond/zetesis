@@ -1,6 +1,7 @@
 //! Logical bounds compare finite numeric measures without changing permissions.
 
 use crate::support::admission;
+use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
 mod semantics;
@@ -195,17 +196,7 @@ fn grounding_limits_are_inclusive() {
             }
             limits
         };
-        let mut lower = 0;
-        let mut upper = 16_384;
-        assert!(limited(source, &limits(upper)).is_ok());
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2;
-            if limited(source, &limits(middle)).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle + 1;
-            }
-        }
+        let lower = first_success(16_384, |middle| limited(source, &limits(middle)).is_ok());
         assert!(lower > 0);
         assert_eq!(
             native(&limited(source, &limits(lower)).unwrap()),
@@ -237,17 +228,7 @@ fn preparation_payload_limit_is_inclusive() {
             FormulaLimits::default(),
         )
     };
-    let mut lower = 0;
-    let mut upper = 16_384;
-    assert!(prepare(upper).is_ok());
-    while lower < upper {
-        let middle = lower + (upper - lower) / 2;
-        if prepare(middle).is_ok() {
-            upper = middle;
-        } else {
-            lower = middle + 1;
-        }
-    }
+    let lower = first_success(16_384, |middle| prepare(middle).is_ok());
     assert!(lower > 0);
     assert!(prepare(lower).is_ok());
     let error = prepare(lower - 1).unwrap_err();

@@ -1,10 +1,10 @@
 //! Source pools retain whole-rule products, local groups and bounded evidence.
 use crate::support::finite_bindings as reference;
-use crate::support::thresholds;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use zetesis_reference_support::{canonical, formula};
+use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
     FormulaResource,
@@ -315,13 +315,6 @@ fn templates_charge_duplicate_occurrences_before_deduplication() {
     );
 }
 
-/// The least `usize` threshold at which `accepts` succeeds, by the shared
-/// search.
-fn first_success(mut accepts: impl FnMut(usize) -> bool) -> usize {
-    let least = thresholds::first_success(|limit| accepts(usize::try_from(limit).unwrap()));
-    usize::try_from(least).unwrap()
-}
-
 #[test]
 fn independent_limits_are_inclusive_and_failure_retains_source_location() {
     let source = "p((1;2),(3;4));q.";
@@ -342,7 +335,7 @@ fn independent_limits_are_inclusive_and_failure_retains_source_location() {
             }
             bounds
         };
-        let exact = first_success(|limit| {
+        let exact = first_success(1 << 24, |limit| {
             limited(source, configured(limit), &FormulaLimits::default()).is_ok()
         });
         let error = limited(source, configured(exact - 1), &FormulaLimits::default()).unwrap_err();
@@ -371,7 +364,7 @@ fn independent_limits_are_inclusive_and_failure_retains_source_location() {
             }
             bounds
         };
-        let exact = first_success(|limit| {
+        let exact = first_success(1 << 24, |limit| {
             limited(source, ExpansionLimits::default(), &configured(limit)).is_ok()
         });
         let error =
@@ -446,7 +439,7 @@ fn local_value_owners_respect_each_expansion_ceiling() {
                 }
                 bounds
             };
-            let exact = first_success(|limit| {
+            let exact = first_success(1 << 24, |limit| {
                 limited(source, configured(limit), &FormulaLimits::default()).is_ok()
             });
             let error =
@@ -691,7 +684,7 @@ fn pool_free_rules_have_an_inclusive_charged_scan_and_no_pool_projection() {
             max_term_work: limit,
             ..ExpansionLimits::default()
         };
-        let exact = first_success(|limit| {
+        let exact = first_success(1 << 24, |limit| {
             limited(source, configured(limit), &FormulaLimits::default()).is_ok()
         });
         let error = limited(source, configured(exact - 1), &FormulaLimits::default()).unwrap_err();
@@ -740,7 +733,7 @@ fn zero_arity_disjunct_carriers_have_an_independent_preclone_node_ceiling() {
             max_analysis_nodes: limit,
             ..FormulaLimits::default()
         };
-        let exact = first_success(|limit| {
+        let exact = first_success(1 << 24, |limit| {
             limited(&source, ExpansionLimits::default(), &configured(limit)).is_ok()
         });
         // Zero-argument predicates still add structural nodes in both complete

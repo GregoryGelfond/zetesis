@@ -1,6 +1,7 @@
 //! Source priority carriers are distinct from realized aggregate values.
 
 use crate::support::source_cases;
+use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 
@@ -321,16 +322,7 @@ fn completed_carriers_respect_grounding_work_limits() {
             }
             admit(&case.source, &limits)
         };
-        let (mut lower, mut upper) = (0, SEARCH_BOUND);
-        assert!(attempt(upper).is_ok());
-        while lower + 1 < upper {
-            let middle = lower + (upper - lower) / 2;
-            if attempt(middle).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle;
-            }
-        }
+        let upper = first_success(SEARCH_BOUND, |middle| attempt(middle).is_ok());
         assert_eq!(exhaustive(&attempt(upper).unwrap()), case.records);
         let error = attempt(upper - 1).unwrap_err();
         assert!(

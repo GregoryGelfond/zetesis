@@ -4,7 +4,7 @@ use crate::support::answer_records::Record;
 use crate::support::clingo_reports::optimal;
 use crate::support::finite_bindings::{holds, remap, values};
 use crate::support::objective_dependency_records as objective_dependencies;
-use crate::support::thresholds::first_success;
+use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 use std::fs::{self};
@@ -511,7 +511,7 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
             }
             admit(source, &limits)
         };
-        let threshold = first_success(|limit| attempt(limit).is_ok());
+        let threshold = first_success(1_u64 << 20, |limit| attempt(limit).is_ok());
         assert!(matches!(attempt(threshold - 1), Err(FormulaFailure::Limit {
             resource: actual, observed, .. }) if actual == resource && observed == u128::from(threshold)));
         assert_eq!(complete(&attempt(threshold).unwrap()).len(), 4);
@@ -527,7 +527,7 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
             FormulaLimits::default(),
         )
     };
-    let threshold = first_success(|limit| attempt(limit).is_ok());
+    let threshold = first_success(1_u64 << 20, |limit| attempt(limit).is_ok());
     assert!(matches!(
         attempt(threshold - 1),
         Err(FormulaFailure::Expansion(ExpansionFailure::Limit {

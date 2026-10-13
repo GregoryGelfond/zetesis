@@ -1,7 +1,7 @@
 //! Boolean heads retain their original truth without supplying atom support.
 
 use crate::support::objective_dependency_records as objective_dependencies;
-use crate::support::thresholds::first_success;
+use zetesis_test_support::thresholds::first_success;
 
 mod cases;
 mod comparisons;
@@ -281,7 +281,7 @@ fn exact_formula_budget(resource: FormulaResource, configure: impl Fn(&mut Formu
         configure(&mut limits, limit);
         admit(BUDGET_SOURCE, &limits)
     };
-    let threshold = first_success(|limit| attempt(limit).is_ok());
+    let threshold = first_success(1_u64 << 20, |limit| attempt(limit).is_ok());
     assert_eq!(
         native(&attempt(threshold).unwrap()),
         native(&formula(BUDGET_SOURCE))
@@ -337,7 +337,7 @@ fn tautologies_preserve_term_work_accounting() {
             FormulaLimits::default(),
         )
     };
-    let threshold = first_success(|limit| attempt(limit).is_ok());
+    let threshold = first_success(1_u64 << 20, |limit| attempt(limit).is_ok());
     assert_eq!(
         native(&attempt(threshold).unwrap()),
         native(&formula(BUDGET_SOURCE))

@@ -1,6 +1,7 @@
 //! Closed nonnumeric weights supply neither a numeric key nor a priority slot.
 
 use crate::support::source_cases;
+use zetesis_test_support::thresholds::first_success;
 mod sources;
 
 use sources::{DIRECTIONS, PROGRAM, WEIGHTS, cases, directive};
@@ -250,7 +251,7 @@ fn literal_admission_limits_are_inclusive() {
             }
             admit(source, &limits)
         };
-        let exact = threshold(|maximum| attempt(maximum).is_ok());
+        let exact = first_success(65_536_u64, |maximum| attempt(maximum).is_ok());
         assert_eq!(exhaustive(&attempt(exact).unwrap()), reference);
         assert!(matches!(attempt(exact - 1), Err(FormulaFailure::Limit {
             resource: actual, observed, limit, ..
@@ -268,27 +269,13 @@ fn literal_admission_limits_are_inclusive() {
             FormulaLimits::default(),
         )
     };
-    let exact = threshold(|maximum| attempt(maximum).is_ok());
+    let exact = first_success(65_536_u64, |maximum| attempt(maximum).is_ok());
     assert_eq!(exhaustive(&attempt(exact).unwrap()), reference);
     assert!(matches!(attempt(exact - 1), Err(FormulaFailure::Expansion(
         ExpansionFailure::Limit {
             resource: ExpansionResource::ScalarBytes, observed, limit, ..
         }
     )) if observed == u128::from(exact) && limit == u128::from(exact - 1)));
-}
-
-fn threshold(mut succeeds: impl FnMut(u64) -> bool) -> u64 {
-    let (mut lower, mut upper) = (0, 65_536);
-    assert!(succeeds(upper));
-    while lower + 1 < upper {
-        let middle = lower + (upper - lower) / 2;
-        if succeeds(middle) {
-            upper = middle;
-        } else {
-            lower = middle;
-        }
-    }
-    upper
 }
 
 proptest::proptest! {

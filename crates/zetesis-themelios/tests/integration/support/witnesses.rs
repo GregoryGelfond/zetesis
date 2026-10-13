@@ -2,8 +2,8 @@
 //! for the witness propositions.
 
 use super::finite_bindings::native;
-use super::thresholds::first_success;
 use zetesis_reference_support::formula;
+use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
@@ -32,14 +32,13 @@ pub(crate) fn inclusive_ceiling(
     mut run: impl FnMut(usize) -> Result<AdmittedFormula, FormulaFailure>,
     refused: impl Fn(&FormulaFailure) -> bool,
 ) -> usize {
-    let least = first_success(|cap| match run(usize::try_from(cap).unwrap()) {
+    let least = first_success(1_000_000, |cap| match run(cap) {
         Ok(_) => true,
         Err(error) => {
             assert!(refused(&error), "{error}");
             false
         }
     });
-    let least = usize::try_from(least).unwrap();
     assert_eq!(native(&run(least).unwrap()), native(&formula(bounded)));
     least
 }

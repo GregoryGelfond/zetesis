@@ -1,13 +1,13 @@
 //! Universal rows and existential consequent alternatives have separate scopes.
 use crate::support::finite_bindings as reference;
 use crate::support::formula_trees::{Formula, world};
-use crate::support::thresholds::first_success;
 use crate::support::upstream;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use zetesis_reference_support::{canonical, formula};
+use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, AnalysisBasis, ExpansionLimits, FormulaFailure,
     FormulaLimits, admit_formula, prepare_formula,
@@ -584,10 +584,7 @@ fn complete_sources_match_clingo() {
 
 /// The least ceiling at which `admit` succeeds.
 fn first_cap(mut admit: impl FnMut(usize) -> Result<AdmittedFormula, FormulaFailure>) -> usize {
-    usize::try_from(first_success(|cap| {
-        admit(usize::try_from(cap).unwrap()).is_ok()
-    }))
-    .unwrap()
+    first_success(1_000_000, |cap| admit(cap).is_ok())
 }
 const BOUNDED: &str = "{p(1..3)}.q:-p(X-1;2*(X..X+1)-3):X=2.";
 const PROJECTED: &str = "{p(f(1,1));p(f(2,1));p(g(1,1))}.q:-not p(f(_,X..X+1)):X=1.";

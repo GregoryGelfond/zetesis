@@ -2,6 +2,7 @@
 
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
+use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 
@@ -263,32 +264,15 @@ fn negative_eligibility_limits_are_inclusive() {
             }
             result
         };
-        let mut lower = 0;
-        let mut upper = 16_384;
-        assert!(
+        let lower = first_success(16_384, |middle| {
             admit_formula(
-                source.into(),
-                options(),
-                ExpansionLimits::default(),
-                limits(upper)
-            )
-            .is_ok()
-        );
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2;
-            if admit_formula(
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
                 limits(middle),
             )
             .is_ok()
-            {
-                upper = middle;
-            } else {
-                lower = middle + 1;
-            }
-        }
+        });
         assert!(lower > 0);
         assert_eq!(
             native(
@@ -322,37 +306,19 @@ fn negative_eligibility_limits_are_inclusive() {
 #[test]
 fn scalar_storage_limits_are_inclusive() {
     let source = "{b}.1#count{1:a:not b}1.";
-    let mut lower = 0;
-    let mut upper = 16_384;
     let limits = |max_scalar_bytes| ExpansionLimits {
         max_scalar_bytes,
         ..Default::default()
     };
-    assert!(
+    let lower = first_success(16_384, |middle| {
         admit_formula(
-            source.into(),
-            options(),
-            limits(upper),
-            FormulaLimits::default()
-        )
-        .is_ok()
-    );
-    while lower < upper {
-        let middle = lower + (upper - lower) / 2;
-        if admit_formula(
             source.into(),
             options(),
             limits(middle),
             FormulaLimits::default(),
         )
         .is_ok()
-        {
-            upper = middle;
-        } else {
-            lower = middle + 1;
-        }
-    }
-    assert!(lower > 0);
+    });
     assert_eq!(
         native(
             &admit_formula(

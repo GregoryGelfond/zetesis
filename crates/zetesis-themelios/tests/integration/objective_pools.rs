@@ -2,6 +2,7 @@
 
 use crate::support::priority_contracts;
 use crate::support::source_cases;
+use zetesis_test_support::thresholds::first_success;
 
 use themelios_program::program::{Arguments, BodyElement, LiteralInner, Statement};
 use zetesis_reference_support as reference;
@@ -216,16 +217,7 @@ fn projected_analysis_has_an_inclusive_node_limit() {
             },
         )
     };
-    let (mut lower, mut upper) = (0, 65536);
-    assert!(attempt(upper).is_ok());
-    while lower + 1 < upper {
-        let middle = lower + (upper - lower) / 2;
-        if attempt(middle).is_ok() {
-            upper = middle;
-        } else {
-            lower = middle;
-        }
-    }
+    let upper = first_success(65536, |middle| attempt(middle).is_ok());
     assert_eq!(
         reference::exhaustive(&attempt(upper).unwrap()),
         source_cases::cases(CASES)[0].records
@@ -334,16 +326,7 @@ fn projected_source_payload_has_independent_limits() {
                 FormulaLimits::default(),
             )
         };
-        let (mut lower, mut upper) = (0, 65536);
-        assert!(attempt(upper).is_ok());
-        while lower + 1 < upper {
-            let middle = lower + (upper - lower) / 2;
-            if attempt(middle).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle;
-            }
-        }
+        let upper = first_success(65536, |middle| attempt(middle).is_ok());
         assert_eq!(
             reference::exhaustive(&attempt(upper).unwrap()),
             source_cases::cases(CASES)[0].records

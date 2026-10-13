@@ -1,6 +1,7 @@
 //! Finite affine chains preserve the complete correlated source guard.
 
 use crate::support::finite_bindings as reference;
+use zetesis_test_support::thresholds::first_success;
 
 use proptest::prelude::*;
 use reference::{Models, exhaustive, holds, native, values};
@@ -320,17 +321,7 @@ fn envelope_storage_and_work_limits_are_inclusive() {
                 FormulaLimits::default(),
             )
         };
-        let mut lower = 0;
-        let mut upper = 1_048_576;
-        assert!(run(upper).is_ok());
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2;
-            if run(middle).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle + 1;
-            }
-        }
+        let lower = first_success(1_048_576, |middle| run(middle).is_ok());
         assert!(run(lower).is_ok());
         assert!(
             matches!(run(lower - 1), Err(FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, .. })) if actual == resource)

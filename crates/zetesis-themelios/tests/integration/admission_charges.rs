@@ -2,6 +2,7 @@
 //! ceiling refuses a program for its size, not for an allowance's shape.
 
 use std::fmt::Write as _;
+use zetesis_test_support::thresholds::first_success;
 
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -32,17 +33,7 @@ fn minimal_work(source: &str) -> u64 {
         )
         .is_ok()
     };
-    let (mut low, mut high) = (0, 1u64 << 40);
-    assert!(admits(high));
-    while low < high {
-        let middle = low + (high - low) / 2;
-        if admits(middle) {
-            high = middle;
-        } else {
-            low = middle + 1;
-        }
-    }
-    low
+    first_success(1_u64 << 40, admits)
 }
 
 /// The least scalar byte budget that admits `source`, by bisection.
@@ -59,17 +50,7 @@ fn minimal_scalar_bytes(source: &str) -> usize {
         )
         .is_ok()
     };
-    let (mut low, mut high) = (0, 1usize << 34);
-    assert!(admits(high));
-    while low < high {
-        let middle = low + (high - low) / 2;
-        if admits(middle) {
-            high = middle;
-        } else {
-            low = middle + 1;
-        }
-    }
-    low
+    first_success(1_usize << 34, admits)
 }
 
 #[test]

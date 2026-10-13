@@ -2,6 +2,7 @@
 
 use crate::support::finite_bindings::holds;
 use crate::support::source_cases;
+use zetesis_test_support::thresholds::first_success;
 
 use crate::support::finite_bindings::values as truth;
 use crate::support::fixtures::OBJECTIVE_EXTREMA_REFUSALS as EXTREMA_REFUSALS;
@@ -302,17 +303,9 @@ fn exact_limits(source: &str) {
         Resource::AnalysisNodes,
         Resource::AnalysisEdges,
     ] {
-        let mut lower = 0;
-        let mut upper = 10_000;
-        assert!(admit(source, &resource.limits(upper)).is_ok());
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2;
-            if admit(source, &resource.limits(middle)).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle + 1;
-            }
-        }
+        let lower = first_success(10_000, |middle| {
+            admit(source, &resource.limits(middle)).is_ok()
+        });
         assert!(lower > 0);
         let exact = admit(source, &resource.limits(lower)).unwrap();
         assert_eq!(exhaustive(&exact), exhaustive(&reference));
