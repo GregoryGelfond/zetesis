@@ -207,7 +207,8 @@ fn failed_refusal_output_retains_the_input_error() {
     assert!(diagnostic.contains("output flush:"), "{diagnostic}");
 }
 
-#[cfg(not(feature = "gpu"))]
+// The default install's front hands a device inventory to its sibling.
+#[cfg(not(any(feature = "gpu", feature = "front")))]
 #[test]
 fn completed_device_inventory_exits_successfully() {
     let output = run(None, &["devices"], Stdio::piped());
@@ -217,7 +218,7 @@ fn completed_device_inventory_exits_successfully() {
     assert!(text.contains("GPU: not compiled into this build"));
 }
 
-#[cfg(all(unix, not(feature = "gpu")))]
+#[cfg(all(unix, not(any(feature = "gpu", feature = "front"))))]
 #[test]
 fn failed_device_inventory_output_exits_two() {
     let output = run(None, &["devices"], failed_output());
