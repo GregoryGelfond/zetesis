@@ -129,9 +129,12 @@ impl Readers {
     /// pass visits every node and its operands or conditions once per row,
     /// every producer and every root position, so the work is linear in the
     /// theory. Storage is admitted against `max_bytes`, with `base` bytes
-    /// already held, before each allocation: the counts and a pass's row marks
-    /// first, then the offsets, placement cursors and entries beside them.
-    /// Returns the index and the most logical bytes the build held at once.
+    /// already held, before the first pass: the counts, a pass's row marks, and
+    /// the offsets, placement cursors and entries, the entries bounded from the
+    /// theory (reader entries by its operand occurrences, producers and roots;
+    /// atom-node and guard entries each by its nodes), so a build the byte
+    /// allowance cannot hold spends nothing. Returns the index and a bound on the
+    /// logical bytes the build holds at once, from the counted entries.
     pub(super) fn build(
         theory: &Theory,
         producers: &[TightProducer],
@@ -142,9 +145,16 @@ impl Readers {
         let nodes = theory.nodes().len();
         let atoms = theory.atom_count();
         let rows = theory.parts().rows().len();
-        let counts = (nodes + atoms + rows) as u128 * size_of::<usize>() as u128;
+        let slots = (nodes + atoms + rows) as u128;
+        let word = size_of::<usize>() as u128;
+        let counts = slots * word;
         let marks = rows.div_ceil(64) as u128 * size_of::<u64>() as u128;
-        bytes(base + counts + marks, max_bytes)?;
+        let lists = (2 * slots + 3) * word;
+        let entries = (theory.parts().occurrences() + producers.len() + theory.roots().len())
+            as u128
+            * size_of::<Reader>() as u128
+            + 2 * nodes as u128 * word;
+        bytes(base + counts + marks + lists + entries, max_bytes)?;
         let mut readers = Counted::new(nodes)?;
         let mut atom_nodes = Counted::new(atoms)?;
         let mut guards = Counted::new(rows)?;
@@ -156,7 +166,7 @@ impl Readers {
         let placed = readers.placed_bytes::<Reader>()?
             + atom_nodes.placed_bytes::<usize>()?
             + guards.placed_bytes::<usize>()?;
-        let peak = bytes(base + counts + marks + placed, max_bytes)?;
+        let held = bytes(base + counts + marks + placed, max_bytes)?;
         let mut readers = readers.placement(Reader(0))?;
         let mut atom_nodes = atom_nodes.placement(0)?;
         let mut guards = guards.placement(0)?;
@@ -170,7 +180,7 @@ impl Readers {
             atom_nodes: atom_nodes.finish()?,
             guards: guards.finish()?,
         };
-        Ok((index, peak))
+        Ok((index, held))
     }
 }
 

@@ -3,6 +3,9 @@ use crate::{AdmissionLimits, FormulaParts, Node, Theory, TightPlanLimits};
 
 #[test]
 fn checks_retain_their_scratch_allocations() {
+    // The plan has no readers index, so every check here evaluates completely;
+    // the update route's propositions are in `tight/evaluate/update_tests.rs`
+    // and `tight/evaluate/incremental_tests.rs`.
     let theory = Theory::new(
         1,
         FormulaParts::new(vec![Node::atom(0)], vec![]).unwrap(),
@@ -148,6 +151,9 @@ fn empty_candidates_charge_each_packed_word() {
 
 #[test]
 fn packed_support_does_not_retain_prior_body_truth() {
+    // The plan has no readers index, so every check here evaluates completely;
+    // the update route's propositions are in `tight/evaluate/update_tests.rs`
+    // and `tight/evaluate/incremental_tests.rs`.
     let theory = Theory::new(
         65,
         FormulaParts::new(

@@ -105,6 +105,9 @@ fn mixed_theory() -> Theory {
 
 #[test]
 fn mixed_checks_retain_every_exact_work_prefix() {
+    // The plan has no readers index, so every check here evaluates completely;
+    // the update route's propositions are in `tight/evaluate/update_tests.rs`
+    // and `tight/evaluate/incremental_tests.rs`.
     let theory = mixed_theory();
     let slot = CancellationSlot::default();
     let run = slot.open(None).unwrap();

@@ -263,12 +263,12 @@ impl TightPlan {
     /// evaluating it completely. The build makes two charged passes over nodes,
     /// operands, numeric conditions, producers and root positions. It is
     /// attempted only when `limits.max_work` covers twice the nodes, operand
-    /// occurrences, producers and roots, so a build the allowance cannot finish
-    /// spends nothing. Its construction vectors and the finished index are
-    /// admitted against `limits.max_bytes`, together with the plan's resident
-    /// bytes, before they are allocated. Returns whether the index exists
-    /// afterwards: when either allowance does not cover the build, the plan keeps
-    /// complete evaluation, and a later call with larger limits may build it.
+    /// occurrences, producers and roots, and when `limits.max_bytes` holds the
+    /// plan's resident bytes with the build's vectors and the finished index,
+    /// the entries bounded from the theory; so a build either allowance cannot
+    /// complete spends nothing. Returns whether the index exists afterwards: when
+    /// either allowance does not cover the build, the plan keeps complete
+    /// evaluation, and a later call with larger limits may build it.
     /// Construction work, construction bytes and resident bytes include the
     /// index.
     ///
@@ -301,7 +301,7 @@ impl TightPlan {
             ..
         } = self;
         let metered = cancellation.metered(limits.max_work, |meter| {
-            let (index, peak) =
+            let (index, held) =
                 match readers::Readers::build(theory, producers, base, limits.max_bytes, meter) {
                     Ok(built) => built,
                     Err(TightError::Limit(TightResource::Bytes)) => return Ok(false),
@@ -313,7 +313,7 @@ impl TightPlan {
                 .checked_add(meter.charged())
                 .ok_or(TightError::Limit(TightResource::Work))?;
             statistics.resident_bytes = resident;
-            statistics.construction_bytes = statistics.construction_bytes.max(peak);
+            statistics.construction_bytes = statistics.construction_bytes.max(held);
             statistics.work = work;
             *readers = Some(index);
             Ok(true)

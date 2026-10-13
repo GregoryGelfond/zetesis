@@ -324,6 +324,9 @@ fn weighted_storage_is_admitted_before_row_initialization() {
 
 #[test]
 fn tight_checks_share_weighted_measures_and_conservative_work() {
+    // The plan has no readers index, so every check here evaluates completely;
+    // the update route's propositions are in `tight/evaluate/update_tests.rs`
+    // and `tight/evaluate/incremental_tests.rs`.
     let owner = weighted(&[1, 2, 3], true);
     let plan =
         TightPlan::compile(&owner, TightPlanLimits::default(), &Cancellation::default()).unwrap();

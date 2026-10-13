@@ -61,16 +61,20 @@ impl TightPlan {
 /// When the plan has its readers index ([`TightPlan::prepare_updates`]), a
 /// workspace keeps, after a check that completed, the complete evaluation of the
 /// candidate it checked together with a handle to that candidate's theory, and
-/// the next check of a candidate of the same theory updates it. The update
+/// the next check of a candidate of the same theory updates it. A node's inputs
+/// are its atom's membership for an atom node, the truth of its row's
+/// conditions for a numeric guard, and its operands' truth otherwise. The update
 /// re-evaluates, in ascending node order, exactly the nodes with an input whose
 /// value changed, keeps the measures of rows none of whose conditions changed,
 /// and maintains a four-byte support count per atom and the unsupported-atom and
 /// false-root sets, so its verdict and witness are those of a complete
 /// evaluation of the new candidate. A candidate that differs in more atoms than
-/// an eighth of the theory's atoms (and at least 64), a different theory, a plan
-/// without the index, or a check after an interrupted one evaluates completely.
-/// An interrupted check leaves nothing a later check can read. Each concurrent
-/// checker owns an exclusive workspace; immutable plans may be shared.
+/// an eighth of the theory's atoms (and at least 64), a different theory, or a
+/// plan without the index evaluates completely. A check that stops after it
+/// begins evaluating leaves nothing a later check can read, so the next check
+/// evaluates completely too; one refused before (for a foreign theory, or at its
+/// first observation of control) changes nothing. Each concurrent checker owns
+/// an exclusive workspace; immutable plans may be shared.
 #[derive(Debug, Default)]
 pub struct TightWorkspace {
     values: Vec<u8>,
@@ -120,9 +124,9 @@ impl Retained {
         (self.candidate.capacity()
             + self.missing.capacity()
             + self.false_roots.capacity()
-            + self.queued.capacity()
-            + self.changed.capacity()) as u128
+            + self.queued.capacity()) as u128
             * size_of::<u64>() as u128
+            + self.changed.capacity() as u128 * size_of::<usize>() as u128
             + self.support.capacity() as u128 * size_of::<u32>() as u128
             + self.pending.capacity() as u128 * size_of::<Reverse<usize>>() as u128
     }
@@ -464,9 +468,10 @@ impl TightWorkspace {
         }
         // Invariant: every node below the least queued node holds its truth under
         // the new candidate, and a node is queued exactly when one of its inputs
-        // changed: an operand's truth, a row's measure, or an atom node's
-        // membership. A reader has a larger index than everything it reads, so
-        // ascending pops re-evaluate each node from final inputs, and a popped
+        // changed: an atom node's membership, a condition of a guard's row (the
+        // row is withdrawn then, before any of its guards is re-evaluated), or an
+        // operand's truth. A reader has a larger index than everything it reads,
+        // so ascending pops re-evaluate each node from final inputs, and a popped
         // node is never queued again: each is re-evaluated at most once.
         while let Some(Reverse(node)) = self.retained.pending.pop() {
             meter.tick()?;

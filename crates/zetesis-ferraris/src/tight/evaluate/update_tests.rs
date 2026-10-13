@@ -95,6 +95,59 @@ fn extremum_choices(atoms: usize) -> Theory {
     Theory::new(atoms, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap()
 }
 
+/// Every incidence kind the readers index lists: atomic choices, a fact, a
+/// rule whose body is a wide conjunction, and a numeric row over three atoms
+/// with two guards under constraints.
+fn mixed_theory() -> Theory {
+    let atoms = 5;
+    let mut nodes =
+        FormulaNodes::new(FormulaParts::new((0..atoms).map(Node::atom).collect(), vec![]).unwrap());
+    let mut append = nodes.transaction();
+    let falsum = append
+        .push(NodeView::False, usize::MAX, usize::MAX)
+        .unwrap();
+    let mut roots = vec![4];
+    for atom in 0..3 {
+        let not = append
+            .push(NodeView::Implies(atom, falsum), usize::MAX, usize::MAX)
+            .unwrap();
+        roots.push(
+            append
+                .push(NodeView::Or(&[atom, not]), usize::MAX, usize::MAX)
+                .unwrap(),
+        );
+    }
+    let wide = append
+        .push(NodeView::And(&[0, 1, 2]), usize::MAX, usize::MAX)
+        .unwrap();
+    roots.push(
+        append
+            .push(NodeView::Implies(wide, 3), usize::MAX, usize::MAX)
+            .unwrap(),
+    );
+    let guards = append
+        .push_extremum_cut_family_range(
+            ExtremumRow {
+                conditions: &[0, 1, 2],
+                ranks: &[0, 1, 2],
+                rank_count: 3,
+            },
+            &[ExtremumCutRule::Suffix(2), ExtremumCutRule::Prefix(1)],
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
+    for guard in guards {
+        roots.push(
+            append
+                .push(NodeView::Implies(guard, falsum), usize::MAX, usize::MAX)
+                .unwrap(),
+        );
+    }
+    append.commit();
+    Theory::new(atoms, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap()
+}
+
 fn prepared(theory: &Theory) -> TightPlan {
     let cancellation = Cancellation::default();
     let mut plan = TightPlan::compile(theory, TightPlanLimits::default(), &cancellation).unwrap();
@@ -213,12 +266,26 @@ fn an_equal_theory_is_evaluated_completely() {
     assert!(reused.work >= complete.work);
 }
 
-/// The second checks of the two routes: a one-atom change and a large change.
-fn route_pairs(theory: &Theory) -> [(Interpretation, Interpretation); 2] {
+/// The second checks of the two routes, a one-atom change that updates and a
+/// large change that evaluates completely, with whether each updates.
+fn route_pairs(theory: &Theory) -> [(Interpretation, Interpretation, bool); 2] {
     [
-        (world(theory, [2, 3]), world(theory, [2, 3, 4])),
-        (world(theory, []), world(theory, 2..102)),
+        (world(theory, [2, 3]), world(theory, [2, 3, 4]), true),
+        (world(theory, []), world(theory, 2..102), false),
     ]
+}
+
+/// Assert the route a second check took: an update charges less than a complete
+/// evaluation of the same candidate, a complete check at least as much.
+fn assert_route(plan: &TightPlan, candidate: &Interpretation, work: u64, updated: bool) {
+    let complete = plan
+        .check_accounted(
+            candidate,
+            TightCheckLimits::default(),
+            &Cancellation::default(),
+        )
+        .work;
+    assert_eq!(work < complete, updated, "{work} against {complete}");
 }
 
 #[test]
@@ -226,8 +293,9 @@ fn each_route_fits_the_plan_bound() {
     let theory = choices(200);
     let plan = prepared(&theory);
     let bound = plan.check_work_bound();
-    for (first, second) in route_pairs(&theory) {
+    for (first, second, updated) in route_pairs(&theory) {
         let (verdict, work) = second_check(&plan, &first, &second, u64::MAX);
+        assert_route(&plan, &second, work, updated);
         assert!(verdict.is_ok());
         assert!(u128::from(work) <= bound, "{work} against {bound}");
     }
@@ -237,8 +305,9 @@ fn each_route_fits_the_plan_bound() {
 fn each_route_refuses_one_unit_short_of_its_work() {
     let theory = choices(200);
     let plan = prepared(&theory);
-    for (first, second) in route_pairs(&theory) {
+    for (first, second, updated) in route_pairs(&theory) {
         let (verdict, work) = second_check(&plan, &first, &second, u64::MAX);
+        assert_route(&plan, &second, work, updated);
         assert_eq!(second_check(&plan, &first, &second, work).0, verdict);
         assert_eq!(
             second_check(&plan, &first, &second, work - 1).0,
@@ -298,40 +367,89 @@ fn an_index_the_work_allowance_cannot_build_spends_nothing() {
 }
 
 #[test]
-fn an_index_build_is_admitted_at_its_peak() {
+fn without_numeric_rows_the_index_build_charges_its_work_bound() {
+    // Each pass visits every node, operand occurrence, producer and root once.
+    let theory = choices(200);
+    let cancellation = Cancellation::default();
+    let mut plan = TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
+    let attempt = plan.prepare_updates(TightPlanLimits::default(), &cancellation);
+    assert_eq!(attempt.result, Ok(true));
+    assert_eq!(u128::from(attempt.work), plan.index_work_bound());
+}
+
+#[test]
+fn an_index_builds_within_its_work_bound() {
+    let theory = mixed_theory();
+    let cancellation = Cancellation::default();
+    let mut plan = TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
+    let bound = plan.index_work_bound();
+    let limits = TightPlanLimits {
+        max_work: u64::try_from(bound).unwrap(),
+        ..TightPlanLimits::default()
+    };
+    let attempt = plan.prepare_updates(limits, &cancellation);
+    assert_eq!(attempt.result, Ok(true));
+    assert!(u128::from(attempt.work) <= bound);
+}
+
+/// The bytes the build is admitted against before its first pass: one count,
+/// offset and cursor per node, atom and numeric row, one more offset per
+/// relation, reader entries bounded by operand occurrences, producers and
+/// roots, atom-node and guard entries each by nodes, and one row mark per 64
+/// rows, beside the plan's resident bytes.
+fn admitted_build_bytes(plan: &TightPlan) -> u64 {
+    let theory = plan.theory();
+    let (nodes, atoms, rows) = (
+        theory.nodes().len() as u64,
+        theory.atom_count() as u64,
+        theory.parts().rows().len() as u64,
+    );
+    let word = size_of::<usize>() as u64;
+    let slots = nodes + atoms + rows;
+    let readers =
+        (theory.parts().occurrences() + plan.producers().len() + theory.roots().len()) as u64;
+    plan.statistics().resident_bytes
+        + slots * word
+        + rows.div_ceil(64) * size_of::<u64>() as u64
+        + (2 * slots + 3) * word
+        + readers * size_of::<u64>() as u64
+        + 2 * nodes * word
+}
+
+#[test]
+fn a_build_the_byte_allowance_cannot_hold_spends_nothing() {
     let theory = extremum_choices(200);
     let cancellation = Cancellation::default();
     let compile =
         || TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
-    let mut built = compile();
-    assert_eq!(
-        built
-            .prepare_updates(TightPlanLimits::default(), &cancellation)
-            .result,
-        Ok(true)
-    );
-    // Beside the finished index the build holds one count and one cursor per
-    // node, atom and numeric row, and one row mark per 64 rows.
-    let (nodes, atoms, rows) = (
-        theory.nodes().len(),
-        theory.atom_count(),
-        theory.parts().rows().len(),
-    );
-    let word = size_of::<usize>() as u64;
-    let peak = built.statistics().resident_bytes
-        + 2 * (nodes + atoms + rows) as u64 * word
-        + rows.div_ceil(64) as u64 * word;
-    assert!(built.statistics().construction_bytes >= peak);
-    for (max_bytes, prepared) in [(peak, true), (peak - 1, false)] {
+    let admitted = admitted_build_bytes(&compile());
+    for (max_bytes, built) in [(admitted, true), (admitted - 1, false)] {
         let mut plan = compile();
         let limits = TightPlanLimits {
             max_bytes,
             ..TightPlanLimits::default()
         };
-        assert_eq!(
-            plan.prepare_updates(limits, &cancellation).result,
-            Ok(prepared)
-        );
-        assert_eq!(plan.readers.is_some(), prepared);
+        let attempt = plan.prepare_updates(limits, &cancellation);
+        assert_eq!(attempt.result, Ok(built));
+        assert_eq!(attempt.work > 0, built);
+        assert_eq!(plan.readers.is_some(), built);
     }
+}
+
+#[test]
+fn construction_bytes_cover_the_index_build() {
+    // Beside the finished index the build holds one count and one cursor per
+    // node, atom and numeric row, and one row mark per 64 rows.
+    let theory = extremum_choices(200);
+    let plan = prepared(&theory);
+    let (nodes, atoms, rows) = (
+        theory.nodes().len() as u64,
+        theory.atom_count() as u64,
+        theory.parts().rows().len() as u64,
+    );
+    let word = size_of::<usize>() as u64;
+    let held = plan.statistics().resident_bytes
+        + 2 * (nodes + atoms + rows) * word
+        + rows.div_ceil(64) * size_of::<u64>() as u64;
+    assert!(plan.statistics().construction_bytes >= held);
 }

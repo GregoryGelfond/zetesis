@@ -1565,8 +1565,8 @@ sends before joining on iterator drop, and counting joined certificate checks
 are Rust lifecycle and accounting obligations, beyond permit conservation. The
 bounded subprocess regressions in `zetesis-sat/tests/integration/parallel_regions.rs` exercise
 shutdown and idle grants; the certificate regressions compare scalar and
-parallel region and construction work, bound checking work by the checks'
-reservations, and reject an insufficient shared allowance. An injected
+parallel region and construction work, check that every certified check
+completes within its reservation, and reject an insufficient shared allowance. An injected
 worker unwind also checks that idle peers wake and coverage remains incomplete.
 
 The native parallel walk keeps one deque per worker. Its owner removes the

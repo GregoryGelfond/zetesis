@@ -207,11 +207,13 @@ impl<'a> Meter<'a> {
     ///
     /// # Errors
     /// When `nested` exceeds the remaining allowance, the nested operation
-    /// overran the limit it was given. Control is observed first, as for a
-    /// refused charge, and [`ChargeError::WorkLimit`] is reported otherwise.
-    /// As for a refused charge, nothing is counted then.
+    /// overran the limit it was given. Its work was done, so the count reaches
+    /// the limit and the operation can charge nothing more; then control is
+    /// observed, as for a refused charge, and [`ChargeError::WorkLimit`] is
+    /// reported otherwise.
     pub fn absorb(&mut self, nested: u64) -> Result<(), ChargeError> {
         if nested > self.remaining() {
+            self.count.value = self.limit;
             // A requested stop takes precedence over the work limit.
             self.poll.poll().map_err(ChargeError::Stopped)?;
             return Err(ChargeError::WorkLimit);
@@ -609,11 +611,23 @@ mod tests {
                 meter.charge().unwrap();
             }
             assert_eq!(meter.remaining(), 7);
-            assert_eq!(meter.absorb(8), Err(ChargeError::WorkLimit));
-            assert_eq!(meter.charged(), 3);
             meter.absorb(7).map_err(ChargeError::into_stop)
         });
         assert_eq!(metered.result, Ok(()));
+        assert_eq!(metered.charged, 10);
+    }
+
+    #[test]
+    fn an_overrun_absorb_counts_up_to_the_limit() {
+        // The refusal is returned as a value, so the exit leaves it alone.
+        let cancellation = Cancellation::default();
+        let metered = cancellation.metered(10, |meter| {
+            for _ in 0..3 {
+                meter.charge().unwrap();
+            }
+            Ok::<_, Stop>((meter.absorb(8), meter.remaining()))
+        });
+        assert_eq!(metered.result, Ok((Err(ChargeError::WorkLimit), 0)));
         assert_eq!(metered.charged, 10);
     }
 
@@ -629,7 +643,7 @@ mod tests {
             metered.result,
             Ok(Err(ChargeError::Stopped(Stop::Cancelled)))
         );
-        assert_eq!(metered.charged, 0);
+        assert_eq!(metered.charged, 10);
     }
 
     /// The settled outcome of an operation that returns `outcome`, with a stop

@@ -429,6 +429,9 @@ fn frozen_queries_reset_shared_measures_for_every_world() {
 
 #[test]
 fn tight_checks_reuse_only_initialized_storage() {
+    // The plan has no readers index, so every check here evaluates completely;
+    // the update route's propositions are in `tight/evaluate/update_tests.rs`
+    // and `tight/evaluate/incremental_tests.rs`.
     let owner = family(vec![], false);
     let mut nodes = FormulaNodes::new(owner.parts().try_clone().unwrap());
     let mut transaction = nodes.transaction();

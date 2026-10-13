@@ -184,12 +184,15 @@ atom in 32-bit words. When the plan has its readers index
 the certificate for CPU use, before sharing the plan), a worker's
 workspace keeps the complete evaluation of the last candidate it checked and
 updates it for the next one: it re-evaluates, in node order, exactly the nodes
-with an operand whose truth changed, and keeps support counts and the false-root
-and unsupported-atom sets, so every verdict and its witness equal a complete
-evaluation's. A candidate that differs in more than an eighth of the atoms (at
-least 64), another theory, or a check after an interrupted one evaluates
-completely. An interrupted check leaves nothing the next check reads. The work a
-check charges then depends on the candidate checked before it;
+with an input whose value changed (an atom node's membership, a condition of a
+numeric guard's row, or an operand's truth), and keeps support counts and the
+false-root and unsupported-atom sets, so every verdict and its witness equal a
+complete evaluation's. A candidate that differs in more than an eighth of the
+atoms (at least 64) or another theory evaluates completely. A check that stops
+after it begins evaluating leaves nothing the next check reads, so the next
+check evaluates completely; one refused before, for a foreign theory or at its
+first observation of control, changes nothing. The work a check charges then
+depends on the candidate checked before it;
 `TightPlan::check_work_bound` bounds every check by either route. A certificate
 prepared for an external checker shares its plan without the index; if it is
 later enabled for CPU checking, its checks evaluate every candidate completely.

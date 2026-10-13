@@ -460,9 +460,10 @@ fn parallel_certificates_charge_the_scalar_regions_and_construction() {
 }
 
 #[test]
-fn checking_work_stays_within_the_reservations_of_its_checks() {
-    // Each certified check reserves the run's own plan bound; the work the
-    // checks charged together stays within what they reserved.
+fn every_check_completes_within_its_reservation() {
+    // Each certified check runs under its reservation, the run's own plan
+    // bound; were the bound too small for a check on either route, the check
+    // would be refused and the enumeration would not complete.
     for worker_count in [1, 3] {
         let mut search = StableModels::with_region_workers(
             &choices(5),
@@ -477,13 +478,9 @@ fn checking_work_stays_within_the_reservations_of_its_checks() {
                 .unwrap()
         );
         assert_eq!(family(&mut search).len(), 32);
-        let bound = search
-            .prepared_tight_certificate()
-            .unwrap()
-            .check_work_bound();
+        assert!(search.exhausted());
         let certified = search.statistics().certified.unwrap();
-        assert_eq!(certified.checks, 32);
-        assert!(u128::from(certified.checking_work) <= 32 * bound);
+        assert_eq!((certified.checks, certified.stable), (32, 32));
     }
 }
 
