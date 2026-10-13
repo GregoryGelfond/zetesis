@@ -105,6 +105,27 @@ Notable changes by release. Versions follow Semantic Versioning.
   `GpuExecutableUnavailable` variant, and those on
   `zetesis_validation::performance::matrix::Decision` its new
   `GpuExecutableUnavailable` disposition.
+- Removed public items that nothing in the workspace called:
+  `GpuOracle::new_metal`, `GpuTightOracle::new_metal`,
+  `GpuFormulaOracle::new_metal` and `GpuFormulaOracle::new_metal_with_projection`
+  in `zetesis-wgpu` (`new_selected` with `GpuSelection { api: GpuApi::Metal }`
+  does the same); `CatalogRead::constructor_of_predicate` in `zetesis-core`;
+  and `FormulaParts::extremum_row` and
+  `Narrower::extremum_witness_preparation_work` in `zetesis-ferraris`.
+- Made crate-private, since only their own crate used them:
+  `RunFailure::into_cause` (`zetesis-cli`); `AtomKey::compare_ref`,
+  `AtomRef::compare_key_with`, `Model::selection_payload_bytes` and
+  `Predicate::shares_name` (`zetesis-core`); `CONSTRAINT_HEAD` and
+  `InstanceAtomIter` (`zetesis-cpu`); `OutputLimits::for_resources`
+  (`zetesis-engine`); `FormulaView::try_to_parts` (`zetesis-ferraris`);
+  `is_record` (`zetesis-maintenance`); `CompletionExecutor::DEFAULT_SCRATCH_BYTES`
+  and `ReductPreparationLimits::DEFAULT_BYTES` (`zetesis-sat`);
+  `SourceBundle::working_directory`, `Encoded::into_text`,
+  `ProgramSite::with_location` and `ProgramSite::with_statement`
+  (`zetesis-themelios`); `Contract::with_witnesses`, `Contract::optimal_family`,
+  `Capture::stderr_text` and `process::invoke_supervised_with_cancellation`
+  (`zetesis-validation`); and `GpuLazyOracle::check_batch_with_source` and
+  `GpuTightOracle::from_context_with_support` (`zetesis-wgpu`).
 
 ## 0.5.0 — 2026-10-10
 
