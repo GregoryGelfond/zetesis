@@ -1,5 +1,6 @@
 //! Located API failures retain source evidence, and observations preserve typed values.
 
+use crate::support::admission;
 use std::error::Error as _;
 use std::fs;
 use std::io;
@@ -18,10 +19,7 @@ use zetesis_themelios::{
 const SOURCE: SourceId = SourceId::new(73);
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn formula(

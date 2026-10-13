@@ -1,5 +1,6 @@
 //! Completed nonbinding guards preserve comparison and default-negation semantics.
 
+use crate::support::admission;
 mod cases;
 use crate::support::finite_bindings as reference;
 mod truth;
@@ -20,20 +21,11 @@ use zetesis_themelios::{
 const SOURCE: SourceId = SourceId::new(173);
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admission::admitted(SOURCE, source)
 }
 
 #[test]

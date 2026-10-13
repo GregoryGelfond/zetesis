@@ -1,4 +1,5 @@
 //! Finite substitutions keep each aggregate equality; proposals are not truth.
+use crate::support::admission;
 use crate::support::finite_bindings as reference;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
@@ -14,19 +15,10 @@ use zetesis_reference_support::canonical;
 
 const SOURCE: SourceId = SourceId::new(113);
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admission::admitted(SOURCE, source)
 }
 
 // Ground references are authored independently of the runtime schedule. The

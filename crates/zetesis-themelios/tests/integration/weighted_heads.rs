@@ -1,5 +1,6 @@
 //! Weighted head permissions remain independent of numeric contributions.
 
+use crate::support::admission;
 mod cases;
 use crate::support::finite_bindings as reference;
 mod alias_semantics;
@@ -21,20 +22,11 @@ use zetesis_themelios::{
 const SOURCE: SourceId = SourceId::new(167);
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admission::admitted(SOURCE, source)
 }
 
 #[test]

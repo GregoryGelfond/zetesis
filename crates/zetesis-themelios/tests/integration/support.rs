@@ -1,5 +1,6 @@
 //! Helpers shared by the integration test modules.
 
+pub(crate) mod admission;
 pub(crate) mod answer_records;
 pub(crate) mod atom_models;
 pub(crate) mod clingo_reports;

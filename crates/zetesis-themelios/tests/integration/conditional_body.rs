@@ -1,6 +1,7 @@
 //! Scoped universal body conditionals retain their original implication reducts.
 //! Exact external records complement a separate finite definition evaluator.
 
+use crate::support::admission;
 use std::collections::BTreeSet;
 use std::fs::{self};
 
@@ -22,19 +23,11 @@ use zetesis_themelios::{
 const SOURCE: SourceId = SourceId::new(97);
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
+    admission::admit(SOURCE, source)
 }
 
 fn cases() -> Vec<Json> {

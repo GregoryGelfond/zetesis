@@ -1,5 +1,6 @@
 //! Outer body substitutions preserve complete choice/count groups and reducts.
 
+use crate::support::admission;
 use crate::support::objective_dependency_records as objective_dependencies;
 
 mod cases;
@@ -19,20 +20,11 @@ use zetesis_themelios::{
 const SOURCE: SourceId = SourceId::new(137);
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admission::admitted(SOURCE, source)
 }
 
 #[test]

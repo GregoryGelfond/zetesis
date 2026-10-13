@@ -2,28 +2,17 @@
 //! ground-guard propositions share.
 
 use themelios_base::source::SourceId;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    admit_formula,
-};
+use zetesis_themelios::{AdmissionOptions, AdmittedFormula, FormulaFailure};
 
 /// The source identity both modules admit under.
 pub(crate) const SOURCE: SourceId = SourceId::new(83);
 
 /// The default admission options under [`SOURCE`].
 pub(crate) fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    super::admission::options(SOURCE)
 }
 
 /// `source` admitted under [`options`] and the default limits.
 pub(crate) fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
+    super::admission::admit(SOURCE, source)
 }

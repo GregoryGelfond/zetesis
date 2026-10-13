@@ -1,5 +1,6 @@
 //! Dependent outer ranges retain complete rows and original frozen equalities.
 
+use crate::support::admission;
 mod cases;
 use crate::support::finite_bindings as reference;
 
@@ -19,20 +20,11 @@ use zetesis_themelios::{
 const SOURCE: SourceId = SourceId::new(151);
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admission::admitted(SOURCE, source)
 }
 
 #[test]

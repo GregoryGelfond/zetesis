@@ -1,5 +1,6 @@
 //! Logical bounds compare finite numeric measures without changing permissions.
 
+use crate::support::admission;
 mod cases;
 use crate::support::finite_bindings as reference;
 mod semantics;
@@ -18,10 +19,7 @@ use zetesis_themelios::{
 const SOURCE: SourceId = SourceId::new(229);
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn limited(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {

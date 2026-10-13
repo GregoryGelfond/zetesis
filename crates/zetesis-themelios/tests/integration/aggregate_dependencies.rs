@@ -1,5 +1,6 @@
 //! Dependent aggregate proposals retain their original equality and frozen truth.
 
+use crate::support::admission;
 use crate::support::objective_dependency_records as objective_dependencies;
 
 mod cases;
@@ -18,20 +19,11 @@ use zetesis_themelios::{
 const SOURCE: SourceId = SourceId::new(157);
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admission::admitted(SOURCE, source)
 }
 
 #[test]

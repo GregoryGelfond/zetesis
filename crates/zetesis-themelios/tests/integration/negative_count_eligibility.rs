@@ -1,5 +1,6 @@
 //! Negated count eligibility retains its original candidate and reduct meaning.
 
+use crate::support::admission;
 use crate::support::finite_bindings as reference;
 
 use std::collections::BTreeSet;
@@ -99,20 +100,11 @@ const CASES: &[(&str, &str)] = &[
 ];
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admission::admitted(SOURCE, source)
 }
 
 #[test]
