@@ -1,6 +1,7 @@
 //! An emission refusal between metered boundaries reports itself without
 //! observing a requested stop; settled where a metered operation returns, as
-//! emission's own refusals are, it becomes the stop.
+//! emission's own refusals are, it becomes the stop. Emission counts the work
+//! its cardinality lowering reports, up to the ceiling that refused it.
 
 use super::{Builder, RestrictionErrorKind, RestrictionLimits};
 use crate::{

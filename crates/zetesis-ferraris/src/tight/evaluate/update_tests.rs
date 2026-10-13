@@ -1,7 +1,9 @@
-//! When a plan builds its readers index, which route a reused workspace takes,
-//! and what it charges: a one-atom change updates the retained evaluation, a
+//! When a plan builds its readers index: which route a reused workspace takes,
+//! and what it charges (a one-atom change updates the retained evaluation, a
 //! large change or another theory evaluates completely, an update follows rows
-//! whose extremum moves, and every check fits the plan's per-check bound.
+//! whose extremum moves, and every check fits the plan's per-check bound); what
+//! building the index charges and reports; and how a reused workspace's bytes
+//! are admitted.
 
 use super::{TightWorkspace, large_change};
 use crate::{
@@ -413,12 +415,26 @@ fn a_build_the_byte_allowance_cannot_hold_spends_nothing() {
     }
 }
 
+/// The bytes the index build holds at once, as a plan that built its index for
+/// `theory` reports them: the finished index, within the plan's resident bytes,
+/// and beside it one count and one cursor per node, atom and numeric row, and
+/// one row mark per 64 rows.
+fn build_held(plan: &TightPlan, theory: &Theory) -> u64 {
+    let (nodes, atoms, rows) = (
+        theory.nodes().len() as u64,
+        theory.atom_count() as u64,
+        theory.parts().rows().len() as u64,
+    );
+    let word = size_of::<usize>() as u64;
+    plan.statistics().resident_bytes
+        + 2 * (nodes + atoms + rows) * word
+        + rows.div_ceil(64) * size_of::<u64>() as u64
+}
+
 #[test]
 fn preparing_the_index_reports_its_build_bytes() {
     // Compilation's own figure is set aside, so the reported construction bytes
-    // can only come from the build: beside the finished index it holds one
-    // count and one cursor per node, atom and numeric row, and one row mark per
-    // 64 rows.
+    // can only come from the build.
     let theory = extremum_choices(200);
     let cancellation = Cancellation::default();
     let mut plan = TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
@@ -428,16 +444,62 @@ fn preparing_the_index_reports_its_build_bytes() {
             .result,
         Ok(true)
     );
-    let (nodes, atoms, rows) = (
-        theory.nodes().len() as u64,
-        theory.atom_count() as u64,
-        theory.parts().rows().len() as u64,
+    assert_eq!(
+        plan.statistics().construction_bytes,
+        build_held(&plan, &theory)
     );
-    let word = size_of::<usize>() as u64;
-    let held = plan.statistics().resident_bytes
-        + 2 * (nodes + atoms + rows) * word
-        + rows.div_ceil(64) * size_of::<u64>() as u64;
-    assert_eq!(plan.statistics().construction_bytes, held);
+}
+
+#[test]
+fn construction_bytes_keep_the_larger_of_compilation_and_the_build() {
+    // Here compilation's figure exceeds the build's, so the larger one is
+    // compilation's and the build leaves it in place.
+    let theory = extremum_choices(200);
+    let cancellation = Cancellation::default();
+    let mut plan = TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
+    let compiled = plan.statistics().construction_bytes;
+    assert_eq!(
+        plan.prepare_updates(TightPlanLimits::default(), &cancellation)
+            .result,
+        Ok(true)
+    );
+    let held = build_held(&plan, &theory);
+    assert!(compiled > held);
+    assert_eq!(plan.statistics().construction_bytes, compiled.max(held));
+}
+
+/// A workspace that checked `[2, 3]` and then updated to `[2, 3, 4]`, so it
+/// holds a summarized evaluation and the scratch of an update.
+fn warmed(plan: &TightPlan, theory: &Theory) -> TightWorkspace {
+    let cancellation = Cancellation::default();
+    let mut workspace = TightWorkspace::default();
+    for atoms in [vec![2, 3], vec![2, 3, 4]] {
+        workspace
+            .check(
+                plan,
+                &world(theory, atoms),
+                TightCheckLimits::default(),
+                &cancellation,
+            )
+            .result
+            .unwrap();
+    }
+    workspace
+}
+
+/// The bytes `workspace` holds under `plan`: the plan's resident bytes and the
+/// workspace's retained capacity.
+fn held(plan: &TightPlan, workspace: &TightWorkspace) -> u64 {
+    u64::try_from(u128::from(plan.statistics().resident_bytes) + workspace.retained_bytes())
+        .unwrap()
+}
+
+/// Default check limits with a byte allowance of `max_bytes`.
+fn within(max_bytes: u64) -> TightCheckLimits {
+    TightCheckLimits {
+        max_bytes,
+        ..TightCheckLimits::default()
+    }
 }
 
 #[test]
@@ -458,10 +520,7 @@ fn an_update_reports_the_bytes_it_holds_after_its_last_reservation() {
         .result
         .unwrap();
     assert_route(&plan, &second, update.work, true);
-    assert_eq!(
-        u128::from(update.logical_bytes),
-        u128::from(plan.statistics().resident_bytes) + workspace.retained_bytes()
-    );
+    assert_eq!(update.logical_bytes, held(&plan, &workspace));
 }
 
 #[test]
@@ -475,31 +534,11 @@ fn an_update_beyond_the_byte_allowance_is_refused_before_its_work() {
     let plan = prepared(&theory);
     let cancellation = Cancellation::default();
     let third = world(&theory, [2, 3, 4, 5]);
-    let warmed = || {
-        let mut workspace = TightWorkspace::default();
-        for atoms in [vec![2, 3], vec![2, 3, 4]] {
-            workspace
-                .check(
-                    &plan,
-                    &world(&theory, atoms),
-                    TightCheckLimits::default(),
-                    &cancellation,
-                )
-                .result
-                .unwrap();
-        }
-        workspace
-    };
-    let held = u128::from(plan.statistics().resident_bytes) + warmed().retained_bytes();
-    let held = u64::try_from(held).unwrap();
-    let within = |max_bytes| TightCheckLimits {
-        max_bytes,
-        ..TightCheckLimits::default()
-    };
-    let admitted = warmed().check(&plan, &third, within(held), &cancellation);
+    let holdings = held(&plan, &warmed(&plan, &theory));
+    let admitted = warmed(&plan, &theory).check(&plan, &third, within(holdings), &cancellation);
     assert!(admitted.result.is_ok());
     assert_route(&plan, &third, admitted.work, true);
-    let refused = warmed().check(&plan, &third, within(held - 1), &cancellation);
+    let refused = warmed(&plan, &theory).check(&plan, &third, within(holdings - 1), &cancellation);
     assert_eq!(
         refused.result.map(|check| check.verdict),
         Err(TightError::Limit(TightResource::Bytes))
@@ -509,71 +548,33 @@ fn an_update_beyond_the_byte_allowance_is_refused_before_its_work() {
 
 #[test]
 fn a_check_after_a_storage_refusal_evaluates_completely() {
-    // The refusal follows the take of the retained evaluation, so it leaves
-    // nothing the next check can update from.
+    // The refusal of the holdings follows the take of the retained evaluation,
+    // so it leaves nothing the next check can update from. No work charged
+    // marks it as the start's admission: a refused growth follows charged work.
     let theory = choices(200);
     let plan = prepared(&theory);
     let cancellation = Cancellation::default();
-    let mut workspace = TightWorkspace::default();
-    for atoms in [vec![2, 3], vec![2, 3, 4]] {
-        workspace
-            .check(
-                &plan,
-                &world(&theory, atoms),
-                TightCheckLimits::default(),
-                &cancellation,
-            )
-            .result
-            .unwrap();
-    }
-    let held = u128::from(plan.statistics().resident_bytes) + workspace.retained_bytes();
-    let short = TightCheckLimits {
-        max_bytes: u64::try_from(held).unwrap() - 1,
-        ..TightCheckLimits::default()
-    };
+    let mut workspace = warmed(&plan, &theory);
     let third = world(&theory, [2, 3, 4, 5]);
-    assert!(
-        workspace
-            .check(&plan, &third, short, &cancellation)
-            .result
-            .is_err()
+    let short = within(held(&plan, &workspace) - 1);
+    let refused = workspace.check(&plan, &third, short, &cancellation);
+    assert_eq!(
+        refused.result.map(|check| check.verdict),
+        Err(TightError::Limit(TightResource::Bytes))
     );
+    assert_eq!(refused.work, 0);
     let after = workspace.check(&plan, &third, TightCheckLimits::default(), &cancellation);
     assert!(after.result.is_ok());
     assert_route(&plan, &third, after.work, false);
 }
 
 #[test]
-fn construction_bytes_keep_the_larger_of_compilation_and_the_build() {
-    // Here compilation's figure exceeds the build's, so the larger one is
-    // compilation's and the build leaves it in place.
-    let theory = extremum_choices(200);
-    let cancellation = Cancellation::default();
-    let mut plan = TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
-    let compiled = plan.statistics().construction_bytes;
-    assert_eq!(
-        plan.prepare_updates(TightPlanLimits::default(), &cancellation)
-            .result,
-        Ok(true)
-    );
-    let (nodes, atoms, rows) = (
-        theory.nodes().len() as u64,
-        theory.atom_count() as u64,
-        theory.parts().rows().len() as u64,
-    );
-    let word = size_of::<usize>() as u64;
-    let held = plan.statistics().resident_bytes
-        + 2 * (nodes + atoms + rows) * word
-        + rows.div_ceil(64) * size_of::<u64>() as u64;
-    assert!(compiled > held);
-    assert_eq!(plan.statistics().construction_bytes, compiled.max(held));
-}
-
-#[test]
-fn a_refused_growth_keeps_the_work_before_it_and_reserves_nothing() {
-    // The first update grows its empty changed-word list; under an allowance
-    // of exactly the bytes held, that growth is refused after the one charged
-    // comparison of the first candidate word, before anything is reserved.
+fn a_growth_is_refused_before_it_is_reserved() {
+    // The first update grows its empty changed-word list, under an allowance
+    // of exactly the bytes held. The one charged operation, the comparison of
+    // the first candidate word, places the refusal at that growth: the start's
+    // admission charges nothing, and the final one follows more work. The
+    // retained capacity shows that nothing was reserved.
     let theory = choices(200);
     let plan = prepared(&theory);
     let cancellation = Cancellation::default();
@@ -588,11 +589,7 @@ fn a_refused_growth_keeps_the_work_before_it_and_reserves_nothing() {
         .result
         .unwrap();
     let before = workspace.retained_bytes();
-    let held = u128::from(plan.statistics().resident_bytes) + before;
-    let limits = TightCheckLimits {
-        max_bytes: u64::try_from(held).unwrap(),
-        ..TightCheckLimits::default()
-    };
+    let limits = within(held(&plan, &workspace));
     let attempt = workspace.check(&plan, &world(&theory, [2, 3, 4]), limits, &cancellation);
     assert_eq!(
         attempt.result.map(|check| check.verdict),
