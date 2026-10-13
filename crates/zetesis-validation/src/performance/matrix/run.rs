@@ -103,6 +103,8 @@ pub(super) fn campaign(
         },
         before,
         after: Vec::new(),
+        executed: None,
+        executed_after: None,
         metadata: Vec::new(),
         samples: Vec::new(),
         total_capture_bytes: 0,
@@ -130,7 +132,16 @@ pub(super) fn campaign(
             fill_unattempted(&mut report)?;
         }
     }
+    close(&mut report, directory);
+    Ok(report)
+}
+
+/// Recheck every sealed input and any executable the runs named in the
+/// native one's place, release the private sources and record when the
+/// campaign finished, keeping each failure as a fault.
+fn close(report: &mut Report, directory: tempfile::TempDir) {
     report.after = report.before.iter().map(identity::recheck).collect();
+    report.executed_after = report.executed.as_ref().map(identity::recheck);
     if let Err(error) = directory.close() {
         report.faults.push(Fault::InputCleanup(error.to_string()));
     }
@@ -138,7 +149,6 @@ pub(super) fn campaign(
     if report.finished_unix_ns.is_none() {
         report.faults.push(Fault::Clock);
     }
-    Ok(report)
 }
 
 /// What a sample's wall time covers; clingo's output only when it takes part.
@@ -558,8 +568,9 @@ fn execute(
             continue;
         }
         let contract = selected.input.contract();
+        let census = &mut censuses[slot.case];
         if let Err((decision, detail)) =
-            censuses[slot.case].check(&mut sample, contract, request, curtailed)
+            qualified(census, &mut sample, contract, request, curtailed, report)
         {
             sample.decision = decision;
             sample.detail = Some(detail);
@@ -569,6 +580,26 @@ fn execute(
         report.samples.push(sample);
     }
     Ok(())
+}
+/// Check `sample` against its workload's census, then settle the executable
+/// a native run named as having done its work against the native executable
+/// the campaign sealed, which comes first among its inputs.
+fn qualified(
+    census: &mut Census,
+    sample: &mut Sample,
+    contract: Option<&examples::Contract>,
+    request: &Request<'_>,
+    curtailed: Curtailed,
+    report: &mut Report,
+) -> Result<(), (Decision, String)> {
+    let executed = census.check(sample, contract, request, curtailed)?;
+    identity::settle_executed(
+        &executed,
+        report.before[0].canonical(),
+        &mut report.executed,
+        request.limits.max_executable_bytes,
+    )
+    .map_err(|detail| (Decision::InvalidReport, detail))
 }
 fn arguments<'a>(
     request: &Request<'a>,
@@ -611,6 +642,8 @@ fn arguments<'a>(
 struct Qualified {
     display: answers::ReportedAnswers,
     native: Option<answers::native_json::NativeAnswers>,
+    /// What a native run's statistics name as the executable that did its work.
+    executed: identity::Named,
 }
 
 /// One workload's completed answer baselines. Neither a failed reference nor a
@@ -622,13 +655,15 @@ struct Census {
 }
 
 impl Census {
+    /// Check `sample` against this workload's baselines, returning the
+    /// executable a native run named as having done its work.
     fn check(
         &mut self,
         sample: &mut Sample,
         contract: Option<&examples::Contract>,
         request: &Request<'_>,
         curtailed: Curtailed,
-    ) -> Result<(), (Decision, String)> {
+    ) -> Result<identity::Named, (Decision, String)> {
         let answer = qualify(
             sample,
             contract,
@@ -643,7 +678,7 @@ impl Census {
         {
             self.reference = Some(answer.display);
         }
-        Ok(())
+        Ok(answer.executed)
     }
 }
 
@@ -693,7 +728,7 @@ fn qualify(
         ));
     }
     let exit = solver_exit(sample)?;
-    let (parsed, native) = match sample.slot.producer {
+    let (parsed, native, executed) = match sample.slot.producer {
         Producer::Reference => {
             if !exit.is_some_and(|exit| {
                 exit.signal.is_none()
@@ -710,6 +745,7 @@ fn qualify(
                 answers::clingo_json(capture.stdout(), request.limits.answers)
                     .map_err(|error| invalid(&error))?,
                 None,
+                identity::Named::Omitted,
             )
         }
         Producer::Native { profile } => {
@@ -729,7 +765,8 @@ fn qualify(
                 )
                 .map_err(|e| (Decision::InvalidTelemetry, e))?,
             );
-            (display, Some(native))
+            let executed = identity::named(&document);
+            (display, Some(native), executed)
         }
     };
     sample.selected_models = Some(parsed.model_count());
@@ -766,6 +803,7 @@ fn qualify(
     Ok(Qualified {
         display: parsed,
         native,
+        executed,
     })
 }
 

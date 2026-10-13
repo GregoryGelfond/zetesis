@@ -237,3 +237,107 @@ fn cancelled_backend_checks_publish_a_nonpass() {
     assert!(document["cases"][0]["reference"]["capture"].is_null());
     assert!(document["cases"][0]["selected"].is_null());
 }
+
+/// A stand-in front: a script that hands each run, in turn, to the next of
+/// `targets` by exec, as the default install's front hands GPU runs to its
+/// sibling.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn front(directory: &std::path::Path, targets: &[std::path::PathBuf]) -> std::path::PathBuf {
+    use std::fmt::Write as _;
+    use std::os::unix::fs::PermissionsExt;
+    let script = directory.join("front");
+    let mut body = String::from(
+        "#!/bin/sh\ncount=$(cat \"$0.count\" 2>/dev/null || printf 0)\nprintf '%s\\n' $((count + 1)) > \"$0.count\"\ncase $((count % ",
+    );
+    writeln!(body, "{})) in", targets.len()).unwrap();
+    for (index, target) in targets.iter().enumerate() {
+        writeln!(body, "    {index}) exec '{}' \"$@\" ;;", target.display()).unwrap();
+    }
+    body.push_str("esac\n");
+    std::fs::write(&script, body).unwrap();
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    script
+}
+
+/// A second path to this build's zetesis, which reports that path as its own.
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn another_zetesis(directory: &std::path::Path) -> std::path::PathBuf {
+    let path = directory.join("zetesis");
+    if std::fs::hard_link(env!("CARGO_BIN_EXE_zetesis"), &path).is_err() {
+        std::fs::copy(env!("CARGO_BIN_EXE_zetesis"), &path).unwrap();
+    }
+    path
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn a_backend_check_seals_the_executable_its_runs_name() {
+    let directory = tempfile::tempdir().unwrap();
+    let zetesis = std::path::Path::new(env!("CARGO_BIN_EXE_zetesis"))
+        .canonicalize()
+        .unwrap();
+    let front = front(directory.path(), std::slice::from_ref(&zetesis));
+    let command = command(&[
+        "zetesis",
+        "test",
+        "backend",
+        "--backend",
+        "cpu",
+        "--zetesis",
+        front.to_str().unwrap(),
+        "--json",
+    ]);
+    let mut output = Vec::new();
+    assert_eq!(
+        testing::execute(&command, Layout::default(), &mut output, &mut Vec::new()).unwrap(),
+        Completion::Passed
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(report["passed"], true);
+    assert_eq!(
+        report["executable"]["canonical"],
+        front.canonicalize().unwrap().to_str().unwrap()
+    );
+    assert_eq!(report["executed"]["canonical"], zetesis.to_str().unwrap());
+    assert_eq!(report["executed_after"]["unchanged"], true);
+    for case in report["cases"].as_array().unwrap() {
+        assert_eq!(case["selected"]["executed"], zetesis.to_str().unwrap());
+    }
+}
+
+#[test]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn a_backend_check_refuses_runs_that_name_different_executables() {
+    let directory = tempfile::tempdir().unwrap();
+    let zetesis = std::path::Path::new(env!("CARGO_BIN_EXE_zetesis"))
+        .canonicalize()
+        .unwrap();
+    let other = another_zetesis(directory.path()).canonicalize().unwrap();
+    // The first case's reference names this build's zetesis, its selected run
+    // the other path.
+    let front = front(directory.path(), &[zetesis, other]);
+    let command = command(&[
+        "zetesis",
+        "test",
+        "backend",
+        "--backend",
+        "cpu",
+        "--zetesis",
+        front.to_str().unwrap(),
+        "--json",
+    ]);
+    let mut output = Vec::new();
+    assert_eq!(
+        testing::execute(&command, Layout::default(), &mut output, &mut Vec::new()).unwrap(),
+        Completion::NonPass
+    );
+    let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(report["passed"], false);
+    assert_eq!(report["cases"][0]["decision"], "invalid_report");
+    assert!(
+        report["cases"][0]["selected"]["detail"]
+            .as_str()
+            .unwrap()
+            .contains("an earlier run named")
+    );
+}

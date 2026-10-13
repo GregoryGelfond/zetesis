@@ -60,15 +60,16 @@ pub(super) fn run(request: &Request, cancelled: &AtomicBool) -> Result<Report, E
         return Err(Error::InvalidLimits);
     }
     // Primary binaries are read incrementally by the maintained identity owner.
-    let executable = identity::seal(&request.executable, 256 * 1024 * 1024)
+    let executable = identity::seal(&request.executable, EXECUTABLE_BYTES)
         .map_err(|error| Error::Identity(error.to_string()))?;
+    let mut executed = None;
     let directory = tempfile::tempdir().map_err(Error::Io)?;
     for fixture in &FIXTURES {
         std::fs::write(directory.path().join(fixture.name), fixture.source).map_err(Error::Io)?;
     }
     let mut cases = Vec::new();
     for fixture in &FIXTURES {
-        let reference = attempt(
+        let mut reference = attempt(
             request,
             executable.canonical(),
             directory.path(),
@@ -76,15 +77,18 @@ pub(super) fn run(request: &Request, cancelled: &AtomicBool) -> Result<Report, E
             Backend::Cpu,
             cancelled,
         );
+        settle(&mut reference, executable.canonical(), &mut executed);
         let selected = if reference.decision == Decision::Passed {
-            Some(attempt(
+            let mut selected = attempt(
                 request,
                 executable.canonical(),
                 directory.path(),
                 fixture,
                 request.backend,
                 cancelled,
-            ))
+            );
+            settle(&mut selected, executable.canonical(), &mut executed);
+            Some(selected)
         } else {
             None
         };
@@ -119,9 +123,25 @@ pub(super) fn run(request: &Request, cancelled: &AtomicBool) -> Result<Report, E
         expected_cases: FIXTURES.len(),
         executable_after: identity::recheck(&executable),
         executable,
+        executed_after: executed.as_ref().map(identity::recheck),
+        executed,
         cases,
         input_cleanup_failure,
     })
+}
+
+/// The largest executable a check seals.
+const EXECUTABLE_BYTES: usize = 256 * 1024 * 1024;
+
+/// Settle the executable `attempt` names as having done its work against the
+/// `invoked` one, refusing its evidence when the settlement does.
+fn settle(attempt: &mut Attempt, invoked: &Path, executed: &mut Option<selected::FileSeal>) {
+    if let Err(detail) =
+        identity::settle_executed(&attempt.executed, invoked, executed, EXECUTABLE_BYTES)
+    {
+        attempt.decision = Decision::InvalidReport;
+        attempt.detail = Some(detail);
+    }
 }
 
 fn abandoned(attempt: &Attempt) -> bool {
@@ -176,6 +196,7 @@ fn attempt(
         family: None,
         observation: None,
         cleanup: None,
+        executed: selected::identity::Named::Omitted,
     };
     let output = match process::invoke_with_cancellation(
         process::Invocation {
@@ -208,9 +229,10 @@ fn attempt(
     let checked = validate::capture(&capture, backend, fixture);
     result.capture = Some(capture);
     match checked {
-        Ok((family, observation)) if result.cleanup.is_none() => {
+        Ok((family, observation, executed)) if result.cleanup.is_none() => {
             result.family = Some(family);
             result.observation = Some(observation);
+            result.executed = executed;
             result.decision = Decision::Passed;
         }
         Ok(_) => {

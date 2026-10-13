@@ -217,6 +217,8 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
         physical_execution_qualified: false,
         before,
         after: Vec::new(),
+        executed: None,
+        executed_after: None,
         cases: Vec::new(),
         total_capture_bytes: 0,
         unresolved_children: Vec::new(),
@@ -253,7 +255,12 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
                 &mut report,
             )
         });
-        let (decision, detail) = compare::case(case, &reference, native.as_ref(), request.limits);
+        let (decision, detail) = settled(
+            compare::case(case, &reference, native.as_ref(), request.limits),
+            native.as_ref(),
+            &mut report,
+            request.limits.max_executable_bytes,
+        );
         report.cases.push(CaseResult {
             id: case.id().into(),
             source_sha256: case.source_sha256().into(),
@@ -267,12 +274,40 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
         }
     }
     report.after = report.before.iter().map(identity::recheck).collect();
+    report.executed_after = report.executed.as_ref().map(identity::recheck);
     if let Err(error) = directory.close() {
         report
             .faults
             .push(CampaignFault::InputCleanup(error.to_string()));
     }
     Ok(report)
+}
+
+/// A passing case's decision once its native run's named executable is
+/// settled against the sealed native executable, the second of the campaign's
+/// inputs; a refused settlement makes the case an invalid report.
+fn settled(
+    (decision, detail): (Decision, Option<String>),
+    native: Option<&InvocationRecord>,
+    report: &mut Report,
+    limit: usize,
+) -> (Decision, Option<String>) {
+    let Some(native) = native.filter(|_| decision == Decision::Pass) else {
+        return (decision, detail);
+    };
+    let named = serde_json::from_slice(native.stdout())
+        .map_or(identity::Named::Omitted, |document| {
+            identity::named(&document)
+        });
+    match identity::settle_executed(
+        &named,
+        report.before[1].canonical(),
+        &mut report.executed,
+        limit,
+    ) {
+        Ok(()) => (decision, detail),
+        Err(refusal) => (Decision::InvalidReport, Some(refusal)),
+    }
 }
 
 fn seals(corpus: &curated::Corpus, request: &Request<'_>) -> Result<Vec<FileSeal>, Error> {

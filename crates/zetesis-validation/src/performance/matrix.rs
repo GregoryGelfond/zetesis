@@ -75,6 +75,13 @@ pub struct Report {
     peak_rss: &'static str,
     before: Vec<FileSeal>,
     after: Vec<Change>,
+    /// The executable native runs named as doing their work in place of the
+    /// invoked one, sealed at its first report, and its recheck when the
+    /// campaign closed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    executed: Option<FileSeal>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    executed_after: Option<Change>,
     metadata: Vec<serialization::MatrixCapture>,
     samples: Vec<Sample>,
     total_capture_bytes: usize,
@@ -103,7 +110,8 @@ impl Report {
             .is_ok_and(|slots| slots.len() == self.samples.len())
     }
     /// Every requested invocation passed parity/telemetry with unchanged inputs,
-    /// and every metadata capture the run owed completed: zetesis's version and
+    /// including any executable the native runs named in the native one's
+    /// place, and every metadata capture the run owed completed: zetesis's version and
     /// help, and clingo's version when clingo took part. Refused, skipped and
     /// needs-clingo cells make this false even in a fully accounted report.
     #[must_use]
@@ -114,9 +122,17 @@ impl Report {
             && self.metadata.len() == owed
             && self.metadata.iter().all(|c| c.0.complete(false))
             && self.after.iter().all(Change::unchanged)
+            && self.executed_after.as_ref().is_none_or(Change::unchanged)
             && self.faults.is_empty()
             && self.unresolved_children.is_empty()
             && self.finished_unix_ns.is_some()
+    }
+    /// The executable native runs named as doing their work in place of the
+    /// invoked one, as sealed at its first report: a front's GPU runs name its
+    /// sibling.
+    #[must_use]
+    pub const fn executed(&self) -> Option<&FileSeal> {
+        self.executed.as_ref()
     }
     /// Exact requested and actual disposition at each schedule position.
     #[must_use]

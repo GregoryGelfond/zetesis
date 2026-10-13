@@ -398,6 +398,65 @@ mod campaigns {
         }
         assert!(view["before"].as_array().unwrap().len() >= 3);
     }
+
+    #[test]
+    fn a_campaign_seals_the_executable_its_native_runs_name() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let fixture = Fixture::new();
+        let zetesis = std::path::Path::new(env!("CARGO_BIN_EXE_zetesis"))
+            .canonicalize()
+            .unwrap();
+        // A stand-in front, handing every run to this build's zetesis by exec
+        // as the default install's front hands GPU runs to its sibling.
+        let front = fixture.directory.path().join("front");
+        std::fs::write(
+            &front,
+            format!("#!/bin/sh\nexec '{}' \"$@\"\n", zetesis.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&front, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let report = fixture.directory.path().join("bench.json");
+        let arguments = [
+            fixture.corpus.to_str().unwrap(),
+            "--zetesis",
+            front.to_str().unwrap(),
+            "--without-clingo",
+            "--case",
+            "scenarios/shortest-path/variant-01/01-basic.lp",
+            "--warmups",
+            "0",
+            "--repetitions",
+            "1",
+            "--memory-runs",
+            "0",
+            "--report",
+            report.to_str().unwrap(),
+            "--json",
+        ];
+        assert_eq!(
+            benchmark::execute_with_cancellation(
+                &BenchCommand::Run(Box::new(bench(&arguments))),
+                Layout::default(),
+                &mut Vec::new(),
+                &mut Vec::new(),
+                &AtomicBool::new(false),
+            )
+            .unwrap(),
+            benchmark::Completion::Passed
+        );
+        let evidence: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(report).unwrap()).unwrap();
+        assert_eq!(evidence["passed"], true);
+        assert_eq!(
+            evidence["report"]["before"][0]["canonical"],
+            front.canonicalize().unwrap().to_str().unwrap()
+        );
+        assert_eq!(
+            evidence["report"]["executed"]["canonical"],
+            zetesis.to_str().unwrap()
+        );
+        assert_eq!(evidence["report"]["executed_after"]["unchanged"], true);
+    }
 }
 
 #[test]

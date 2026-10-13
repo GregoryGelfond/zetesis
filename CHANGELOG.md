@@ -12,8 +12,15 @@ Notable changes by release. Versions follow Semantic Versioning.
   `zetesis devices`) to the GPU-capable build installed beside it in
   `zetesis-libexec`, which takes over the same process. A front that cannot run
   that build fails with the new kind `gpu_executable_unavailable`; statistics
-  now name the executable that did the work. The installer finishes every
-  build before replacing anything and replaces each executable by rename.
+  now name the executable that did the work (`executable`). The installer
+  finishes every build before replacing anything, replaces each executable by
+  rename, with the `zetesis` you run last, and reports an old GPU build it
+  cannot remove instead of failing.
+- Backend checks, benchmark campaigns and the selected clingo comparison seal
+  the executable their runs name as having done the work when it is not the
+  one they invoked, as after a hand-off, and record it beside the invoked one
+  (`executed`, `executed_after`); a run naming a third executable, or unable to
+  name its own, is refused.
 - Prime-sieve and subset-sum examples in the maintained correctness and scaling
   comparisons, with complete-answer checks against clingo.
 - `Cancellation::metered` runs a metered computation with a `Meter`, which holds

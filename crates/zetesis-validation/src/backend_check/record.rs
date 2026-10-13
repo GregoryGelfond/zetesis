@@ -1,5 +1,6 @@
 use crate::{performance::matrix::Observation, process, selected};
 use serde::{Serialize, Serializer};
+use std::path::Path;
 
 /// A full selected family with reported objective priorities preserved.
 #[derive(Debug, PartialEq, Eq, Serialize)]
@@ -64,6 +65,7 @@ pub struct Attempt {
     pub(super) family: Option<Family>,
     pub(super) observation: Option<Observation>,
     pub(super) cleanup: Option<Cleanup>,
+    pub(super) executed: selected::identity::Named,
 }
 impl Attempt {
     /// Checked disposition of this child.
@@ -85,6 +87,15 @@ impl Attempt {
     #[must_use]
     pub fn detail(&self) -> Option<&str> {
         self.detail.as_deref()
+    }
+    /// The executable this run's statistics name as having done its work,
+    /// resolved through links; absent unless the run passed and named one.
+    #[must_use]
+    pub fn executed(&self) -> Option<&Path> {
+        match &self.executed {
+            selected::identity::Named::Path(path) => Some(path),
+            selected::identity::Named::Omitted | selected::identity::Named::Unresolved => None,
+        }
     }
 }
 
@@ -137,6 +148,12 @@ pub struct Report {
     pub(super) expected_cases: usize,
     pub(super) executable: selected::FileSeal,
     pub(super) executable_after: selected::Change,
+    /// The executable runs named as doing their work in place of the invoked
+    /// one, sealed at its first report, and its recheck when the report closed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) executed: Option<selected::FileSeal>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(super) executed_after: Option<selected::Change>,
     pub(super) cases: Vec<CaseResult>,
     pub(super) input_cleanup_failure: Option<String>,
 }
@@ -146,16 +163,27 @@ impl Report {
     pub const fn required_cases(&self) -> usize {
         self.expected_cases
     }
-    /// All expected checks and the primary-executable recheck passed.
+    /// All expected checks, the primary-executable recheck and the recheck of
+    /// any executable the runs named in its place passed.
     #[must_use]
     pub fn passed(&self) -> bool {
         self.cases.len() == self.expected_cases
             && self.executable_after.unchanged()
+            && self
+                .executed_after
+                .as_ref()
+                .is_none_or(selected::Change::unchanged)
             && self.input_cleanup_failure.is_none()
             && self
                 .cases
                 .iter()
                 .all(|case| case.decision == Decision::Passed)
+    }
+    /// The executable runs named as doing their work in place of the invoked
+    /// one, as sealed at its first report: a front's GPU runs name its sibling.
+    #[must_use]
+    pub const fn executed(&self) -> Option<&selected::FileSeal> {
+        self.executed.as_ref()
     }
     /// Cases in fixed order; unresolved cleanup can leave a shorter prefix.
     #[must_use]
@@ -196,6 +224,7 @@ impl Serialize for Attempt {
             family: Option<&'a Family>,
             observation: Option<&'a Observation>,
             cleanup: Option<&'a Cleanup>,
+            executed: Option<&'a Path>,
         }
         View {
             arguments: &self.arguments,
@@ -205,6 +234,7 @@ impl Serialize for Attempt {
             family: self.family.as_ref(),
             observation: self.observation.as_ref(),
             cleanup: self.cleanup.as_ref(),
+            executed: self.executed(),
         }
         .serialize(serializer)
     }
