@@ -27,7 +27,10 @@ pub enum Decision {
     CaptureLimit,
     /// Search or publication was incomplete.
     Incomplete,
-    /// The structured answer report was malformed or contradictory.
+    /// The structured answer report was malformed or contradictory, or named
+    /// an executable the check refuses: a third one, beside the invoked
+    /// executable and the one an earlier run named, or one that could not be
+    /// sealed.
     InvalidReport,
     /// The completed full family or objective vector violated its known contract.
     FamilyMismatch,
@@ -93,9 +96,12 @@ impl Attempt {
         self.detail.as_deref()
     }
     /// The executable this run's report names as having done its work,
-    /// resolved through links; absent unless the run passed and its report
-    /// named one. A run the settlement refused keeps the executable it named,
-    /// so read it with [`Self::decision`].
+    /// resolved through links. Present exactly when the run's decision is
+    /// [`Decision::Passed`], or [`Decision::InvalidReport`] because of the
+    /// executable it named (a third one, beside the invoked executable and the
+    /// one an earlier run named, or one that could not be sealed), and in
+    /// either case its report named a path; so read it with
+    /// [`Self::decision`].
     #[must_use]
     pub fn executed(&self) -> Option<&Path> {
         match &self.executed {

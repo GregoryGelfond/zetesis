@@ -242,6 +242,23 @@ fn a_statistics_object_names_its_executable_by_key() {
 }
 
 #[test]
+fn an_executable_value_that_is_not_a_path_reads_as_unresolved() {
+    // No zetesis build writes these; another executable or a corrupted report
+    // could, and such a run must not count as the native executable.
+    let named = |executable: serde_json::Value| {
+        super::named(&serde_json::json!({ "executable": executable }))
+    };
+    for value in [
+        serde_json::json!(42),
+        serde_json::json!(true),
+        serde_json::json!(["/opt/zetesis"]),
+        serde_json::json!({}),
+    ] {
+        assert_eq!(named(value.clone()), Named::Unresolved, "{value}");
+    }
+}
+
+#[test]
 fn statistics_that_are_not_an_object_read_as_no_statistics() {
     let named = |statistics: serde_json::Value| super::named(&statistics);
     assert_eq!(named(serde_json::Value::Null), Named::NoStatistics);
