@@ -45,8 +45,9 @@ impl Workload {
     /// No-op edits retain their provenance but keep the unchanged contract.
     ///
     /// # Errors
-    /// Refuses unconfined paths, changed sources, includes, invalid contracts,
-    /// unsupported amendments, and source or metadata limits.
+    /// Refuses unconfined paths, files that are not regular files, changed
+    /// sources, includes, invalid contracts, unsupported amendments, and source
+    /// or metadata limits.
     pub fn authored(
         program: AuthoredProgram<'_>,
         amendments: &[ConstantAmendment<'_>],

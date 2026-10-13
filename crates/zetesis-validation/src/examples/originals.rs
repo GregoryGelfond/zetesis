@@ -17,7 +17,9 @@ use crate::answers;
 ///
 /// # Errors
 /// Refuses changed originals, deletion spans outside ordinary leading comments,
-/// changed includes, mismatched contracts, unconfined paths or source-byte limits.
+/// changed includes, mismatched contracts, unconfined paths, files inside
+/// `original_root` that are not regular files ([`Error::Irregular`]) or
+/// source-byte limits.
 pub fn verify_originals(
     corpus: &Corpus,
     original_root: &Path,

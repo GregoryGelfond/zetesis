@@ -133,6 +133,11 @@ Notable changes by release. Versions follow Semantic Versioning.
   `GpuExecutableUnavailable` variant, and those on
   `zetesis_validation::performance::matrix::Decision` its new
   `GpuExecutableUnavailable` disposition.
+- `zetesis_validation::curated::Error` and `zetesis_validation::examples::Error`
+  refuse a file under the root they read that is not a regular file with the
+  new `Irregular` variant, naming its resolved path, where they reported it
+  under `Path` as a path not confined to that root. Exhaustive matches must
+  handle the variant.
 - Removed public items that nothing in the workspace called:
   `GpuOracle::new_metal`, `GpuTightOracle::new_metal`,
   `GpuFormulaOracle::new_metal` and `GpuFormulaOracle::new_metal_with_projection`

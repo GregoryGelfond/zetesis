@@ -214,6 +214,21 @@ fn source_symlinks_cannot_escape_the_corpus() {
 }
 
 #[test]
+fn a_directory_in_place_of_a_source_is_not_a_regular_file() {
+    let directory = isolated();
+    let source = directory.path().join(verified().files()[0].path());
+    fs::remove_file(&source).unwrap();
+    fs::create_dir(&source).unwrap();
+    let error = examples::load(directory.path(), Limits::default()).unwrap_err();
+    assert!(matches!(&error, Error::Irregular(path) if *path == source.canonicalize().unwrap()));
+    assert!(
+        error
+            .to_string()
+            .starts_with("examples file is not a regular file: ")
+    );
+}
+
+#[test]
 fn original_source_tampering_is_refused() {
     let directory = tempfile::tempdir().unwrap();
     copy(

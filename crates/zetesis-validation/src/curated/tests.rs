@@ -251,7 +251,7 @@ fn a_directory_is_not_a_source_file() {
     let root = tempfile::tempdir().unwrap();
     assert!(matches!(
         Files::read(Path::new(root.path()), 10, Resource::SourceBytes),
-        Err(Error::Path(_))
+        Err(Error::Irregular(path)) if path == root.path()
     ));
 }
 

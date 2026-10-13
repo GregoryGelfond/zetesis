@@ -20,13 +20,12 @@ pub(crate) trait Failure: Sized {
     fn io(path: &Path, source: io::Error) -> Self;
     /// `text` does not name a file confined to the corpus.
     fn unconfined(text: String) -> Self;
+    /// The file at `path` is not a regular file.
+    fn irregular(path: &Path) -> Self;
     /// `observed` exceeds the inclusive allowance `limit` of `resource`.
     fn limit(resource: Self::Resource, observed: u128, limit: usize) -> Self;
     /// The bytes named `path` have the SHA-256 `actual`, not their seal.
     fn digest(path: String, expected: String, actual: String) -> Self;
-
-    /// The file at `path`, inside the corpus, is not a regular file.
-    fn irregular(path: &Path) -> Self;
 
     /// Refuse `observed` past the inclusive `limit` of `resource`.
     fn ceiling(resource: Self::Resource, observed: u128, limit: usize) -> Result<(), Self> {

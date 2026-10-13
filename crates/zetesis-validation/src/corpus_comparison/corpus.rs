@@ -61,6 +61,9 @@ impl crate::corpus_files::Failure for ReadFailure {
     fn unconfined(text: String) -> Self {
         Self::Unconfined(text)
     }
+    fn irregular(path: &Path) -> Self {
+        Self::Irregular(path.to_owned())
+    }
     fn limit(resource: ReadResource, observed: u128, limit: usize) -> Self {
         Self::Limit {
             resource,
@@ -70,9 +73,6 @@ impl crate::corpus_files::Failure for ReadFailure {
     }
     fn digest(path: String, _expected: String, _actual: String) -> Self {
         Self::Digest(path)
-    }
-    fn irregular(path: &Path) -> Self {
-        Self::Irregular(path.to_owned())
     }
 }
 

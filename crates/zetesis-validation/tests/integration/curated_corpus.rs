@@ -318,6 +318,22 @@ fn a_source_symlink_cannot_escape_the_corpus_root() {
 }
 
 #[test]
+fn a_directory_in_place_of_a_source_is_not_a_regular_file() {
+    let directory = isolated();
+    let first = verified().cases()[0].path().to_owned();
+    let source = directory.path().join(&first);
+    fs::remove_file(&source).unwrap();
+    fs::create_dir(&source).unwrap();
+    let error = curated::open(directory.path(), Limits::default()).unwrap_err();
+    assert!(matches!(&error, Error::Irregular(path) if *path == source.canonicalize().unwrap()));
+    assert!(
+        error
+            .to_string()
+            .starts_with("corpus file is not a regular file: ")
+    );
+}
+
+#[test]
 fn the_verify_command_reports_integrity_without_claiming_a_solver_run() {
     let output = Command::new(env!("CARGO_BIN_EXE_zetesis-corpus"))
         .arg("verify")

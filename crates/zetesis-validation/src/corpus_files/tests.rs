@@ -27,10 +27,13 @@ fn nonportable_components_cannot_name_corpus_inputs() {
 #[test]
 fn directories_cannot_supply_source_bytes() {
     let directory = tempfile::tempdir().unwrap();
-    assert!(matches!(
-        Files::read(directory.path(), 1024, Resource::SourceBytes),
-        Err(Error::Path(_))
-    ));
+    let error = Files::read(directory.path(), 1024, Resource::SourceBytes).unwrap_err();
+    assert!(matches!(&error, Error::Irregular(path) if path == directory.path()));
+    assert!(
+        error
+            .to_string()
+            .starts_with("examples file is not a regular file: ")
+    );
 }
 
 #[test]
