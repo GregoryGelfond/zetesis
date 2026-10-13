@@ -4,7 +4,7 @@ use std::path::Path;
 
 use super::{
     Annotation, Contract, Corpus, Edit, Error, Family, Files, Limits, Resource, Satisfiability,
-    ceiling, document,
+    document,
 };
 use crate::answers;
 
@@ -107,7 +107,7 @@ pub fn derive_source(source: &str, edits: &[Edit], limit: usize) -> Result<Strin
         length = length - edit.before.len() as u128 + edit.after.len() as u128;
         previous_end = edit.end_byte;
     }
-    ceiling(Resource::SourceBytes, length, limit)?;
+    Files::ceiling(Resource::SourceBytes, length, limit)?;
     let capacity = usize::try_from(length)
         .map_err(|_| invalid("source derivation exceeds addressable storage"))?;
     let mut result = String::new();

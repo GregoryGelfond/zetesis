@@ -184,18 +184,6 @@ impl std::error::Error for Error {
     }
 }
 
-fn ceiling(resource: Resource, observed: u128, limit: usize) -> Result<(), Error> {
-    if observed > limit as u128 {
-        Err(Error::Limit {
-            resource,
-            observed,
-            limit,
-        })
-    } else {
-        Ok(())
-    }
-}
-
 /// Load and seal the self-contained examples, license, dependencies and contracts.
 /// No upstream checkout, original corpus, external tool, or solver is consulted.
 ///

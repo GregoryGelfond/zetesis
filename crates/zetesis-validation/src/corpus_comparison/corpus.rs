@@ -7,7 +7,6 @@ use std::io::Read;
 use std::path::{Component, Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::corpus_comparison::Request;
 
@@ -79,7 +78,7 @@ pub(crate) fn load(options: &Request) -> Result<Loaded, String> {
         .clone()
         .unwrap_or_else(|| options.repo.join("validation/corpus/manifest.json"));
     let bytes = bounded_read(&path, MAX_MANIFEST)?;
-    if hash(&bytes) != MANIFEST_SHA256 {
+    if crate::selected::identity::sha256(&bytes) != MANIFEST_SHA256 {
         return Err("manifest identity differs from the trusted pinned target".into());
     }
     let manifest: Manifest =
@@ -123,7 +122,7 @@ pub(crate) fn load(options: &Request) -> Result<Loaded, String> {
     Ok(Loaded {
         root,
         manifest,
-        manifest_sha256: hash(&bytes),
+        manifest_sha256: crate::selected::identity::sha256(&bytes),
         view: SourceView::Original,
     })
 }
@@ -146,14 +145,10 @@ fn verify(root: &Path, relative: &str, expected: &str) -> Result<(), String> {
         return Err(format!("target symlink leaves corpus: {relative}"));
     }
     let bytes = bounded_read(&actual, MAX_SOURCE)?;
-    if hash(&bytes) != expected {
+    if crate::selected::identity::sha256(&bytes) != expected {
         return Err(format!("source hash mismatch: {relative}"));
     }
     Ok(())
-}
-
-fn hash(bytes: &[u8]) -> String {
-    format!("{:x}", Sha256::digest(bytes))
 }
 
 fn bounded_read(path: &Path, maximum: u64) -> Result<Vec<u8>, String> {
@@ -174,7 +169,7 @@ fn bounded_read(path: &Path, maximum: u64) -> Result<Vec<u8>, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{hash, load, verify};
+    use super::{load, verify};
     use crate::corpus_comparison::Request as Options;
     use zetesis_test_support::repository;
 
@@ -204,7 +199,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         std::fs::write(root.path().join("source.lp"), "changed.").unwrap();
         let canonical = root.path().canonicalize().unwrap();
-        let expected = hash(b"original.");
+        let expected = crate::selected::identity::sha256(b"original.");
         assert!(
             verify(&canonical, "source.lp", &expected)
                 .unwrap_err()

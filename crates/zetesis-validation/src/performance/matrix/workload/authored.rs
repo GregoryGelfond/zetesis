@@ -9,6 +9,7 @@ use super::{
     Budget, ConstantAmendment, Error, Source, Workload, WorkloadLimits, constants, examples, field,
 };
 use crate::selected::FileSeal;
+use crate::selected::identity;
 
 /// A reviewed source and display contract, independent of the correctness corpus.
 ///
@@ -95,7 +96,7 @@ impl Workload {
         let derived = examples::derive_source(&text, &edits, limits.source_bytes.min(remaining))
             .map_err(Error::Corpus)?;
         budget.source(derived.len())?;
-        let derived_sha256 = format!("{:x}", Sha256::digest(derived.as_bytes()));
+        let derived_sha256 = identity::sha256(derived.as_bytes());
         let mut hash = Sha256::new();
         hash.update(b"zetesis-authored-workload-v1\0");
         for part in [
@@ -117,7 +118,7 @@ impl Workload {
         let amended = source.base_sha256 != source.derived_sha256;
         Ok(Self {
             entry,
-            identity: budget.text(&format!("{:x}", hash.finalize()))?,
+            identity: budget.text(&identity::spelled(&hash.finalize()))?,
             manifest_sha256: None,
             sources: vec![source],
             default_contract: program.contract.clone(),

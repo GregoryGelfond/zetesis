@@ -1,7 +1,7 @@
 //! Integrity of identities and full-model versus selected-display contracts.
 
 use super::document::{CaseRecord, Document};
-use super::{Error, Files, Limits, Resource, UPSTREAM_REVISION, assertion, ceiling};
+use super::{Error, Files, Limits, Resource, UPSTREAM_REVISION, assertion};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) const ORIGINALS: &[(&str, &str)] = &[
@@ -59,10 +59,10 @@ pub(super) fn validate(document: &Document, limits: Limits) -> Result<(), Error>
         }
         identity(case, &origins)?;
         models += case.contract.full_models.len() as u128;
-        ceiling(Resource::Models, models, limits.models)?;
+        Files::ceiling(Resource::Models, models, limits.models)?;
         for model in &case.contract.full_models {
             atoms += model.len() as u128;
-            ceiling(Resource::Atoms, atoms, limits.atoms)?;
+            Files::ceiling(Resource::Atoms, atoms, limits.atoms)?;
             let unique: BTreeSet<_> = model.iter().collect();
             if unique.len() != model.len() || model.iter().any(String::is_empty) {
                 return Err(Error::Contract(format!(

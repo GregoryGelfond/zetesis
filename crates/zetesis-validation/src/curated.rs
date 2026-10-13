@@ -185,17 +185,6 @@ impl From<serde_json::Error> for Error {
         Self::Json(error)
     }
 }
-pub(super) fn ceiling(resource: Resource, observed: u128, limit: usize) -> Result<(), Error> {
-    if observed > limit as u128 {
-        Err(Error::Limit {
-            resource,
-            observed,
-            limit,
-        })
-    } else {
-        Ok(())
-    }
-}
 
 /// Verify the pinned curated target and retain its exact UTF-8 source bytes.
 /// Returned paths describe verified inputs; later filesystem changes do not
