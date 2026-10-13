@@ -45,16 +45,27 @@ for package in $packages; do
         zetesis-cli) name=zetesis ;;
         *) name=$package ;;
     esac
-    printf '#!/bin/sh\n# %s %s source=%s identity=%s\n' "$profile" "$name" \
-        "${INSTALL_TEST_SOURCE:-}" "${ZETESIS_SIBLING_IDENTITY:-}" \
-        > "$directory/$target/release/$name"
+    # A named Mach-O file stands in for zetesis in a profile, for the load
+    # command readings of a macOS install.
+    case "$name.$profile" in
+        zetesis.full) binary=${INSTALL_TEST_FULL_BINARY:-} ;;
+        zetesis.front) binary=${INSTALL_TEST_FRONT_BINARY:-} ;;
+        *) binary= ;;
+    esac
+    if [ -n "$binary" ]; then
+        cp "$binary" "$directory/$target/release/$name"
+    else
+        printf '#!/bin/sh\n# %s %s source=%s identity=%s\n' "$profile" "$name" \
+            "${INSTALL_TEST_SOURCE:-}" "${ZETESIS_SIBLING_IDENTITY:-}" \
+            > "$directory/$target/release/$name"
+    fi
     chmod 755 "$directory/$target/release/$name"
 done
 "#;
 
 const RUSTC: &str = "#!/bin/sh\nprintf '%s\\n' 'rustc 1.97.1' 'host: test-host'\n";
 
-const UNAME: &str = "#!/bin/sh\nprintf '%s\\n' Linux\n";
+const UNAME: &str = "#!/bin/sh\nprintf '%s\\n' \"${INSTALL_TEST_SYSTEM:-Linux}\"\n";
 
 const INSTALL: &str = r#"#!/bin/sh
 for last in "$@"; do :; done
@@ -365,4 +376,75 @@ fn a_failure_placing_the_sibling_leaves_the_previous_install_working() {
     let mut expected = vec![identity("a"), identity("b")];
     expected.sort();
     assert_eq!(installer.identities(), expected);
+}
+
+/// A macOS install whose builds are the system executables `full` and
+/// `front`, read by the real load-command guard.
+#[cfg(target_os = "macos")]
+fn macos(installer: &Installer, full: &str, front: &str) -> Output {
+    installer.run(
+        "b",
+        &[],
+        &[
+            ("INSTALL_TEST_SYSTEM", "Darwin"),
+            ("INSTALL_TEST_FULL_BINARY", full),
+            ("INSTALL_TEST_FRONT_BINARY", front),
+        ],
+    )
+}
+
+/// A system executable that links frameworks, and one that links none.
+#[cfg(target_os = "macos")]
+const FRAMEWORKS: &str = "/usr/bin/plutil";
+#[cfg(target_os = "macos")]
+const NO_FRAMEWORK: &str = "/bin/ls";
+
+#[test]
+#[cfg(target_os = "macos")]
+fn a_macos_install_takes_a_front_without_frameworks_beside_a_sibling_with_them() {
+    let installer = Installer::new();
+    let output = macos(&installer, FRAMEWORKS, NO_FRAMEWORK);
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert_eq!(
+        fs::read(installer.installed().join("zetesis")).unwrap(),
+        fs::read(NO_FRAMEWORK).unwrap()
+    );
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn a_gpu_build_without_frameworks_stops_a_macos_install() {
+    // The control: either the reading is broken or the GPU build no longer
+    // needs a front, and the refusal says both.
+    let installer = Installer::new();
+    installer.install("a");
+    let previous = installer.files();
+    let output = macos(&installer, NO_FRAMEWORK, NO_FRAMEWORK);
+    assert!(!output.status.success());
+    let refusal = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        refusal.contains("either otool could not read them, or the GPU build no longer links"),
+        "{refusal}"
+    );
+    assert_eq!(installer.files(), previous);
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn a_front_with_frameworks_stops_a_macos_install() {
+    let installer = Installer::new();
+    installer.install("a");
+    let previous = installer.files();
+    let output = macos(&installer, FRAMEWORKS, FRAMEWORKS);
+    assert!(!output.status.success());
+    let refusal = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        refusal.contains("The CPU front links a framework"),
+        "{refusal}"
+    );
+    assert_eq!(installer.files(), previous);
 }
