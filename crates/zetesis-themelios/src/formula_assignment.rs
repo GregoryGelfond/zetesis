@@ -116,14 +116,16 @@ fn split(
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<Split, FormulaFailure> {
-    let extremum = matches!(function, AggregateFunction::Min | AggregateFunction::Max);
-    let mut firsts = Sides {
-        required: Binding::new(computation, limits, counters, location)?,
-        optional: Binding::new(computation, limits, counters, location)?,
-    };
-    let mut weights = Sides {
-        required: Buffer::new(computation, limits, counters, location)?,
-        optional: Buffer::new(computation, limits, counters, location)?,
+    let mut split = if matches!(function, AggregateFunction::Min | AggregateFunction::Max) {
+        Split::Values(Sides {
+            required: Binding::new(computation, limits, counters, location)?,
+            optional: Binding::new(computation, limits, counters, location)?,
+        })
+    } else {
+        Split::Weights(Sides {
+            required: Buffer::new(computation, limits, counters, location)?,
+            optional: Buffer::new(computation, limits, counters, location)?,
+        })
     };
     for slot in 0..tuples.len() {
         counters.work(limits, location)?;
@@ -135,34 +137,39 @@ fn split(
         let required = required_tuples.contains(&key, limits, counters, location)?;
         let read = computation.read();
         let first = tuples.read(slot, read, location)?.child(0);
-        if extremum {
-            let first = first.expect("admitted nonempty extremum tuple");
-            extremum_value(first, location)?;
-            let key = read.term_key(first).map_err(|error| {
-                crate::formula_binding::assignment(
-                    zetesis_core::catalog::AssignmentError::Read(error),
+        match &mut split {
+            Split::Values(firsts) => {
+                let first = first.expect("admitted nonempty extremum tuple");
+                extremum_value(first, location)?;
+                let key = read.term_key(first).map_err(|error| {
+                    crate::formula_binding::assignment(
+                        zetesis_core::catalog::AssignmentError::Read(error),
+                        location,
+                    )
+                })?;
+                append(
+                    firsts.side_mut(required),
+                    &key,
+                    computation,
+                    limits,
+                    counters,
                     location,
-                )
-            })?;
-            append(
-                firsts.side_mut(required),
-                &key,
-                computation,
-                limits,
-                counters,
-                location,
-            )?;
-        } else if let Some(weight) = contribution(function, first, location)? {
-            weights
-                .side_mut(required)
-                .push(weight, computation, limits, counters, location)?;
+                )?;
+            }
+            Split::Weights(weights) => {
+                if let Some(weight) = contribution(function, first, location)? {
+                    weights.side_mut(required).push(
+                        weight,
+                        computation,
+                        limits,
+                        counters,
+                        location,
+                    )?;
+                }
+            }
         }
     }
-    Ok(if extremum {
-        Split::Values(firsts)
-    } else {
-        Split::Weights(weights)
-    })
+    Ok(split)
 }
 
 /// Append `key` as the last slot of `values`.
