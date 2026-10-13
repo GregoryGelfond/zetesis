@@ -1,6 +1,7 @@
-//! The native reference the zetesis workspace's tests compare with clingo:
-//! every answer set of a small program, found by checking each candidate
-//! against the reduct.
+//! Test support over `zetesis-themelios`: the native reference the zetesis
+//! workspace's tests compare with clingo (every answer set of a small program,
+//! found by checking each candidate against the reduct), preparation and
+//! hybrid grounding, and source-bundle fixtures.
 //!
 //! [`admit`] admits a source under the default options, [`formula`] under
 //! the default limits as well and [`normal`] on the normal-program route, and
@@ -12,9 +13,9 @@
 //! the reduct (`zetesis_cpu::check`). [`prepared`] prepares a source under the
 //! default options and limits and [`hybrid`] grounds it for hybrid execution;
 //! [`BundleFixture`] writes a source bundle into a temporary directory for the
-//! tests that load or run one. The crate stands above `zetesis-themelios`,
-//! so only the tests that compare a native enumeration compile it. It is not
-//! published or installed.
+//! tests that load or run one. The crate stands above `zetesis-themelios`, so
+//! only the tests that need that closure compile it. It is not published or
+//! installed.
 
 use zetesis_core::{Model, Program, Sign};
 use zetesis_cpu::{Cancellation, CandidateLimits, CandidateTermination, Candidates};

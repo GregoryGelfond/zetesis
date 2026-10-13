@@ -1,5 +1,5 @@
-//! Formula admission under a test module's own source identity and the
-//! default limits.
+//! Formula admission under a test module's own source identity, within the
+//! default limits or given ones.
 
 use themelios_base::source::SourceId;
 use zetesis_themelios::{

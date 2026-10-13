@@ -1,4 +1,5 @@
-//! Both public candidate doors poll after their selected materialization work.
+//! Both public candidate doors poll after their selected materialization work,
+//! and both stay terminated once the enumeration stops.
 
 use super::*;
 
