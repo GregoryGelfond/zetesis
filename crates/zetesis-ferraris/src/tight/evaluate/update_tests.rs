@@ -392,38 +392,14 @@ fn an_index_builds_within_its_work_bound() {
     assert!(u128::from(attempt.work) <= bound);
 }
 
-/// The bytes the build is admitted against before its first pass: one count,
-/// offset and cursor per node, atom and numeric row, one more offset per
-/// relation, reader entries bounded by operand occurrences, producers and
-/// roots, atom-node and guard entries each by nodes, and one row mark per 64
-/// rows, beside the plan's resident bytes.
-fn admitted_build_bytes(plan: &TightPlan) -> u64 {
-    let theory = plan.theory();
-    let (nodes, atoms, rows) = (
-        theory.nodes().len() as u64,
-        theory.atom_count() as u64,
-        theory.parts().rows().len() as u64,
-    );
-    let word = size_of::<usize>() as u64;
-    let slots = nodes + atoms + rows;
-    let readers =
-        (theory.parts().occurrences() + plan.producers().len() + theory.roots().len()) as u64;
-    plan.statistics().resident_bytes
-        + slots * word
-        + rows.div_ceil(64) * size_of::<u64>() as u64
-        + (2 * slots + 3) * word
-        + readers * size_of::<u64>() as u64
-        + 2 * nodes * word
-}
-
 #[test]
 fn a_build_the_byte_allowance_cannot_hold_spends_nothing() {
     let theory = extremum_choices(200);
     let cancellation = Cancellation::default();
     let compile =
         || TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
-    let admitted = admitted_build_bytes(&compile());
-    for (max_bytes, built) in [(admitted, true), (admitted - 1, false)] {
+    let bound = u64::try_from(compile().index_byte_bound()).unwrap();
+    for (max_bytes, built) in [(bound, true), (bound - 1, false)] {
         let mut plan = compile();
         let limits = TightPlanLimits {
             max_bytes,
@@ -437,11 +413,20 @@ fn a_build_the_byte_allowance_cannot_hold_spends_nothing() {
 }
 
 #[test]
-fn construction_bytes_cover_the_index_build() {
-    // Beside the finished index the build holds one count and one cursor per
-    // node, atom and numeric row, and one row mark per 64 rows.
+fn preparing_the_index_reports_its_build_bytes() {
+    // Compilation's own figure is set aside, so the reported construction bytes
+    // can only come from the build: beside the finished index it holds one
+    // count and one cursor per node, atom and numeric row, and one row mark per
+    // 64 rows.
     let theory = extremum_choices(200);
-    let plan = prepared(&theory);
+    let cancellation = Cancellation::default();
+    let mut plan = TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
+    plan.statistics.construction_bytes = 0;
+    assert_eq!(
+        plan.prepare_updates(TightPlanLimits::default(), &cancellation)
+            .result,
+        Ok(true)
+    );
     let (nodes, atoms, rows) = (
         theory.nodes().len() as u64,
         theory.atom_count() as u64,
@@ -451,5 +436,5 @@ fn construction_bytes_cover_the_index_build() {
     let held = plan.statistics().resident_bytes
         + 2 * (nodes + atoms + rows) * word
         + rows.div_ceil(64) * size_of::<u64>() as u64;
-    assert!(plan.statistics().construction_bytes >= held);
+    assert_eq!(plan.statistics().construction_bytes, held);
 }

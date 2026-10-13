@@ -11,7 +11,7 @@
 
 use std::mem::size_of;
 
-use super::{Tick, TightError, TightProducer, bytes, filled};
+use super::{Tick, TightError, TightProducer, filled};
 use crate::{NodeView, Theory};
 use zetesis_cpu::{Meter, Stop};
 
@@ -78,9 +78,10 @@ impl<T: Copy> Lists<T> {
         &self.entries[self.offsets[slot]..self.offsets[slot + 1]]
     }
 
+    /// Logical payload: offsets and entries by length.
     fn bytes(&self) -> u128 {
-        self.offsets.capacity() as u128 * size_of::<usize>() as u128
-            + self.entries.capacity() as u128 * size_of::<T>() as u128
+        self.offsets.len() as u128 * size_of::<usize>() as u128
+            + self.entries.len() as u128 * size_of::<T>() as u128
     }
 }
 
@@ -119,42 +120,50 @@ impl Readers {
         self.atom_nodes.entries.len()
     }
 
-    /// Retained payload: offsets and entries of the three relations.
+    /// Retained logical payload: offsets and entries of the three relations.
     pub(super) fn bytes(&self) -> u128 {
         self.of_nodes.bytes() + self.atom_nodes.bytes() + self.guards.bytes()
+    }
+
+    /// A bound on the logical bytes building the index holds at once,
+    /// computable from the theory before the build: one count, offset and
+    /// cursor per node, atom and numeric row and one more offset per relation;
+    /// reader entries bounded by operand occurrences, producers and roots
+    /// (each is an operand, a row condition listed once, a producer body or a
+    /// root position); atom-node and guard entries together by nodes (each is
+    /// one node); and one row mark per 64 rows.
+    pub(super) fn byte_bound(theory: &Theory, producers: &[TightProducer]) -> u128 {
+        let (nodes, rows) = (theory.nodes().len(), theory.parts().rows().len());
+        let slots = (nodes + theory.atom_count() + rows) as u128;
+        let word = size_of::<usize>() as u128;
+        let readers =
+            (theory.parts().occurrences() + producers.len() + theory.roots().len()) as u128;
+        slots * word
+            + (2 * slots + 3) * word
+            + readers * size_of::<Reader>() as u128
+            + nodes as u128 * word
+            + rows.div_ceil(64) as u128 * size_of::<u64>() as u128
     }
 
     /// Build the index in two charged passes over the same incidence stream:
     /// one counts each relation's lists, the other places their entries. Each
     /// pass visits every node and its operands or conditions once per row,
     /// every producer and every root position, so the work is linear in the
-    /// theory. Storage is admitted against `max_bytes`, with `base` bytes
-    /// already held, before the first pass: the counts, a pass's row marks, and
-    /// the offsets, placement cursors and entries, the entries bounded from the
-    /// theory (reader entries by its operand occurrences, producers and roots;
-    /// atom-node and guard entries each by its nodes), so a build the byte
-    /// allowance cannot hold spends nothing. Returns the index and a bound on the
-    /// logical bytes the build holds at once, from the counted entries.
+    /// theory. The caller admits `base` plus [`Self::byte_bound`] before the
+    /// build; the counted figure lies within that bound, and an excess is an
+    /// invariant failure, not a refusal. Returns the index and the counted
+    /// bound on the logical bytes the build holds at once, `base` included.
     pub(super) fn build(
         theory: &Theory,
         producers: &[TightProducer],
         base: u128,
-        max_bytes: u64,
         meter: &mut Meter<'_>,
     ) -> Result<(Self, u64), TightError> {
         let nodes = theory.nodes().len();
         let atoms = theory.atom_count();
         let rows = theory.parts().rows().len();
-        let slots = (nodes + atoms + rows) as u128;
-        let word = size_of::<usize>() as u128;
-        let counts = slots * word;
+        let counts = (nodes + atoms + rows) as u128 * size_of::<usize>() as u128;
         let marks = rows.div_ceil(64) as u128 * size_of::<u64>() as u128;
-        let lists = (2 * slots + 3) * word;
-        let entries = (theory.parts().occurrences() + producers.len() + theory.roots().len())
-            as u128
-            * size_of::<Reader>() as u128
-            + 2 * nodes as u128 * word;
-        bytes(base + counts + marks + lists + entries, max_bytes)?;
         let mut readers = Counted::new(nodes)?;
         let mut atom_nodes = Counted::new(atoms)?;
         let mut guards = Counted::new(rows)?;
@@ -166,7 +175,12 @@ impl Readers {
         let placed = readers.placed_bytes::<Reader>()?
             + atom_nodes.placed_bytes::<usize>()?
             + guards.placed_bytes::<usize>()?;
-        let held = bytes(base + counts + marks + placed, max_bytes)?;
+        // The counted lists lie within the bound admitted before the build.
+        let held = base + counts + marks + placed;
+        if held > base + Self::byte_bound(theory, producers) {
+            return Err(Stop::InvalidProgram.into());
+        }
+        let held = u64::try_from(held).map_err(|_| Stop::InvalidProgram)?;
         let mut readers = readers.placement(Reader(0))?;
         let mut atom_nodes = atom_nodes.placement(0)?;
         let mut guards = guards.placement(0)?;

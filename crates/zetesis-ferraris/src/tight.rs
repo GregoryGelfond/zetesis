@@ -286,7 +286,9 @@ impl TightPlan {
                 work: 0,
             };
         }
-        if u128::from(limits.max_work) < self.index_work_bound() {
+        if u128::from(limits.max_work) < self.index_work_bound()
+            || u128::from(limits.max_bytes) < self.index_byte_bound()
+        {
             return TightAttempt {
                 result: Ok(false),
                 work: 0,
@@ -301,13 +303,11 @@ impl TightPlan {
             ..
         } = self;
         let metered = cancellation.metered(limits.max_work, |meter| {
-            let (index, held) =
-                match readers::Readers::build(theory, producers, base, limits.max_bytes, meter) {
-                    Ok(built) => built,
-                    Err(TightError::Limit(TightResource::Bytes)) => return Ok(false),
-                    Err(error) => return Err(error),
-                };
-            let resident = bytes(base + index.bytes(), limits.max_bytes)?;
+            // Both allowances cover the build, so neither runs out within it.
+            let (index, held) = readers::Readers::build(theory, producers, base, meter)?;
+            // The finished index is the held figure less the counts, cursors and
+            // row marks, so its bytes lie within the allowance too.
+            let resident = u64::try_from(base + index.bytes()).map_err(|_| Stop::InvalidProgram)?;
             let work = statistics
                 .work
                 .checked_add(meter.charged())
@@ -322,6 +322,13 @@ impl TightPlan {
             result: metered.result,
             work: metered.charged,
         }
+    }
+
+    /// The most logical bytes the plan holds while building its readers index:
+    /// its resident bytes and [`readers::Readers::byte_bound`].
+    fn index_byte_bound(&self) -> u128 {
+        u128::from(self.statistics.resident_bytes)
+            + readers::Readers::byte_bound(&self.theory, &self.producers)
     }
 
     /// The most work building the readers index can charge: two passes, each

@@ -447,7 +447,6 @@ impl TightWorkspace {
         if !self.retained.summarized {
             self.summarize(plan, limits, meter)?;
         }
-        let logical_bytes = self.admit(plan, limits.max_bytes)?;
         // Second pass: apply the changed words.
         for position in 0..self.retained.changed.len() {
             meter.tick()?;
@@ -505,6 +504,9 @@ impl TightWorkspace {
                 }
             }
         }
+        // Every growth during the update was admitted before it was reserved, so
+        // this reports the bytes the check holds after its last reservation.
+        let logical_bytes = self.admit(plan, limits.max_bytes)?;
         let retained = &self.retained;
         let verdict = if retained.false_root_count > 0 {
             TightVerdict::NotModel {

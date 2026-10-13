@@ -460,11 +460,13 @@ fn parallel_certificates_charge_the_scalar_regions_and_construction() {
 }
 
 #[test]
-fn every_check_completes_within_its_reservation() {
-    // Each certified check runs under its reservation, the run's own plan
-    // bound; were the bound too small for a check on either route, the check
-    // would be refused and the enumeration would not complete.
-    for worker_count in [1, 3] {
+fn no_certified_check_is_refused_under_its_reservation() {
+    // Region workers reserve the run's own plan bound for each certified check
+    // and run the check under it; were the bound too small for a check, the
+    // check would be refused and the enumeration would not complete. A single
+    // worker is the scalar method, which reserves nothing, so only worker
+    // counts above one apply.
+    for worker_count in [2, 3] {
         let mut search = StableModels::with_region_workers(
             &choices(5),
             workers(worker_count),
