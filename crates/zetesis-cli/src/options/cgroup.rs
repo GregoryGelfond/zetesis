@@ -77,17 +77,7 @@ fn least_limit(
 #[cfg(test)]
 mod tests {
     use super::memory_limit;
-    use std::collections::HashMap;
-    use std::path::Path;
-
-    /// A reader over the given files and nothing else.
-    fn files<'a>(entries: &'a [(&str, &str)]) -> impl Fn(&Path) -> Option<String> + 'a {
-        let map: HashMap<&Path, &str> = entries
-            .iter()
-            .map(|&(path, text)| (Path::new(path), text))
-            .collect();
-        move |path| map.get(path).map(|text| (*text).to_owned())
-    }
+    use crate::options::tests::files;
 
     #[test]
     fn a_unified_group_limit_is_read_at_the_process_group() {
@@ -97,10 +87,12 @@ mod tests {
 
     #[test]
     fn the_least_limit_on_the_path_to_the_root_binds() {
+        // A larger limit nearer the group than the least one, so neither the
+        // nearest limit nor the root's is the answer.
         let read = files(&[
-            ("/sys/fs/cgroup/a/b/memory.max", "max\n"),
+            ("/sys/fs/cgroup/a/b/memory.max", "1073741824\n"),
             ("/sys/fs/cgroup/a/memory.max", "536870912\n"),
-            ("/sys/fs/cgroup/memory.max", "1073741824\n"),
+            ("/sys/fs/cgroup/memory.max", "2147483648\n"),
         ]);
         assert_eq!(memory_limit("0::/a/b\n", read), Some(1 << 29));
     }
@@ -135,7 +127,9 @@ mod tests {
 
     #[test]
     fn a_group_path_leaving_its_root_is_not_read() {
-        let read = files(&[("/sys/fs/memory.max", "1\n")]);
+        // Planted where a walk that followed `..` would ask for it, spelled as
+        // that walk spells it.
+        let read = files(&[("/sys/fs/cgroup/../memory.max", "1\n")]);
         assert_eq!(memory_limit("0::/../memory.max\n", read), None);
     }
 

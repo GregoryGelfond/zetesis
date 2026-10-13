@@ -49,10 +49,10 @@ pub struct Options {
     pub additional_inputs: Vec<PathBuf>,
     /// Execution backend: cpu (the default) or gpu.
     ///
-    /// `gpu` uses the platform's native API: Metal on macOS, Vulkan elsewhere.
-    /// `metal` or `vulkan` names the API instead. An unavailable GPU fails;
-    /// device failure does not silently retry on CPU.
-    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu", hide_possible_values = true)]
+    /// The everyday help names these two; the full help lists every value with
+    /// its meaning from the backend vocabulary, the GPU APIs included, in place
+    /// of the parser's own list of values.
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu", hide_possible_values = true, long_help = backend_long_help())]
     pub backend: Backend,
     /// Grounding mode, independent of execution backend.
     ///
@@ -140,25 +140,49 @@ pub struct Options {
     pub workers: NonZeroUsize,
 }
 
-/// The memory available to the process in bytes, read once per process the
-/// first time it is asked for, when the default allowance is taken or the
-/// statistics header prints it: the header prints the reading the allowance
-/// came from.
+/// The full help's account of `--backend`: every value with its meaning, in the
+/// vocabulary's order, so that each API's scope and limits are stated where the
+/// expert values are offered.
+fn backend_long_help() -> String {
+    let values: Vec<String> = Backend::ALL
+        .into_iter()
+        .map(|backend| format!("  {:<7} {}", backend.label(), backend.help()))
+        .collect();
+    format!(
+        "Execution backend: cpu (the default) or gpu.\n\nValues:\n{}\n\n\
+         An unavailable GPU fails; device failure does not silently retry on CPU.",
+        values.join("\n")
+    )
+}
+
+/// The memory available to the process in bytes, read once per process: when
+/// the command is built, since its default allowance derives from the reading,
+/// so on every invocation, an explicit `--memory` included; or, for a caller
+/// that builds `Options` itself, when the statistics header first prints it.
+/// The header prints the reading the allowance came from.
 pub(crate) fn host_memory() -> Option<u64> {
     static HOST_MEMORY: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
     *HOST_MEMORY.get_or_init(read_host_memory)
 }
 
-/// The memory available to the process in bytes: the host's physical memory
-/// from `/proc/meminfo`, lowered to the memory limit of the process's control
-/// group when one is set, since inside a container the host's figure is not
-/// the memory the process may use.
+/// The memory available to the process in bytes, from the files Linux keeps.
 #[cfg(target_os = "linux")]
 fn read_host_memory() -> Option<u64> {
-    let read = |path: &std::path::Path| std::fs::read_to_string(path).ok();
+    available_memory(|path| std::fs::read_to_string(path).ok())
+}
+
+/// The memory available to the process in bytes, where `read` returns a file's
+/// text: the host's physical memory from `/proc/meminfo`, lowered to the memory
+/// limit of the process's control group when one is set, since inside a
+/// container the host's figure is not the memory the process may use. Without
+/// `/proc/meminfo` there is no reading, whatever a group states: a group's value
+/// alone can be version 1's "unlimited", which only the comparison with
+/// physical memory renders harmless.
+#[cfg(any(target_os = "linux", test))]
+fn available_memory(read: impl Fn(&std::path::Path) -> Option<String>) -> Option<u64> {
     let physical = memory_total(&read(std::path::Path::new("/proc/meminfo"))?)?;
     let limit = read(std::path::Path::new("/proc/self/cgroup"))
-        .and_then(|groups| cgroup::memory_limit(&groups, read));
+        .and_then(|groups| cgroup::memory_limit(&groups, &read));
     Some(limit.map_or(physical, |limit| limit.min(physical)))
 }
 
@@ -176,15 +200,15 @@ fn memory_total(meminfo: &str) -> Option<u64> {
 }
 
 /// The host's physical memory in bytes, from the kernel's `hw.memsize`
-/// through one `sysctlbyname` call. The kernel reports physical memory only
-/// through `sysctl`, and this is the one foreign call zetesis makes: it starts
-/// no process and takes microseconds. The kernel writes at most the eight
-/// bytes it is given and stores how many it wrote; anything but a complete
-/// eight-byte reading is no reading.
+/// through one `sysctlbyname` call. macOS reports physical memory only through
+/// system interfaces (`sysctl`, or Mach's `host_info`), each a foreign call;
+/// this is the one in zetesis's own source, and it starts no process. The
+/// kernel writes at most the eight bytes it is given and stores how many it
+/// wrote; anything but a complete eight-byte reading is no reading.
 #[cfg(target_os = "macos")]
 #[expect(
     unsafe_code,
-    reason = "the kernel reports physical memory only through sysctl: one sysctlbyname call into a fixed eight-byte buffer"
+    reason = "macOS reports physical memory only through system interfaces: one sysctlbyname call into a fixed eight-byte buffer"
 )]
 fn read_host_memory() -> Option<u64> {
     use std::ffi::{c_char, c_int, c_void};
@@ -199,10 +223,12 @@ fn read_host_memory() -> Option<u64> {
     }
     let mut memory = 0_u64;
     let mut length = size_of::<u64>();
-    // SAFETY: the name is a NUL-terminated string; `oldp` points to `memory`,
-    // whose size `length` states, so the kernel writes at most those eight
-    // bytes and stores the count it wrote in `length`; with a null `newp` and
-    // a zero `newlen` nothing is set.
+    // SAFETY: the declaration matches sysctlbyname(3), `int sysctlbyname(const
+    // char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen)`, with
+    // `usize` for `size_t`. The name is a NUL-terminated string; `oldp` points
+    // to `memory`, whose size `length` states, so the kernel writes at most
+    // those eight bytes and stores the count it wrote in `length`; with a null
+    // `newp` and a zero `newlen` nothing is set.
     let status = unsafe {
         sysctlbyname(
             c"hw.memsize".as_ptr(),
@@ -227,8 +253,9 @@ fn host_memory_allowance() -> u64 {
     allowance(host_memory())
 }
 
-/// Half of `available` memory, or the reference without a reading. Never
-/// more than half: a fixed floor would exceed a small container's limit.
+/// Half of `available` memory whenever there is a reading, so that the
+/// allowance stays within what the process may use, a container's limit
+/// included; the reference without one.
 fn allowance(available: Option<u64>) -> u64 {
     available.map_or(crate::SolveConfig::REFERENCE_MEMORY, |memory| memory / 2)
 }

@@ -4,7 +4,7 @@
 //! as this host's figure.
 
 use clap::Parser;
-use zetesis_cli::{Options, Oracle};
+use zetesis_cli::{Backend, Options, Oracle};
 
 fn help(flag: &str) -> String {
     let error = Options::try_parse_from(["zetesis", flag]).unwrap_err();
@@ -51,8 +51,13 @@ fn everyday_help_offers_the_cpu_or_a_gpu() {
 }
 
 #[test]
-fn full_help_names_the_gpu_apis() {
-    assert!(help("--help-all").contains("`metal` or `vulkan` names the API instead"));
+fn full_help_lists_every_backend_with_its_meaning() {
+    // From the vocabulary, so each API's scope and Vulkan's qualification
+    // limit are stated where the expert values are offered.
+    let full = help("--help-all");
+    for backend in Backend::ALL {
+        assert!(full.contains(backend.help()), "missing {}", backend.label());
+    }
 }
 
 #[test]

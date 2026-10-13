@@ -264,13 +264,14 @@ The default is half of the memory available to the process: its physical
 memory, or on Linux the memory limit of its control group when that is lower,
 as inside a container. When the host does not report its memory the default is
 two gibibytes. On macOS the reading is one `sysctlbyname` call for `hw.memsize`,
-the one foreign call zetesis makes; on Linux it reads `/proc/meminfo` and the
-cgroup filesystem. The shared policy
+the one foreign call in zetesis's own source; on Linux it reads `/proc/meminfo`
+and the cgroup filesystem. The shared policy
 derives source, expansion-family, support, formula, session and output capacities
 from that allowance, including population limits for retained values and nodes.
-Checked depth and representation limits remain. `--stats` reports the allowance,
-the memory available to the process and actual configured named capacities.
-`--memory` is listed under `--help-all`.
+Checked depth and representation limits remain. The record view of `--stats`
+(with `--json`, or from a legacy invocation) reports the allowance, the memory
+available to the process and the configured named capacities; the human tables
+do not show them. `--memory` is listed under `--help-all`.
 
 The capacities are independent shares for named owners, which can overlap.
 Their sum is not the allowance, and neither the allowance nor the population

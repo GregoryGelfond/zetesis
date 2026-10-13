@@ -28,7 +28,7 @@ const EXCEPTIONS: &[Exception] = &[Exception {
     file: "crates/zetesis-cli/src/options.rs",
     item: "read_host_memory",
     lint: "unsafe_code",
-    constraint: "macOS reports physical memory only through sysctl: one sysctlbyname call for hw.memsize into a fixed eight-byte buffer",
+    constraint: "macOS reports physical memory only through system interfaces (sysctl or Mach host_info), each a foreign call: one sysctlbyname call for hw.memsize into a fixed eight-byte buffer",
 }];
 
 /// Whether `exception` names `suppression`, found in `file`.

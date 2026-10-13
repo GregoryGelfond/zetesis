@@ -230,7 +230,7 @@ fn advanced_help_preserves_public_resource_contracts() {
         assert!(!text.contains("--max-"));
         assert!(text.contains("--memory"));
         assert!(text.contains("not a resident-memory limit"));
-        assert!(text.contains("`metal` or `vulkan` names the API instead"));
+        assert!(text.contains("unqualified there"), "Vulkan's limit");
         assert!(text.contains("unproved incumbents"));
     }
 }

@@ -233,7 +233,14 @@ lint. Such an exception must use a narrow `expect` on the required declaration,
 explain the actual interface constraint, and join the audit's exception list,
 which names the file, the item and the lint with that constraint. It remains an
 exception, subject to
-review; this is not permission to suppress implementation defects. Avoid
+review; this is not permission to suppress implementation defects. Unsafe code
+is admitted on the same terms, and only when the maintainers accept the foreign
+call that needs it: a narrow `expect(unsafe_code)` on the one item that makes
+the call, a `SAFETY` argument at the unsafe block that includes why the
+declaration matches the foreign prototype, and an entry in the audit's exception
+list, which is the register of every such call. A crate holding one denies
+unsafe code rather than forbidding it. The one accepted call reads the host's
+physical memory on macOS (`sysctlbyname` for `hw.memsize`, in zetesis-cli). Avoid
 unbounded recursion on foreign input, unchecked arithmetic and hidden allocation
 or fallback behavior. Make malformed input, cancellation, partial results and
 writer/device failures intelligible typed outcomes.
