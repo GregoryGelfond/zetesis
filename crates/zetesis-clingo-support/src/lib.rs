@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde_json::Value;
-use zetesis_test_support::records::Records;
+use zetesis_test_support::records::{Models, Records};
 use zetesis_validation::{answers, process};
 
 /// The clingo release the comparisons are recorded against.
@@ -316,6 +316,37 @@ pub fn model_records(report: &Value) -> Records {
     records
 }
 
+/// The full models of a complete JSON report: its witnesses' atoms.
+///
+/// # Panics
+/// As [`model_records`].
+#[must_use]
+pub fn full_models(report: &Value) -> Models {
+    model_records(report)
+        .into_iter()
+        .map(|(atoms, _)| atoms)
+        .collect()
+}
+
+/// The full models of a complete JSON report of a program without an
+/// objective.
+///
+/// # Panics
+/// As [`model_records`], and if a witness has costs.
+#[must_use]
+pub fn objective_free_models(report: &Value) -> Models {
+    model_records(report)
+        .into_iter()
+        .map(|(atoms, costs)| {
+            assert_eq!(
+                costs, None,
+                "a witness of a program without an objective has costs"
+            );
+            atoms
+        })
+        .collect()
+}
+
 /// A witness's atoms, as their spellings.
 ///
 /// # Panics
@@ -389,6 +420,42 @@ mod tests {
         let empty = tempfile::tempdir().unwrap();
         let search = std::env::join_paths([empty.path()]).unwrap();
         let _ = discover(None, Some(&search));
+    }
+
+    /// A complete report of two witnesses, with `costs` on each.
+    fn report(costs: &Value) -> Value {
+        json!({
+            "Result": "SATISFIABLE",
+            "Call": [{"Witnesses": [
+                {"Value": ["a"], "Costs": costs},
+                {"Value": ["b", "c"], "Costs": costs}
+            ]}],
+            "Models": {"Number": 2, "More": "no"}
+        })
+    }
+
+    #[test]
+    fn full_models_are_the_witnesses_atoms() {
+        let expected: Models = [vec!["a"], vec!["b", "c"]]
+            .iter()
+            .map(|atoms| atoms.iter().map(|&atom| atom.to_owned()).collect())
+            .collect();
+        assert_eq!(full_models(&report(&json!([1]))), expected);
+        assert_eq!(objective_free_models(&report(&Value::Null)), expected);
+    }
+
+    #[test]
+    #[should_panic(expected = "without an objective has costs")]
+    fn a_witness_with_costs_is_refused_where_there_is_no_objective() {
+        let _ = objective_free_models(&report(&json!([1])));
+    }
+
+    #[test]
+    #[should_panic(expected = "incomplete enumeration")]
+    fn full_models_refuse_an_incomplete_enumeration() {
+        let mut incomplete = report(&Value::Null);
+        incomplete["Models"]["More"] = json!("yes");
+        let _ = full_models(&incomplete);
     }
 
     /// The shell stands in for clingo in the tests of a run's contract.

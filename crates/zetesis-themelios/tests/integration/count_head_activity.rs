@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use cases::CASES;
-use reference::{Models, exhaustive, external, holds, native, values};
+use reference::{Models, exhaustive, holds, native, values};
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
@@ -86,34 +86,10 @@ fn frozen_truth_matches_separate_permissions() {
 #[test]
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
-    let mut total = 0;
-    for &(source, _) in CASES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    assert!(
-                        expected.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&formula(source)), expected, "{source}");
-        total += count;
-    }
-    println!("complete_sources={} full_models={total}", CASES.len());
+    reference::original_sources_match_clingo_full_models(
+        CASES.iter().map(|&(source, _)| source),
+        formula,
+    );
 }
 
 #[test]

@@ -150,6 +150,74 @@ pub(crate) fn external(source: &str, valid: bool) -> Json {
     oracle::json(&run)
 }
 
+/// Each of `sources`, admitted by `input`, has by native enumeration exactly
+/// the full models clingo enumerates for it.
+pub(crate) fn original_sources_match_clingo_full_models<'a>(
+    sources: impl IntoIterator<Item = &'a str>,
+    input: impl Fn(&str) -> AdmittedFormula,
+) {
+    let (mut compared, mut models) = (0, 0);
+    for source in sources {
+        let expected = oracle::full_models(&external(source, true));
+        assert_eq!(native(&input(source)), expected, "{source}");
+        compared += 1;
+        models += expected.len();
+    }
+    println!("complete_sources={compared} full_models={models}");
+}
+
+/// Each source of `pairs` and its expansion, both admitted by `input`, have
+/// the same atoms and agree on classical truth and on frozen truth under every
+/// pair of interpretations. Arbitrary M/J includes both proper subsets and
+/// unrelated worlds.
+pub(crate) fn frozen_truth_matches<'a>(
+    pairs: impl IntoIterator<Item = (&'a str, &'a str)>,
+    input: impl Fn(&str) -> AdmittedFormula,
+) {
+    let (mut sources, mut compared) = (0, 0);
+    for (source, expanded) in pairs {
+        let left = input(source);
+        let right = input(expanded);
+        let names: Vec<_> = left.atoms().iter().map(canonical).collect();
+        let other: Vec<_> = right.atoms().iter().map(canonical).collect();
+        assert_eq!(
+            names.iter().collect::<BTreeSet<_>>(),
+            other.iter().collect(),
+            "{source}"
+        );
+        assert!(names.len() <= 7, "bounded exhaustive interpretation pairs");
+        let remap = |mask: usize| {
+            names.iter().enumerate().fold(0, |result, (index, name)| {
+                result
+                    | (usize::from(mask & (1 << index) != 0)
+                        << other.iter().position(|other| other == name).unwrap())
+            })
+        };
+        for outer in 0..1 << names.len() {
+            let a = values(left.theory(), outer, None);
+            let b = values(right.theory(), remap(outer), None);
+            assert_eq!(
+                holds(left.theory(), &a),
+                holds(right.theory(), &b),
+                "{source}"
+            );
+            for inner in 0..1 << names.len() {
+                assert_eq!(
+                    holds(left.theory(), &values(left.theory(), inner, Some(&a))),
+                    holds(
+                        right.theory(),
+                        &values(right.theory(), remap(inner), Some(&b))
+                    ),
+                    "{source}: M={outer} J={inner}"
+                );
+                compared += 1;
+            }
+        }
+        sources += 1;
+    }
+    println!("source_pairs={sources} frozen_pairs={compared}");
+}
+
 /// The mask over `to`'s atoms that holds the atoms `mask` holds over `from`'s.
 pub(crate) fn remap(
     mask: usize,

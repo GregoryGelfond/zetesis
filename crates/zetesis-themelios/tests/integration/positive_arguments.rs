@@ -1,10 +1,10 @@
 //! Evaluated positive arguments consume bindings and retain actual source atoms.
 use crate::support::finite_bindings as reference;
 use crate::support::thresholds::minimum_preparation_bytes as minimum_bytes;
-use reference::{Models, exhaustive, external, holds, native, values};
+use reference::{Models, exhaustive, native};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::formula;
 use zetesis_themelios::{
     AdmissionOptions, AnalysisBasis, ExpansionFailure, ExpansionLimits, FormulaFailure,
     FormulaLimits, FormulaResource, admit_formula, prepare_formula,
@@ -135,80 +135,16 @@ fn stability_matches_subset_enumeration() {
 
 #[test]
 fn frozen_truth_matches_explicit_substitution() {
-    let mut pairs = 0;
-    for &(source, expanded) in CASES {
-        let left = formula(source);
-        let right = formula(expanded);
-        let names: Vec<_> = left.atoms().iter().map(canonical).collect();
-        let other: Vec<_> = right.atoms().iter().map(canonical).collect();
-        assert_eq!(
-            names.iter().collect::<BTreeSet<_>>(),
-            other.iter().collect(),
-            "{source}"
-        );
-        assert!(names.len() <= 7);
-        let remap = |mask: usize| {
-            names.iter().enumerate().fold(0, |result, (index, name)| {
-                result
-                    | (usize::from(mask & (1 << index) != 0)
-                        << other.iter().position(|other| other == name).unwrap())
-            })
-        };
-        for outer in 0..1 << names.len() {
-            let a = values(left.theory(), outer, None);
-            let b = values(right.theory(), remap(outer), None);
-            assert_eq!(
-                holds(left.theory(), &a),
-                holds(right.theory(), &b),
-                "{source}"
-            );
-            for inner in 0..1 << names.len() {
-                assert_eq!(
-                    holds(left.theory(), &values(left.theory(), inner, Some(&a))),
-                    holds(
-                        right.theory(),
-                        &values(right.theory(), remap(inner), Some(&b))
-                    ),
-                    "{source}: M={outer} J={inner}"
-                );
-                pairs += 1;
-            }
-        }
-    }
-    println!("source_pairs={} frozen_pairs={pairs}", CASES.len());
+    reference::frozen_truth_matches(CASES.iter().copied(), formula);
 }
 
 #[test]
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
-    let mut total = 0;
-    for &(source, _) in CASES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    assert!(
-                        expected.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&formula(source)), expected, "{source}");
-        total += count;
-    }
-    println!("complete_sources={} full_models={total}", CASES.len());
+    reference::original_sources_match_clingo_full_models(
+        CASES.iter().map(|&(source, _)| source),
+        formula,
+    );
 }
 
 #[test]
