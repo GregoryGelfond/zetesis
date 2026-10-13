@@ -49,13 +49,13 @@ Notable changes by release. Versions follow Semantic Versioning.
   and `comparisons_without_integer_form`, which the statistics' grounding
   attribution reports.
 
-- An aggregate assignment now proposes the measures of the selections between
-  its required and possible tuples, its carrier: every selection that contains
-  its required tuples, those from an element whose condition has no atom of
-  either sign, and lies within its possible ones. Admission's arithmetic family
-  follows the carrier, in the assignment's own rule and in every rule that reads
-  its heads. Programs that were refused only for a proposal outside the carrier
-  are now admitted, such as `p(M+1) :- M = #min{1; 5}.`, which answers `p(2)`;
+- An aggregate assignment now proposes its carrier: the measure of every
+  selection that contains its required tuples, those from an element whose
+  condition has no atom of either sign, and lies within its possible ones.
+  Admission's arithmetic family follows the carrier, in the assignment's own
+  rule and in every rule that reads its heads. Programs that were refused only
+  for a proposal outside the carrier are now admitted, such as
+  `p(M+1) :- M = #min{1; 5}.`, which answers `p(2)`;
   warnings that came only from proposals outside the carrier are gone; and a
   family whose every carrier value divides by zero is now refused, such as
   `q(Y) :- N = #count{1}, Y = 1/(N-1).` The carrier can still hold values no

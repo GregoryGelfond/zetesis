@@ -161,10 +161,10 @@ many witnesses produce it. On success,
 [`formula_assignment::counts`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment/counts.rs)
 constructs exactly the ordered values `|R|..=|R|+|O|` for the required keys
 `R` and the optional keys `O`, using checked increments in one bounded buffer.
-The carrier still includes values correlated conditions cannot realize: the original
-aggregate equality decides truth, and proposal traversal preserves required
-source warnings and errors. Value, storage, work and cancellation checks remain
-active.
+The carrier still includes values correlated conditions cannot realize: the
+original aggregate equality decides truth, and proposal traversal preserves
+required source warnings and errors. Value, storage, work and cancellation
+checks remain active.
 
 Weighted assignments compute distinct sums in ascending order: the total of
 the required weights, summed exactly, plus every subset sum of the optional
