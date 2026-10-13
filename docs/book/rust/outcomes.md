@@ -347,7 +347,9 @@ evaluation's work counts toward the certificate's limit, the cadence continues
 through it, and the certificate's exit settles both. Restriction emission lowers
 cardinality bounds through aggregate lowering, an operation of another
 arrangement that polls before every step: the lowering runs under the meter's
-remaining allowance, and the work it reports is counted when it returns.
+remaining allowance, and the work it reports is counted when it returns. A
+lowering that overran its allowance is counted up to the limit and refused as
+the emission's work limit, so every work refusal leaves the count at the limit.
 
 Narrowing meters its reads through a second arrangement: permits from a
 `NarrowingQuota`, at most `NARROWING_BATCH` (`POLL_INTERVAL`) at a time. A quota

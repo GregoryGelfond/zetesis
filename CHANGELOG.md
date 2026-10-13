@@ -48,7 +48,11 @@ Notable changes by release. Versions follow Semantic Versioning.
   Verdicts and their witnesses equal a complete evaluation's, and a Lean law
   proves the node-table update rule. `TightPlan::check_work_bound` bounds every
   check on either route; a reused `TightWorkspace`'s work and logical bytes now
-  depend on the candidate it checked before. `TightPlan::prepare_updates` builds
+  depend on the candidate it checked before. A certified run's checking and
+  search work therefore depend on the order in which its workers check
+  candidates: they differ between worker counts and, with several workers,
+  between runs, and under a binding cumulative work ceiling whether such a run
+  completes can differ between runs. `TightPlan::prepare_updates` builds
   the reverse index the update needs, only when its work and byte allowances
   cover the build, and the plan's construction work, construction bytes and
   resident bytes include it.
