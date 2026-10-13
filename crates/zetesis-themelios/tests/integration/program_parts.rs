@@ -2,7 +2,7 @@
 
 use crate::support::finite_bindings as reference;
 
-use reference::{exhaustive, native};
+use reference::native;
 use themelios_base::source::SourceId;
 use zetesis_reference_support::formula;
 use zetesis_themelios::{
@@ -51,10 +51,7 @@ fn explicit_base_preserves_stable_models() {
 
 #[test]
 fn explicit_base_matches_exhaustive_reduct_checking() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]

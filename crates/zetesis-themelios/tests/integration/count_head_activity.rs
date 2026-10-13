@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use cases::CASES;
-use reference::{Models, exhaustive, holds, native, values};
+use reference::{Models, holds, native, values};
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
@@ -29,10 +29,7 @@ fn models_match_separate_permissions() {
 
 #[test]
 fn stability_matches_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]

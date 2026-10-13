@@ -13,7 +13,7 @@ use std::collections::BTreeSet;
 
 use cases::CASES;
 use proptest::prelude::*;
-use reference::{Models, exhaustive, external, holds, native, values};
+use reference::{Models, external, holds, native, values};
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{admit, canonical, formula};
 use zetesis_themelios::{
@@ -31,10 +31,7 @@ fn complete_models_match_original_contracts() {
 
 #[test]
 fn stability_matches_independent_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]

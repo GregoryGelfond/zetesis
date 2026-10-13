@@ -1,7 +1,7 @@
 //! Local witnesses retain complete atoms under structural selection.
 use crate::support::finite_bindings as reference;
 use crate::support::witnesses::{self, limited};
-use reference::{Models, exhaustive, native, values};
+use reference::{Models, native, values};
 use std::collections::BTreeSet;
 use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
@@ -144,10 +144,7 @@ fn models_match_finite_substitution() {
 
 #[test]
 fn stability_matches_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]

@@ -21,12 +21,7 @@ pub(crate) fn models(source: &str) -> formula::Models {
     result
 }
 
-pub(crate) fn expected(records: &[&[&str]]) -> formula::Models {
-    records
-        .iter()
-        .map(|record| record.iter().map(|name| (*name).to_owned()).collect())
-        .collect()
-}
+pub(crate) use formula::expected;
 
 pub(crate) fn external(source: &str) {
     let result = formula::external(source, true);

@@ -8,7 +8,7 @@ use std::collections::BTreeSet;
 
 use crate::support::objective_boundaries;
 use cases::CASES;
-use reference::{Models, exhaustive, native};
+use reference::{Models, native};
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
@@ -27,17 +27,12 @@ fn input(source: &str) -> AdmittedFormula {
 
 #[test]
 fn models_match_finite_substitutions() {
-    for &(source, expanded) in CASES {
-        assert_eq!(native(&input(source)), native(&input(expanded)), "{source}");
-    }
+    reference::models_match_substitutions(CASES.iter().copied(), input);
 }
 
 #[test]
 fn stability_matches_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = input(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), input);
 }
 
 #[test]

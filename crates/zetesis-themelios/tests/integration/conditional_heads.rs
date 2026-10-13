@@ -3,7 +3,7 @@
 use crate::support::finite_bindings as reference;
 
 use crate::support::finite_bindings::expected;
-use reference::{exhaustive, external, holds, native, values};
+use reference::{external, holds, native, values};
 use std::collections::BTreeSet;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{admit, canonical, formula};
@@ -37,10 +37,7 @@ fn complete_families_preserve_conditional_eligibility() {
 
 #[test]
 fn membership_matches_independent_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]

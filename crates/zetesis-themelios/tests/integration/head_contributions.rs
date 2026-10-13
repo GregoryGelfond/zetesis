@@ -46,17 +46,12 @@ fn input(source: &str) -> AdmittedFormula {
 
 #[test]
 fn source_models_match_explicit_permissions() {
-    for &(source, expanded) in CASES {
-        assert_eq!(native(&input(source)), native(&input(expanded)), "{source}");
-    }
+    reference::models_match_substitutions(CASES.iter().copied(), input);
 }
 
 #[test]
 fn source_stability_matches_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = input(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), input);
 }
 
 #[test]

@@ -3,7 +3,7 @@
 use crate::support::finite_bindings as reference;
 use crate::support::finite_bindings::expected;
 
-use reference::{exhaustive, external, native};
+use reference::{external, native};
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support::formula;
 
@@ -48,10 +48,7 @@ fn complete_answers_preserve_signed_choice_contracts() {
 
 #[test]
 fn signed_choices_match_exhaustive_reduct_checking() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]

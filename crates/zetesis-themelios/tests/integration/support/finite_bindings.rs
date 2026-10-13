@@ -150,6 +150,29 @@ pub(crate) fn external(source: &str, valid: bool) -> Json {
     oracle::json(&run)
 }
 
+/// Every source's native models are its models by exhaustive reduct
+/// checking.
+pub(crate) fn stability_matches_exhaustion<'a>(
+    sources: impl IntoIterator<Item = &'a str>,
+    input: impl Fn(&str) -> AdmittedFormula,
+) {
+    for source in sources {
+        let admitted = input(source);
+        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
+    }
+}
+
+/// Every source has the native models of its finite substitution, the second
+/// of each pair.
+pub(crate) fn models_match_substitutions<'a>(
+    pairs: impl IntoIterator<Item = (&'a str, &'a str)>,
+    input: impl Fn(&str) -> AdmittedFormula,
+) {
+    for (source, expanded) in pairs {
+        assert_eq!(native(&input(source)), native(&input(expanded)), "{source}");
+    }
+}
+
 /// Each of `sources`, admitted by `input`, has by native enumeration exactly
 /// the full models clingo enumerates for it.
 pub(crate) fn original_sources_match_clingo_full_models<'a>(

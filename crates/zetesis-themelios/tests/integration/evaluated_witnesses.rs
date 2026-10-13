@@ -5,7 +5,7 @@ use crate::support::witnesses::{self, limited};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
-use reference::{Models, exhaustive, holds, native, values};
+use reference::{Models, holds, native, values};
 use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
@@ -148,10 +148,7 @@ fn models_match_finite_substitution() {
 
 #[test]
 fn stability_matches_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]

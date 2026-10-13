@@ -1,7 +1,7 @@
 //! Evaluated positive arguments consume bindings and retain actual source atoms.
 use crate::support::finite_bindings as reference;
 use crate::support::thresholds::minimum_preparation_bytes as minimum_bytes;
-use reference::{Models, exhaustive, native};
+use reference::{Models, native};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use zetesis_reference_support::formula;
@@ -127,10 +127,7 @@ fn models_match_explicit_substitution() {
 
 #[test]
 fn stability_matches_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]

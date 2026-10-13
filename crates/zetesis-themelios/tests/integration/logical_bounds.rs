@@ -6,7 +6,7 @@ use crate::support::finite_bindings as reference;
 mod semantics;
 
 use cases::{BOUNDS, RELATIONS, sources};
-use reference::{Models, exhaustive, expected, external, holds, native, values};
+use reference::{Models, expected, external, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support::canonical;
@@ -44,10 +44,11 @@ fn complete_answers_match_declared_contracts() {
 
 #[test]
 fn stability_matches_independent_subset_enumeration() {
-    for (source, _) in sources() {
-        let admitted = input(&source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    let sources = sources();
+    reference::stability_matches_exhaustion(
+        sources.iter().map(|(source, _)| source.as_str()),
+        input,
+    );
 }
 
 #[test]

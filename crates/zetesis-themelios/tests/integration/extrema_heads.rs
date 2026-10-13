@@ -9,7 +9,7 @@ use std::collections::BTreeSet;
 
 use crate::support::objective_boundaries;
 use cases::sources;
-use reference::{Models, exhaustive, holds, native, values};
+use reference::{Models, holds, native, values};
 use themelios_base::source::SourceId;
 use themelios_program::term::EvalError;
 use zetesis_reference_support::canonical;
@@ -30,21 +30,22 @@ fn input(source: &str) -> AdmittedFormula {
 
 #[test]
 fn models_match_finite_substitutions() {
-    for (source, expanded) in sources() {
-        assert_eq!(
-            native(&input(&source)),
-            native(&input(&expanded)),
-            "{source}"
-        );
-    }
+    let sources = sources();
+    reference::models_match_substitutions(
+        sources
+            .iter()
+            .map(|(source, expanded)| (source.as_str(), expanded.as_str())),
+        input,
+    );
 }
 
 #[test]
 fn stability_matches_subset_enumeration() {
-    for (source, _) in sources() {
-        let admitted = input(&source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    let sources = sources();
+    reference::stability_matches_exhaustion(
+        sources.iter().map(|(source, _)| source.as_str()),
+        input,
+    );
 }
 
 #[test]
