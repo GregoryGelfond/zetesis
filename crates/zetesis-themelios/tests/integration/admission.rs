@@ -143,14 +143,7 @@ fn raw_choice_shape_is_checked_before_set_canonicalization() {
     ] {
         let source_id = SourceId::new(220);
         let source = Source::new(source_id, text.into()).unwrap();
-        let error = admit(
-            text.into(),
-            AdmissionOptions {
-                source_id,
-                ..AdmissionOptions::default()
-            },
-        )
-        .unwrap_err();
+        let error = admit(text.into(), admission::options(source_id)).unwrap_err();
         let AdmissionFailure::Profile {
             feature: actual,
             location,
@@ -232,14 +225,7 @@ fn relational_refusals_preserve_the_profile_diagnostic() {
     ] {
         let source_id = SourceId::new(219);
         let source = Source::new(source_id, text.into()).unwrap();
-        let error = admit(
-            text.into(),
-            AdmissionOptions {
-                source_id,
-                ..AdmissionOptions::default()
-            },
-        )
-        .unwrap_err();
+        let error = admit(text.into(), admission::options(source_id)).unwrap_err();
         let AdmissionFailure::Profile {
             feature: actual,
             location,

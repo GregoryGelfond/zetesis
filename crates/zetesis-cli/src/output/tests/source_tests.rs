@@ -21,13 +21,7 @@ fn config() -> SolveConfig {
 }
 
 fn evaluated(source: &str, interrupted: bool) -> (Progress, SourceEvaluationStatistics) {
-    let preparation = zetesis_themelios::prepare_formula(
-        source.into(),
-        zetesis_themelios::AdmissionOptions::default(),
-        zetesis_themelios::ExpansionLimits::default(),
-        zetesis_themelios::FormulaLimits::default(),
-    )
-    .unwrap();
+    let preparation = zetesis_reference_support::prepared(source);
     let SourceAdmission::Admitted(owner) = preparation.try_source().unwrap() else {
         panic!("fixture must use direct source evaluation");
     };

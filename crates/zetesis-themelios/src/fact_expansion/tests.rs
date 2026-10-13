@@ -530,13 +530,7 @@ fn relational_admission_keeps_each_expanded_facts_evidence() {
 #[test]
 fn formula_admission_keeps_expanded_analysis_and_root_evidence() {
     let source = "p(1..2,3..4).";
-    let admitted = crate::admit_formula(
-        source.into(),
-        crate::AdmissionOptions::default(),
-        crate::ExpansionLimits::default(),
-        crate::FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = crate::test_support::admitted(source);
     assert_eq!(admitted.analyzed_program().statements().count(), 4);
     assert_eq!(admitted.atoms().len(), 4);
     assert_eq!(admitted.expansion_usage().templates, 4);

@@ -8,9 +8,7 @@ use zetesis_reference_support::admit;
 
 use reference::{exhaustive, native};
 use serde_json::Value as Json;
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaLimits, FormulaResource, admit_formula,
-};
+use zetesis_themelios::{FormulaLimits, FormulaResource};
 
 fn cases() -> Vec<Json> {
     include_str!("../fixtures/value-extrema.jsonl")
@@ -87,13 +85,8 @@ fn complete_values_preserve_source_models_and_original_reduct_minimality() {
     assert_eq!(rows.len(), 218);
     for row in rows {
         let source = row["source"].as_str().unwrap();
-        let input = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_or_else(|error| panic!("{}: {source}: {error}", row["name"]));
+        let input = admit(source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{}: {source}: {error}", row["name"]));
         assert_eq!(input.source().expect("source input").text(), source);
         assert_eq!(
             native(&input),

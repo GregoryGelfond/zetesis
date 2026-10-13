@@ -179,6 +179,7 @@ fn candidate_gates_cannot_hide_fatal_source_arithmetic() {
     ] {
         // An interpretation can omit p, but original arithmetic validation
         // precedes every candidate and must refuse the source itself.
+        // Preparation's refusal is inspected, which `prepared` would raise as a panic.
         let result = prepare_formula(
             source.into(),
             AdmissionOptions::default(),

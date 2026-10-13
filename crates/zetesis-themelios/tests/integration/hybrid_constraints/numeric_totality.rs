@@ -150,6 +150,7 @@ fn independent_fatal_arithmetic_keeps_its_source_site() {
 #[test]
 fn total_body_evidence_does_not_supply_a_head_binding() {
     let source = "d(1).e(1).p(Z):-d(X),e(Y),X/Y=1.";
+    // Preparation's refusal is inspected, which `prepared` would raise as a panic.
     let result = prepare_formula(
         source.into(),
         AdmissionOptions::default(),

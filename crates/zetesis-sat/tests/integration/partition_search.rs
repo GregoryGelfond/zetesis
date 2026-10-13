@@ -3,11 +3,11 @@
 use std::collections::BTreeSet;
 
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
+use zetesis_reference_support::formula;
 use zetesis_sat::{
     Cancellation, Limits, StableModels,
     partition::{Group, Plan, Premises, RestrictionLimits},
 };
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 fn search(
     theory: &Theory,
@@ -30,13 +30,7 @@ fn search(
 
 #[test]
 fn candidate_consequences_preserve_independent_stability() {
-    let admitted = admit_formula(
-        "2 { a; b; c; d } 2. :- a,b. :- c,d.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("2 { a; b; c; d } 2. :- a,b. :- c,d.");
     let theory = admitted.theory();
     let groups = [
         Group {
@@ -206,13 +200,7 @@ fn shape_validation_does_not_certify_theory_entailment() {
 
 #[test]
 fn inactive_capacity_cannot_justify_an_unconditional_bound() {
-    let admitted = admit_formula(
-        "2 { a; b; c; d } 2. { g }. :- g,a,b. :- g,c,d.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("2 { a; b; c; d } 2. { g }. :- g,a,b. :- g,c,d.");
     let members = ["a", "b", "c", "d"].map(|name| {
         admitted
             .atoms()

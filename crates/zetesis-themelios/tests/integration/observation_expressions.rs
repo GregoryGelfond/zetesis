@@ -5,10 +5,10 @@ use crate::support::observation_rendering::shown as terms;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{admit, formula};
+use zetesis_themelios::FormulaLimits;
 use zetesis_themelios::observation::{
     ConstructionLimits, ErrorKind, EvaluationError, Limits, Resource,
 };
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 #[test]
 fn checked_integer_operators_construct_their_scalar_results() {
@@ -188,12 +188,7 @@ fn completed_directives_release_their_owned_bindings() {
 
 #[test]
 fn circular_equalities_do_not_establish_a_finite_binding() {
-    let result = admit_formula(
-        "#show X:X=Y,Y=X.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    );
+    let result = admit("#show X:X=Y,Y=X.", &FormulaLimits::default());
     assert!(
         matches!(result, Err(zetesis_themelios::FormulaFailure::Observation { error })
         if error.kind() == &ErrorKind::Unsupported(zetesis_themelios::observation::Feature::UnsafeVariable))

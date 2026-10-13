@@ -1,13 +1,11 @@
 //! Scalar data evaluation retains complete original and frozen source semantics.
+use crate::support::admission;
 use crate::support::finite_bindings as reference;
 
 use themelios_base::source::SourceId;
 use themelios_program::term::EvalError;
 use zetesis_reference_support::formula;
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
-    admit_formula,
-};
+use zetesis_themelios::{ExpansionFailure, FormulaFailure};
 
 const CASES: &[(&str, &str)] = &[
     (
@@ -122,16 +120,7 @@ fn arithmetic_refusals_retain_the_source_rule() {
         ("d(f(1)). p(X+1):-d(X).", EvalError::Undefined),
     ] {
         let source_id = SourceId::new(29);
-        let failure = admit_formula(
-            source.into(),
-            AdmissionOptions {
-                source_id,
-                ..Default::default()
-            },
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
+        let failure = admission::admit(source_id, source).unwrap_err();
         let FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, location }) = failure
         else {
             panic!("expected evaluated arithmetic refusal: {failure}");

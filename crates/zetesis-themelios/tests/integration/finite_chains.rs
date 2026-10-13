@@ -11,8 +11,8 @@ use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{admit, canonical, formula};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionResource, FormulaFailure,
+    FormulaLimits, FormulaResource, admit_formula,
 };
 
 // Expected assignments are obtained by integer arithmetic, before source
@@ -235,11 +235,9 @@ fn finite_chains_defer_irrelevant_coefficient_capacity() {
 
 #[test]
 fn deferred_coefficient_capacity_preserves_reached_arithmetic_errors() {
-    let result = admit_formula(
-        "p(X,Y):-0<X<Y<3,0=2147483647*(2147483647*(2147483647*X)).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
+    let result = admit(
+        "p(X,Y):-0<X<Y<3,0=2147483647*(2147483647*(2147483647*X)).",
+        &FormulaLimits::default(),
     );
     assert!(matches!(
         result,

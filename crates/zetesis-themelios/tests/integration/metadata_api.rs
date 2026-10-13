@@ -1,5 +1,6 @@
 //! Native metadata consumers use canonical vocabulary through the frontend alone.
 
+use crate::support::admission;
 use crate::support::resource_limits;
 use zetesis_core::{Atom, Model, Predicate, Sign, Value};
 use zetesis_cpu::Cancellation;
@@ -12,8 +13,8 @@ use zetesis_themelios::logical::term::{BinaryOp, Term, Variable};
 use zetesis_themelios::observation::{ErrorKind, Feature, Limits, ObservationProgram};
 use zetesis_themelios::{
     AdmissionOptions, AtomSelection, AtomSelectionError, AtomSelectionLimits, ExpansionFailure,
-    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, MetadataError,
-    MetadataFeature, MetadataLimits, MetadataResource, ProgramSite, SourceMetadata, admit_formula,
+    ExpansionResource, FormulaFailure, MetadataError, MetadataFeature, MetadataLimits,
+    MetadataResource, ProgramSite, SourceMetadata,
 };
 
 fn fallback() -> Location {
@@ -57,6 +58,7 @@ fn canonical_source_types_are_nameable() {
     let (source, program) = program("p.");
     let analysis: zetesis_themelios::analysis::Analysis =
         zetesis_themelios::analysis::Analysis::of(&program);
+    // Spelled out, since the test is that the options type can be named.
     let options = AdmissionOptions {
         source_id: source.id(),
         ..Default::default()
@@ -184,16 +186,7 @@ fn native_metadata_matches_source_admission() {
     let source = "#const c=2+1. #show -p/1. #show f(X,c):p(X). #defined q/1.";
     let (_, shared) = program(source);
     let native = SourceMetadata::compile(&shared, MetadataLimits::default(), fallback()).unwrap();
-    let admitted = admit_formula(
-        source.into(),
-        AdmissionOptions {
-            source_id: fallback().source,
-            ..Default::default()
-        },
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = admission::admitted(fallback().source, source);
     assert_eq!(&native, admitted.metadata());
     let observations =
         ObservationProgram::compile(&shared, MetadataLimits::default(), fallback()).unwrap();

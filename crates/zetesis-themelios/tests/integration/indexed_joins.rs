@@ -173,13 +173,7 @@ fn selective_join_work_limit_is_inclusive() {
 
 #[test]
 fn indexed_candidates_still_validate_repeated_variables_and_every_constant() {
-    let input = admit_formula(
-        "p(1;2).q(1,2,a).q(1,1,b).q(2,2,b).q(2,2,a).r(X):-p(X),q(X,X,a).".to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .expect("full row match");
+    let input = formula("p(1;2).q(1,2,a).q(1,1,b).q(2,2,b).q(2,2,a).r(X):-p(X),q(X,X,a).");
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("finite theory");
     let model = search.next().expect("one model").expect("verified model");
@@ -250,13 +244,7 @@ fn ready_filters_prune_before_later_relations_without_reading_generated_slots() 
     assert!(search.next().is_none());
     assert!(search.exhausted());
 
-    let input = admit_formula(
-        "d(5).p(Y):-d(X),Y=X+1,Y>5.".to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .expect("generated comparison waits for binding");
+    let input = formula("d(5).p(Y):-d(X),Y=X+1,Y>5.");
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("theory");
     let model = search.next().expect("one model").expect("verified model");
@@ -303,13 +291,7 @@ fn invalid_arithmetic_on_unextendable_prefixes_does_not_refuse_the_source() {
 
 #[test]
 fn duplicate_support_heads_do_not_remove_alternative_final_reduct_witnesses() {
-    let input = admit_formula(
-        "d(1;2).{q(1);q(2)}.p:-d(X),q(X).".to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .expect("support projection preserves full final body disjunction");
+    let input = formula("d(1;2).{q(1);q(2)}.p:-d(X),q(X).");
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("theory");
     let mut count = 0;

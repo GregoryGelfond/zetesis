@@ -281,6 +281,7 @@ fn arithmetic_cannot_invert_a_captured_value() {
 fn preparation_requires_independently_bound_inputs() {
     // Preparation must refuse before any support traversal, including when the
     // current finite support carrier would be empty.
+    // Preparation's refusal is inspected, which `prepared` would raise as a panic.
     assert!(matches!(
         prepare_formula(
             "q:-p(X,X+Y):#true.".into(),

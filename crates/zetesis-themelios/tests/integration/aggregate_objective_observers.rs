@@ -12,9 +12,7 @@ use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_test_support::records::Records;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_themelios::{AdmittedFormula, FormulaLimits};
 
 struct Case {
     name: String,
@@ -112,13 +110,8 @@ fn observer_cases_preserve_recorded_contracts() {
     let cases = cases();
     assert_eq!(cases.len(), 92);
     for case in cases {
-        let input = admit_formula(
-            case.source.clone(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_or_else(|error| panic!("{}: {error}", case.name));
+        let input = zetesis_reference_support::admit(&case.source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{}: {error}", case.name));
         assert_eq!(
             exhaustive(&input),
             case.expected,

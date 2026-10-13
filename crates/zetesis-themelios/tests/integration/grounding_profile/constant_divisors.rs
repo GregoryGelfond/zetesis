@@ -8,6 +8,7 @@ use zetesis_themelios::{
 use super::{Observer, Record};
 
 fn ground(source: &str, hybrid: bool, observer: &Observer) -> Result<usize, FormulaFailure> {
+    // Preparation's refusal is returned, which `prepared` would raise as a panic.
     let prepared = prepare_formula(
         source.into(),
         AdmissionOptions::default(),
@@ -247,15 +248,9 @@ fn siblings_without_division_retain_family_validation() {
 #[test]
 fn hybrid_capture_uses_computed_domain_selection() {
     let observer = Observer::default();
-    let owner = prepare_formula(
-        "{p(1..6)}.q(2). :-p(X),q(Y),X/2=Y.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_hybrid_with_observer(Some(&observer))
-    .unwrap();
+    let owner = zetesis_reference_support::prepared("{p(1..6)}.q(2). :-p(X),q(Y),X/2=Y.")
+        .ground_hybrid_with_observer(Some(&observer))
+        .unwrap();
     assert_eq!(owner.streamed_instances(), 2);
     // Indexed is the ordinary hybrid policy. An actual finite-table probe here
     // establishes that capture used the computed necessary domain.

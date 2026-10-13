@@ -10,8 +10,8 @@ use zetesis_ferraris::{Interpretation, Theory};
 
 use crate::formula::Compiled;
 use crate::{
-    AdmissionOptions, ExpansionLimits, FormulaLimits, GroundingObserver, GroundingOutcome,
-    GroundingPhase, GroundingWork, HybridFormula, PreparedFormula,
+    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, GroundingObserver,
+    GroundingOutcome, GroundingPhase, GroundingWork, HybridFormula, PreparedFormula,
 };
 
 /// The empty span at the start of source 0.
@@ -71,6 +71,18 @@ pub(crate) fn compiled_atoms(compiled: &Compiled) -> Vec<Atom> {
         .iter()
         .map(|atom| atom.to_atom(ValueLimits::default()).unwrap())
         .collect()
+}
+
+/// `source` admitted under the default options and limits, which must admit
+/// it.
+pub(crate) fn admitted(source: &str) -> AdmittedFormula {
+    crate::admit_formula(
+        source.into(),
+        AdmissionOptions::default(),
+        ExpansionLimits::default(),
+        FormulaLimits::default(),
+    )
+    .unwrap_or_else(|error| panic!("{source}: {error}"))
 }
 
 /// `source` prepared under the default options and limits, which must admit

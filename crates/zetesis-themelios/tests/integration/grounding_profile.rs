@@ -12,7 +12,7 @@ use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, DomainLimits, ExpansionLimits, FormulaFailure,
     FormulaLimits, FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase,
-    GroundingWork, admit_formula_with_grounding_observer, prepare_formula,
+    GroundingWork, admit_formula_with_grounding_observer,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -509,16 +509,10 @@ fn phases_are_entered_in_the_order_the_catalog_lists() {
     // phase as it exits, so the first exit of every phase, the domain analysis
     // included when it runs, must follow the catalog's order.
     let observer = Observer::default();
-    prepare_formula(
-        "p(1..3). q(X) :- p(X), X < 3.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .with_domain_analysis(Some(DomainLimits::default()))
-    .ground_with_observer(Some(&observer))
-    .unwrap();
+    zetesis_reference_support::prepared("p(1..3). q(X) :- p(X), X < 3.")
+        .with_domain_analysis(Some(DomainLimits::default()))
+        .ground_with_observer(Some(&observer))
+        .unwrap();
     let records = observer.records.borrow();
     let mut entered: Vec<GroundingPhase> = Vec::new();
     for record in records.iter() {

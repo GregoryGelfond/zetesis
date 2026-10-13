@@ -103,15 +103,10 @@ fn every_kind_of_join_finds_its_posting() {
 
 #[test]
 fn a_streamed_constraint_finds_its_posting() {
-    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, prepare_formula};
     let observer = Observer::default();
-    prepare_formula(
-        "{ a(1..6) }.\n{ b(1..6, 1..2) }.\nc(X) :- a(X).\n:- c(X), b(X, 2).\n".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
+    zetesis_reference_support::prepared(
+        "{ a(1..6) }.\n{ b(1..6, 1..2) }.\nc(X) :- a(X).\n:- c(X), b(X, 2).\n",
     )
-    .expect("prepared")
     .ground_hybrid_with_observer(Some(&observer))
     .expect("admitted");
     let unindexed: u64 = observer

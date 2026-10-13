@@ -23,6 +23,7 @@ fn authored_terms_reject_undefined_arithmetic() {
             matches!(error, ExpansionFailure::Evaluation { .. }),
             "{source}: {error}"
         );
+        // Preparation's refusal is inspected, which `prepared` would raise as a panic.
         let error = prepare_formula(
             source.into(),
             AdmissionOptions::default(),
@@ -62,6 +63,7 @@ fn authored_terms_reject_nested_nul_values() {
             ),
             "{error}"
         );
+        // Preparation's refusal is inspected, which `prepared` would raise as a panic.
         let error = prepare_formula(
             source.into(),
             AdmissionOptions::default(),

@@ -62,6 +62,7 @@ fn ground(
     domains: Option<DomainLimits>,
     observation: &Observation,
 ) -> Result<AdmittedFormula, FormulaFailure> {
+    // Preparation's refusal is returned, which `prepared` would raise as a panic.
     prepare_formula(
         source.to_owned(),
         AdmissionOptions::default(),

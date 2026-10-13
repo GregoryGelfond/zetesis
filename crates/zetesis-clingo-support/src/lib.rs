@@ -490,6 +490,19 @@ mod tests {
         let _ = costs(&json!("3"));
     }
 
+    // A set decoding a repeated atom would silently collapse a multiset.
+    #[test]
+    #[should_panic(expected = "full atom identities are unique")]
+    fn atoms_refuses_a_repeated_atom() {
+        let _ = atoms(&json!(["a", "a"]));
+    }
+
+    #[test]
+    #[should_panic(expected = "a witness's atoms are an array of strings")]
+    fn atoms_refuses_an_atom_that_is_not_a_string() {
+        let _ = atoms(&json!(["a", 1]));
+    }
+
     /// The shell stands in for clingo in the tests of a run's contract.
     #[cfg(unix)]
     const SHELL: &str = "/bin/sh";

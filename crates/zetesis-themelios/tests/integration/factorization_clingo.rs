@@ -13,9 +13,7 @@ use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_sat::{Limits as SearchLimits, StableModels};
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_themelios::{AdmittedFormula, FormulaLimits};
 
 type Record = (BTreeSet<String>, Option<Vec<i64>>);
 type Records = BTreeSet<Record>;
@@ -122,13 +120,8 @@ fn complete_factorization_sources_match_independent_reduct_and_recorded_model_co
     assert_eq!(cases.len(), 36);
     let mut total = 0;
     for case in cases {
-        let input = admit_formula(
-            case.source.clone(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_or_else(|error| panic!("{}: explicit admission required: {error}", case.name));
+        let input = zetesis_reference_support::admit(&case.source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{}: explicit admission required: {error}", case.name));
         let reference = exhaustive(&input);
         assert_eq!(reference, case.records, "{}: {}", case.name, case.source);
         assert_eq!(

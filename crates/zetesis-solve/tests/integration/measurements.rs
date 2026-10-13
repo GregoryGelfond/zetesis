@@ -462,18 +462,10 @@ fn stages_only_phase_guards_preserve_coarse_intervals() {
 
 #[test]
 fn stages_only_grounding_omits_detailed_attribution() {
-    use zetesis_themelios::{ExpansionLimits, FormulaLimits, prepare_formula};
-
     let owner = SolveMeasurements::stages_only();
     let observer = owner.grounding_observer().unwrap();
     assert!(!observer.details_enabled());
-    let prepared = prepare_formula(
-        "p(0). p(X+1):-p(X),X<3.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = zetesis_reference_support::prepared("p(0). p(X+1):-p(X),X<3.");
     let admitted = prepared.ground_with_observer(Some(&observer)).unwrap();
     assert_eq!(admitted.atom_catalog().atoms().len(), 4);
     let snapshot = owner.snapshot().unwrap();

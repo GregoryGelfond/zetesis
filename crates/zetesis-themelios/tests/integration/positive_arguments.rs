@@ -167,12 +167,7 @@ fn inverse_bindings_have_an_explicit_profile_refusal() {
 #[test]
 fn anonymous_arithmetic_has_no_named_input() {
     assert!(matches!(
-        admit_formula(
-            "d(1).p(2).q:-d(X),p(X+_).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
+        admit("d(1).p(2).q:-d(X),p(X+_).", &FormulaLimits::default()),
         Err(FormulaFailure::UnboundArgumentInput { .. })
     ));
 }
@@ -191,6 +186,7 @@ fn input_refusal_explains_the_located_profile_boundary() {
 
 #[test]
 fn empty_support_cannot_supply_an_expression_input() {
+    // Preparation's refusal is inspected, which `prepared` would raise as a panic.
     assert!(matches!(
         prepare_formula(
             "q(X):-p(X+1).".into(),
@@ -227,12 +223,7 @@ fn undefined_arithmetic_requires_a_complete_row() {
         assert!(admit(source, &FormulaLimits::default()).is_ok(), "{source}");
     }
     assert!(matches!(
-        admit_formula(
-            "d(1).p(1).q(X):-d(X),p(X/0).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
+        admit("d(1).p(1).q(X):-d(X),p(X/0).", &FormulaLimits::default()),
         Err(FormulaFailure::Expansion(
             ExpansionFailure::Evaluation { .. }
         ))
