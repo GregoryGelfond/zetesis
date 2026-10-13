@@ -25,6 +25,7 @@ impl Compiler<'_> {
         facts: &Facts,
         origins: &[ProgramSite],
         items: &mut Items,
+        scratch: &mut Scratch,
     ) -> Result<(), FormulaFailure> {
         let location = self.location;
         if facts.products().next().is_none() {
@@ -45,7 +46,7 @@ impl Compiler<'_> {
                 self.options.core_limits.max_predicate_arity as u128,
                 location,
             )?;
-            let columns = Columns::read(&product, location)?;
+            scratch.layout(product, location)?;
             let run = single && product.len() == 1;
             let open = items
                 .arena()
@@ -55,13 +56,11 @@ impl Compiler<'_> {
             // the vocabulary grows as it grew one fact rule at a time: the first
             // row's values, its predicate, then each later column value, last
             // column first, as the rows advance.
-            let mut admitted = Vec::new();
-            admitted
-                .try_reserve_exact(columns.cells.len())
-                .map_err(|error| allocation(error, location))?;
-            admitted.resize(columns.cells.len(), None);
-            for &start in &columns.starts {
-                admitted[start] = Some(self.cell(columns.cells[start])?);
+            for (column, &start) in product.columns().zip(&scratch.starts) {
+                let first = Values::new(column)
+                    .next()
+                    .expect("a product column has a value");
+                scratch.admitted[start] = Some(self.cell(first)?);
             }
             let predicate = match open {
                 Some((_, predicate)) => predicate,
@@ -70,22 +69,18 @@ impl Compiler<'_> {
                         .predicate(source.into(), self.limits, self.counters, location)?
                 }
             };
-            for column in (0..columns.starts.len()).rev() {
-                let later = columns.starts[column] + 1..columns.end(column);
-                for (slot, value) in admitted[later.clone()]
-                    .iter_mut()
-                    .zip(&columns.cells[later])
-                {
+            for (column, &start) in product.columns().rev().zip(scratch.starts.iter().rev()) {
+                for (offset, value) in Values::new(column).enumerate().skip(1) {
                     self.budget.poll(location)?;
-                    *slot = Some(self.cell(*value)?);
+                    scratch.admitted[start + offset] = Some(self.cell(value)?);
                 }
             }
             let arena = items.arena();
             arena
-                .reserve_cells(admitted.len())
+                .reserve_cells(scratch.admitted.len())
                 .map_err(|error| allocation(error, location))?;
             let first = arena.cell_count();
-            for cell in admitted {
+            for cell in scratch.admitted.drain(..) {
                 arena.push_cell(cell.expect("every column value is admitted"));
             }
             if let Some((block, _)) = open {
@@ -103,10 +98,12 @@ impl Compiler<'_> {
                 items.arena().open(source.clone(), block);
                 block
             } else {
-                let starts: Vec<usize> = columns.starts.iter().map(|start| first + start).collect();
+                for start in &mut scratch.starts {
+                    *start += first;
+                }
                 items
                     .arena()
-                    .push_product(predicate, &starts, &evidence)
+                    .push_product(predicate, &scratch.starts, &evidence)
                     .map_err(|error| allocation(error, location))?
             };
             items.note_block(block);
@@ -147,53 +144,77 @@ enum Column<'a> {
     Number(i32),
 }
 
-/// A product's column values, in emission order, column after column.
-struct Columns<'a> {
-    cells: Vec<Column<'a>>,
-    starts: Vec<usize>,
+/// A column's values in emission order, read from its segments in place.
+struct Values<'a, I> {
+    cells: I,
+    interval: Option<std::ops::RangeInclusive<i32>>,
+    borrowed: std::marker::PhantomData<&'a Value>,
 }
 
-impl<'a> Columns<'a> {
-    fn read(product: &ProductView<'a>, location: ProgramSite) -> Result<Self, FormulaFailure> {
-        let mut columns = Self {
-            cells: Vec::new(),
-            starts: Vec::new(),
-        };
-        for column in product.columns() {
-            columns
-                .starts
-                .try_reserve(1)
-                .map_err(|error| allocation(error, location))?;
-            columns.starts.push(columns.cells.len());
-            for cell in column {
-                match cell {
-                    Cell::Scalar(value) => {
-                        columns
-                            .cells
-                            .try_reserve(1)
-                            .map_err(|error| allocation(error, location))?;
-                        columns.cells.push(Column::Value(value));
-                    }
-                    Cell::Interval(range) => {
-                        let width = crate::integer_range::width(&range);
-                        columns
-                            .cells
-                            .try_reserve(usize::try_from(width).unwrap_or(usize::MAX))
-                            .map_err(|error| allocation(error, location))?;
-                        columns.cells.extend(range.map(Column::Number));
-                    }
-                }
+impl<'a, I: Iterator<Item = Cell<'a>>> Values<'a, I> {
+    fn new(cells: I) -> Self {
+        Self {
+            cells,
+            interval: None,
+            borrowed: std::marker::PhantomData,
+        }
+    }
+}
+
+impl<'a, I: Iterator<Item = Cell<'a>>> Iterator for Values<'a, I> {
+    type Item = Column<'a>;
+
+    fn next(&mut self) -> Option<Column<'a>> {
+        loop {
+            if let Some(number) = self.interval.as_mut().and_then(Iterator::next) {
+                return Some(Column::Number(number));
+            }
+            match self.cells.next()? {
+                Cell::Scalar(value) => return Some(Column::Value(value)),
+                Cell::Interval(range) => self.interval = Some(range),
             }
         }
-        Ok(columns)
     }
+}
 
-    /// The end of `column`'s values.
-    fn end(&self, column: usize) -> usize {
-        self.starts
-            .get(column + 1)
-            .copied()
-            .unwrap_or(self.cells.len())
+/// Compilation scratch reused across fact statements: one product's column
+/// starts and its admitted cells, in column order.
+#[derive(Default)]
+pub(super) struct Scratch {
+    starts: Vec<usize>,
+    admitted: Vec<Option<Scalar>>,
+}
+
+impl Scratch {
+    /// Lay out `product`'s columns: each column's start among its cells, and an
+    /// empty slot per cell.
+    fn layout(
+        &mut self,
+        product: ProductView<'_>,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        self.starts.clear();
+        self.admitted.clear();
+        let mut total = 0_usize;
+        for column in product.columns() {
+            self.starts
+                .try_reserve(1)
+                .map_err(|error| allocation(error, location))?;
+            self.starts.push(total);
+            for cell in column {
+                total = total.saturating_add(match cell {
+                    Cell::Scalar(_) => 1,
+                    Cell::Interval(range) => {
+                        usize::try_from(crate::integer_range::width(&range)).unwrap_or(usize::MAX)
+                    }
+                });
+            }
+        }
+        self.admitted
+            .try_reserve(total)
+            .map_err(|error| allocation(error, location))?;
+        self.admitted.resize(total, None);
+        Ok(())
     }
 }
 

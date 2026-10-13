@@ -65,22 +65,23 @@ impl Facts {
 
 /// One checked product of a family: its predicate, its columns and its row
 /// count, in the order [`Facts::next`] emits its rows (last argument fastest).
+#[derive(Clone, Copy)]
 pub(crate) struct ProductView<'a> {
     product: &'a Product,
 }
 
 impl<'a> ProductView<'a> {
-    pub(crate) fn predicate(&self) -> &'a zetesis_core::Predicate {
+    pub(crate) fn predicate(self) -> &'a zetesis_core::Predicate {
         self.product.predicate()
     }
 
     /// The product's row count before any row is emitted.
-    pub(crate) fn len(&self) -> usize {
+    pub(crate) fn len(self) -> usize {
         self.product.len()
     }
 
     /// Each argument's segments, in emission order.
-    pub(crate) fn columns(&self) -> impl Iterator<Item = impl Iterator<Item = Cell<'a>>> {
+    pub(crate) fn columns(self) -> impl DoubleEndedIterator<Item = impl Iterator<Item = Cell<'a>>> {
         self.product.columns().iter().map(columns::Column::cells)
     }
 }

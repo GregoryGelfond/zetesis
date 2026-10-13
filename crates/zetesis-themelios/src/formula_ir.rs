@@ -722,6 +722,7 @@ fn plan_constraint_replacements(
 #[derive(Default)]
 struct Parts {
     items: crate::formula_facts::Items,
+    fact_scratch: facts::Scratch,
     projection: Vec<RuleIr>,
     analyzed: Vec<WithProvenance<Statement>>,
     pool_projection_nodes: u128,
@@ -1063,7 +1064,7 @@ impl Compiler<'_> {
                 }
                 return Ok(());
             }
-            self.facts(&facts, &origins, &mut parts.items)?;
+            self.facts(&facts, &origins, &mut parts.items, &mut parts.fact_scratch)?;
             while let Some(head) = facts.next(self.budget, self.location)? {
                 parts.analyzed.push(crate::formula_analysis::fact(
                     &head,
