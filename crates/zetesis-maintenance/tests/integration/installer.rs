@@ -247,17 +247,43 @@ fn reinstalling_the_same_source_keeps_its_one_identity_directory() {
 }
 
 #[test]
-fn a_new_identity_removes_only_the_identity_directories_it_supersedes() {
+fn a_new_identity_keeps_every_entry_without_an_identity_directory_shape() {
     let installer = Installer::new();
     installer.install("a");
-    // A directory and a file not named as an identity is: the installer never
-    // made them, so it leaves them alone.
-    fs::create_dir(installer.installed().join("zetesis-libexec/notes")).unwrap();
-    fs::write(installer.installed().join("zetesis-libexec/README"), "kept").unwrap();
+    let libexec = installer.installed().join("zetesis-libexec");
+    // Directories whose names fall just outside the shape: no leading digit,
+    // fifteen digits, uppercase digits; and a file whose name has the shape.
+    let kept = [
+        "notes",
+        "backup-0123456789abcdef",
+        "0.4.0-0123456789abcde",
+        "0.4.0-0123456789ABCDEF",
+    ];
+    for name in kept {
+        fs::create_dir(libexec.join(name)).unwrap();
+    }
+    fs::write(libexec.join("0.3.0-0123456789abcdef"), "kept").unwrap();
     installer.install("b");
-    let mut expected = vec!["README".to_owned(), identity("b"), "notes".to_owned()];
+    let mut expected: Vec<String> = kept.iter().map(|name| (*name).to_owned()).collect();
+    expected.extend(["0.3.0-0123456789abcdef".to_owned(), identity("b")]);
     expected.sort();
     assert_eq!(installer.identities(), expected);
+}
+
+#[test]
+fn a_new_identity_removes_every_other_identity_shaped_directory() {
+    let installer = Installer::new();
+    installer.install("a");
+    // The shape is all the installer checks, so a directory of that shape it
+    // did not make goes with the identity it supersedes.
+    fs::create_dir(
+        installer
+            .installed()
+            .join("zetesis-libexec/0.4.0-0123456789abcdef"),
+    )
+    .unwrap();
+    installer.install("b");
+    assert_eq!(installer.identities(), [identity("b")]);
 }
 
 #[test]
@@ -321,6 +347,35 @@ fn a_cpu_only_install_removes_the_sibling_directory() {
         ),
     ]);
     assert_eq!(installer.files(), expected);
+}
+
+#[test]
+fn a_cpu_only_install_reports_a_sibling_directory_it_cannot_remove() {
+    use std::os::unix::fs::PermissionsExt;
+    let installer = Installer::new();
+    installer.install("a");
+    let libexec = installer.installed().join("zetesis-libexec");
+    let previous = libexec.join(identity("a"));
+    // Its executable cannot be unlinked from a directory without write access.
+    fs::set_permissions(&previous, fs::Permissions::from_mode(0o555)).unwrap();
+    let output = installer.run("a", &["--cpu-only"], &[]);
+    fs::set_permissions(&previous, fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let warning = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        warning.contains(&format!("Could not remove {}", libexec.display())),
+        "{warning}"
+    );
+    let files = installer.files();
+    assert_eq!(files["zetesis"], built("cpu-only", "zetesis", "a", ""));
+    assert_eq!(
+        files["zetesis-bench"],
+        built("cpu-only", "zetesis-bench", "a", "")
+    );
 }
 
 #[test]

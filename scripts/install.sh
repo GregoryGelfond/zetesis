@@ -107,9 +107,14 @@ else
     hash=$(digest "$stage/sibling/zetesis")
     identity=$version-$(printf '%s' "$hash" | cut -c 1-16)
     # The front: zetesis without the GPU stack, naming the sibling it hands GPU
-    # requests to.
-    ZETESIS_SIBLING_IDENTITY=$identity cargo build --locked --release --target "$host_target" \
-        --target-dir "$target_dir" --no-default-features --features front -p zetesis-cli
+    # requests to. The identity is exported in a subshell: POSIX leaves it
+    # unspecified whether an assignment before a function call reaches the
+    # commands the function runs.
+    (
+        ZETESIS_SIBLING_IDENTITY=$identity
+        export ZETESIS_SIBLING_IDENTITY
+        build --no-default-features --features front -p zetesis-cli
+    )
     cp -- "$built/zetesis" "$stage/zetesis"
     # The front exists so that CPU runs start without a graphics framework. On
     # macOS the load commands decide it: reading them is a value-dependent step
@@ -140,27 +145,37 @@ place_tools() {
     place "$stage/zetesis" "$install_dir/zetesis"
 }
 
+# Remove $1, which the completed install no longer uses: a directory that
+# cannot be removed is reported, and is not an error.
+retire() {
+    if ! rm -rf -- "$1"; then
+        printf 'Could not remove %s, which this install no longer uses; remove it by hand.\n' "$1" >&2
+    fi
+}
+
 mkdir -p -- "$install_dir"
 if [ "$cpu_only" = true ]; then
     place_tools
-    rm -rf -- "${install_dir:?}/$libexec"
+    # The CPU-only zetesis never looks in this directory.
+    retire "${install_dir:?}/$libexec"
 else
     mkdir -p -- "$install_dir/$libexec/$identity"
     place "$stage/sibling/zetesis" "$install_dir/$libexec/$identity/zetesis"
     place_tools
-    # Only directories named as an identity is: a version, a hyphen and
-    # sixteen hexadecimal digits. The new install is complete by now, so a
-    # directory that cannot be removed is reported, unused, and not an error.
-    hex='[0-9a-f]'
-    superseded="*-$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex"
+    # The identity directories this install supersedes are chosen by the shape
+    # of their names, the script's second value-dependent step beside the load
+    # command reading: a directory whose name begins with a digit and ends in a
+    # hyphen and sixteen lowercase hexadecimal digits, as an identity's version
+    # and digest do. Any other name is kept; a directory of that shape placed
+    # here by hand is removed with them. The classes list their characters,
+    # since what a range matches depends on the locale.
+    hex='[0123456789abcdef]'
+    superseded="[0123456789]*-$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex"
     for previous in "$install_dir/$libexec"/*; do
         name=${previous##*/}
         if [ -d "$previous" ] && [ "$name" != "$identity" ]; then
             case "$name" in
-                $superseded)
-                    if ! rm -rf -- "$previous"; then
-                        printf 'Could not remove %s, which this install no longer uses; remove it by hand.\n' "$previous" >&2
-                    fi ;;
+                $superseded) retire "$previous" ;;
             esac
         fi
     done
