@@ -54,12 +54,37 @@ fn the_installer_the_guide_and_the_packages_agree() {
     .unwrap();
 }
 
+/// The documents that state where the default install keeps its sibling.
+const LAYOUT_DOCUMENTS: [&str; 3] = [
+    "INSTALL.md",
+    "README.md",
+    "docs/book/architecture/execution.md",
+];
+
+/// Check the layout with `installer` and `front` against the documents, with
+/// `document` replacing the one at its path.
+fn layout(installer: &str, front: &str, document: Option<(&str, &str)>) -> Result<(), String> {
+    let texts: Vec<(&str, String)> = LAYOUT_DOCUMENTS
+        .iter()
+        .map(|&path| match document {
+            Some((replaced, text)) if replaced == path => (path, text.to_owned()),
+            _ => (path, read(path)),
+        })
+        .collect();
+    let documents: Vec<(&str, &str)> = texts
+        .iter()
+        .map(|(path, text)| (*path, text.as_str()))
+        .collect();
+    install::check_sibling_directory(installer, front, &documents)
+        .map_err(|error| error.to_string())
+}
+
 #[test]
 fn the_installer_places_the_sibling_where_the_front_looks() {
-    install::check_sibling_directory(
+    layout(
         &read("scripts/install.sh"),
-        &read("INSTALL.md"),
         &read("crates/zetesis-cli/src/sibling.rs"),
+        None,
     )
     .unwrap();
 }
@@ -71,18 +96,40 @@ fn a_sibling_directory_the_front_does_not_look_in_is_refused() {
         "libexec='zetesis-libexec'",
         "libexec='zetesis-helpers'",
     );
-    let refusal = install::check_sibling_directory(
-        &installer,
-        &read("INSTALL.md"),
-        &read("crates/zetesis-cli/src/sibling.rs"),
-    )
-    .unwrap_err()
-    .to_string();
+    let refusal = layout(&installer, &read("crates/zetesis-cli/src/sibling.rs"), None).unwrap_err();
     assert!(refusal.contains("but the front looks in"), "{refusal}");
 }
 
+#[test]
+fn a_front_looking_in_another_directory_is_refused() {
+    let front = altered(
+        &read("crates/zetesis-cli/src/sibling.rs"),
+        "const LIBEXEC: &str = \"zetesis-libexec\";",
+        "const LIBEXEC: &str = \"zetesis-helpers\";",
+    );
+    let refusal = layout(&read("scripts/install.sh"), &front, None).unwrap_err();
+    assert!(refusal.contains("but the front looks in"), "{refusal}");
+}
+
+#[test]
+fn a_layout_document_that_does_not_name_the_directory_is_refused() {
+    for path in LAYOUT_DOCUMENTS {
+        let document = read(path).replace("`zetesis-libexec", "`zetesis-helpers");
+        let refusal = layout(
+            &read("scripts/install.sh"),
+            &read("crates/zetesis-cli/src/sibling.rs"),
+            Some((path, &document)),
+        )
+        .unwrap_err();
+        assert!(
+            refusal.contains(&format!("{path} does not name")),
+            "{refusal}"
+        );
+    }
+}
+
 /// The packages the CLI's front profile resolves to, as `cargo tree` reports
-/// its normal dependencies.
+/// its normal dependencies, for the installer's selection and features.
 fn front_packages() -> Vec<String> {
     let output = Command::new(env!("CARGO"))
         .args([

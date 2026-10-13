@@ -43,8 +43,11 @@ GitHub read access for the pinned themelios dependency.
 The default install includes GPU support: Metal on macOS, Vulkan elsewhere. It
 builds zetesis twice, once with the GPU stack and once without, and installs the
 GPU-capable build in `zetesis-libexec` as described above. Every build finishes
-before anything is replaced, and each executable is replaced by a rename, so a
-failed or interrupted install leaves the previous one working.
+before anything is replaced, each executable is replaced by a rename, and the
+`zetesis` you run is replaced last, so a failed or interrupted install leaves
+the previous one working. Run one install at a time for a given binary
+directory and Cargo target directory: both builds of zetesis write the same
+build output.
 `./scripts/install.sh --cpu-only` builds zetesis without GPU support, for
 machines with no supported GPU or no graphics drivers; that build runs on the
 CPU only, refuses `--backend gpu`, and the script removes any

@@ -1,5 +1,8 @@
 #!/bin/sh
 # Build locked release binaries and install the tools an end user runs.
+# Precondition: one install at a time per Cargo target directory and per binary
+# directory. Both builds of zetesis write the same artifact, and Cargo
+# serializes builds but not the copies this script makes after them.
 set -eu
 
 # The packages built and the tools installed from them. Every install line and
@@ -108,31 +111,53 @@ else
     ZETESIS_SIBLING_IDENTITY=$identity cargo build --locked --release --target "$host_target" \
         --target-dir "$target_dir" --no-default-features --features front -p zetesis-cli
     cp -- "$built/zetesis" "$stage/zetesis"
-    # The front exists so that CPU runs start without a graphics framework.
-    if [ "$(uname -s)" = Darwin ] && otool -L "$stage/zetesis" | grep -q '\.framework/'; then
-        printf '%s\n' 'The CPU front links a framework, so it would start like the GPU build; not installing.' >&2
-        exit 1
+    # The front exists so that CPU runs start without a graphics framework. On
+    # macOS the load commands decide it: reading them is a value-dependent step
+    # in this otherwise glue script, so the GPU build's are read first as its
+    # control, since that build links Metal at launch.
+    if [ "$(uname -s)" = Darwin ]; then
+        if ! /usr/bin/otool -L "$stage/sibling/zetesis" | grep -q '\.framework/'; then
+            printf '%s\n' 'Found no framework in the load commands of the GPU build: either otool could not read them, or the GPU build no longer links a framework at launch and the CPU front may no longer be needed; not installing.' >&2
+            exit 1
+        fi
+        if /usr/bin/otool -L "$stage/zetesis" | grep -q '\.framework/'; then
+            printf '%s\n' 'The CPU front links a framework, so it would start like the GPU build; not installing.' >&2
+            exit 1
+        fi
     fi
     report="default build: zetesis hands GPU requests to $libexec/$identity/zetesis"
 fi
 
+# Each tool, with zetesis last: in a default install the installed front
+# names an installed sibling at every point, since the new sibling is placed
+# before the new front, and the previous one is removed only after it.
+place_tools() {
+    for tool in $tools; do
+        if [ "$tool" != zetesis ]; then
+            place "$stage/$tool" "$install_dir/$tool"
+        fi
+    done
+    place "$stage/zetesis" "$install_dir/zetesis"
+}
+
 mkdir -p -- "$install_dir"
 if [ "$cpu_only" = true ]; then
-    for tool in $tools; do
-        place "$stage/$tool" "$install_dir/$tool"
-    done
+    place_tools
     rm -rf -- "${install_dir:?}/$libexec"
 else
-    # The sibling first and the front last, so that from the front's rename on
-    # its identity names an installed sibling.
     mkdir -p -- "$install_dir/$libexec/$identity"
     place "$stage/sibling/zetesis" "$install_dir/$libexec/$identity/zetesis"
-    for tool in $tools; do
-        place "$stage/$tool" "$install_dir/$tool"
-    done
+    place_tools
+    # Only directories named as an identity is: a version, a hyphen and
+    # sixteen hexadecimal digits.
+    hex='[0-9a-f]'
+    superseded="*-$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex"
     for previous in "$install_dir/$libexec"/*; do
-        if [ -e "$previous" ] && [ "$previous" != "$install_dir/$libexec/$identity" ]; then
-            rm -rf -- "$previous"
+        name=${previous##*/}
+        if [ -d "$previous" ] && [ "$name" != "$identity" ]; then
+            case "$name" in
+                $superseded) rm -rf -- "$previous" ;;
+            esac
         fi
     done
 fi
