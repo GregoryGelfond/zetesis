@@ -36,6 +36,24 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- The formula route holds facts as columnar fact products instead of building a
+  rule with an empty body for each fact. Each argument alternative of a fact
+  statement is stored as one product, its predicate admitted once, each column
+  value admitted once and the statement's evidence stored once; consecutive
+  one-row statements of a predicate share a run. Support completion interns the
+  rows in its first round where their rules stood, exact activity stages them
+  required, and emission asserts each with its own root, producer and origins,
+  without a join or any join-path attempt. Answers, theories, atom order and
+  output are unchanged. Receipts measure the work performed:
+  `expansion_usage()` reports each fact's origins once, where the fact's rule
+  charged them a second time for its own vector; grounding work falls by the
+  facts' support visits, joins and attempts, and
+  `GroundingWork.support_producer_visits` no longer counts facts; support bytes
+  fall by the facts' pattern rows and rise by the fact storage. A work, origin or
+  support-storage ceiling can therefore be reached later than before. Grounding
+  observers see one rule-instantiation phase per fact product or run, at its
+  first statement, instead of one per fact; `TerminalFormula::deferred_templates()`
+  still counts each deferred fact.
 - Comparisons of integer arithmetic are decided with machine integers. The
   compiler compiles each comparison operand of at most sixteen nodes once, with
   the prepared program, into an integer comparison form; on a row whose operand

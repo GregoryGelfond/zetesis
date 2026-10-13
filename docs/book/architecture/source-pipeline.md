@@ -90,6 +90,7 @@ those instructions rather than interpreting the plan as new program semantics.
 | Source catalog and includes | `bundle`, `bundle_admission` | Original files, paths, source identities and located failures |
 | Diagnostic and strict-profile checks | `profile`, `diagnostic`, `source_diagnostics` | Typed refusals and source views; no recovered partial program |
 | Relational templates | `compile`, `extended`, `expansion`, `fact_expansion` | Closed values, bounded constants/arithmetic/fact expansion and template admission |
+| Fact products | `formula_facts`, `formula_ir::facts` | On the formula route, facts held as columnar products of admitted values with their statements' evidence, standing in item order where rules with empty bodies would have stood |
 | Classical negation | `coherence` | Distinct signed predicates and consistency constraints |
 | Semantic value conversion | `structural_value`, `scalar_arithmetic`, `formula_value` | Typed closed values and checked arithmetic; no atom support |
 | Formula preparation | `formula`, `formula::preparation`, `formula_ir` | Public owned preparation, scoped rule/objective IR and cumulative budgets |
@@ -107,7 +108,7 @@ those instructions rather than interpreting the plan as new program semantics.
 | Formula emission | `formula_ground`, `formula_guard`, `formula_conditional` | Original implications, aggregate conditions and universal instances |
 | Optional formula factoring | `formula_factor` | Qualified existential components with the complete-join path as fallback |
 | Optional count certificates | `formula_count_plan` | Capture, derivation and emitted correspondence to the original theory |
-| Source activity | `formula_source_activity` | Bounded absent/optional/required producer refinement over completed support, shared by objectives and projection |
+| Source activity | `formula_source_activity` | Bounded absent/optional/required producer refinement over completed support, shared by objectives and projection; each fact row is a required producer |
 | Original-model queries | `formula_source_activity::model_query` | Closed conditions over full original atom identities, separate from source activity and reduct formulas |
 | Objective source preparation | `formula_weak`, `formula_ir::objective_scope`, `formula_objective_dependencies` | Scoped weak bodies and independently applicable objective precision plans |
 | Objective materialization | `formula_ground::objectives`, `formula_ground::scoped_body` | Retained objective templates and bounded body validation without producer support |

@@ -369,7 +369,7 @@ for its exact semantic boundary.
 Adaptive materialization defers a certified group only when at least one of its
 complete lowered producers has a variable, including a body-only variable. A
 group shares a predicate name, arity and sign; all its producers move together,
-including any ground facts or rules. Groups whose producers are all ground stay
+including any fact products or ground rules. Groups whose producers are all ground stay
 in ordinary materialization, even when their rules have nonempty bodies. If no
 group passes this physical policy, the result is `Complete`. Mathematical
 terminal eligibility remains unchanged.
