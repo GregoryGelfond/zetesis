@@ -542,3 +542,62 @@ fn a_check_after_a_storage_refusal_evaluates_completely() {
     assert!(after.result.is_ok());
     assert_route(&plan, &third, after.work, false);
 }
+
+#[test]
+fn construction_bytes_keep_the_larger_of_compilation_and_the_build() {
+    // Here compilation's figure exceeds the build's, so the larger one is
+    // compilation's and the build leaves it in place.
+    let theory = extremum_choices(200);
+    let cancellation = Cancellation::default();
+    let mut plan = TightPlan::compile(&theory, TightPlanLimits::default(), &cancellation).unwrap();
+    let compiled = plan.statistics().construction_bytes;
+    assert_eq!(
+        plan.prepare_updates(TightPlanLimits::default(), &cancellation)
+            .result,
+        Ok(true)
+    );
+    let (nodes, atoms, rows) = (
+        theory.nodes().len() as u64,
+        theory.atom_count() as u64,
+        theory.parts().rows().len() as u64,
+    );
+    let word = size_of::<usize>() as u64;
+    let held = plan.statistics().resident_bytes
+        + 2 * (nodes + atoms + rows) * word
+        + rows.div_ceil(64) * size_of::<u64>() as u64;
+    assert!(compiled > held);
+    assert_eq!(plan.statistics().construction_bytes, compiled.max(held));
+}
+
+#[test]
+fn a_refused_growth_keeps_the_work_before_it_and_reserves_nothing() {
+    // The first update grows its empty changed-word list; under an allowance
+    // of exactly the bytes held, that growth is refused after the one charged
+    // comparison of the first candidate word, before anything is reserved.
+    let theory = choices(200);
+    let plan = prepared(&theory);
+    let cancellation = Cancellation::default();
+    let mut workspace = TightWorkspace::default();
+    workspace
+        .check(
+            &plan,
+            &world(&theory, [2, 3]),
+            TightCheckLimits::default(),
+            &cancellation,
+        )
+        .result
+        .unwrap();
+    let before = workspace.retained_bytes();
+    let held = u128::from(plan.statistics().resident_bytes) + before;
+    let limits = TightCheckLimits {
+        max_bytes: u64::try_from(held).unwrap(),
+        ..TightCheckLimits::default()
+    };
+    let attempt = workspace.check(&plan, &world(&theory, [2, 3, 4]), limits, &cancellation);
+    assert_eq!(
+        attempt.result.map(|check| check.verdict),
+        Err(TightError::Limit(TightResource::Bytes))
+    );
+    assert_eq!(attempt.work, 1);
+    assert_eq!(workspace.retained_bytes(), before);
+}
