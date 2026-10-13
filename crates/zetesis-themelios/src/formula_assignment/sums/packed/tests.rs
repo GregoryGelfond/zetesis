@@ -188,3 +188,60 @@ fn packed_distinct_limit_reports_the_first_excess_value() {
         ));
     });
 }
+
+/// Runs seeded at `seed` holding `seed` plus every count of `units` unit
+/// weights, and whether the next unit weight enters packed execution, with the
+/// result of finishing from there over `rest`.
+fn seeded_packed(
+    seed: i32,
+    units: usize,
+    rest: &[i32],
+) -> (bool, Result<Vec<i32>, FormulaFailure>) {
+    Fixture::default().with(given_site(), |_, computation, counters| {
+        let limits = FormulaLimits::default();
+        let mut context = Context::new(&*computation, &limits, counters, given_site());
+        let mut runs = Runs::new(seed, &mut context).unwrap();
+        for _ in 0..units {
+            tick(&mut context).unwrap();
+            runs.add(1, &mut context).unwrap();
+        }
+        let Some(plan) = Plan::for_runs(&runs.values, seed, 1, &mut context).unwrap() else {
+            return (false, Ok(Vec::new()));
+        };
+        drop(runs.next);
+        let result = finish(
+            runs.values,
+            seed,
+            1,
+            rest.iter().copied(),
+            plan,
+            &mut context,
+        )
+        .map(|values| values.slice().to_vec());
+        (true, result)
+    })
+}
+
+#[test]
+fn a_negative_origin_admits_a_carrier_its_optional_weights_alone_overflow() {
+    // The origin -100 plus nine units and 2147483640: the optional weights alone
+    // exceed i32, but every carrier value fits.
+    let (packed, result) = seeded_packed(-100, 8, &[2_147_483_640]);
+    assert!(packed, "the ninth unit weight enters packed execution");
+    let expected: Vec<i32> = (-100..=-91).chain(2_147_483_540..=2_147_483_549).collect();
+    assert_eq!(result.unwrap(), expected);
+}
+
+#[test]
+fn a_positive_origin_refuses_the_first_carrier_value_above_i32() {
+    // The origin 2147483630 plus eighteen units is 2147483648.
+    let (packed, result) = seeded_packed(2_147_483_630, 8, &[1; 21]);
+    assert!(packed, "the ninth unit weight enters packed execution");
+    assert!(matches!(
+        result,
+        Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation {
+            error: EvalError::Overflow,
+            ..
+        }))
+    ));
+}
