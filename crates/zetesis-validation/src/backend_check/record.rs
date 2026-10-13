@@ -27,10 +27,10 @@ pub enum Decision {
     CaptureLimit,
     /// Search or publication was incomplete.
     Incomplete,
-    /// The structured answer report was malformed or contradictory, or named
-    /// an executable the check refuses: a third one, beside the invoked
-    /// executable and the one an earlier run named, or one that could not be
-    /// sealed.
+    /// The structured answer report was malformed or contradictory, or the
+    /// executable its statistics name was refused: none (`null`, or a value
+    /// that is not a path), a third one, beside the invoked executable and the
+    /// one an earlier run named, or one that could not be sealed.
     InvalidReport,
     /// The completed full family or objective vector violated its known contract.
     FamilyMismatch,

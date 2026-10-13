@@ -36,7 +36,10 @@ pub enum Decision {
     CampaignCaptureBudget,
     /// Spawn/exit/capture/cleanup failed; a GPU error is not assumed to mean absence.
     InvocationFailure,
-    /// Captured producer output is malformed or contradictory.
+    /// Captured producer output is malformed or contradictory, or the
+    /// executable its statistics name was refused: none (`null`, or a value
+    /// that is not a path), a third one, beside the invoked executable and the
+    /// one an earlier run named, or one that could not be sealed.
     InvalidReport,
     /// Completed selected answers violate the source contract or reference family.
     ParityMismatch,
