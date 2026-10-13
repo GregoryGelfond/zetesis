@@ -1,23 +1,12 @@
 //! Joint propagation keeps the established last-subject split preference.
 
 use super::super::{CandidateKnowledge, Conditions, Narrower, Region, RegionCounts, narrow};
-use super::budget;
+use super::{budget, theory};
 use crate::ferraris::conditions::Bound;
 use crate::{Cancellation, Incomplete};
 use zetesis_ferraris::{
-    AdmissionLimits, ChoiceHeads, FormulaParts, Narrowing, NarrowingScratch, Node, OriginalSubject,
-    RegionLimits, Theory,
+    ChoiceHeads, Narrowing, NarrowingScratch, Node, OriginalSubject, RegionLimits, Theory,
 };
-
-fn theory(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(
-        3,
-        FormulaParts::new(nodes, vec![]).unwrap(),
-        roots,
-        AdmissionLimits::default(),
-    )
-    .unwrap()
-}
 
 fn original() -> Theory {
     // `(b → c) → a`: its only unknown parent reads b and c, so b ranks first.

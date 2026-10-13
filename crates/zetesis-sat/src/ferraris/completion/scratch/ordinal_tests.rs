@@ -1,7 +1,8 @@
 //! Independent verification keeps its cache beside the retained query cache.
 
 use super::*;
-use crate::{Cancellation, ReductPreparationLimits};
+use crate::Cancellation;
+use crate::test_support::prepare;
 use zetesis_ferraris::{
     AdmissionLimits, ExtremaMeasure, ExtremumCutDescriptor, ExtremumCutRule, FormulaParts, Node,
     NumericDomain, NumericRow, ThresholdDescriptor,
@@ -47,16 +48,6 @@ fn theory(rows: usize, cuts: bool) -> Theory {
     )
     .unwrap();
     Theory::new(1, parts, vec![], AdmissionLimits::default()).unwrap()
-}
-
-fn prepare(theory: &Theory) -> PreparedReduct {
-    PreparedReduct::prepare(
-        theory,
-        ReductPreparationLimits::default(),
-        &Cancellation::default(),
-    )
-    .result
-    .unwrap()
 }
 
 #[test]

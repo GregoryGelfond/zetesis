@@ -25,6 +25,8 @@ pub use region_filter::{
 };
 mod checked;
 mod prepared_reduct;
+#[cfg(test)]
+mod test_support;
 pub use prepared_reduct::{
     PreparedReduct, ReductPreparationAttempt, ReductPreparationLimits, ReductPreparationStatistics,
     ReductQueryStatistics, ReductStatistics, ReductWorkspace,

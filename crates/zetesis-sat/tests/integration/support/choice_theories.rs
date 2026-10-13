@@ -44,3 +44,24 @@ pub(crate) fn three_choices() -> Theory {
         vec![5, 7, 9],
     )
 }
+
+/// Three independent choices, a | not a for atoms 0 to 2, laid out with falsum
+/// first, then the atoms, then each choice's implication and disjunction.
+pub(crate) fn three_choices_falsum_first() -> Theory {
+    theory(
+        3,
+        vec![
+            Node::falsum(),
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::implies(1, 0),
+            Node::or_pair([1, 4]),
+            Node::implies(2, 0),
+            Node::or_pair([2, 6]),
+            Node::implies(3, 0),
+            Node::or_pair([3, 8]),
+        ],
+        vec![5, 7, 9],
+    )
+}

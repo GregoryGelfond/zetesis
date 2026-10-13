@@ -1,22 +1,10 @@
 //! A closed subject needs revisiting only after a later subject changes its input.
 
 use super::super::{CandidateKnowledge, Conditions, Narrower, Region, RegionCounts, narrow};
-use super::{NARROWING_ATTEMPTS, budget, enumeration};
+use super::{NARROWING_ATTEMPTS, budget, enumeration, theory};
 use crate::ferraris::conditions::Bound;
 use crate::{Cancellation, Limits};
-use zetesis_ferraris::{
-    AdmissionLimits, FormulaParts, Interpretation, Narrowing, NarrowingScratch, Node, Theory,
-};
-
-fn theory(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(
-        3,
-        FormulaParts::new(nodes, vec![]).unwrap(),
-        roots,
-        AdmissionLimits::default(),
-    )
-    .unwrap()
-}
+use zetesis_ferraris::{Interpretation, Narrowing, NarrowingScratch, Node, Theory};
 
 /// `b <- a` and the choice of c. The first root makes a either a fact or a choice.
 fn original(fact: bool) -> Theory {

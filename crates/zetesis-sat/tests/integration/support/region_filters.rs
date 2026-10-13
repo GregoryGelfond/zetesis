@@ -6,12 +6,11 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use zetesis_cpu::regions::Region;
-use zetesis_ferraris::{Node, Theory};
+use zetesis_ferraris::Theory;
 use zetesis_sat::{
     BatchLimits, Cancellation, Incomplete, Limits, RegionFeasibility, RegionFilter,
     RegionFilterWorker, StableModels,
 };
-use zetesis_theory_support::theories::theory;
 
 use super::batching::residual;
 
@@ -25,18 +24,33 @@ pub(crate) enum Route {
 pub(crate) const ROUTES: [Route; 3] = [Route::Scalar, Route::Producers, Route::Native];
 
 impl Route {
+    /// A search of `theory` on this route under the default limits, with four
+    /// workers where the route has workers.
     pub(crate) fn search(self, theory: &Theory, cancellation: Cancellation) -> StableModels {
-        let workers = NonZeroUsize::new(4).unwrap();
+        self.search_with(
+            theory,
+            NonZeroUsize::new(4).unwrap(),
+            Limits::default(),
+            cancellation,
+        )
+    }
+
+    /// A search of `theory` on this route under `limits`, with `workers` where
+    /// the route has workers.
+    pub(crate) fn search_with(
+        self,
+        theory: &Theory,
+        workers: NonZeroUsize,
+        limits: Limits,
+        cancellation: Cancellation,
+    ) -> StableModels {
         match self {
-            Self::Scalar => StableModels::new(theory, Limits::default(), cancellation),
-            Self::Producers => StableModels::with_region_producers(
-                theory,
-                workers,
-                Limits::default(),
-                cancellation,
-            ),
+            Self::Scalar => StableModels::new(theory, limits, cancellation),
+            Self::Producers => {
+                StableModels::with_region_producers(theory, workers, limits, cancellation)
+            }
             Self::Native => {
-                StableModels::with_region_workers(theory, workers, Limits::default(), cancellation)
+                StableModels::with_region_workers(theory, workers, limits, cancellation)
             }
         }
         .unwrap()
@@ -67,21 +81,6 @@ impl Route {
         assert!(search.exhausted());
         answers
     }
-}
-
-pub(crate) fn choices(atoms: usize) -> Theory {
-    let mut nodes = vec![Node::falsum()];
-    let mut roots = Vec::new();
-    for atom in 0..atoms {
-        let offset = nodes.len();
-        nodes.extend([
-            Node::atom(atom),
-            Node::implies(offset, 0),
-            Node::or_pair([offset, offset + 1]),
-        ]);
-        roots.push(offset + 2);
-    }
-    theory(atoms, nodes, roots)
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -172,4 +171,15 @@ impl RegionFilterWorker for Worker<'_> {
             RegionFeasibility::NotRefuted
         })
     }
+}
+
+/// A search of `original` on `route` under `limits`, with three workers where
+/// the route has workers.
+pub(crate) fn search(
+    route: Route,
+    original: &Theory,
+    limits: Limits,
+    control: Cancellation,
+) -> StableModels {
+    route.search_with(original, NonZeroUsize::new(3).unwrap(), limits, control)
 }

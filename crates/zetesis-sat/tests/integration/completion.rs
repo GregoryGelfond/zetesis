@@ -5,6 +5,7 @@ use std::convert::Infallible;
 use std::num::NonZeroUsize;
 
 use crate::support::batching::{batch, residual};
+use crate::support::choice_theories::three_choices_falsum_first;
 use crate::support::clause_search::by_clauses;
 use zetesis_ferraris::{Interpretation, Node, Theory};
 use zetesis_sat::{
@@ -12,25 +13,6 @@ use zetesis_sat::{
     Limits, PreparedReduct, ReductPreparationLimits, SearchLimits, StableModels,
 };
 use zetesis_theory_support::theories::theory;
-
-fn choices() -> Theory {
-    theory(
-        3,
-        vec![
-            Node::falsum(),
-            Node::atom(0),
-            Node::atom(1),
-            Node::atom(2),
-            Node::implies(1, 0),
-            Node::or_pair([1, 4]),
-            Node::implies(2, 0),
-            Node::or_pair([2, 6]),
-            Node::implies(3, 0),
-            Node::or_pair([3, 8]),
-        ],
-        vec![5, 7, 9],
-    )
-}
 
 fn executor(workers: usize) -> CompletionExecutor {
     CompletionExecutor::new(NonZeroUsize::new(workers).unwrap()).unwrap()
@@ -188,7 +170,7 @@ fn parallel_completion_matches_reference_and_scalar_order_across_reused_theories
         }
     }
     for t in [
-        choices(),
+        three_choices_falsum_first(),
         theory(0, vec![], vec![]),
         theory(0, vec![Node::falsum()], vec![0]),
     ] {
@@ -202,7 +184,12 @@ fn parallel_completion_matches_reference_and_scalar_order_across_reused_theories
 }
 
 fn partial(limits: Limits, executor: &mut CompletionExecutor) -> StableModels {
-    let mut search = by_clauses(&choices(), limits, Cancellation::default()).unwrap();
+    let mut search = by_clauses(
+        &three_choices_falsum_first(),
+        limits,
+        Cancellation::default(),
+    )
+    .unwrap();
     let result = search.next_batch_with_completion(batch(3), executor, |_, candidates| {
         assert_eq!(candidates.len(), 3);
         Err::<Vec<BatchVerdict>, _>("retain proposals before completion")
@@ -398,7 +385,12 @@ fn checker_retry_restriction_and_failed_certificate_preserve_the_owned_batch() {
 #[test]
 fn cancellation_before_workspace_reservation_keeps_pending_candidates() {
     let cancellation = Cancellation::default();
-    let mut search = by_clauses(&choices(), Limits::default(), cancellation.clone()).unwrap();
+    let mut search = by_clauses(
+        &three_choices_falsum_first(),
+        Limits::default(),
+        cancellation.clone(),
+    )
+    .unwrap();
     let mut pool = executor(4);
     let result = search.next_batch_with_completion(batch(3), &mut pool, |theory, candidates| {
         cancellation.cancel();
@@ -414,15 +406,22 @@ fn cancellation_before_workspace_reservation_keeps_pending_candidates() {
     assert_eq!(pool.last_statistics().unwrap().failed, 0);
     assert_eq!(pool.last_statistics().unwrap().completed, 0);
     // The same pool is reusable after the caller's cancelled solve.
-    assert_eq!(collect(&choices(), 3, &mut pool).0.len(), 8);
+    assert_eq!(
+        collect(&three_choices_falsum_first(), 3, &mut pool).0.len(),
+        8
+    );
 }
 
 #[test]
 fn opt_in_worker_sums_do_not_replace_scalar_search_wall_intervals() {
     for workers in [1, 3] {
         let mut pool = executor(workers);
-        let mut search =
-            by_clauses(&choices(), Limits::default(), Cancellation::default()).unwrap();
+        let mut search = by_clauses(
+            &three_choices_falsum_first(),
+            Limits::default(),
+            Cancellation::default(),
+        )
+        .unwrap();
         search.enable_phase_timing();
         search
             .next_batch_with_completion(batch(3), &mut pool, residual)
@@ -442,7 +441,7 @@ fn opt_in_worker_sums_do_not_replace_scalar_search_wall_intervals() {
             assert_eq!(timing.original_validation.calls, 3);
             assert_eq!(timing.reduct.calls, 0);
         }
-        collect(&choices(), 3, &mut pool);
+        collect(&three_choices_falsum_first(), 3, &mut pool);
         assert_eq!(pool.last_statistics().unwrap().elapsed, None);
         assert_eq!(pool.last_statistics().unwrap().worker_reduct, None);
     }
@@ -450,7 +449,7 @@ fn opt_in_worker_sums_do_not_replace_scalar_search_wall_intervals() {
 
 #[test]
 fn scratch_admission_precedes_results_and_is_retryable_without_new_proposals() {
-    let t = choices();
+    let t = three_choices_falsum_first();
     for workers in [1, 2, 4] {
         let mut search = by_clauses(&t, Limits::default(), Cancellation::default()).unwrap();
         let mut refused =
@@ -510,7 +509,7 @@ fn scratch_admission_precedes_results_and_is_retryable_without_new_proposals() {
 
 #[test]
 fn prepared_owner_survives_capacity_refusal_and_retry() {
-    let theory = choices();
+    let theory = three_choices_falsum_first();
     let requested = prepared_requirements(&theory, 3);
     let actual = requested.shared_bytes + requested.result_bytes + retained_query_bytes(&theory, 3);
     let mut search = by_clauses(&theory, Limits::default(), Cancellation::default()).unwrap();
@@ -558,7 +557,7 @@ fn prepared_owner_survives_capacity_refusal_and_retry() {
 
 #[test]
 fn fixed_scratch_envelopes_cap_concurrency_and_release_between_irregular_calls() {
-    let t = choices();
+    let t = three_choices_falsum_first();
     for workers in [1, 2, 4] {
         for admitted in [1, 2, 4] {
             let requirements = prepared_requirements(&t, 3);
@@ -593,7 +592,7 @@ fn fixed_scratch_envelopes_cap_concurrency_and_release_between_irregular_calls()
 
 #[test]
 fn certificate_only_completion_needs_result_storage_but_no_query_workspace() {
-    let t = choices();
+    let t = three_choices_falsum_first();
     let requirements = prepared_requirements(&t, 3);
     for workers in [1, 2, 4] {
         let mut search = by_clauses(&t, Limits::default(), Cancellation::default()).unwrap();
@@ -618,7 +617,7 @@ fn certificate_only_completion_needs_result_storage_but_no_query_workspace() {
 
 #[test]
 fn one_workspace_parallel_failure_joins_all_residual_slots_and_accounts_each() {
-    let t = choices();
+    let t = three_choices_falsum_first();
     let required = prepared_requirements(&t, 3);
     let mut probe = by_clauses(&t, Limits::default(), Cancellation::default()).unwrap();
     let _ = probe.next_batch(batch(3), |_, _| {

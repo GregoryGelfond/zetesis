@@ -12,7 +12,7 @@ use crate::{
     SearchStatistics, StableModels, Statistics,
 };
 use std::sync::Arc;
-use zetesis_ferraris::{AdmissionLimits, Node};
+use zetesis_ferraris::{AdmissionLimits, FormulaParts, Node};
 
 thread_local! {
     // Counts actual subject invocations, including closures charging no work.
@@ -106,6 +106,18 @@ fn enumeration(theory: &Theory, workers: usize, producers: bool, limits: Limits)
     } else {
         StableModels::with_region_workers(theory, workers, limits, Cancellation::default())
     }
+    .unwrap()
+}
+
+/// The theory over three atoms with the formula nodes `nodes` and the roots
+/// `roots`, under the default admission limits.
+fn theory(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
+    Theory::new(
+        3,
+        FormulaParts::new(nodes, vec![]).unwrap(),
+        roots,
+        AdmissionLimits::default(),
+    )
     .unwrap()
 }
 

@@ -153,27 +153,6 @@ fn frontier_peaks_survive_complete_enumeration() {
     }
 }
 
-/// Three independent `a OR NOT a` formulas, whose eight interpretations are
-/// all stable.
-fn three_choices() -> Theory {
-    theory(
-        3,
-        vec![
-            Node::falsum(),
-            Node::atom(0),
-            Node::atom(1),
-            Node::atom(2),
-            Node::implies(1, 0),
-            Node::or_pair([1, 4]),
-            Node::implies(2, 0),
-            Node::or_pair([2, 6]),
-            Node::implies(3, 0),
-            Node::or_pair([3, 8]),
-        ],
-        vec![5, 7, 9],
-    )
-}
-
 #[test]
 fn frontier_receipts_include_exact_knowledge_storage() {
     // One-candidate rounds keep one region active at a time, so the walk,
@@ -190,7 +169,7 @@ fn frontier_receipts_include_exact_knowledge_storage() {
         + 8 * size_of::<u64>() as u128
         + 6 * size_of::<u16>() as u128;
     let mut search = StableModels::with_region_producers(
-        &three_choices(),
+        &choice_theories::three_choices_falsum_first(),
         nonzero(2),
         Limits::default(),
         Cancellation::default(),

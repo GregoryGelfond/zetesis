@@ -7,7 +7,8 @@ use zetesis_ferraris::{Node, TightPlanLimits};
 use zetesis_sat::{BatchError, Cancellation, Incomplete, Limits, SearchMethod, StableModels};
 
 use crate::support::batching::{batch, residual};
-use crate::support::region_filters::{Condition, Filter, ROUTES, Route, choices};
+use crate::support::choice_theories::choices;
+use crate::support::region_filters::{Condition, Filter, ROUTES, Route};
 use zetesis_theory_support::theories::theory;
 
 #[test]

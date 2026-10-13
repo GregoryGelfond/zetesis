@@ -14,8 +14,9 @@ use zetesis_sat::{
 use zetesis_theory_support::theories::theory;
 
 use crate::support::batching::{batch, residual};
+use crate::support::choice_theories::choices;
 use crate::support::interpretations::stable_models;
-use crate::support::region_filters::{ROUTES, Route, choices};
+use crate::support::region_filters::{ROUTES, Route};
 
 type Callback = fn(&Region, RegionPass, &Cancellation) -> Result<RegionConsequence, Incomplete>;
 

@@ -1,11 +1,11 @@
 //! Checked strata determine one candidate without weakening enumeration boundaries.
 
-use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
+use std::{collections::BTreeSet, convert::Infallible};
 
 use crate::support::batching::{batch, residual};
 use crate::support::choice_theories::choices;
 use crate::support::clause_search::by_clauses;
-use crate::support::region_filters::{ROUTES, Route};
+use crate::support::region_filters::{ROUTES, search};
 use zetesis_ferraris::{
     Interpretation, Node, StratifiedError, StratifiedPlanLimits, StratifiedResource, Theory,
     TightPlanLimits,
@@ -44,16 +44,6 @@ fn strata(seed: bool, forbid_d: bool) -> Theory {
         ],
         roots,
     )
-}
-
-fn search(route: Route, original: &Theory, limits: Limits, control: Cancellation) -> StableModels {
-    let workers = NonZeroUsize::new(3).unwrap();
-    match route {
-        Route::Scalar => StableModels::new(original, limits, control),
-        Route::Producers => StableModels::with_region_producers(original, workers, limits, control),
-        Route::Native => StableModels::with_region_workers(original, workers, limits, control),
-    }
-    .unwrap()
 }
 
 fn enable(stream: &mut StableModels) {
