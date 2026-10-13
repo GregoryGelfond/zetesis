@@ -6925,24 +6925,54 @@
     "line": 170
   },
   {
+    "name": "Zetesis.SourceMeasures.weighted_filter_split",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 193
+  },
+  {
+    "name": "Zetesis.SourceMeasures.weighted_perm",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 203
+  },
+  {
+    "name": "Zetesis.SourceMeasures.length_filter_split",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 212
+  },
+  {
+    "name": "Zetesis.SourceMeasures.required_part_perm",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 221
+  },
+  {
+    "name": "Zetesis.SourceMeasures.required_sum_carrier_membership",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 239
+  },
+  {
+    "name": "Zetesis.SourceMeasures.required_count_carrier_membership",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 295
+  },
+  {
     "name": "Zetesis.SourceSupport.unchanged_round_closed",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 59
+    "line": 64
   },
   {
     "name": "Zetesis.SourceSupport.stages_inside_closed",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 69
+    "line": 74
   },
   {
     "name": "Zetesis.SourceSupport.stable_inside_closed",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 102
+    "line": 107
   },
   {
     "name": "Zetesis.SourceSupport.completed_activity_covers",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 122
+    "line": 127
   },
   {
     "name": "Zetesis.StorageOwners.sum_within_reservations",

@@ -2776,27 +2776,35 @@ classification, carrier reduction, checked arithmetic and unary transport remain
 implementation obligations. The mathematical list enumerator is a reference
 definition; it does not verify the Rust subset-sum or extremum operations.
 
-[`SourceMeasures.count_carrier_membership`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceMeasures.lean#L140)
+[`SourceMeasures.count_carrier_membership`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceMeasures.lean)
 specializes carrier membership to no required keys and the measure `List.length`:
-the possible values are exactly the naturals up to the list length. This law
-counts occurrences; the aggregate callers must first coalesce complete tuple
-keys and supply one unit contribution per key. It justifies membership in the
-direct count proposal range, not Rust's ordered buffer, numeric conversion or
-resource behavior. Checked `i32` increments, distinct full-key coverage and
-unchanged later aggregate equality and source diagnostics remain implementation
-obligations. In particular, unconditional witnesses are still optional during
-proposal generation; removing unrealizable count values could suppress a
-required diagnostic.
+the possible values are exactly the naturals up to the list length.
+[`SourceMeasures.required_count_carrier_membership`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceMeasures.lean)
+generalizes it to required keys: over distinct possible keys with the required
+keys among them, the values are exactly the naturals from the number of
+required keys to the number of possible keys. These laws count distinct keys;
+the aggregate callers must first coalesce complete tuple keys and supply one
+unit contribution per key. They justify membership in the count proposal range,
+not Rust's ordered buffer, numeric conversion or resource behavior. Checked `i32`
+increments, distinct full-key coverage, the classification of required keys and
+unchanged later aggregate equality remain implementation obligations.
 
 [`SourceMeasures.sum_carrier_nil` and `sum_carrier_cons`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceMeasures.lean)
 specialize the same carrier to optional integer sums: the empty input has only
 zero, and one more occurrence keeps the old values together with their translation
-by its weight. Equal weights remain separate occurrences. This is a common
-denotation for sorted merging and packed reachability, not a proof of Rust shifts,
-word boundaries, sorted output, checked `i32` arithmetic or resource behavior.
-Callers still coalesce complete ASP tuple keys before supplying contributions;
-correlated conditions can leave carrier values unrealizable, and the original
-aggregate equality retains those conditions.
+by its weight. Equal weights remain separate occurrences.
+[`SourceMeasures.required_sum_carrier_membership`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceMeasures.lean)
+states the seeded form over distinct keys with a key-to-weight map: a value is
+the required keys' total plus a subset sum of the optional keys' weights. Over
+weights used as keys, membership in the required keys could not require each
+occurrence, so the law is stated over keys. This is a common denotation for the
+seeded sorted merging and packed reachability, not a proof of Rust shifts, word
+boundaries, sorted output, checked `i32` arithmetic or resource behavior. Callers
+still coalesce complete ASP tuple keys before supplying contributions; correlated
+conditions can leave carrier values unrealizable, and the original aggregate
+equality retains those conditions. The ordered-extremum form for `#min` and
+`#max` with required keys is not yet stated; their proposals are checked against
+exhaustive reduct enumeration and the clingo campaign.
 
 [`IntegerEnvelopes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/IntegerEnvelopes.lean)
 proves directed bound coverage and integer floor/ceiling laws.

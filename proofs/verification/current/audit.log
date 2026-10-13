@@ -1449,6 +1449,12 @@
 'Zetesis.SourceMeasures.count_carrier_membership' depends on axioms: [propext, Quot.sound]
 'Zetesis.SourceMeasures.sum_carrier_nil' depends on axioms: [propext]
 'Zetesis.SourceMeasures.sum_carrier_cons' depends on axioms: [propext, Quot.sound]
+'Zetesis.SourceMeasures.weighted_filter_split' depends on axioms: [propext, Quot.sound]
+'Zetesis.SourceMeasures.weighted_perm' depends on axioms: [propext, Quot.sound]
+'Zetesis.SourceMeasures.length_filter_split' depends on axioms: [propext, Quot.sound]
+'Zetesis.SourceMeasures.required_part_perm' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.SourceMeasures.required_sum_carrier_membership' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.SourceMeasures.required_count_carrier_membership' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.SourceSupport.unchanged_round_closed' does not depend on any axioms
 'Zetesis.SourceSupport.stages_inside_closed' does not depend on any axioms
 'Zetesis.SourceSupport.stable_inside_closed' depends on axioms: [propext, Classical.choice, Quot.sound]

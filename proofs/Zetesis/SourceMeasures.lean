@@ -184,4 +184,165 @@ theorem sum_carrier_cons (weight : Int) (possible : List Int) (value : Int) :
   rw [split, List.mem_append]
   simp only [List.mem_map]
 
+/-- A selection's total under a key-to-weight map: the sum measure over complete
+keys, where equal weights on distinct keys stay separate contributions. -/
+def weighted (weight : K → Int) (selected : List K) : Int :=
+  (selected.map weight).sum
+
+/-- Splitting a list by a predicate and its negation splits its total. -/
+theorem weighted_filter_split (weight : K → Int) (keep : K → Bool) (keys : List K) :
+    weighted weight keys =
+      weighted weight (keys.filter keep) + weighted weight (keys.filter (fun key => !keep key)) := by
+  induction keys with
+  | nil => simp [weighted]
+  | cons head rest ih =>
+    simp only [weighted, List.map_cons, List.sum_cons] at ih ⊢
+    cases decision : keep head <;> simp [decision, ih] <;> omega
+
+/-- Permuting a selection does not change its total. -/
+theorem weighted_perm (weight : K → Int) {left right : List K}
+    (permutation : left.Perm right) : weighted weight left = weighted weight right := by
+  induction permutation with
+  | nil => rfl
+  | cons head permutation ih => simp [weighted] at ih ⊢; omega
+  | swap first second rest => simp [weighted]; omega
+  | trans first second ihFirst ihSecond => exact ihFirst.trans ihSecond
+
+/-- Splitting a list by a predicate and its negation splits its length. -/
+theorem length_filter_split (keep : K → Bool) (keys : List K) :
+    keys.length = (keys.filter keep).length + (keys.filter (fun key => !keep key)).length := by
+  induction keys with
+  | nil => simp
+  | cons head rest ih => cases decision : keep head <;> simp [decision] <;> omega
+
+/-- Over distinct possible keys, a selection that contains every required key
+keeps exactly the required keys when filtered by membership in them, up to
+order. -/
+theorem required_part_perm [DecidableEq K] (required possible selected : List K)
+    (distinct : possible.Nodup) (requiredDistinct : required.Nodup)
+    (inside : selected.Sublist possible) (mandatory : required ⊆ selected) :
+    (selected.filter (fun key => decide (key ∈ required))).Perm required := by
+  apply (List.perm_ext_iff_of_nodup
+    ((inside.nodup distinct).sublist List.filter_sublist |> fun nodup => nodup) requiredDistinct).mpr
+  intro key
+  simp only [List.mem_filter, decide_eq_true_eq]
+  exact ⟨And.right, fun member => ⟨mandatory member, member⟩⟩
+
+/-- With distinct possible keys and the required keys among them, a sum carrier
+value is the required keys' total plus a subset sum of the optional keys'
+weights. A selection splits into its required part, a permutation of the
+required keys, and its optional part, a selection of the optional keys;
+conversely the possible keys filtered by the required keys and an optional
+selection form a selection. This is the denotation of the seeded sum
+operation; over weights used as keys `Admissible` would not require each
+occurrence. -/
+theorem required_sum_carrier_membership [DecidableEq K] (weight : K → Int)
+    (required possible : List K) (distinct : possible.Nodup)
+    (requiredDistinct : required.Nodup) (included : required ⊆ possible) (value : Int) :
+    value ∈ carrier required possible (weighted weight) ↔
+      ∃ optional ∈ carrier [] (possible.filter (fun key => decide (key ∉ required)))
+          (weighted weight),
+        value = weighted weight required + optional := by
+  rw [carrier_membership]
+  constructor
+  · rintro ⟨selected, ⟨inside, mandatory⟩, measured⟩
+    refine ⟨weighted weight (selected.filter (fun key => decide (key ∉ required))), ?_, ?_⟩
+    · apply (carrier_membership _ _ _ _).mpr
+      exact ⟨_, ⟨inside.filter _, List.nil_subset _⟩, rfl⟩
+    · rw [← measured, weighted_filter_split weight (fun key => decide (key ∈ required)) selected,
+        weighted_perm weight
+          (required_part_perm required possible selected distinct requiredDistinct inside mandatory)]
+      congr 2
+      apply List.filter_congr
+      intro key _
+      simp
+  · rintro ⟨optional, present, rfl⟩
+    obtain ⟨chosen, ⟨within, _⟩, measured⟩ := (carrier_membership _ _ _ _).mp present
+    let keep := fun key => decide (key ∈ required ∨ key ∈ chosen)
+    refine ⟨possible.filter keep, ⟨List.filter_sublist, ?_⟩, ?_⟩
+    · intro key member
+      exact List.mem_filter.mpr ⟨included member, by simp [keep, member]⟩
+    · have chosenDistinct : chosen.Nodup := within.nodup (distinct.sublist List.filter_sublist)
+      have requiredPart :
+          ((possible.filter keep).filter (fun key => decide (key ∈ required))).Perm required :=
+        required_part_perm required possible (possible.filter keep) distinct requiredDistinct
+          List.filter_sublist (fun key member =>
+            List.mem_filter.mpr ⟨included member, by simp [keep, member]⟩)
+      have optionalPart :
+          ((possible.filter keep).filter (fun key => !decide (key ∈ required))).Perm chosen := by
+        apply (List.perm_ext_iff_of_nodup
+          ((distinct.sublist List.filter_sublist).sublist List.filter_sublist) chosenDistinct).mpr
+        intro key
+        simp only [List.mem_filter, keep, decide_eq_true_eq, Bool.not_eq_true',
+          decide_eq_false_iff_not]
+        constructor
+        · rintro ⟨⟨_, required | picked⟩, absent⟩
+          · exact absurd required absent
+          · exact picked
+        · intro picked
+          have optionalKey := within.subset picked
+          simp only [List.mem_filter, decide_eq_true_eq] at optionalKey
+          exact ⟨⟨optionalKey.1, Or.inr picked⟩, optionalKey.2⟩
+      rw [weighted_filter_split weight (fun key => decide (key ∈ required)) (possible.filter keep),
+        weighted_perm weight requiredPart, weighted_perm weight optionalPart, measured]
+
+/-- With distinct possible keys and the required keys among them, the count
+carrier contains exactly the naturals from the number of required keys to the
+number of possible keys. A selection contains the required keys, which its
+membership filter keeps up to order, and lies within the possible keys;
+conversely the required keys together with a prefix of the optional keys
+realize each value between the bounds. -/
+theorem required_count_carrier_membership [DecidableEq K] (required possible : List K)
+    (distinct : possible.Nodup) (requiredDistinct : required.Nodup)
+    (included : required ⊆ possible) (value : Nat) :
+    value ∈ carrier required possible List.length ↔
+      required.length ≤ value ∧ value ≤ possible.length := by
+  rw [carrier_membership]
+  have split := length_filter_split (fun key => decide (key ∈ required)) possible
+  have requiredLength :
+      (possible.filter (fun key => decide (key ∈ required))).length = required.length :=
+    (required_part_perm required possible possible distinct requiredDistinct
+      (List.Sublist.refl possible) included).length_eq
+  constructor
+  · rintro ⟨selected, ⟨inside, mandatory⟩, rfl⟩
+    have own := (required_part_perm required possible selected distinct requiredDistinct inside
+      mandatory).length_eq
+    exact ⟨own ▸ List.length_filter_le _ _, inside.length_le⟩
+  · rintro ⟨atLeast, atMost⟩
+    let optional := possible.filter (fun key => !decide (key ∈ required))
+    let chosen := optional.take (value - required.length)
+    let keep := fun key => decide (key ∈ required ∨ key ∈ chosen)
+    refine ⟨possible.filter keep, ⟨List.filter_sublist, ?_⟩, ?_⟩
+    · intro key member
+      exact List.mem_filter.mpr ⟨included member, by simp [keep, member]⟩
+    · have chosenDistinct : chosen.Nodup :=
+        (List.take_sublist _ _).nodup (distinct.sublist List.filter_sublist)
+      have requiredPart :
+          ((possible.filter keep).filter (fun key => decide (key ∈ required))).Perm required :=
+        required_part_perm required possible (possible.filter keep) distinct requiredDistinct
+          List.filter_sublist (fun key member =>
+            List.mem_filter.mpr ⟨included member, by simp [keep, member]⟩)
+      have optionalPart :
+          ((possible.filter keep).filter (fun key => !decide (key ∈ required))).Perm chosen := by
+        apply (List.perm_ext_iff_of_nodup
+          ((distinct.sublist List.filter_sublist).sublist List.filter_sublist) chosenDistinct).mpr
+        intro key
+        simp only [List.mem_filter, keep, decide_eq_true_eq, Bool.not_eq_true',
+          decide_eq_false_iff_not]
+        constructor
+        · rintro ⟨⟨_, required | picked⟩, absent⟩
+          · exact absurd required absent
+          · exact picked
+        · intro picked
+          have optionalKey := (List.take_sublist _ _).subset picked
+          simp only [optional, List.mem_filter, Bool.not_eq_true', decide_eq_false_iff_not]
+            at optionalKey
+          exact ⟨⟨optionalKey.1, Or.inr picked⟩, optionalKey.2⟩
+      have total := length_filter_split (fun key => decide (key ∈ required)) (possible.filter keep)
+      have optionalLength : optional.length + required.length = possible.length := by
+        simp only [optional]
+        omega
+      rw [total, requiredPart.length_eq, optionalPart.length_eq, List.length_take]
+      omega
+
 end Zetesis.SourceMeasures
