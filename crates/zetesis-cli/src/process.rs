@@ -305,5 +305,11 @@ fn read_text(reader: impl Read, limit: usize) -> io::Result<String> {
     })
 }
 
+/// This process's executable, resolved through links: where the default
+/// install's front finds its sibling, and what the run's statistics name.
+pub(crate) fn this_executable() -> io::Result<std::path::PathBuf> {
+    std::env::current_exe().and_then(std::fs::canonicalize)
+}
+
 #[cfg(test)]
 mod tests;

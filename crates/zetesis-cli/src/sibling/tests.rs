@@ -52,7 +52,7 @@ fn a_gpu_test_command_is_not_handed_off() {
 #[test]
 fn the_sibling_is_in_the_identity_directory_beside_the_front() {
     assert_eq!(
-        sibling(Path::new("/opt/bin/zetesis"), "0.5.0-0123abcd"),
+        sibling(Path::new("/opt/bin"), "0.5.0-0123abcd"),
         Path::new("/opt/bin/zetesis-libexec/0.5.0-0123abcd/zetesis")
     );
 }
@@ -142,7 +142,7 @@ fn the_sibling_receives_the_program_name_arguments_and_input_unchanged() {
 fn failure(front: std::io::Result<PathBuf>) -> (Option<PathBuf>, ErrorKind, String) {
     let arguments = vec![OsString::from("zetesis"), OsString::from("devices")];
     let invocation = Invocation::try_parse_from(&arguments).unwrap();
-    let error = hand_off_from(&invocation, &arguments, front, "0.5.0-0").unwrap();
+    let error = hand_off_from(&invocation, &arguments, || front, "0.5.0-0").unwrap();
     let message = error.to_string();
     let RunError::GpuExecutableUnavailable { path, error: cause } = error else {
         panic!("{error:?}");
@@ -164,11 +164,25 @@ fn a_cpu_invocation_is_not_handed_off() {
 }
 
 #[test]
+fn a_cpu_invocation_resolves_no_executable() {
+    let arguments = vec![
+        OsString::from("zetesis"),
+        OsString::from("solve"),
+        OsString::from("-"),
+    ];
+    let invocation = Invocation::try_parse_from(&arguments).unwrap();
+    let resolve = || -> std::io::Result<PathBuf> {
+        panic!("a CPU invocation resolved this executable's path")
+    };
+    assert!(hand_off_from(&invocation, &arguments, resolve, "0.5.0-0").is_none());
+}
+
+#[test]
 fn a_missing_sibling_names_its_path_and_the_remedy() {
     let directory = tempfile::tempdir().unwrap();
     let front = directory.path().join("zetesis");
-    let (path, kind, message) = failure(Ok(front.clone()));
-    let expected = sibling(&front, "0.5.0-0");
+    let (path, kind, message) = failure(Ok(front));
+    let expected = sibling(directory.path(), "0.5.0-0");
     assert_eq!(path.as_deref(), Some(expected.as_path()));
     assert_eq!(kind, ErrorKind::NotFound);
     assert!(
@@ -182,7 +196,7 @@ fn a_missing_sibling_names_its_path_and_the_remedy() {
 fn a_sibling_that_cannot_be_executed_names_the_remedy() {
     let directory = tempfile::tempdir().unwrap();
     let front = directory.path().join("zetesis");
-    let path = sibling(&front, "0.5.0-0");
+    let path = sibling(directory.path(), "0.5.0-0");
     std::fs::create_dir_all(path.parent().unwrap()).unwrap();
     std::fs::write(&path, "not an executable").unwrap();
     let (_, kind, message) = failure(Ok(front));
@@ -198,6 +212,13 @@ fn a_front_that_cannot_resolve_its_path_reports_no_sibling_path() {
     assert!(message.contains("could not be located"), "{message}");
     // Reinstalling does not resolve this executable's own path.
     assert!(!message.contains("rerun"), "{message}");
+}
+
+#[test]
+fn a_front_path_without_a_directory_reports_no_sibling_path() {
+    let (path, _, message) = failure(Ok(PathBuf::from("/")));
+    assert_eq!(path, None);
+    assert!(message.contains("could not be located"), "{message}");
 }
 
 #[test]

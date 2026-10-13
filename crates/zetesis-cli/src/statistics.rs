@@ -1105,9 +1105,6 @@ fn independent_closure(
     Ok(())
 }
 
-#[cfg(test)]
-mod tests;
-
 /// The executable doing this run's work, resolved through links, for evidence
 /// that names the binary behind a measurement: after the default install's
 /// front hands a GPU request to its sibling, the sibling. None when the host
@@ -1115,11 +1112,10 @@ mod tests;
 /// statistics view of the run names the same executable.
 pub(crate) fn running_executable() -> Option<&'static std::path::Path> {
     static EXECUTABLE: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
-    EXECUTABLE.get_or_init(|| this_executable().ok()).as_deref()
+    EXECUTABLE
+        .get_or_init(|| crate::process::this_executable().ok())
+        .as_deref()
 }
 
-/// This process's executable, resolved through links: where the front finds
-/// its sibling, and what the statistics name.
-pub(crate) fn this_executable() -> io::Result<std::path::PathBuf> {
-    std::env::current_exe().and_then(std::fs::canonicalize)
-}
+#[cfg(test)]
+mod tests;

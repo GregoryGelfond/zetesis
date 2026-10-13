@@ -52,14 +52,9 @@ pub(crate) fn opens_device(invocation: &Invocation) -> bool {
     }
 }
 
-/// The sibling of the front at `front`, from the install of `identity`.
-pub(crate) fn sibling(front: &Path, identity: &str) -> PathBuf {
-    front
-        .parent()
-        .unwrap_or(Path::new(""))
-        .join(LIBEXEC)
-        .join(identity)
-        .join(EXECUTABLE)
+/// The sibling, from the install of `identity`, of a front in `directory`.
+pub(crate) fn sibling(directory: &Path, identity: &str) -> PathBuf {
+    directory.join(LIBEXEC).join(identity).join(EXECUTABLE)
 }
 
 /// The command that runs `sibling` in place of the front: the front's program
@@ -83,29 +78,38 @@ pub(crate) fn hand_off(
     hand_off_from(
         invocation,
         arguments,
-        crate::statistics::this_executable(),
+        crate::process::this_executable,
         identity,
     )
 }
 
-/// Hand `invocation` to the sibling of `identity` beside `front` when it opens
-/// a GPU device, returning only the failure of a hand-off: one that succeeds
-/// replaces the process, keeping its standard streams untouched. `front` is
-/// the front's resolved path, or why it could not be resolved.
+/// Hand `invocation` to the sibling of `identity` beside the front when it
+/// opens a GPU device, returning only the failure of a hand-off: one that
+/// succeeds replaces the process, keeping its standard streams untouched.
+/// `resolve` gives the front's resolved path; it is called only once the
+/// decision to hand off is taken, so a CPU invocation resolves nothing.
 pub(crate) fn hand_off_from(
     invocation: &Invocation,
     arguments: &[OsString],
-    front: std::io::Result<PathBuf>,
+    resolve: impl FnOnce() -> std::io::Result<PathBuf>,
     identity: &str,
 ) -> Option<RunError> {
     if !opens_device(invocation) {
         return None;
     }
-    let front = match front {
-        Ok(front) => front,
+    let directory = match resolve() {
+        Ok(front) => match front.parent() {
+            Some(directory) => directory.to_owned(),
+            None => {
+                return Some(RunError::GpuExecutableUnavailable {
+                    path: None,
+                    error: std::io::Error::other("this executable's path names no directory"),
+                });
+            }
+        },
         Err(error) => return Some(RunError::GpuExecutableUnavailable { path: None, error }),
     };
-    let path = sibling(&front, identity);
+    let path = sibling(&directory, identity);
     let error = std::os::unix::process::CommandExt::exec(&mut prepared(&path, arguments));
     Some(RunError::GpuExecutableUnavailable {
         path: Some(path),
