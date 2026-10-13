@@ -275,8 +275,9 @@ fn route_pairs(theory: &Theory) -> [(Interpretation, Interpretation, bool); 2] {
     ]
 }
 
-/// Assert the route a second check took: an update charges less than a complete
-/// evaluation of the same candidate, a complete check at least as much.
+/// Assert the route a check of a reused workspace took: an update charges less
+/// than a complete evaluation of the same candidate, a complete check at least
+/// as much.
 fn assert_route(plan: &TightPlan, candidate: &Interpretation, work: u64, updated: bool) {
     let complete = plan
         .check_accounted(
@@ -504,4 +505,40 @@ fn an_update_beyond_the_byte_allowance_is_refused_before_its_work() {
         Err(TightError::Limit(TightResource::Bytes))
     );
     assert_eq!(refused.work, 0);
+}
+
+#[test]
+fn a_check_after_a_storage_refusal_evaluates_completely() {
+    // The refusal follows the take of the retained evaluation, so it leaves
+    // nothing the next check can update from.
+    let theory = choices(200);
+    let plan = prepared(&theory);
+    let cancellation = Cancellation::default();
+    let mut workspace = TightWorkspace::default();
+    for atoms in [vec![2, 3], vec![2, 3, 4]] {
+        workspace
+            .check(
+                &plan,
+                &world(&theory, atoms),
+                TightCheckLimits::default(),
+                &cancellation,
+            )
+            .result
+            .unwrap();
+    }
+    let held = u128::from(plan.statistics().resident_bytes) + workspace.retained_bytes();
+    let short = TightCheckLimits {
+        max_bytes: u64::try_from(held).unwrap() - 1,
+        ..TightCheckLimits::default()
+    };
+    let third = world(&theory, [2, 3, 4, 5]);
+    assert!(
+        workspace
+            .check(&plan, &third, short, &cancellation)
+            .result
+            .is_err()
+    );
+    let after = workspace.check(&plan, &third, TightCheckLimits::default(), &cancellation);
+    assert!(after.result.is_ok());
+    assert_route(&plan, &third, after.work, false);
 }

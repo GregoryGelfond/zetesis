@@ -70,10 +70,11 @@ impl TightPlan {
 /// false-root sets, so its verdict and witness are those of a complete
 /// evaluation of the new candidate. A candidate that differs in more atoms than
 /// an eighth of the theory's atoms (and at least 64), a different theory, or a
-/// plan without the index evaluates completely. A check that stops after it
-/// begins evaluating leaves nothing a later check can read, so the next check
-/// evaluates completely too; one refused before (for a foreign theory, or at its
-/// first observation of control) changes nothing. Each concurrent checker owns
+/// plan without the index evaluates completely. A check refused or stopped after
+/// its first observation of control (for its storage, its work, an allocation
+/// or a later stop) leaves nothing a later check can read, so the next check
+/// evaluates completely; one refused before it, for a foreign theory or at that
+/// observation, changes nothing. Each concurrent checker owns
 /// an exclusive workspace; immutable plans may be shared.
 #[derive(Debug, Default)]
 pub struct TightWorkspace {
@@ -226,7 +227,10 @@ impl TightWorkspace {
     }
 
     /// Evaluate `candidate` completely; with `keep`, retain the evaluation for
-    /// the next check's update.
+    /// the next check's update. Precondition: the caller has admitted the
+    /// workspace's holdings ([`Self::admit`]), which counts the truth and support
+    /// vectors and the numeric scratch at a complete check's sizes, so the
+    /// reservations below grow nothing unadmitted.
     fn complete(
         &mut self,
         plan: &TightPlan,
@@ -242,7 +246,7 @@ impl TightWorkspace {
             .try_reserve_exact(plan.theory.nodes().len())
             .map_err(|_| Stop::Allocation)?;
         self.admit(plan, limits.max_bytes)?;
-        let base = self.truth_support_bytes(plan);
+        let base = self.bytes_beside_numeric(plan);
         self.numeric.reserve_observed(&plan.theory, |actual| {
             bytes(base + actual, limits.max_bytes).map(|_| ())
         })?;
@@ -291,7 +295,7 @@ impl TightWorkspace {
     /// the larger of its capacity and what a complete check requires, with
     /// `more` bytes requested beyond them: the one measure every admission uses.
     fn requested(&self, plan: &TightPlan, more: u128) -> u128 {
-        self.truth_support_bytes(plan) + self.numeric.required_bytes(&plan.theory) + more
+        self.bytes_beside_numeric(plan) + self.numeric.required_bytes(&plan.theory) + more
     }
 
     /// Keep the evaluated candidate's words and an empty update scratch, one
@@ -410,7 +414,9 @@ impl TightWorkspace {
     /// Bring the retained complete evaluation to `candidate`: re-evaluate, in
     /// ascending node order, exactly the atom nodes of changed atoms and the
     /// readers of changed values. Returns `None`, having changed nothing, when
-    /// more atoms changed than [`large_change`] admits.
+    /// more atoms changed than [`large_change`] admits. Precondition: the caller
+    /// has admitted the workspace's holdings ([`Self::admit`]); each growth here
+    /// admits itself before it is reserved.
     fn update(
         &mut self,
         plan: &TightPlan,
@@ -510,7 +516,7 @@ impl TightWorkspace {
         // reservation. While each reservation's capacity is what was admitted
         // for it, this only reports the bytes the check holds after its last
         // reservation; an allocator may return more capacity than requested,
-        // and that excess is refused here, against the same limit.
+        // and that excess is admitted here, against the same limit.
         let logical_bytes = self.admit(plan, limits.max_bytes)?;
         let retained = &self.retained;
         let verdict = if retained.false_root_count > 0 {
@@ -609,11 +615,19 @@ impl TightWorkspace {
         }
     }
 
+    /// Admit the workspace's bytes under `plan` against `limit`, in one of two
+    /// roles. At a check's start it admits the holdings before any work. After a
+    /// reservation whose growth was admitted before it, it refuses only capacity
+    /// an allocator returned beyond the request, and otherwise reports the bytes
+    /// held.
     fn admit(&self, plan: &TightPlan, limit: u64) -> Result<u64, TightError> {
         bytes(self.requested(plan, 0), limit)
     }
 
-    fn truth_support_bytes(&self, plan: &TightPlan) -> u128 {
+    /// Every byte the workspace counts under `plan` except the numeric scratch:
+    /// the plan's resident bytes, the truth and support vectors at the larger of
+    /// capacity and a complete check's size, and the retained evaluation.
+    fn bytes_beside_numeric(&self, plan: &TightPlan) -> u128 {
         u128::from(plan.statistics.resident_bytes)
             + self.values.capacity().max(plan.theory.nodes().len()) as u128
             + self
