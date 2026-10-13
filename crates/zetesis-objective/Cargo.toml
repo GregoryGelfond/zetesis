@@ -12,7 +12,7 @@ zetesis-core.workspace = true
 zetesis-cpu.workspace = true
 
 [dev-dependencies]
-proptest = "1.11"
+proptest.workspace = true
 zetesis-test-support.workspace = true
 
 [lints]

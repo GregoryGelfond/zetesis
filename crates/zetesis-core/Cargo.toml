@@ -10,7 +10,7 @@ publish = false
 [dependencies]
 
 [dev-dependencies]
-proptest = "1.11"
+proptest.workspace = true
 zetesis-test-support.workspace = true
 
 [lints]

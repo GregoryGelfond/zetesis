@@ -8,8 +8,8 @@ license.workspace = true
 publish = false
 
 [dependencies]
-serde_json = "1"
-tempfile = "3"
+serde_json.workspace = true
+tempfile.workspace = true
 zetesis-test-support.workspace = true
 zetesis-validation.workspace = true
 

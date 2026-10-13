@@ -13,7 +13,7 @@ themelios-program.workspace = true
 [dev-dependencies]
 themelios-base.workspace = true
 themelios-syntax.workspace = true
-proptest = "1.11"
+proptest.workspace = true
 
 [lints]
 workspace = true

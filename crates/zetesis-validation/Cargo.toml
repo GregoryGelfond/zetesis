@@ -9,10 +9,10 @@ publish = false
 
 [dependencies]
 clap.workspace = true
-serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["raw_value"] }
-sha2 = "0.10"
-tempfile = "3"
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true, features = ["raw_value"] }
+sha2.workspace = true
+tempfile.workspace = true
 zetesis-backend = { workspace = true, features = ["clap", "serde"] }
 zetesis-core.workspace = true
 themelios-program.workspace = true
@@ -22,11 +22,11 @@ themelios-syntax.workspace = true
 rustix = { version = "1.1.4", features = ["fs", "process"] }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
-nix = { version = "=0.31.3", default-features = false, features = ["resource"] }
-signal-hook = { version = "=0.4.4", default-features = false }
+nix = { version = "0.31.3", default-features = false, features = ["resource"] }
+signal-hook = { version = "0.4.4", default-features = false }
 
 [dev-dependencies]
-proptest = "1.11"
+proptest.workspace = true
 zetesis-clingo-support.workspace = true
 zetesis-test-support.workspace = true
 

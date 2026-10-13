@@ -24,7 +24,12 @@ source boundary. Native dense IDs, packed relations and formula DAGs are justifi
 execution representations with explicit validated conversions. Do not flatten
 logical values into strings for internal exchange or add another ASP parser.
 Keep the reviewed Git dependency pin. A dependency update must establish its
-source, API and semantic compatibility explicitly.
+source, API and semantic compatibility explicitly. Declare a dependency that
+several workspace crates use once, in the workspace table; each member adds
+only the features it needs. Requirements are caret ranges, and `Cargo.lock`
+fixes the version every build uses, so an update is a reviewed change to the
+lock; an exact requirement stays only where one release must match another,
+with that reason beside it.
 
 Library-first means a consumer can use the capability without clap options,
 process invocation, global I/O or parsing rendered prose. Typed configurations,
