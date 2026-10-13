@@ -269,7 +269,7 @@ fn family_inputs<'a>(
                 (comparison, bound)
             }
         };
-        crate::formula_assignment::extremum_value(bound, location)?;
+        crate::formula_assignment::endpoint_guard(bound, location)?;
         guards.push(
             ValueExtremumGuard { comparison, bound },
             computation,

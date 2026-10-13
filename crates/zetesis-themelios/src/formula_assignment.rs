@@ -155,7 +155,7 @@ fn split(
         match &mut split {
             Split::Values(firsts) => {
                 let first = first.expect("admitted nonempty extremum tuple");
-                extremum_value(first, location)?;
+                endpoint_guard(first, location)?;
                 let key = read.term_key(first).map_err(|error| {
                     crate::formula_binding::assignment(
                         zetesis_core::catalog::AssignmentError::Read(error),
@@ -254,7 +254,10 @@ pub(crate) fn tuple(
     )
 }
 
-pub(crate) fn extremum_value(
+/// The numeric endpoint guard: refuses `value`, a `#min` or `#max` bound or a
+/// possible tuple's first value, when it is `i32::MIN` or `i32::MAX`
+/// ([`AdmissionFailure::ExtremumEndpoint`](crate::AdmissionFailure::ExtremumEndpoint)).
+pub(crate) fn endpoint_guard(
     value: TermRef<'_>,
     location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
@@ -285,9 +288,9 @@ fn precedes(function: AggregateFunction, order: std::cmp::Ordering) -> bool {
 /// required tuples. Without one: the empty value (`#sup` for `#min`, `#inf` for
 /// `#max`) and every optional value. Charges work per step and assignment
 /// values per distinct value; returns the values in ascending term order. The
-/// endpoint guard ([`extremum_value`]) is the proposal sites' admission policy,
-/// applied where they reduce their tuples to values; this operation applies no
-/// guard of its own.
+/// endpoint guard ([`endpoint_guard`]) is the proposal sites' admission
+/// policy, applied where they reduce their tuples to values; this operation
+/// applies no guard of its own.
 pub(crate) fn extrema_carrier(
     function: AggregateFunction,
     required: AssignmentSlice<'_>,

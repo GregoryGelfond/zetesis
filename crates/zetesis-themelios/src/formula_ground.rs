@@ -2478,7 +2478,7 @@ impl Builder<'_, '_, '_> {
                     .value(tuple, read, location)?
                     .child(0)
                     .expect("admitted nonempty extremum tuple");
-                crate::formula_assignment::extremum_value(value, location)?;
+                crate::formula_assignment::endpoint_guard(value, location)?;
                 let key = read.term_key(value).map_err(|error| {
                     crate::formula_binding::assignment(
                         zetesis_core::catalog::AssignmentError::Read(error),
@@ -2862,7 +2862,7 @@ impl Builder<'_, '_, '_> {
                 location,
             )
         })?;
-        crate::formula_assignment::extremum_value(bound, location)?;
+        crate::formula_assignment::endpoint_guard(bound, location)?;
         let first = self.nodes.view().len();
         let limits = self.aggregate_limits();
         let terms = &self.terms;

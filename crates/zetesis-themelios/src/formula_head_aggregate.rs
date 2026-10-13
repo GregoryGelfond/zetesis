@@ -143,7 +143,7 @@ pub(super) fn contribution(
         let Some(value) = first else {
             return Ok(None);
         };
-        crate::formula_assignment::extremum_value(value, location)?;
+        crate::formula_assignment::endpoint_guard(value, location)?;
         return Ok(Some(Contribution::Extremum(value)));
     }
     let Some(ValueNodeRef::Number(value)) = first.map(TermRef::descriptor) else {
