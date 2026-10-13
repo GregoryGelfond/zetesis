@@ -1,21 +1,22 @@
-//! Test support over `zetesis-themelios`: the native reference the zetesis
-//! workspace's tests compare with clingo (every answer set of a small program,
-//! found by checking each candidate against the reduct), preparation and
-//! hybrid grounding, and source-bundle fixtures.
+//! Test support over `zetesis-themelios`: admission of a source under default
+//! or given limits, the native reference the zetesis workspace's tests compare
+//! with clingo (every answer set of a small program, found by checking each
+//! candidate against the reduct), preparation and hybrid grounding, and
+//! source-bundle fixtures.
 //!
-//! [`admit`] admits a source under the default options, [`formula`] under
-//! the default limits as well and [`normal`] on the normal-program route, and
-//! [`exhaustive`] enumerates every subset of
-//! its atoms, keeping those the reduct check (`zetesis_ferraris::check`)
-//! accepts, each with its objective's costs; atoms are spelled as clingo
-//! spells them ([`canonical`]). [`normal_answer_sets`] finds a normal
-//! program's answer sets by exhausting its candidates, each checked against
-//! the reduct (`zetesis_cpu::check`). [`prepared`] prepares a source under the
-//! default options and limits and [`hybrid`] grounds it for hybrid execution;
-//! [`BundleFixture`] writes a source bundle into a temporary directory for the
-//! tests that load or run one. The crate stands above `zetesis-themelios`, so
-//! only the tests that need that closure compile it. It is not published or
-//! installed.
+//! [`admit`] admits a source under given formula limits, the rest at their
+//! defaults, [`formula`] under the default limits throughout and [`normal`] on
+//! the normal-program route. [`exhaustive`] enumerates every subset of an
+//! admitted source's atoms, keeping those the reduct check
+//! (`zetesis_ferraris::check`) accepts, each with its objective's costs; atoms
+//! are spelled as clingo spells them ([`canonical`]). [`normal_answer_sets`]
+//! finds a normal program's answer sets by exhausting its candidates, each
+//! checked against the reduct (`zetesis_cpu::check`). [`prepared`] prepares a
+//! source under the default options and limits and [`hybrid`] grounds it for
+//! hybrid execution; [`BundleFixture`] writes a source bundle into a temporary
+//! directory for the tests that load or run one. The crate stands above
+//! `zetesis-themelios`, so only the tests that need that closure compile it.
+//! It is not published or installed.
 
 use zetesis_core::{Model, Program, Sign};
 use zetesis_cpu::{Cancellation, CandidateLimits, CandidateTermination, Candidates};
