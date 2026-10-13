@@ -752,9 +752,9 @@ local family is empty and has no arithmetic error. An absent fact is not an
 undefined arithmetic value.
 
 An aggregate assignment such as `N = #count{...}` substitutes, under each fixed
-outer binding, the values its aggregate can take: the measure of every selection
-of its tuples that contains the *required* tuples and lies within the possible
-ones. A tuple is required when one of its elements' conditions consists only of
+outer binding, the measures of the selections between its required and possible
+tuples, its *carrier*: the measure of every selection of its tuples that
+contains the *required* tuples and lies within the possible ones. A tuple is required when one of its elements' conditions consists only of
 comparisons, intervals and `#true`/`#false`, with no atom of either sign; such a
 condition holds for every binding its element yields. So
 `p(M+1) :- M = #min{1; 5}.` substitutes `M = 1` alone and answers `p(2)`

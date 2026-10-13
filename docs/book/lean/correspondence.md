@@ -2767,7 +2767,10 @@ concrete correspondence obligations.
 [`AggregateInvariants`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AggregateInvariants.lean)
 states when optional tuple keys cannot change a required sum or extremum.
 The source [measure carrier](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_objective_dependencies/presence/flat/carrier.rs)
-coalesces complete keys and classifies required and possible activity.
+coalesces complete keys and classifies required and possible activity. It
+reduces its tuples to contributions and takes its values from the carrier
+operation the assignment proposal sites share (`formula_assignment::carrier` and
+`extrema_carrier`), so one operation carries one meaning.
 An invariant result is the singleton case.
 [`SourceMeasures`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceMeasures.lean)
 proves finite carrier membership and coverage of actual active selections.

@@ -49,17 +49,20 @@ Notable changes by release. Versions follow Semantic Versioning.
   and `comparisons_without_integer_form`, which the statistics' grounding
   attribution reports.
 
-- An aggregate assignment now proposes only the values its aggregate can take:
-  the measure of every selection that contains its required tuples, those from
-  an element whose condition has no atom of either sign, and lies within its
-  possible ones. Admission's arithmetic family follows these values, in the
-  assignment's own rule and in every rule that reads its heads. Programs that
-  were refused only for an impossible proposal are now admitted, such as
-  `p(M+1) :- M = #min{1; 5}.`, which answers `p(2)`; warnings that came only from
-  impossible proposals are gone; and a family whose every possible value divides
-  by zero is now refused, such as `q(Y) :- N = #count{1}, Y = 1/(N-1).` A sum is
-  refused exactly when one of its values leaves the 32-bit range, whatever the
-  order of its weights. Answer sets are unchanged. On the maintained nested
+- An aggregate assignment now proposes the measures of the selections between
+  its required and possible tuples, its carrier: every selection that contains
+  its required tuples, those from an element whose condition has no atom of
+  either sign, and lies within its possible ones. Admission's arithmetic family
+  follows the carrier, in the assignment's own rule and in every rule that reads
+  its heads. Programs that were refused only for a proposal outside the carrier
+  are now admitted, such as `p(M+1) :- M = #min{1; 5}.`, which answers `p(2)`;
+  warnings that came only from proposals outside the carrier are gone; and a
+  family whose every carrier value divides by zero is now refused, such as
+  `q(Y) :- N = #count{1}, Y = 1/(N-1).` The carrier can still hold values no
+  answer set realizes: `{p}. q(Y) :- N = #count{1 : p; 1 : not p}, Y = 1/(N-1).`
+  substitutes `N = 0` and keeps its warning. A sum is refused exactly when one of
+  its carrier values leaves the 32-bit range, whatever the order of its weights.
+  Answer sets are unchanged. On the maintained nested
   Mastermind workload, grounding keeps 654 possible atoms instead of 5,162.
 - Read the host's memory on macOS with one `sysctlbyname` call for `hw.memsize`
   instead of running `/usr/sbin/sysctl`, so no invocation starts a child

@@ -134,9 +134,10 @@ fn expected_refusal(name: &str) -> Option<Refusal> {
         // Finite aggregate tuple expressions are admitted, but reached 1/0
         // remains an evaluation failure. clingo's discarded-term result is
         // retained as reference data, not substituted for this source contract.
-        // An assignment's family is its carrier: when every value the
-        // aggregate can take divides by zero, in its own rule or in a rule
-        // that reads its head, the family is entirely undefined and refused,
+        // An assignment's family is its carrier, the measures of the selections
+        // between its required and possible tuples: when every carrier value
+        // divides by zero, in its own rule or in a rule that reads its head,
+        // the family is entirely undefined and refused,
         // and clingo's answer, which drops the undefined instances, is
         // retained as reference data. A carrier value outside i32 is refused;
         // clingo's recorded answers wrap the sum to -2147483648 in both models.

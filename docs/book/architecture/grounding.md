@@ -159,9 +159,9 @@ value support completion proposes has a root in final grounding's family. Each
 distinct key of a count contributes one, regardless of its first field or how
 many witnesses produce it. On success,
 [`formula_assignment::counts`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment/counts.rs)
-constructs exactly the ordered values `R..=R+O` for `R` required and `O`
-optional keys, using checked increments in one bounded buffer. The carrier
-still includes values correlated conditions cannot realize: the original
+constructs exactly the ordered values `|R|..=|R|+|O|` for the required keys
+`R` and the optional keys `O`, using checked increments in one bounded buffer.
+The carrier still includes values correlated conditions cannot realize: the original
 aggregate equality decides truth, and proposal traversal preserves required
 source warnings and errors. Value, storage, work and cancellation checks remain
 active.
