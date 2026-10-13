@@ -3,7 +3,7 @@
 mod cases;
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
-use crate::support::limits;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
@@ -121,8 +121,7 @@ fn original_sources_retain_their_identity() {
 
 #[test]
 fn neutral_tuples_retain_complete_key_limits() {
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_elements = 1;
+    let limits = resource_limits::formula(FormulaResource::AggregateElements, 1);
     let duplicate = limited(
         "#sum{word:a;word:b}=0.",
         ExpansionLimits::default(),
@@ -151,13 +150,12 @@ fn neutral_tuples_retain_complete_key_limits() {
 #[test]
 fn missing_extrema_retain_complete_key_limits() {
     for (function, empty) in [("#min", "#sup"), ("#max", "#inf")] {
-        let mut limits = FormulaLimits::default();
-        limits.aggregate.max_elements = 1;
+        let limits =
+            |maximum| resource_limits::formula(FormulaResource::AggregateElements, maximum);
         let source = format!("{function}{{:a;:b}}={empty}.");
-        let admitted = limited(&source, ExpansionLimits::default(), &limits).unwrap();
+        let admitted = limited(&source, ExpansionLimits::default(), &limits(1)).unwrap();
         assert_eq!(native(&admitted), native(&input("{a;b}.")));
-        limits.aggregate.max_elements = 0;
-        let error = limited(&source, ExpansionLimits::default(), &limits).unwrap_err();
+        let error = limited(&source, ExpansionLimits::default(), &limits(0)).unwrap_err();
         assert!(matches!(
             error,
             FormulaFailure::Limit {
@@ -168,9 +166,8 @@ fn missing_extrema_retain_complete_key_limits() {
             }
         ));
         assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-        limits.aggregate.max_elements = 1;
         let mixed = format!("{function}{{:a;{empty}:b}}={empty}.");
-        let error = limited(&mixed, ExpansionLimits::default(), &limits).unwrap_err();
+        let error = limited(&mixed, ExpansionLimits::default(), &limits(1)).unwrap_err();
         assert!(matches!(
             error,
             FormulaFailure::Limit {
@@ -181,9 +178,8 @@ fn missing_extrema_retain_complete_key_limits() {
             }
         ));
         assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-        limits.aggregate.max_elements = 2;
         assert_eq!(
-            native(&limited(&mixed, ExpansionLimits::default(), &limits).unwrap()),
+            native(&limited(&mixed, ExpansionLimits::default(), &limits(2)).unwrap()),
             native(&input("{a;b}."))
         );
     }
@@ -250,9 +246,8 @@ fn bound_neutral_tuple_fields_preserve_source_permissions() {
 #[test]
 fn evaluated_neutral_tuple_fields_keep_distinct_key_limits() {
     let source = "d(1;2).#sum{word,1/X:a:d(X)}=0.";
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_elements = 1;
-    let error = limited(source, ExpansionLimits::default(), &limits).unwrap_err();
+    let limits = |maximum| resource_limits::formula(FormulaResource::AggregateElements, maximum);
+    let error = limited(source, ExpansionLimits::default(), &limits(1)).unwrap_err();
     assert!(
         matches!(
             error,
@@ -266,9 +261,8 @@ fn evaluated_neutral_tuple_fields_keep_distinct_key_limits() {
         "{error}"
     );
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-    limits.aggregate.max_elements = 2;
     assert_eq!(
-        native(&limited(source, ExpansionLimits::default(), &limits).unwrap()),
+        native(&limited(source, ExpansionLimits::default(), &limits(2)).unwrap()),
         native(&input("d(1;2).{a}."))
     );
 }
@@ -361,10 +355,10 @@ fn selected_rows_obey_inclusive_work_limits() {
                 limited(
                     source,
                     ExpansionLimits::default(),
-                    &limits::formula(resource, maximum),
+                    &resource_limits::formula(resource, maximum),
                 )
             };
-            let exact = first_success(limits::formula_default(resource), |maximum| {
+            let exact = first_success(resource_limits::formula_default(resource), |maximum| {
                 attempt(maximum).is_ok()
             });
             let error = attempt(exact - 1).expect_err("inclusive boundary");
@@ -389,11 +383,11 @@ fn neutral_rows_obey_inclusive_expansion_limits() {
             let attempt = |maximum| {
                 limited(
                     source,
-                    limits::expansion(resource, maximum),
+                    resource_limits::expansion(resource, maximum),
                     &FormulaLimits::default(),
                 )
             };
-            let exact = first_success(limits::expansion_default(resource), |maximum| {
+            let exact = first_success(resource_limits::expansion_default(resource), |maximum| {
                 attempt(maximum).is_ok()
             });
             let error = attempt(exact - 1).expect_err("inclusive source boundary");

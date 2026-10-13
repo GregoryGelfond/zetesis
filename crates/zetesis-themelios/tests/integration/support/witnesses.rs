@@ -2,7 +2,7 @@
 //! for the witness propositions.
 
 use super::finite_bindings::native;
-use crate::support::limits;
+use crate::support::resource_limits;
 use zetesis_reference_support::formula;
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
@@ -51,11 +51,11 @@ pub(crate) fn inclusive_ceiling(
 pub(crate) fn term_work_ceiling(bounded: &str) -> u64 {
     inclusive_ceiling(
         bounded,
-        limits::expansion_default(ExpansionResource::TermWork),
+        resource_limits::expansion_default(ExpansionResource::TermWork),
         |cap| {
             limited(
                 bounded,
-                limits::expansion(ExpansionResource::TermWork, cap),
+                resource_limits::expansion(ExpansionResource::TermWork, cap),
                 &FormulaLimits::default(),
             )
         },
@@ -76,11 +76,11 @@ pub(crate) fn term_work_ceiling(bounded: &str) -> u64 {
 pub(crate) fn scalar_bytes_ceiling(bounded: &str) -> u64 {
     inclusive_ceiling(
         bounded,
-        limits::expansion_default(ExpansionResource::ScalarBytes),
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
         |cap| {
             limited(
                 bounded,
-                limits::expansion(ExpansionResource::ScalarBytes, cap),
+                resource_limits::expansion(ExpansionResource::ScalarBytes, cap),
                 &FormulaLimits::default(),
             )
         },
@@ -101,12 +101,12 @@ pub(crate) fn scalar_bytes_ceiling(bounded: &str) -> u64 {
 pub(crate) fn substitution_ceiling(bounded: &str) -> u64 {
     inclusive_ceiling(
         bounded,
-        limits::formula_default(FormulaResource::Substitutions),
+        resource_limits::formula_default(FormulaResource::Substitutions),
         |cap| {
             limited(
                 bounded,
                 ExpansionLimits::default(),
-                &limits::formula(FormulaResource::Substitutions, cap),
+                &resource_limits::formula(FormulaResource::Substitutions, cap),
             )
         },
         |error| matches!(error, FormulaFailure::Limit { resource: FormulaResource::Substitutions, observed, limit, .. } if *observed == limit + 1),

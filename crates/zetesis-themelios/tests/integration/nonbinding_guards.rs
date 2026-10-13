@@ -1,7 +1,7 @@
 //! Completed nonbinding guards preserve comparison and default-negation semantics.
 
 use crate::support::admission;
-use crate::support::limits;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -220,10 +220,10 @@ fn grounding_limits_are_inclusive() {
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits::formula(resource, ceiling),
+                resource_limits::formula(resource, ceiling),
             )
         };
-        let lower = first_success(limits::formula_default(resource), |middle| {
+        let lower = first_success(resource_limits::formula_default(resource), |middle| {
             admit(middle).is_ok()
         });
         assert_eq!(native(&admit(lower).unwrap()), native(&input(source)));

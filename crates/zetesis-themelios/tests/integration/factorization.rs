@@ -1,5 +1,6 @@
 //! Complete formula and frozen-reduct comparison against explicit Cartesian rules.
 
+use crate::support::resource_limits;
 use crate::support::stable_models;
 
 use std::cell::Cell;
@@ -14,9 +15,8 @@ use zetesis_reference_support::{admit, formula};
 use zetesis_test_support::programs::atom;
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, FormulaResource,
-    GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
-    admit_formula_with_grounding_observer,
+    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaResource, GroundingObserver,
+    GroundingOutcome, GroundingPhase, GroundingWork, admit_formula_with_grounding_observer,
 };
 
 fn interpretation(
@@ -231,8 +231,7 @@ impl GroundingObserver for InstantiationRows {
 #[test]
 fn factored_cartesian_bodies_visit_only_component_rows() {
     let visits = InstantiationRows::default();
-    let mut limits = FormulaLimits::default();
-    limits.theory.max_roots = 200;
+    let limits = resource_limits::formula(FormulaResource::Roots, 200);
     let admitted = admit_formula_with_grounding_observer(
         CARTESIAN_SOURCE.to_owned(),
         AdmissionOptions::default(),
@@ -263,8 +262,7 @@ fn a_factored_root_retains_its_source_location() {
 
 #[test]
 fn a_factored_source_respects_the_zero_root_ceiling() {
-    let mut limits = FormulaLimits::default();
-    limits.theory.max_roots = 0;
+    let limits = resource_limits::formula(FormulaResource::Roots, 0);
     assert!(matches!(
         admit(CARTESIAN_SOURCE, &limits),
         Err(zetesis_themelios::FormulaFailure::Limit {

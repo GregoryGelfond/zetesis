@@ -280,6 +280,7 @@ fn constant_refusals_retain_duplicate_or_policy_locations_and_evaluation_causes(
 
 #[test]
 fn formula_resource_failures_keep_the_actual_nested_admission_cause() {
+    // Filters are refused as an objective admission resource, not a formula one.
     let mut objective = FormulaLimits::default();
     objective.objective.max_filters = 0;
     let error = formula("p(1). #minimize{X:p(X),X!=0}.", &objective).unwrap_err();
@@ -301,6 +302,7 @@ fn formula_resource_failures_keep_the_actual_nested_admission_cause() {
     let source = "{q(1..3)}. p :- #count{X:q(X)}>=2.";
     let admitted = formula(source, &FormulaLimits::default()).unwrap();
     assert!(!admitted.theory().parts().thresholds().is_empty());
+    // An aggregate's state limit is refused as an aggregate error, not by resource.
     let mut aggregate = FormulaLimits::default();
     aggregate.aggregate.max_states = 0;
     let error = formula(source, &aggregate).unwrap_err();
@@ -319,6 +321,7 @@ fn formula_resource_failures_keep_the_actual_nested_admission_cause() {
     );
     assert!(error.to_string().contains("state limit"));
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
+    // Observation nodes are refused as an observation resource, not a formula one.
     let mut observation = FormulaLimits::default();
     observation.observation.max_nodes = 0;
     let error = formula("p. #show f(1).", &observation).unwrap_err();

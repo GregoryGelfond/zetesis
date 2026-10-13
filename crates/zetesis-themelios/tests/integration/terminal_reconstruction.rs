@@ -1,11 +1,12 @@
 //! Public reconstruction owns selected truth independently of canonical storage.
 
+use crate::support::resource_limits;
 use zetesis_core::{Atom, Model, Predicate, Value};
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_reference_support::prepared;
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaLimits, FormulaMaterialization, ReconstructionError,
-    TerminalFormula, prepare_formula,
+    AdmissionOptions, ExpansionLimits, FormulaLimits, FormulaMaterialization, FormulaResource,
+    ReconstructionError, TerminalFormula, prepare_formula,
 };
 
 fn terminal(source: &str) -> TerminalFormula {
@@ -254,10 +255,7 @@ fn distinct_answers_do_not_exhaust_the_grounding_ceiling() {
     // Room for grounding and about two of the largest reconstructions.
     let owner = terminal_with(
         MANY,
-        &FormulaLimits {
-            max_work: admission + 2 * largest,
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::Work, admission + 2 * largest),
     );
     let mut cursor = owner.reconstruction().unwrap();
     let mut peak_work = 0;
@@ -285,10 +283,7 @@ fn repeated_reconstructions_do_not_exhaust_the_grounding_ceiling() {
     // Room for grounding and about three reconstructions in all.
     let owner = terminal_with(
         MANY,
-        &FormulaLimits {
-            max_work: admission + 3 * call + call / 2,
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::Work, admission + 3 * call + call / 2),
     );
     let mut cursor = owner.reconstruction().unwrap();
     let model = selection(&owner, &["seed(1)", "seed(3)"]);
@@ -309,10 +304,7 @@ fn one_answer_beyond_the_headroom_is_refused() {
     let (admission, call) = costs();
     let owner = terminal_with(
         MANY,
-        &FormulaLimits {
-            max_work: admission + call / 2,
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::Work, admission + call / 2),
     );
     let mut cursor = owner.reconstruction().unwrap();
     let model = selection(&owner, &["seed(1)", "seed(3)"]);
@@ -331,10 +323,7 @@ fn an_answer_fits_exactly_the_headroom_admission_left() {
     // Published at admission + c, with exact receipts.
     let owner = terminal_with(
         MANY,
-        &FormulaLimits {
-            max_work: admission + call,
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::Work, admission + call),
     );
     let mut cursor = owner.reconstruction().unwrap();
     let mut warm = 0;
@@ -357,10 +346,7 @@ fn an_answer_fits_exactly_the_headroom_admission_left() {
     // call's own charge.
     let owner = terminal_with(
         MANY,
-        &FormulaLimits {
-            max_work: admission + call - 1,
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::Work, admission + call - 1),
     );
     let mut cursor = owner.reconstruction().unwrap();
     let error = cursor

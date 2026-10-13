@@ -1,7 +1,7 @@
 //! Admission charges count the operations the formula route performs, so a
 //! ceiling refuses a program for its size, not for an allowance's shape.
 
-use crate::support::limits;
+use crate::support::resource_limits;
 use std::fmt::Write as _;
 use zetesis_reference_support::{admit, formula};
 use zetesis_test_support::thresholds::first_success;
@@ -25,9 +25,17 @@ fn producer_chain(predicates: usize) -> String {
 
 /// The least formula work ceiling that admits `source`, by bisection.
 fn minimal_work(source: &str) -> u64 {
-    let admits =
-        |max_work| admit(source, &limits::formula(FormulaResource::Work, max_work)).is_ok();
-    first_success(limits::formula_default(FormulaResource::Work), admits)
+    let admits = |max_work| {
+        admit(
+            source,
+            &resource_limits::formula(FormulaResource::Work, max_work),
+        )
+        .is_ok()
+    };
+    first_success(
+        resource_limits::formula_default(FormulaResource::Work),
+        admits,
+    )
 }
 
 /// The least scalar byte budget that admits `source`, by bisection.
@@ -36,13 +44,13 @@ fn minimal_scalar_bytes(source: &str) -> u64 {
         admit_formula(
             source.to_owned(),
             AdmissionOptions::default(),
-            limits::expansion(ExpansionResource::ScalarBytes, max_scalar_bytes),
+            resource_limits::expansion(ExpansionResource::ScalarBytes, max_scalar_bytes),
             FormulaLimits::default(),
         )
         .is_ok()
     };
     first_success(
-        limits::expansion_default(ExpansionResource::ScalarBytes),
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
         admits,
     )
 }

@@ -1,5 +1,6 @@
 //! Source declarations stay separate from completed fixed-domain projection.
 
+use crate::support::resource_limits;
 use zetesis_core::Predicate;
 use zetesis_reference_support::{admit, formula};
 use zetesis_test_support::programs::unary as atom;
@@ -76,6 +77,7 @@ fn project_metadata_records_the_explicit_domain() {
 
 #[test]
 fn absent_project_heads_leave_an_explicit_empty_domain() {
+    // Both projection limits at once, so their fields are named here.
     let result = admit(
         "p(1).#project q(X):p(X).",
         &FormulaLimits {
@@ -121,23 +123,11 @@ fn pooled_project_declarations_union_into_the_same_fixed_domain() {
 #[test]
 fn projection_admission_refuses_the_complete_owner_at_its_own_limit() {
     let source = "p(1;2).#project p/1.";
-    for (limits, resource) in [
-        (
-            FormulaLimits {
-                max_project_atoms: 1,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::ProjectAtoms,
-        ),
-        (
-            FormulaLimits {
-                max_project_bytes: 0,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::ProjectBytes,
-        ),
+    for (resource, limit) in [
+        (FormulaResource::ProjectAtoms, 1),
+        (FormulaResource::ProjectBytes, 0),
     ] {
-        let error = admit(source, &limits).unwrap_err();
+        let error = admit(source, &resource_limits::formula(resource, limit)).unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Limit { resource: actual, .. } if actual == resource),
             "{error}"
@@ -181,10 +171,7 @@ fn declaration_bodies_count_authored_occurrences_before_deduplication() {
 
 #[test]
 fn project_constants_use_a_separate_domain_allowance() {
-    let limits = FormulaLimits {
-        max_domain_values: 2,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::DomainValues, 2);
     let source = "p(1).";
     let original = formula(source);
     let selected = admit(&format!("{source}#project q((2;3))."), &limits).unwrap();

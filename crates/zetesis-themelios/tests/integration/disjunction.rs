@@ -3,6 +3,7 @@
 
 use crate::support::head_models::{Names, expected, manual_holds, truth};
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::resource_limits;
 
 use std::time::Duration;
 
@@ -306,10 +307,7 @@ fn disjunction_element_ceiling_is_inclusive_and_independent_of_body_limits() {
     let admit = |text: &str, count| {
         zetesis_reference_support::admit(
             text,
-            &FormulaLimits {
-                max_disjunction_elements: count,
-                ..FormulaLimits::default()
-            },
+            &resource_limits::formula(FormulaResource::DisjunctionElements, count),
         )
     };
     assert!(admit("a | b.", 2).is_ok());

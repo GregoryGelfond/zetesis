@@ -1,13 +1,16 @@
 //! Complete-value extrema against full source models and an independent reduct.
 use crate::support::clingo_reports;
 use crate::support::finite_bindings as reference;
+use crate::support::resource_limits;
 use crate::support::upstream;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support::admit;
 
 use reference::{exhaustive, native};
 use serde_json::Value as Json;
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
+use zetesis_themelios::{
+    AdmissionOptions, ExpansionLimits, FormulaLimits, FormulaResource, admit_formula,
+};
 
 fn cases() -> Vec<Json> {
     include_str!("../fixtures/value-extrema.jsonl")
@@ -111,34 +114,13 @@ fn complete_values_preserve_source_models_and_original_reduct_minimality() {
 fn value_carrier_and_cache_limits_refuse_without_a_partial_formula() {
     let source = "{p;q}.r(M):-M=#min{f(1),a:p;f(1),b:q;\"z\",c:p}.";
     for limits in [
-        FormulaLimits {
-            max_assignment_values: 1,
-            ..FormulaLimits::default()
-        },
-        FormulaLimits {
-            max_aggregate_cache_rows: 0,
-            ..FormulaLimits::default()
-        },
-        FormulaLimits {
-            max_aggregate_cache_elements: 2,
-            ..FormulaLimits::default()
-        },
-        FormulaLimits {
-            max_aggregate_cache_roots: 2,
-            ..FormulaLimits::default()
-        },
-        FormulaLimits {
-            max_aggregate_cache_key_bytes: 0,
-            ..FormulaLimits::default()
-        },
-        FormulaLimits {
-            max_work: 0,
-            ..FormulaLimits::default()
-        },
-        FormulaLimits {
-            max_substitutions: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::AssignmentValues, 1),
+        resource_limits::formula(FormulaResource::AggregateCacheRows, 0),
+        resource_limits::formula(FormulaResource::AggregateCacheElements, 2),
+        resource_limits::formula(FormulaResource::AggregateCacheRoots, 2),
+        resource_limits::formula(FormulaResource::AggregateCacheKeys, 0),
+        resource_limits::formula(FormulaResource::Work, 0),
+        resource_limits::formula(FormulaResource::Substitutions, 0),
     ] {
         let error = admit(source, &limits).unwrap_err();
         assert!(!error.diagnostics().is_empty(), "{error}");
@@ -148,6 +130,7 @@ fn value_carrier_and_cache_limits_refuse_without_a_partial_formula() {
 #[test]
 fn equal_first_values_share_proposals_but_retain_complete_tuple_limit_counts() {
     let source = "{p;q}.r(M):-M=#min{f(1),a:p;f(1),b:q}.";
+    // Two limits at once, each then lowered alone, so their fields are named here.
     let limits = FormulaLimits {
         max_assignment_values: 2,
         max_aggregate_cache_elements: 2,

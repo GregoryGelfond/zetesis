@@ -114,6 +114,7 @@ fn source_exclusion_precedes_field_evaluation() {
 #[test]
 fn resolved_fields_retain_template_ceiling() {
     let source = "p(1;2).#minimize{X+1,X+1:p(X)}.";
+    // Two objective limits at once, so their fields are named here.
     let mut limits = FormulaLimits::default();
     limits.objective.max_templates = 2;
     limits.objective.max_tuple_width = 1;
@@ -139,6 +140,7 @@ fn resolved_fields_retain_template_ceiling() {
 #[test]
 fn resolved_fields_retain_tuple_width_ceiling() {
     let source = "p(1;2).#minimize{X+1,X+1:p(X)}.";
+    // The tuple width is refused as an objective admission resource, not a formula one.
     let mut limits = FormulaLimits::default();
     limits.objective.max_tuple_width = 1;
     let input = reference::admit(source, &limits).unwrap();

@@ -1,5 +1,6 @@
 //! Constructor patterns retain exact source atoms through finite extraction.
 use crate::support::finite_bindings as reference;
+use crate::support::resource_limits;
 use crate::support::thresholds::minimum_preparation_bytes;
 use reference::{Models, holds, native, values};
 use std::collections::BTreeSet;
@@ -398,10 +399,7 @@ fn pattern_nodes_obey_the_value_ceiling() {
             let result = prepare_formula(
                 source.into(),
                 AdmissionOptions::default(),
-                ExpansionLimits {
-                    max_values: limit,
-                    ..ExpansionLimits::default()
-                },
+                resource_limits::expansion(ExpansionResource::Values, limit),
                 FormulaLimits::default(),
             );
             if limit == exact {
@@ -410,7 +408,7 @@ fn pattern_nodes_obey_the_value_ceiling() {
                 assert!(
                     matches!(result, Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
                 resource: ExpansionResource::Values, observed, ..
-            })) if observed == exact as u128),
+            })) if observed == u128::from(exact)),
                     "{source}"
                 );
             }

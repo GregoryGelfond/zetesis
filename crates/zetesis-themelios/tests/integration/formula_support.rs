@@ -4,10 +4,11 @@
 
 use crate::support::atom_models::{self, Models};
 use crate::support::objective_boundaries;
+use crate::support::resource_limits;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_reference_support::{admit, formula};
-use zetesis_themelios::{AdmittedFormula, FormulaFailure, FormulaLimits, FormulaResource};
+use zetesis_themelios::{AdmittedFormula, FormulaFailure, FormulaResource};
 
 fn exhaustive(input: &AdmittedFormula) -> Models {
     let count = input.atoms().len();
@@ -171,10 +172,7 @@ fn incomplete_support_is_a_located_refusal_not_a_smaller_program() {
     for max_support_rounds in [0, 1] {
         let error = admit(
             source,
-            &FormulaLimits {
-                max_support_rounds,
-                ..FormulaLimits::default()
-            },
+            &resource_limits::formula(FormulaResource::SupportRounds, max_support_rounds),
         )
         .expect_err("support closure has not reached its final no-change round");
         assert!(matches!(

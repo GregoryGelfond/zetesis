@@ -3,6 +3,7 @@
 use zetesis_reference_support::{BundleFixture, formula, prepared};
 
 use crate::support::grounding_observers::Observer;
+use crate::support::resource_limits;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaBundleFailure, FormulaFailure, FormulaLimits, FormulaResource,
@@ -16,10 +17,7 @@ fn preparation_exposes_analysis_without_support_completion() {
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_support_rounds: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::SupportRounds, 0),
     )
     .unwrap();
     assert_eq!(input.source().expect("source input").text(), source);
@@ -48,10 +46,7 @@ fn send_analysis_precedes_grounding() {
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_support_rounds: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::SupportRounds, 0),
     )
     .unwrap();
     let analysis = prepared.source_analysis();
@@ -88,15 +83,12 @@ fn grounding_resumes_the_expansion_budget() {
     // capture-delta cells. Canonical term lookups do not copy scalar payloads.
     let source = "p(f(\"x\")). q(X) :- p(f(X)).";
     let baseline = formula(source);
-    let exact_bytes = baseline.expansion_usage().scalar_bytes;
+    let exact_bytes = u64::try_from(baseline.expansion_usage().scalar_bytes).unwrap();
     assert!(matches!(
         prepare_formula(
             source.into(),
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_scalar_bytes: 0,
-                ..ExpansionLimits::default()
-            },
+            resource_limits::expansion(ExpansionResource::ScalarBytes, 0),
             FormulaLimits::default(),
         ),
         Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
@@ -109,10 +101,7 @@ fn grounding_resumes_the_expansion_budget() {
     // Preparation succeeds below the complete charge. Both entry points must
     // agree at this inclusive boundary; the private handoff regression anchors
     // an accepted preparation charge independently of this shared baseline.
-    let expansion = ExpansionLimits {
-        max_scalar_bytes: exact_bytes - 1,
-        ..ExpansionLimits::default()
-    };
+    let expansion = resource_limits::expansion(ExpansionResource::ScalarBytes, exact_bytes - 1);
     let prepared = prepare_formula(
         source.into(),
         AdmissionOptions::default(),
@@ -139,8 +128,8 @@ fn grounding_resumes_the_expansion_budget() {
         panic!("expected cumulative expansion refusal");
     };
     assert_eq!(resource, ExpansionResource::ScalarBytes);
-    assert_eq!(limit, (exact_bytes - 1) as u128);
-    assert_eq!(observed, exact_bytes as u128);
+    assert_eq!(limit, u128::from(exact_bytes - 1));
+    assert_eq!(observed, u128::from(exact_bytes));
     assert_eq!(
         location.location().expect("parsed source").source,
         AdmissionOptions::default().source_id
@@ -148,10 +137,7 @@ fn grounding_resumes_the_expansion_budget() {
     let exact = prepare_formula(
         source.into(),
         AdmissionOptions::default(),
-        ExpansionLimits {
-            max_scalar_bytes: exact_bytes,
-            ..expansion
-        },
+        resource_limits::expansion(ExpansionResource::ScalarBytes, exact_bytes),
         FormulaLimits::default(),
     )
     .unwrap()
@@ -172,10 +158,7 @@ fn preparation_enforces_the_analysis_budget() {
         "p.".into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_analysis_nodes: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::AnalysisNodes, 0),
     )
     .unwrap_err();
     assert!(matches!(
@@ -275,10 +258,7 @@ fn grounding_observation_closes_after_a_refusal() {
         "p.".into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_support_rounds: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::SupportRounds, 0),
     )
     .unwrap();
     assert!(input.ground_with_observer(Some(&observer)).is_err());
@@ -341,10 +321,7 @@ fn bundle_grounding_refusals_retain_source_evidence() {
         fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_support_rounds: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::SupportRounds, 0),
     )
     .unwrap();
     let error = prepared.ground().unwrap_err();
@@ -400,10 +377,7 @@ fn bundle_preparation_refusals_retain_source_evidence() {
         fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_analysis_nodes: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::AnalysisNodes, 0),
     )
     .unwrap_err();
     assert_eq!(error.bundle().sources().len(), 2);
@@ -459,10 +433,7 @@ fn bundle_definitions_share_one_preparation_budget() {
         prepare_bundle_formula(
             fixture.bundle(),
             BundleAdmissionOptions::default(),
-            ExpansionLimits {
-                max_constants,
-                ..ExpansionLimits::default()
-            },
+            resource_limits::expansion(ExpansionResource::Constants, max_constants),
             FormulaLimits::default(),
         )
     };
@@ -490,10 +461,10 @@ fn bundle_metadata_counts_original_occurrences() {
         prepare_bundle_formula(
             fixture.bundle(),
             BundleAdmissionOptions::default(),
-            ExpansionLimits {
+            resource_limits::expansion(
+                ExpansionResource::MetadataStatements,
                 max_metadata_statements,
-                ..ExpansionLimits::default()
-            },
+            ),
             FormulaLimits::default(),
         )
     };
@@ -523,13 +494,7 @@ fn bundle_objectives_share_one_preparation_budget() {
             fixture.bundle(),
             BundleAdmissionOptions::default(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                objective: zetesis_objective::AdmissionLimits {
-                    max_templates,
-                    ..zetesis_objective::AdmissionLimits::default()
-                },
-                ..FormulaLimits::default()
-            },
+            resource_limits::formula(FormulaResource::ObjectiveElements, max_templates),
         )
     };
     let error = limited(1).unwrap_err();
@@ -563,10 +528,7 @@ fn duplicate_definitions_precede_later_metadata_refusal() {
     let error = prepare_bundle_formula(
         fixture.bundle(),
         BundleAdmissionOptions::default(),
-        ExpansionLimits {
-            max_metadata_statements: 0,
-            ..ExpansionLimits::default()
-        },
+        resource_limits::expansion(ExpansionResource::MetadataStatements, 0),
         FormulaLimits::default(),
     )
     .unwrap_err();
@@ -636,17 +598,15 @@ fn native_source_groups_obey_operand_ceiling() {
     let admit = |limits| zetesis_reference_support::admit(source, &limits);
     let full = admit(FormulaLimits::default()).unwrap();
     assert!((0..full.theory().view().len()).any(|index| matches!(full.theory().view().node(index).unwrap(), zetesis_ferraris::NodeView::Or(row) if row.len() == 4)));
-    let count = full.theory().parts().occurrences();
-    let mut limits = FormulaLimits::default();
-    limits.theory.max_operands = count;
-    let exact = admit(limits).unwrap();
+    let count = u64::try_from(full.theory().parts().occurrences()).unwrap();
+    let limits = |maximum| resource_limits::formula(FormulaResource::Operands, maximum);
+    let exact = admit(limits(count)).unwrap();
     assert_eq!(
         (exact.theory().nodes(), exact.theory().operands()),
         (full.theory().nodes(), full.theory().operands())
     );
-    limits.theory.max_operands = count - 1;
     assert!(
-        matches!(admit(limits), Err(FormulaFailure::Limit {resource: FormulaResource::Operands, limit, observed, ..}) if limit == (count - 1) as u128 && observed == count as u128)
+        matches!(admit(limits(count - 1)), Err(FormulaFailure::Limit {resource: FormulaResource::Operands, limit, observed, ..}) if limit == u128::from(count - 1) && observed == u128::from(count))
     );
     assert_eq!(
         crate::support::finite_bindings::native(&full),

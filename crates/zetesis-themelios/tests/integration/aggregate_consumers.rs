@@ -1,7 +1,7 @@
 //! Finite substitutions keep each aggregate equality; proposals are not truth.
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
-use crate::support::limits;
+use crate::support::resource_limits;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -396,10 +396,7 @@ fn generated_values_obey_the_assignment_ceiling() {
         "{p}.q(N+1):-N=#count{1:p}.".into(),
         options(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_assignment_values: 1,
-            ..Default::default()
-        },
+        resource_limits::formula(FormulaResource::AssignmentValues, 1),
     )
     .unwrap_err();
     assert!(
@@ -422,10 +419,7 @@ fn generated_rows_obey_the_substitution_ceiling() {
         "q(N+1):-N=#count{}.".into(),
         options(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_substitutions: 0,
-            ..Default::default()
-        },
+        resource_limits::formula(FormulaResource::Substitutions, 0),
     )
     .unwrap_err();
     assert!(
@@ -448,11 +442,11 @@ fn preparation_limits_are_inclusive() {
     // Locate its exact boundary without assuming a host usize/Vec layout.
     let source = "q(f(Y)):-N=#count{},Y=N+1.";
     for resource in [ExpansionResource::TermWork, ExpansionResource::ScalarBytes] {
-        let lower = first_success(limits::expansion_default(resource), |middle| {
+        let lower = first_success(resource_limits::expansion_default(resource), |middle| {
             prepare_formula(
                 source.into(),
                 options(),
-                limits::expansion(resource, middle),
+                resource_limits::expansion(resource, middle),
                 FormulaLimits::default(),
             )
             .is_ok()
@@ -461,7 +455,7 @@ fn preparation_limits_are_inclusive() {
             prepare_formula(
                 source.into(),
                 options(),
-                limits::expansion(resource, lower),
+                resource_limits::expansion(resource, lower),
                 FormulaLimits::default()
             )
             .is_ok()
@@ -469,7 +463,7 @@ fn preparation_limits_are_inclusive() {
         let error = prepare_formula(
             source.into(),
             options(),
-            limits::expansion(resource, lower - 1),
+            resource_limits::expansion(resource, lower - 1),
             FormulaLimits::default(),
         )
         .unwrap_err();

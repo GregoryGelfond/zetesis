@@ -1,6 +1,6 @@
 //! Constructed values remain data in original and frozen source interpretations.
 use crate::support::finite_bindings as reference;
-use crate::support::limits;
+use crate::support::resource_limits;
 use crate::support::upstream;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
@@ -122,7 +122,7 @@ fn construction_admissions(resource: ExpansionResource) {
     for _ in 0..2_048 {
         match limited(
             source,
-            limits::expansion(resource, limit),
+            resource_limits::expansion(resource, limit),
             &FormulaLimits::default(),
         ) {
             Ok(actual) => {
@@ -358,10 +358,7 @@ fn scalar_failures_remain_admission_errors() {
 #[test]
 fn recursive_construction_cannot_finish_truncated() {
     let source = "p(0).p(f(X)):-p(X).";
-    let limits = FormulaLimits {
-        max_support_rounds: 3,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::SupportRounds, 3);
     assert!(matches!(
         limited(source, ExpansionLimits::default(), &limits),
         Err(FormulaFailure::Limit {
@@ -390,18 +387,18 @@ fn construction_preserves_statement_origins() {
 fn construction_scalar_bytes_have_an_inclusive_limit() {
     let source = "d(1).p(long_constructor_name(X)):-d(X).";
     let lower = first_success(
-        limits::expansion_default(ExpansionResource::ScalarBytes),
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
         |middle| {
-            let expansion = limits::expansion(ExpansionResource::ScalarBytes, middle);
+            let expansion = resource_limits::expansion(ExpansionResource::ScalarBytes, middle);
             limited(source, expansion, &FormulaLimits::default()).is_ok()
         },
     );
-    let expansion = limits::expansion(ExpansionResource::ScalarBytes, lower);
+    let expansion = resource_limits::expansion(ExpansionResource::ScalarBytes, lower);
     assert_eq!(
         native(&limited(source, expansion, &FormulaLimits::default()).unwrap()),
         native(&formula(source))
     );
-    let expansion = limits::expansion(ExpansionResource::ScalarBytes, lower - 1);
+    let expansion = resource_limits::expansion(ExpansionResource::ScalarBytes, lower - 1);
     assert!(matches!(
         limited(source, expansion, &FormulaLimits::default()),
         Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
@@ -536,18 +533,12 @@ fn constructed_keys_retain_objective_contributions() {
 #[test]
 fn generated_head_value_limit_is_inclusive() {
     let source = "d(1..2).p(f(X)):-d(X).";
-    let limits = FormulaLimits {
-        max_generated_values: 2,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::GeneratedValues, 2);
     assert_eq!(
         native(&limited(source, ExpansionLimits::default(), &limits).unwrap()),
         native(&formula(source))
     );
-    let limits = FormulaLimits {
-        max_generated_values: 1,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::GeneratedValues, 1);
     assert!(matches!(
         limited(source, ExpansionLimits::default(), &limits),
         Err(FormulaFailure::Limit {
@@ -589,10 +580,7 @@ fn constructor_inputs_count_toward_slot_limit() {
 
 #[test]
 fn incomplete_constructor_work_returns_no_admission() {
-    let limits = FormulaLimits {
-        max_work: 0,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::Work, 0);
     assert!(matches!(
         limited("d(1).p(f(X)):-d(X).", ExpansionLimits::default(), &limits),
         Err(FormulaFailure::Limit {

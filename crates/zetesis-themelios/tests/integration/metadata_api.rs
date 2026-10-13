@@ -1,5 +1,6 @@
 //! Native metadata consumers use canonical vocabulary through the frontend alone.
 
+use crate::support::resource_limits;
 use zetesis_core::{Atom, Model, Predicate, Sign, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::base::source::{Source, SourceId};
@@ -11,8 +12,8 @@ use zetesis_themelios::logical::term::{BinaryOp, Term, Variable};
 use zetesis_themelios::observation::{ErrorKind, Feature, Limits, ObservationProgram};
 use zetesis_themelios::{
     AdmissionOptions, AtomSelection, AtomSelectionError, AtomSelectionLimits, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaLimits, MetadataError, MetadataFeature, MetadataLimits,
-    MetadataResource, ProgramSite, SourceMetadata, admit_formula,
+    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, MetadataError,
+    MetadataFeature, MetadataLimits, MetadataResource, ProgramSite, SourceMetadata, admit_formula,
 };
 
 fn fallback() -> Location {
@@ -498,10 +499,7 @@ fn native_constants_refuse_annotated_policy() {
 fn native_constant_work_limit_is_enforced() {
     let (_, shared) = program("#const a=1. #show a.");
     let limits = MetadataLimits {
-        expansion: ExpansionLimits {
-            max_term_work: 0,
-            ..Default::default()
-        },
+        expansion: resource_limits::expansion(ExpansionResource::TermWork, 0),
         ..Default::default()
     };
     assert!(matches!(
@@ -519,10 +517,7 @@ fn native_constant_work_limit_is_enforced() {
 fn native_directive_limit_counts_originals() {
     let (_, shared) = program("#show p/1. #show p/1.");
     let limits = MetadataLimits {
-        expansion: ExpansionLimits {
-            max_metadata_statements: 1,
-            ..Default::default()
-        },
+        expansion: resource_limits::expansion(ExpansionResource::MetadataStatements, 1),
         ..Default::default()
     };
     assert!(matches!(

@@ -3,7 +3,7 @@
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
 use crate::support::finite_bindings::remap;
-use crate::support::limits;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
@@ -247,10 +247,7 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
         let error = input_with(
             source,
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_assignment_values: 2,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::AssignmentValues, 2),
         )
         .unwrap_err();
         assert!(
@@ -260,10 +257,7 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
         let program = input_with(
             source,
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_assignment_values: 3,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::AssignmentValues, 3),
         )
         .unwrap();
         assert_eq!(
@@ -280,10 +274,7 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
         let program = input_with(
             source,
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_assignment_values: 0,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::AssignmentValues, 0),
         )
         .unwrap();
         assert_eq!(native(&program), model([]), "{source}");
@@ -294,10 +285,10 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
 fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
     let source = "{p(X):0<X,X<3}.q:-p(Y):not not (Y,1)=(2,1).";
     let lower = first_success(
-        limits::expansion_default(ExpansionResource::TermWork),
+        resource_limits::expansion_default(ExpansionResource::TermWork),
         |limit| match input_with(
             source,
-            limits::expansion(ExpansionResource::TermWork, limit),
+            resource_limits::expansion(ExpansionResource::TermWork, limit),
             &FormulaLimits::default(),
         ) {
             Ok(_) => true,
@@ -310,7 +301,7 @@ fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
     );
     let error = input_with(
         source,
-        limits::expansion(ExpansionResource::TermWork, lower - 1),
+        resource_limits::expansion(ExpansionResource::TermWork, lower - 1),
         &FormulaLimits::default(),
     )
     .unwrap_err();
@@ -319,7 +310,7 @@ fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
     );
     let program = input_with(
         source,
-        limits::expansion(ExpansionResource::TermWork, lower),
+        resource_limits::expansion(ExpansionResource::TermWork, lower),
         &FormulaLimits::default(),
     )
     .unwrap();

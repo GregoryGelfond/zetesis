@@ -7,6 +7,7 @@ use crate::support::answer_records::Record;
 use crate::support::clingo_reports::{optimal, optimal_witnesses};
 use crate::support::finite_bindings::{holds, values};
 use crate::support::objective_boundaries;
+use crate::support::resource_limits;
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Model, Sign};
@@ -421,10 +422,9 @@ fn coherence_roots_are_bounded_and_keep_both_original_source_locations() {
         })
         .collect();
     assert_eq!(origins, BTreeSet::from(["p.", "-p."]));
-    let roots = admitted.theory().roots().len();
+    let roots = u64::try_from(admitted.theory().roots().len()).unwrap();
     for (limit, succeeds) in [(roots, true), (roots - 1, false)] {
-        let mut limits = FormulaLimits::default();
-        limits.theory.max_roots = limit;
+        let limits = resource_limits::formula(FormulaResource::Roots, limit);
         let result = zetesis_reference_support::admit(source, &limits);
         if succeeds {
             assert!(result.is_ok());

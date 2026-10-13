@@ -1,7 +1,7 @@
 //! Weighted head permissions remain independent of numeric contributions.
 
 use crate::support::admission;
-use crate::support::limits;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -201,12 +201,12 @@ fn grounding_limits_are_inclusive() {
             FormulaResource::Substitutions,
             FormulaResource::Work,
         ] {
-            let lower = first_success(limits::formula_default(resource), |middle| {
+            let lower = first_success(resource_limits::formula_default(resource), |middle| {
                 admit_formula(
                     source.into(),
                     options(),
                     ExpansionLimits::default(),
-                    limits::formula(resource, middle),
+                    resource_limits::formula(resource, middle),
                 )
                 .is_ok()
             });
@@ -216,7 +216,7 @@ fn grounding_limits_are_inclusive() {
                         source.into(),
                         options(),
                         ExpansionLimits::default(),
-                        limits::formula(resource, lower)
+                        resource_limits::formula(resource, lower)
                     )
                     .unwrap()
                 ),
@@ -226,7 +226,7 @@ fn grounding_limits_are_inclusive() {
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits::formula(resource, lower - 1),
+                resource_limits::formula(resource, lower - 1),
             )
             .unwrap_err();
             assert!(
@@ -482,8 +482,7 @@ fn weighted_aliases_preserve_other_count_certificates() {
 
 #[test]
 fn tuple_limits_count_complete_weighted_keys() {
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_elements = 1;
+    let limits = resource_limits::formula(FormulaResource::AggregateElements, 1);
     assert!(
         admit_formula(
             "1#sum{1:a;1:b}1.".into(),
@@ -519,12 +518,12 @@ fn alias_storage_limits_are_inclusive() {
             admit_formula(
                 source.into(),
                 options(),
-                limits::expansion(ExpansionResource::ScalarBytes, maximum),
+                resource_limits::expansion(ExpansionResource::ScalarBytes, maximum),
                 FormulaLimits::default(),
             )
         };
         let upper = first_success(
-            limits::expansion_default(ExpansionResource::ScalarBytes),
+            resource_limits::expansion_default(ExpansionResource::ScalarBytes),
             |middle| attempt(middle).is_ok(),
         );
         let error = attempt(upper - 1).unwrap_err();

@@ -1,6 +1,6 @@
 //! Bound-column probes restrict work without replacing full relational matching.
 
-use crate::support::limits;
+use crate::support::resource_limits;
 use std::cell::Cell;
 use std::fmt::Write;
 use zetesis_reference_support::{admit, formula};
@@ -117,9 +117,14 @@ fn shared_arguments_select_only_matching_rows() {
 #[test]
 fn selective_join_work_limit_is_inclusive() {
     let source = selective_source();
-    let compile = |max_work| admit(&source, &limits::formula(FormulaResource::Work, max_work));
+    let compile = |max_work| {
+        admit(
+            &source,
+            &resource_limits::formula(FormulaResource::Work, max_work),
+        )
+    };
     let low = first_success(
-        limits::formula_default(FormulaResource::Work),
+        resource_limits::formula_default(FormulaResource::Work),
         |max_work| match compile(max_work) {
             Ok(_) => true,
             Err(FormulaFailure::Limit {
@@ -198,10 +203,7 @@ fn retained_index_entries_have_an_independent_inclusive_ceiling() {
         // q's rule reads both columns of p, through its head; q is unread.
         let result = admit(
             "p(1,2). q(X,Y) :- p(X,Y).",
-            &FormulaLimits {
-                max_support_index_entries: maximum,
-                ..FormulaLimits::default()
-            },
+            &resource_limits::formula(FormulaResource::SupportIndexEntries, maximum),
         );
         if maximum == 2 {
             assert!(result.is_ok());
@@ -219,10 +221,7 @@ fn retained_index_entries_have_an_independent_inclusive_ceiling() {
     assert!(
         admit(
             "p.",
-            &FormulaLimits {
-                max_support_index_entries: 0,
-                ..FormulaLimits::default()
-            }
+            &resource_limits::formula(FormulaResource::SupportIndexEntries, 0)
         )
         .is_ok()
     );
@@ -234,10 +233,7 @@ fn ready_filters_prune_before_later_relations_without_reading_generated_slots() 
         "left(1..30).right(1..30).tail(1..30).p(X):-left(X),right(Y),tail(Z),X=Y.".to_owned(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_substitutions: 5_000,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::Substitutions, 5_000),
     )
     .expect("ready equality removes incompatible partial rows before tail expansion");
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())

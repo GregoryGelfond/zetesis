@@ -6,6 +6,7 @@
 //! a physical lowering. Clingo agreement is separate empirical corroboration.
 
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::resource_limits;
 
 use crate::support::head_element_reference as reference;
 
@@ -234,13 +235,7 @@ fn local_constant_witnesses_require_safe_bindings() {
 fn constant_activity_observes_element_refusal() {
     let error = admit(
         "1#count{0:#true;1:#false}1.",
-        &FormulaLimits {
-            aggregate: zetesis_ferraris::AggregateLimits {
-                max_elements: 0,
-                ..Default::default()
-            },
-            ..Default::default()
-        },
+        &resource_limits::formula(FormulaResource::AggregateElements, 0),
     )
     .unwrap_err();
     assert!(
@@ -259,13 +254,7 @@ fn constant_activity_observes_element_refusal() {
 
 #[test]
 fn occurrence_keys_own_the_choice_element_budget() {
-    let limits = FormulaLimits {
-        aggregate: zetesis_ferraris::AggregateLimits {
-            max_elements: 1,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::AggregateElements, 1);
     admit("d(1..2).1{#true:d(X)}1.", &limits).unwrap();
     let error = admit("2{#true;#true}2.", &limits).unwrap_err();
     assert!(

@@ -1,5 +1,6 @@
 //! Lifted objectives score verified stable models without supplying support.
 
+use crate::support::resource_limits;
 use std::collections::BTreeSet;
 
 use zetesis_core::{Atom, AtomCatalog, Model, ValueLimits};
@@ -10,8 +11,8 @@ use zetesis_sat::{Limits as SearchLimits, StableModels};
 use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, SourceBundle, admit_bundle_formula,
-    admit_extended,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, SourceBundle,
+    admit_bundle_formula, admit_extended,
 };
 
 fn scored(
@@ -276,13 +277,7 @@ fn objective_conditions_bind_scalars_without_adding_logical_support() {
 
 #[test]
 fn original_objective_budgets_count_occurrences_before_canonicalization() {
-    let limits = FormulaLimits {
-        objective: zetesis_objective::AdmissionLimits {
-            max_templates: 1,
-            ..zetesis_objective::AdmissionLimits::default()
-        },
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::ObjectiveElements, 1);
     let error = admit("a. #minimize{1:a;1:a}.", &limits).expect_err("raw objective element budget");
     assert!(matches!(
         error,
@@ -291,6 +286,7 @@ fn original_objective_budgets_count_occurrences_before_canonicalization() {
             ..
         }
     ));
+    // The tuple width is refused as an objective admission resource, not a formula one.
     let limits = FormulaLimits {
         objective: zetesis_objective::AdmissionLimits {
             max_tuple_width: 1,
@@ -340,10 +336,7 @@ fn profile_retry_classification_does_not_hide_malformed_arithmetic_or_limits() {
     let error: ExpansionFailure = admit_extended(
         "p(1..3).".to_owned(),
         AdmissionOptions::default(),
-        ExpansionLimits {
-            max_templates: 1,
-            ..ExpansionLimits::default()
-        },
+        resource_limits::expansion(ExpansionResource::Templates, 1),
     )
     .expect_err("budget");
     assert!(!error.needs_formula_admission());

@@ -6,6 +6,7 @@ use zetesis_reference_support::BundleFixture;
 
 use crate::support::clingo_reports::{enumerated, expected};
 use crate::support::finite_bindings::{exhaustive, holds, native, remap, values};
+use crate::support::resource_limits;
 use crate::support::sourced_admission::{SOURCE, input, options};
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
@@ -182,10 +183,7 @@ fn incomplete_guard_construction_and_ground_evaluation_have_located_limits() {
     let error = admit_formula(
         source.into(),
         options(),
-        ExpansionLimits {
-            max_term_work: 1,
-            ..Default::default()
-        },
+        resource_limits::expansion(ExpansionResource::TermWork, 1),
         FormulaLimits::default(),
     )
     .unwrap_err();
@@ -196,10 +194,7 @@ fn incomplete_guard_construction_and_ground_evaluation_have_located_limits() {
         source.into(),
         options(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_work: 0,
-            ..Default::default()
-        },
+        resource_limits::formula(FormulaResource::Work, 0),
     )
     .unwrap_err();
     assert!(

@@ -1,7 +1,7 @@
 //! Independent observers preserve previously established source carriers.
 
-use crate::support::limits;
 use crate::support::priority_contracts;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use zetesis_reference_support as reference;
@@ -30,8 +30,9 @@ fn composed_carrier_limits_are_inclusive() {
         FormulaResource::ObjectivePresenceEntries,
         FormulaResource::Work,
     ] {
-        let attempt = |maximum| reference::admit(source, &limits::formula(resource, maximum));
-        let upper = first_success(limits::formula_default(resource), |middle| {
+        let attempt =
+            |maximum| reference::admit(source, &resource_limits::formula(resource, maximum));
+        let upper = first_success(resource_limits::formula_default(resource), |middle| {
             attempt(middle).is_ok()
         });
         let input = attempt(upper).unwrap();

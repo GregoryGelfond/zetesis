@@ -2,16 +2,14 @@
 //! no join reads keeps none, and every probe a join makes finds its posting.
 
 use super::{Observer, compile};
-use zetesis_themelios::FormulaLimits;
+use crate::support::resource_limits;
+use zetesis_themelios::{FormulaLimits, FormulaResource};
 
 #[test]
 fn demanded_support_fits_its_storage_allowance() {
     // This admits 200 rows and one demand table. Charging that table again
     // for each publication exceeds this bound before support completes.
-    let limits = FormulaLimits {
-        max_support_bytes: 100_000,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::SupportBytes, 100_000);
     let observer = Observer::default();
     let admitted = compile("d(1..100). p(X):-d(X).", &limits, Some(&observer)).unwrap();
     assert_eq!(admitted.atoms().len(), 200);

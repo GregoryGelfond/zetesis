@@ -1,5 +1,6 @@
 //! Canonical preparation separates input inspection, purpose and runtime control.
 
+use crate::support::resource_limits;
 use crate::support::unevaluable_directives::{objective, projection};
 use std::{cell::Cell, collections::BTreeSet, sync::Arc, time::Instant};
 
@@ -14,9 +15,9 @@ use zetesis_themelios::logical::{
     symbol::VarName,
 };
 use zetesis_themelios::{
-    ExpansionFailure, ExpansionResource, FormulaFailure, FormulaPurpose, GroundingObserver,
-    GroundingPhase, ProgramAdmissionOptions, ProgramFormulaOptions, ProgramSite, ProgramSubject,
-    prepare_program_formula_with, validate_program_formula,
+    ExpansionFailure, ExpansionResource, FormulaFailure, FormulaPurpose, FormulaResource,
+    GroundingObserver, GroundingPhase, ProgramAdmissionOptions, ProgramFormulaOptions, ProgramSite,
+    ProgramSubject, prepare_program_formula_with, validate_program_formula,
 };
 
 fn atom(name: &str) -> Atom {
@@ -96,8 +97,8 @@ fn excluded_declarations_are_not_evaluated() {
 fn excluded_declarations_do_not_block_hybrid() {
     let program = Arc::new(Program::of([choice().into(), objective(), projection()]));
     let mut options = answers();
-    options.formula.objective.max_templates = 0;
-    options.expansion.max_metadata_statements = 0;
+    options.formula = resource_limits::formula(FormulaResource::ObjectiveElements, 0);
+    options.expansion = resource_limits::expansion(ExpansionResource::MetadataStatements, 0);
     let input = prepare_program_formula_with(program, options)
         .unwrap()
         .ground_hybrid()

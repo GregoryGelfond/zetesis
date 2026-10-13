@@ -1,5 +1,6 @@
 //! Canonical relational preparation preserves the existing compiler's semantics.
 
+use crate::support::resource_limits;
 use crate::support::unevaluable_directives::{objective, projection};
 use std::{collections::BTreeSet, sync::Arc, time::Instant};
 use zetesis_reference_support::normal_answer_sets;
@@ -163,7 +164,7 @@ fn excluded_directives_do_not_consume_semantic_budgets() {
         rules().into_iter().chain([objective(), projection()]),
     ));
     let mut options = answers();
-    options.expansion.max_metadata_statements = 0;
+    options.expansion = resource_limits::expansion(ExpansionResource::MetadataStatements, 0);
     let input = prepare_program_relational(Arc::clone(&program), options).unwrap();
     assert!(std::ptr::eq(input.original_program(), program.as_ref()));
     assert!(!input.metadata().project_selection().is_explicit());
@@ -394,7 +395,8 @@ fn observation_work_shares_the_expansion_allowance() {
     let limit = complete.expansion_usage().term_work - 1;
     assert!(limit >= plain.expansion_usage().term_work);
     let mut options = answers();
-    options.expansion.max_term_work = limit;
+    options.expansion =
+        resource_limits::expansion(ExpansionResource::TermWork, u64::try_from(limit).unwrap());
     let error = prepare_program_relational(program, options).unwrap_err();
     assert!(
         matches!(error.cause(), FormulaFailure::Expansion(ExpansionFailure::Limit {

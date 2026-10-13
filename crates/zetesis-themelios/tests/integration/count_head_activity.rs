@@ -2,7 +2,7 @@
 
 mod cases;
 use crate::support::finite_bindings as reference;
-use crate::support::limits;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
@@ -167,8 +167,7 @@ fn alias_groups_preserve_other_count_certificates() {
 
 #[test]
 fn tuple_limits_count_distinct_complete_keys() {
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_elements = 1;
+    let limits = resource_limits::formula(FormulaResource::AggregateElements, 1);
     assert!(admit("1#count{1:a;1:b}1.", &limits).is_ok());
     assert!(matches!(
         admit("1#count{1:a;2:a}1.", &limits),
@@ -190,8 +189,8 @@ fn original_sources_remain_owned() {
 fn alias_work_limits_are_inclusive() {
     for source in ["1#count{1:a;1:b}1.", "{b;c}.1#count{1:a:b;2:a:c}1."] {
         for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
-            let attempt = |maximum| admit(source, &limits::formula(resource, maximum));
-            let maximum = first_success(limits::formula_default(resource), |limit| {
+            let attempt = |maximum| admit(source, &resource_limits::formula(resource, maximum));
+            let maximum = first_success(resource_limits::formula_default(resource), |limit| {
                 attempt(limit).is_ok()
             });
             assert!(matches!(attempt(maximum - 1), Err(FormulaFailure::Limit {
@@ -211,12 +210,12 @@ fn alias_storage_limits_are_inclusive() {
             admit_formula(
                 source.into(),
                 AdmissionOptions::default(),
-                limits::expansion(ExpansionResource::ScalarBytes, maximum),
+                resource_limits::expansion(ExpansionResource::ScalarBytes, maximum),
                 FormulaLimits::default(),
             )
         };
         let maximum = first_success(
-            limits::expansion_default(ExpansionResource::ScalarBytes),
+            resource_limits::expansion_default(ExpansionResource::ScalarBytes),
             |limit| attempt(limit).is_ok(),
         );
         assert!(

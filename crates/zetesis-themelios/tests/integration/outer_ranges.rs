@@ -1,7 +1,7 @@
 //! Dependent outer ranges retain complete rows and original frozen equalities.
 
 use crate::support::admission;
-use crate::support::limits;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -154,10 +154,7 @@ fn range_width_is_checked_before_enumeration() {
             source.into(),
             options(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                max_assignment_values: 3,
-                ..Default::default()
-            },
+            resource_limits::formula(FormulaResource::AssignmentValues, 3),
         )
         .unwrap_err();
         assert!(
@@ -284,12 +281,12 @@ fn grounding_limits_are_inclusive() {
         FormulaResource::Substitutions,
         FormulaResource::Work,
     ] {
-        let lower = first_success(limits::formula_default(resource), |middle| {
+        let lower = first_success(resource_limits::formula_default(resource), |middle| {
             admit_formula(
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits::formula(resource, middle),
+                resource_limits::formula(resource, middle),
             )
             .is_ok()
         });
@@ -299,7 +296,7 @@ fn grounding_limits_are_inclusive() {
                     source.into(),
                     options(),
                     ExpansionLimits::default(),
-                    limits::formula(resource, lower)
+                    resource_limits::formula(resource, lower)
                 )
                 .unwrap()
             ),
@@ -309,7 +306,7 @@ fn grounding_limits_are_inclusive() {
             source.into(),
             options(),
             ExpansionLimits::default(),
-            limits::formula(resource, lower - 1),
+            resource_limits::formula(resource, lower - 1),
         )
         .unwrap_err();
         assert!(
@@ -325,12 +322,12 @@ fn grounding_limits_are_inclusive() {
 fn scalar_storage_limit_is_inclusive() {
     let source = "q(K):-N=#count{},K=N..N+2.";
     let lower = first_success(
-        limits::expansion_default(ExpansionResource::ScalarBytes),
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
         |middle| {
             admit_formula(
                 source.into(),
                 options(),
-                limits::expansion(ExpansionResource::ScalarBytes, middle),
+                resource_limits::expansion(ExpansionResource::ScalarBytes, middle),
                 FormulaLimits::default(),
             )
             .is_ok()
@@ -341,7 +338,7 @@ fn scalar_storage_limit_is_inclusive() {
             &admit_formula(
                 source.into(),
                 options(),
-                limits::expansion(ExpansionResource::ScalarBytes, lower),
+                resource_limits::expansion(ExpansionResource::ScalarBytes, lower),
                 FormulaLimits::default()
             )
             .unwrap()
@@ -351,7 +348,7 @@ fn scalar_storage_limit_is_inclusive() {
     let error = admit_formula(
         source.into(),
         options(),
-        limits::expansion(ExpansionResource::ScalarBytes, lower - 1),
+        resource_limits::expansion(ExpansionResource::ScalarBytes, lower - 1),
         FormulaLimits::default(),
     )
     .unwrap_err();

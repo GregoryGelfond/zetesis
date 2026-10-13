@@ -1,5 +1,6 @@
 //! Generative scalar instructions preserve scoped bindings and whole-model identity.
 
+use crate::support::resource_limits;
 use std::collections::BTreeSet;
 use zetesis_reference_support::{admit, formula};
 
@@ -146,30 +147,17 @@ fn local_bindings_do_not_escape_choice_and_aggregate_scopes() {
 
 #[test]
 fn value_ranges_recursive_growth_and_arithmetic_have_typed_refusals() {
-    for (source, limits, resource) in [
-        (
-            "p(X):-X=1..3.",
-            FormulaLimits {
-                max_assignment_values: 2,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::AssignmentValues,
-        ),
-        (
-            "p(0).p(X+1):-p(X).",
-            FormulaLimits {
-                max_support_rounds: 3,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::SupportRounds,
-        ),
+    for (source, resource, limit) in [
+        ("p(X):-X=1..3.", FormulaResource::AssignmentValues, 2),
+        ("p(0).p(X+1):-p(X).", FormulaResource::SupportRounds, 3),
         (
             "p(X):-X=1..2147483647.",
-            FormulaLimits::default(),
             FormulaResource::AssignmentValues,
+            resource_limits::formula_default(FormulaResource::AssignmentValues),
         ),
     ] {
-        let failure = admit(source, &limits).expect_err("no partial carrier may be admitted");
+        let failure = admit(source, &resource_limits::formula(resource, limit))
+            .expect_err("no partial carrier may be admitted");
         assert!(
             matches!(failure, FormulaFailure::Limit { resource:actual, .. } if actual == resource)
         );

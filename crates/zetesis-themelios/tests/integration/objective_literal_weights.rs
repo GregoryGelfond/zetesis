@@ -1,6 +1,6 @@
 //! Closed nonnumeric weights supply neither a numeric key nor a priority slot.
 
-use crate::support::limits;
+use crate::support::resource_limits;
 use crate::support::source_cases;
 use zetesis_test_support::thresholds::first_success;
 mod sources;
@@ -127,8 +127,7 @@ fn ignored_weights_do_not_hide_invalid_siblings() {
 
 #[test]
 fn ignored_templates_retain_source_limits() {
-    let mut limits = FormulaLimits::default();
-    limits.objective.max_templates = 0;
+    let limits = resource_limits::formula(FormulaResource::ObjectiveElements, 0);
     assert!(matches!(
         admit("#minimize{foo}.", &limits),
         Err(FormulaFailure::Limit {
@@ -147,6 +146,7 @@ fn ignored_shape_limit(
     configure: impl Fn(&mut AdmissionLimits, usize),
 ) {
     let attempt = |maximum| {
+        // Objective admission resources, not formula ones, so the caller names their fields.
         let mut limits = FormulaLimits::default();
         configure(&mut limits.objective, maximum);
         admit(IGNORED_SHAPE, &limits)
@@ -243,8 +243,8 @@ fn literal_admission_limits_are_inclusive() {
     let source = "{a;b}.#minimize{f(1,\"text\")@7,k:a;0@3,k:b}.";
     let reference = exhaustive(&admit(source, &FormulaLimits::default()).unwrap());
     for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
-        let attempt = |maximum| admit(source, &limits::formula(resource, maximum));
-        let exact = first_success(limits::formula_default(resource), |maximum| {
+        let attempt = |maximum| admit(source, &resource_limits::formula(resource, maximum));
+        let exact = first_success(resource_limits::formula_default(resource), |maximum| {
             attempt(maximum).is_ok()
         });
         assert_eq!(exhaustive(&attempt(exact).unwrap()), reference);
@@ -257,12 +257,12 @@ fn literal_admission_limits_are_inclusive() {
         admit_formula(
             source.into(),
             AdmissionOptions::default(),
-            limits::expansion(ExpansionResource::ScalarBytes, maximum),
+            resource_limits::expansion(ExpansionResource::ScalarBytes, maximum),
             FormulaLimits::default(),
         )
     };
     let exact = first_success(
-        limits::expansion_default(ExpansionResource::ScalarBytes),
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
         |maximum| attempt(maximum).is_ok(),
     );
     assert_eq!(exhaustive(&attempt(exact).unwrap()), reference);

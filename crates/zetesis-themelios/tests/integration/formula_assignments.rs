@@ -6,6 +6,7 @@ use std::collections::BTreeSet;
 
 use crate::support::atom_models::Models;
 use crate::support::objective_boundaries;
+use crate::support::resource_limits;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{admit, formula as input};
@@ -119,10 +120,7 @@ fn aggregate_producers_consume_prior_values() {
 
 #[test]
 fn generative_recursion_and_candidate_rows_have_typed_independent_limits() {
-    let limits = FormulaLimits {
-        max_support_rounds: 2,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::SupportRounds, 2);
     assert!(matches!(
         admit("n(N):-N=#count{X:n(X)}.", &limits),
         Err(FormulaFailure::Limit {
@@ -130,10 +128,7 @@ fn generative_recursion_and_candidate_rows_have_typed_independent_limits() {
             ..
         })
     ));
-    let limits = FormulaLimits {
-        max_assignment_values: 0,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::AssignmentValues, 0);
     assert!(matches!(
         admit("n(N):-N=#sum{}.", &limits),
         Err(FormulaFailure::Limit {
@@ -141,10 +136,7 @@ fn generative_recursion_and_candidate_rows_have_typed_independent_limits() {
             ..
         })
     ));
-    let limits = FormulaLimits {
-        max_assignment_values: 2,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::AssignmentValues, 2);
     assert!(matches!(
         admit("{a;b}.n(N):-N=#sum{1:a;2:b}.", &limits),
         Err(FormulaFailure::Limit {
@@ -307,10 +299,7 @@ fn one_threshold_family_per_binding_meets_the_original_cli_work_ceiling() {
             bundle,
             zetesis_themelios::BundleAdmissionOptions::default(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                max_work: 1_048_576,
-                ..FormulaLimits::default()
-            },
+            resource_limits::formula(FormulaResource::Work, 1_048_576),
         )
         .expect("complete bounded family admission");
         assert_eq!(bundle_optimum(&input), (cost.to_vec(), count), "{path:?}");
@@ -330,37 +319,14 @@ fn eligibility_cache_separates_source_aggregates_and_outer_bindings() {
         expected(&["g(x;y).e(x,1).e(y,2).n(x,1).n(y,2)."])
     );
     let source = "{a}.n(N):-N=#sum{1:a}.";
-    for (limits, resource) in [
-        (
-            FormulaLimits {
-                max_aggregate_cache_rows: 0,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::AggregateCacheRows,
-        ),
-        (
-            FormulaLimits {
-                max_aggregate_cache_elements: 0,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::AggregateCacheElements,
-        ),
-        (
-            FormulaLimits {
-                max_aggregate_cache_key_bytes: 0,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::AggregateCacheKeys,
-        ),
-        (
-            FormulaLimits {
-                max_aggregate_cache_roots: 0,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::AggregateCacheRoots,
-        ),
+    for resource in [
+        FormulaResource::AggregateCacheRows,
+        FormulaResource::AggregateCacheElements,
+        FormulaResource::AggregateCacheKeys,
+        FormulaResource::AggregateCacheRoots,
     ] {
-        let error = admit(source, &limits).expect_err("explicit cache ceiling");
+        let error = admit(source, &resource_limits::formula(resource, 0))
+            .expect_err("explicit cache ceiling");
         assert!(
             matches!(error, FormulaFailure::Limit { resource: actual, .. } if actual == resource)
         );

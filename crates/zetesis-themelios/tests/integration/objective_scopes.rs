@@ -1,7 +1,7 @@
 //! Scoped objectives observe the original model through shared formula operations.
 
-use crate::support::limits;
 use crate::support::priority_contracts;
+use crate::support::resource_limits;
 use crate::support::source_cases;
 use zetesis_reference_support as reference;
 use zetesis_test_support::thresholds::first_success;
@@ -79,6 +79,7 @@ fn scoped_local_variables_cannot_bind_objective_fields() {
 fn ignored_scoped_rows_retain_no_query_nodes() {
     for field in ["symbol", "1@symbol", "#inf", "1@#sup"] {
         let source = format!("{{a}}.:~#count{{1:a}}>0.[{field}]");
+        // Condition nodes are refused as an objective admission resource, not a formula one.
         let mut limits = FormulaLimits::default();
         limits.objective.max_condition_nodes = 0;
         let input = reference::admit(&source, &limits).unwrap();
@@ -91,6 +92,7 @@ fn ignored_scoped_rows_retain_no_query_nodes() {
 
 #[test]
 fn scoped_numeric_zero_retains_its_query() {
+    // Condition nodes are refused as an objective admission resource, not a formula one.
     let mut limits = FormulaLimits::default();
     limits.objective.max_condition_nodes = 0;
     let source = "{a}.:~#count{1:a}>0.[0]";
@@ -117,6 +119,7 @@ fn scoped_numeric_zero_retains_its_query() {
 fn scoped_validation_precedes_numeric_selection() {
     for field in ["symbol", "1@symbol", "0"] {
         let source = format!("d(0).{{a}}.:~d(X),#count{{1:a}}>1/X.[{field}]");
+        // Condition nodes are refused as an objective admission resource, not a formula one.
         let mut limits = FormulaLimits::default();
         limits.objective.max_condition_nodes = 0;
         let error = reference::admit(&source, &limits).unwrap_err();
@@ -135,6 +138,7 @@ fn scoped_validation_precedes_activity_exclusion() {
     for body in ["d(X),not a,#count{}>1/X", "d(X),#count{}>1/X,not a"] {
         for field in ["1", "symbol", "1@symbol", "0"] {
             let source = format!("d(0).a.:~{body}.[{field}]");
+            // Condition nodes are refused as an objective admission resource, not a formula one.
             let mut limits = FormulaLimits::default();
             limits.objective.max_condition_nodes = 0;
             let error = reference::admit(&source, &limits).unwrap_err();
@@ -155,6 +159,8 @@ fn scoped_validation_precedes_activity_exclusion() {
 fn absent_scoped_rows_retain_no_query_nodes() {
     for field in ["1", "symbol", "1@symbol", "0"] {
         let source = format!("d(1).a.:~d(X),not a,#count{{}}>1/X.[{field}]");
+        // Condition nodes are refused as an objective admission resource, not a
+        // formula one, and the formula nodes are then limited alongside them.
         let mut limits = FormulaLimits::default();
         limits.objective.max_condition_nodes = 0;
         let input = reference::admit(&source, &limits).unwrap();
@@ -174,6 +180,7 @@ fn absent_scoped_rows_retain_no_query_nodes() {
 fn scoped_formula_limits_do_not_change_the_theory_cap() {
     let base = "{a}.";
     let original = reference::admit(base, &FormulaLimits::default()).unwrap();
+    // Two theory limits at once, so their fields are named here.
     let mut limits = FormulaLimits::default();
     limits.theory.max_atoms = original.atoms().len();
     limits.theory.max_nodes = original.theory().nodes().len();
@@ -198,8 +205,9 @@ fn scoped_formula_limits_are_inclusive() {
         FormulaResource::Work,
         FormulaResource::Substitutions,
     ] {
-        let attempt = |maximum| reference::admit(source, &limits::formula(resource, maximum));
-        let upper = first_success(limits::formula_default(resource), |middle| {
+        let attempt =
+            |maximum| reference::admit(source, &resource_limits::formula(resource, maximum));
+        let upper = first_success(resource_limits::formula_default(resource), |middle| {
             attempt(middle).is_ok()
         });
         assert_eq!(reference::exhaustive(&attempt(upper).unwrap()), expected);
@@ -216,10 +224,7 @@ fn scoped_formula_limits_are_inclusive() {
 #[test]
 fn scoped_aggregate_nodes_keep_typed_refusals() {
     let source = "{a;b}.:~N=#count{1:a;2:b}.[N@N]";
-    let limits = FormulaLimits {
-        max_objective_formula_nodes: 5,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::ObjectiveFormulaNodes, 5);
     let error = reference::admit(source, &limits).unwrap_err();
     assert!(matches!(error, FormulaFailure::Aggregate { error, .. }
         if error.kind() == zetesis_ferraris::AggregateErrorKind::NodeLimit));
@@ -234,6 +239,7 @@ fn scoped_binders_retain_source_shape_limits() {
         zetesis_objective::AdmissionResource::Filters,
         zetesis_objective::AdmissionResource::Variables,
     ] {
+        // Objective admission resources, not formula ones, so their fields are named here.
         let mut limits = FormulaLimits::default();
         match resource {
             zetesis_objective::AdmissionResource::TupleWidth => {

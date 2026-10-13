@@ -1,5 +1,6 @@
 //! Evaluated positive arguments consume bindings and retain actual source atoms.
 use crate::support::finite_bindings as reference;
+use crate::support::resource_limits;
 use crate::support::thresholds::minimum_preparation_bytes as minimum_bytes;
 use reference::{Models, native};
 use std::collections::BTreeSet;
@@ -341,10 +342,7 @@ fn work_prefixes_refuse_until_complete_admission() {
     for cap in 0..4096 {
         let result = admit(
             source,
-            &FormulaLimits {
-                max_work: cap,
-                ..FormulaLimits::default()
-            },
+            &resource_limits::formula(FormulaResource::Work, cap),
         );
         match result {
             Ok(admitted) => {

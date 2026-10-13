@@ -2,8 +2,8 @@
 
 use crate::support::finite_bindings::{Models, holds, remap, values};
 use crate::support::head_models::{complete, expected, limited, manual_holds, selected};
-use crate::support::limits;
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
@@ -264,24 +264,23 @@ fn checked_group_size_and_tuple_storage_obey_inclusive_limits() {
         "#count{X:p(X):X=1..4}.",
         "d(1..4).1#count{X:p(X):d(X)}2.",
     ] {
-        let mut limits = FormulaLimits::default();
-        limits.aggregate.max_elements = 4;
+        let limits =
+            |maximum| resource_limits::formula(FormulaResource::AggregateElements, maximum);
         assert!(
             limited(
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                &limits
+                &limits(4)
             )
             .is_ok()
         );
-        limits.aggregate.max_elements = 3;
         assert!(matches!(
             limited(
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                &limits
+                &limits(3)
             ),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::AggregateElements,
@@ -295,12 +294,12 @@ fn checked_group_size_and_tuple_storage_obey_inclusive_limits() {
         limited(
             source,
             AdmissionOptions::default(),
-            limits::expansion(ExpansionResource::ScalarBytes, limit),
+            resource_limits::expansion(ExpansionResource::ScalarBytes, limit),
             &FormulaLimits::default(),
         )
     };
     let threshold = first_success(
-        limits::expansion_default(ExpansionResource::ScalarBytes),
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
         |limit| attempt(limit).is_ok(),
     );
     assert!(matches!(
@@ -333,10 +332,10 @@ fn validation_limits(source: &str) {
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                &limits::formula(resource, limit),
+                &resource_limits::formula(resource, limit),
             )
         };
-        let threshold = first_success(limits::formula_default(resource), |limit| {
+        let threshold = first_success(resource_limits::formula_default(resource), |limit| {
             attempt(limit).is_ok()
         });
         assert!(

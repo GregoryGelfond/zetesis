@@ -2,7 +2,7 @@
 
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
-use crate::support::limits;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
@@ -256,12 +256,12 @@ fn original_sources_remain_owned() {
 fn negative_eligibility_limits_are_inclusive() {
     let source = "d(1..2).{b(1)}.1#count{X:a(X):d(X),not b(X)}1.";
     for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
-        let lower = first_success(limits::formula_default(resource), |middle| {
+        let lower = first_success(resource_limits::formula_default(resource), |middle| {
             admit_formula(
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits::formula(resource, middle),
+                resource_limits::formula(resource, middle),
             )
             .is_ok()
         });
@@ -271,7 +271,7 @@ fn negative_eligibility_limits_are_inclusive() {
                     source.into(),
                     options(),
                     ExpansionLimits::default(),
-                    limits::formula(resource, lower)
+                    resource_limits::formula(resource, lower)
                 )
                 .unwrap()
             ),
@@ -281,7 +281,7 @@ fn negative_eligibility_limits_are_inclusive() {
             source.into(),
             options(),
             ExpansionLimits::default(),
-            limits::formula(resource, lower - 1),
+            resource_limits::formula(resource, lower - 1),
         )
         .unwrap_err();
         assert!(
@@ -297,10 +297,11 @@ fn negative_eligibility_limits_are_inclusive() {
 #[test]
 fn scalar_storage_limits_are_inclusive() {
     let source = "{b}.1#count{1:a:not b}1.";
-    let limits =
-        |max_scalar_bytes| limits::expansion(ExpansionResource::ScalarBytes, max_scalar_bytes);
+    let limits = |max_scalar_bytes| {
+        resource_limits::expansion(ExpansionResource::ScalarBytes, max_scalar_bytes)
+    };
     let lower = first_success(
-        limits::expansion_default(ExpansionResource::ScalarBytes),
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
         |middle| {
             admit_formula(
                 source.into(),

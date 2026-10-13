@@ -12,6 +12,7 @@
 use crate::support::atom_models::atom;
 use crate::support::finite_bindings::Models;
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::resource_limits;
 use zetesis_reference_support::{admit, formula};
 
 use std::collections::BTreeSet;
@@ -212,6 +213,7 @@ fn aggregate_translation_refusals_identify_original_rule_and_resource() {
     let rule = "a :- #sum{1:p;-1:q} >= 0.";
     let source = format!("p.\nq.\n{rule}");
     // The default budgets admit the reference; each case below lowers one.
+    // These are refused as aggregate errors, not by resource, so they name their fields.
     let input = formula(&source);
     for (aggregate, expected) in [
         (
@@ -266,13 +268,7 @@ fn aggregate_translation_refusals_identify_original_rule_and_resource() {
     }
     let error = admit(
         &source,
-        &FormulaLimits {
-            aggregate: AggregateLimits {
-                max_elements: 1,
-                ..AggregateLimits::default()
-            },
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::AggregateElements, 1),
     )
     .expect_err("preflight distinct tuple storage");
     let FormulaFailure::Limit {

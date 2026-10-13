@@ -1,6 +1,6 @@
 //! Optional domains preserve complete theories while avoiding impossible prefixes.
 
-use crate::support::limits;
+use crate::support::resource_limits;
 use std::cell::{Cell, RefCell};
 use std::fmt::Write;
 use zetesis_test_support::thresholds::first_success;
@@ -530,10 +530,7 @@ fn fact(max_work: u64, domains: Option<DomainLimits>) -> Result<AdmittedFormula,
         "p(1).".to_owned(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_work,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::Work, max_work),
     )?
     .with_domain_analysis(domains)
     .ground()
@@ -554,7 +551,7 @@ fn exceeds_work(failure: &FormulaFailure, ceiling: u64) -> bool {
 #[test]
 fn domain_analysis_is_charged_beyond_the_plain_admission_boundary() {
     let least = first_success(
-        limits::formula_default(FormulaResource::Work),
+        resource_limits::formula_default(FormulaResource::Work),
         |max_work| match fact(max_work, None) {
             Ok(_) => true,
             Err(failure) => {

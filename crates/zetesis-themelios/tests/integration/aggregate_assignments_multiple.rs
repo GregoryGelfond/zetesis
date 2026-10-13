@@ -5,6 +5,7 @@
 use crate::support::clingo_reports::enumerated;
 use crate::support::finite_bindings::{Models, exhaustive, native};
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::resource_limits;
 use crate::support::sourced_admission::{SOURCE, input, options};
 
 use std::collections::BTreeSet;
@@ -122,41 +123,17 @@ fn product_limits_refuse_the_whole_source_and_preserve_original_locations() {
     let source = format!("{{p;q}}.\n{rule}");
     let reference = input(&source).unwrap();
     assert_eq!(native(&reference).len(), 4);
-    for (limits, expected) in [
-        (
-            FormulaLimits {
-                max_substitutions: 8,
-                ..Default::default()
-            },
-            FormulaResource::Substitutions,
-        ),
-        (
-            FormulaLimits {
-                max_assignment_values: 1,
-                ..Default::default()
-            },
-            FormulaResource::AssignmentValues,
-        ),
-        (
-            FormulaLimits {
-                max_aggregate_cache_rows: 1,
-                ..Default::default()
-            },
-            FormulaResource::AggregateCacheRows,
-        ),
-        (
-            FormulaLimits {
-                max_aggregate_cache_roots: 1,
-                ..Default::default()
-            },
-            FormulaResource::AggregateCacheRoots,
-        ),
+    for (expected, limit) in [
+        (FormulaResource::Substitutions, 8),
+        (FormulaResource::AssignmentValues, 1),
+        (FormulaResource::AggregateCacheRows, 1),
+        (FormulaResource::AggregateCacheRoots, 1),
     ] {
         let error = admit_formula(
             source.clone(),
             options(),
             ExpansionLimits::default(),
-            limits,
+            resource_limits::formula(expected, limit),
         )
         .unwrap_err();
         let FormulaFailure::Limit {
@@ -205,10 +182,7 @@ fn scope_work_is_bounded_and_can_be_retried_without_partial_admission() {
     let error = admit_formula(
         source.into(),
         options(),
-        ExpansionLimits {
-            max_term_work: 1,
-            ..Default::default()
-        },
+        resource_limits::expansion(ExpansionResource::TermWork, 1),
         FormulaLimits::default(),
     )
     .unwrap_err();

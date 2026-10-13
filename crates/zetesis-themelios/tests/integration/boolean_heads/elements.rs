@@ -1,6 +1,7 @@
 //! Boolean elements retain activity without introducing producer atoms.
 
 use crate::support::admission;
+use crate::support::resource_limits;
 use std::collections::BTreeSet;
 use zetesis_reference_support::prepared;
 
@@ -175,11 +176,9 @@ fn false_boolean_heads_preserve_empty_contributions() {
 
 #[test]
 fn boolean_occurrence_limits_are_inclusive() {
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_elements = 2;
-    assert!(limited("2{#true;#true}2.", &limits).is_ok());
-    limits.aggregate.max_elements = 1;
-    let error = limited("2{#true;#true}2.", &limits).unwrap_err();
+    let limits = |maximum| resource_limits::formula(FormulaResource::AggregateElements, maximum);
+    assert!(limited("2{#true;#true}2.", &limits(2)).is_ok());
+    let error = limited("2{#true;#true}2.", &limits(1)).unwrap_err();
     assert!(
         matches!(
             error,
@@ -191,7 +190,7 @@ fn boolean_occurrence_limits_are_inclusive() {
         "{error}"
     );
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-    assert!(limited("d(1..2).1{#true:d(X)}1.", &limits).is_ok());
+    assert!(limited("d(1..2).1{#true:d(X)}1.", &limits(1)).is_ok());
 }
 
 #[test]

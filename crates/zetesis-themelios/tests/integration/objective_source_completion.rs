@@ -1,6 +1,6 @@
 //! Source grounding eligibility remains separate from complete-model truth.
 
-use crate::support::limits;
+use crate::support::resource_limits;
 use crate::support::source_cases;
 use zetesis_test_support::thresholds::first_success;
 
@@ -48,8 +48,9 @@ fn source_eligibility_limits_are_inclusive() {
             FormulaResource::Substitutions,
             FormulaResource::ObjectivePresenceEntries,
         ] {
-            let attempt = |maximum| reference::admit(source, &limits::formula(resource, maximum));
-            let upper = first_success(limits::formula_default(resource), |middle| {
+            let attempt =
+                |maximum| reference::admit(source, &resource_limits::formula(resource, maximum));
+            let upper = first_success(resource_limits::formula_default(resource), |middle| {
                 attempt(middle).is_ok()
             });
             assert_eq!(reference::exhaustive(&attempt(upper).unwrap()), expected);
@@ -75,6 +76,7 @@ fn producer_activity_does_not_consume_query_capacity() {
         "a.b.c.p:-a,b,c.#minimize{1:not not p}.",
         "a.b.c.{p:a,b,c}.#minimize{1:not not p}.",
     ] {
+        // Condition nodes are refused as an objective admission resource, not a formula one.
         let mut limits = FormulaLimits::default();
         limits.objective.max_condition_nodes = 5;
         let input = reference::admit(source, &limits).unwrap();
@@ -111,6 +113,7 @@ fn producer_activity_does_not_consume_query_capacity() {
 
 #[test]
 fn absent_rows_retain_no_query_capacity() {
+    // Condition nodes are refused as an objective admission resource, not a formula one.
     let mut limits = FormulaLimits::default();
     limits.objective.max_condition_nodes = 0;
     let input = reference::admit("a.b.c.p:-a,b,c.#minimize{1:not p}.", &limits).unwrap();
@@ -130,6 +133,7 @@ fn ignored_values_do_not_retain_query_capacity() {
         "{a}.#minimize{1@symbol:not not a}.",
         "p(symbol).{a}.#minimize{1@P:p(P),not not a}.",
     ] {
+        // Condition nodes are refused as an objective admission resource, not a formula one.
         let mut limits = FormulaLimits::default();
         limits.objective.max_condition_nodes = 0;
         let input = reference::admit(source, &limits).unwrap();
@@ -142,6 +146,7 @@ fn ignored_values_do_not_retain_query_capacity() {
 
 #[test]
 fn numeric_zero_retains_its_model_query() {
+    // Condition nodes are refused as an objective admission resource, not a formula one.
     let mut limits = FormulaLimits::default();
     limits.objective.max_condition_nodes = 5;
     let source = "{a}.#minimize{symbol:not not a;0:not not a;1@symbol:not not a}.";
@@ -182,6 +187,7 @@ fn source_arithmetic_precedes_query_materialization() {
         "d(0).{a}.#minimize{1@1/X:d(X),not not a}.",
         "d(0).{a}.#minimize{1,1/X:d(X),not not a}.",
     ] {
+        // Condition nodes are refused as an objective admission resource, not a formula one.
         let mut limits = FormulaLimits::default();
         limits.objective.max_condition_nodes = 0;
         assert!(

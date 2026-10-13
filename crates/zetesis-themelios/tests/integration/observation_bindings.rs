@@ -335,6 +335,7 @@ fn structural_binding_reserves_its_complete_value_slot() {
 }
 
 fn assert_complete_value_slot(source: &str, slots: u32) {
+    // Observation resources, not formula ones, so the observation limit names its field.
     let run = |max_variables| {
         admit(
             source,
@@ -369,6 +370,7 @@ fn moved_operands_charge_their_retained_guard_nodes() {
         ("#show. #show X:X=1..2.", 10),
         ("#show. #show X:f(X)=#min{f(1)}.", 12),
     ] {
+        // Observation resources, not formula ones, so the observation limit names its field.
         let run = |max_nodes| {
             admit(
                 source,

@@ -4,6 +4,7 @@ mod constant_divisors;
 mod lending_rows;
 mod support_demand;
 
+use crate::support::resource_limits;
 use std::cell::{Cell, RefCell};
 
 use zetesis_test_support::repository;
@@ -213,10 +214,7 @@ fn recursive_support_appends_each_posting_once() {
         let observer = Observer::default();
         let admitted = compile(
             &format!("p(0). p(X+1):-p(X),X<{bound}."),
-            &FormulaLimits {
-                max_work: 1_048_576,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::Work, 1_048_576),
             Some(&observer),
         )
         .unwrap();
@@ -239,10 +237,7 @@ fn recursive_support_visits_only_new_positive_rows() {
         let observer = Observer::default();
         compile(
             &format!("p(0). p(X+1):-p(X),X<{bound}."),
-            &FormulaLimits {
-                max_work: 1_048_576,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::Work, 1_048_576),
             Some(&observer),
         )
         .unwrap();
@@ -327,10 +322,7 @@ fn undefined_family_validation_retains_its_failed_phase() {
 #[test]
 fn profiling_preserves_inclusive_support_limits() {
     for (rounds, succeeds) in [(1, false), (2, true)] {
-        let limits = FormulaLimits {
-            max_support_rounds: rounds,
-            ..FormulaLimits::default()
-        };
+        let limits = resource_limits::formula(FormulaResource::SupportRounds, rounds);
         let observer = Observer::default();
         let measured = compile("p(1).", &limits, Some(&observer));
         let plain = compile("p(1).", &limits, None);
@@ -349,13 +341,7 @@ fn profiling_preserves_inclusive_support_limits() {
 
 #[test]
 fn node_refusal_retains_attempted_interning() {
-    let limits = FormulaLimits {
-        theory: zetesis_ferraris::AdmissionLimits {
-            max_nodes: 1,
-            ..zetesis_ferraris::AdmissionLimits::default()
-        },
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::Nodes, 1);
     let observer = Observer::default();
     let error = compile("p(1).", &limits, Some(&observer)).unwrap_err();
     assert_eq!(
@@ -370,14 +356,8 @@ fn node_refusal_retains_attempted_interning() {
     assert_eq!(last.work.nodes_inserted, Some(1));
 }
 
-fn root_refusal(source: &str, roots: usize, phase: GroundingPhase) {
-    let limits = FormulaLimits {
-        theory: zetesis_ferraris::AdmissionLimits {
-            max_roots: roots,
-            ..zetesis_ferraris::AdmissionLimits::default()
-        },
-        ..FormulaLimits::default()
-    };
+fn root_refusal(source: &str, roots: u64, phase: GroundingPhase) {
+    let limits = resource_limits::formula(FormulaResource::Roots, roots);
     let observer = Observer::default();
     let error = compile(source, &limits, Some(&observer)).unwrap_err();
     assert!(matches!(
@@ -387,7 +367,7 @@ fn root_refusal(source: &str, roots: usize, phase: GroundingPhase) {
             observed,
             limit,
             ..
-        } if observed == roots as u128 + 1 && limit == roots as u128
+        } if observed == u128::from(roots) + 1 && limit == u128::from(roots)
     ));
     let records = observer.records.borrow();
     let last = records.last().unwrap();

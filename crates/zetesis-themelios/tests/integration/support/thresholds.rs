@@ -1,6 +1,6 @@
 //! The least scalar-byte ceiling under which a source prepares.
 
-use crate::support::limits;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits,
@@ -14,12 +14,12 @@ pub(crate) fn minimum_preparation_bytes(source: &str) -> u64 {
         prepare_formula(
             source.into(),
             AdmissionOptions::default(),
-            limits::expansion(ExpansionResource::ScalarBytes, cap),
+            resource_limits::expansion(ExpansionResource::ScalarBytes, cap),
             FormulaLimits::default(),
         )
     };
     first_success(
-        limits::expansion_default(ExpansionResource::ScalarBytes),
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
         |cap| match prepare(cap) {
             Ok(_) => true,
             Err(FormulaFailure::Expansion(ExpansionFailure::Limit {

@@ -1,7 +1,7 @@
 //! Complete objective observations through total predicate renamings.
 
 use crate::support::finite_bindings::holds;
-use crate::support::limits;
+use crate::support::resource_limits;
 use crate::support::source_cases;
 use zetesis_test_support::thresholds::first_success;
 
@@ -262,12 +262,12 @@ fn exact_limits(source: &str) {
         FormulaResource::AnalysisNodes,
         FormulaResource::AnalysisEdges,
     ] {
-        let lower = first_success(limits::formula_default(resource), |middle| {
-            admit(source, &limits::formula(resource, middle)).is_ok()
+        let lower = first_success(resource_limits::formula_default(resource), |middle| {
+            admit(source, &resource_limits::formula(resource, middle)).is_ok()
         });
-        let exact = admit(source, &limits::formula(resource, lower)).unwrap();
+        let exact = admit(source, &resource_limits::formula(resource, lower)).unwrap();
         assert_eq!(exhaustive(&exact), exhaustive(&reference));
-        let error = admit(source, &limits::formula(resource, lower - 1)).unwrap_err();
+        let error = admit(source, &resource_limits::formula(resource, lower - 1)).unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Limit { resource: actual, observed, limit, .. }
                 if actual == resource && observed > limit),
@@ -275,7 +275,7 @@ fn exact_limits(source: &str) {
         );
         assert!(!error.diagnostics().is_empty());
         assert_eq!(
-            exhaustive(&admit(source, &limits::formula(resource, lower)).unwrap()),
+            exhaustive(&admit(source, &resource_limits::formula(resource, lower)).unwrap()),
             exhaustive(&reference),
             "retry publishes the complete objective contract"
         );

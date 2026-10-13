@@ -2,7 +2,7 @@
 
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
-use crate::support::limits;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use proptest::prelude::*;
@@ -298,11 +298,11 @@ fn envelope_storage_and_work_limits_are_inclusive() {
             admit_formula(
                 "p(X,Y):-0<2*X<3*Y<7.".into(),
                 AdmissionOptions::default(),
-                limits::expansion(resource, limit),
+                resource_limits::expansion(resource, limit),
                 FormulaLimits::default(),
             )
         };
-        let lower = first_success(limits::expansion_default(resource), |middle| {
+        let lower = first_success(resource_limits::expansion_default(resource), |middle| {
             run(middle).is_ok()
         });
         assert!(run(lower).is_ok());

@@ -1,10 +1,11 @@
 //! Aliased numeric extrema retain tuple activity and separate head permissions.
 
 use crate::support::head_element_reference as reference;
+use crate::support::resource_limits;
 
 use reference::{Selection, expected, external, models};
 use zetesis_reference_support::{admit, formula};
-use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
+use zetesis_themelios::{FormulaFailure, FormulaResource};
 
 const CASES: &[(&str, &[&[&str]])] = &[
     ("1#min{1:a;1:b}1.", &[&["a"], &["b"], &["a", "b"]]),
@@ -98,13 +99,7 @@ proptest::proptest! {
 #[test]
 fn alias_keys_own_the_element_budget() {
     for function in ["#min", "#max"] {
-        let limits = FormulaLimits {
-            aggregate: zetesis_ferraris::AggregateLimits {
-                max_elements: 1,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
+        let limits = resource_limits::formula(FormulaResource::AggregateElements, 1);
         let shared = format!("0{function}{{0,k:a;0,k:b;0,k:a}}0.");
         let result = admit(&shared, &limits).unwrap();
         assert_eq!(result.atoms(), formula(&shared).atoms());
@@ -128,10 +123,7 @@ fn alias_keys_own_the_element_budget() {
 #[test]
 fn alias_expansion_observes_work_refusal() {
     let source = "0#min{0:a;0:b;0,k:a}0.";
-    let limits = FormulaLimits {
-        max_work: 0,
-        ..Default::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::Work, 0);
     let error = admit(source, &limits).unwrap_err();
     assert!(
         matches!(

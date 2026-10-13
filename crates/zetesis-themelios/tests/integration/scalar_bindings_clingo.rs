@@ -7,6 +7,7 @@ use std::collections::BTreeSet;
 use zetesis_reference_support::{admit, formula};
 
 use crate::support::finite_bindings::Models;
+use crate::support::resource_limits;
 use crate::support::unsigned_spellings::atom_text;
 use serde_json::Value as Json;
 use themelios_program::term::EvalError;
@@ -133,10 +134,7 @@ fn scalar_and_interval_admissions_match_complete_models_with_explicit_boundaries
         // this particular source by a mandatory negative gate. Four rounds make
         // the resource regression small and independent of default work tuning.
         let limits = if case.native == "SupportRounds" {
-            FormulaLimits {
-                max_support_rounds: 4,
-                ..FormulaLimits::default()
-            }
+            resource_limits::formula(FormulaResource::SupportRounds, 4)
         } else {
             FormulaLimits::default()
         };

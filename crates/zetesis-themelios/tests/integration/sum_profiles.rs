@@ -1,8 +1,9 @@
 //! Positive sums and ignored tuple contributions retain original reduct semantics.
+use crate::support::resource_limits;
 use crate::support::source_cases;
 
 use zetesis_reference_support::{admit, exhaustive};
-use zetesis_themelios::FormulaLimits;
+use zetesis_themelios::{FormulaLimits, FormulaResource};
 
 fn cases() -> Vec<source_cases::Case> {
     source_cases::cases(include_str!("../fixtures/sum-profiles.jsonl"))
@@ -46,22 +47,10 @@ fn ignored_weights_do_not_relax_scope_or_resource_checks() {
     for function in ["sum", "sum+"] {
         let source = format!("n(N) :- N = #{function} {{ foo,k; -2,j; 3,l }}.");
         for limits in [
-            FormulaLimits {
-                max_assignment_values: 0,
-                ..Default::default()
-            },
-            FormulaLimits {
-                max_aggregate_cache_rows: 0,
-                ..Default::default()
-            },
-            FormulaLimits {
-                max_aggregate_cache_roots: 0,
-                ..Default::default()
-            },
-            FormulaLimits {
-                max_work: 0,
-                ..Default::default()
-            },
+            resource_limits::formula(FormulaResource::AssignmentValues, 0),
+            resource_limits::formula(FormulaResource::AggregateCacheRows, 0),
+            resource_limits::formula(FormulaResource::AggregateCacheRoots, 0),
+            resource_limits::formula(FormulaResource::Work, 0),
         ] {
             assert!(
                 !admit(&source, &limits)

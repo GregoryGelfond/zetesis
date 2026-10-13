@@ -58,6 +58,7 @@ fn cardinality_keys_pay_their_complete_admission_cost() {
         ("p.r. #show. #show N:N={p;not q;not not r}.", 23, "3"),
         ("p. #show. #show N:N={p}. #show f(N):N={p}.", 19, "1 f(1)"),
     ] {
+        // Observation resources, not formula ones, so the observation limit names its field.
         let run = |max_nodes| {
             admit(
                 source,

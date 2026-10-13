@@ -1,7 +1,7 @@
 //! Conditional heads preserve finite existential scope and original reducts.
 
 use crate::support::finite_bindings as reference;
-use crate::support::limits;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use crate::support::finite_bindings::expected;
@@ -196,20 +196,14 @@ fn local_instance_limit_is_inclusive() {
     let source = "d(1..3).a(X):d(X).";
     let admitted = admit(
         source,
-        &FormulaLimits {
-            max_disjunction_elements: 3,
-            ..Default::default()
-        },
+        &resource_limits::formula(FormulaResource::DisjunctionElements, 3),
     )
     .unwrap();
     assert_eq!(native(&admitted), native(&formula(source)));
     assert!(matches!(
         admit(
             source,
-            &FormulaLimits {
-                max_disjunction_elements: 2,
-                ..Default::default()
-            }
+            &resource_limits::formula(FormulaResource::DisjunctionElements, 2)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::DisjunctionElements,
@@ -223,10 +217,16 @@ fn local_instance_limit_is_inclusive() {
 #[test]
 fn work_refusal_never_publishes_a_prefix() {
     let source = "d(1..2).a(X):d(X).";
-    let attempt = |work| admit(source, &limits::formula(FormulaResource::Work, work));
-    let lower = first_success(limits::formula_default(FormulaResource::Work), |middle| {
-        attempt(middle).is_ok()
-    });
+    let attempt = |work| {
+        admit(
+            source,
+            &resource_limits::formula(FormulaResource::Work, work),
+        )
+    };
+    let lower = first_success(
+        resource_limits::formula_default(FormulaResource::Work),
+        |middle| attempt(middle).is_ok(),
+    );
     assert_eq!(native(&attempt(lower).unwrap()), native(&formula(source)));
     assert!(
         matches!(attempt(lower-1), Err(FormulaFailure::Limit { resource: FormulaResource::Work, limit, observed, .. })

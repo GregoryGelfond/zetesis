@@ -422,6 +422,7 @@ fn public_model_spelling_is_validated_before_output() {
 #[test]
 fn all_source_ceilings_preflight_owned_templates_and_origin_copies() {
     use zetesis_themelios::observation::AdmissionLimits;
+    // Observation resources, not formula ones, so their limits name their fields.
     for (limits, resource) in [
         (
             AdmissionLimits {

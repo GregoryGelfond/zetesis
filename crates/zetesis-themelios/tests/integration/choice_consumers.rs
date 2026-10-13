@@ -1,8 +1,8 @@
 //! Outer body substitutions preserve complete choice/count groups and reducts.
 
 use crate::support::admission;
-use crate::support::limits;
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 mod cases;
@@ -247,11 +247,11 @@ fn preparation_limits_are_inclusive() {
         "Y#count{1:p}Y:-N=#count{},Y=N+1.",
     ] {
         for resource in [ExpansionResource::TermWork, ExpansionResource::ScalarBytes] {
-            let lower = first_success(limits::expansion_default(resource), |middle| {
+            let lower = first_success(resource_limits::expansion_default(resource), |middle| {
                 prepare_formula(
                     source.into(),
                     options(),
-                    limits::expansion(resource, middle),
+                    resource_limits::expansion(resource, middle),
                     FormulaLimits::default(),
                 )
                 .is_ok()
@@ -260,7 +260,7 @@ fn preparation_limits_are_inclusive() {
                 prepare_formula(
                     source.into(),
                     options(),
-                    limits::expansion(resource, lower),
+                    resource_limits::expansion(resource, lower),
                     FormulaLimits::default()
                 )
                 .is_ok()
@@ -268,7 +268,7 @@ fn preparation_limits_are_inclusive() {
             let error = prepare_formula(
                 source.into(),
                 options(),
-                limits::expansion(resource, lower - 1),
+                resource_limits::expansion(resource, lower - 1),
                 FormulaLimits::default(),
             )
             .unwrap_err();
@@ -295,12 +295,12 @@ fn grounding_limits_are_inclusive() {
             FormulaResource::Substitutions,
             FormulaResource::Work,
         ] {
-            let lower = first_success(limits::formula_default(resource), |middle| {
+            let lower = first_success(resource_limits::formula_default(resource), |middle| {
                 admit_formula(
                     source.into(),
                     options(),
                     ExpansionLimits::default(),
-                    limits::formula(resource, middle),
+                    resource_limits::formula(resource, middle),
                 )
                 .is_ok()
             });
@@ -310,7 +310,7 @@ fn grounding_limits_are_inclusive() {
                         source.into(),
                         options(),
                         ExpansionLimits::default(),
-                        limits::formula(resource, lower)
+                        resource_limits::formula(resource, lower)
                     )
                     .unwrap()
                 ),
@@ -320,7 +320,7 @@ fn grounding_limits_are_inclusive() {
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits::formula(resource, lower - 1),
+                resource_limits::formula(resource, lower - 1),
             )
             .unwrap_err();
             assert!(

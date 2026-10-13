@@ -1,6 +1,7 @@
 //! The retained upstream analysis describes the exact bounded source projection;
 //! its class/safety verdicts neither replace native scope checks nor lift quotas.
 
+use crate::support::resource_limits;
 use std::collections::BTreeSet;
 use zetesis_reference_support::{BundleFixture, admit};
 
@@ -19,6 +20,7 @@ fn admit_with(text: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, For
 
 #[test]
 fn empty_and_exact_structure_ceilings_are_inclusive() {
+    // Both analysis limits at once, each then lowered alone, so their fields are named here.
     admit_with(
         "",
         &FormulaLimits {
@@ -122,10 +124,7 @@ fn unknown_class_verdict_does_not_remove_the_support_round_ceiling() {
     assert!(input.atoms().is_empty(), "analysis cannot invent support");
     let error = admit_with(
         "a :- a.",
-        &FormulaLimits {
-            max_support_rounds: 0,
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::SupportRounds, 0),
     )
     .expect_err("analysis cannot authorize incomplete support closure");
     assert!(matches!(

@@ -1,11 +1,11 @@
 //! Explicitly true/empty conditions retain signed whole-rule expansion semantics.
 
-use crate::support::limits;
 use std::collections::BTreeSet;
 
 use crate::support::finite_bindings::{holds, values};
 use crate::support::head_models::{self, complete, expected, limited, manual_holds, selected};
 use crate::support::objective_boundaries;
+use crate::support::resource_limits;
 use serde_json::{Value as Json, json};
 use zetesis_reference_support::{BundleFixture, admit};
 use zetesis_test_support::thresholds::first_success;
@@ -170,10 +170,7 @@ fn condition_and_head_counts_have_inclusive_limits() {
             }
         )))
     ));
-    let limits = FormulaLimits {
-        max_disjunction_elements: 2,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::DisjunctionElements, 2);
     assert!(
         limited(
             source,
@@ -188,10 +185,7 @@ fn condition_and_head_counts_have_inclusive_limits() {
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_disjunction_elements: 1,
-                ..limits
-            }
+            &resource_limits::formula(FormulaResource::DisjunctionElements, 1)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::DisjunctionElements,
@@ -242,10 +236,10 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                &limits::formula(resource, limit),
+                &resource_limits::formula(resource, limit),
             )
         };
-        let threshold = first_success(limits::formula_default(resource), |limit| {
+        let threshold = first_success(resource_limits::formula_default(resource), |limit| {
             attempt(limit).is_ok()
         });
         assert!(
@@ -261,12 +255,12 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
         limited(
             source,
             AdmissionOptions::default(),
-            limits::expansion(ExpansionResource::TermWork, limit),
+            resource_limits::expansion(ExpansionResource::TermWork, limit),
             &FormulaLimits::default(),
         )
     };
     let threshold = first_success(
-        limits::expansion_default(ExpansionResource::TermWork),
+        resource_limits::expansion_default(ExpansionResource::TermWork),
         |limit| attempt(limit).is_ok(),
     );
     assert!(matches!(
@@ -277,24 +271,23 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
         }))
     ));
     let admitted = admit(source, &FormulaLimits::default()).unwrap();
-    let mut limits = FormulaLimits::default();
-    limits.theory.max_nodes = admitted.theory().nodes().len();
+    let nodes = u64::try_from(admitted.theory().nodes().len()).unwrap();
+    let limits = |maximum| resource_limits::formula(FormulaResource::Nodes, maximum);
     assert!(
         limited(
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            &limits
+            &limits(nodes)
         )
         .is_ok()
     );
-    limits.theory.max_nodes -= 1;
     assert!(matches!(
         limited(
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            &limits
+            &limits(nodes - 1)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::Nodes,

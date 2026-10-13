@@ -1,7 +1,7 @@
 //! Completed possible support covers rich cyclic objective producer families.
 
-use crate::support::limits;
 use crate::support::priority_contracts;
+use crate::support::resource_limits;
 use crate::support::source_cases;
 use zetesis_test_support::thresholds::first_success;
 
@@ -89,9 +89,11 @@ fn cyclic_completion_limits_are_inclusive() {
         FormulaResource::ObjectivePresenceEntries,
         FormulaResource::Work,
     ] {
-        let attempt = |maximum| reference::admit(source, &limits::formula(resource, maximum));
-        let upper = first_success(limits::formula_default(resource), |middle| {
-            match attempt(middle) {
+        let attempt =
+            |maximum| reference::admit(source, &resource_limits::formula(resource, maximum));
+        let upper = first_success(
+            resource_limits::formula_default(resource),
+            |middle| match attempt(middle) {
                 Ok(_) => true,
                 Err(FormulaFailure::Limit {
                     resource: actual, ..
@@ -103,8 +105,8 @@ fn cyclic_completion_limits_are_inclusive() {
                     false
                 }
                 Err(error) => panic!("{resource:?}: unexpected refusal {error}"),
-            }
-        });
+            },
+        );
         assert_eq!(reference::exhaustive(&attempt(upper).unwrap()), expected);
         let error = attempt(upper - 1).unwrap_err();
         assert!(
@@ -122,7 +124,7 @@ fn cyclic_completion_limits_are_inclusive() {
 fn growing_value_feedback_never_yields_a_program() {
     let source = "n(0).n(N):-N=#count{X:n(X)}.#minimize{N:n(N)}.";
     for maximum in [1, 2, 4] {
-        let limits = limits::formula(FormulaResource::SupportRounds, maximum);
+        let limits = resource_limits::formula(FormulaResource::SupportRounds, maximum);
         let error = reference::admit(source, &limits).unwrap_err();
         assert!(
             matches!(error,

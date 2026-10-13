@@ -1,5 +1,6 @@
 //! Local witness rows distinguish captured inputs from closed evaluated values.
 use crate::support::finite_bindings as reference;
+use crate::support::resource_limits;
 use crate::support::witnesses::{self, limited};
 
 use std::collections::BTreeSet;
@@ -452,10 +453,7 @@ fn work_prefixes_cannot_publish_partial_theories() {
         match limited(
             CASES[0].0,
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_work: cap,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::Work, cap),
         ) {
             Ok(admitted) => {
                 assert!(cap > 0);

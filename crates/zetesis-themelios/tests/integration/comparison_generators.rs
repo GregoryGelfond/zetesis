@@ -2,6 +2,7 @@
 //! Exact external records complement a separate finite definition evaluator.
 
 use crate::support::admission;
+use crate::support::resource_limits;
 use std::collections::BTreeSet;
 
 use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected};
@@ -168,10 +169,7 @@ fn exact_integer_domain_bounds_and_empty_endpoints_do_not_wrap() {
         source.into(),
         options(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_assignment_values: 2,
-            ..Default::default()
-        },
+        resource_limits::formula(FormulaResource::AssignmentValues, 2),
     );
     assert!(
         matches!(result, Err(FormulaFailure::Limit { resource: FormulaResource::AssignmentValues, limit: 2, observed: 3, location }) if location.location().expect("parsed source").source == SOURCE)
@@ -180,10 +178,7 @@ fn exact_integer_domain_bounds_and_empty_endpoints_do_not_wrap() {
         source.into(),
         options(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_assignment_values: 3,
-            ..Default::default()
-        },
+        resource_limits::formula(FormulaResource::AssignmentValues, 3),
     )
     .unwrap();
     assert_eq!(native(&result), native(&input("p(1..3).").unwrap()));
@@ -196,10 +191,7 @@ fn exact_integer_domain_bounds_and_empty_endpoints_do_not_wrap() {
             source.into(),
             options(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                max_assignment_values: 0,
-                ..Default::default()
-            },
+            resource_limits::formula(FormulaResource::AssignmentValues, 0),
         )
         .unwrap();
         assert_eq!(
@@ -219,10 +211,7 @@ fn interrupted_generator_construction_never_returns_a_partial_program() {
             source.into(),
             options(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                max_substitutions: cap,
-                ..Default::default()
-            },
+            resource_limits::formula(FormulaResource::Substitutions, cap),
         );
         match result {
             Ok(program) => {

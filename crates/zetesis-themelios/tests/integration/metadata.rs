@@ -4,6 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::support::admission;
 use crate::support::atom_models::{self, Models, answer_sets};
+use crate::support::resource_limits;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
@@ -156,10 +157,7 @@ fn duplicate_metadata_occurrences_keep_their_original_spans() {
 
 #[test]
 fn raw_metadata_occurrences_have_their_own_budget_before_deduplication() {
-    let limits = ExpansionLimits {
-        max_metadata_statements: 1,
-        ..ExpansionLimits::default()
-    };
+    let limits = resource_limits::expansion(ExpansionResource::MetadataStatements, 1);
     assert!(matches!(
         admit_extended(
             "#show p/1. #show p/1.".to_owned(),
@@ -187,10 +185,7 @@ fn raw_metadata_occurrences_have_their_own_budget_before_deduplication() {
         admit_extended(
             "p.".to_owned(),
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_metadata_statements: 0,
-                ..ExpansionLimits::default()
-            }
+            resource_limits::expansion(ExpansionResource::MetadataStatements, 0)
         )
         .is_ok()
     );
@@ -285,10 +280,7 @@ fn bundle_metadata_unions_global_selection_and_keeps_file_identities() {
     let error = admit_bundle_extended(
         fixture.bundle(),
         BundleAdmissionOptions::default(),
-        ExpansionLimits {
-            max_metadata_statements: 4,
-            ..ExpansionLimits::default()
-        },
+        resource_limits::expansion(ExpansionResource::MetadataStatements, 4),
     )
     .expect_err("global metadata ceiling");
     assert!(matches!(

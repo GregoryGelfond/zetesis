@@ -7,6 +7,7 @@ use std::path::Path;
 
 use crate::support::atom_models::{self, Models, answer_sets};
 use crate::support::bundle_fixtures;
+use crate::support::resource_limits;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
@@ -267,10 +268,7 @@ fn syntax_and_constant_budgets_are_cumulative_across_original_sources() {
     assert!(
         matches!(error.error(), BundleAdmissionError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Limit { resource: InputLimit::SyntaxNodes, limit, observed, location })) if *limit == total_nodes - 1 && *observed == total_nodes && location.location().unwrap().source == SourceId::new(1))
     );
-    let limits = ExpansionLimits {
-        max_constants: 1,
-        ..ExpansionLimits::default()
-    };
+    let limits = resource_limits::expansion(ExpansionResource::Constants, 1);
     assert!(matches!(
         admit_bundle_extended(fixture.bundle(), BundleAdmissionOptions::default(), limits)
             .expect_err("global definitions budget")
@@ -288,10 +286,7 @@ fn expansion_and_provenance_budgets_remain_global_across_files() {
     let fixture = BundleFixture::new();
     fixture.write("entry.lp", "#include \"child.lp\". p(1..2).");
     fixture.write("child.lp", "q(1..2).");
-    let limits = ExpansionLimits {
-        max_templates: 3,
-        ..ExpansionLimits::default()
-    };
+    let limits = resource_limits::expansion(ExpansionResource::Templates, 3);
     assert!(matches!(
         admit_bundle_extended(fixture.bundle(), BundleAdmissionOptions::default(), limits)
             .expect_err("global emitted templates")
@@ -303,10 +298,7 @@ fn expansion_and_provenance_budgets_remain_global_across_files() {
         })
     ));
     fixture.write("child.lp", "p(1..2).");
-    let limits = ExpansionLimits {
-        max_origin_locations: 3,
-        ..ExpansionLimits::default()
-    };
+    let limits = resource_limits::expansion(ExpansionResource::Origins, 3);
     assert!(matches!(
         admit_bundle_extended(fixture.bundle(), BundleAdmissionOptions::default(), limits)
             .expect_err("global provenance copies")

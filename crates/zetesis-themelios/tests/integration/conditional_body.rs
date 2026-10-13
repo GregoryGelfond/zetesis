@@ -2,6 +2,7 @@
 //! Exact external records complement a separate finite definition evaluator.
 
 use crate::support::admission;
+use crate::support::resource_limits;
 use std::collections::BTreeSet;
 
 use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected};
@@ -200,10 +201,7 @@ fn partial_local_iteration_never_certifies_vacuity_and_exact_caps_are_inclusive(
             source.into(),
             options(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                max_substitutions: cap,
-                ..Default::default()
-            },
+            resource_limits::formula(FormulaResource::Substitutions, cap),
         );
         match result {
             Ok(program) => {
@@ -235,10 +233,7 @@ fn partial_local_iteration_never_certifies_vacuity_and_exact_caps_are_inclusive(
             source.into(),
             options(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                max_substitutions: cap - 1,
-                ..Default::default()
-            }
+            resource_limits::formula(FormulaResource::Substitutions, cap - 1)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::Substitutions,

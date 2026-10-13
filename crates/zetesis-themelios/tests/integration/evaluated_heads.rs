@@ -1,11 +1,11 @@
 //! Evaluated heads retain original grouping, atom identities and frozen reducts.
 
-use crate::support::limits;
 use std::collections::BTreeSet;
 
 use crate::support::finite_bindings::{holds, values};
 use crate::support::head_models::{self, complete, expected, limited, manual_holds, selected};
 use crate::support::objective_boundaries;
+use crate::support::resource_limits;
 use serde_json::{Value as Json, json};
 use zetesis_reference_support::{BundleFixture, admit};
 use zetesis_test_support::thresholds::first_success;
@@ -202,10 +202,7 @@ fn generated_slot_arity_and_range_width_limits_are_inclusive() {
         );
     }
     let source = "n(1).{p(N..N+1):n(N)}.";
-    let limits = FormulaLimits {
-        max_assignment_values: 2,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::AssignmentValues, 2);
     assert!(
         limited(
             source,
@@ -220,10 +217,7 @@ fn generated_slot_arity_and_range_width_limits_are_inclusive() {
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_assignment_values: 1,
-                ..limits
-            }
+            &resource_limits::formula(FormulaResource::AssignmentValues, 1)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::AssignmentValues,
@@ -273,10 +267,10 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
                     source,
                     AdmissionOptions::default(),
                     ExpansionLimits::default(),
-                    &limits::formula(resource, limit),
+                    &resource_limits::formula(resource, limit),
                 )
             };
-            let threshold = first_success(limits::formula_default(resource), |limit| {
+            let threshold = first_success(resource_limits::formula_default(resource), |limit| {
                 attempt(limit).is_ok()
             });
             assert!(
@@ -291,12 +285,12 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
             limited(
                 source,
                 AdmissionOptions::default(),
-                limits::expansion(ExpansionResource::TermWork, limit),
+                resource_limits::expansion(ExpansionResource::TermWork, limit),
                 &FormulaLimits::default(),
             )
         };
         let threshold = first_success(
-            limits::expansion_default(ExpansionResource::TermWork),
+            resource_limits::expansion_default(ExpansionResource::TermWork),
             |limit| attempt(limit).is_ok(),
         );
         assert!(matches!(
@@ -307,23 +301,22 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
             }))
         ));
         let admitted = admit(source, &FormulaLimits::default()).unwrap();
-        let mut limits = FormulaLimits::default();
-        limits.theory.max_nodes = admitted.theory().nodes().len();
+        let nodes = u64::try_from(admitted.theory().nodes().len()).unwrap();
+        let limits = |maximum| resource_limits::formula(FormulaResource::Nodes, maximum);
         assert!(
             limited(
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                &limits
+                &limits(nodes)
             )
             .is_ok()
         );
-        limits.theory.max_nodes -= 1;
         let refusal = limited(
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            &limits,
+            &limits(nodes - 1),
         );
         // Aggregate compilation uses the same total-node ceiling before its
         // suffix is interned. Shared support guards can make the final graph

@@ -1,6 +1,6 @@
 //! Selected complete rows preserve source grounding, evidence and finite refusals.
 
-use crate::support::limits;
+use crate::support::resource_limits;
 use std::cell::Cell;
 use zetesis_test_support::thresholds::first_success;
 
@@ -156,19 +156,21 @@ fn table_strategy_preserves_deferred_head_errors() {
     equal_theory("d(0;1).e(0;1).p(1/X):-d(X),e(X),X>0.");
 }
 
-/// Search `resource`'s least admitting limit from its default; every refusal
-/// below it names the resource at the limit tried.
-fn exact_ceiling(resource: FormulaResource) {
+/// Asserts that `resource` has an exact ceiling: searched from its default,
+/// a least admitting limit exists, and every refusal below it names the
+/// resource at the limit tried.
+fn assert_exact_ceiling(resource: FormulaResource) {
     let compile = |maximum| {
         ground(
             SHARED,
             JoinStrategy::Table,
-            &limits::formula(resource, maximum),
+            &resource_limits::formula(resource, maximum),
             &Observation::default(),
         )
     };
-    first_success(limits::formula_default(resource), |maximum| {
-        match compile(maximum) {
+    first_success(
+        resource_limits::formula_default(resource),
+        |maximum| match compile(maximum) {
             Ok(_) => true,
             Err(FormulaFailure::Limit {
                 resource: found,
@@ -182,18 +184,18 @@ fn exact_ceiling(resource: FormulaResource) {
                 false
             }
             other => panic!("unexpected resource result: {other:?}"),
-        }
-    });
+        },
+    );
 }
 
 #[test]
 fn cumulative_table_work_has_an_exact_ceiling() {
-    exact_ceiling(FormulaResource::Work);
+    assert_exact_ceiling(FormulaResource::Work);
 }
 
 #[test]
 fn simultaneous_table_storage_has_an_exact_ceiling() {
-    exact_ceiling(FormulaResource::SupportBytes);
+    assert_exact_ceiling(FormulaResource::SupportBytes);
 }
 
 #[test]

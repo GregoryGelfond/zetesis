@@ -1,6 +1,6 @@
 //! Local witnesses retain complete atoms under structural selection.
 use crate::support::finite_bindings as reference;
-use crate::support::limits;
+use crate::support::resource_limits;
 use crate::support::witnesses::{self, limited};
 use reference::{Models, native, values};
 use std::collections::BTreeSet;
@@ -395,10 +395,7 @@ fn witness_nodes_obey_the_value_ceiling() {
             let result = zetesis_themelios::prepare_formula(
                 source.into(),
                 AdmissionOptions::default(),
-                ExpansionLimits {
-                    max_values: cap,
-                    ..Default::default()
-                },
+                resource_limits::expansion(ExpansionResource::Values, cap),
                 FormulaLimits::default(),
             );
             if cap == exact {
@@ -407,7 +404,7 @@ fn witness_nodes_obey_the_value_ceiling() {
                 assert!(
                     matches!(result, Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
                     resource: ExpansionResource::Values, limit, observed, ..
-                })) if limit == cap as u128 && observed == exact as u128),
+                })) if limit == u128::from(cap) && observed == u128::from(exact)),
                     "{source}"
                 );
             }
@@ -436,12 +433,12 @@ const BOUNDED: &str = "{p(f(1,2));p(f(2,2));p(f(3,3))}.q:-p(f(X,X)):#true.";
 fn witness_work_limit_is_inclusive() {
     let cap = witnesses::inclusive_ceiling(
         BOUNDED,
-        limits::formula_default(FormulaResource::Work),
+        resource_limits::formula_default(FormulaResource::Work),
         |cap| {
             limited(
                 BOUNDED,
                 ExpansionLimits::default(),
-                &limits::formula(FormulaResource::Work, cap),
+                &resource_limits::formula(FormulaResource::Work, cap),
             )
         },
         // A relation operation can charge a bounded group of cells at once.

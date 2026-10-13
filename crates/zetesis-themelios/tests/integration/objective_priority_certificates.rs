@@ -1,5 +1,6 @@
 //! Invariant aggregate values discharge generated priority obligations.
 
+use crate::support::resource_limits;
 use crate::support::source_cases;
 
 use zetesis_reference_support::{admit, exhaustive};
@@ -73,20 +74,17 @@ fn invariant_priorities_preserve_scored_answers() {
 fn certificate_storage_has_an_inclusive_limit() {
     // One request, two tuple sets, two cone predicates, one transported name
     // and one completed carrier value coexist during certification.
-    const CERTIFICATE_ENTRIES: usize = 7;
+    const CERTIFICATE_ENTRIES: u64 = 7;
     let source = "a.n(N):-N=#count{1:a}.#minimize{1@N:n(N)}.";
-    let mut limits = FormulaLimits {
-        max_objective_presence_entries: CERTIFICATE_ENTRIES - 1,
-        ..FormulaLimits::default()
-    };
-    let error = admit(source, &limits).unwrap_err();
+    let limits =
+        |maximum| resource_limits::formula(FormulaResource::ObjectivePresenceEntries, maximum);
+    let error = admit(source, &limits(CERTIFICATE_ENTRIES - 1)).unwrap_err();
     assert!(matches!(error, FormulaFailure::Limit {
         resource: FormulaResource::ObjectivePresenceEntries,
         observed,
         ..
-    } if observed == CERTIFICATE_ENTRIES as u128));
-    limits.max_objective_presence_entries = CERTIFICATE_ENTRIES;
-    assert!(admit(source, &limits).is_ok());
+    } if observed == u128::from(CERTIFICATE_ENTRIES)));
+    assert!(admit(source, &limits(CERTIFICATE_ENTRIES)).is_ok());
 }
 
 #[test]

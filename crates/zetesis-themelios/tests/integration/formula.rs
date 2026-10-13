@@ -3,6 +3,7 @@
 use crate::support::atom_models::answer_sets;
 use crate::support::atom_models::{self, Models};
 use crate::support::objective_boundaries;
+use crate::support::resource_limits;
 
 use std::collections::BTreeSet;
 
@@ -220,13 +221,7 @@ fn parameterized_program_parts_remain_located_refusals() {
 fn limit_diagnostics_report_required_counts() {
     let error = admit(
         "a. b.",
-        &FormulaLimits {
-            theory: zetesis_ferraris::AdmissionLimits {
-                max_atoms: 1,
-                ..zetesis_ferraris::AdmissionLimits::default()
-            },
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::Atoms, 1),
     )
     .unwrap_err();
     assert_eq!(
@@ -237,67 +232,16 @@ fn limit_diagnostics_report_required_counts() {
 
 #[test]
 fn each_formula_resource_refuses_without_returning_a_partial_theory() {
-    let cases = [
-        (
-            FormulaLimits {
-                max_domain_values: 1,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::DomainValues,
-        ),
-        (
-            FormulaLimits {
-                max_substitutions: 1,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::Substitutions,
-        ),
-        (
-            FormulaLimits {
-                max_work: 1,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::Work,
-        ),
-        (
-            FormulaLimits {
-                max_origin_locations: 1,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::Origins,
-        ),
-        (
-            FormulaLimits {
-                theory: zetesis_ferraris::AdmissionLimits {
-                    max_atoms: 1,
-                    ..zetesis_ferraris::AdmissionLimits::default()
-                },
-                ..FormulaLimits::default()
-            },
-            FormulaResource::Atoms,
-        ),
-        (
-            FormulaLimits {
-                theory: zetesis_ferraris::AdmissionLimits {
-                    max_nodes: 1,
-                    ..zetesis_ferraris::AdmissionLimits::default()
-                },
-                ..FormulaLimits::default()
-            },
-            FormulaResource::Nodes,
-        ),
-        (
-            FormulaLimits {
-                theory: zetesis_ferraris::AdmissionLimits {
-                    max_roots: 1,
-                    ..zetesis_ferraris::AdmissionLimits::default()
-                },
-                ..FormulaLimits::default()
-            },
-            FormulaResource::Roots,
-        ),
-    ];
-    for (limits, expected) in cases {
+    for expected in [
+        FormulaResource::DomainValues,
+        FormulaResource::Substitutions,
+        FormulaResource::Work,
+        FormulaResource::Origins,
+        FormulaResource::Atoms,
+        FormulaResource::Nodes,
+        FormulaResource::Roots,
+    ] {
+        let limits = resource_limits::formula(expected, 1);
         let error = admit("d(1..2). 1{a(X):d(X)}1.", &limits).expect_err("bounded refusal");
         assert!(
             matches!(error, FormulaFailure::Limit { resource, .. } if resource == expected),

@@ -1,6 +1,7 @@
 //! Successful admission retains bounded warnings and original source evidence.
 
 use crate::support::admission;
+use crate::support::resource_limits;
 use zetesis_reference_support::BundleFixture;
 
 use zetesis_test_support::fixtures::ZERO_DIVISOR as SOURCE;
@@ -76,10 +77,7 @@ fn unreached_zero_divisors_retain_no_warnings() {
     ] {
         let admitted = admit(
             source,
-            &FormulaLimits {
-                max_warnings: 0,
-                ..FormulaLimits::default()
-            },
+            &resource_limits::formula(FormulaResource::Warnings, 0),
         )
         .unwrap();
         assert!(admitted.warnings().is_empty(), "{source}");
@@ -91,10 +89,7 @@ fn unreached_zero_divisors_retain_no_warnings() {
 fn repeated_evaluations_retain_one_warning_location() {
     let admitted = admit(
         "d(0..4). p(X,Y) :- d(X), d(Y), 1/X=1.",
-        &FormulaLimits {
-            max_warnings: 1,
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::Warnings, 1),
     )
     .unwrap();
     assert_eq!(admitted.warnings().len(), 1);
@@ -124,10 +119,7 @@ fn warning_retention_exhaustion_refuses_admission() {
     ] {
         let failure = admit(
             source,
-            &FormulaLimits {
-                max_warnings: limit,
-                ..FormulaLimits::default()
-            },
+            &resource_limits::formula(FormulaResource::Warnings, limit),
         )
         .unwrap_err();
         assert!(
@@ -136,7 +128,7 @@ fn warning_retention_exhaustion_refuses_admission() {
                 limit: ceiling,
                 observed,
                 ..
-            } if ceiling == limit as u128 && observed == limit as u128 + 1),
+            } if ceiling == u128::from(limit) && observed == u128::from(limit) + 1),
             "{failure}"
         );
     }

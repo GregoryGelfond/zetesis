@@ -5,11 +5,12 @@
 //! other reached arithmetic failures refuse the program. Incomplete
 //! relational prefixes have no such duty.
 
+use crate::support::resource_limits;
 use std::collections::BTreeSet;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
 use zetesis_themelios::{
-    ExpansionFailure, FormulaFailure, FormulaLimits, observation::EvaluationError,
+    ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource, observation::EvaluationError,
 };
 
 fn refused(source: &str, expected: &EvaluationError) {
@@ -334,6 +335,7 @@ fn missing_positive_extensions_skip_scoped_validation() {
 
 #[test]
 fn rule_validation_uses_no_objective_scratch_allowance() {
+    // Both objective scratch limits at once, so their fields are named here.
     let limits = FormulaLimits {
         max_objective_formula_atoms: 0,
         max_objective_formula_nodes: 0,
@@ -422,10 +424,7 @@ fn staged_head_families_match_clingo() {
 
 #[test]
 fn head_generation_charges_only_selected_rows() {
-    let limits = FormulaLimits {
-        max_generated_values: 0,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::GeneratedValues, 0);
     for source in ["d(0).p(X+1):-d(X),1=2.", "d(0).{p(X+1):d(X),1=2}."] {
         let admitted = reference::admit(source, &limits).unwrap();
         assert_eq!(

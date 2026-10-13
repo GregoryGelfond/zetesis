@@ -3,12 +3,13 @@
 //! all bound is a test, not a generator, and a round's new rows are joined
 //! first.
 
+use crate::support::resource_limits;
 use std::cell::Cell;
 use std::fmt::Write as _;
 
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaLimits, GroundingObserver, GroundingOutcome,
+    AdmissionOptions, ExpansionLimits, FormulaResource, GroundingObserver, GroundingOutcome,
     GroundingPhase, GroundingWork, admit_formula_with_grounding_observer,
 };
 
@@ -65,10 +66,7 @@ fn support_counts(source: &str) -> (u64, u64) {
         source.to_owned(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_work: 100_000_000,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::Work, 100_000_000),
         Some(&rows),
     )
     .unwrap();
@@ -82,10 +80,7 @@ fn instantiation_rows(source: &str) -> u64 {
         source.to_owned(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_work: 100_000_000,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::Work, 100_000_000),
         Some(&rows),
     )
     .unwrap();

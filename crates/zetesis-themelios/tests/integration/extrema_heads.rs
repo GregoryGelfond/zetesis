@@ -1,7 +1,7 @@
 //! Extrema heads retain permissions independently of selected logical values.
 
 use crate::support::admission;
-use crate::support::limits;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -232,13 +232,7 @@ fn logical_boolean_values_create_no_atoms() {
 #[test]
 fn logical_keys_retain_the_complete_tuple_budget() {
     for function in ["#min", "#max"] {
-        let limits = FormulaLimits {
-            aggregate: zetesis_ferraris::AggregateLimits {
-                max_elements: 1,
-                ..Default::default()
-            },
-            ..Default::default()
-        };
+        let limits = resource_limits::formula(FormulaResource::AggregateElements, 1);
         assert!(
             admit_formula(
                 format!("{function}{{f(1),k:a;f(1),k:b}}=f(1)."),
@@ -277,7 +271,7 @@ fn logical_values_retain_scalar_storage_limits() {
     let error = admit_formula(
         source.into(),
         options(),
-        limits::expansion(ExpansionResource::ScalarBytes, 0),
+        resource_limits::expansion(ExpansionResource::ScalarBytes, 0),
         FormulaLimits::default(),
     )
     .unwrap_err();
@@ -548,12 +542,12 @@ fn grounding_limits_are_inclusive() {
         FormulaResource::Substitutions,
         FormulaResource::Work,
     ] {
-        let lower = first_success(limits::formula_default(resource), |middle| {
+        let lower = first_success(resource_limits::formula_default(resource), |middle| {
             admit_formula(
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits::formula(resource, middle),
+                resource_limits::formula(resource, middle),
             )
             .is_ok()
         });
@@ -563,7 +557,7 @@ fn grounding_limits_are_inclusive() {
                     source.into(),
                     options(),
                     ExpansionLimits::default(),
-                    limits::formula(resource, lower)
+                    resource_limits::formula(resource, lower)
                 )
                 .unwrap()
             ),
@@ -573,7 +567,7 @@ fn grounding_limits_are_inclusive() {
             source.into(),
             options(),
             ExpansionLimits::default(),
-            limits::formula(resource, lower - 1),
+            resource_limits::formula(resource, lower - 1),
         )
         .unwrap_err();
         assert!(

@@ -3,8 +3,8 @@
 use crate::support::answer_records::Record;
 use crate::support::clingo_reports::{optimal, optimal_witnesses};
 use crate::support::finite_bindings::{holds, remap, values};
-use crate::support::limits;
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
@@ -412,18 +412,12 @@ fn interval_slots_obey_the_variable_limit() {
 #[test]
 fn generated_choice_values_obey_the_cumulative_limit() {
     let source = "{p(1..2)}.{q(3..4)}.";
-    let limits = FormulaLimits {
-        max_generated_values: 4,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::GeneratedValues, 4);
     assert!(admit(source, &limits).is_ok());
     assert!(matches!(
         admit(
             source,
-            &FormulaLimits {
-                max_generated_values: 3,
-                ..limits
-            }
+            &resource_limits::formula(FormulaResource::GeneratedValues, 3)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::GeneratedValues,
@@ -435,15 +429,11 @@ fn generated_choice_values_obey_the_cumulative_limit() {
 
 #[test]
 fn oversized_choice_range_is_refused_before_generation() {
-    let limits = FormulaLimits::default();
     assert!(
         matches!(
             admit(
                 "{p((-2147483647-1)..2147483647)}.",
-                &FormulaLimits {
-                    max_assignment_values: 3,
-                    ..limits
-                }
+                &resource_limits::formula(FormulaResource::AssignmentValues, 3)
             ),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::AssignmentValues,
@@ -460,10 +450,7 @@ fn empty_joins_do_not_enumerate_choice_ranges() {
     assert!(
         admit(
             "{p((-2147483647-1)..2147483647)}:-missing.",
-            &FormulaLimits {
-                max_assignment_values: 0,
-                ..FormulaLimits::default()
-            }
+            &resource_limits::formula(FormulaResource::AssignmentValues, 0)
         )
         .is_ok(),
         "a closed empty relational join never enumerates the range"
@@ -474,8 +461,8 @@ fn empty_joins_do_not_enumerate_choice_ranges() {
 fn construction_and_streamed_substitution_work_refuse_before_partial_admission() {
     let source = "1{p(1..2,1..2)}1.";
     for resource in [FormulaResource::Substitutions, FormulaResource::Work] {
-        let attempt = |limit| admit(source, &limits::formula(resource, limit));
-        let threshold = first_success(limits::formula_default(resource), |limit| {
+        let attempt = |limit| admit(source, &resource_limits::formula(resource, limit));
+        let threshold = first_success(resource_limits::formula_default(resource), |limit| {
             attempt(limit).is_ok()
         });
         assert!(matches!(attempt(threshold - 1), Err(FormulaFailure::Limit {
@@ -486,12 +473,12 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
         admit_formula(
             source.into(),
             AdmissionOptions::default(),
-            limits::expansion(ExpansionResource::TermWork, limit),
+            resource_limits::expansion(ExpansionResource::TermWork, limit),
             FormulaLimits::default(),
         )
     };
     let threshold = first_success(
-        limits::expansion_default(ExpansionResource::TermWork),
+        resource_limits::expansion_default(ExpansionResource::TermWork),
         |limit| attempt(limit).is_ok(),
     );
     assert!(matches!(
@@ -506,12 +493,7 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
         (FormulaResource::Atoms, admitted.atoms().len()),
         (FormulaResource::Nodes, admitted.theory().nodes().len()),
     ] {
-        let mut limits = FormulaLimits::default();
-        if resource == FormulaResource::Atoms {
-            limits.theory.max_atoms = limit - 1;
-        } else {
-            limits.theory.max_nodes = limit - 1;
-        }
+        let limits = resource_limits::formula(resource, u64::try_from(limit - 1).unwrap());
         assert!(matches!(admit(source, &limits), Err(FormulaFailure::Limit {
             resource: actual, .. }) if actual == resource));
     }

@@ -1,6 +1,6 @@
 //! A comparison certificate belongs to one completed nongenerative binding.
 
-use crate::support::limits;
+use crate::support::resource_limits;
 use crate::support::source_cases;
 use zetesis_test_support::thresholds::first_success;
 
@@ -83,13 +83,17 @@ fn mixed_comparison_families_preserve_defined_substitutions() {
 #[test]
 fn reused_comparisons_keep_the_work_ceiling_inclusive() {
     let source = "d(1;2;3).p(X,Y):-d(X),d(Y),X+Y=4,X!=Y.";
-    let admitted =
-        |maximum| reference::admit(source, &limits::formula(FormulaResource::Work, maximum));
+    let admitted = |maximum| {
+        reference::admit(
+            source,
+            &resource_limits::formula(FormulaResource::Work, maximum),
+        )
+    };
     // This test locates an inclusive work boundary, not a fixed cost target.
     // Start from an actually admitted endpoint under the public finite policy;
     // checked lookup operations may change the amount of work this source needs.
-    let complete =
-        admitted(FormulaLimits::default().max_work).expect("finite comparison fixture is admitted");
+    let complete = admitted(resource_limits::formula_default(FormulaResource::Work))
+        .expect("finite comparison fixture is admitted");
     let expected = Records::from([(
         ["d(1)", "d(2)", "d(3)", "p(1,3)", "p(3,1)"]
             .into_iter()
@@ -109,7 +113,7 @@ fn reused_comparisons_keep_the_work_ceiling_inclusive() {
         Err(error) => panic!("expected only a work refusal at {maximum}: {error:?}"),
     };
     let upper = first_success(
-        limits::formula_default(FormulaResource::Work),
+        resource_limits::formula_default(FormulaResource::Work),
         has_enough_work,
     );
     let lower = upper - 1;

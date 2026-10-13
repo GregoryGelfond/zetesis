@@ -13,6 +13,7 @@ use zetesis_themelios::{
 };
 
 use crate::support::admission;
+use crate::support::resource_limits;
 use crate::support::source_cases;
 use zetesis_reference_support as reference;
 use zetesis_reference_support::{BundleFixture, formula};
@@ -96,13 +97,7 @@ fn weak_occurrences_count_before_upstream_statement_deduplication() {
     ] {
         let result = zetesis_reference_support::admit(
             source,
-            &FormulaLimits {
-                objective: zetesis_objective::AdmissionLimits {
-                    max_templates: 1,
-                    ..zetesis_objective::AdmissionLimits::default()
-                },
-                ..FormulaLimits::default()
-            },
+            &resource_limits::formula(FormulaResource::ObjectiveElements, 1),
         );
         assert!(matches!(
             result,

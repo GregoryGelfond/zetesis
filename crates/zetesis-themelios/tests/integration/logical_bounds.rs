@@ -1,7 +1,7 @@
 //! Logical bounds compare finite numeric measures without changing permissions.
 
 use crate::support::admission;
-use crate::support::limits;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -161,8 +161,7 @@ fn logical_bounds_cannot_hide_undefined_arithmetic() {
 
 #[test]
 fn logical_guards_preserve_tuple_element_limits() {
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_elements = 1;
+    let limits = resource_limits::formula(FormulaResource::AggregateElements, 1);
     assert!(limited("#count{1:a;1:b}<=word.", &limits).is_ok());
     let error = limited("#count{1:a;2:b}<=word.", &limits).unwrap_err();
     assert!(matches!(
@@ -185,14 +184,14 @@ fn grounding_limits_are_inclusive() {
         FormulaResource::Substitutions,
         FormulaResource::Work,
     ] {
-        let lower = first_success(limits::formula_default(resource), |middle| {
-            limited(source, &limits::formula(resource, middle)).is_ok()
+        let lower = first_success(resource_limits::formula_default(resource), |middle| {
+            limited(source, &resource_limits::formula(resource, middle)).is_ok()
         });
         assert_eq!(
-            native(&limited(source, &limits::formula(resource, lower)).unwrap()),
+            native(&limited(source, &resource_limits::formula(resource, lower)).unwrap()),
             native(&input(source))
         );
-        let error = limited(source, &limits::formula(resource, lower - 1)).unwrap_err();
+        let error = limited(source, &resource_limits::formula(resource, lower - 1)).unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Limit { resource: actual, limit, observed, .. }
             if actual == resource && limit == u128::from(lower - 1) && observed == u128::from(lower)),
@@ -210,12 +209,12 @@ fn preparation_payload_limit_is_inclusive() {
         prepare_formula(
             source.into(),
             options(),
-            limits::expansion(ExpansionResource::ScalarBytes, ceiling),
+            resource_limits::expansion(ExpansionResource::ScalarBytes, ceiling),
             FormulaLimits::default(),
         )
     };
     let lower = first_success(
-        limits::expansion_default(ExpansionResource::ScalarBytes),
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
         |middle| prepare(middle).is_ok(),
     );
     assert!(prepare(lower).is_ok());

@@ -1,6 +1,6 @@
 //! Source pools retain whole-rule products, local groups and bounded evidence.
 use crate::support::finite_bindings as reference;
-use crate::support::limits;
+use crate::support::resource_limits;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
@@ -287,10 +287,7 @@ fn templates_charge_duplicate_occurrences_before_deduplication() {
     let source = "p(1;1;2);q.";
     let error = limited(
         source,
-        ExpansionLimits {
-            max_templates: 2,
-            ..ExpansionLimits::default()
-        },
+        resource_limits::expansion(ExpansionResource::Templates, 2),
         &FormulaLimits::default(),
     )
     .unwrap_err();
@@ -306,10 +303,7 @@ fn templates_charge_duplicate_occurrences_before_deduplication() {
     assert!(
         limited(
             source,
-            ExpansionLimits {
-                max_templates: 3,
-                ..ExpansionLimits::default()
-            },
+            resource_limits::expansion(ExpansionResource::Templates, 3),
             &FormulaLimits::default()
         )
         .is_ok()
@@ -325,17 +319,17 @@ fn independent_limits_are_inclusive_and_failure_retains_source_location() {
         ExpansionResource::ScalarBytes,
         ExpansionResource::Origins,
     ] {
-        let exact = first_success(limits::expansion_default(resource), |limit| {
+        let exact = first_success(resource_limits::expansion_default(resource), |limit| {
             limited(
                 source,
-                limits::expansion(resource, limit),
+                resource_limits::expansion(resource, limit),
                 &FormulaLimits::default(),
             )
             .is_ok()
         });
         let error = limited(
             source,
-            limits::expansion(resource, exact - 1),
+            resource_limits::expansion(resource, exact - 1),
             &FormulaLimits::default(),
         )
         .unwrap_err();
@@ -348,7 +342,7 @@ fn independent_limits_are_inclusive_and_failure_retains_source_location() {
             native(
                 &limited(
                     source,
-                    limits::expansion(resource, exact),
+                    resource_limits::expansion(resource, exact),
                     &FormulaLimits::default()
                 )
                 .unwrap()
@@ -361,18 +355,18 @@ fn independent_limits_are_inclusive_and_failure_retains_source_location() {
         FormulaResource::Substitutions,
         FormulaResource::Work,
     ] {
-        let exact = first_success(limits::formula_default(resource), |limit| {
+        let exact = first_success(resource_limits::formula_default(resource), |limit| {
             limited(
                 source,
                 ExpansionLimits::default(),
-                &limits::formula(resource, limit),
+                &resource_limits::formula(resource, limit),
             )
             .is_ok()
         });
         let error = limited(
             source,
             ExpansionLimits::default(),
-            &limits::formula(resource, exact - 1),
+            &resource_limits::formula(resource, exact - 1),
         )
         .unwrap_err();
         assert!(
@@ -435,17 +429,17 @@ fn local_value_owners_respect_each_expansion_ceiling() {
             ExpansionResource::Values,
             ExpansionResource::ScalarBytes,
         ] {
-            let exact = first_success(limits::expansion_default(resource), |limit| {
+            let exact = first_success(resource_limits::expansion_default(resource), |limit| {
                 limited(
                     source,
-                    limits::expansion(resource, limit),
+                    resource_limits::expansion(resource, limit),
                     &FormulaLimits::default(),
                 )
                 .is_ok()
             });
             let error = limited(
                 source,
-                limits::expansion(resource, exact - 1),
+                resource_limits::expansion(resource, exact - 1),
                 &FormulaLimits::default(),
             )
             .unwrap_err();
@@ -456,7 +450,7 @@ fn local_value_owners_respect_each_expansion_ceiling() {
             );
             let accepted = limited(
                 source,
-                limits::expansion(resource, exact),
+                resource_limits::expansion(resource, exact),
                 &FormulaLimits::default(),
             )
             .unwrap();
@@ -553,10 +547,7 @@ fn pooled_head_values_obey_the_cumulative_limit() {
         limited(
             "p(X):-X=(1;2).",
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_generated_values: 1,
-                ..FormulaLimits::default()
-            }
+            &resource_limits::formula(FormulaResource::GeneratedValues, 1)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::GeneratedValues,
@@ -571,10 +562,7 @@ fn recursive_pool_growth_obeys_the_round_limit() {
         limited(
             "p(0).p(Y):-p(X),Y=(X+1;X+2).",
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_support_rounds: 3,
-                ..FormulaLimits::default()
-            }
+            &resource_limits::formula(FormulaResource::SupportRounds, 3)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::SupportRounds,
@@ -680,11 +668,11 @@ fn empty_alternatives_never_erase_required_source_safety() {
 fn pool_free_rules_have_an_inclusive_charged_scan_and_no_pool_projection() {
     for source in ["p:-q.", "{p}.", "p(X):-X=1..2."] {
         let exact = first_success(
-            limits::expansion_default(ExpansionResource::TermWork),
+            resource_limits::expansion_default(ExpansionResource::TermWork),
             |limit| {
                 limited(
                     source,
-                    limits::expansion(ExpansionResource::TermWork, limit),
+                    resource_limits::expansion(ExpansionResource::TermWork, limit),
                     &FormulaLimits::default(),
                 )
                 .is_ok()
@@ -692,7 +680,7 @@ fn pool_free_rules_have_an_inclusive_charged_scan_and_no_pool_projection() {
         );
         let error = limited(
             source,
-            limits::expansion(ExpansionResource::TermWork, exact - 1),
+            resource_limits::expansion(ExpansionResource::TermWork, exact - 1),
             &FormulaLimits::default(),
         )
         .unwrap_err();
@@ -710,7 +698,7 @@ fn pool_free_rules_have_an_inclusive_charged_scan_and_no_pool_projection() {
             native(
                 &limited(
                     source,
-                    limits::expansion(ExpansionResource::TermWork, exact),
+                    resource_limits::expansion(ExpansionResource::TermWork, exact),
                     &FormulaLimits::default()
                 )
                 .unwrap()
@@ -723,11 +711,8 @@ fn pool_free_rules_have_an_inclusive_charged_scan_and_no_pool_projection() {
     assert!(
         limited(
             "",
-            limits::expansion(ExpansionResource::TermWork, 0),
-            &FormulaLimits {
-                max_analysis_nodes: 0,
-                ..FormulaLimits::default()
-            }
+            resource_limits::expansion(ExpansionResource::TermWork, 0),
+            &resource_limits::formula(FormulaResource::AnalysisNodes, 0)
         )
         .is_ok()
     );
@@ -742,12 +727,12 @@ fn zero_arity_disjunct_carriers_have_an_independent_preclone_node_ceiling() {
             .join(";");
         let source = format!("p(1;2);{head}.");
         let exact = first_success(
-            limits::formula_default(FormulaResource::AnalysisNodes),
+            resource_limits::formula_default(FormulaResource::AnalysisNodes),
             |limit| {
                 limited(
                     &source,
                     ExpansionLimits::default(),
-                    &limits::formula(FormulaResource::AnalysisNodes, limit),
+                    &resource_limits::formula(FormulaResource::AnalysisNodes, limit),
                 )
                 .is_ok()
             },
@@ -758,7 +743,7 @@ fn zero_arity_disjunct_carriers_have_an_independent_preclone_node_ceiling() {
         let error = limited(
             &source,
             ExpansionLimits::default(),
-            &limits::formula(FormulaResource::AnalysisNodes, exact - 1),
+            &resource_limits::formula(FormulaResource::AnalysisNodes, exact - 1),
         )
         .unwrap_err();
         assert!(
@@ -771,7 +756,7 @@ fn zero_arity_disjunct_carriers_have_an_independent_preclone_node_ceiling() {
             limited(
                 &source,
                 ExpansionLimits::default(),
-                &limits::formula(FormulaResource::AnalysisNodes, exact)
+                &resource_limits::formula(FormulaResource::AnalysisNodes, exact)
             )
             .unwrap()
             .atoms()
@@ -786,6 +771,7 @@ fn zero_arity_disjunct_carriers_have_an_independent_preclone_node_ceiling() {
 fn compact_source_refuses_an_oversized_materialized_pool() {
     let arguments = ["(0;1)"; 12].join(",");
     let source = format!("p(f({arguments})).");
+    // Lifts three limits so that only the family bytes can refuse, so the fields are named here.
     let error = limited(
         &source,
         ExpansionLimits {

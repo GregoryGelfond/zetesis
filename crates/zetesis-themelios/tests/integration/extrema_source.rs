@@ -1,8 +1,9 @@
 //! Numeric min/max source translation, generated sentinels and total observers.
+use crate::support::resource_limits;
 use crate::support::source_cases;
 use zetesis_core::Value;
 use zetesis_reference_support::{admit, exhaustive};
-use zetesis_themelios::FormulaLimits;
+use zetesis_themelios::{FormulaLimits, FormulaResource};
 
 fn cases() -> Vec<source_cases::Case> {
     source_cases::cases(include_str!("../fixtures/extrema-source.jsonl"))
@@ -44,18 +45,9 @@ fn empty_assignments_use_real_extrema_and_respect_assignment_cache_limits() {
             &[value]
         );
         for limits in [
-            FormulaLimits {
-                max_assignment_values: 0,
-                ..FormulaLimits::default()
-            },
-            FormulaLimits {
-                max_aggregate_cache_rows: 0,
-                ..FormulaLimits::default()
-            },
-            FormulaLimits {
-                max_aggregate_cache_roots: 0,
-                ..FormulaLimits::default()
-            },
+            resource_limits::formula(FormulaResource::AssignmentValues, 0),
+            resource_limits::formula(FormulaResource::AggregateCacheRows, 0),
+            resource_limits::formula(FormulaResource::AggregateCacheRoots, 0),
         ] {
             assert!(
                 !admit(&source, &limits)

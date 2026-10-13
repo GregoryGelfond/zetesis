@@ -7,6 +7,7 @@ use crate::support::head_models::{
     Names, clingo, complete, expected, limited, manual_holds, selected, truth,
 };
 use crate::support::objective_boundaries;
+use crate::support::resource_limits;
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{BundleFixture, admit, canonical};
@@ -249,42 +250,35 @@ fn negation_nodes_and_occurrences_obey_exact_resource_boundaries() {
         "not not p(1..2).",
     ] {
         let admitted = admit(source, &FormulaLimits::default()).unwrap();
-        let mut limits = FormulaLimits::default();
-        limits.theory.max_nodes = admitted.theory().nodes().len();
+        let nodes = u64::try_from(admitted.theory().nodes().len()).unwrap();
+        let limits = |maximum| resource_limits::formula(FormulaResource::Nodes, maximum);
         assert_eq!(
             complete(
                 &limited(
                     source,
                     AdmissionOptions::default(),
                     ExpansionLimits::default(),
-                    &limits
+                    &limits(nodes)
                 )
                 .unwrap()
             ),
             complete(&admitted)
         );
-        limits.theory.max_nodes -= 1;
         assert!(matches!(
             limited(
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                &limits
+                &limits(nodes - 1)
             ),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::Nodes,
                 ..
             })
         ));
-        for (work, expansion_work) in [(0, usize::MAX), (u64::MAX, 0)] {
-            let limits = FormulaLimits {
-                max_work: work,
-                ..FormulaLimits::default()
-            };
-            let expansion = ExpansionLimits {
-                max_term_work: expansion_work,
-                ..ExpansionLimits::default()
-            };
+        for (work, expansion_work) in [(0, u64::MAX), (u64::MAX, 0)] {
+            let limits = resource_limits::formula(FormulaResource::Work, work);
+            let expansion = resource_limits::expansion(ExpansionResource::TermWork, expansion_work);
             assert!(matches!(
                 limited(source, AdmissionOptions::default(), expansion, &limits),
                 Err(FormulaFailure::Limit {
@@ -297,10 +291,7 @@ fn negation_nodes_and_occurrences_obey_exact_resource_boundaries() {
             ));
         }
     }
-    let limits = FormulaLimits {
-        max_disjunction_elements: 2,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::DisjunctionElements, 2);
     assert!(
         limited(
             "a|not a.",
@@ -328,10 +319,7 @@ fn negation_nodes_and_occurrences_obey_exact_resource_boundaries() {
 #[test]
 fn singleton_head_limit_counts_one_literal() {
     for source in ["not a.", "not not a."] {
-        let limits = FormulaLimits {
-            max_disjunction_elements: 1,
-            ..FormulaLimits::default()
-        };
+        let limits = resource_limits::formula(FormulaResource::DisjunctionElements, 1);
         assert!(
             limited(
                 source,
@@ -341,10 +329,7 @@ fn singleton_head_limit_counts_one_literal() {
             )
             .is_ok()
         );
-        let limits = FormulaLimits {
-            max_disjunction_elements: 0,
-            ..limits
-        };
+        let limits = resource_limits::formula(FormulaResource::DisjunctionElements, 0);
         assert!(matches!(
             limited(
                 source,

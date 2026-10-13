@@ -1,6 +1,7 @@
 //! Optional source-count plans preserve the original reduct subject.
 
 use crate::support::finite_bindings as reference;
+use crate::support::resource_limits;
 
 use reference::{exhaustive, external, holds, native, values};
 use zetesis_clingo_support as oracle;
@@ -8,7 +9,7 @@ use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{BundleFixture, canonical, prepared};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionLimits,
-    FormulaLimits, prepare_formula,
+    FormulaLimits, FormulaResource, prepare_formula,
 };
 
 const SOURCES: &[&str] = &[
@@ -357,10 +358,7 @@ fn optional_planning_preserves_original_work_failures() {
                 SOURCES[0].into(),
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                FormulaLimits {
-                    max_work: maximum,
-                    ..FormulaLimits::default()
-                },
+                resource_limits::formula(FormulaResource::Work, maximum),
             )
             .and_then(|prepared| {
                 if planned {
@@ -396,10 +394,7 @@ fn optional_planning_preserves_grounding_round_failures() {
             SOURCES[0].into(),
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                max_support_rounds: 0,
-                ..FormulaLimits::default()
-            },
+            resource_limits::formula(FormulaResource::SupportRounds, 0),
         )
         .expect("source preparation does not construct possible support")
     };
@@ -465,10 +460,7 @@ fn included_source_refusal_keeps_bundle_ownership() {
         bundle,
         zetesis_themelios::BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_support_rounds: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::SupportRounds, 0),
     )
     .unwrap();
     let error = input

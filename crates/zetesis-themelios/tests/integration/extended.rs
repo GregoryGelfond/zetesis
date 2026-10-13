@@ -4,6 +4,7 @@ use std::collections::BTreeSet;
 
 use crate::support::admission;
 use crate::support::atom_models::ground_atom;
+use crate::support::resource_limits;
 
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Span};
@@ -312,10 +313,7 @@ fn unsupported_forms_never_disappear_behind_empty_intervals() {
 
 #[test]
 fn giant_products_are_bounded_before_fact_materialization() {
-    let limits = ExpansionLimits {
-        max_templates: 5,
-        ..ExpansionLimits::default()
-    };
+    let limits = resource_limits::expansion(ExpansionResource::Templates, 5);
     let failure = admit_extended(
         "p(1..3,1..3).".to_owned(),
         AdmissionOptions::default(),
@@ -347,44 +345,22 @@ fn giant_products_are_bounded_before_fact_materialization() {
 
 #[test]
 fn independent_expansion_budgets_and_zero_limits_are_enforced() {
-    for (text, limits, expected) in [
-        (
-            "#const n=2. p(n).",
-            ExpansionLimits {
-                max_constants: 0,
-                ..ExpansionLimits::default()
-            },
-            ExpansionResource::Constants,
-        ),
-        (
-            "p(1+2).",
-            ExpansionLimits {
-                max_term_work: 0,
-                ..ExpansionLimits::default()
-            },
-            ExpansionResource::TermWork,
-        ),
-        (
-            "p(1..2).",
-            ExpansionLimits {
-                max_values: 3,
-                ..ExpansionLimits::default()
-            },
-            ExpansionResource::Values,
-        ),
+    for (text, expected, limit) in [
+        ("#const n=2. p(n).", ExpansionResource::Constants, 0),
+        ("p(1+2).", ExpansionResource::TermWork, 0),
+        ("p(1..2).", ExpansionResource::Values, 3),
         (
             "#const s=\"abcd\". p(s;s;s).",
-            ExpansionLimits {
-                max_scalar_bytes: 3,
-                ..ExpansionLimits::default()
-            },
             ExpansionResource::ScalarBytes,
+            3,
         ),
     ] {
+        let limits = resource_limits::expansion(expected, limit);
         assert!(
             matches!(admit_extended(text.to_owned(), AdmissionOptions::default(), limits), Err(ExpansionFailure::Limit { resource, .. }) if resource == expected)
         );
     }
+    // Every expansion limit at once, so each field is named here.
     let empty = ExpansionLimits {
         max_constants: 0,
         max_term_work: 0,
@@ -400,10 +376,7 @@ fn independent_expansion_budgets_and_zero_limits_are_enforced() {
         admit_extended(
             "p.".to_owned(),
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_values: 0,
-                ..ExpansionLimits::default()
-            }
+            resource_limits::expansion(ExpansionResource::Values, 0)
         )
         .is_ok()
     );
@@ -411,10 +384,7 @@ fn independent_expansion_budgets_and_zero_limits_are_enforced() {
         admit_extended(
             "p(2..1).".to_owned(),
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_templates: 0,
-                ..ExpansionLimits::default()
-            }
+            resource_limits::expansion(ExpansionResource::Templates, 0)
         )
         .is_ok()
     );
@@ -448,10 +418,7 @@ fn extended_is_explicit_and_source_and_core_limits_still_apply() {
 
 #[test]
 fn duplicated_rule_evidence_is_bounded_before_per_fact_copying() {
-    let limits = ExpansionLimits {
-        max_origin_locations: 3,
-        ..ExpansionLimits::default()
-    };
+    let limits = resource_limits::expansion(ExpansionResource::Origins, 3);
     assert!(matches!(
         admit_extended(
             "p(1..2). p(1..2).".to_owned(),
@@ -527,10 +494,7 @@ fn a_term_work_ceiling_trips_at_the_node_the_normalization_reaches() {
     // the refusal names the running total there and that statement's span.
     let (resource, limit, observed, span) = limit_failure(
         "e(0,1,2). e(3,4,5).",
-        ExpansionLimits {
-            max_term_work: 4,
-            ..ExpansionLimits::default()
-        },
+        resource_limits::expansion(ExpansionResource::TermWork, 4),
     );
     assert_eq!(resource, ExpansionResource::TermWork);
     assert_eq!((limit, observed), (4, 5));
@@ -545,10 +509,7 @@ fn scalars_are_charged_head_first_and_then_in_argument_order() {
     // Four bytes in the head exceed a ceiling of three before the body's one
     // byte is reached; one byte in the first argument is within it and the
     // four of the second then make five.
-    let limits = ExpansionLimits {
-        max_scalar_bytes: 3,
-        ..ExpansionLimits::default()
-    };
+    let limits = resource_limits::expansion(ExpansionResource::ScalarBytes, 3);
     let (resource, limit, observed, _) = limit_failure("q(\"aaaa\") :- p(\"b\").", limits);
     assert_eq!(
         (resource, limit, observed),

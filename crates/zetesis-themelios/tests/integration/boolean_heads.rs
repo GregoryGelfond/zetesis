@@ -1,7 +1,7 @@
 //! Boolean heads retain their original truth without supplying atom support.
 
-use crate::support::limits;
 use crate::support::objective_dependency_records as objective_dependencies;
+use crate::support::resource_limits;
 use zetesis_test_support::thresholds::first_success;
 
 mod cases;
@@ -246,14 +246,11 @@ fn boolean_disjuncts_preserve_scored_answers() {
 #[test]
 fn head_element_limits_count_boolean_operands() {
     for (source, count) in [("#true.", 1), ("#true|a.", 2), ("not #false|a|b.", 3)] {
-        let mut limits = FormulaLimits {
-            max_disjunction_elements: count,
-            ..FormulaLimits::default()
-        };
-        assert!(admit(source, &limits).is_ok());
-        limits.max_disjunction_elements = count - 1;
+        let limits =
+            |maximum| resource_limits::formula(FormulaResource::DisjunctionElements, maximum);
+        assert!(admit(source, &limits(count)).is_ok());
         assert!(
-            matches!(admit(source, &limits), Err(FormulaFailure::Limit { resource: FormulaResource::DisjunctionElements, observed, .. }) if observed == count as u128)
+            matches!(admit(source, &limits(count - 1)), Err(FormulaFailure::Limit { resource: FormulaResource::DisjunctionElements, observed, .. }) if observed == u128::from(count))
         );
     }
 }
@@ -276,8 +273,8 @@ fn tautologies_preserve_arithmetic_refusals() {
 const BUDGET_SOURCE: &str = "d(1..2).#true|p(X+1):-d(X).";
 
 fn exact_formula_budget(resource: FormulaResource) {
-    let attempt = |limit| admit(BUDGET_SOURCE, &limits::formula(resource, limit));
-    let threshold = first_success(limits::formula_default(resource), |limit| {
+    let attempt = |limit| admit(BUDGET_SOURCE, &resource_limits::formula(resource, limit));
+    let threshold = first_success(resource_limits::formula_default(resource), |limit| {
         attempt(limit).is_ok()
     });
     assert_eq!(
@@ -320,12 +317,12 @@ fn tautologies_preserve_term_work_accounting() {
         admit_formula(
             BUDGET_SOURCE.into(),
             AdmissionOptions::default(),
-            limits::expansion(ExpansionResource::TermWork, limit),
+            resource_limits::expansion(ExpansionResource::TermWork, limit),
             FormulaLimits::default(),
         )
     };
     let threshold = first_success(
-        limits::expansion_default(ExpansionResource::TermWork),
+        resource_limits::expansion_default(ExpansionResource::TermWork),
         |limit| attempt(limit).is_ok(),
     );
     assert_eq!(
