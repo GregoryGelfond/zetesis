@@ -91,6 +91,18 @@ fn record_statistics_name_the_executable_that_ran() {
 }
 
 #[test]
+fn both_statistics_views_of_one_run_name_the_same_executable() {
+    let result = solve("visible.", &["--json", "--stats"]);
+    let document: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    let named = document["statistics"]["executable"].as_str().unwrap();
+    let diagnostics = String::from_utf8(result.stderr).unwrap();
+    assert!(
+        diagnostics.contains(&format!("  executable: {named}\n")),
+        "{diagnostics}"
+    );
+}
+
+#[test]
 fn requested_json_contains_machine_statistics() {
     let result = solve(
         "{hidden}. visible. #show visible/0.",
