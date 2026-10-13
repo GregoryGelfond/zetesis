@@ -1,34 +1,15 @@
 //! Refutation needs only the prefix that establishes a contradiction.
 
+use crate::test_support::SinglePermits;
 use zetesis_cpu::{Cancellation, Stop};
 
 use crate::{
-    AdmissionLimits, FormulaParts, Narrower, NarrowingQuota, Node, OperandSpan, OriginalSubject,
-    Region, RegionLimits, Theory,
+    AdmissionLimits, FormulaParts, Narrower, Node, OperandSpan, OriginalSubject, Region,
+    RegionLimits, Theory,
 };
 
 use super::super::{Closure, NarrowingScratch, Step, Subject, Work, bit, producers};
 use super::compact_mut;
-
-/// Single permits expose the exact read at which a typed refusal is observed.
-struct Quota {
-    remaining: u64,
-    failure: Stop,
-}
-
-impl NarrowingQuota for Quota {
-    fn reserve(&mut self, _: u64) -> Result<u64, Stop> {
-        if self.remaining == 0 {
-            return Err(self.failure);
-        }
-        self.remaining -= 1;
-        Ok(1)
-    }
-
-    fn refund(&mut self, unspent: u64) {
-        self.remaining += unspent;
-    }
-}
 
 fn chain(disjunction: bool, atoms: usize) -> Theory {
     let operands = OperandSpan {
@@ -72,10 +53,7 @@ fn chain_refutation_visits_only_its_prefix() {
                     }
                     let mut scratch = NarrowingScratch::default();
                     scratch.prepare(9);
-                    let mut quota = Quota {
-                        remaining: limit,
-                        failure,
-                    };
+                    let mut quota = SinglePermits::new(limit, failure);
                     let mut work = Work::reserved(&mut quota);
                     let result = Closure {
                         known: compact_mut(&mut knowledge),
@@ -126,10 +104,7 @@ fn parent_refutation_visits_only_its_prefix() {
             }
             let mut scratch = NarrowingScratch::default();
             scratch.prepare(9);
-            let mut quota = Quota {
-                remaining: limit,
-                failure,
-            };
+            let mut quota = SinglePermits::new(limit, failure);
             let mut work = Work::reserved(&mut quota);
             let result = Closure {
                 known: compact_mut(&mut knowledge),

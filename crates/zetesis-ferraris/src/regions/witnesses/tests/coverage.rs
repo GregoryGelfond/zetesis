@@ -2,7 +2,7 @@
 
 use super::super::{Scratch, Work, chain_position, expands};
 use super::*;
-use crate::NarrowingQuota;
+use crate::test_support::Allowance;
 use zetesis_cpu::Stop;
 
 fn connective(nodes: &mut FormulaNodes, disjunction: bool, children: &[usize]) -> usize {
@@ -38,14 +38,6 @@ fn chain(index: &Narrower, root: usize) -> usize {
     let chain = chain_position(index.chain_of[root].unwrap());
     assert!(expands(index, chain));
     chain
-}
-
-fn warmed(index: &Narrower) -> Scratch {
-    let mut scratch = Scratch::default();
-    scratch
-        .begin(index.parents.len(), &mut Work::new(u64::MAX))
-        .unwrap();
-    scratch
 }
 
 #[test]
@@ -284,26 +276,6 @@ fn every_cover_work_prefix_can_retry_with_another_cut() {
         }
     }
 }
-
-struct CancelAfter {
-    remaining: u64,
-}
-
-impl NarrowingQuota for CancelAfter {
-    fn reserve(&mut self, requested: u64) -> Result<u64, Stop> {
-        if self.remaining == 0 {
-            return Err(Stop::Cancelled);
-        }
-        let granted = self.remaining.min(requested);
-        self.remaining -= granted;
-        Ok(granted)
-    }
-
-    fn refund(&mut self, unspent: u64) {
-        self.remaining += unspent;
-    }
-}
-
 #[test]
 fn cancelled_cover_prefixes_do_not_establish_coverage() {
     let width = 8;
@@ -312,7 +284,10 @@ fn cancelled_cover_prefixes_do_not_establish_coverage() {
     let chain = chain(&index, root);
     for allowed in 0..u64::try_from(3 * width + 5).unwrap() {
         let mut scratch = warmed(&index);
-        let mut quota = CancelAfter { remaining: allowed };
+        let mut quota = Allowance {
+            remaining: allowed,
+            failure: Stop::Cancelled,
+        };
         let mut work = Work::reserved(&mut quota);
         let result = scratch.covered_by(&index, chain, &mut work, |node, work| {
             work.tick()?;

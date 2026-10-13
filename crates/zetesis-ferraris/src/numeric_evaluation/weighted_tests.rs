@@ -1,10 +1,11 @@
 //! Shared nonnegative sums keep per-guard truth and per-pass row identity.
 
 use super::{Measure, NumericRowScratch};
+use crate::test_support::world;
 use crate::{
     AdmissionLimits, EvaluationError, EvaluationLimits, EvaluationWorkspace, ExtremumCutRule,
-    ExtremumRow, FormulaNodes, FormulaParts, FrozenReduct, Interpretation, Limits, Node, NodeView,
-    Theory, Threshold, TightCheckLimits, TightPlan, TightPlanLimits, TightVerdict, TightWorkspace,
+    ExtremumRow, FormulaNodes, FormulaParts, FrozenReduct, Limits, Node, NodeView, Theory,
+    Threshold, TightCheckLimits, TightPlan, TightPlanLimits, TightVerdict, TightWorkspace,
 };
 use zetesis_cpu::{Cancellation, Stop};
 
@@ -25,14 +26,6 @@ fn weighted(bounds: &[i128], checked: bool) -> Theory {
     } else {
         Theory::new(2, nodes.into_parts(), vec![], AdmissionLimits::default()).unwrap()
     }
-}
-
-fn world(theory: &Theory, mask: usize) -> Interpretation {
-    Interpretation::new(
-        theory,
-        (0..theory.atom_count()).filter(|atom| mask & (1 << atom) != 0),
-    )
-    .unwrap()
 }
 
 fn threshold(theory: &Theory, node: usize) -> Threshold<'_> {

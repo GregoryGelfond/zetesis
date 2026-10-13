@@ -2,6 +2,7 @@
 
 use super::EqualWitnesses;
 use crate::regions::{Work, chain_position};
+use crate::test_support::push_committed;
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, ExtremumCutRule, ExtremumRow,
     FormulaNodes, FormulaParts, FrozenSubject, Interpretation, Limits, Narrower, Narrowing,
@@ -11,13 +12,6 @@ use zetesis_cpu::{Cancellation, Stop};
 
 fn owner(atoms: usize) -> FormulaNodes {
     FormulaNodes::new(FormulaParts::new((0..atoms).map(Node::atom).collect(), vec![]).unwrap())
-}
-
-fn push(owner: &mut FormulaNodes, value: NodeView<'_>) -> usize {
-    let mut transaction = owner.transaction();
-    let node = transaction.push(value, usize::MAX, usize::MAX).unwrap();
-    transaction.commit();
-    node
 }
 
 fn cuts(owner: &mut FormulaNodes, conditions: &[usize], count: usize) -> Vec<usize> {
@@ -64,8 +58,8 @@ fn a_collision_bucket_retains_separate_exact_classes() {
     // Equal cardinality, minimum, sum and xor, but different leaf sets.
     let first = cuts(&mut nodes, &[0, 3, 4, 7], 1)[0];
     let second = cuts(&mut nodes, &[0, 1, 6, 7], 1)[0];
-    let first_boolean = push(&mut nodes, NodeView::Or(&[7, 4, 3, 0, 3]));
-    let second_boolean = push(&mut nodes, NodeView::Or(&[7, 6, 1, 0, 1]));
+    let first_boolean = push_committed(&mut nodes, NodeView::Or(&[7, 4, 3, 0, 3]));
+    let second_boolean = push_committed(&mut nodes, NodeView::Or(&[7, 6, 1, 0, 1]));
     let theory = finish(nodes, 8, vec![]);
     let index = Narrower::new(&theory);
     assert_eq!(index.equal_extrema.classes.len(), 2);
@@ -83,8 +77,8 @@ fn a_collision_bucket_retains_separate_exact_classes() {
 fn eligible_collision_buckets_preserve_boolean_subgroups() {
     let mut nodes = owner(8);
     cuts(&mut nodes, &[0, 3, 4, 7], 1);
-    let first = push(&mut nodes, NodeView::Or(&[0, 1, 6, 7]));
-    let second = push(&mut nodes, NodeView::Or(&[7, 6, 1, 0]));
+    let first = push_committed(&mut nodes, NodeView::Or(&[0, 1, 6, 7]));
+    let second = push_committed(&mut nodes, NodeView::Or(&[7, 6, 1, 0]));
     let theory = finish(nodes, 8, vec![]);
     let index = Narrower::new(&theory);
     // The old runtime candidate bucket admitted this exact Boolean equality,
@@ -100,7 +94,7 @@ fn eligible_collision_buckets_preserve_boolean_subgroups() {
 fn unmatched_collision_members_do_not_form_a_class() {
     let mut nodes = owner(8);
     let native = cuts(&mut nodes, &[0, 3, 4, 7], 1)[0];
-    let boolean = push(&mut nodes, NodeView::Or(&[0, 1, 6, 7]));
+    let boolean = push_committed(&mut nodes, NodeView::Or(&[0, 1, 6, 7]));
     let theory = finish(nodes, 8, vec![]);
     let index = Narrower::new(&theory);
     assert!(members(&index, native).is_empty());
@@ -112,7 +106,7 @@ fn repeated_class(atoms: usize) -> Theory {
     let mut nodes = owner(atoms);
     let conditions: Vec<_> = (0..atoms).collect();
     cuts(&mut nodes, &conditions, 32);
-    push(&mut nodes, NodeView::Or(&conditions));
+    push_committed(&mut nodes, NodeView::Or(&conditions));
     finish(nodes, atoms, vec![])
 }
 
@@ -148,8 +142,8 @@ fn authentication_refuses_every_incomplete_work_prefix() {
     let mut nodes = owner(8);
     cuts(&mut nodes, &[0, 3, 4, 7], 1);
     cuts(&mut nodes, &[0, 1, 6, 7], 1);
-    push(&mut nodes, NodeView::Or(&[7, 4, 3, 0, 3]));
-    push(&mut nodes, NodeView::Or(&[7, 6, 1, 0, 1]));
+    push_committed(&mut nodes, NodeView::Or(&[7, 4, 3, 0, 3]));
+    push_committed(&mut nodes, NodeView::Or(&[7, 6, 1, 0, 1]));
     let theory = finish(nodes, 8, vec![]);
     let index = Narrower::new(&theory);
     let expected = &index.equal_extrema;
@@ -174,9 +168,9 @@ fn authentication_refuses_every_incomplete_work_prefix() {
 #[test]
 fn exact_classes_preserve_arbitrary_frozen_models() {
     let mut nodes = owner(3);
-    let either = push(&mut nodes, NodeView::Or(&[0, 1]));
+    let either = push_committed(&mut nodes, NodeView::Or(&[0, 1]));
     let cut = cuts(&mut nodes, &[either, 0], 1)[0];
-    let observed = push(&mut nodes, NodeView::Implies(either, 2));
+    let observed = push_committed(&mut nodes, NodeView::Implies(either, 2));
     let theory = finish(nodes, 3, vec![cut, observed]);
     let index = Narrower::new(&theory);
     assert_eq!(index.equal_extrema.classes.len(), 1);

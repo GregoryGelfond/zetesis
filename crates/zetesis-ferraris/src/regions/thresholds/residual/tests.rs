@@ -1,10 +1,11 @@
 //! Residual arithmetic preserves compatible models and consumes only closed sums.
 
 use crate::regions::{Closure, NarrowingStatistics, Step, Width, Work};
+use crate::test_support::{Allowance, close};
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaNodes, FormulaParts,
-    FrozenSubject, Interpretation, Knowledge, Limits, Narrower, Narrowing, NarrowingQuota,
-    NarrowingScratch, Node, NodeView, OriginalSubject, Region, RegionLimits, Theory, models,
+    FrozenSubject, Interpretation, Limits, Narrower, Narrowing, NarrowingScratch, Node, NodeView,
+    OriginalSubject, Region, RegionLimits, Theory, models,
 };
 use zetesis_cpu::{Cancellation, Stop};
 
@@ -47,25 +48,6 @@ fn residual() -> Theory {
         .chain((33..=64).map(|condition| (condition, 10)))
         .collect();
     interval(65, &terms, [17, 18])
-}
-
-fn close(
-    theory: &Theory,
-    index: &Narrower,
-    region: &mut Region,
-    knowledge: &mut Knowledge,
-    scratch: &mut NarrowingScratch,
-) -> (Narrowing, NarrowingStatistics) {
-    index
-        .narrow_known(
-            OriginalSubject::new(theory, None),
-            region,
-            knowledge,
-            scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap()
 }
 
 #[test]
@@ -530,25 +512,6 @@ fn row_queue_receipt_includes_both_worklists() {
         as u128
         * size_of::<u64>() as u128;
     assert_eq!(scratch.retained_bytes(), entries + flags);
-}
-
-struct Allowance {
-    remaining: u64,
-    failure: Stop,
-}
-
-impl NarrowingQuota for Allowance {
-    fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
-        let granted = wanted.min(self.remaining);
-        if granted == 0 {
-            return Err(self.failure);
-        }
-        self.remaining -= granted;
-        Ok(granted)
-    }
-    fn refund(&mut self, unspent: u64) {
-        self.remaining += unspent;
-    }
 }
 
 #[test]

@@ -6,11 +6,12 @@ use std::num::NonZeroUsize;
 use zetesis_cpu::Cancellation;
 
 use crate::{
-    AdmissionLimits, EvaluationLimits, EvaluationWorkspace, Interpretation, Narrower, Node, Region,
+    AdmissionLimits, EvaluationLimits, EvaluationWorkspace, Interpretation, Narrower, Node,
     RegionLimits, Theory,
 };
 
 use super::super::{chain_position, encoded_chain};
+use super::partial_region;
 
 fn dissolved_chains() -> Theory {
     Theory::new(
@@ -110,19 +111,6 @@ fn live_chain_links_follow_dissolved_chain_removal() {
         narrower.absorbed,
         [false, false, false, false, true, false, true, false, false]
     );
-}
-
-fn partial_region(mut code: usize) -> Region {
-    let mut region = Region::all_open(4);
-    for atom in 0..4 {
-        match code % 3 {
-            1 => assert!(region.cut(atom)),
-            2 => assert!(region.hold(atom)),
-            _ => {}
-        }
-        code /= 3;
-    }
-    region
 }
 
 fn compare_closures(theory: &Theory, frozen: Option<&[bool]>) {

@@ -24,6 +24,8 @@ mod reduct;
 mod regions;
 mod stratified;
 mod support;
+#[cfg(test)]
+mod test_support;
 mod theory;
 mod threshold;
 pub mod threshold_lowering;

@@ -3,11 +3,11 @@
 mod locality;
 mod selection;
 
+use crate::test_support::{Allowance, close};
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaNodes, FormulaParts,
-    FrozenSubject, Interpretation, Knowledge, Narrower, Narrowing, NarrowingQuota,
-    NarrowingScratch, NarrowingStatistics, Node, NodeView, OriginalSubject, Region, RegionLimits,
-    Theory,
+    FrozenSubject, Interpretation, Knowledge, Narrower, Narrowing, NarrowingScratch,
+    NarrowingStatistics, Node, NodeView, OriginalSubject, Region, RegionLimits, Theory,
 };
 use zetesis_cpu::{Cancellation, Stop};
 
@@ -76,25 +76,6 @@ fn witness(native_source: bool, positive: bool) -> Theory {
         AdmissionLimits::default(),
     )
     .unwrap()
-}
-
-fn close(
-    theory: &Theory,
-    index: &Narrower,
-    region: &mut Region,
-    knowledge: &mut Knowledge,
-    scratch: &mut NarrowingScratch,
-) -> (Narrowing, NarrowingStatistics) {
-    index
-        .narrow_known(
-            OriginalSubject::new(theory, None),
-            region,
-            knowledge,
-            scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap()
 }
 
 #[test]
@@ -270,24 +251,6 @@ fn frozen_closure_ignores_connective_links() {
                 }
             }
         }
-    }
-}
-
-struct Allowance {
-    remaining: u64,
-    failure: Stop,
-}
-impl NarrowingQuota for Allowance {
-    fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
-        let granted = wanted.min(self.remaining);
-        if granted == 0 {
-            return Err(self.failure);
-        }
-        self.remaining -= granted;
-        Ok(granted)
-    }
-    fn refund(&mut self, unspent: u64) {
-        self.remaining += unspent;
     }
 }
 

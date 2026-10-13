@@ -706,3 +706,12 @@ fn a_native_upper_bound_refutes_its_smaller_boolean_conjunction() {
     assert_eq!(region.decision(4), Some(true));
     assert!((0..4).all(|atom| region.is_open(atom)));
 }
+
+/// Witness scratch begun for `index`'s parents with unbounded work.
+fn warmed(index: &Narrower) -> super::Scratch {
+    let mut scratch = super::Scratch::default();
+    scratch
+        .begin(index.parents.len(), &mut super::Work::new(u64::MAX))
+        .unwrap();
+    scratch
+}

@@ -1,5 +1,6 @@
 //! Ordinal cuts preserve witnesses without one leaf table per guard.
 
+use crate::test_support::push_committed;
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, ExtremumCutRule, ExtremumRow,
     FormulaNodes, FormulaParts, FrozenSubject, Interpretation, Limits, Narrower, Narrowing,
@@ -10,13 +11,6 @@ use zetesis_cpu::{Cancellation, Stop};
 
 fn owner(atoms: usize) -> FormulaNodes {
     FormulaNodes::new(FormulaParts::new((0..atoms).map(Node::atom).collect(), vec![]).unwrap())
-}
-
-fn push(owner: &mut FormulaNodes, value: NodeView<'_>) -> usize {
-    let mut transaction = owner.transaction();
-    let node = transaction.push(value, usize::MAX, usize::MAX).unwrap();
-    transaction.commit();
-    node
 }
 
 fn cuts(
@@ -102,7 +96,7 @@ fn repeated_conditions_preserve_extreme_witnesses() {
 
 fn compound() -> Theory {
     let mut nodes = owner(3);
-    let either = push(&mut nodes, NodeView::Or(&[0, 1]));
+    let either = push_committed(&mut nodes, NodeView::Or(&[0, 1]));
     let cut = cuts(
         &mut nodes,
         &[either, 0, 2],
@@ -110,9 +104,9 @@ fn compound() -> Theory {
         5,
         &[ExtremumCutRule::Prefix(4)],
     )[0];
-    let no = push(&mut nodes, NodeView::False);
-    let not_b = push(&mut nodes, NodeView::Implies(1, no));
-    let not_c = push(&mut nodes, NodeView::Implies(2, no));
+    let no = push_committed(&mut nodes, NodeView::False);
+    let not_b = push_committed(&mut nodes, NodeView::Implies(1, no));
+    let not_c = push_committed(&mut nodes, NodeView::Implies(2, no));
     finish(nodes, 3, vec![cut, not_b, not_c])
 }
 
@@ -136,7 +130,7 @@ fn ordered_cuts_propagate_without_choosing_a_witness() {
             [ExtremumCutRule::Prefix(3), ExtremumCutRule::Prefix(4)]
         };
         let roots = cuts(&mut nodes, &[0, 1, 2], &[1, 2, 3], 5, &guards);
-        let observed = push(&mut nodes, NodeView::Implies(roots[1], 3));
+        let observed = push_committed(&mut nodes, NodeView::Implies(roots[1], 3));
         let theory = finish(nodes, 4, vec![roots[0], observed]);
         let mut region = Region::all_open(4);
         assert_ne!(close(&theory, &mut region, None), Narrowing::Refuted);
@@ -162,7 +156,7 @@ fn equal_witness_cuts_transfer_between_different_rows() {
         6,
         &[ExtremumCutRule::Suffix(3)],
     )[0];
-    let observed = push(&mut nodes, NodeView::Implies(second, 3));
+    let observed = push_committed(&mut nodes, NodeView::Implies(second, 3));
     let theory = finish(nodes, 4, vec![first, observed]);
     for original in [None, Some(9)] {
         let mut region = Region::all_open(4);
@@ -174,7 +168,7 @@ fn equal_witness_cuts_transfer_between_different_rows() {
 #[test]
 fn equal_compound_witnesses_transfer_to_boolean_chains() {
     let mut nodes = owner(3);
-    let either = push(&mut nodes, NodeView::Or(&[0, 1]));
+    let either = push_committed(&mut nodes, NodeView::Or(&[0, 1]));
     let cut = cuts(
         &mut nodes,
         &[either, 0],
@@ -182,7 +176,7 @@ fn equal_compound_witnesses_transfer_to_boolean_chains() {
         4,
         &[ExtremumCutRule::Prefix(3)],
     )[0];
-    let observed = push(&mut nodes, NodeView::Implies(either, 2));
+    let observed = push_committed(&mut nodes, NodeView::Implies(either, 2));
     let theory = finish(nodes, 3, vec![cut, observed]);
     let mut region = Region::all_open(3);
     assert_ne!(close(&theory, &mut region, None), Narrowing::Refuted);
@@ -206,7 +200,7 @@ fn unit_rows_receive_native_cut_witnesses() {
         .push_threshold_family_range(&[0, 1, 2], &[1, 1, 1], &[1, 2], usize::MAX, usize::MAX)
         .unwrap();
     transaction.commit();
-    let observed = push(&mut nodes, NodeView::Implies(thresholds.start, 3));
+    let observed = push_committed(&mut nodes, NodeView::Implies(thresholds.start, 3));
     let theory = finish(nodes, 4, vec![cut, observed]);
     let mut region = Region::all_open(4);
     assert_ne!(close(&theory, &mut region, None), Narrowing::Refuted);
@@ -230,10 +224,10 @@ fn endpoint_cuts_respect_empty_extrema() {
             ExtremumCutRule::Suffix(5),
         ],
     );
-    let false_node = push(&mut nodes, NodeView::False);
+    let false_node = push_committed(&mut nodes, NodeView::False);
     let mut required = vec![roots[2], roots[3]];
     for position in [0, 1, 4, 5] {
-        required.push(push(
+        required.push(push_committed(
             &mut nodes,
             NodeView::Implies(roots[position], false_node),
         ));
@@ -389,7 +383,7 @@ fn fingerprint_collisions_do_not_establish_equality() {
         3,
         &[ExtremumCutRule::Prefix(2)],
     )[0];
-    let observed = push(&mut nodes, NodeView::Implies(second, 8));
+    let observed = push_committed(&mut nodes, NodeView::Implies(second, 8));
     let theory = finish(nodes, 9, vec![first, observed]);
     let mut region = Region::all_open(9);
     assert!(region.cut(8));

@@ -1,37 +1,13 @@
+use crate::test_support::world;
+use crate::test_support::{constructed_theory, push};
 use crate::{
     AdmissionLimits, EvaluationError, EvaluationLimits, EvaluationWorkspace, ExtremumCut,
-    ExtremumCutRule, ExtremumRow, FormulaNodes, FormulaTransaction, Interpretation, Limits,
-    NodeView, PositiveError, PositivePlan, PositivePlanLimits, PositiveResource, StratifiedError,
-    StratifiedPlan, StratifiedPlanLimits, SupportLimits, Theory, TightCheckLimits, TightPlan,
-    TightPlanLimits, TightVerdict, models, models_reduct, support_restriction,
+    ExtremumCutRule, ExtremumRow, FormulaTransaction, Limits, NodeView, PositiveError,
+    PositivePlan, PositivePlanLimits, PositiveResource, StratifiedError, StratifiedPlan,
+    StratifiedPlanLimits, SupportLimits, Theory, TightCheckLimits, TightPlan, TightPlanLimits,
+    TightVerdict, models, models_reduct, support_restriction,
 };
 use zetesis_cpu::{Cancellation, Stop};
-
-fn push(transaction: &mut FormulaTransaction<'_>, node: NodeView<'_>) -> usize {
-    transaction.push(node, usize::MAX, usize::MAX).unwrap()
-}
-
-fn theory(
-    atoms: usize,
-    construct: impl FnOnce(&mut FormulaTransaction<'_>) -> Vec<usize>,
-) -> Theory {
-    let mut nodes = FormulaNodes::default();
-    let mut transaction = nodes.transaction();
-    for atom in 0..atoms {
-        push(&mut transaction, NodeView::Atom(atom));
-    }
-    let roots = construct(&mut transaction);
-    transaction.commit();
-    Theory::new(atoms, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap()
-}
-
-fn world(theory: &Theory, mask: usize) -> Interpretation {
-    Interpretation::new(
-        theory,
-        (0..theory.atom_count()).filter(|atom| mask & (1 << atom) != 0),
-    )
-    .unwrap()
-}
 
 // Independent witness expansion, used only as the small semantic test oracle.
 // The native branch must retain its ordinal row rather than calling this branch.
@@ -78,7 +54,7 @@ fn cut(
 }
 
 fn nested(native: bool, rule: ExtremumCutRule, empty: bool) -> Theory {
-    theory(3, |transaction| {
+    constructed_theory(3, |transaction| {
         let falsum = push(transaction, NodeView::False);
         let implication = push(transaction, NodeView::Implies(0, 1));
         let negative = push(transaction, NodeView::Implies(2, falsum));
@@ -177,7 +153,7 @@ fn original_cut_truth_preserves_full_width_carriers() {
                 ExtremumCutRule::Prefix(boundary),
                 ExtremumCutRule::Suffix(boundary),
             ] {
-                let owner = theory(2, |transaction| {
+                let owner = constructed_theory(2, |transaction| {
                     vec![cut(
                         transaction,
                         true,
@@ -230,7 +206,7 @@ fn endpoint_cuts_charge_every_physical_occurrence() {
         ExtremumCutRule::Suffix(0),
         ExtremumCutRule::Suffix(5),
     ] {
-        let owner = theory(3, |transaction| {
+        let owner = constructed_theory(3, |transaction| {
             vec![cut(
                 transaction,
                 true,
@@ -278,7 +254,7 @@ fn endpoint_cuts_charge_every_physical_occurrence() {
 #[test]
 fn tight_ranks_ignore_nonqualifying_self_edges() {
     for rule in [ExtremumCutRule::Prefix(2), ExtremumCutRule::Suffix(3)] {
-        let owner = theory(2, |transaction| {
+        let owner = constructed_theory(2, |transaction| {
             let opaque = push(transaction, NodeView::Implies(1, 0));
             let ranks = match rule {
                 ExtremumCutRule::Prefix(_) => [1, 4, 4],
@@ -324,7 +300,7 @@ fn endpoint_cut_bodies_ignore_opaque_children() {
             rule,
             ExtremumCutRule::Prefix(5) | ExtremumCutRule::Suffix(0)
         );
-        let owner = theory(2, |transaction| {
+        let owner = constructed_theory(2, |transaction| {
             let opaque = push(transaction, NodeView::Implies(0, 1));
             let body = cut(
                 transaction,
@@ -371,7 +347,7 @@ fn endpoint_cut_bodies_ignore_opaque_children() {
 }
 
 fn positive_cycle(fact: bool) -> Theory {
-    theory(3, |transaction| {
+    constructed_theory(3, |transaction| {
         let opaque = push(transaction, NodeView::Implies(2, 0));
         let body = cut(
             transaction,
@@ -453,7 +429,7 @@ fn positive_cut_work_refusals_keep_charged_prefixes() {
 #[test]
 fn stratified_cut_aliases_keep_default_negation() {
     for fact in [false, true] {
-        let owner = theory(2, |transaction| {
+        let owner = constructed_theory(2, |transaction| {
             let falsum = push(transaction, NodeView::False);
             let negative = push(transaction, NodeView::Implies(1, falsum));
             let opaque = push(transaction, NodeView::Implies(0, 1));
@@ -488,7 +464,7 @@ fn stratified_cut_aliases_keep_default_negation() {
 
 #[test]
 fn stratified_distinct_cut_witnesses_decline() {
-    let owner = theory(3, |transaction| {
+    let owner = constructed_theory(3, |transaction| {
         let body = cut(
             transaction,
             true,
@@ -512,7 +488,7 @@ fn stratified_distinct_cut_witnesses_decline() {
 }
 
 fn support(native: bool) -> Theory {
-    let owner = theory(3, |transaction| {
+    let owner = constructed_theory(3, |transaction| {
         let opaque = push(transaction, NodeView::Implies(2, 0));
         vec![cut(
             transaction,

@@ -1,38 +1,13 @@
 //! Independent threshold arithmetic, frozen truth and class-certificate checks.
 
+use crate::test_support::world;
+use crate::test_support::{constructed_theory, push};
 use crate::{
-    AdmissionLimits, EvaluationError, EvaluationLimits, EvaluationWorkspace, FormulaNodes,
-    FormulaTransaction, Interpretation, Limits, NodeView, PositivePlan, PositivePlanLimits,
-    StratifiedError, StratifiedPlan, StratifiedPlanLimits, Theory, Threshold, TightCheckLimits,
-    TightError, TightPlan, TightPlanLimits, TightVerdict,
+    EvaluationError, EvaluationLimits, EvaluationWorkspace, FormulaTransaction, Limits, NodeView,
+    PositivePlan, PositivePlanLimits, StratifiedError, StratifiedPlan, StratifiedPlanLimits,
+    Threshold, TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightVerdict,
 };
 use zetesis_cpu::{Cancellation, Stop};
-
-fn push(transaction: &mut FormulaTransaction<'_>, node: NodeView<'_>) -> usize {
-    transaction.push(node, usize::MAX, usize::MAX).unwrap()
-}
-
-fn theory(
-    atoms: usize,
-    construct: impl FnOnce(&mut FormulaTransaction<'_>) -> Vec<usize>,
-) -> Theory {
-    let mut nodes = FormulaNodes::default();
-    let mut transaction = nodes.transaction();
-    for atom in 0..atoms {
-        push(&mut transaction, NodeView::Atom(atom));
-    }
-    let roots = construct(&mut transaction);
-    transaction.commit();
-    Theory::new(atoms, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap()
-}
-
-fn world(theory: &Theory, mask: usize) -> Interpretation {
-    Interpretation::new(
-        theory,
-        (0..theory.atom_count()).filter(|atom| mask & (1 << atom) != 0),
-    )
-    .unwrap()
-}
 
 fn threshold(
     transaction: &mut FormulaTransaction<'_>,
@@ -54,7 +29,7 @@ fn threshold(
 fn original_thresholds_keep_weighted_multiplicity() {
     let weights = [2, 3, 0, u64::MAX];
     for bound in [i128::MIN, 0, 1, 5, 6, i128::from(u64::MAX) + 5, i128::MAX] {
-        let owner = theory(3, |transaction| {
+        let owner = constructed_theory(3, |transaction| {
             vec![threshold(transaction, &[0, 0, 1, 2], &weights, bound)]
         });
         assert!(matches!(
@@ -86,7 +61,7 @@ fn original_thresholds_keep_weighted_multiplicity() {
 #[test]
 fn empty_thresholds_keep_the_widened_bound() {
     for bound in [i128::MIN, 0, 1, i128::MAX] {
-        let owner = theory(0, |transaction| {
+        let owner = constructed_theory(0, |transaction| {
             vec![threshold(transaction, &[], &[], bound)]
         });
         assert_eq!(
@@ -105,7 +80,7 @@ fn empty_thresholds_keep_the_widened_bound() {
 #[test]
 fn frozen_thresholds_match_arbitrary_worlds() {
     for bound in -1..19 {
-        let owner = theory(2, |transaction| {
+        let owner = constructed_theory(2, |transaction| {
             let falsum = push(transaction, NodeView::False);
             let implication = push(transaction, NodeView::Implies(0, 1));
             let negative = push(transaction, NodeView::Implies(0, falsum));
@@ -145,7 +120,7 @@ fn frozen_thresholds_match_arbitrary_worlds() {
 
 #[test]
 fn every_threshold_occurrence_consumes_work() {
-    let owner = theory(3, |transaction| {
+    let owner = constructed_theory(3, |transaction| {
         vec![threshold(transaction, &[0, 0, 1, 2], &[2, 3, 0, 1], 1)]
     });
     let candidate = world(&owner, 7);
@@ -202,7 +177,7 @@ fn reduction_propagates_a_stop_after_decisive_truth() {
 
 #[test]
 fn tight_threshold_dependencies_require_strict_ranks() {
-    let owner = theory(3, |transaction| {
+    let owner = constructed_theory(3, |transaction| {
         let body = threshold(transaction, &[0, 0, 1, 2], &[2, 3, 1, 0], 4);
         vec![0, push(transaction, NodeView::Implies(body, 2))]
     });
@@ -234,7 +209,7 @@ fn tight_threshold_dependencies_require_strict_ranks() {
 #[test]
 fn positive_threshold_cycles_need_external_consequences() {
     for facts in 0..4 {
-        let owner = theory(3, |transaction| {
+        let owner = constructed_theory(3, |transaction| {
             let body = threshold(transaction, &[0, 0, 1, 2], &[2, 3, 4, 0], 7);
             let mut roots = vec![
                 push(transaction, NodeView::Implies(body, 2)),
@@ -273,7 +248,7 @@ fn positive_threshold_cycles_need_external_consequences() {
 #[test]
 fn stratified_conjunction_thresholds_preserve_negation() {
     for fact in [false, true] {
-        let owner = theory(3, |transaction| {
+        let owner = constructed_theory(3, |transaction| {
             let falsum = push(transaction, NodeView::False);
             let singleton = threshold(transaction, &[0, 0, 1], &[2, 3, 0], 4);
             let negative = push(transaction, NodeView::Implies(singleton, falsum));
@@ -301,7 +276,7 @@ fn stratified_conjunction_thresholds_preserve_negation() {
 
 #[test]
 fn stratified_general_thresholds_decline_the_certificate() {
-    let owner = theory(3, |transaction| {
+    let owner = constructed_theory(3, |transaction| {
         let body = threshold(transaction, &[0, 1], &[2, 3], 2);
         vec![push(transaction, NodeView::Implies(body, 2))]
     });

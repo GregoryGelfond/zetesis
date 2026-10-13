@@ -1,17 +1,8 @@
 //! Independent reduct agreement and complete-certificate boundaries.
 
 use super::*;
+use crate::test_support::theory;
 use crate::{AdmissionLimits, FormulaParts, Limits, Node, OperandSpan};
-
-fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(
-        atoms,
-        FormulaParts::new(nodes, vec![]).unwrap(),
-        roots,
-        AdmissionLimits::default(),
-    )
-    .unwrap()
-}
 
 fn plan(theory: &Theory) -> StratifiedPlan {
     StratifiedPlan::compile(

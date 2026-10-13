@@ -1,6 +1,7 @@
 //! A support recheck is queued at most once until it runs, and a support that
 //! falls after an atom's recheck has it rechecked again.
 
+use crate::test_support::theory;
 use zetesis_cpu::{Cancellation, Stop};
 
 use super::super::{Closure, Step, Work};
@@ -225,19 +226,9 @@ fn a_held_unsupported_head_refutes_the_region() {
     assert_eq!(work.spent, 4);
 }
 
-fn support_theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(
-        atoms,
-        crate::FormulaParts::new(nodes, vec![]).unwrap(),
-        roots,
-        AdmissionLimits::default(),
-    )
-    .unwrap()
-}
-
 #[test]
 fn duplicate_producers_remain_distinct_supporters() {
-    let theory = support_theory(
+    let theory = theory(
         2,
         vec![
             Node::atom(0),
@@ -257,7 +248,7 @@ fn duplicate_producers_remain_distinct_supporters() {
 #[test]
 fn a_competing_head_cannot_supply_support() {
     // c -> (a or b), d -> a: held b blocks the first producer of held a.
-    let theory = support_theory(
+    let theory = theory(
         4,
         vec![
             Node::atom(0),
@@ -280,7 +271,7 @@ fn a_competing_head_cannot_supply_support() {
 #[test]
 fn choice_support_prevents_a_spurious_sole_body() {
     // {a}, b -> a: the bodyless choice and ordinary rule both support a.
-    let theory = support_theory(
+    let theory = theory(
         2,
         vec![
             Node::atom(0),
@@ -301,7 +292,7 @@ fn choice_support_prevents_a_spurious_sole_body() {
 
 #[test]
 fn a_bodyless_sole_support_forces_no_body() {
-    let theory = support_theory(
+    let theory = theory(
         2,
         vec![Node::atom(0), Node::atom(1), Node::implies(1, 0)],
         vec![0, 2],
@@ -380,7 +371,7 @@ fn later_support_withdrawal_forces_the_remaining_body() {
 fn a_new_competing_head_rechecks_remaining_support() {
     // a or b; c -> a; {b}; {c}. Initially held a has two possible
     // producers. Holding b withdraws the disjunctive support and forces c.
-    let theory = support_theory(
+    let theory = theory(
         3,
         vec![
             Node::atom(0),

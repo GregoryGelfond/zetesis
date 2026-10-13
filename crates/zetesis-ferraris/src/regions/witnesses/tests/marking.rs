@@ -2,7 +2,7 @@
 
 use super::super::{Scratch, Work, chain_position, expands};
 use super::*;
-use crate::NarrowingQuota;
+use crate::test_support::Allowance;
 use zetesis_cpu::Stop;
 
 fn dag(disjunction: bool, depth: usize) -> (Theory, Vec<usize>) {
@@ -29,14 +29,6 @@ fn dag(disjunction: bool, depth: usize) -> (Theory, Vec<usize>) {
         Theory::new(2, nodes.into_parts(), vec![], AdmissionLimits::default()).unwrap(),
         roots,
     )
-}
-
-fn warmed(index: &Narrower) -> Scratch {
-    let mut scratch = Scratch::default();
-    scratch
-        .begin(index.parents.len(), &mut Work::new(u64::MAX))
-        .unwrap();
-    scratch
 }
 
 fn assert_marks(scratch: &Scratch, index: &Narrower, expected: &[usize]) {
@@ -125,24 +117,6 @@ fn every_refused_mark_prefix_matches_collection_and_retries() {
         assert_eq!(marked.leaves.capacity(), 0);
     }
 }
-
-struct CancelAfter(u64);
-
-impl NarrowingQuota for CancelAfter {
-    fn reserve(&mut self, requested: u64) -> Result<u64, Stop> {
-        if self.0 == 0 {
-            return Err(Stop::Cancelled);
-        }
-        let granted = self.0.min(requested);
-        self.0 -= granted;
-        Ok(granted)
-    }
-
-    fn refund(&mut self, unspent: u64) {
-        self.0 += unspent;
-    }
-}
-
 #[test]
 fn cancelled_marking_prefixes_retry_with_fresh_membership() {
     let depth = 8;
@@ -152,7 +126,10 @@ fn cancelled_marking_prefixes_retry_with_fresh_membership() {
     let expected: Vec<_> = roots.iter().rev().copied().chain([0, 1]).collect();
     for allowed in 0..u64::try_from(4 * depth + 1).unwrap() {
         let mut scratch = warmed(&index);
-        let mut quota = CancelAfter(allowed);
+        let mut quota = Allowance {
+            remaining: allowed,
+            failure: Stop::Cancelled,
+        };
         let mut work = Work::reserved(&mut quota);
         assert_eq!(
             scratch.mark_cone(&index, chain, &mut work),
@@ -160,7 +137,7 @@ fn cancelled_marking_prefixes_retry_with_fresh_membership() {
         );
         assert_eq!(work.spent, allowed);
         work.refund();
-        assert_eq!(quota.0, 0);
+        assert_eq!(quota.remaining, 0);
         scratch
             .mark_cone(&index, chain, &mut Work::new(u64::MAX))
             .unwrap();

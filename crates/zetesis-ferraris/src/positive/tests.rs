@@ -1,17 +1,8 @@
 //! Whole-root grammar, linear incidence and exact reduct-family controls.
 
 use super::*;
-use crate::{AdmissionLimits, Limits, Node};
-
-fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(
-        atoms,
-        crate::FormulaParts::new(nodes, vec![]).unwrap(),
-        roots,
-        AdmissionLimits::default(),
-    )
-    .unwrap()
-}
+use crate::test_support::theory;
+use crate::{Limits, Node};
 
 fn plan(theory: &Theory) -> PositivePlan {
     PositivePlan::compile(

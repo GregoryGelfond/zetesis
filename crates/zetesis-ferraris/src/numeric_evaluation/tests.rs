@@ -1,10 +1,11 @@
 use super::NumericRowScratch;
+use crate::test_support::world;
 use crate::{
     AdmissionLimits, EvaluationError, EvaluationLimits, EvaluationWorkspace, ExtremaMeasure,
     ExtremumCut, ExtremumCutDescriptor, ExtremumCutRule, ExtremumRow, FormulaNodes, FormulaParts,
-    FrozenReduct, Interpretation, Limits, Node, NodeView, NumericDomain, NumericRow, Theory,
-    ThresholdDescriptor, TightCheckLimits, TightPlan, TightPlanLimits, TightVerdict,
-    TightWorkspace, check, models_reduct, native_aggregate as native,
+    FrozenReduct, Limits, Node, NodeView, NumericDomain, NumericRow, Theory, ThresholdDescriptor,
+    TightCheckLimits, TightPlan, TightPlanLimits, TightVerdict, TightWorkspace, check,
+    models_reduct, native_aggregate as native,
 };
 use zetesis_core::Value;
 use zetesis_cpu::{Cancellation, Stop};
@@ -34,14 +35,6 @@ fn family(roots: Vec<usize>, reverse: bool) -> Theory {
         .unwrap();
     transaction.commit();
     Theory::new(2, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap()
-}
-
-fn world(theory: &Theory, mask: usize) -> Interpretation {
-    Interpretation::new(
-        theory,
-        (0..theory.atom_count()).filter(|atom| mask & (1 << atom) != 0),
-    )
-    .unwrap()
 }
 
 fn view(theory: &Theory, node: usize) -> ExtremumCut<'_> {

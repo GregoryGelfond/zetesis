@@ -2,6 +2,7 @@
 
 use std::mem::size_of;
 
+use super::partial_region;
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, Interpretation, Narrower, Node, Region,
     RegionLimits, Theory,
@@ -94,19 +95,6 @@ pub(super) fn same_knowledge(left: &Knowledge, right: &Knowledge) {
     }
 }
 
-fn region(mut code: usize) -> Region {
-    let mut region = Region::all_open(4);
-    for atom in 0..4 {
-        match code % 3 {
-            1 => assert!(region.cut(atom)),
-            2 => assert!(region.hold(atom)),
-            _ => {}
-        }
-        code /= 3;
-    }
-    region
-}
-
 fn compare_closures(theory: &Theory, frozen: Option<&[bool]>, max_work: u64) {
     let narrower = Narrower::new(theory);
     let fresh = narrower.knowledge();
@@ -118,7 +106,7 @@ fn compare_closures(theory: &Theory, frozen: Option<&[bool]>, max_work: u64) {
     let extracted =
         super::super::producers(theory, RegionLimits::default(), &cancellation).unwrap();
     for code in 0..3usize.pow(4) {
-        let mut compact_region = region(code);
+        let mut compact_region = partial_region(code);
         let mut native_region = compact_region.clone();
         let mut compact = fresh.clone();
         let mut intermediate = compact32(&fresh);

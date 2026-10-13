@@ -1,11 +1,12 @@
 //! Processed operands remove only redundant scans, not pending events.
 
+use crate::test_support::SinglePermits;
 use zetesis_cpu::{Cancellation, Stop};
 
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaParts, FrozenSubject,
-    Interpretation, Knowledge, Narrower, Narrowing, NarrowingQuota, NarrowingScratch, Node,
-    OriginalSubject, Region, RegionLimits, Theory,
+    Interpretation, Knowledge, Narrower, Narrowing, NarrowingScratch, Node, OriginalSubject,
+    Region, RegionLimits, Theory,
 };
 
 use super::super::{Closure, Step, Subject, Width, Work, bit, counters::Count};
@@ -412,28 +413,6 @@ fn an_absorbing_operand_still_refutes_an_opposite_root() {
         assert_eq!(work.spent, 0);
     }
 }
-
-struct Quota {
-    remaining: u64,
-    calls: u64,
-    stop: Stop,
-}
-
-impl NarrowingQuota for Quota {
-    fn reserve(&mut self, _wanted: u64) -> Result<u64, Stop> {
-        self.calls += 1;
-        if self.remaining == 0 {
-            return Err(self.stop);
-        }
-        self.remaining -= 1;
-        Ok(1)
-    }
-
-    fn refund(&mut self, unspent: u64) {
-        self.remaining += unspent;
-    }
-}
-
 /// h <- a and b, or h <- a or b; the body is a live chain with a parent.
 fn chain_body(disjunction: bool) -> Theory {
     let join = if disjunction {
@@ -500,11 +479,7 @@ fn processed_roots_keep_the_node_and_parent_permits() {
             for limit in 0..=2 {
                 let (mut knowledge, mut scratch) = processed_body(&index);
                 let mut expected = knowledge.clone();
-                let mut quota = Quota {
-                    remaining: limit,
-                    calls: 0,
-                    stop,
-                };
+                let mut quota = SinglePermits::new(limit, stop);
                 let mut work = Work::reserved(&mut quota);
                 let result = Closure {
                     known: compact_mut(&mut knowledge),
@@ -630,11 +605,7 @@ fn witnessed_units_keep_the_node_and_parent_permits() {
                     state(&index, [opposite, opposite, opposite - 1, witness]);
                 assert_eq!(scratch.nodes.pop(), Some((2, !disjunction)));
                 let mut expected = knowledge.clone();
-                let mut quota = Quota {
-                    remaining: limit,
-                    calls: 0,
-                    stop,
-                };
+                let mut quota = SinglePermits::new(limit, stop);
                 let mut work = Work::reserved(&mut quota);
                 let result = Closure {
                     known: compact_mut(&mut knowledge),
