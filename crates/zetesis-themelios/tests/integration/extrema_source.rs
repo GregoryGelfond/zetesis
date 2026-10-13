@@ -1,7 +1,5 @@
 //! Numeric min/max source translation, generated sentinels and total observers.
 use crate::support::source_cases;
-use oracle::records as clingo;
-use zetesis_clingo_support as oracle;
 use zetesis_core::Value;
 use zetesis_reference_support::{admit, exhaustive};
 use zetesis_themelios::FormulaLimits;
@@ -87,13 +85,5 @@ fn unresolved_numeric_endpoints_remain_located_refusals() {
 #[test]
 #[ignore = "requires clingo: recorded extrema sources match fresh clingo; 198 bounded complete source comparisons"]
 fn recorded_extrema_sources_match_fresh_clingo() {
-    for case in cases() {
-        assert_eq!(
-            clingo(&case.source),
-            case.records,
-            "{}: {}",
-            case.name,
-            case.source
-        );
-    }
+    source_cases::clingo_matches_every_case(&cases());
 }

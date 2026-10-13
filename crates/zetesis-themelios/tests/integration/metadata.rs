@@ -1,18 +1,17 @@
 //! Display/declaration metadata preserves full stable models and source evidence.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
 
-use crate::support::atom_models::Models;
+use crate::support::atom_models::{Models, answer_sets};
+use crate::support::bundle_fixtures::Fixture;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
-use zetesis_core::{Atom, Program};
-use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
+use zetesis_core::Atom;
 use zetesis_themelios::{
-    AdmissionOptions, Admitted, BundleAdmissionError, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, ExpansionResource, OutputSelection, SourceBundle,
-    SourceDirective, admit, admit_bundle_extended, admit_extended,
+    AdmissionOptions, Admitted, BundleAdmissionError, BundleAdmissionOptions, ExpansionFailure,
+    ExpansionLimits, ExpansionResource, OutputSelection, SourceDirective, admit,
+    admit_bundle_extended, admit_extended,
 };
 
 type Displays = BTreeMap<BTreeSet<Atom>, usize>;
@@ -24,33 +23,6 @@ fn input(source: &str) -> Admitted {
         ExpansionLimits::default(),
     )
     .unwrap_or_else(|error| panic!("metadata source {source}: {error}"))
-}
-
-fn models(program: &Program) -> Models {
-    let cancellation = Cancellation::default();
-    let mut models = BTreeSet::new();
-    for seed in Candidates::new(program, CandidateLimits::default(), cancellation.clone()) {
-        let result = check(
-            program,
-            &seed.expect("full candidate enumeration"),
-            Limits::default(),
-            &cancellation,
-        )
-        .expect("complete reduct");
-        if result.accepted() {
-            assert!(
-                models.insert(
-                    result
-                        .closure()
-                        .atoms()
-                        .iter()
-                        .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
-                        .collect::<BTreeSet<_>>()
-                )
-            );
-        }
-    }
-    models
 }
 
 fn displays(models: &Models, selection: &OutputSelection) -> Displays {
@@ -75,7 +47,7 @@ fn defined_signatures_are_located_declarations_without_logical_effects() {
         accepted.program().templates().iter().collect::<Vec<_>>(),
         base.program().templates().iter().collect::<Vec<_>>()
     );
-    assert_eq!(models(accepted.program()), models(base.program()));
+    assert_eq!(answer_sets(accepted.program()), answer_sets(base.program()));
     assert!(!accepted.metadata().output().is_explicit());
     assert!(
         accepted
@@ -97,7 +69,7 @@ fn defined_signatures_are_located_declarations_without_logical_effects() {
 #[test]
 fn signatures_select_exact_arities_and_never_rename_through_constants() {
     let accepted = input("#const p=7. p. p(1). q. #show p/0.");
-    let full = models(accepted.program());
+    let full = answer_sets(accepted.program());
     assert_eq!(full.first().expect("full model").len(), 3);
     let shown = displays(&full, accepted.metadata().output());
     let atom = shown
@@ -118,22 +90,28 @@ fn empty_show_activates_explicit_selection_without_erasing_other_signatures() {
         assert!(accepted.metadata().output().is_explicit());
         assert_eq!(accepted.metadata().output().signatures().len(), 1);
         assert_eq!(
-            displays(&models(accepted.program()), accepted.metadata().output())
-                .first_key_value()
-                .expect("display")
-                .0
-                .len(),
+            displays(
+                &answer_sets(accepted.program()),
+                accepted.metadata().output()
+            )
+            .first_key_value()
+            .expect("display")
+            .0
+            .len(),
             1
         );
     }
     let accepted = input("p. q. #show.");
     assert_eq!(
-        displays(&models(accepted.program()), accepted.metadata().output()),
+        displays(
+            &answer_sets(accepted.program()),
+            accepted.metadata().output()
+        ),
         BTreeMap::from([(BTreeSet::new(), 1)])
     );
     let default = input("p. q.");
     assert_eq!(
-        displays(&models(default.program()), default.metadata().output())
+        displays(&answer_sets(default.program()), default.metadata().output())
             .first_key_value()
             .expect("display")
             .0
@@ -145,14 +123,14 @@ fn empty_show_activates_explicit_selection_without_erasing_other_signatures() {
 #[test]
 fn equal_displays_do_not_collapse_full_model_identity_or_counts() {
     let accepted = input("{p}. {q}. #show p/0.");
-    let full = models(accepted.program());
+    let full = answer_sets(accepted.program());
     assert_eq!(full.len(), 4);
     let shown = displays(&full, accepted.metadata().output());
     assert_eq!(shown.len(), 2);
     assert!(shown.values().all(|count| *count == 2));
     let hidden = input("{p}. {q}. #show.");
     assert_eq!(
-        displays(&models(hidden.program()), hidden.metadata().output()),
+        displays(&answer_sets(hidden.program()), hidden.metadata().output()),
         BTreeMap::from([(BTreeSet::new(), 4)])
     );
 }
@@ -206,7 +184,7 @@ fn raw_metadata_occurrences_have_their_own_budget_before_deduplication() {
     )
     .expect("metadata consumes no templates");
     assert!(accepted.program().templates().is_empty());
-    assert_eq!(models(accepted.program()).len(), 1);
+    assert_eq!(answer_sets(accepted.program()).len(), 1);
     assert!(
         admit_extended(
             "p.".to_owned(),
@@ -251,27 +229,6 @@ fn strict_s0_and_unsupported_display_forms_still_refuse() {
     }
 }
 
-struct Fixture {
-    directory: tempfile::TempDir,
-}
-impl Fixture {
-    fn new() -> Self {
-        Self {
-            directory: tempfile::tempdir().expect("fixture directory"),
-        }
-    }
-    fn write(&self, name: &str, source: &str) {
-        fs::write(self.directory.path().join(name), source).expect("fixture source");
-    }
-    fn bundle(&self) -> SourceBundle {
-        SourceBundle::load(
-            self.directory.path().join("entry.lp"),
-            BundleLimits::default(),
-        )
-        .expect("original source graph")
-    }
-}
-
 #[test]
 fn bundle_metadata_unions_global_selection_and_keeps_file_identities() {
     let fixture = Fixture::new();
@@ -289,18 +246,21 @@ fn bundle_metadata_unions_global_selection_and_keeps_file_identities() {
     assert_eq!(accepted.metadata().directives().len(), 5);
     assert_eq!(accepted.metadata().output().signatures().len(), 2);
     assert_eq!(
-        models(accepted.program())
+        answer_sets(accepted.program())
             .first()
             .expect("full model")
             .len(),
         3
     );
     assert_eq!(
-        displays(&models(accepted.program()), accepted.metadata().output())
-            .first_key_value()
-            .expect("display")
-            .0
-            .len(),
+        displays(
+            &answer_sets(accepted.program()),
+            accepted.metadata().output()
+        )
+        .first_key_value()
+        .expect("display")
+        .0
+        .len(),
         2
     );
     let identities: BTreeSet<_> = accepted
@@ -428,7 +388,7 @@ fn declarations_and_signature_display_match_clingo_without_model_projection() {
             "#show unknown/7.",
         ] {
             let accepted = input(&format!("{base} {metadata}"));
-            let full = models(accepted.program());
+            let full = answer_sets(accepted.program());
             assert_eq!(
                 displays(&full, &OutputSelection::default()),
                 external(base),
@@ -460,13 +420,16 @@ fn included_signature_metadata_matches_clingo_complete_display_multiplicities() 
         )
         .expect("metadata bundle");
         let run = oracle::run_in(
-            fixture.directory.path(),
+            fixture.directory(),
             ["entry.lp", "0", "--outf=2", "--warn=none"],
             &oracle::DECIDED,
             oracle::Limits::default(),
         );
         assert_eq!(
-            displays(&models(accepted.program()), accepted.metadata().output()),
+            displays(
+                &answer_sets(accepted.program()),
+                accepted.metadata().output()
+            ),
             oracle_json(run.stdout())
         );
     }

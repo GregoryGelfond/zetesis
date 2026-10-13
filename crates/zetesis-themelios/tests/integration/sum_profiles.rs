@@ -1,8 +1,6 @@
 //! Positive sums and ignored tuple contributions retain original reduct semantics.
 use crate::support::source_cases;
 
-use oracle::records as clingo;
-use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{admit, exhaustive};
 use zetesis_themelios::FormulaLimits;
 
@@ -78,13 +76,5 @@ fn ignored_weights_do_not_relax_scope_or_resource_checks() {
 #[test]
 #[ignore = "requires clingo: recorded sum profiles match fresh clingo; 274 bounded complete source comparisons"]
 fn recorded_sum_profiles_match_fresh_clingo() {
-    for case in cases() {
-        assert_eq!(
-            clingo(&case.source),
-            case.records,
-            "{}: {}",
-            case.name,
-            case.source
-        );
-    }
+    source_cases::clingo_matches_every_case(&cases());
 }

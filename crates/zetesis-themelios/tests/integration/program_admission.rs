@@ -1,9 +1,9 @@
 //! The typed relational boundary shares source semantics without a text roundtrip.
 
 use std::collections::BTreeSet;
+use zetesis_reference_support::normal_answer_sets;
 
 use zetesis_core::Program as NativeProgram;
-use zetesis_cpu::{Cancellation, CandidateLimits, CandidateTermination, Candidates, Limits, check};
 use zetesis_reference_support::canonical;
 use zetesis_themelios::logical::{
     program::{Atom, Program, Rule, Script, Statement},
@@ -27,19 +27,10 @@ fn raised(text: &str) -> Program {
 }
 
 fn answers(program: &NativeProgram) -> BTreeSet<BTreeSet<String>> {
-    let cancellation = Cancellation::default();
-    let mut candidates = Candidates::new(program, CandidateLimits::default(), cancellation.clone());
     let mut result = BTreeSet::new();
-    for seed in candidates.by_ref() {
-        let membership = check(program, &seed.unwrap(), Limits::default(), &cancellation).unwrap();
-        if membership.accepted() {
-            assert!(result.insert(membership.closure().atoms().iter().map(canonical).collect()));
-        }
+    for model in normal_answer_sets(program) {
+        assert!(result.insert(model.atoms().iter().map(canonical).collect()));
     }
-    assert_eq!(
-        candidates.termination(),
-        Some(CandidateTermination::Exhausted)
-    );
     result
 }
 

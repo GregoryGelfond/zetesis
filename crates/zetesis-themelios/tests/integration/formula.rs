@@ -1,6 +1,7 @@
 //! Finite source-to-Ferraris admission preserves support, scopes, and evidence.
 
 use crate::support::atom_models::Models;
+use crate::support::atom_models::answer_sets;
 use crate::support::objective_boundaries;
 
 use std::collections::BTreeSet;
@@ -155,31 +156,7 @@ fn existing_scalar_fact_and_normal_rule_profile_keeps_its_models() {
             ExpansionLimits::default(),
         )
         .expect("existing extended profile");
-        let cancellation = Cancellation::default();
-        let expected: Models = zetesis_cpu::Candidates::new(
-            plain.program(),
-            zetesis_cpu::CandidateLimits::default(),
-            cancellation.clone(),
-        )
-        .filter_map(|seed| {
-            let checked = zetesis_cpu::check(
-                plain.program(),
-                &seed.expect("candidate"),
-                zetesis_cpu::Limits::default(),
-                &cancellation,
-            )
-            .expect("closure");
-            checked.accepted().then(|| {
-                checked
-                    .closure()
-                    .atoms()
-                    .iter()
-                    .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
-                    .collect::<BTreeSet<_>>()
-            })
-        })
-        .collect();
-        assert_eq!(native(source), expected, "{source}");
+        assert_eq!(native(source), answer_sets(plain.program()), "{source}");
     }
 }
 

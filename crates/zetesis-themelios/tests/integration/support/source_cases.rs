@@ -1,6 +1,6 @@
 //! Original sources and complete records decoded from campaign fixtures.
 use serde_json::Value as Json;
-use zetesis_clingo_support::{atoms, costs};
+use zetesis_clingo_support::{self as oracle, atoms, costs};
 use zetesis_reference_support as reference;
 use zetesis_test_support::records::Records;
 use zetesis_themelios::FormulaLimits;
@@ -65,6 +65,20 @@ pub(crate) fn objectives_keep_the_original_reduct_subject(fixture: &str) {
             observed.formula_origins(),
             "{}",
             case.name
+        );
+    }
+}
+
+/// Fresh clingo's complete scored records of every case's source are the ones
+/// the case records.
+pub(crate) fn clingo_matches_every_case(cases: &[Case]) {
+    for case in cases {
+        assert_eq!(
+            oracle::records(&case.source),
+            case.records,
+            "{}: {}",
+            case.name,
+            case.source
         );
     }
 }

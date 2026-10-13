@@ -2,8 +2,8 @@
 
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Term, Value};
-use zetesis_cpu::{Cancellation, CandidateLimits, CandidateTermination, Candidates, Limits, check};
 use zetesis_reference_support as reference;
+use zetesis_reference_support::normal_answer_sets;
 use zetesis_reference_support::{canonical, exhaustive};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{AdmissionOptions, FormulaLimits, admit};
@@ -88,31 +88,10 @@ const FORMULA: &[(&str, &[&[&str]])] = &[
 fn ordinary_extremal_sources_preserve_complete_models() {
     for &(source, wanted) in ORDINARY {
         let input = admit(source.into(), AdmissionOptions::default()).unwrap();
-        let mut candidates = Candidates::new(
-            input.program(),
-            CandidateLimits::default(),
-            Cancellation::default(),
-        );
         let mut actual = Records::new();
-        for seed in candidates.by_ref() {
-            let result = check(
-                input.program(),
-                &seed.unwrap(),
-                Limits::default(),
-                &Cancellation::default(),
-            )
-            .unwrap();
-            if result.accepted() {
-                assert!(actual.insert((
-                    result.closure().atoms().iter().map(canonical).collect(),
-                    None
-                )));
-            }
+        for model in normal_answer_sets(input.program()) {
+            assert!(actual.insert((model.atoms().iter().map(canonical).collect(), None)));
         }
-        assert_eq!(
-            candidates.termination(),
-            Some(CandidateTermination::Exhausted)
-        );
         assert_eq!(actual, expected(wanted), "{source}");
     }
 }

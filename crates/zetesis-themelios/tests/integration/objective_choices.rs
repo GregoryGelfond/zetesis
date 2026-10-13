@@ -1,6 +1,7 @@
 //! Necessary source-choice costs preserve every original model at an admissible
 //! lexicographic cost, including ties and conditional group activation.
 
+use crate::support::objective_plans::exact;
 use std::cmp::Ordering;
 
 use zetesis_cpu::Cancellation;
@@ -26,17 +27,6 @@ const CONDITIONAL: &str =
     include_str!("../fixtures/required-choice-objectives/conditional-element.lp");
 const ZERO_LOWER: &str = include_str!("../fixtures/required-choice-objectives/zero-lower.lp");
 const EMPTY: &str = include_str!("../fixtures/required-choice-objectives/inconsistent-empty.lp");
-
-fn exact(input: &AdmittedFormula) -> ObjectivePlan {
-    ObjectivePlan::new(
-        input.theory(),
-        input.atoms(),
-        input.objectives(),
-        ObjectivePlanLimits::default(),
-        &Cancellation::default(),
-    )
-    .unwrap()
-}
 
 fn prepare(plan: &mut ObjectivePlan, choices: &RequiredChoices) {
     let statistics = plan

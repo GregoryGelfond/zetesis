@@ -1,17 +1,18 @@
 //! Canonical relational preparation preserves the existing compiler's semantics.
 
+use crate::support::unevaluable_directives::{objective, projection};
 use std::{collections::BTreeSet, sync::Arc, time::Instant};
+use zetesis_reference_support::normal_answer_sets;
 
 use zetesis_core::{GroundProgram, Model, Seed, StaticLimits};
 use zetesis_cpu::{
-    Cancellation, CandidateLimits, CandidateTermination, Candidates, Limits, Stop, check,
-    check_static,
+    Cancellation, CandidateLimits, CandidateTermination, Candidates, Limits, Stop, check_static,
 };
 use zetesis_themelios::logical::{
     Name, Symbol, Term,
     program::{
-        Atom, Body, BodyElement, Choice, ChoiceElement, Condition, Const, Direction, Guard,
-        Optimize, OptimizeElement, Program, Project, Relation, Rule, Show, Statement, weight,
+        Atom, Body, BodyElement, Choice, ChoiceElement, Condition, Const, Guard, Program, Relation,
+        Rule, Show, Statement,
     },
     symbol::{Sign, VarName},
 };
@@ -97,13 +98,6 @@ fn models(
     result
 }
 
-fn lazy_models(program: &zetesis_core::Program) -> Vec<Model> {
-    models(program, |seed| {
-        let checked = check(program, seed, Limits::default(), &Cancellation::default()).unwrap();
-        checked.accepted().then(|| checked.closure().clone())
-    })
-}
-
 fn family(models: &[Model]) -> BTreeSet<BTreeSet<Symbol>> {
     let family = models.iter().map(full).collect::<BTreeSet<_>>();
     assert_eq!(family.len(), models.len());
@@ -128,26 +122,6 @@ fn answers() -> ProgramRelationalOptions {
     }
 }
 
-fn objective() -> Statement {
-    Optimize::new(
-        Direction::Minimize,
-        [OptimizeElement::new(
-            weight(Term::from(1) / Term::from(0)),
-            [],
-            Condition::empty(),
-        )],
-    )
-    .into()
-}
-
-fn projection() -> Statement {
-    Project::atom_body(
-        atom("selected", [Term::from(1) / Term::from(0)]),
-        Body::empty(),
-    )
-    .into()
-}
-
 #[test]
 fn relational_execution_preserves_the_answer_family() {
     let input = prepare_program_relational(Arc::new(Program::of(rules())), answers()).unwrap();
@@ -161,7 +135,7 @@ fn relational_execution_preserves_the_answer_family() {
     });
     // These invoke the source-join and static-graph membership implementations,
     // respectively; agreement alone would not detect a shared incomplete family.
-    assert_eq!(family(&lazy_models(input.program())), expected());
+    assert_eq!(family(&normal_answer_sets(input.program())), expected());
     assert_eq!(family(&eager), expected());
 }
 
@@ -179,8 +153,8 @@ fn extended_source_charges_are_preserved() {
     )
     .unwrap();
     assert_eq!(typed.expansion_usage(), source.expansion_usage());
-    assert_eq!(family(&lazy_models(source.program())), expected());
-    assert_eq!(family(&lazy_models(typed.program())), expected());
+    assert_eq!(family(&normal_answer_sets(source.program())), expected());
+    assert_eq!(family(&normal_answer_sets(typed.program())), expected());
 }
 
 #[test]
@@ -193,7 +167,7 @@ fn excluded_directives_do_not_consume_semantic_budgets() {
     let input = prepare_program_relational(Arc::clone(&program), options).unwrap();
     assert!(std::ptr::eq(input.original_program(), program.as_ref()));
     assert!(!input.metadata().project_selection().is_explicit());
-    assert_eq!(family(&lazy_models(input.program())), expected());
+    assert_eq!(family(&normal_answer_sets(input.program())), expected());
 }
 
 #[test]
@@ -224,7 +198,7 @@ fn show_metadata_preserves_full_interpretations() {
         projection(),
     ]));
     let input = prepare_program_relational(Arc::new(program), answers()).unwrap();
-    let models = lazy_models(input.program());
+    let models = normal_answer_sets(input.program());
     assert_eq!(family(&models), expected());
     let observations = models
         .iter()
@@ -367,7 +341,7 @@ fn preparation_preserves_control_reasons() {
         assert!(Arc::ptr_eq(&retained, &program));
     }
     let retry = prepare_program_relational(Arc::clone(&program), answers()).unwrap();
-    assert_eq!(family(&lazy_models(retry.program())), expected());
+    assert_eq!(family(&normal_answer_sets(retry.program())), expected());
 }
 
 #[test]

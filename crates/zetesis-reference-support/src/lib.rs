@@ -7,12 +7,14 @@
 //! [`exhaustive`] enumerates every subset of
 //! its atoms, keeping those the reduct check (`zetesis_ferraris::check`)
 //! accepts, each with its objective's costs; atoms are spelled as clingo
-//! spells them ([`canonical`]). The crate stands above `zetesis-themelios`,
+//! spells them ([`canonical`]). [`normal_answer_sets`] finds a normal
+//! program's answer sets by exhausting its candidates, each checked against
+//! the reduct (`zetesis_cpu::check`). The crate stands above `zetesis-themelios`,
 //! so only the tests that compare a native enumeration compile it. It is not
 //! published or installed.
 
-use zetesis_core::{Model, Sign};
-use zetesis_cpu::Cancellation;
+use zetesis_core::{Model, Program, Sign};
+use zetesis_cpu::{Cancellation, CandidateLimits, CandidateTermination, Candidates};
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{
@@ -139,6 +141,37 @@ pub fn exhaustive(input: &AdmittedFormula) -> Records {
     records
 }
 
+/// Every answer set of the normal program `program`: the closure of each
+/// candidate the reduct check (`zetesis_cpu::check`) accepts, the candidates
+/// exhausted under the default limits.
+///
+/// # Panics
+/// Panics if a candidate or its check is refused, or if the candidates stop
+/// before they are exhausted.
+#[must_use]
+pub fn normal_answer_sets(program: &Program) -> Vec<Model> {
+    let cancellation = Cancellation::default();
+    let mut candidates = Candidates::new(program, CandidateLimits::default(), cancellation.clone());
+    let answer_sets = candidates
+        .by_ref()
+        .filter_map(|seed| {
+            let checked = zetesis_cpu::check(
+                program,
+                &seed.expect("the default candidate limits"),
+                zetesis_cpu::Limits::default(),
+                &cancellation,
+            )
+            .expect("the default reduct-check limits");
+            checked.accepted().then(|| checked.closure().clone())
+        })
+        .collect();
+    assert_eq!(
+        candidates.termination(),
+        Some(CandidateTermination::Exhausted)
+    );
+    answer_sets
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -165,5 +198,19 @@ mod tests {
         ]
         .into();
         assert_eq!(exhaustive(&admitted), expected);
+    }
+
+    #[test]
+    fn a_normal_program_has_the_answer_sets_its_candidates_check_to() {
+        let admitted = normal("a :- not b. b :- not a. c :- a.");
+        let mut answer_sets: Vec<Vec<String>> = normal_answer_sets(admitted.program())
+            .iter()
+            .map(|model| model.atoms().iter().map(canonical).collect())
+            .collect();
+        for answer_set in &mut answer_sets {
+            answer_set.sort();
+        }
+        answer_sets.sort();
+        assert_eq!(answer_sets, [vec!["a", "c"], vec!["b"]]);
     }
 }

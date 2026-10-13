@@ -7,11 +7,11 @@ mod truth;
 
 use std::collections::BTreeSet;
 
+use crate::support::frozen_truth::Truth;
 use crate::support::objective_boundaries;
 use cases::sources;
 use reference::{Models, exhaustive, holds, native, values};
 use themelios_base::source::SourceId;
-use truth::Truth;
 use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,

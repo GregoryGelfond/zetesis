@@ -1,5 +1,6 @@
 //! Canonical preparation separates input inspection, purpose and runtime control.
 
+use crate::support::unevaluable_directives::{objective, projection};
 use std::{cell::Cell, collections::BTreeSet, sync::Arc, time::Instant};
 
 use zetesis_core::Model;
@@ -8,8 +9,7 @@ use zetesis_reference_support::exhaustive;
 use zetesis_themelios::logical::{
     Name, Symbol, Term,
     program::{
-        Atom, Body, Choice, ChoiceElement, Condition, Direction, Guard, Optimize, OptimizeElement,
-        Program, Project, Relation, Rule, Show, Statement, weight,
+        Atom, Choice, ChoiceElement, Condition, Guard, Program, Relation, Rule, Show, Statement,
     },
     symbol::VarName,
 };
@@ -33,29 +33,6 @@ fn choice() -> Rule {
         ["p", "q"].map(|name| ChoiceElement::new(atom(name).into(), Condition::empty())),
         Some(bound()),
     ))
-}
-
-fn objective() -> Statement {
-    Optimize::new(
-        Direction::Minimize,
-        [OptimizeElement::new(
-            weight(Term::from(1) / Term::from(0)),
-            [],
-            Condition::empty(),
-        )],
-    )
-    .into()
-}
-
-fn projection() -> Statement {
-    Project::atom_body(
-        Atom::new(
-            Name::new("selected").unwrap(),
-            [Term::from(1) / Term::from(0)],
-        ),
-        Body::empty(),
-    )
-    .into()
 }
 
 fn answers() -> ProgramFormulaOptions {

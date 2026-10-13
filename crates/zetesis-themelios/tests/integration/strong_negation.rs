@@ -1,5 +1,6 @@
 //! Strong predicate signs remain distinct atoms, with explicit coherence.
 
+use crate::support::atom_models::answer_sets;
 use std::collections::BTreeSet;
 use std::fs::{self};
 
@@ -9,7 +10,7 @@ use crate::support::finite_bindings::{holds, values};
 use crate::support::objective_boundaries;
 use serde_json::Value as Json;
 use zetesis_core::{Model, Sign};
-use zetesis_cpu::{Cancellation, CandidateLimits, Candidates};
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_reference_support::canonical;
 use zetesis_themelios::{
@@ -314,35 +315,7 @@ fn ordinary_and_extended_closure_routes_enforce_the_same_signed_coherence() {
             )
             .unwrap(),
         ] {
-            let mut actual = BTreeSet::new();
-            for seed in Candidates::new(
-                admitted.program(),
-                CandidateLimits::default(),
-                Cancellation::default(),
-            ) {
-                let checked = zetesis_cpu::check(
-                    admitted.program(),
-                    &seed.unwrap(),
-                    zetesis_cpu::Limits::default(),
-                    &Cancellation::default(),
-                )
-                .unwrap();
-                if checked.accepted() {
-                    assert!(
-                        actual.insert(
-                            checked
-                                .closure()
-                                .atoms()
-                                .iter()
-                                .map(|atom| atom
-                                    .to_atom(zetesis_core::ValueLimits::default())
-                                    .unwrap())
-                                .collect::<BTreeSet<_>>()
-                        )
-                    );
-                }
-            }
-            assert_eq!(actual, expected, "{source}");
+            assert_eq!(answer_sets(admitted.program()), expected, "{source}");
         }
     }
 }

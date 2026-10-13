@@ -3,7 +3,6 @@
 use crate::support::source_cases;
 
 use std::collections::BTreeSet;
-use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
 use zetesis_test_support::records::Records;
 use zetesis_themelios::FormulaLimits;
@@ -36,9 +35,7 @@ fn evaluated_fields_keeps_the_original_reduct_subject() {
 #[test]
 #[ignore = "requires clingo: evaluated fields match fresh clingo; 18 original expression sources"]
 fn evaluated_fields_match_fresh_clingo() {
-    for case in source_cases::cases(CASES) {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    source_cases::clingo_matches_every_case(&source_cases::cases(CASES));
 }
 
 #[test]

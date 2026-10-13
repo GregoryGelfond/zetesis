@@ -1,58 +1,7 @@
 //! Original and frozen truth from declared source rows, not compiler nodes.
 
 use super::{canonical, holds, input, values};
-
-#[derive(Clone, Copy)]
-struct Truth {
-    whole: bool,
-    frozen: bool,
-}
-
-impl Truth {
-    fn constant(value: bool) -> Self {
-        Self {
-            whole: value,
-            frozen: value,
-        }
-    }
-
-    fn atom(whole: bool, inner: bool) -> Self {
-        Self {
-            whole,
-            frozen: whole && inner,
-        }
-    }
-
-    fn and(self, other: Self) -> Self {
-        Self {
-            whole: self.whole && other.whole,
-            frozen: self.frozen && other.frozen,
-        }
-    }
-
-    fn or(self, other: Self) -> Self {
-        Self {
-            whole: self.whole || other.whole,
-            frozen: self.frozen || other.frozen,
-        }
-    }
-
-    fn implies(self, other: Self) -> Self {
-        let whole = !self.whole || other.whole;
-        Self {
-            whole,
-            frozen: whole && (!self.frozen || other.frozen),
-        }
-    }
-
-    fn negate(self) -> Self {
-        self.implies(Self::constant(false))
-    }
-
-    fn choice(self) -> Self {
-        self.or(self.negate())
-    }
-}
+use crate::support::frozen_truth::Truth;
 
 // A finite numeric measure compared with a nonnumeric bound accepts either all
 // or none of its masks. Build the canonical subset formula explicitly: a

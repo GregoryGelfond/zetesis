@@ -2,7 +2,6 @@
 
 use crate::support::source_cases;
 
-use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
 use zetesis_themelios::FormulaLimits;
 
@@ -34,9 +33,7 @@ fn cyclic_producers_keeps_the_original_reduct_subject() {
 #[test]
 #[ignore = "requires clingo: cyclic producers match fresh clingo; 15 original cyclic sources"]
 fn cyclic_producers_match_fresh_clingo() {
-    for case in source_cases::cases(CASES) {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    source_cases::clingo_matches_every_case(&source_cases::cases(CASES));
 }
 
 #[test]

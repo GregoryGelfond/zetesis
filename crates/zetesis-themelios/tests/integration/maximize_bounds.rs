@@ -1,4 +1,5 @@
 //! Every signed candidate guard uses the same normalized keys as exact scoring.
+use crate::support::objective_plans::exact as plan;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
@@ -28,17 +29,6 @@ fn score(input: &AdmittedFormula, selected: impl IntoIterator<Item = usize>) -> 
     .score()
     .clone()
 }
-fn plan(input: &AdmittedFormula) -> ObjectivePlan {
-    ObjectivePlan::new(
-        input.theory(),
-        input.atoms(),
-        input.objectives(),
-        ObjectivePlanLimits::default(),
-        &Cancellation::default(),
-    )
-    .unwrap()
-}
-
 #[test]
 fn every_candidate_guard_matches_full_normalized_scores_and_keeps_ties() {
     for source in [

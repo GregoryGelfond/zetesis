@@ -3,79 +3,23 @@
 
 use std::collections::BTreeSet;
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
-use crate::support::atom_models::Models;
+use crate::support::atom_models::{Models, answer_sets};
+use crate::support::bundle_fixtures::Fixture;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
-use zetesis_core::{Atom, Program};
-use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
+use zetesis_core::Atom;
 use zetesis_test_support::repository;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedBundle, BundleAdmissionError,
-    BundleAdmissionFailure, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, ExpansionResource, InputLimit, SourceBundle, admit, admit_bundle_extended,
+    AdmissionFailure, AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions, BundleLimits,
+    ExpansionFailure, ExpansionLimits, ExpansionResource, InputLimit, SourceBundle, admit,
+    admit_bundle_extended,
 };
 
-struct Fixture {
-    directory: tempfile::TempDir,
-}
-impl Fixture {
-    fn new() -> Self {
-        Self {
-            directory: tempfile::tempdir().expect("fixture directory"),
-        }
-    }
-    fn write(&self, name: &str, source: &str) {
-        let path = self.path(name);
-        fs::create_dir_all(path.parent().expect("fixture parent")).expect("fixture parents");
-        fs::write(path, source).expect("original fixture source");
-    }
-    fn path(&self, name: &str) -> PathBuf {
-        self.directory.path().join(name)
-    }
-    fn bundle(&self) -> SourceBundle {
-        SourceBundle::load(self.path("entry.lp"), BundleLimits::default())
-            .expect("loaded source graph")
-    }
-    fn admit(&self) -> Result<AdmittedBundle, BundleAdmissionFailure> {
-        admit_bundle_extended(
-            self.bundle(),
-            BundleAdmissionOptions::default(),
-            ExpansionLimits::default(),
-        )
-    }
-}
-
-fn native(program: &Program) -> Models {
-    let cancellation = Cancellation::default();
-    let mut models = BTreeSet::new();
-    let mut candidates = Candidates::new(program, CandidateLimits::default(), cancellation.clone());
-    for seed in candidates.by_ref() {
-        let seed = seed.expect("candidate budget permits full exhaustion");
-        let result = check(program, &seed, Limits::default(), &cancellation)
-            .expect("complete reduct closure");
-        if result.accepted() {
-            assert!(
-                models.insert(
-                    result
-                        .closure()
-                        .atoms()
-                        .iter()
-                        .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
-                        .collect::<BTreeSet<_>>()
-                ),
-                "one seed per model"
-            );
-        }
-    }
-    assert!(candidates.next().is_none(), "exhaustion is fused");
-    models
-}
-
 fn explicit(source: &str) -> Models {
-    native(
+    answer_sets(
         admit(source.to_owned(), AdmissionOptions::default())
             .expect("explicit S0 fixture")
             .program(),
@@ -97,7 +41,7 @@ fn global_forward_constants_and_nested_includes_produce_native_templates() {
     let admitted = fixture.admit().expect("global scalar definitions");
     assert_eq!(admitted.bundle().sources().len(), 3);
     assert_eq!(
-        native(admitted.program()),
+        answer_sets(admitted.program()),
         explicit("d(1). d(2). d(3). {pick(X)} :- d(X). :- pick(1),pick(3).")
     );
 }
@@ -111,7 +55,7 @@ fn base_sections_preserve_included_rules() {
     );
     fixture.write("child.lp", "#program base. q :- p. #program base().");
     let admitted = fixture.admit().unwrap();
-    assert_eq!(native(admitted.program()), explicit("p. q. r."));
+    assert_eq!(answer_sets(admitted.program()), explicit("p. q. r."));
     for origins in admitted.template_origins() {
         assert!(!origins.is_empty());
         for location in origins {
@@ -136,7 +80,7 @@ fn base_sections_preserve_global_metadata() {
     );
     fixture.write("child.lp", "#program base. #const n=2. #defined d/1.");
     let admitted = fixture.admit().unwrap();
-    assert_eq!(native(admitted.program()), explicit("p(2)."));
+    assert_eq!(answer_sets(admitted.program()), explicit("p(2)."));
     assert_eq!(admitted.metadata().directives().len(), 2);
 }
 
@@ -150,7 +94,7 @@ fn rule_variables_remain_local_across_files_and_positive_cycles() {
     fixture.write("left.lp", "p(X) :- left(X). cycle(X) :- loop(X).");
     fixture.write("right.lp", "q(X) :- right(X). loop(X) :- cycle(X).");
     assert_eq!(
-        native(fixture.admit().expect("local rule scopes").program()),
+        answer_sets(fixture.admit().expect("local rule scopes").program()),
         explicit("left(1). right(2). p(1). q(2).")
     );
 }
@@ -195,7 +139,7 @@ fn repeated_identical_include_paths_are_not_duplicate_definitions() {
     fixture.write("shared.lp", "#const n=2. p(n).");
     let admitted = fixture.admit().expect("same lexical path included once");
     assert_eq!(admitted.bundle().sources()[0].includes().len(), 2);
-    assert_eq!(native(admitted.program()), explicit("p(2). q(2)."));
+    assert_eq!(answer_sets(admitted.program()), explicit("p(2). q(2)."));
 }
 
 #[test]
@@ -458,7 +402,7 @@ fn oracle_atom(source: &str) -> Atom {
 
 fn compare(fixture: &Fixture) {
     let input = fixture.admit().expect("supported original bundle");
-    assert_eq!(native(input.program()), external(fixture.directory.path()));
+    assert_eq!(answer_sets(input.program()), external(fixture.directory()));
 }
 
 #[test]

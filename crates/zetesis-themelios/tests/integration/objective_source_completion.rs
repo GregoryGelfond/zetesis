@@ -2,7 +2,6 @@
 
 use crate::support::source_cases;
 
-use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
@@ -83,9 +82,7 @@ fn source_eligibility_limits_are_inclusive() {
 #[test]
 #[ignore = "requires clingo: source eligibility matches fresh clingo; 36 original source-eligibility cases"]
 fn source_eligibility_matches_fresh_clingo() {
-    for case in source_cases::cases(CASES) {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    source_cases::clingo_matches_every_case(&source_cases::cases(CASES));
 }
 
 #[test]
