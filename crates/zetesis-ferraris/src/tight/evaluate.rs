@@ -203,6 +203,9 @@ impl TightWorkspace {
         // last plan's producers computed: a plan's producers and readers are
         // functions of its theory alone.
         let previous = self.retained.theory.take();
+        // Storage admission of what the workspace already holds precedes either
+        // route's work; each later growth admits itself before it is reserved.
+        self.admit(plan, limits.max_bytes)?;
         if retain
             && let Some(readers) = plan.readers.as_ref()
             && previous
@@ -232,7 +235,6 @@ impl TightWorkspace {
         meter: &mut Meter<'_>,
         keep: bool,
     ) -> Result<TightCheck, TightError> {
-        self.admit(plan, limits.max_bytes)?;
         // Explicit byte cells give candidate tiles a fixed payload bound.
         // Rust's Vec<bool> also stores byte-sized elements; it is not bit-packed.
         self.values.clear();
@@ -417,10 +419,6 @@ impl TightWorkspace {
         limits: TightCheckLimits,
         meter: &mut Meter<'_>,
     ) -> Result<Option<TightCheck>, TightError> {
-        // What the workspace already holds is admitted before any work, as a
-        // complete check admits before evaluating; each growth below admits
-        // itself before it is reserved.
-        self.admit(plan, limits.max_bytes)?;
         // First pass: find the changed words and count changed atoms, with no
         // change to the retained state.
         let threshold = large_change(plan.theory.atom_count());
@@ -508,9 +506,11 @@ impl TightWorkspace {
                 }
             }
         }
-        // Everything held was admitted, before the first pass or before its
-        // reservation, so this only reports the bytes the check holds after its
-        // last reservation; it cannot refuse.
+        // Everything held was admitted, before the check's work or before its
+        // reservation. While each reservation's capacity is what was admitted
+        // for it, this only reports the bytes the check holds after its last
+        // reservation; an allocator may return more capacity than requested,
+        // and that excess is refused here, against the same limit.
         let logical_bytes = self.admit(plan, limits.max_bytes)?;
         let retained = &self.retained;
         let verdict = if retained.false_root_count > 0 {

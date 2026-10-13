@@ -465,30 +465,43 @@ fn an_update_reports_the_bytes_it_holds_after_its_last_reservation() {
 
 #[test]
 fn an_update_beyond_the_byte_allowance_is_refused_before_its_work() {
+    // Twin workspaces with the same history: at exactly the bytes held, the
+    // third check updates (which pins the route); one byte short, it is
+    // refused with no work charged. One changed word fits the changed-word
+    // list's first reservation and the few queued nodes the worklist's, so
+    // the update grows nothing.
     let theory = choices(200);
     let plan = prepared(&theory);
     let cancellation = Cancellation::default();
-    let mut workspace = TightWorkspace::default();
-    for atoms in [vec![2, 3], vec![2, 3, 4]] {
+    let third = world(&theory, [2, 3, 4, 5]);
+    let warmed = || {
+        let mut workspace = TightWorkspace::default();
+        for atoms in [vec![2, 3], vec![2, 3, 4]] {
+            workspace
+                .check(
+                    &plan,
+                    &world(&theory, atoms),
+                    TightCheckLimits::default(),
+                    &cancellation,
+                )
+                .result
+                .unwrap();
+        }
         workspace
-            .check(
-                &plan,
-                &world(&theory, atoms),
-                TightCheckLimits::default(),
-                &cancellation,
-            )
-            .result
-            .unwrap();
-    }
-    let held = u128::from(plan.statistics().resident_bytes) + workspace.retained_bytes();
-    let limits = TightCheckLimits {
-        max_bytes: u64::try_from(held).unwrap() - 1,
+    };
+    let held = u128::from(plan.statistics().resident_bytes) + warmed().retained_bytes();
+    let held = u64::try_from(held).unwrap();
+    let within = |max_bytes| TightCheckLimits {
+        max_bytes,
         ..TightCheckLimits::default()
     };
-    let attempt = workspace.check(&plan, &world(&theory, [2, 3, 4, 5]), limits, &cancellation);
+    let admitted = warmed().check(&plan, &third, within(held), &cancellation);
+    assert!(admitted.result.is_ok());
+    assert_route(&plan, &third, admitted.work, true);
+    let refused = warmed().check(&plan, &third, within(held - 1), &cancellation);
     assert_eq!(
-        attempt.result.map(|check| check.verdict),
+        refused.result.map(|check| check.verdict),
         Err(TightError::Limit(TightResource::Bytes))
     );
-    assert_eq!(attempt.work, 0);
+    assert_eq!(refused.work, 0);
 }

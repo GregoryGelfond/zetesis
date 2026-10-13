@@ -192,7 +192,8 @@ impl<'a> Meter<'a> {
 
     /// Operations the limit still admits: the work limit to give a nested
     /// operation of another arrangement, whose reported work [`Self::absorb`]
-    /// then counts.
+    /// then counts. The count never exceeds the limit (an admitted charge stops
+    /// at it, and an absorb counts at most up to it), so this never underflows.
     #[must_use]
     #[inline]
     pub const fn remaining(&self) -> u64 {
