@@ -46,8 +46,8 @@ pub(crate) fn truth(formula: &Json, tested: &Names, frozen: Option<&Names>) -> b
     if let Some(atom) = formula.as_str() {
         return tested.contains(atom);
     }
-    if formula == &Json::Bool(false) {
-        return false;
+    if let Json::Bool(value) = formula {
+        return *value;
     }
     let left = truth(&formula[1], tested, frozen);
     let right = truth(&formula[2], tested, frozen);

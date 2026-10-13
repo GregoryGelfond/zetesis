@@ -1,7 +1,7 @@
 //! Finite signed source disjunctions retain their original reduct.
 //! Hand-written formula trees are independent of source normalization and SAT.
 
-use crate::support::head_models::{Names, expected, truth};
+use crate::support::head_models::{Names, expected, manual_holds, truth};
 use crate::support::objective_dependency_records as objective_dependencies;
 
 use std::time::Duration;
@@ -36,25 +36,18 @@ fn subset(atoms: &[String], mask: usize) -> Names {
 
 // Every M-false subtree becomes falsum, including non-atomic implications.
 // This evaluates JSON trees directly, without a production DAG or compiler.
-fn holds(theory: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
-    theory["roots"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|root| truth(root, tested, frozen))
-}
 fn manual_models(theory: &Json) -> Models {
     let atoms: Vec<_> = oracle::atoms(&theory["atoms"]).into_iter().collect();
     assert!(atoms.len() <= 8, "tiny independent exhaustive carrier");
     (0..1 << atoms.len())
         .filter_map(|mask| {
             let outer = subset(&atoms, mask);
-            if !holds(theory, &outer, None) {
+            if !manual_holds(theory, &outer, None) {
                 return None;
             }
             let true_atoms: Vec<_> = outer.iter().cloned().collect();
             let proper_model = (0..(1 << true_atoms.len()) - 1)
-                .any(|bits| holds(theory, &subset(&true_atoms, bits), Some(&outer)));
+                .any(|bits| manual_holds(theory, &subset(&true_atoms, bits), Some(&outer)));
             (!proper_model).then_some(outer)
         })
         .collect()
@@ -158,7 +151,7 @@ fn every_frozen_subset_matches_manual_formulas_and_necessary_support() {
                     &cancellation
                 )
                 .unwrap(),
-                supported && holds(manual, &outer, None),
+                supported && manual_holds(manual, &outer, None),
                 "{label}: original M={outer:?}"
             );
             for tested in &all {
@@ -175,7 +168,7 @@ fn every_frozen_subset_matches_manual_formulas_and_necessary_support() {
                         &cancellation
                     )
                     .unwrap(),
-                    supported && holds(manual, &inner, Some(&outer)),
+                    supported && manual_holds(manual, &inner, Some(&outer)),
                     "{label}: frozen M={outer:?}, J={inner:?}"
                 );
             }
