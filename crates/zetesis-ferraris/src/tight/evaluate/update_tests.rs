@@ -5,7 +5,7 @@
 //! building the index charges and reports; how a reused workspace's bytes are
 //! admitted; and that an update refuses a support count past `u32`.
 
-use super::{TightWorkspace, large_change};
+use super::{SupportCount, TightWorkspace, large_change};
 use crate::{
     AdmissionLimits, ExtremumCutRule, ExtremumRow, FormulaNodes, FormulaParts, Interpretation,
     Node, NodeView, Theory, TightCheckLimits, TightError, TightPlan, TightPlanLimits,
@@ -367,6 +367,19 @@ fn an_index_the_work_allowance_cannot_build_spends_nothing() {
     let attempt = plan.prepare_updates(limits, &cancellation);
     assert_eq!((attempt.result, attempt.work), (Ok(false), 0));
     assert_eq!(plan.statistics(), before);
+}
+
+#[test]
+fn the_update_index_admits_at_most_u32_max_producers() {
+    // No test can build a plan with that many producers, so the admission
+    // decision is driven with the figures `prepare_updates` passes it, under
+    // allowances that cover any build.
+    let ample = TightPlanLimits::default();
+    let most = SupportCount::MAX as usize;
+    assert!(TightPlan::index_admitted(most, 0, 0, ample));
+    if let Some(beyond) = most.checked_add(1) {
+        assert!(!TightPlan::index_admitted(beyond, 0, 0, ample));
+    }
 }
 
 #[test]

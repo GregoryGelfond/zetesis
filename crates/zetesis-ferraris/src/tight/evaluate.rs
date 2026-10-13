@@ -85,6 +85,12 @@ pub struct TightWorkspace {
     retained: Retained,
 }
 
+/// One atom's support count: how many of its producers are bodyless or have a
+/// true body. Four bytes per atom; a plan admits the readers index only when no
+/// head can have more producers than this type holds
+/// ([`TightPlan::prepare_updates`]), so a count never passes it.
+pub(super) type SupportCount = u32;
+
 /// The complete evaluation a workspace keeps between checks of one theory, and
 /// the summaries an update maintains from it.
 ///
@@ -106,7 +112,7 @@ struct Retained {
     /// Whether the support counts and the two sets summarize node truth.
     summarized: bool,
     /// For each atom, its producers that are bodyless or have a true body.
-    support: Vec<u32>,
+    support: Vec<SupportCount>,
     /// Present atoms without support, and how many.
     missing: Vec<u64>,
     missing_count: usize,
@@ -129,7 +135,7 @@ impl Retained {
             + self.queued.capacity()) as u128
             * size_of::<u64>() as u128
             + self.changed.capacity() as u128 * size_of::<usize>() as u128
-            + self.support.capacity() as u128 * size_of::<u32>() as u128
+            + self.support.capacity() as u128 * size_of::<SupportCount>() as u128
             + self.pending.capacity() as u128 * size_of::<Reverse<usize>>() as u128
     }
 }
@@ -370,7 +376,7 @@ impl TightWorkspace {
         self.retained.missing.clear();
         self.retained.false_roots.clear();
         let more = atoms.saturating_sub(self.retained.support.capacity()) as u128
-            * size_of::<u32>() as u128
+            * size_of::<SupportCount>() as u128
             + (atoms
                 .div_ceil(64)
                 .saturating_sub(self.retained.missing.capacity())

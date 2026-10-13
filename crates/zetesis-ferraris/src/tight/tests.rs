@@ -2,7 +2,7 @@
 //! byte refusal settled where a metered operation returns, as the certificate's
 //! own refusals are, becomes a requested stop.
 
-use super::{Tick, TightError, TightResource, bytes, support_counts_fit};
+use super::{Tick, TightError, TightResource, bytes};
 use zetesis_cpu::{Cancellation, Refusal, Stop};
 
 #[test]
@@ -65,11 +65,4 @@ fn certificate_errors_classify_resource_refusals() {
     ] {
         assert!(!shape.is_resource_refusal(), "{shape:?}");
     }
-}
-
-#[test]
-fn the_update_index_admits_at_most_u32_max_producers() {
-    // Beyond that, a head's four-byte support count could overflow.
-    assert!(support_counts_fit(u32::MAX as usize));
-    assert!(!support_counts_fit(u32::MAX as usize + 1));
 }

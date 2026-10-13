@@ -6,6 +6,7 @@ mod readers;
 #[cfg(test)]
 mod tests;
 
+use evaluate::SupportCount;
 pub use evaluate::TightWorkspace;
 
 use std::fmt;
@@ -267,12 +268,12 @@ impl TightPlan {
     /// plan's resident bytes with the build's vectors and the finished index,
     /// the entries bounded from the theory; so a build either allowance cannot
     /// complete spends nothing. It is also attempted only for a plan of at most
-    /// `u32::MAX` producers, so that the four-byte support count an update keeps
-    /// per atom holds every head's count. Returns whether the index exists afterwards: when
-    /// either allowance does not cover the build, the plan keeps complete
-    /// evaluation, and a later call with larger limits may build it.
-    /// Construction work, construction bytes and resident bytes include the
-    /// index.
+    /// `u32::MAX` producers, so that the support count an update keeps per atom
+    /// holds every head's count. Returns whether the index exists afterwards. A
+    /// plan past `u32::MAX` producers never receives it; when an allowance falls
+    /// short, the plan keeps complete evaluation, and a later call with larger
+    /// limits may build it. Construction work, construction bytes and resident
+    /// bytes include the index.
     ///
     /// # Errors
     /// Refuses cancellation, deadlines and allocation; the plan is unchanged
@@ -288,10 +289,12 @@ impl TightPlan {
                 work: 0,
             };
         }
-        if !support_counts_fit(self.producers.len())
-            || u128::from(limits.max_work) < self.index_work_bound()
-            || u128::from(limits.max_bytes) < self.index_byte_bound()
-        {
+        if !Self::index_admitted(
+            self.producers.len(),
+            self.index_work_bound(),
+            self.index_byte_bound(),
+            limits,
+        ) {
             return TightAttempt {
                 result: Ok(false),
                 work: 0,
@@ -325,6 +328,22 @@ impl TightPlan {
             result: metered.result,
             work: metered.charged,
         }
+    }
+
+    /// Whether the readers index may be built for a plan of `producers`
+    /// producers whose build is bounded by `work_bound` and `byte_bound`: every
+    /// head's support count fits [`SupportCount`], since no head has more
+    /// producers than the plan, and both allowances cover the build. The one
+    /// decision [`Self::prepare_updates`] makes before it starts.
+    fn index_admitted(
+        producers: usize,
+        work_bound: u128,
+        byte_bound: u128,
+        limits: TightPlanLimits,
+    ) -> bool {
+        SupportCount::try_from(producers).is_ok()
+            && u128::from(limits.max_work) >= work_bound
+            && u128::from(limits.max_bytes) >= byte_bound
     }
 
     /// The most logical bytes the plan holds while building its readers index:
@@ -463,12 +482,6 @@ impl Tick for Meter<'_> {
 }
 
 /// Admit `value` logical bytes under `limit`.
-/// Whether a four-byte support count holds every head's count in a plan with
-/// `producers` producers: no head has more producers than the plan has.
-fn support_counts_fit(producers: usize) -> bool {
-    u32::try_from(producers).is_ok()
-}
-
 fn bytes(value: u128, limit: u64) -> Result<u64, TightError> {
     match u64::try_from(value) {
         Ok(value) if value <= limit => Ok(value),
