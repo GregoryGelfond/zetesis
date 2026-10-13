@@ -337,6 +337,35 @@ pub(crate) struct AggregateElementIr {
     pub key: AggregateKey,
     pub condition: Vec<LiteralIr>,
     pub variables: usize,
+    /// Whether the element's tuple is present for every binding its local
+    /// join yields, whatever the interpretation ([`decided_by_join`]); an
+    /// assignment proposes its values from the tuples with such an element.
+    pub required: bool,
+}
+
+/// Whether the element's local join decides every literal of `condition` for
+/// each binding it yields, so the condition holds in every interpretation for
+/// that binding. Comparisons, argument checks, guards (comparison chains,
+/// negated comparisons, `#true` and `#false`), binders and intervals are
+/// decided before a row is yielded. An atom of either sign depends on the
+/// interpretation; a nested conditional or aggregate would hold atoms; and a
+/// head guard selects emitted constraints rather than rows, so source-evidence
+/// traversals do not decide it.
+pub(crate) fn decided_by_join(condition: &[LiteralIr]) -> bool {
+    condition.iter().all(|literal| match literal {
+        LiteralIr::Compare(..)
+        | LiteralIr::ArgumentCheck { .. }
+        | LiteralIr::TupleCompare(..)
+        | LiteralIr::Guard(_)
+        | LiteralIr::Bind { .. }
+        | LiteralIr::Range { .. } => true,
+        LiteralIr::Atom(..)
+        | LiteralIr::PatternAtom(_)
+        | LiteralIr::ProjectedAtom(..)
+        | LiteralIr::HeadGuard(_)
+        | LiteralIr::Conditional(_)
+        | LiteralIr::Aggregate(_) => false,
+    })
 }
 pub(crate) enum AggregateKey {
     Tuple(Vec<CoreTerm>),

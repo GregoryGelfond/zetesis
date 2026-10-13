@@ -10,6 +10,7 @@ fn count_proposals_equal_unit_subset_sums() {
         Fixture::default().with(given_site(), |_, computation, counters| {
             let limits = FormulaLimits::default();
             let actual = counts(
+                0,
                 std::iter::repeat_n(1, size),
                 computation,
                 &limits,
@@ -18,6 +19,7 @@ fn count_proposals_equal_unit_subset_sums() {
             )
             .unwrap();
             let reference = sums(
+                0,
                 std::iter::repeat_n(1, size),
                 computation,
                 &limits,
@@ -35,10 +37,10 @@ fn count_construction_avoids_subset_merge_work() {
     let (direct, merged) = Fixture::default().with(given_site(), |_, computation, counters| {
         let limits = FormulaLimits::default();
         let before = counters.accounting.work;
-        drop(counts([1; 64], computation, &limits, counters, given_site()).unwrap());
+        drop(counts(0, [1; 64], computation, &limits, counters, given_site()).unwrap());
         let direct = counters.accounting.work - before;
         let before = counters.accounting.work;
-        drop(sums([1; 64], computation, &limits, counters, given_site()).unwrap());
+        drop(sums(0, [1; 64], computation, &limits, counters, given_site()).unwrap());
         (direct, counters.accounting.work - before)
     });
     assert!(
@@ -64,7 +66,7 @@ fn zero_value_limit_precedes_other_refusals() {
             panic!("the empty candidate's limit precedes input consumption")
         });
         assert!(matches!(
-            counts(unseen, computation, &limits, counters, given_site()),
+            counts(0, unseen, computation, &limits, counters, given_site()),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::AssignmentValues,
                 observed: 1,
@@ -88,6 +90,7 @@ fn value_limit_includes_the_zero_proposal() {
                 ..FormulaLimits::default()
             };
             let fitting = counts(
+                0,
                 std::iter::repeat_n(1, limit - 1),
                 computation,
                 &limits,
@@ -98,7 +101,7 @@ fn value_limit_includes_the_zero_proposal() {
             assert_eq!(fitting.len(), limit);
             drop(fitting);
             assert!(matches!(
-                counts(
+                counts(0,
                     std::iter::repeat_n(1, limit),
                     computation,
                     &limits,
@@ -122,6 +125,7 @@ fn every_work_refusal_releases_count_storage() {
         let before = counters.accounting.work;
         drop(
             counts(
+                0,
                 [1; 8],
                 computation,
                 &FormulaLimits::default(),
@@ -140,7 +144,7 @@ fn every_work_refusal_releases_count_storage() {
                 ..FormulaLimits::default()
             };
             assert!(matches!(
-                counts([1; 8], computation, &limits, counters, given_site()),
+                counts(0, [1; 8], computation, &limits, counters, given_site()),
                 Err(FormulaFailure::Limit {
                     resource: FormulaResource::Work,
                     ..
@@ -161,7 +165,7 @@ fn storage_refusal_releases_the_count_header() {
             ..FormulaLimits::default()
         };
         assert!(matches!(
-            counts([1; 4], computation, &limits, counters, given_site()),
+            counts(0, [1; 4], computation, &limits, counters, given_site()),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::SupportBytes,
                 ..
@@ -186,6 +190,7 @@ fn cancellation_between_contributions_releases_storage() {
         });
         assert!(matches!(
             counts(
+                0,
                 weights,
                 computation,
                 &FormulaLimits::default(),
@@ -207,6 +212,7 @@ fn cancellation_between_contributions_releases_storage() {
 fn nonunit_count_contribution_is_an_invariant_failure() {
     Fixture::default().with(given_site(), |_, computation, counters| {
         let _ = counts(
+            0,
             [1, 2],
             computation,
             &FormulaLimits::default(),

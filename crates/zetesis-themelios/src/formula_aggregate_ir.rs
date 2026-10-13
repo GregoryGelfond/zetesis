@@ -290,6 +290,7 @@ impl Compiler<'_> {
                             elements.push(AggregateElementIr {
                                 family,
                                 key: AggregateKey::Atom(atom),
+                                required: crate::formula_ir::decided_by_join(&condition),
                                 condition,
                                 variables: local.count,
                             });
@@ -340,6 +341,7 @@ impl Compiler<'_> {
         Ok(AggregateElementIr {
             family,
             key: AggregateKey::Tuple(tuple),
+            required: crate::formula_ir::decided_by_join(&condition),
             condition,
             variables: local.count,
         })

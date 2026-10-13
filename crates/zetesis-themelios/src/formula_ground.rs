@@ -623,8 +623,16 @@ enum Purpose {
     Validation,
 }
 
+/// An aggregate's coalesced elements and, on the assignment path, whether
+/// each, in order, is required.
+type Coalesced = (GroundAggregate, Option<Arc<Buffer<bool>>>);
+
 struct CachedAggregate {
     elements: GroundAggregate,
+    /// For each element in order, whether its tuple has an occurrence from an
+    /// element whose condition the local join decides: the split of the
+    /// assignment's contributions into required and optional ones.
+    required: Arc<Buffer<bool>>,
     roots: Option<Arc<CoordinateMap<usize, usize>>>,
 }
 
@@ -2031,7 +2039,7 @@ impl Builder<'_, '_, '_> {
         if let Some(target) = aggregate.binding {
             return self.assignment_aggregate(aggregate, target, assignment, support, location);
         }
-        let elements = self.aggregate_elements(aggregate, assignment, support, location)?;
+        let (elements, _) = self.aggregate_elements(aggregate, assignment, support, location)?;
         let mut result = self.aggregate_guards(
             &elements,
             &aggregate.guards,
@@ -2071,7 +2079,9 @@ impl Builder<'_, '_, '_> {
             self.limits.max_aggregate_cache_rows as u128,
             location,
         )?;
-        let elements = self.aggregate_elements(aggregate, assignment, support, location)?;
+        let (elements, required) =
+            self.aggregate_elements(aggregate, assignment, support, location)?;
+        let required = required.expect("an assignment keeps its required tuples");
         ceiling(
             FormulaResource::AggregateCacheElements,
             self.cached_elements as u128 + elements.len() as u128,
@@ -2086,6 +2096,7 @@ impl Builder<'_, '_, '_> {
             key,
             CachedAggregate {
                 elements,
+                required,
                 roots: None,
             },
             Context::new(
@@ -2119,13 +2130,13 @@ impl Builder<'_, '_, '_> {
             roots
         } else {
             self.work(location)?;
-            let elements = self
+            let cached = self
                 .aggregate_cache
                 .get(slot)
-                .expect("cache lookup returned a published row")
-                .elements
-                .clone();
-            let roots = self.assignment_family(aggregate.function, &elements, location)?;
+                .expect("cache lookup returned a published row");
+            let (elements, required) = (cached.elements.clone(), Arc::clone(&cached.required));
+            let roots =
+                self.assignment_family(aggregate.function, &elements, &required, location)?;
             self.work(location)?;
             self.aggregate_cache
                 .get_mut(slot)
@@ -2159,9 +2170,10 @@ impl Builder<'_, '_, '_> {
         &mut self,
         function: AggregateFunction,
         elements: &GroundAggregate,
+        required: &Buffer<bool>,
         location: ProgramSite,
     ) -> Result<Arc<CoordinateMap<usize, usize>>, FormulaFailure> {
-        let values = self.aggregate_candidates(function, elements, location)?;
+        let values = self.aggregate_candidates(function, elements, required, location)?;
         ceiling(
             FormulaResource::AggregateCacheRoots,
             self.cached_roots as u128 + values.len() as u128,
@@ -2254,35 +2266,52 @@ impl Builder<'_, '_, '_> {
         &mut self,
         function: AggregateFunction,
         elements: &GroundAggregate,
+        required: &Buffer<bool>,
         location: ProgramSite,
     ) -> Result<Binding<'static>, FormulaFailure> {
         match elements {
-            GroundAggregate::Numeric(elements) => crate::formula_assignment::candidates(
-                function,
-                elements.iter().map(|element| element.weight),
-                self.computation,
-                self.limits,
-                &mut self.counters,
-                location,
-            ),
-            GroundAggregate::Extrema(elements) => {
-                let mut firsts =
-                    Binding::new(self.computation, self.limits, &mut self.counters, location)?;
-                firsts.extend_scope(
-                    elements.len(),
+            GroundAggregate::Numeric(elements) => {
+                let weights = |side: bool| {
+                    elements
+                        .iter()
+                        .zip(required.iter())
+                        .filter(move |(_, required)| **required == side)
+                        .map(|(element, _)| element.weight)
+                };
+                crate::formula_assignment::carrier(
+                    function,
+                    weights(true),
+                    weights(false),
                     self.computation,
                     self.limits,
                     &mut self.counters,
                     location,
-                )?;
-                for (slot, element) in elements.iter().enumerate() {
+                )
+            }
+            GroundAggregate::Extrema(elements) => {
+                // The optional tuples' values, then the required ones'.
+                let mut firsts = [
+                    Binding::new(self.computation, self.limits, &mut self.counters, location)?,
+                    Binding::new(self.computation, self.limits, &mut self.counters, location)?,
+                ];
+                for (element, &required) in elements.iter().zip(required.iter()) {
                     self.work(location)?;
                     let key = self.terms.key(element.value, location)?;
-                    firsts.set(slot, &key, self.limits, &mut self.counters, location)?;
+                    let firsts = &mut firsts[usize::from(required)];
+                    let at = firsts.len();
+                    firsts.extend_scope(
+                        at + 1,
+                        self.computation,
+                        self.limits,
+                        &mut self.counters,
+                        location,
+                    )?;
+                    firsts.set(at, &key, self.limits, &mut self.counters, location)?;
                 }
-                crate::formula_assignment::extrema_candidates(
+                crate::formula_assignment::extrema_carrier(
                     function,
-                    firsts.slots(),
+                    firsts[1].slots(),
+                    firsts[0].slots(),
                     self.computation,
                     self.limits,
                     &mut self.counters,
@@ -2329,7 +2358,7 @@ impl Builder<'_, '_, '_> {
         assignment: &Binding,
         support: &Support,
         location: ProgramSite,
-    ) -> Result<GroundAggregate, FormulaFailure> {
+    ) -> Result<Coalesced, FormulaFailure> {
         let is_extremum = extremum(aggregate.function).is_some();
         let mut grouped = CoordinateMap::<GroundKey, (Measure, usize)>::new(
             self.computation,
@@ -2337,6 +2366,21 @@ impl Builder<'_, '_, '_> {
             &mut self.counters,
             location,
         )?;
+        // On the assignment path only: the keys with an occurrence from an
+        // element whose condition the local join decides. The same bit
+        // `formula_assignment::values` reads, so both sites propose from the
+        // same required tuples.
+        let mut required = aggregate
+            .binding
+            .map(|_| {
+                CoordinateMap::<GroundKey, ()>::new(
+                    self.computation,
+                    self.limits,
+                    &mut self.counters,
+                    location,
+                )
+            })
+            .transpose()?;
         for element in &aggregate.elements {
             let mut local = Join::new(
                 &element.condition,
@@ -2359,39 +2403,8 @@ impl Builder<'_, '_, '_> {
                 location,
             )? {
                 let key = self.aggregate_key(&element.key, &binding, location)?;
-                let weight = match &key {
-                    GroundKey::Tuple(tuple) if is_extremum => {
-                        let read = self.computation.read();
-                        let value = self
-                            .terms
-                            .value(*tuple, read, location)?
-                            .child(0)
-                            .expect("admitted nonempty extremum tuple");
-                        crate::formula_assignment::extremum_value(value, location)?;
-                        let key = read.term_key(value).map_err(|error| {
-                            crate::formula_binding::assignment(
-                                zetesis_core::catalog::AssignmentError::Read(error),
-                                location,
-                            )
-                        })?;
-                        Measure::Extremum(self.term(&key, location)?)
-                    }
-                    GroundKey::Tuple(tuple) => {
-                        let value = self
-                            .terms
-                            .value(*tuple, self.computation.read(), location)?
-                            .child(0);
-                        let Some(weight) = crate::formula_assignment::contribution(
-                            aggregate.function,
-                            value,
-                            location,
-                        )?
-                        else {
-                            continue;
-                        };
-                        Measure::Numeric(weight)
-                    }
-                    GroundKey::Atom(_) => Measure::Numeric(1),
+                let Some(weight) = self.measure(aggregate.function, key, location)? else {
+                    continue;
                 };
                 let condition = self.body(&element.condition, &binding, location, support)?;
                 let previous = grouped
@@ -2418,18 +2431,77 @@ impl Builder<'_, '_, '_> {
                         location,
                     ),
                 )?;
+                if let Some(required) = required.as_mut().filter(|_| element.required) {
+                    required.insert(
+                        key,
+                        (),
+                        Some((
+                            FormulaResource::AggregateElements,
+                            self.limits.aggregate.max_elements,
+                        )),
+                        Context::new(
+                            &*self.computation,
+                            self.limits,
+                            &mut self.counters,
+                            location,
+                        ),
+                    )?;
+                }
             }
         }
-        self.coalesced_aggregate(grouped, is_extremum, location)
+        self.coalesced_aggregate(grouped, required.as_ref(), is_extremum, location)
+    }
+
+    /// What one coalesced key contributes to `function`: its first value for
+    /// an extremum, its weight for a sum or one for a count; nothing for a
+    /// tuple a sum does not count.
+    fn measure(
+        &mut self,
+        function: AggregateFunction,
+        key: GroundKey,
+        location: ProgramSite,
+    ) -> Result<Option<Measure>, FormulaFailure> {
+        Ok(Some(match key {
+            GroundKey::Tuple(tuple) if extremum(function).is_some() => {
+                let read = self.computation.read();
+                let value = self
+                    .terms
+                    .value(tuple, read, location)?
+                    .child(0)
+                    .expect("admitted nonempty extremum tuple");
+                crate::formula_assignment::extremum_value(value, location)?;
+                let key = read.term_key(value).map_err(|error| {
+                    crate::formula_binding::assignment(
+                        zetesis_core::catalog::AssignmentError::Read(error),
+                        location,
+                    )
+                })?;
+                Measure::Extremum(self.term(&key, location)?)
+            }
+            GroundKey::Tuple(tuple) => {
+                let value = self
+                    .terms
+                    .value(tuple, self.computation.read(), location)?
+                    .child(0);
+                let Some(weight) =
+                    crate::formula_assignment::contribution(function, value, location)?
+                else {
+                    return Ok(None);
+                };
+                Measure::Numeric(weight)
+            }
+            GroundKey::Atom(_) => Measure::Numeric(1),
+        }))
     }
 
     /// Publish the measured contribution family after full tuple coalescing.
     fn coalesced_aggregate(
         &mut self,
         grouped: CoordinateMap<GroundKey, (Measure, usize)>,
+        required: Option<&CoordinateMap<GroundKey, ()>>,
         is_extremum: bool,
         location: ProgramSite,
-    ) -> Result<GroundAggregate, FormulaFailure> {
+    ) -> Result<Coalesced, FormulaFailure> {
         let grouped = aggregate_order::ordered(
             grouped,
             &self.terms,
@@ -2441,6 +2513,36 @@ impl Builder<'_, '_, '_> {
                 location,
             ),
         )?;
+        let required = required
+            .map(|required| -> Result<_, FormulaFailure> {
+                let mut flags =
+                    Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+                flags.reserve(
+                    grouped.len(),
+                    self.computation,
+                    self.limits,
+                    &mut self.counters,
+                    location,
+                )?;
+                for entry in grouped.iter() {
+                    let found = required.find(
+                        &entry.0,
+                        self.computation,
+                        self.limits,
+                        &mut self.counters,
+                        location,
+                    )?;
+                    flags.push(
+                        found.is_some(),
+                        self.computation,
+                        self.limits,
+                        &mut self.counters,
+                        location,
+                    )?;
+                }
+                Ok(Arc::new(flags))
+            })
+            .transpose()?;
         if is_extremum {
             let mut elements =
                 Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
@@ -2466,7 +2568,7 @@ impl Builder<'_, '_, '_> {
                 )?;
             }
             self.work(location)?;
-            return Ok(GroundAggregate::Extrema(Arc::new(elements)));
+            return Ok((GroundAggregate::Extrema(Arc::new(elements)), required));
         }
         let mut elements =
             Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
@@ -2492,7 +2594,7 @@ impl Builder<'_, '_, '_> {
             )?;
         }
         self.work(location)?;
-        Ok(GroundAggregate::Numeric(Arc::new(elements)))
+        Ok((GroundAggregate::Numeric(Arc::new(elements)), required))
     }
     fn aggregate_key(
         &mut self,

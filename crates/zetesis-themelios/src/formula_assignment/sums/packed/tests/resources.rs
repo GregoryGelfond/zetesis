@@ -17,7 +17,7 @@ fn empty_value_refusal_precedes_input_and_other_limits() {
         let unseen =
             std::iter::from_fn(|| -> Option<i32> { panic!("no input before the empty limit") });
         assert!(matches!(
-            sums(unseen, computation, &limits, counters, given_site()),
+            sums(0, unseen, computation, &limits, counters, given_site()),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::AssignmentValues,
                 observed: 1,
@@ -42,7 +42,7 @@ fn every_packed_work_prefix_releases_storage_and_the_exact_budget_fits() {
                 max_work: counters.accounting.work + cutoff,
                 ..Default::default()
             };
-            let result = sums([1; 24], computation, &limits, counters, given_site());
+            let result = sums(0, [1; 24], computation, &limits, counters, given_site());
             if cutoff == needed {
                 assert_eq!(result.unwrap().slice(), (0..=24).collect::<Vec<_>>());
             } else {
@@ -75,6 +75,7 @@ fn cancellation_between_packed_contributions_releases_storage() {
         });
         assert!(matches!(
             sums(
+                0,
                 weights,
                 computation,
                 &FormulaLimits::default(),
@@ -111,10 +112,10 @@ fn dense_packed(maximum: i32, context: &mut Context<'_, &Computation<'_, '_>>) -
             )
             .unwrap();
     }
-    let plan = Plan::for_runs(&values, 0, context)
+    let plan = Plan::for_runs(&values, 0, 0, context)
         .unwrap()
         .expect("dense entry");
-    Packed::from_values(values, plan, context).unwrap()
+    Packed::from_values(values, 0, plan, context).unwrap()
 }
 
 fn live_bytes(computation: &Computation<'_, '_>, limits: &FormulaLimits) -> usize {
@@ -170,7 +171,7 @@ fn replacement_growth_declines_before_allocation_at_the_live_ceiling() {
             &mut Context::new(computation, &defaults, counters, given_site()),
         );
         let weight = i32::try_from(packed.words.capacity() * WORD_BITS).unwrap();
-        let proposed = Plan::select(packed.count, 32, weight, given_site())
+        let proposed = Plan::select(packed.count, 32, 0, weight, given_site())
             .unwrap()
             .expect("the proposed growth passes the independent work/space comparison");
         assert!(proposed.words > packed.words.capacity());
@@ -200,12 +201,10 @@ fn selected_entry_refusal_releases_both_transition_owners() {
     Fixture::default().with(given_site(), |_, computation, counters| {
         let defaults = FormulaLimits::default();
         let before = counters.workspace_bytes();
-        let mut runs = Runs::new(&mut Context::new(
-            computation,
-            &defaults,
-            counters,
-            given_site(),
-        ))
+        let mut runs = Runs::new(
+            0,
+            &mut Context::new(computation, &defaults, counters, given_site()),
+        )
         .unwrap();
         for _ in 0..16 {
             tick(&mut Context::new(
@@ -223,6 +222,7 @@ fn selected_entry_refusal_releases_both_transition_owners() {
         }
         let plan = Plan::for_runs(
             &runs.values,
+            0,
             1,
             &mut Context::new(computation, &defaults, counters, given_site()),
         )
@@ -238,6 +238,7 @@ fn selected_entry_refusal_releases_both_transition_owners() {
         assert!(matches!(
             super::super::finish(
                 runs.values,
+                0,
                 1,
                 [],
                 plan,

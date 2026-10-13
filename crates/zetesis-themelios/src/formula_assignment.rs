@@ -1,6 +1,8 @@
 //! Bounded candidate values from complete, canonical full-tuple local joins.
 mod counts;
 mod sums;
+#[cfg(test)]
+mod tests;
 pub(crate) use sums::sums;
 
 use crate::ProgramSite;
@@ -12,8 +14,9 @@ use crate::formula_support::components::Term;
 use crate::formula_support::{
     Buffer, Computation, Context, Counters, GroundingWork, Join, Support, TermSelection,
 };
-use crate::{FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature};
+use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature};
 use themelios_program::program::AggregateFunction;
+use themelios_program::term::EvalError;
 use zetesis_core::catalog::{AssignmentSlice, TermKey, TermRef};
 use zetesis_core::{Value, ValueNodeRef};
 
@@ -31,6 +34,9 @@ pub(crate) fn values(
         location,
     } = work;
     let mut tuples = TermSelection::new(computation, limits, counters, location)?;
+    // The tuples with an occurrence from an element whose condition the local
+    // join decides: present in every interpretation for this binding.
+    let mut required = TermSelection::new(computation, limits, counters, location)?;
     for element in &aggregate.elements {
         let mut local = Join::new(
             &element.condition,
@@ -51,19 +57,41 @@ pub(crate) fn values(
                 limits.aggregate.max_elements,
                 Context::new(&*computation, limits, counters, location),
             )?;
+            if element.required {
+                required.insert(
+                    &tuple,
+                    FormulaResource::AggregateElements,
+                    limits.aggregate.max_elements,
+                    Context::new(&*computation, limits, counters, location),
+                )?;
+            }
         }
     }
     let tuples = tuples.ordered(true, computation, limits, counters, location)?;
-    let mut firsts = Binding::new(computation, limits, counters, location)?;
-    let mut weights = Buffer::new(computation, limits, counters, location)?;
+    let extremum = matches!(
+        aggregate.function,
+        AggregateFunction::Min | AggregateFunction::Max
+    );
+    // Contributions of the optional tuples, then of the required ones.
+    let mut firsts = [
+        Binding::new(computation, limits, counters, location)?,
+        Binding::new(computation, limits, counters, location)?,
+    ];
+    let mut weights = [
+        Buffer::new(computation, limits, counters, location)?,
+        Buffer::new(computation, limits, counters, location)?,
+    ];
     for slot in 0..tuples.len() {
         counters.work(limits, location)?;
+        let key = tuples
+            .slots()
+            .key(slot)
+            .map_err(|error| crate::formula_binding::assignment(error, location))?
+            .expect("ordered tuples have no missing entries");
+        let side = usize::from(required.contains(&key, limits, counters, location)?);
         let read = computation.read();
         let first = tuples.read(slot, read, location)?.child(0);
-        if matches!(
-            aggregate.function,
-            AggregateFunction::Min | AggregateFunction::Max
-        ) {
+        if extremum {
             let first = first.expect("admitted nonempty extremum tuple");
             extremum_value(first, location)?;
             let key = read.term_key(first).map_err(|error| {
@@ -72,28 +100,30 @@ pub(crate) fn values(
                     location,
                 )
             })?;
-            firsts.extend_scope(slot + 1, computation, limits, counters, location)?;
-            firsts.set(slot, &key, limits, counters, location)?;
+            let firsts = &mut firsts[side];
+            let at = firsts.len();
+            firsts.extend_scope(at + 1, computation, limits, counters, location)?;
+            firsts.set(at, &key, limits, counters, location)?;
         } else if let Some(weight) = contribution(aggregate.function, first, location)? {
-            weights.push(weight, computation, limits, counters, location)?;
+            weights[side].push(weight, computation, limits, counters, location)?;
         }
     }
-    if matches!(
-        aggregate.function,
-        AggregateFunction::Min | AggregateFunction::Max
-    ) {
-        extrema_candidates(
+    let [optional, required] = &weights;
+    if extremum {
+        extrema_carrier(
             aggregate.function,
-            firsts.slots(),
+            firsts[1].slots(),
+            firsts[0].slots(),
             computation,
             limits,
             counters,
             location,
         )
     } else {
-        candidates(
+        carrier(
             aggregate.function,
-            weights.iter().copied(),
+            required.iter().copied(),
+            optional.iter().copied(),
             computation,
             limits,
             counters,
@@ -151,40 +181,86 @@ pub(crate) fn extremum_value(
     Ok(())
 }
 
-pub(crate) fn extrema_candidates(
+/// Whether `order`, a value's order against the current extremum, puts the
+/// value strictly before it in `function`'s order: below for `#min`, above for
+/// `#max`.
+pub(crate) fn precedes(function: AggregateFunction, order: std::cmp::Ordering) -> bool {
+    match function {
+        AggregateFunction::Min => order.is_lt(),
+        AggregateFunction::Max => order.is_gt(),
+        _ => unreachable!("extremum order applies to #min and #max only"),
+    }
+}
+
+/// The proposed values of a `#min` or `#max` assignment from its required and
+/// optional tuples' values. With a required tuple: the required extremum and
+/// every optional value strictly before it, since every selection contains the
+/// required tuples. Without one: the empty value (`#sup` for `#min`, `#inf` for
+/// `#max`) and every optional value. Charges work per step and assignment
+/// values per distinct value; returns the values in ascending term order.
+pub(crate) fn extrema_carrier(
     function: AggregateFunction,
-    possible: AssignmentSlice<'_>,
+    required: AssignmentSlice<'_>,
+    optional: AssignmentSlice<'_>,
     computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<Binding<'static>, FormulaFailure> {
     let mut values = TermSelection::new(computation, limits, counters, location)?;
-    let empty = match function {
-        AggregateFunction::Min => Value::Supremum,
-        AggregateFunction::Max => Value::Infimum,
-        _ => unreachable!("value candidates are extrema only"),
-    };
-    let empty = computation.import((&empty).into(), limits, counters, location)?;
-    values.insert(
-        &empty,
-        FormulaResource::AssignmentValues,
-        limits.max_assignment_values,
-        Context::new(&*computation, limits, counters, location),
-    )?;
-    for slot in 0..possible.len() {
+    let mut extremum: Option<TermKey> = None;
+    for slot in 0..required.len() {
         counters.work(limits, location)?;
-        let key = possible
-            .key(slot)
-            .map_err(|error| crate::formula_binding::assignment(error, location))?
-            .expect("possible extrema list has no missing entries");
-        let value = computation.read().term(&key).map_err(|error| {
-            crate::formula_binding::assignment(
-                zetesis_core::catalog::AssignmentError::Read(error),
-                location,
-            )
-        })?;
+        let key = slice_key(required, slot, location)?;
+        let value = read_term(computation, &key, location)?;
         extremum_value(value, location)?;
+        let before = match &extremum {
+            None => true,
+            Some(current) => {
+                let current = read_term(computation, current, location)?;
+                precedes(
+                    function,
+                    value.compare_terms_with(current, || counters.work(limits, location))?,
+                )
+            }
+        };
+        if before {
+            extremum = Some(key);
+        }
+    }
+    if let Some(extremum) = &extremum {
+        values.insert(
+            extremum,
+            FormulaResource::AssignmentValues,
+            limits.max_assignment_values,
+            Context::new(&*computation, limits, counters, location),
+        )?;
+    } else {
+        let empty = match function {
+            AggregateFunction::Min => Value::Supremum,
+            AggregateFunction::Max => Value::Infimum,
+            _ => unreachable!("value candidates are extrema only"),
+        };
+        let empty = computation.import((&empty).into(), limits, counters, location)?;
+        values.insert(
+            &empty,
+            FormulaResource::AssignmentValues,
+            limits.max_assignment_values,
+            Context::new(&*computation, limits, counters, location),
+        )?;
+    }
+    for slot in 0..optional.len() {
+        counters.work(limits, location)?;
+        let key = slice_key(optional, slot, location)?;
+        let value = read_term(computation, &key, location)?;
+        extremum_value(value, location)?;
+        if let Some(current) = &extremum {
+            let current = read_term(computation, current, location)?;
+            let order = value.compare_terms_with(current, || counters.work(limits, location))?;
+            if !precedes(function, order) {
+                continue;
+            }
+        }
         values.insert(
             &key,
             FormulaResource::AssignmentValues,
@@ -193,6 +269,30 @@ pub(crate) fn extrema_candidates(
         )?;
     }
     values.ordered(false, computation, limits, counters, location)
+}
+
+fn slice_key(
+    slice: AssignmentSlice<'_>,
+    slot: usize,
+    location: ProgramSite,
+) -> Result<TermKey, FormulaFailure> {
+    Ok(slice
+        .key(slot)
+        .map_err(|error| crate::formula_binding::assignment(error, location))?
+        .expect("an extremum list has no missing entries"))
+}
+
+fn read_term<'a>(
+    computation: &'a Computation<'_, '_>,
+    key: &TermKey,
+    location: ProgramSite,
+) -> Result<TermRef<'a>, FormulaFailure> {
+    computation.read().term(key).map_err(|error| {
+        crate::formula_binding::assignment(
+            zetesis_core::catalog::AssignmentError::Read(error),
+            location,
+        )
+    })
 }
 
 pub(crate) fn contribution(
@@ -212,9 +312,17 @@ pub(crate) fn contribution(
     }
 }
 
-pub(crate) fn candidates(
+/// The proposed values of an assignment aggregate: the measure of every
+/// selection between its required tuples and its possible ones, from each
+/// required and each optional tuple's contribution (`#count`: one; `#sum` and
+/// `#sum+`: its weight; `#min` and `#max`: its value as a number). Without a
+/// required tuple, every selection of the optional ones. Charges work and
+/// cancellation per step, assignment values per distinct value and storage
+/// through its buffers; returns the values in ascending order.
+pub(crate) fn carrier(
     function: AggregateFunction,
-    weights: impl IntoIterator<Item = i32>,
+    required: impl IntoIterator<Item = i32>,
+    optional: impl IntoIterator<Item = i32>,
     computation: &mut Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
@@ -223,30 +331,39 @@ pub(crate) fn candidates(
     // Both callers supply one contribution per coalesced full tuple: `values`
     // uses `contribution(Count, _)`, and final grounding uses the same function
     // (or unit atom keys) before grouping. Count never consumes tuple weights.
+    let positive = |weight: &i32| function != AggregateFunction::SumPlus || *weight > 0;
     let numbers = match function {
         AggregateFunction::Count => {
-            counts::counts(weights, computation, limits, counters, location)?
-        }
-        AggregateFunction::Sum | AggregateFunction::SumPlus => sums(
-            weights
-                .into_iter()
-                .filter(|weight| function != AggregateFunction::SumPlus || *weight > 0),
-            computation,
-            limits,
-            counters,
-            location,
-        )?,
-        AggregateFunction::Min | AggregateFunction::Max => {
-            let mut possible = Binding::new(computation, limits, counters, location)?;
-            for weight in weights {
-                let slot = possible.len();
-                possible.extend_scope(slot + 1, computation, limits, counters, location)?;
-                let key = computation.number(weight, limits, counters, location)?;
-                possible.set(slot, &key, limits, counters, location)?;
+            let mut count = 0_usize;
+            for _ in required {
+                counters.work(limits, location)?;
+                count += 1;
             }
-            return extrema_candidates(
+            counts::counts(count, optional, computation, limits, counters, location)?
+        }
+        AggregateFunction::Sum | AggregateFunction::SumPlus => {
+            let seed = required_total(
+                required.into_iter().filter(positive),
+                limits,
+                counters,
+                location,
+            )?;
+            sums(
+                seed,
+                optional.into_iter().filter(positive),
+                computation,
+                limits,
+                counters,
+                location,
+            )?
+        }
+        AggregateFunction::Min | AggregateFunction::Max => {
+            let required = numbers_binding(required, computation, limits, counters, location)?;
+            let optional = numbers_binding(optional, computation, limits, counters, location)?;
+            return extrema_carrier(
                 function,
-                possible.slots(),
+                required.slots(),
+                optional.slots(),
                 computation,
                 limits,
                 counters,
@@ -261,4 +378,42 @@ pub(crate) fn candidates(
         result.set(slot, &key, limits, counters, location)?;
     }
     Ok(result)
+}
+
+/// The total of the required contributions, summed exactly. It is the measure
+/// of the selection of exactly the required tuples, so a total outside `i32`
+/// refuses the aggregate as an overflow, whatever the summation order.
+pub(crate) fn required_total(
+    weights: impl IntoIterator<Item = i32>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<i32, FormulaFailure> {
+    let overflow = || ExpansionFailure::Evaluation {
+        error: EvalError::Overflow,
+        location,
+    };
+    let mut total = 0_i64;
+    for weight in weights {
+        counters.work(limits, location)?;
+        total = total.checked_add(i64::from(weight)).ok_or_else(overflow)?;
+    }
+    Ok(i32::try_from(total).map_err(|_| overflow())?)
+}
+
+fn numbers_binding(
+    numbers: impl IntoIterator<Item = i32>,
+    computation: &mut Computation<'_, '_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<Binding<'static>, FormulaFailure> {
+    let mut binding = Binding::new(computation, limits, counters, location)?;
+    for number in numbers {
+        let slot = binding.len();
+        binding.extend_scope(slot + 1, computation, limits, counters, location)?;
+        let key = computation.number(number, limits, counters, location)?;
+        binding.set(slot, &key, limits, counters, location)?;
+    }
+    Ok(binding)
 }

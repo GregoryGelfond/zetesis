@@ -13,7 +13,6 @@ use std::cmp::Ordering;
 use super::super::Predicates;
 use crate::formula_support::components::Term;
 use themelios_program::program::AggregateFunction;
-use themelios_program::term::EvalError;
 use zetesis_core::catalog::{AssignmentError, TermKey, TermRef};
 use zetesis_core::{TemplateTerm, Value, ValueNodeRef};
 
@@ -21,7 +20,7 @@ use super::{Activity, Context, activity, assignment, transport};
 use crate::formula::ceiling;
 use crate::formula_ir::{AggregateKey, LiteralIr, Prepared, RuleIr};
 use crate::formula_support::{Buffer, Computation, Counters, TermSelection};
-use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
+use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
 pub(in super::super) struct Carrier<'a> {
     pub predicates: Predicates<'a>,
@@ -166,21 +165,18 @@ fn complete<'a>(
                     )?;
                 }
             }
+            // Seeded at the required measure, every sum is a carrier value, so
+            // the operation refuses exactly a carrier value outside i32.
             let sums = crate::formula_assignment::sums(
+                initial,
                 weights.iter().copied(),
                 context.computation,
                 context.limits,
                 context.counters,
                 context.location,
             )?;
-            for &delta in sums.iter() {
+            for &total in sums.iter() {
                 context.inspect()?;
-                let total = initial
-                    .checked_add(delta)
-                    .ok_or(ExpansionFailure::Evaluation {
-                        error: EvalError::Overflow,
-                        location: context.location,
-                    })?;
                 let value = context.computation.number(
                     total,
                     context.limits,
@@ -207,9 +203,7 @@ fn complete<'a>(
                         context.counters.work(context.limits, context.location)
                     })?
                 };
-                if (function == AggregateFunction::Min && order.is_lt())
-                    || (function == AggregateFunction::Max && order.is_gt())
-                {
+                if crate::formula_assignment::precedes(function, order) {
                     context.inspect()?;
                     let value = context
                         .computation
@@ -262,7 +256,12 @@ fn measure(
 ) -> Result<TermKey, FormulaFailure> {
     match function {
         AggregateFunction::Count | AggregateFunction::Sum | AggregateFunction::SumPlus => {
-            let mut total = 0_i32;
+            let mut weights = Buffer::new(
+                context.computation,
+                context.limits,
+                context.counters,
+                context.location,
+            )?;
             for tuple in required.values.iter().copied() {
                 context.inspect()?;
                 if let Some(weight) = crate::formula_assignment::contribution(
@@ -270,14 +269,23 @@ fn measure(
                     first(tuple, context)?,
                     context.location,
                 )? {
-                    total = total
-                        .checked_add(weight)
-                        .ok_or(ExpansionFailure::Evaluation {
-                            error: EvalError::Overflow,
-                            location: context.location,
-                        })?;
+                    weights.push(
+                        weight,
+                        context.computation,
+                        context.limits,
+                        context.counters,
+                        context.location,
+                    )?;
                 }
             }
+            // Summed exactly, so a partial sum outside i32 refuses nothing the
+            // carrier does not contain.
+            let total = crate::formula_assignment::required_total(
+                weights.iter().copied(),
+                context.limits,
+                context.counters,
+                context.location,
+            )?;
             context
                 .computation
                 .number(total, context.limits, context.counters, context.location)

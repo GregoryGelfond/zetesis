@@ -162,7 +162,7 @@ fn nonbinding_guards_cannot_supply_missing_inputs() {
 
 #[test]
 fn defined_false_guards_complete_the_mixed_family() {
-    let source = "q:-N=#count{1},1/N<=#count{}.";
+    let source = "{p}.q:-N=#count{1:p},1/N<=#count{}.";
     let admitted = input(source);
     // N=1 gives a defined false guard, which witnesses definedness, not truth.
     let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
@@ -175,8 +175,19 @@ fn defined_false_guards_complete_the_mixed_family() {
             .expect("source input")
             .slice(location.location().expect("parsed source").span)
             .unwrap(),
-        source
+        "q:-N=#count{1:p},1/N<=#count{}."
     );
+    let expected = Models::from([BTreeSet::new(), BTreeSet::from(["p".into()])]);
+    assert_eq!(native(&admitted), expected);
+    assert_eq!(exhaustive(&admitted), expected);
+}
+
+#[test]
+fn a_required_count_leaves_only_the_defined_guard() {
+    // The element holds for every binding, so the count proposes one alone;
+    // the guard 1/1 <= 0 is defined and false, with no warning retained.
+    let admitted = input("q:-N=#count{1},1/N<=#count{}.");
+    assert!(admitted.warnings().is_empty(), "{:?}", admitted.warnings());
     let expected = Models::from([BTreeSet::new()]);
     assert_eq!(native(&admitted), expected);
     assert_eq!(exhaustive(&admitted), expected);

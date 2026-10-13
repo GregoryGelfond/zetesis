@@ -36,6 +36,18 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- An aggregate assignment now proposes only the values its aggregate can take:
+  the measure of every selection that contains its required tuples, those from
+  an element whose condition has no atom of either sign, and lies within its
+  possible ones. Admission's arithmetic family follows these values, in the
+  assignment's own rule and in every rule that reads its heads. Programs that
+  were refused only for an impossible proposal are now admitted, such as
+  `p(M+1) :- M = #min{1; 5}.`, which answers `p(2)`; warnings that came only from
+  impossible proposals are gone; and a family whose every possible value divides
+  by zero is now refused, such as `q(Y) :- N = #count{1}, Y = 1/(N-1).` A sum is
+  refused exactly when one of its values leaves the 32-bit range, whatever the
+  order of its weights. Answer sets are unchanged. On the maintained nested
+  Mastermind workload, grounding keeps 654 possible atoms instead of 5,162.
 - Read the host's memory on macOS with one `sysctlbyname` call for `hw.memsize`
   instead of running `/usr/sbin/sysctl`, so no invocation starts a child
   process. It is the one foreign call in zetesis's own source, named in the

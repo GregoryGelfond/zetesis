@@ -127,6 +127,7 @@ mod program_parts;
 mod project_conditions;
 mod project_metadata;
 mod refusal_contracts;
+mod required_carriers;
 mod root_bundles;
 mod scalar_bindings;
 mod scalar_bindings_clingo;

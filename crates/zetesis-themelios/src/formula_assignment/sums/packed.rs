@@ -1,9 +1,10 @@
 //! One nonnegative packed interval inside the finite assignment-sum operation.
 //!
-//! A bit at s means that some optional subset has value s, with existence
-//! (not the number of witnesses) retained. Descending shifts read the previous
-//! occurrence state, so repeated weights still make separate contributions.
-//! The caller can enter once and leave once; no input list or cache is retained.
+//! A bit at s means that some optional subset has value s above the seed, so
+//! the sum seed + s is reachable, with existence (not the number of witnesses)
+//! retained. Descending shifts read the previous occurrence state, so repeated
+//! weights still make separate contributions. The caller can enter once and
+//! leave once; no input list or cache is retained.
 
 #[cfg(test)]
 mod tests;
@@ -15,22 +16,28 @@ const WORD_BITS: usize = u64::BITS as usize;
 
 #[derive(Clone, Copy)]
 pub(super) struct Plan {
+    /// The largest reachable sum above the seed.
     maximum: usize,
     words: usize,
 }
 
 impl Plan {
+    /// A packed route for a run that still starts at its `seed`, so every
+    /// value lies at or above it.
     pub(super) fn for_runs(
         values: &Numbers,
+        seed: i32,
         weight: i32,
         context: &mut Context<'_, &Computation<'_, '_>>,
     ) -> Result<Option<Self>, FormulaFailure> {
-        if values.slice().first() != Some(&0) {
+        if values.slice().first() != Some(&seed) {
             return Ok(None);
         }
+        let last = *values.slice().last().expect("the seed is retained");
         let Some(plan) = Self::select(
             values.len(),
-            *values.slice().last().expect("zero is retained"),
+            i64::from(last) - i64::from(seed),
+            seed,
             weight,
             context.work.location,
         )?
@@ -44,18 +51,22 @@ impl Plan {
         Ok(fits_extra_bytes(requested, context)?.then_some(plan))
     }
 
+    /// `maximum` is the largest sum above `seed` before adding `weight`. The
+    /// largest resulting sum, `seed` plus the new maximum, must fit `i32`.
     fn select(
         count: usize,
-        maximum: i32,
+        maximum: i64,
+        seed: i32,
         weight: i32,
         location: crate::ProgramSite,
     ) -> Result<Option<Self>, FormulaFailure> {
         if weight < 0 {
             return Ok(None);
         }
-        let maximum = maximum
-            .checked_add(weight)
-            .ok_or_else(|| overflow(location))?;
+        let maximum = maximum + i64::from(weight);
+        if i32::try_from(i64::from(seed) + maximum).is_err() {
+            return Err(overflow(location));
+        }
         let maximum = usize::try_from(maximum).expect("nonnegative maximum");
         let words = (maximum + 1).div_ceil(WORD_BITS);
         let cells = count as u128;
@@ -94,18 +105,21 @@ fn fits_extra_bytes(
 
 struct Packed {
     words: Buffer<u64>,
+    /// The sum every bit offset is taken from.
+    seed: i32,
     maximum: usize,
     count: usize,
 }
 
 pub(super) fn finish(
     values: Numbers,
+    seed: i32,
     first: i32,
     weights: impl IntoIterator<Item = i32>,
     plan: Plan,
     context: &mut Context<'_, &Computation<'_, '_>>,
 ) -> Result<Numbers, FormulaFailure> {
-    let mut packed = Packed::from_values(values, plan, context)?;
+    let mut packed = Packed::from_values(values, seed, plan, context)?;
     packed.add(first, plan, context)?;
     let mut weights = weights.into_iter();
     for weight in weights.by_ref() {
@@ -128,8 +142,15 @@ impl Packed {
         weight: i32,
         context: &mut Context<'_, &Computation<'_, '_>>,
     ) -> Result<Option<Plan>, FormulaFailure> {
-        let maximum = i32::try_from(self.maximum).expect("admitted i32 maximum");
-        let Some(plan) = Plan::select(self.count, maximum, weight, context.work.location)? else {
+        let maximum = i64::try_from(self.maximum).expect("admitted maximum");
+        let Some(plan) = Plan::select(
+            self.count,
+            maximum,
+            self.seed,
+            weight,
+            context.work.location,
+        )?
+        else {
             return Ok(None);
         };
         // Retained updates need no new lease or header. A replacement keeps
@@ -144,11 +165,14 @@ impl Packed {
 
     fn from_values(
         values: Numbers,
+        seed: i32,
         plan: Plan,
         context: &mut Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
-        let maximum = usize::try_from(*values.slice().last().expect("zero is retained"))
-            .expect("nonnegative sums");
+        let above = |sum: i32| {
+            usize::try_from(i64::from(sum) - i64::from(seed)).expect("sums at or above the seed")
+        };
+        let maximum = above(*values.slice().last().expect("the seed is retained"));
         let count = values.len();
         let mut words = Buffer::new(
             context.computation,
@@ -166,7 +190,7 @@ impl Packed {
         )?;
         for &sum in values.iter() {
             tick(context)?;
-            let sum = usize::try_from(sum).expect("nonnegative sums");
+            let sum = above(sum);
             words.slice_mut()[sum / WORD_BITS] |= 1 << (sum % WORD_BITS);
         }
         // The old canonical run and the new words overlap during conversion;
@@ -174,6 +198,7 @@ impl Packed {
         drop(values);
         Ok(Self {
             words,
+            seed,
             maximum,
             count,
         })
@@ -251,7 +276,8 @@ impl Packed {
             let mut remaining = word;
             while remaining != 0 {
                 let bit = remaining.trailing_zeros() as usize;
-                let sum = i32::try_from(index * WORD_BITS + bit)
+                let above = i64::try_from(index * WORD_BITS + bit).expect("an admitted offset");
+                let sum = i32::try_from(i64::from(self.seed) + above)
                     .expect("every set bit is an admitted i32 sum");
                 values.push(
                     sum,

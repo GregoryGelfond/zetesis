@@ -166,6 +166,7 @@ fn assignment_family_inputs_reserve_exact_storage() {
                     key: AggregateKey::Tuple(vec![CoreTerm::Variable(1), CoreTerm::Variable(2)]),
                     condition: Vec::new(),
                     variables: 3,
+                    required: true,
                 });
                 let result = compiler.assignment_family_inputs(&aggregate, 2);
                 if limit == bytes {
@@ -251,6 +252,7 @@ fn aggregate_inputs_exclude_local_witnesses() {
                 ),
             )],
             variables: 3,
+            required: false,
         });
         aggregate.family_inputs = compiler.assignment_family_inputs(aggregate, 2).unwrap();
         let body = [
@@ -333,6 +335,7 @@ fn reading_aggregate(target: usize, input: usize) -> LiteralIr {
         key: AggregateKey::Tuple(vec![CoreTerm::Variable(input)]),
         condition: Vec::new(),
         variables: target.max(input) + 1,
+        required: true,
     });
     aggregate.family_inputs = vec![input];
     literal
@@ -515,6 +518,7 @@ fn nonbinding_element(key: AggregateKey, condition: Vec<LiteralIr>) -> LiteralIr
         elements: vec![AggregateElementIr {
             family: crate::formula_ir::LocalFamily(0),
             key,
+            required: crate::formula_ir::decided_by_join(&condition),
             condition,
             variables: 2,
         }],

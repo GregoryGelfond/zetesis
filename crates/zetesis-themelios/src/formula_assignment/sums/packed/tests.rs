@@ -26,12 +26,13 @@ fn result_and_work(weights: &[i32], merge_only: bool) -> (Vec<i32>, u64) {
         let before = counters.accounting.work;
         let result = if merge_only {
             let mut context = Context::new(&*computation, &limits, counters, given_site());
-            Runs::new(&mut context)
+            Runs::new(0, &mut context)
                 .unwrap()
                 .finish(weights.iter().copied(), &mut context)
                 .unwrap()
         } else {
             sums(
+                0,
                 weights.iter().copied(),
                 computation,
                 &limits,
@@ -121,6 +122,7 @@ fn a_wide_tail_declines_before_allocating_its_span() {
             ..Default::default()
         };
         let actual = sums(
+            0,
             weights.iter().copied(),
             computation,
             &limits,
@@ -143,6 +145,7 @@ fn overflow_remains_a_typed_failure_before_and_after_packing() {
             let before = counters.workspace_bytes();
             assert!(matches!(
                 sums(
+                    0,
                     weights,
                     computation,
                     &FormulaLimits::default(),
@@ -166,7 +169,7 @@ fn packed_distinct_limit_reports_the_first_excess_value() {
             max_assignment_values: 65,
             ..Default::default()
         };
-        let fitting = sums([1; 64], computation, &limits, counters, given_site()).unwrap();
+        let fitting = sums(0, [1; 64], computation, &limits, counters, given_site()).unwrap();
         assert_eq!(fitting.slice(), (0..=64).collect::<Vec<_>>());
         drop(fitting);
         let limits = FormulaLimits {
@@ -175,7 +178,7 @@ fn packed_distinct_limit_reports_the_first_excess_value() {
         };
         let weights = std::iter::repeat_n(1, 32).chain([64]);
         assert!(matches!(
-            sums(weights, computation, &limits, counters, given_site()),
+            sums(0, weights, computation, &limits, counters, given_site()),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::AssignmentValues,
                 observed: 41,

@@ -1,8 +1,8 @@
 //! Aggregate reference cases include recursive formulas whose classical truth
 //! tables agree but whose reducts have different subset models.
 //!
-//! The fixture contains 321 sources: 315 admitted comparisons/assignments and
-//! six explicit refusals, including two unsafe programs. The portable test
+//! The fixture contains 330 sources: 321 admitted comparisons/assignments and
+//! nine explicit refusals, including two unsafe programs. The portable test
 //! compares every admission with independent exhaustive reduct enumeration;
 //! the optional test reruns the full external reference campaign. A recorded
 //! unsupported case is a refusal regression, never a compatibility pass.
@@ -134,7 +134,16 @@ fn expected_refusal(name: &str) -> Option<Refusal> {
         // Finite aggregate tuple expressions are admitted, but reached 1/0
         // remains an evaluation failure. clingo's discarded-term result is
         // retained as reference data, not substituted for this source contract.
-        "sum_local_undefined" => Some(Refusal::Evaluation),
+        // An assignment's family is its carrier: when every value the
+        // aggregate can take divides by zero, in its own rule or in a rule
+        // that reads its head, the family is entirely undefined and refused,
+        // and clingo's answer, which drops the undefined instances, is
+        // retained as reference data. A carrier value outside i32 is refused;
+        // clingo's recorded answers wrap the sum to -2147483648 in both models.
+        "sum_local_undefined"
+        | "assignment_required_count_zero_divisor"
+        | "assignment_downstream_zero_divisor"
+        | "assignment_required_sum_overflow" => Some(Refusal::Evaluation),
         _ => None,
     }
 }
@@ -163,8 +172,8 @@ fn assert_refusal(error: &FormulaFailure, expected: Refusal) {
 #[test]
 fn recorded_aggregate_comparisons_match_exhaustive_reduct_models() {
     let cases = cases();
-    assert_eq!(cases.len(), 321);
-    assert_eq!(cases.iter().filter(|case| case.valid).count(), 319);
+    assert_eq!(cases.len(), 330);
+    assert_eq!(cases.iter().filter(|case| case.valid).count(), 328);
     let mut admitted = 0;
     let mut refused = 0;
     for case in cases {
@@ -195,7 +204,7 @@ fn recorded_aggregate_comparisons_match_exhaustive_reduct_models() {
             admitted += 1;
         }
     }
-    assert_eq!((admitted, refused), (315, 6));
+    assert_eq!((admitted, refused), (321, 9));
 }
 
 #[test]
@@ -358,8 +367,8 @@ fn compare_external(case: &Case) {
 #[ignore = "requires clingo: recorded recursive aggregate semantics match clingo"]
 fn recorded_recursive_aggregate_semantics_match_clingo() {
     let cases = cases();
-    assert_eq!(cases.len(), 321);
-    assert_eq!(cases.iter().filter(|case| case.valid).count(), 319);
+    assert_eq!(cases.len(), 330);
+    assert_eq!(cases.iter().filter(|case| case.valid).count(), 328);
     for case in cases {
         compare_external(&case);
     }

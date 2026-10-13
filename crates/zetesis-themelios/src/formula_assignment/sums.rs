@@ -1,7 +1,8 @@
 //! Distinct finite assignment sums with leased sorted or packed execution.
 //!
-//! Every input occurrence remains independently optional. The returned `Numbers`
-//! are always ascending, distinct i32 values; packed words are private scratch.
+//! Every input occurrence is independently optional above a seed, the exact
+//! total of the required contributions. The returned `Numbers` are always
+//! ascending, distinct i32 values; packed words are private scratch.
 mod packed;
 
 use crate::ProgramSite;
@@ -12,7 +13,12 @@ use themelios_program::term::EvalError;
 
 pub(crate) type Numbers = Buffer<i32>;
 
+/// The sums of `seed` and every selection of `weights`. Every value a run
+/// holds is the seed plus a selection of the weights added so far, which is
+/// itself a sum of the result, so a checked addition fails exactly when a
+/// resulting sum leaves `i32`.
 pub(crate) fn sums(
+    seed: i32,
     weights: impl IntoIterator<Item = i32>,
     computation: &Computation<'_, '_>,
     limits: &FormulaLimits,
@@ -27,15 +33,15 @@ pub(crate) fn sums(
         location,
     )?;
     let mut context = Context::new(computation, limits, counters, location);
-    let mut runs = Runs::new(&mut context)?;
+    let mut runs = Runs::new(seed, &mut context)?;
     let mut weights = weights.into_iter();
     for weight in weights.by_ref() {
         tick(&mut context)?;
-        if let Some(plan) = packed::Plan::for_runs(&runs.values, weight, &mut context)? {
+        if let Some(plan) = packed::Plan::for_runs(&runs.values, seed, weight, &mut context)? {
             // This is the only entry into packed execution. A later signed or
             // sparse contribution returns to merging without trying it again.
             drop(runs.next);
-            return packed::finish(runs.values, weight, weights, plan, &mut context);
+            return packed::finish(runs.values, seed, weight, weights, plan, &mut context);
         }
         runs.add(weight, &mut context)?;
     }
@@ -63,7 +69,10 @@ struct Runs {
 }
 
 impl Runs {
-    fn new(context: &mut Context<'_, &Computation<'_, '_>>) -> Result<Self, FormulaFailure> {
+    fn new(
+        seed: i32,
+        context: &mut Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Self, FormulaFailure> {
         let mut values = Buffer::new(
             context.computation,
             context.work.limits,
@@ -77,7 +86,7 @@ impl Runs {
             context.work.location,
         )?;
         values.push(
-            0,
+            seed,
             context.computation,
             context.work.limits,
             context.work.counters,
@@ -118,8 +127,9 @@ impl Runs {
     ) -> Result<(), FormulaFailure> {
         // Adding a fixed integer preserves order. The caller paid the first
         // value's work/cancellation charge before choosing the physical route.
-        // Check every addition before merging; an overflowing optional subset
-        // remains a source refusal. Zero ensures this run is never empty.
+        // Check every addition before merging: each value is the seed plus a
+        // selection, so an overflowing addition is a resulting sum that leaves
+        // i32, a source refusal. The seed ensures this run is never empty.
         for (index, sum) in self.values.iter().enumerate() {
             if index != 0 {
                 tick(context)?;
@@ -184,6 +194,7 @@ mod tests {
                 .collect();
             Fixture::default().with(given_site(), |_, computation, counters| {
                 let actual = sums(
+                    0,
                     weights,
                     computation,
                     &FormulaLimits::default(),
@@ -203,7 +214,7 @@ mod tests {
                 ..Default::default()
             };
             assert_eq!(
-                sums([1, 1], computation, &limits, counters, given_site())
+                sums(0, [1, 1], computation, &limits, counters, given_site())
                     .unwrap()
                     .slice(),
                 &[0, 1, 2]
@@ -213,7 +224,7 @@ mod tests {
                 ..limits
             };
             assert!(matches!(
-                sums([1, 1], computation, &limits, counters, given_site()),
+                sums(0, [1, 1], computation, &limits, counters, given_site()),
                 Err(FormulaFailure::Limit {
                     resource: FormulaResource::AssignmentValues,
                     observed: 3,
@@ -229,6 +240,7 @@ mod tests {
             Fixture::default().with(given_site(), |_, computation, counters| {
                 assert!(matches!(
                     sums(
+                        0,
                         weights,
                         computation,
                         &FormulaLimits::default(),
@@ -248,6 +260,7 @@ mod tests {
         let needed = Fixture::default().with(given_site(), |_, computation, counters| {
             let before = counters.accounting.work;
             sums(
+                0,
                 [2, -3, 5],
                 computation,
                 &FormulaLimits::default(),
@@ -268,7 +281,9 @@ mod tests {
                     max_work: counters.accounting.work + cutoff,
                     ..limits
                 };
-                assert!(sums([2, -3, 5], computation, &bounded, counters, given_site()).is_err());
+                assert!(
+                    sums(0, [2, -3, 5], computation, &bounded, counters, given_site()).is_err()
+                );
                 assert_eq!(
                     computation
                         .allowance(&observer, &limits, given_site())

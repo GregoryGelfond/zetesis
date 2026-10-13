@@ -209,9 +209,10 @@ fn unrelated_objectives_keep_their_priority() {
 
 #[test]
 fn mixed_proposals_keep_the_defined_family() {
-    // The first aggregate actually equals one. Its unrealizable zero proposal
-    // remains warning evidence; the original equalities decide which rows hold.
-    let source = "q(M):-N=#count{1},Y=1/N,M=#sum{Y}.";
+    // The count's element is optional, so its zero proposal is realizable and
+    // divides by zero; the defined one-proposal keeps the family admitted with
+    // a warning, and the original equalities decide which rows hold.
+    let source = "{p}.q(M):-N=#count{1:p},Y=1/N,M=#sum{Y}.";
     let admitted = input(source);
     let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
         panic!("one zero-divisor warning: {:?}", admitted.warnings());
@@ -223,8 +224,19 @@ fn mixed_proposals_keep_the_defined_family() {
             .expect("source input")
             .slice(location.location().expect("parsed source").span)
             .unwrap(),
-        source
+        "q(M):-N=#count{1:p},Y=1/N,M=#sum{Y}."
     );
+    let expected = Models::from([BTreeSet::new(), BTreeSet::from(["p".into(), "q(1)".into()])]);
+    assert_eq!(native(&admitted), expected);
+    assert_eq!(exhaustive(&admitted), expected);
+}
+
+#[test]
+fn a_required_count_proposes_no_unrealizable_zero() {
+    // The element holds for every binding, so the count proposes one alone:
+    // no instance divides by zero and no warning is retained.
+    let admitted = input("q(M):-N=#count{1},Y=1/N,M=#sum{Y}.");
+    assert!(admitted.warnings().is_empty(), "{:?}", admitted.warnings());
     let expected = Models::from([BTreeSet::from(["q(1)".into()])]);
     assert_eq!(native(&admitted), expected);
     assert_eq!(exhaustive(&admitted), expected);

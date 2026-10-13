@@ -23,13 +23,26 @@ safety, arithmetic evaluation and resource limits can still fail. A frontend
 syntax diagnostic, an unsupported zetesis construct, and an exceeded resource
 ceiling have distinct meanings; none denotes an inconsistent program.
 
-Possible support also supplies substitutions for source validation. A rule whose
-body contains `not p` cannot contribute an answer-set atom when `p` is a fact,
-but removing that rule from support can hide a later arithmetic error. For
-example, `p. d(2147483647). h(X) :- d(X), not p. k(X+1) :- h(X).` still reaches
-overflow during admission. Such pruning requires a certificate preserving
-admission throughout the affected consumers, not only answer-set equivalence.
-The current grounder retains those support rows.
+Possible support also supplies substitutions for source validation. An
+aggregate assignment publishes possible heads from its carrier,
+`{measure(S) | R ⊆ S ⊆ P}`, where `P` holds the tuples the completed support
+makes possible and `R` the required ones: a tuple is required when one of its
+elements' conditions consists only of comparisons, intervals and
+`#true`/`#false`, with no atom of either sign. This `R` under-approximates the
+tuples every interpretation contains: in `#count{1 : p; 1 : not p}` the tuple
+`1` is in every interpretation, but neither condition is atom-free, so it is not
+required. Source validation checks the families that read those heads over the
+carrier's values; that is the definition of the proposal family (see the
+language reference's
+[arithmetic families](../reference/language.md#numeric-boundaries-and-refusal-meaning)),
+and a sound sharpening of `R` redefines it in the same way. Pruning below a
+producer's closure is different. A rule whose body contains `not p` cannot
+contribute an answer-set atom when `p` is a fact, but removing that rule from
+support can hide a later arithmetic error. For example,
+`p. d(2147483647). h(X) :- d(X), not p. k(X+1) :- h(X).` still reaches overflow
+during admission. Such pruning requires a certificate preserving admission
+throughout the affected consumers, not only answer-set equivalence. The current
+grounder retains those support rows.
 
 The [checked source-preparation example](../rust/source.md) follows
 `prepare_formula`, the retained analysis basis, `ground` and a complete CPU
@@ -138,28 +151,38 @@ families belong to one completed support snapshot; they never carry results
 across growing support rounds. Complete tuple identity and eligibility formulas
 remain unchanged, including their frozen-reduct meaning.
 
-Count assignments coalesce complete tuple keys before constructing proposals.
-Each distinct key contributes one, regardless of its first field or how many
-witnesses produce it. On success,
+Assignments coalesce complete tuple keys before constructing proposals, and
+split them into required keys, those with an occurrence from an element whose
+condition the local join decides, and optional ones. Both proposal sites, the
+support rounds and final grounding, read that one bit of each element, so every
+value support completion proposes has a root in final grounding's family. Each
+distinct key of a count contributes one, regardless of its first field or how
+many witnesses produce it. On success,
 [`formula_assignment::counts`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment/counts.rs)
-constructs exactly the ordered values `0..=N` for `N` keys, using
-checked increments in one bounded buffer. This count carrier still includes
-unrealizable values: the
-original aggregate equality decides truth, and proposal traversal preserves
-required source warnings and errors. Value, storage, work and cancellation
-checks remain active.
+constructs exactly the ordered values `R..=R+O` for `R` required and `O`
+optional keys, using checked increments in one bounded buffer. The carrier
+still includes values correlated conditions cannot realize: the original
+aggregate equality decides truth, and proposal traversal preserves required
+source warnings and errors. Value, storage, work and cancellation checks remain
+active.
 
-Weighted assignments compute distinct subset sums in ascending order. The
+Weighted assignments compute distinct sums in ascending order: the total of
+the required weights, summed exactly, plus every subset sum of the optional
+ones. The
 [`sum operation`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment/sums.rs)
-merges checked sorted runs. For a sufficiently dense nonnegative range, it can
-instead retain one bit per reachable sum and add each weight by shifting and
-uniting those bits. A work and storage comparison includes conversion costs;
-sparse or signed contributions use the sorted operation. Each occurrence remains
-optional, including repeated weights. The operation consumes its input once and
-returns the same ordered numeric buffer; packed words are temporary storage.
+merges checked sorted runs seeded at that total, so every value a run holds is a
+carrier value and a checked addition fails exactly when a carrier value leaves
+`i32`. For a sufficiently dense nonnegative range, it can instead retain one bit
+per reachable sum above the seed and add each weight by shifting and uniting
+those bits. A work and storage comparison includes conversion costs; sparse or
+signed contributions use the sorted operation. Each optional occurrence remains
+independent, including repeated weights. The operation consumes its input once
+and returns the same ordered numeric buffer; packed words are temporary storage.
 Allocation, overflow, cancellation and resource failures remain explicit.
 These proposals may include sums that correlated conditions cannot realize;
-the original aggregate still determines truth.
+the original aggregate still determines truth. `#min` and `#max` assignments
+with a required key propose the required extremum and the optional values
+strictly before it, without the empty value.
 
 Independent compilations share the ground builder's `FormulaNodes` owner. It
 retains the node, operand and numeric arenas and the extent of committed topology
