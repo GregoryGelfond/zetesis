@@ -1,6 +1,7 @@
 //! Finite substitutions keep each aggregate equality; proposals are not truth.
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
+use crate::support::limits;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
@@ -447,30 +448,20 @@ fn preparation_limits_are_inclusive() {
     // Locate its exact boundary without assuming a host usize/Vec layout.
     let source = "q(f(Y)):-N=#count{},Y=N+1.";
     for resource in [ExpansionResource::TermWork, ExpansionResource::ScalarBytes] {
-        let limits = |ceiling| {
-            let mut result = ExpansionLimits::default();
-            match resource {
-                ExpansionResource::TermWork => result.max_term_work = ceiling,
-                ExpansionResource::ScalarBytes => result.max_scalar_bytes = ceiling,
-                _ => unreachable!(),
-            }
-            result
-        };
-        let lower = first_success(16_384, |middle| {
+        let lower = first_success(limits::expansion_default(resource), |middle| {
             prepare_formula(
                 source.into(),
                 options(),
-                limits(middle),
+                limits::expansion(resource, middle),
                 FormulaLimits::default(),
             )
             .is_ok()
         });
-        assert!(lower > 0);
         assert!(
             prepare_formula(
                 source.into(),
                 options(),
-                limits(lower),
+                limits::expansion(resource, lower),
                 FormulaLimits::default()
             )
             .is_ok()
@@ -478,14 +469,14 @@ fn preparation_limits_are_inclusive() {
         let error = prepare_formula(
             source.into(),
             options(),
-            limits(lower - 1),
+            limits::expansion(resource, lower - 1),
             FormulaLimits::default(),
         )
         .unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit {
             resource: actual, limit, observed, ..
-        }) if actual == resource && limit == (lower-1) as u128 && observed == lower as u128),
+        }) if actual == resource && limit == u128::from(lower - 1) && observed == u128::from(lower)),
             "{error}"
         );
         assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);

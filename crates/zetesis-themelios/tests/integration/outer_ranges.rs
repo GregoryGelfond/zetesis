@@ -1,6 +1,7 @@
 //! Dependent outer ranges retain complete rows and original frozen equalities.
 
 use crate::support::admission;
+use crate::support::limits;
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -283,35 +284,22 @@ fn grounding_limits_are_inclusive() {
         FormulaResource::Substitutions,
         FormulaResource::Work,
     ] {
-        let limits = |ceiling| {
-            let mut limits = FormulaLimits::default();
-            match resource {
-                FormulaResource::AssignmentValues => {
-                    limits.max_assignment_values = usize::try_from(ceiling).unwrap();
-                }
-                FormulaResource::Substitutions => limits.max_substitutions = ceiling,
-                FormulaResource::Work => limits.max_work = ceiling,
-                _ => unreachable!(),
-            }
-            limits
-        };
-        let lower = first_success(16_384, |middle| {
+        let lower = first_success(limits::formula_default(resource), |middle| {
             admit_formula(
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits(middle),
+                limits::formula(resource, middle),
             )
             .is_ok()
         });
-        assert!(lower > 0);
         assert_eq!(
             native(
                 &admit_formula(
                     source.into(),
                     options(),
                     ExpansionLimits::default(),
-                    limits(lower)
+                    limits::formula(resource, lower)
                 )
                 .unwrap()
             ),
@@ -321,7 +309,7 @@ fn grounding_limits_are_inclusive() {
             source.into(),
             options(),
             ExpansionLimits::default(),
-            limits(lower - 1),
+            limits::formula(resource, lower - 1),
         )
         .unwrap_err();
         assert!(
@@ -336,26 +324,24 @@ fn grounding_limits_are_inclusive() {
 #[test]
 fn scalar_storage_limit_is_inclusive() {
     let source = "q(K):-N=#count{},K=N..N+2.";
-    let limits = |ceiling| ExpansionLimits {
-        max_scalar_bytes: ceiling,
-        ..Default::default()
-    };
-    let lower = first_success(16_384, |middle| {
-        admit_formula(
-            source.into(),
-            options(),
-            limits(middle),
-            FormulaLimits::default(),
-        )
-        .is_ok()
-    });
-    assert!(lower > 0);
+    let lower = first_success(
+        limits::expansion_default(ExpansionResource::ScalarBytes),
+        |middle| {
+            admit_formula(
+                source.into(),
+                options(),
+                limits::expansion(ExpansionResource::ScalarBytes, middle),
+                FormulaLimits::default(),
+            )
+            .is_ok()
+        },
+    );
     assert_eq!(
         native(
             &admit_formula(
                 source.into(),
                 options(),
-                limits(lower),
+                limits::expansion(ExpansionResource::ScalarBytes, lower),
                 FormulaLimits::default()
             )
             .unwrap()
@@ -365,12 +351,12 @@ fn scalar_storage_limit_is_inclusive() {
     let error = admit_formula(
         source.into(),
         options(),
-        limits(lower - 1),
+        limits::expansion(ExpansionResource::ScalarBytes, lower - 1),
         FormulaLimits::default(),
     )
     .unwrap_err();
     assert!(
-        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: ExpansionResource::ScalarBytes, limit, observed, .. }) if limit == (lower-1) as u128 && observed == lower as u128),
+        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: ExpansionResource::ScalarBytes, limit, observed, .. }) if limit == u128::from(lower - 1) && observed == u128::from(lower)),
         "{error}"
     );
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);

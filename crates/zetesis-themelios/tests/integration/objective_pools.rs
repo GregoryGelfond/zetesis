@@ -1,5 +1,6 @@
 //! Conditional alternatives stay inside their local quantifier in weak bodies.
 
+use crate::support::limits;
 use crate::support::priority_contracts;
 use crate::support::source_cases;
 use zetesis_test_support::thresholds::first_success;
@@ -211,13 +212,13 @@ fn projected_analysis_has_an_inclusive_node_limit() {
     let attempt = |maximum| {
         reference::admit(
             source,
-            &FormulaLimits {
-                max_analysis_nodes: maximum,
-                ..FormulaLimits::default()
-            },
+            &limits::formula(FormulaResource::AnalysisNodes, maximum),
         )
     };
-    let upper = first_success(65536, |middle| attempt(middle).is_ok());
+    let upper = first_success(
+        limits::formula_default(FormulaResource::AnalysisNodes),
+        |middle| attempt(middle).is_ok(),
+    );
     assert_eq!(
         reference::exhaustive(&attempt(upper).unwrap()),
         source_cases::cases(CASES)[0].records
@@ -226,7 +227,7 @@ fn projected_analysis_has_an_inclusive_node_limit() {
     assert!(
         matches!(failure, FormulaFailure::Limit {
         resource: FormulaResource::AnalysisNodes, observed, limit, ..
-    } if observed == upper as u128 && limit == (upper - 1) as u128),
+    } if observed == u128::from(upper) && limit == u128::from(upper - 1)),
         "{failure}"
     );
     assert!(!failure.diagnostics().is_empty());
@@ -300,9 +301,7 @@ fn local_pool_alternatives_do_not_borrow_another_alternatives_binder() {
 
 #[test]
 fn projected_source_payload_has_independent_limits() {
-    use zetesis_themelios::{
-        AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, admit_formula,
-    };
+    use zetesis_themelios::{AdmissionOptions, ExpansionFailure, ExpansionResource, admit_formula};
     let source = "d(1;2).p(1).p(3).:~p(X;X+1):d(X).[1]";
     for resource in [
         ExpansionResource::TermWork,
@@ -311,22 +310,16 @@ fn projected_source_payload_has_independent_limits() {
         ExpansionResource::Origins,
     ] {
         let attempt = |maximum| {
-            let mut limits = ExpansionLimits::default();
-            match resource {
-                ExpansionResource::TermWork => limits.max_term_work = maximum,
-                ExpansionResource::ScalarBytes => limits.max_scalar_bytes = maximum,
-                ExpansionResource::Values => limits.max_values = maximum,
-                ExpansionResource::Origins => limits.max_origin_locations = maximum,
-                _ => unreachable!("selected source resources"),
-            }
             admit_formula(
                 source.into(),
                 AdmissionOptions::default(),
-                limits,
+                limits::expansion(resource, maximum),
                 FormulaLimits::default(),
             )
         };
-        let upper = first_success(65536, |middle| attempt(middle).is_ok());
+        let upper = first_success(limits::expansion_default(resource), |middle| {
+            attempt(middle).is_ok()
+        });
         assert_eq!(
             reference::exhaustive(&attempt(upper).unwrap()),
             source_cases::cases(CASES)[0].records

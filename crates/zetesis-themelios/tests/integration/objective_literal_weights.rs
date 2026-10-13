@@ -1,5 +1,6 @@
 //! Closed nonnumeric weights supply neither a numeric key nor a priority slot.
 
+use crate::support::limits;
 use crate::support::source_cases;
 use zetesis_test_support::thresholds::first_success;
 mod sources;
@@ -13,8 +14,8 @@ use zetesis_objective::{AdmissionError, AdmissionLimits, AdmissionResource};
 use zetesis_reference_support::{admit, exhaustive};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
-    FormulaLimits, FormulaResource, admit_formula,
+    AdmissionOptions, ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits,
+    FormulaResource, admit_formula,
 };
 
 const CONDITION_CASES: &str = r##"{"name":"absent_condition","source":"#minimize{foo:a}.","records":[[[],null]]}
@@ -242,16 +243,10 @@ fn literal_admission_limits_are_inclusive() {
     let source = "{a;b}.#minimize{f(1,\"text\")@7,k:a;0@3,k:b}.";
     let reference = exhaustive(&admit(source, &FormulaLimits::default()).unwrap());
     for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
-        let attempt = |maximum| {
-            let mut limits = FormulaLimits::default();
-            if resource == FormulaResource::Work {
-                limits.max_work = maximum;
-            } else {
-                limits.max_substitutions = maximum;
-            }
-            admit(source, &limits)
-        };
-        let exact = first_success(65_536_u64, |maximum| attempt(maximum).is_ok());
+        let attempt = |maximum| admit(source, &limits::formula(resource, maximum));
+        let exact = first_success(limits::formula_default(resource), |maximum| {
+            attempt(maximum).is_ok()
+        });
         assert_eq!(exhaustive(&attempt(exact).unwrap()), reference);
         assert!(matches!(attempt(exact - 1), Err(FormulaFailure::Limit {
             resource: actual, observed, limit, ..
@@ -262,14 +257,14 @@ fn literal_admission_limits_are_inclusive() {
         admit_formula(
             source.into(),
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_scalar_bytes: usize::try_from(maximum).unwrap(),
-                ..Default::default()
-            },
+            limits::expansion(ExpansionResource::ScalarBytes, maximum),
             FormulaLimits::default(),
         )
     };
-    let exact = first_success(65_536_u64, |maximum| attempt(maximum).is_ok());
+    let exact = first_success(
+        limits::expansion_default(ExpansionResource::ScalarBytes),
+        |maximum| attempt(maximum).is_ok(),
+    );
     assert_eq!(exhaustive(&attempt(exact).unwrap()), reference);
     assert!(matches!(attempt(exact - 1), Err(FormulaFailure::Expansion(
         ExpansionFailure::Limit {

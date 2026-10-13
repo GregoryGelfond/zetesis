@@ -1,6 +1,7 @@
 //! Finite affine chains preserve the complete correlated source guard.
 
 use crate::support::finite_bindings as reference;
+use crate::support::limits;
 use zetesis_test_support::thresholds::first_success;
 
 use proptest::prelude::*;
@@ -308,20 +309,16 @@ fn mixed_chain_bindings_preserve_defined_solutions() {
 fn envelope_storage_and_work_limits_are_inclusive() {
     for resource in [ExpansionResource::TermWork, ExpansionResource::ScalarBytes] {
         let run = |limit| {
-            let mut expansion = ExpansionLimits::default();
-            match resource {
-                ExpansionResource::TermWork => expansion.max_term_work = limit,
-                ExpansionResource::ScalarBytes => expansion.max_scalar_bytes = limit,
-                _ => unreachable!("selected envelope resources"),
-            }
             admit_formula(
                 "p(X,Y):-0<2*X<3*Y<7.".into(),
                 AdmissionOptions::default(),
-                expansion,
+                limits::expansion(resource, limit),
                 FormulaLimits::default(),
             )
         };
-        let lower = first_success(1_048_576, |middle| run(middle).is_ok());
+        let lower = first_success(limits::expansion_default(resource), |middle| {
+            run(middle).is_ok()
+        });
         assert!(run(lower).is_ok());
         assert!(
             matches!(run(lower - 1), Err(FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, .. })) if actual == resource)

@@ -1,5 +1,6 @@
 //! Completed possible support covers rich cyclic objective producer families.
 
+use crate::support::limits;
 use crate::support::priority_contracts;
 use crate::support::source_cases;
 use zetesis_test_support::thresholds::first_success;
@@ -88,34 +89,21 @@ fn cyclic_completion_limits_are_inclusive() {
         FormulaResource::ObjectivePresenceEntries,
         FormulaResource::Work,
     ] {
-        let attempt = |maximum| {
-            let mut limits = FormulaLimits::default();
-            match resource {
-                FormulaResource::SupportRounds => limits.max_support_rounds = maximum,
-                FormulaResource::AssignmentValues => {
-                    limits.max_assignment_values = usize::try_from(maximum).unwrap();
+        let attempt = |maximum| reference::admit(source, &limits::formula(resource, maximum));
+        let upper = first_success(limits::formula_default(resource), |middle| {
+            match attempt(middle) {
+                Ok(_) => true,
+                Err(FormulaFailure::Limit {
+                    resource: actual, ..
+                }) if actual == resource => false,
+                Err(FormulaFailure::Aggregate { error, .. })
+                    if resource == FormulaResource::Work
+                        && error.kind() == zetesis_ferraris::AggregateErrorKind::WorkLimit =>
+                {
+                    false
                 }
-                FormulaResource::Substitutions => limits.max_substitutions = maximum,
-                FormulaResource::ObjectivePresenceEntries => {
-                    limits.max_objective_presence_entries = usize::try_from(maximum).unwrap();
-                }
-                FormulaResource::Work => limits.max_work = maximum,
-                _ => unreachable!("selected completion resources"),
+                Err(error) => panic!("{resource:?}: unexpected refusal {error}"),
             }
-            reference::admit(source, &limits)
-        };
-        let upper = first_success(65_536, |middle| match attempt(middle) {
-            Ok(_) => true,
-            Err(FormulaFailure::Limit {
-                resource: actual, ..
-            }) if actual == resource => false,
-            Err(FormulaFailure::Aggregate { error, .. })
-                if resource == FormulaResource::Work
-                    && error.kind() == zetesis_ferraris::AggregateErrorKind::WorkLimit =>
-            {
-                false
-            }
-            Err(error) => panic!("{resource:?}: unexpected refusal {error}"),
         });
         assert_eq!(reference::exhaustive(&attempt(upper).unwrap()), expected);
         let error = attempt(upper - 1).unwrap_err();
@@ -134,10 +122,7 @@ fn cyclic_completion_limits_are_inclusive() {
 fn growing_value_feedback_never_yields_a_program() {
     let source = "n(0).n(N):-N=#count{X:n(X)}.#minimize{N:n(N)}.";
     for maximum in [1, 2, 4] {
-        let limits = FormulaLimits {
-            max_support_rounds: maximum,
-            ..FormulaLimits::default()
-        };
+        let limits = limits::formula(FormulaResource::SupportRounds, maximum);
         let error = reference::admit(source, &limits).unwrap_err();
         assert!(
             matches!(error,

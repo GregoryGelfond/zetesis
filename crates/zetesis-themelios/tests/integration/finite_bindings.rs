@@ -3,6 +3,7 @@
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
 use crate::support::finite_bindings::remap;
+use crate::support::limits;
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
@@ -293,13 +294,10 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
 fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
     let source = "{p(X):0<X,X<3}.q:-p(Y):not not (Y,1)=(2,1).";
     let lower = first_success(
-        ExpansionLimits::default().max_term_work,
+        limits::expansion_default(ExpansionResource::TermWork),
         |limit| match input_with(
             source,
-            ExpansionLimits {
-                max_term_work: limit,
-                ..Default::default()
-            },
+            limits::expansion(ExpansionResource::TermWork, limit),
             &FormulaLimits::default(),
         ) {
             Ok(_) => true,
@@ -312,22 +310,16 @@ fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
     );
     let error = input_with(
         source,
-        ExpansionLimits {
-            max_term_work: lower - 1,
-            ..Default::default()
-        },
+        limits::expansion(ExpansionResource::TermWork, lower - 1),
         &FormulaLimits::default(),
     )
     .unwrap_err();
     assert!(
-        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: ExpansionResource::TermWork, limit, observed, location }) if limit == (lower - 1) as u128 && observed > limit && location.location().expect("parsed source").source == SOURCE)
+        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: ExpansionResource::TermWork, limit, observed, location }) if limit == u128::from(lower - 1) && observed > limit && location.location().expect("parsed source").source == SOURCE)
     );
     let program = input_with(
         source,
-        ExpansionLimits {
-            max_term_work: lower,
-            ..Default::default()
-        },
+        limits::expansion(ExpansionResource::TermWork, lower),
         &FormulaLimits::default(),
     )
     .unwrap();

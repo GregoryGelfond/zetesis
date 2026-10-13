@@ -1,6 +1,7 @@
 //! Dependent aggregate proposals retain their original equality and frozen truth.
 
 use crate::support::admission;
+use crate::support::limits;
 use crate::support::objective_dependency_records as objective_dependencies;
 use zetesis_test_support::thresholds::first_success;
 
@@ -267,41 +268,22 @@ fn grounding_limits_are_inclusive() {
         FormulaResource::AggregateCacheRows,
         FormulaResource::AggregateCacheRoots,
     ] {
-        let limits = |ceiling| {
-            let mut limits = FormulaLimits::default();
-            match resource {
-                FormulaResource::AssignmentValues => {
-                    limits.max_assignment_values = usize::try_from(ceiling).unwrap();
-                }
-                FormulaResource::Substitutions => limits.max_substitutions = ceiling,
-                FormulaResource::Work => limits.max_work = ceiling,
-                FormulaResource::AggregateCacheRows => {
-                    limits.max_aggregate_cache_rows = usize::try_from(ceiling).unwrap();
-                }
-                FormulaResource::AggregateCacheRoots => {
-                    limits.max_aggregate_cache_roots = usize::try_from(ceiling).unwrap();
-                }
-                _ => unreachable!(),
-            }
-            limits
-        };
-        let lower = first_success(16_384, |middle| {
+        let lower = first_success(limits::formula_default(resource), |middle| {
             admit_formula(
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits(middle),
+                limits::formula(resource, middle),
             )
             .is_ok()
         });
-        assert!(lower > 0);
         assert_eq!(
             native(
                 &admit_formula(
                     source.into(),
                     options(),
                     ExpansionLimits::default(),
-                    limits(lower)
+                    limits::formula(resource, lower)
                 )
                 .unwrap()
             ),
@@ -311,7 +293,7 @@ fn grounding_limits_are_inclusive() {
             source.into(),
             options(),
             ExpansionLimits::default(),
-            limits(lower - 1),
+            limits::formula(resource, lower - 1),
         )
         .unwrap_err();
         assert!(
@@ -335,26 +317,24 @@ fn grounding_limits_are_inclusive() {
 #[test]
 fn scalar_storage_limit_is_inclusive() {
     let source = "q(M):-N=#count{},Y=N+1,M=#sum{Y}.";
-    let limits = |ceiling| ExpansionLimits {
-        max_scalar_bytes: ceiling,
-        ..Default::default()
-    };
-    let lower = first_success(16_384, |middle| {
-        admit_formula(
-            source.into(),
-            options(),
-            limits(middle),
-            FormulaLimits::default(),
-        )
-        .is_ok()
-    });
-    assert!(lower > 0);
+    let lower = first_success(
+        limits::expansion_default(ExpansionResource::ScalarBytes),
+        |middle| {
+            admit_formula(
+                source.into(),
+                options(),
+                limits::expansion(ExpansionResource::ScalarBytes, middle),
+                FormulaLimits::default(),
+            )
+            .is_ok()
+        },
+    );
     assert_eq!(
         native(
             &admit_formula(
                 source.into(),
                 options(),
-                limits(lower),
+                limits::expansion(ExpansionResource::ScalarBytes, lower),
                 FormulaLimits::default()
             )
             .unwrap()
@@ -364,12 +344,12 @@ fn scalar_storage_limit_is_inclusive() {
     let error = admit_formula(
         source.into(),
         options(),
-        limits(lower - 1),
+        limits::expansion(ExpansionResource::ScalarBytes, lower - 1),
         FormulaLimits::default(),
     )
     .unwrap_err();
     assert!(
-        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: ExpansionResource::ScalarBytes, limit, observed, .. }) if limit == (lower-1) as u128 && observed == lower as u128),
+        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: ExpansionResource::ScalarBytes, limit, observed, .. }) if limit == u128::from(lower - 1) && observed == u128::from(lower)),
         "{error}"
     );
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);

@@ -1,5 +1,6 @@
 //! Rich source activity shares scoped lowering and preserves independent literals.
 
+use crate::support::limits;
 use zetesis_reference_support::{admit, formula};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
@@ -64,16 +65,10 @@ fn rich_activity_does_not_retain_model_query_nodes() {
 #[test]
 fn rich_activity_work_refusal_is_inclusive() {
     let source = "{p;r}.q:-1=#count{1:r}.#project p:q,not q.";
-    let attempt = |max_work| {
-        admit(
-            source,
-            &FormulaLimits {
-                max_work,
-                ..FormulaLimits::default()
-            },
-        )
-    };
-    let upper = first_success(65_536, |middle| attempt(middle).is_ok());
+    let attempt = |max_work| admit(source, &limits::formula(FormulaResource::Work, max_work));
+    let upper = first_success(limits::formula_default(FormulaResource::Work), |middle| {
+        attempt(middle).is_ok()
+    });
     let accepted = attempt(upper).unwrap();
     assert_eq!(accepted.projection().atoms().len(), 1);
     let failure = attempt(upper - 1).unwrap_err();

@@ -1,5 +1,6 @@
 //! Completed priority presence for flat extrema observers.
 
+use crate::support::limits;
 use crate::support::source_cases;
 use zetesis_test_support::thresholds::first_success;
 
@@ -72,18 +73,10 @@ fn presence_completion_respects_inclusive_limits() {
         FormulaResource::Substitutions,
         FormulaResource::ObjectivePresenceEntries,
     ] {
-        let attempt = |maximum| {
-            let mut limits = FormulaLimits::default();
-            if resource == FormulaResource::Work {
-                limits.max_work = maximum;
-            } else if resource == FormulaResource::Substitutions {
-                limits.max_substitutions = maximum;
-            } else {
-                limits.max_objective_presence_entries = usize::try_from(maximum).unwrap();
-            }
-            admit(source, &limits)
-        };
-        let upper = first_success(65_536, |middle| attempt(middle).is_ok());
+        let attempt = |maximum| admit(source, &limits::formula(resource, maximum));
+        let upper = first_success(limits::formula_default(resource), |middle| {
+            attempt(middle).is_ok()
+        });
         assert_eq!(exhaustive(&attempt(upper).unwrap()), expected);
         let error = attempt(upper - 1).unwrap_err();
         assert!(!error.diagnostics().is_empty());
@@ -102,16 +95,13 @@ fn distinct_carriers_share_the_storage_allowance() {
     let attempt = |maximum| {
         admit(
             source,
-            &FormulaLimits {
-                max_objective_presence_entries: maximum,
-                ..Default::default()
-            },
+            &limits::formula(FormulaResource::ObjectivePresenceEntries, maximum),
         )
     };
     let exact = (1..128).find(|&maximum| attempt(maximum).is_ok()).unwrap();
     assert_eq!(exhaustive(&attempt(exact).unwrap()), expected);
     assert!(
-        matches!(attempt(exact-1), Err(FormulaFailure::Limit {resource:FormulaResource::ObjectivePresenceEntries, observed, limit, ..}) if observed == exact as u128 && limit == (exact-1) as u128)
+        matches!(attempt(exact-1), Err(FormulaFailure::Limit {resource:FormulaResource::ObjectivePresenceEntries, observed, limit, ..}) if observed == u128::from(exact) && limit == u128::from(exact - 1))
     );
     assert_eq!(exhaustive(&attempt(exact).unwrap()), expected);
 }

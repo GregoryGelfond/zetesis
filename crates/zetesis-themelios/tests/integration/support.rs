@@ -12,6 +12,7 @@ pub(crate) mod frozen_truth;
 pub(crate) mod grounding_observers;
 pub(crate) mod head_element_reference;
 pub(crate) mod head_models;
+pub(crate) mod limits;
 pub(crate) mod objective_boundaries;
 pub(crate) mod objective_contract;
 pub(crate) mod objective_dependency_records;

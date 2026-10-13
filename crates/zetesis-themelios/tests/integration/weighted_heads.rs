@@ -1,6 +1,7 @@
 //! Weighted head permissions remain independent of numeric contributions.
 
 use crate::support::admission;
+use crate::support::limits;
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -200,35 +201,22 @@ fn grounding_limits_are_inclusive() {
             FormulaResource::Substitutions,
             FormulaResource::Work,
         ] {
-            let limits = |ceiling| {
-                let mut limits = FormulaLimits::default();
-                match resource {
-                    FormulaResource::AggregateElements => {
-                        limits.aggregate.max_elements = usize::try_from(ceiling).unwrap();
-                    }
-                    FormulaResource::Substitutions => limits.max_substitutions = ceiling,
-                    FormulaResource::Work => limits.max_work = ceiling,
-                    _ => unreachable!(),
-                }
-                limits
-            };
-            let lower = first_success(16_384, |middle| {
+            let lower = first_success(limits::formula_default(resource), |middle| {
                 admit_formula(
                     source.into(),
                     options(),
                     ExpansionLimits::default(),
-                    limits(middle),
+                    limits::formula(resource, middle),
                 )
                 .is_ok()
             });
-            assert!(lower > 0);
             assert_eq!(
                 native(
                     &admit_formula(
                         source.into(),
                         options(),
                         ExpansionLimits::default(),
-                        limits(lower)
+                        limits::formula(resource, lower)
                     )
                     .unwrap()
                 ),
@@ -238,7 +226,7 @@ fn grounding_limits_are_inclusive() {
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits(lower - 1),
+                limits::formula(resource, lower - 1),
             )
             .unwrap_err();
             assert!(
@@ -531,20 +519,20 @@ fn alias_storage_limits_are_inclusive() {
             admit_formula(
                 source.into(),
                 options(),
-                ExpansionLimits {
-                    max_scalar_bytes: maximum,
-                    ..Default::default()
-                },
+                limits::expansion(ExpansionResource::ScalarBytes, maximum),
                 FormulaLimits::default(),
             )
         };
-        let upper = first_success(65_536, |middle| attempt(middle).is_ok());
+        let upper = first_success(
+            limits::expansion_default(ExpansionResource::ScalarBytes),
+            |middle| attempt(middle).is_ok(),
+        );
         let error = attempt(upper - 1).unwrap_err();
         assert!(matches!(
             error,
             FormulaFailure::Expansion(ExpansionFailure::Limit {
                 resource: ExpansionResource::ScalarBytes, limit, observed, ..
-            }) if limit == (upper - 1) as u128 && observed == upper as u128
+            }) if limit == u128::from(upper - 1) && observed == u128::from(upper)
         ));
         assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
         assert_eq!(native(&attempt(upper).unwrap()), native(&input(source)));

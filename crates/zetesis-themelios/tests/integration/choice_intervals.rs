@@ -3,6 +3,7 @@
 use crate::support::answer_records::Record;
 use crate::support::clingo_reports::optimal;
 use crate::support::finite_bindings::{holds, remap, values};
+use crate::support::limits;
 use crate::support::objective_dependency_records as objective_dependencies;
 use zetesis_test_support::thresholds::first_success;
 
@@ -502,16 +503,10 @@ fn empty_joins_do_not_enumerate_choice_ranges() {
 fn construction_and_streamed_substitution_work_refuse_before_partial_admission() {
     let source = "1{p(1..2,1..2)}1.";
     for resource in [FormulaResource::Substitutions, FormulaResource::Work] {
-        let attempt = |limit| {
-            let mut limits = FormulaLimits::default();
-            if resource == FormulaResource::Work {
-                limits.max_work = limit;
-            } else {
-                limits.max_substitutions = limit;
-            }
-            admit(source, &limits)
-        };
-        let threshold = first_success(1_u64 << 20, |limit| attempt(limit).is_ok());
+        let attempt = |limit| admit(source, &limits::formula(resource, limit));
+        let threshold = first_success(limits::formula_default(resource), |limit| {
+            attempt(limit).is_ok()
+        });
         assert!(matches!(attempt(threshold - 1), Err(FormulaFailure::Limit {
             resource: actual, observed, .. }) if actual == resource && observed == u128::from(threshold)));
         assert_eq!(complete(&attempt(threshold).unwrap()).len(), 4);
@@ -520,14 +515,14 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
         admit_formula(
             source.into(),
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_term_work: usize::try_from(limit).unwrap(),
-                ..ExpansionLimits::default()
-            },
+            limits::expansion(ExpansionResource::TermWork, limit),
             FormulaLimits::default(),
         )
     };
-    let threshold = first_success(1_u64 << 20, |limit| attempt(limit).is_ok());
+    let threshold = first_success(
+        limits::expansion_default(ExpansionResource::TermWork),
+        |limit| attempt(limit).is_ok(),
+    );
     assert!(matches!(
         attempt(threshold - 1),
         Err(FormulaFailure::Expansion(ExpansionFailure::Limit {

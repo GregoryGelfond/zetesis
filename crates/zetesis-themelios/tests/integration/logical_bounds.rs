@@ -1,6 +1,7 @@
 //! Logical bounds compare finite numeric measures without changing permissions.
 
 use crate::support::admission;
+use crate::support::limits;
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -184,25 +185,14 @@ fn grounding_limits_are_inclusive() {
         FormulaResource::Substitutions,
         FormulaResource::Work,
     ] {
-        let limits = |ceiling| {
-            let mut limits = FormulaLimits::default();
-            match resource {
-                FormulaResource::AggregateElements => {
-                    limits.aggregate.max_elements = usize::try_from(ceiling).unwrap();
-                }
-                FormulaResource::Substitutions => limits.max_substitutions = ceiling,
-                FormulaResource::Work => limits.max_work = ceiling,
-                _ => unreachable!("selected grounding ceilings"),
-            }
-            limits
-        };
-        let lower = first_success(16_384, |middle| limited(source, &limits(middle)).is_ok());
-        assert!(lower > 0);
+        let lower = first_success(limits::formula_default(resource), |middle| {
+            limited(source, &limits::formula(resource, middle)).is_ok()
+        });
         assert_eq!(
-            native(&limited(source, &limits(lower)).unwrap()),
+            native(&limited(source, &limits::formula(resource, lower)).unwrap()),
             native(&input(source))
         );
-        let error = limited(source, &limits(lower - 1)).unwrap_err();
+        let error = limited(source, &limits::formula(resource, lower - 1)).unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Limit { resource: actual, limit, observed, .. }
             if actual == resource && limit == u128::from(lower - 1) && observed == u128::from(lower)),
@@ -216,26 +206,24 @@ fn grounding_limits_are_inclusive() {
 #[test]
 fn preparation_payload_limit_is_inclusive() {
     let source = "d(word).{a}f(X):-d(X).";
-    let limits = |ceiling| ExpansionLimits {
-        max_scalar_bytes: ceiling,
-        ..Default::default()
-    };
     let prepare = |ceiling| {
         prepare_formula(
             source.into(),
             options(),
-            limits(ceiling),
+            limits::expansion(ExpansionResource::ScalarBytes, ceiling),
             FormulaLimits::default(),
         )
     };
-    let lower = first_success(16_384, |middle| prepare(middle).is_ok());
-    assert!(lower > 0);
+    let lower = first_success(
+        limits::expansion_default(ExpansionResource::ScalarBytes),
+        |middle| prepare(middle).is_ok(),
+    );
     assert!(prepare(lower).is_ok());
     let error = prepare(lower - 1).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit {
         resource: ExpansionResource::ScalarBytes, limit, observed, ..
-    }) if limit == (lower - 1) as u128 && observed == lower as u128),
+    }) if limit == u128::from(lower - 1) && observed == u128::from(lower)),
         "{error}"
     );
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);

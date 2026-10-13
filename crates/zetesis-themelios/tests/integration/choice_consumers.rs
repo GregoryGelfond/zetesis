@@ -1,6 +1,7 @@
 //! Outer body substitutions preserve complete choice/count groups and reducts.
 
 use crate::support::admission;
+use crate::support::limits;
 use crate::support::objective_dependency_records as objective_dependencies;
 use zetesis_test_support::thresholds::first_success;
 
@@ -246,30 +247,20 @@ fn preparation_limits_are_inclusive() {
         "Y#count{1:p}Y:-N=#count{},Y=N+1.",
     ] {
         for resource in [ExpansionResource::TermWork, ExpansionResource::ScalarBytes] {
-            let limits = |ceiling| {
-                let mut result = ExpansionLimits::default();
-                match resource {
-                    ExpansionResource::TermWork => result.max_term_work = ceiling,
-                    ExpansionResource::ScalarBytes => result.max_scalar_bytes = ceiling,
-                    _ => unreachable!(),
-                }
-                result
-            };
-            let lower = first_success(16_384, |middle| {
+            let lower = first_success(limits::expansion_default(resource), |middle| {
                 prepare_formula(
                     source.into(),
                     options(),
-                    limits(middle),
+                    limits::expansion(resource, middle),
                     FormulaLimits::default(),
                 )
                 .is_ok()
             });
-            assert!(lower > 0);
             assert!(
                 prepare_formula(
                     source.into(),
                     options(),
-                    limits(lower),
+                    limits::expansion(resource, lower),
                     FormulaLimits::default()
                 )
                 .is_ok()
@@ -277,14 +268,14 @@ fn preparation_limits_are_inclusive() {
             let error = prepare_formula(
                 source.into(),
                 options(),
-                limits(lower - 1),
+                limits::expansion(resource, lower - 1),
                 FormulaLimits::default(),
             )
             .unwrap_err();
             assert!(
                 matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit {
                 resource: actual, limit, observed, ..
-            }) if actual == resource && limit == (lower-1) as u128 && observed == lower as u128),
+            }) if actual == resource && limit == u128::from(lower - 1) && observed == u128::from(lower)),
                 "{error}"
             );
             assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
@@ -304,35 +295,22 @@ fn grounding_limits_are_inclusive() {
             FormulaResource::Substitutions,
             FormulaResource::Work,
         ] {
-            let limits = |ceiling| {
-                let mut result = FormulaLimits::default();
-                match resource {
-                    FormulaResource::AssignmentValues => {
-                        result.max_assignment_values = usize::try_from(ceiling).unwrap();
-                    }
-                    FormulaResource::Substitutions => result.max_substitutions = ceiling,
-                    FormulaResource::Work => result.max_work = ceiling,
-                    _ => unreachable!(),
-                }
-                result
-            };
-            let lower = first_success(16_384, |middle| {
+            let lower = first_success(limits::formula_default(resource), |middle| {
                 admit_formula(
                     source.into(),
                     options(),
                     ExpansionLimits::default(),
-                    limits(middle),
+                    limits::formula(resource, middle),
                 )
                 .is_ok()
             });
-            assert!(lower > 0);
             assert_eq!(
                 native(
                     &admit_formula(
                         source.into(),
                         options(),
                         ExpansionLimits::default(),
-                        limits(lower)
+                        limits::formula(resource, lower)
                     )
                     .unwrap()
                 ),
@@ -342,7 +320,7 @@ fn grounding_limits_are_inclusive() {
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits(lower - 1),
+                limits::formula(resource, lower - 1),
             )
             .unwrap_err();
             assert!(

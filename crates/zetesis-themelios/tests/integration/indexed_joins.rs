@@ -1,5 +1,6 @@
 //! Bound-column probes restrict work without replacing full relational matching.
 
+use crate::support::limits;
 use std::cell::Cell;
 use std::fmt::Write;
 use zetesis_test_support::thresholds::first_success;
@@ -127,7 +128,7 @@ fn selective_join_work_limit_is_inclusive() {
         )
     };
     let low = first_success(
-        FormulaLimits::default().max_work,
+        limits::formula_default(FormulaResource::Work),
         |max_work| match compile(max_work) {
             Ok(_) => true,
             Err(FormulaFailure::Limit {

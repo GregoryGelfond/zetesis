@@ -2,6 +2,7 @@
 
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
+use crate::support::limits;
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
@@ -255,32 +256,22 @@ fn original_sources_remain_owned() {
 fn negative_eligibility_limits_are_inclusive() {
     let source = "d(1..2).{b(1)}.1#count{X:a(X):d(X),not b(X)}1.";
     for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
-        let limits = |ceiling| {
-            let mut result = FormulaLimits::default();
-            match resource {
-                FormulaResource::Work => result.max_work = ceiling,
-                FormulaResource::Substitutions => result.max_substitutions = ceiling,
-                _ => unreachable!(),
-            }
-            result
-        };
-        let lower = first_success(16_384, |middle| {
+        let lower = first_success(limits::formula_default(resource), |middle| {
             admit_formula(
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits(middle),
+                limits::formula(resource, middle),
             )
             .is_ok()
         });
-        assert!(lower > 0);
         assert_eq!(
             native(
                 &admit_formula(
                     source.into(),
                     options(),
                     ExpansionLimits::default(),
-                    limits(lower)
+                    limits::formula(resource, lower)
                 )
                 .unwrap()
             ),
@@ -290,7 +281,7 @@ fn negative_eligibility_limits_are_inclusive() {
             source.into(),
             options(),
             ExpansionLimits::default(),
-            limits(lower - 1),
+            limits::formula(resource, lower - 1),
         )
         .unwrap_err();
         assert!(
@@ -306,19 +297,20 @@ fn negative_eligibility_limits_are_inclusive() {
 #[test]
 fn scalar_storage_limits_are_inclusive() {
     let source = "{b}.1#count{1:a:not b}1.";
-    let limits = |max_scalar_bytes| ExpansionLimits {
-        max_scalar_bytes,
-        ..Default::default()
-    };
-    let lower = first_success(16_384, |middle| {
-        admit_formula(
-            source.into(),
-            options(),
-            limits(middle),
-            FormulaLimits::default(),
-        )
-        .is_ok()
-    });
+    let limits =
+        |max_scalar_bytes| limits::expansion(ExpansionResource::ScalarBytes, max_scalar_bytes);
+    let lower = first_success(
+        limits::expansion_default(ExpansionResource::ScalarBytes),
+        |middle| {
+            admit_formula(
+                source.into(),
+                options(),
+                limits(middle),
+                FormulaLimits::default(),
+            )
+            .is_ok()
+        },
+    );
     assert_eq!(
         native(
             &admit_formula(
@@ -340,7 +332,7 @@ fn scalar_storage_limits_are_inclusive() {
     .unwrap_err();
     assert!(
         matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: ExpansionResource::ScalarBytes, limit, observed, .. })
-        if limit == (lower-1) as u128 && observed == lower as u128),
+        if limit == u128::from(lower - 1) && observed == u128::from(lower)),
         "{error}"
     );
     println!("inclusive_ScalarBytes={lower}");

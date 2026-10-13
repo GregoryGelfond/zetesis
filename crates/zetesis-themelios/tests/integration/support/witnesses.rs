@@ -2,6 +2,7 @@
 //! for the witness propositions.
 
 use super::finite_bindings::native;
+use crate::support::limits;
 use zetesis_reference_support::formula;
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
@@ -23,16 +24,18 @@ pub(crate) fn limited(
     )
 }
 
-/// The least ceiling at which `run` admits `bounded`: admission is monotone in
-/// each isolated resource ceiling, and every lower ceiling the search tries is
+/// The least ceiling at which `run` admits `bounded`, searched from
+/// `default`, the resource's default limit: admission is monotone in each
+/// isolated resource ceiling, and every lower ceiling the search tries is
 /// refused as `refused` accepts. The least ceiling admits the formula the
 /// default limits admit.
 pub(crate) fn inclusive_ceiling(
     bounded: &str,
-    mut run: impl FnMut(usize) -> Result<AdmittedFormula, FormulaFailure>,
+    default: u64,
+    mut run: impl FnMut(u64) -> Result<AdmittedFormula, FormulaFailure>,
     refused: impl Fn(&FormulaFailure) -> bool,
-) -> usize {
-    let least = first_success(1_000_000, |cap| match run(cap) {
+) -> u64 {
+    let least = first_success(default, |cap| match run(cap) {
         Ok(_) => true,
         Err(error) => {
             assert!(refused(&error), "{error}");
@@ -45,16 +48,14 @@ pub(crate) fn inclusive_ceiling(
 
 /// The least term-work ceiling that admits `bounded`, refused below it for
 /// its term work.
-pub(crate) fn term_work_ceiling(bounded: &str) -> usize {
+pub(crate) fn term_work_ceiling(bounded: &str) -> u64 {
     inclusive_ceiling(
         bounded,
+        limits::expansion_default(ExpansionResource::TermWork),
         |cap| {
             limited(
                 bounded,
-                ExpansionLimits {
-                    max_term_work: cap,
-                    ..Default::default()
-                },
+                limits::expansion(ExpansionResource::TermWork, cap),
                 &FormulaLimits::default(),
             )
         },
@@ -72,16 +73,14 @@ pub(crate) fn term_work_ceiling(bounded: &str) -> usize {
 
 /// The least scalar-storage ceiling that admits `bounded`, refused below it
 /// for its scalar bytes.
-pub(crate) fn scalar_bytes_ceiling(bounded: &str) -> usize {
+pub(crate) fn scalar_bytes_ceiling(bounded: &str) -> u64 {
     inclusive_ceiling(
         bounded,
+        limits::expansion_default(ExpansionResource::ScalarBytes),
         |cap| {
             limited(
                 bounded,
-                ExpansionLimits {
-                    max_scalar_bytes: cap,
-                    ..Default::default()
-                },
+                limits::expansion(ExpansionResource::ScalarBytes, cap),
                 &FormulaLimits::default(),
             )
         },
@@ -99,17 +98,15 @@ pub(crate) fn scalar_bytes_ceiling(bounded: &str) -> usize {
 
 /// The least substitution ceiling that admits `bounded`, refused below it by
 /// exactly one substitution.
-pub(crate) fn substitution_ceiling(bounded: &str) -> usize {
+pub(crate) fn substitution_ceiling(bounded: &str) -> u64 {
     inclusive_ceiling(
         bounded,
+        limits::formula_default(FormulaResource::Substitutions),
         |cap| {
             limited(
                 bounded,
                 ExpansionLimits::default(),
-                &FormulaLimits {
-                    max_substitutions: cap as u64,
-                    ..Default::default()
-                },
+                &limits::formula(FormulaResource::Substitutions, cap),
             )
         },
         |error| matches!(error, FormulaFailure::Limit { resource: FormulaResource::Substitutions, observed, limit, .. } if *observed == limit + 1),

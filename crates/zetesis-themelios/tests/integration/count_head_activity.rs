@@ -2,6 +2,7 @@
 
 mod cases;
 use crate::support::finite_bindings as reference;
+use crate::support::limits;
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
@@ -216,20 +217,16 @@ fn alias_work_limits_are_inclusive() {
     for source in ["1#count{1:a;1:b}1.", "{b;c}.1#count{1:a:b;2:a:c}1."] {
         for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
             let attempt = |maximum| {
-                let mut limits = FormulaLimits::default();
-                if resource == FormulaResource::Work {
-                    limits.max_work = maximum;
-                } else {
-                    limits.max_substitutions = maximum;
-                }
                 admit_formula(
                     source.into(),
                     AdmissionOptions::default(),
                     ExpansionLimits::default(),
-                    limits,
+                    limits::formula(resource, maximum),
                 )
             };
-            let maximum = first_success(65_536_u64, |limit| attempt(limit).is_ok());
+            let maximum = first_success(limits::formula_default(resource), |limit| {
+                attempt(limit).is_ok()
+            });
             assert!(matches!(attempt(maximum - 1), Err(FormulaFailure::Limit {
                 resource: actual, limit, observed, ..
             }) if actual == resource && limit == u128::from(maximum - 1)
@@ -247,14 +244,14 @@ fn alias_storage_limits_are_inclusive() {
             admit_formula(
                 source.into(),
                 AdmissionOptions::default(),
-                ExpansionLimits {
-                    max_scalar_bytes: usize::try_from(maximum).unwrap(),
-                    ..Default::default()
-                },
+                limits::expansion(ExpansionResource::ScalarBytes, maximum),
                 FormulaLimits::default(),
             )
         };
-        let maximum = first_success(65_536_u64, |limit| attempt(limit).is_ok());
+        let maximum = first_success(
+            limits::expansion_default(ExpansionResource::ScalarBytes),
+            |limit| attempt(limit).is_ok(),
+        );
         assert!(
             matches!(attempt(maximum - 1), Err(FormulaFailure::Expansion(
             ExpansionFailure::Limit {

@@ -1,6 +1,7 @@
 //! Conditional heads preserve finite existential scope and original reducts.
 
 use crate::support::finite_bindings as reference;
+use crate::support::limits;
 use zetesis_test_support::thresholds::first_success;
 
 use crate::support::finite_bindings::expected;
@@ -222,16 +223,10 @@ fn local_instance_limit_is_inclusive() {
 #[test]
 fn work_refusal_never_publishes_a_prefix() {
     let source = "d(1..2).a(X):d(X).";
-    let attempt = |work| {
-        admit(
-            source,
-            &FormulaLimits {
-                max_work: work,
-                ..Default::default()
-            },
-        )
-    };
-    let lower = first_success(16_384, |middle| attempt(middle).is_ok());
+    let attempt = |work| admit(source, &limits::formula(FormulaResource::Work, work));
+    let lower = first_success(limits::formula_default(FormulaResource::Work), |middle| {
+        attempt(middle).is_ok()
+    });
     assert_eq!(native(&attempt(lower).unwrap()), native(&formula(source)));
     assert!(
         matches!(attempt(lower-1), Err(FormulaFailure::Limit { resource: FormulaResource::Work, limit, observed, .. })

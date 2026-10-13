@@ -1,6 +1,7 @@
 //! Completed nonbinding guards preserve comparison and default-negation semantics.
 
 use crate::support::admission;
+use crate::support::limits;
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -203,34 +204,17 @@ fn grounding_limits_are_inclusive() {
         FormulaResource::AggregateCacheRows,
         FormulaResource::AggregateCacheRoots,
     ] {
-        let limits = |ceiling| {
-            let mut limits = FormulaLimits::default();
-            match resource {
-                FormulaResource::AssignmentValues => {
-                    limits.max_assignment_values = usize::try_from(ceiling).unwrap();
-                }
-                FormulaResource::Substitutions => limits.max_substitutions = ceiling,
-                FormulaResource::Work => limits.max_work = ceiling,
-                FormulaResource::AggregateCacheRows => {
-                    limits.max_aggregate_cache_rows = usize::try_from(ceiling).unwrap();
-                }
-                FormulaResource::AggregateCacheRoots => {
-                    limits.max_aggregate_cache_roots = usize::try_from(ceiling).unwrap();
-                }
-                _ => unreachable!(),
-            }
-            limits
-        };
         let admit = |ceiling| {
             admit_formula(
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits(ceiling),
+                limits::formula(resource, ceiling),
             )
         };
-        let lower = first_success(16_384, |middle| admit(middle).is_ok());
-        assert!(lower > 0);
+        let lower = first_success(limits::formula_default(resource), |middle| {
+            admit(middle).is_ok()
+        });
         assert_eq!(native(&admit(lower).unwrap()), native(&input(source)));
         let error = admit(lower - 1).unwrap_err();
         assert!(

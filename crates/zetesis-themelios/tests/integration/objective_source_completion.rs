@@ -1,5 +1,6 @@
 //! Source grounding eligibility remains separate from complete-model truth.
 
+use crate::support::limits;
 use crate::support::source_cases;
 use zetesis_test_support::thresholds::first_success;
 
@@ -47,19 +48,10 @@ fn source_eligibility_limits_are_inclusive() {
             FormulaResource::Substitutions,
             FormulaResource::ObjectivePresenceEntries,
         ] {
-            let attempt = |maximum| {
-                let mut limits = FormulaLimits::default();
-                match resource {
-                    FormulaResource::Work => limits.max_work = maximum,
-                    FormulaResource::Substitutions => limits.max_substitutions = maximum,
-                    FormulaResource::ObjectivePresenceEntries => {
-                        limits.max_objective_presence_entries = usize::try_from(maximum).unwrap();
-                    }
-                    _ => unreachable!("selected source resources"),
-                }
-                reference::admit(source, &limits)
-            };
-            let upper = first_success(65_536, |middle| attempt(middle).is_ok());
+            let attempt = |maximum| reference::admit(source, &limits::formula(resource, maximum));
+            let upper = first_success(limits::formula_default(resource), |middle| {
+                attempt(middle).is_ok()
+            });
             assert_eq!(reference::exhaustive(&attempt(upper).unwrap()), expected);
             let failure = attempt(upper - 1).unwrap_err();
             assert!(

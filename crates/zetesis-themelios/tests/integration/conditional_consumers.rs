@@ -1,6 +1,7 @@
 //! Complete aggregate proposals enter scoped original conditional implications.
 
 use crate::support::admission;
+use crate::support::limits;
 use crate::support::objective_dependency_records as objective_dependencies;
 use zetesis_test_support::thresholds::first_success;
 
@@ -64,35 +65,22 @@ fn grounding_limits_are_inclusive() {
         FormulaResource::Substitutions,
         FormulaResource::Work,
     ] {
-        let limits = |ceiling| {
-            let mut limits = FormulaLimits::default();
-            match resource {
-                FormulaResource::AssignmentValues => {
-                    limits.max_assignment_values = usize::try_from(ceiling).unwrap();
-                }
-                FormulaResource::Substitutions => limits.max_substitutions = ceiling,
-                FormulaResource::Work => limits.max_work = ceiling,
-                _ => unreachable!(),
-            }
-            limits
-        };
-        let lower = first_success(16_384, |middle| {
+        let lower = first_success(limits::formula_default(resource), |middle| {
             admit_formula(
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits(middle),
+                limits::formula(resource, middle),
             )
             .is_ok()
         });
-        assert!(lower > 0);
         assert_eq!(
             native(
                 &admit_formula(
                     source.into(),
                     options(),
                     ExpansionLimits::default(),
-                    limits(lower)
+                    limits::formula(resource, lower)
                 )
                 .unwrap()
             ),
@@ -102,7 +90,7 @@ fn grounding_limits_are_inclusive() {
             source.into(),
             options(),
             ExpansionLimits::default(),
-            limits(lower - 1),
+            limits::formula(resource, lower - 1),
         )
         .unwrap_err();
         assert!(

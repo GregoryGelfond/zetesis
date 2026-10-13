@@ -1,5 +1,6 @@
 //! Boolean heads retain their original truth without supplying atom support.
 
+use crate::support::limits;
 use crate::support::objective_dependency_records as objective_dependencies;
 use zetesis_test_support::thresholds::first_success;
 
@@ -275,13 +276,11 @@ fn tautologies_preserve_arithmetic_refusals() {
 
 const BUDGET_SOURCE: &str = "d(1..2).#true|p(X+1):-d(X).";
 
-fn exact_formula_budget(resource: FormulaResource, configure: impl Fn(&mut FormulaLimits, u64)) {
-    let attempt = |limit| {
-        let mut limits = FormulaLimits::default();
-        configure(&mut limits, limit);
-        admit(BUDGET_SOURCE, &limits)
-    };
-    let threshold = first_success(1_u64 << 20, |limit| attempt(limit).is_ok());
+fn exact_formula_budget(resource: FormulaResource) {
+    let attempt = |limit| admit(BUDGET_SOURCE, &limits::formula(resource, limit));
+    let threshold = first_success(limits::formula_default(resource), |limit| {
+        attempt(limit).is_ok()
+    });
     assert_eq!(
         native(&attempt(threshold).unwrap()),
         native(&formula(BUDGET_SOURCE))
@@ -298,30 +297,22 @@ fn exact_formula_budget(resource: FormulaResource, configure: impl Fn(&mut Formu
 
 #[test]
 fn tautologies_preserve_work_accounting() {
-    exact_formula_budget(FormulaResource::Work, |limits, value| {
-        limits.max_work = value;
-    });
+    exact_formula_budget(FormulaResource::Work);
 }
 
 #[test]
 fn tautologies_preserve_substitution_accounting() {
-    exact_formula_budget(FormulaResource::Substitutions, |limits, value| {
-        limits.max_substitutions = value;
-    });
+    exact_formula_budget(FormulaResource::Substitutions);
 }
 
 #[test]
 fn tautologies_preserve_node_accounting() {
-    exact_formula_budget(FormulaResource::Nodes, |limits, value| {
-        limits.theory.max_nodes = usize::try_from(value).unwrap();
-    });
+    exact_formula_budget(FormulaResource::Nodes);
 }
 
 #[test]
 fn tautologies_preserve_atom_accounting() {
-    exact_formula_budget(FormulaResource::Atoms, |limits, value| {
-        limits.theory.max_atoms = usize::try_from(value).unwrap();
-    });
+    exact_formula_budget(FormulaResource::Atoms);
 }
 
 #[test]
@@ -330,14 +321,14 @@ fn tautologies_preserve_term_work_accounting() {
         admit_formula(
             BUDGET_SOURCE.into(),
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_term_work: usize::try_from(limit).unwrap(),
-                ..ExpansionLimits::default()
-            },
+            limits::expansion(ExpansionResource::TermWork, limit),
             FormulaLimits::default(),
         )
     };
-    let threshold = first_success(1_u64 << 20, |limit| attempt(limit).is_ok());
+    let threshold = first_success(
+        limits::expansion_default(ExpansionResource::TermWork),
+        |limit| attempt(limit).is_ok(),
+    );
     assert_eq!(
         native(&attempt(threshold).unwrap()),
         native(&formula(BUDGET_SOURCE))

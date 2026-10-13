@@ -1,5 +1,6 @@
 //! Scoped objectives observe the original model through shared formula operations.
 
+use crate::support::limits;
 use crate::support::priority_contracts;
 use crate::support::source_cases;
 use zetesis_reference_support as reference;
@@ -197,27 +198,15 @@ fn scoped_formula_limits_are_inclusive() {
         FormulaResource::Work,
         FormulaResource::Substitutions,
     ] {
-        let attempt = |maximum| {
-            let mut limits = FormulaLimits::default();
-            match resource {
-                FormulaResource::ObjectiveFormulaAtoms => {
-                    limits.max_objective_formula_atoms = maximum;
-                }
-                FormulaResource::ObjectiveFormulaNodes => {
-                    limits.max_objective_formula_nodes = maximum;
-                }
-                FormulaResource::Work => limits.max_work = maximum as u64,
-                FormulaResource::Substitutions => limits.max_substitutions = maximum as u64,
-                _ => unreachable!("selected scratch resources"),
-            }
-            reference::admit(source, &limits)
-        };
-        let upper = first_success(65536, |middle| attempt(middle).is_ok());
+        let attempt = |maximum| reference::admit(source, &limits::formula(resource, maximum));
+        let upper = first_success(limits::formula_default(resource), |middle| {
+            attempt(middle).is_ok()
+        });
         assert_eq!(reference::exhaustive(&attempt(upper).unwrap()), expected);
         let failure = attempt(upper - 1).unwrap_err();
         assert!(
             matches!(failure, FormulaFailure::Limit { resource: actual, observed, limit, .. }
-            if actual == resource && observed == upper as u128 && limit == (upper - 1) as u128),
+            if actual == resource && observed == u128::from(upper) && limit == u128::from(upper - 1)),
             "{resource:?}: {failure}"
         );
         assert!(!failure.diagnostics().is_empty());

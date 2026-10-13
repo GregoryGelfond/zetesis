@@ -1,5 +1,6 @@
 //! Constructed values remain data in original and frozen source interpretations.
 use crate::support::finite_bindings as reference;
+use crate::support::limits;
 use crate::support::upstream;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
@@ -119,13 +120,11 @@ fn construction_admissions(resource: ExpansionResource) {
     // Follow the next required cumulative amount. This exercises each actual
     // admission boundary without assuming allocation capacities or charge sizes.
     for _ in 0..2_048 {
-        let mut expansion = ExpansionLimits::default();
-        match resource {
-            ExpansionResource::ScalarBytes => expansion.max_scalar_bytes = limit,
-            ExpansionResource::TermWork => expansion.max_term_work = limit,
-            _ => panic!("not a construction admission resource"),
-        }
-        match limited(source, expansion, &FormulaLimits::default()) {
+        match limited(
+            source,
+            limits::expansion(resource, limit),
+            &FormulaLimits::default(),
+        ) {
             Ok(actual) => {
                 assert!(limit > 0);
                 assert_eq!(actual.atoms(), expected.atoms());
@@ -148,8 +147,8 @@ fn construction_admissions(resource: ExpansionResource) {
                     unreachable!()
                 };
                 assert_eq!(*actual, resource);
-                assert_eq!(*reported_limit, limit as u128);
-                assert!(*observed > limit as u128);
+                assert_eq!(*reported_limit, u128::from(limit));
+                assert!(*observed > u128::from(limit));
                 assert!(*observed <= 1_048_576, "fixture must remain small");
                 assert_eq!(
                     error.diagnostics()[0].primary().location,
@@ -162,7 +161,7 @@ fn construction_admissions(resource: ExpansionResource) {
                         .slice(location.location().expect("parsed source").span)
                         .is_ok()
                 );
-                limit = usize::try_from(*observed).unwrap();
+                limit = u64::try_from(*observed).unwrap();
             }
             Err(error) => panic!("{resource:?}/{limit}: {error}"),
         }
@@ -390,25 +389,19 @@ fn construction_preserves_statement_origins() {
 #[test]
 fn construction_scalar_bytes_have_an_inclusive_limit() {
     let source = "d(1).p(long_constructor_name(X)):-d(X).";
-    let lower = first_success(1 << 20, |middle| {
-        let expansion = ExpansionLimits {
-            max_scalar_bytes: middle,
-            ..ExpansionLimits::default()
-        };
-        limited(source, expansion, &FormulaLimits::default()).is_ok()
-    });
-    let expansion = ExpansionLimits {
-        max_scalar_bytes: lower,
-        ..ExpansionLimits::default()
-    };
+    let lower = first_success(
+        limits::expansion_default(ExpansionResource::ScalarBytes),
+        |middle| {
+            let expansion = limits::expansion(ExpansionResource::ScalarBytes, middle);
+            limited(source, expansion, &FormulaLimits::default()).is_ok()
+        },
+    );
+    let expansion = limits::expansion(ExpansionResource::ScalarBytes, lower);
     assert_eq!(
         native(&limited(source, expansion, &FormulaLimits::default()).unwrap()),
         native(&formula(source))
     );
-    let expansion = ExpansionLimits {
-        max_scalar_bytes: lower - 1,
-        ..ExpansionLimits::default()
-    };
+    let expansion = limits::expansion(ExpansionResource::ScalarBytes, lower - 1);
     assert!(matches!(
         limited(source, expansion, &FormulaLimits::default()),
         Err(FormulaFailure::Expansion(ExpansionFailure::Limit {

@@ -3,6 +3,7 @@
 mod cases;
 use crate::support::admission;
 use crate::support::finite_bindings as reference;
+use crate::support::limits;
 use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
@@ -357,15 +358,15 @@ fn selected_rows_obey_inclusive_work_limits() {
     ] {
         for resource in [FormulaResource::Substitutions, FormulaResource::Work] {
             let attempt = |maximum| {
-                let mut limits = FormulaLimits::default();
-                match resource {
-                    FormulaResource::Substitutions => limits.max_substitutions = maximum,
-                    FormulaResource::Work => limits.max_work = maximum,
-                    _ => unreachable!(),
-                }
-                limited(source, ExpansionLimits::default(), &limits)
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &limits::formula(resource, maximum),
+                )
             };
-            let exact = first_success(1_u64 << 20, |maximum| attempt(maximum).is_ok());
+            let exact = first_success(limits::formula_default(resource), |maximum| {
+                attempt(maximum).is_ok()
+            });
             let error = attempt(exact - 1).expect_err("inclusive boundary");
             assert!(
                 matches!(error, FormulaFailure::Limit { resource: actual, limit, observed, .. } if actual == resource && limit == u128::from(exact - 1) && observed == u128::from(exact)),
@@ -386,19 +387,15 @@ fn neutral_rows_obey_inclusive_expansion_limits() {
     ] {
         for resource in [ExpansionResource::TermWork, ExpansionResource::ScalarBytes] {
             let attempt = |maximum| {
-                let mut limits = ExpansionLimits::default();
-                match resource {
-                    ExpansionResource::TermWork => {
-                        limits.max_term_work = usize::try_from(maximum).unwrap();
-                    }
-                    ExpansionResource::ScalarBytes => {
-                        limits.max_scalar_bytes = usize::try_from(maximum).unwrap();
-                    }
-                    _ => unreachable!(),
-                }
-                limited(source, limits, &FormulaLimits::default())
+                limited(
+                    source,
+                    limits::expansion(resource, maximum),
+                    &FormulaLimits::default(),
+                )
             };
-            let exact = first_success(1_u64 << 20, |maximum| attempt(maximum).is_ok());
+            let exact = first_success(limits::expansion_default(resource), |maximum| {
+                attempt(maximum).is_ok()
+            });
             let error = attempt(exact - 1).expect_err("inclusive source boundary");
             assert!(
                 matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, limit, observed, .. }) if actual == resource && limit == u128::from(exact - 1) && observed == u128::from(exact)),

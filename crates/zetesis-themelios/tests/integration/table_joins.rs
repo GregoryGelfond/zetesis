@@ -1,5 +1,6 @@
 //! Selected complete rows preserve source grounding, evidence and finite refusals.
 
+use crate::support::limits;
 use std::cell::Cell;
 use zetesis_test_support::thresholds::first_success;
 
@@ -155,55 +156,44 @@ fn table_strategy_preserves_deferred_head_errors() {
     equal_theory("d(0;1).e(0;1).p(1/X):-d(X),e(X),X>0.");
 }
 
-fn minimum(resource: FormulaResource) -> u64 {
+/// Search `resource`'s least admitting limit from its default; every refusal
+/// below it names the resource at the limit tried.
+fn exact_ceiling(resource: FormulaResource) {
     let compile = |maximum| {
-        let mut limits = FormulaLimits::default();
-        match resource {
-            FormulaResource::Work => limits.max_work = maximum,
-            FormulaResource::SupportBytes => {
-                limits.max_support_bytes = usize::try_from(maximum).unwrap();
-            }
-            _ => unreachable!("selected finite resource"),
-        }
         ground(
             SHARED,
             JoinStrategy::Table,
-            &limits,
+            &limits::formula(resource, maximum),
             &Observation::default(),
         )
     };
-    let ceiling = match resource {
-        FormulaResource::Work => FormulaLimits::default().max_work,
-        FormulaResource::SupportBytes => {
-            u64::try_from(FormulaLimits::default().max_support_bytes).unwrap()
+    first_success(limits::formula_default(resource), |maximum| {
+        match compile(maximum) {
+            Ok(_) => true,
+            Err(FormulaFailure::Limit {
+                resource: found,
+                observed,
+                limit,
+                ..
+            }) => {
+                assert_eq!(found, resource);
+                assert_eq!(limit, u128::from(maximum));
+                assert!(observed > limit);
+                false
+            }
+            other => panic!("unexpected resource result: {other:?}"),
         }
-        _ => unreachable!("selected finite resource"),
-    };
-    first_success(ceiling, |maximum| match compile(maximum) {
-        Ok(_) => true,
-        Err(FormulaFailure::Limit {
-            resource: found,
-            observed,
-            limit,
-            ..
-        }) => {
-            assert_eq!(found, resource);
-            assert_eq!(limit, u128::from(maximum));
-            assert!(observed > limit);
-            false
-        }
-        other => panic!("unexpected resource result: {other:?}"),
-    })
+    });
 }
 
 #[test]
 fn cumulative_table_work_has_an_exact_ceiling() {
-    assert!(minimum(FormulaResource::Work) > 0);
+    exact_ceiling(FormulaResource::Work);
 }
 
 #[test]
 fn simultaneous_table_storage_has_an_exact_ceiling() {
-    assert!(minimum(FormulaResource::SupportBytes) > 0);
+    exact_ceiling(FormulaResource::SupportBytes);
 }
 
 #[test]

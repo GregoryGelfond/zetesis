@@ -1,5 +1,6 @@
 //! Source pools retain whole-rule products, local groups and bounded evidence.
 use crate::support::finite_bindings as reference;
+use crate::support::limits;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
@@ -324,28 +325,34 @@ fn independent_limits_are_inclusive_and_failure_retains_source_location() {
         ExpansionResource::ScalarBytes,
         ExpansionResource::Origins,
     ] {
-        let configured = |limit| {
-            let mut bounds = ExpansionLimits::default();
-            match resource {
-                ExpansionResource::TermWork => bounds.max_term_work = limit,
-                ExpansionResource::Values => bounds.max_values = limit,
-                ExpansionResource::ScalarBytes => bounds.max_scalar_bytes = limit,
-                ExpansionResource::Origins => bounds.max_origin_locations = limit,
-                _ => unreachable!(),
-            }
-            bounds
-        };
-        let exact = first_success(1 << 24, |limit| {
-            limited(source, configured(limit), &FormulaLimits::default()).is_ok()
+        let exact = first_success(limits::expansion_default(resource), |limit| {
+            limited(
+                source,
+                limits::expansion(resource, limit),
+                &FormulaLimits::default(),
+            )
+            .is_ok()
         });
-        let error = limited(source, configured(exact - 1), &FormulaLimits::default()).unwrap_err();
+        let error = limited(
+            source,
+            limits::expansion(resource, exact - 1),
+            &FormulaLimits::default(),
+        )
+        .unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, location, .. })
             if actual == resource && !location.location().expect("parsed source").span.is_empty()),
             "{error}"
         );
         assert_eq!(
-            native(&limited(source, configured(exact), &FormulaLimits::default()).unwrap()),
+            native(
+                &limited(
+                    source,
+                    limits::expansion(resource, exact),
+                    &FormulaLimits::default()
+                )
+                .unwrap()
+            ),
             native(&formula(source))
         );
     }
@@ -354,21 +361,20 @@ fn independent_limits_are_inclusive_and_failure_retains_source_location() {
         FormulaResource::Substitutions,
         FormulaResource::Work,
     ] {
-        let configured = |limit: usize| {
-            let mut bounds = FormulaLimits::default();
-            match resource {
-                FormulaResource::AnalysisNodes => bounds.max_analysis_nodes = limit,
-                FormulaResource::Substitutions => bounds.max_substitutions = limit as u64,
-                FormulaResource::Work => bounds.max_work = limit as u64,
-                _ => unreachable!(),
-            }
-            bounds
-        };
-        let exact = first_success(1 << 24, |limit| {
-            limited(source, ExpansionLimits::default(), &configured(limit)).is_ok()
+        let exact = first_success(limits::formula_default(resource), |limit| {
+            limited(
+                source,
+                ExpansionLimits::default(),
+                &limits::formula(resource, limit),
+            )
+            .is_ok()
         });
-        let error =
-            limited(source, ExpansionLimits::default(), &configured(exact - 1)).unwrap_err();
+        let error = limited(
+            source,
+            ExpansionLimits::default(),
+            &limits::formula(resource, exact - 1),
+        )
+        .unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Limit { resource: actual, .. } if actual == resource),
             "{error}"
@@ -429,27 +435,31 @@ fn local_value_owners_respect_each_expansion_ceiling() {
             ExpansionResource::Values,
             ExpansionResource::ScalarBytes,
         ] {
-            let configured = |limit| {
-                let mut bounds = ExpansionLimits::default();
-                match resource {
-                    ExpansionResource::TermWork => bounds.max_term_work = limit,
-                    ExpansionResource::Values => bounds.max_values = limit,
-                    ExpansionResource::ScalarBytes => bounds.max_scalar_bytes = limit,
-                    _ => unreachable!(),
-                }
-                bounds
-            };
-            let exact = first_success(1 << 24, |limit| {
-                limited(source, configured(limit), &FormulaLimits::default()).is_ok()
+            let exact = first_success(limits::expansion_default(resource), |limit| {
+                limited(
+                    source,
+                    limits::expansion(resource, limit),
+                    &FormulaLimits::default(),
+                )
+                .is_ok()
             });
-            let error =
-                limited(source, configured(exact - 1), &FormulaLimits::default()).unwrap_err();
+            let error = limited(
+                source,
+                limits::expansion(resource, exact - 1),
+                &FormulaLimits::default(),
+            )
+            .unwrap_err();
             assert!(
                 matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, location, .. })
                 if actual == resource && !location.location().expect("parsed source").span.is_empty()),
                 "{source}: {error}"
             );
-            let accepted = limited(source, configured(exact), &FormulaLimits::default()).unwrap();
+            let accepted = limited(
+                source,
+                limits::expansion(resource, exact),
+                &FormulaLimits::default(),
+            )
+            .unwrap();
             assert_eq!(native(&accepted), expected, "{source}: {resource:?}");
         }
     }
@@ -680,14 +690,23 @@ fn empty_alternatives_never_erase_required_source_safety() {
 #[test]
 fn pool_free_rules_have_an_inclusive_charged_scan_and_no_pool_projection() {
     for source in ["p:-q.", "{p}.", "p(X):-X=1..2."] {
-        let configured = |limit| ExpansionLimits {
-            max_term_work: limit,
-            ..ExpansionLimits::default()
-        };
-        let exact = first_success(1 << 24, |limit| {
-            limited(source, configured(limit), &FormulaLimits::default()).is_ok()
-        });
-        let error = limited(source, configured(exact - 1), &FormulaLimits::default()).unwrap_err();
+        let exact = first_success(
+            limits::expansion_default(ExpansionResource::TermWork),
+            |limit| {
+                limited(
+                    source,
+                    limits::expansion(ExpansionResource::TermWork, limit),
+                    &FormulaLimits::default(),
+                )
+                .is_ok()
+            },
+        );
+        let error = limited(
+            source,
+            limits::expansion(ExpansionResource::TermWork, exact - 1),
+            &FormulaLimits::default(),
+        )
+        .unwrap_err();
         assert!(
             matches!(
                 error,
@@ -699,7 +718,14 @@ fn pool_free_rules_have_an_inclusive_charged_scan_and_no_pool_projection() {
             "{source}: {error}"
         );
         assert_eq!(
-            native(&limited(source, configured(exact), &FormulaLimits::default()).unwrap()),
+            native(
+                &limited(
+                    source,
+                    limits::expansion(ExpansionResource::TermWork, exact),
+                    &FormulaLimits::default()
+                )
+                .unwrap()
+            ),
             native(&formula(source))
         );
         println!("pool-free inclusive expansion work: {source} => {exact}");
@@ -708,10 +734,7 @@ fn pool_free_rules_have_an_inclusive_charged_scan_and_no_pool_projection() {
     assert!(
         limited(
             "",
-            ExpansionLimits {
-                max_term_work: 0,
-                ..ExpansionLimits::default()
-            },
+            limits::expansion(ExpansionResource::TermWork, 0),
             &FormulaLimits {
                 max_analysis_nodes: 0,
                 ..FormulaLimits::default()
@@ -729,29 +752,41 @@ fn zero_arity_disjunct_carriers_have_an_independent_preclone_node_ceiling() {
             .collect::<Vec<_>>()
             .join(";");
         let source = format!("p(1;2);{head}.");
-        let configured = |limit| FormulaLimits {
-            max_analysis_nodes: limit,
-            ..FormulaLimits::default()
-        };
-        let exact = first_success(1 << 24, |limit| {
-            limited(&source, ExpansionLimits::default(), &configured(limit)).is_ok()
-        });
+        let exact = first_success(
+            limits::formula_default(FormulaResource::AnalysisNodes),
+            |limit| {
+                limited(
+                    &source,
+                    ExpansionLimits::default(),
+                    &limits::formula(FormulaResource::AnalysisNodes, limit),
+                )
+                .is_ok()
+            },
+        );
         // Zero-argument predicates still add structural nodes in both complete
         // source copies; a text-only payload counter cannot replace this ceiling.
-        assert!(exact >= 2 * (count + 1));
-        let error =
-            limited(&source, ExpansionLimits::default(), &configured(exact - 1)).unwrap_err();
+        assert!(exact >= u64::try_from(2 * (count + 1)).unwrap());
+        let error = limited(
+            &source,
+            ExpansionLimits::default(),
+            &limits::formula(FormulaResource::AnalysisNodes, exact - 1),
+        )
+        .unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Limit {
             resource: FormulaResource::AnalysisNodes, observed, location, ..
-        } if observed == exact as u128 && !location.location().expect("parsed source").span.is_empty()),
+        } if observed == u128::from(exact) && !location.location().expect("parsed source").span.is_empty()),
             "{error}"
         );
         assert_eq!(
-            limited(&source, ExpansionLimits::default(), &configured(exact))
-                .unwrap()
-                .atoms()
-                .len(),
+            limited(
+                &source,
+                ExpansionLimits::default(),
+                &limits::formula(FormulaResource::AnalysisNodes, exact)
+            )
+            .unwrap()
+            .atoms()
+            .len(),
             count + 2
         );
         println!("zero-arity disjuncts={count}, inclusive projection nodes={exact}");

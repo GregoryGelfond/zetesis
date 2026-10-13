@@ -1,5 +1,6 @@
 //! Evaluated heads retain original grouping, atom identities and frozen reducts.
 
+use crate::support::limits;
 use std::collections::BTreeSet;
 use std::fs::{self};
 
@@ -269,20 +270,16 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
     ] {
         for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
             let attempt = |limit| {
-                let mut limits = FormulaLimits::default();
-                if resource == FormulaResource::Work {
-                    limits.max_work = limit;
-                } else {
-                    limits.max_substitutions = limit;
-                }
                 limited(
                     source,
                     AdmissionOptions::default(),
                     ExpansionLimits::default(),
-                    &limits,
+                    &limits::formula(resource, limit),
                 )
             };
-            let threshold = first_success(1_u64 << 20, |limit| attempt(limit).is_ok());
+            let threshold = first_success(limits::formula_default(resource), |limit| {
+                attempt(limit).is_ok()
+            });
             assert!(
                 matches!(attempt(threshold - 1), Err(FormulaFailure::Limit { resource: actual, observed, .. }) if actual == resource && observed == u128::from(threshold))
             );
@@ -295,14 +292,14 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
             limited(
                 source,
                 AdmissionOptions::default(),
-                ExpansionLimits {
-                    max_term_work: usize::try_from(limit).unwrap(),
-                    ..ExpansionLimits::default()
-                },
+                limits::expansion(ExpansionResource::TermWork, limit),
                 &FormulaLimits::default(),
             )
         };
-        let threshold = first_success(1_u64 << 20, |limit| attempt(limit).is_ok());
+        let threshold = first_success(
+            limits::expansion_default(ExpansionResource::TermWork),
+            |limit| attempt(limit).is_ok(),
+        );
         assert!(matches!(
             attempt(threshold - 1),
             Err(FormulaFailure::Expansion(ExpansionFailure::Limit {

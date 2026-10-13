@@ -1,6 +1,7 @@
 //! Extrema heads retain permissions independently of selected logical values.
 
 use crate::support::admission;
+use crate::support::limits;
 use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
@@ -16,7 +17,8 @@ use themelios_program::term::EvalError;
 use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(179);
@@ -275,10 +277,7 @@ fn logical_values_retain_scalar_storage_limits() {
     let error = admit_formula(
         source.into(),
         options(),
-        ExpansionLimits {
-            max_scalar_bytes: 0,
-            ..Default::default()
-        },
+        limits::expansion(ExpansionResource::ScalarBytes, 0),
         FormulaLimits::default(),
     )
     .unwrap_err();
@@ -549,35 +548,22 @@ fn grounding_limits_are_inclusive() {
         FormulaResource::Substitutions,
         FormulaResource::Work,
     ] {
-        let limits = |ceiling| {
-            let mut limits = FormulaLimits::default();
-            match resource {
-                FormulaResource::AggregateElements => {
-                    limits.aggregate.max_elements = usize::try_from(ceiling).unwrap();
-                }
-                FormulaResource::Substitutions => limits.max_substitutions = ceiling,
-                FormulaResource::Work => limits.max_work = ceiling,
-                _ => unreachable!(),
-            }
-            limits
-        };
-        let lower = first_success(16_384, |middle| {
+        let lower = first_success(limits::formula_default(resource), |middle| {
             admit_formula(
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits(middle),
+                limits::formula(resource, middle),
             )
             .is_ok()
         });
-        assert!(lower > 0);
         assert_eq!(
             native(
                 &admit_formula(
                     source.into(),
                     options(),
                     ExpansionLimits::default(),
-                    limits(lower)
+                    limits::formula(resource, lower)
                 )
                 .unwrap()
             ),
@@ -587,7 +573,7 @@ fn grounding_limits_are_inclusive() {
             source.into(),
             options(),
             ExpansionLimits::default(),
-            limits(lower - 1),
+            limits::formula(resource, lower - 1),
         )
         .unwrap_err();
         assert!(

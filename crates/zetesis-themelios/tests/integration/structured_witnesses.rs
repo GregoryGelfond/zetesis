@@ -1,5 +1,6 @@
 //! Local witnesses retain complete atoms under structural selection.
 use crate::support::finite_bindings as reference;
+use crate::support::limits;
 use crate::support::witnesses::{self, limited};
 use reference::{Models, native, values};
 use std::collections::BTreeSet;
@@ -435,14 +436,12 @@ const BOUNDED: &str = "{p(f(1,2));p(f(2,2));p(f(3,3))}.q:-p(f(X,X)):#true.";
 fn witness_work_limit_is_inclusive() {
     let cap = witnesses::inclusive_ceiling(
         BOUNDED,
+        limits::formula_default(FormulaResource::Work),
         |cap| {
             limited(
                 BOUNDED,
                 ExpansionLimits::default(),
-                &FormulaLimits {
-                    max_work: cap as u64,
-                    ..Default::default()
-                },
+                &limits::formula(FormulaResource::Work, cap),
             )
         },
         // A relation operation can charge a bounded group of cells at once.

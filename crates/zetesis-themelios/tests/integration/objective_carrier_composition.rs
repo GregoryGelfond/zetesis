@@ -1,5 +1,6 @@
 //! Independent observers preserve previously established source carriers.
 
+use crate::support::limits;
 use crate::support::priority_contracts;
 use zetesis_test_support::thresholds::first_success;
 
@@ -29,18 +30,10 @@ fn composed_carrier_limits_are_inclusive() {
         FormulaResource::ObjectivePresenceEntries,
         FormulaResource::Work,
     ] {
-        let attempt = |maximum| {
-            let mut limits = FormulaLimits::default();
-            match resource {
-                FormulaResource::ObjectivePresenceEntries => {
-                    limits.max_objective_presence_entries = maximum;
-                }
-                FormulaResource::Work => limits.max_work = maximum as u64,
-                _ => unreachable!("selected carrier resources"),
-            }
-            reference::admit(source, &limits)
-        };
-        let upper = first_success(65536, |middle| attempt(middle).is_ok());
+        let attempt = |maximum| reference::admit(source, &limits::formula(resource, maximum));
+        let upper = first_success(limits::formula_default(resource), |middle| {
+            attempt(middle).is_ok()
+        });
         let input = attempt(upper).unwrap();
         // The fixed symbolic maximum excludes n(1), hence every p(N).
         // Carrier preparation still runs under both inclusive ceilings even
@@ -51,7 +44,7 @@ fn composed_carrier_limits_are_inclusive() {
         assert!(
             matches!(failure,
                 FormulaFailure::Limit { resource: actual, observed, limit, .. }
-                if actual == resource && observed == upper as u128 && limit == (upper - 1) as u128
+                if actual == resource && observed == u128::from(upper) && limit == u128::from(upper - 1)
             ),
             "{resource:?}: {failure}"
         );

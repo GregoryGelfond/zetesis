@@ -1,5 +1,6 @@
 //! Source priority carriers are distinct from realized aggregate values.
 
+use crate::support::limits;
 use crate::support::source_cases;
 use zetesis_test_support::thresholds::first_success;
 
@@ -304,22 +305,15 @@ fn selected_source_carriers_match_fresh_clingo() {
 
 #[test]
 fn completed_carriers_respect_grounding_work_limits() {
-    const SEARCH_BOUND: u64 = 65_536;
     let case = source_cases::cases(CASES.trim())
         .into_iter()
         .find(|case| case.name == "shared_product")
         .unwrap();
     for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
-        let attempt = |maximum| {
-            let mut limits = FormulaLimits::default();
-            match resource {
-                FormulaResource::Work => limits.max_work = maximum,
-                FormulaResource::Substitutions => limits.max_substitutions = maximum,
-                _ => unreachable!("selected work resource"),
-            }
-            admit(&case.source, &limits)
-        };
-        let upper = first_success(SEARCH_BOUND, |middle| attempt(middle).is_ok());
+        let attempt = |maximum| admit(&case.source, &limits::formula(resource, maximum));
+        let upper = first_success(limits::formula_default(resource), |middle| {
+            attempt(middle).is_ok()
+        });
         assert_eq!(exhaustive(&attempt(upper).unwrap()), case.records);
         let error = attempt(upper - 1).unwrap_err();
         assert!(
