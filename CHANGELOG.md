@@ -108,8 +108,9 @@ Notable changes by release. Versions follow Semantic Versioning.
 - Removed public items that nothing in the workspace called:
   `GpuOracle::new_metal`, `GpuTightOracle::new_metal`,
   `GpuFormulaOracle::new_metal` and `GpuFormulaOracle::new_metal_with_projection`
-  in `zetesis-wgpu` (`new_selected` with `GpuSelection { api: GpuApi::Metal }`
-  does the same); `CatalogRead::constructor_of_predicate` in `zetesis-core`;
+  in `zetesis-wgpu` (`new_selected`, or `new_selected_with_projection` for the
+  projected constructor, with `GpuSelection { api: GpuApi::Metal }`, does the
+  same); `CatalogRead::constructor_of_predicate` in `zetesis-core`;
   and `FormulaParts::extremum_row` and
   `Narrower::extremum_witness_preparation_work` in `zetesis-ferraris`.
 - Made crate-private, since only their own crate used them:
