@@ -70,13 +70,13 @@ impl TightPlan {
 /// false-root sets, so its verdict and witness are those of a complete
 /// evaluation of the new candidate. A candidate that differs in more atoms than
 /// an eighth of the theory's atoms (and at least 64), a different theory, or a
-/// plan without the index evaluates completely. A check that ends after its
-/// first observation of control (refused for its storage or its work, failing an
-/// allocation, or stopped at a later observation) leaves nothing the next check
-/// reads, so the next check evaluates completely; a check refused for a foreign
-/// theory, or stopped at that first observation, changes nothing. Each
-/// concurrent checker owns an exclusive workspace; immutable plans may be
-/// shared.
+/// plan without the index evaluates completely. A check refused for a foreign
+/// theory, stopped at its first observation of control, or refused for storage
+/// at its start changes nothing. A check that ends later (refused for its work
+/// or for storage it grows, failing an allocation, or stopped at a later
+/// observation) leaves nothing the next check reads, so the next check
+/// evaluates completely. Each concurrent checker owns an exclusive workspace;
+/// immutable plans may be shared.
 #[derive(Debug, Default)]
 pub struct TightWorkspace {
     values: Vec<u8>,
@@ -199,17 +199,18 @@ impl TightWorkspace {
             return Err(Stop::WrongProgram.into());
         }
         meter.poll()?;
+        // Storage admission precedes the take and either route's work, so a
+        // refusal here changes nothing and the retained evaluation stays valid.
+        // It counts what the workspace holds, each vector at no less than a
+        // complete check requires; each later growth passes through `grow`,
+        // which admits it before reserving it.
+        self.admit(plan, limits.max_bytes)?;
         // Taken for the whole check: an interrupted update or evaluation leaves
         // nothing a later check could read as a complete evaluation. The same
         // theory instance also authenticates the retained summaries, which the
         // last plan's producers computed: a plan's producers and readers are
         // functions of its theory alone.
         let previous = self.retained.theory.take();
-        // Storage admission precedes either route's work. It counts what the
-        // workspace holds, each vector at no less than a complete check
-        // requires; each later growth passes through `grow`, which admits it
-        // before reserving it.
-        self.admit(plan, limits.max_bytes)?;
         if retain
             && let Some(readers) = plan.readers.as_ref()
             && previous

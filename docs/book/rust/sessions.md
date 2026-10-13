@@ -188,12 +188,13 @@ with an input whose value changed (an atom node's membership, a condition of a
 numeric guard's row, or an operand's truth), and keeps support counts and the
 false-root and unsupported-atom sets, so every verdict and its witness equal a
 complete evaluation's. A candidate that differs in more than an eighth of the
-atoms (at least 64) or another theory evaluates completely. A check that ends
-after its first observation of control (refused for its storage or its work,
-failing an allocation, or stopped at a later observation) leaves nothing the
-next check reads, so the next check evaluates completely; a check refused for a
-foreign theory, or stopped at that first observation, changes nothing. The work
-a check charges then depends on the candidate checked before it;
+atoms (at least 64) or another theory evaluates completely. A check refused for
+a foreign theory, stopped at its first observation of control, or refused for
+storage at its start changes nothing. A check that ends later (refused for its
+work or for storage it grows, failing an allocation, or stopped at a later
+observation) leaves nothing the next check reads, so the next check evaluates
+completely. The work a check charges then depends on the candidate checked
+before it;
 `TightPlan::check_work_bound` bounds every check by either route. A certificate
 prepared for an external checker shares its plan without the index; if it is
 later enabled for CPU checking, its checks evaluate every candidate completely.

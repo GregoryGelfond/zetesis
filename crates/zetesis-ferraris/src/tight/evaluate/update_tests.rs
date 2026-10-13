@@ -547,10 +547,11 @@ fn an_update_beyond_the_byte_allowance_is_refused_before_its_work() {
 }
 
 #[test]
-fn a_check_after_a_storage_refusal_evaluates_completely() {
-    // The refusal of the holdings follows the take of the retained evaluation,
-    // so it leaves nothing the next check can update from. No work charged
-    // marks it as the start's admission: a refused growth follows charged work.
+fn a_storage_refusal_at_the_start_keeps_the_retained_evaluation() {
+    // The start's admission precedes the take of the retained evaluation, so
+    // its refusal changes nothing, and the next check, given the bytes it
+    // needs, updates. No work charged marks the refusal as the start's
+    // admission: a refused growth follows charged work.
     let theory = choices(200);
     let plan = prepared(&theory);
     let cancellation = Cancellation::default();
@@ -565,7 +566,7 @@ fn a_check_after_a_storage_refusal_evaluates_completely() {
     assert_eq!(refused.work, 0);
     let after = workspace.check(&plan, &third, TightCheckLimits::default(), &cancellation);
     assert!(after.result.is_ok());
-    assert_route(&plan, &third, after.work, false);
+    assert_route(&plan, &third, after.work, true);
 }
 
 #[test]
