@@ -1,7 +1,7 @@
 //! Aggregate reference cases include recursive formulas whose classical truth
 //! tables agree but whose reducts have different subset models.
 //!
-//! The fixture contains 339 sources: 330 admitted comparisons/assignments and
+//! The fixture contains 342 sources: 333 admitted comparisons/assignments and
 //! nine explicit refusals, including two unsafe programs. The portable test
 //! compares every admission with independent exhaustive reduct enumeration;
 //! the optional test reruns the full external reference campaign. A recorded
@@ -173,8 +173,8 @@ fn assert_refusal(error: &FormulaFailure, expected: Refusal) {
 #[test]
 fn recorded_aggregate_comparisons_match_exhaustive_reduct_models() {
     let cases = cases();
-    assert_eq!(cases.len(), 339);
-    assert_eq!(cases.iter().filter(|case| case.valid).count(), 337);
+    assert_eq!(cases.len(), 342);
+    assert_eq!(cases.iter().filter(|case| case.valid).count(), 340);
     let mut admitted = 0;
     let mut refused = 0;
     for case in cases {
@@ -205,7 +205,7 @@ fn recorded_aggregate_comparisons_match_exhaustive_reduct_models() {
             admitted += 1;
         }
     }
-    assert_eq!((admitted, refused), (330, 9));
+    assert_eq!((admitted, refused), (333, 9));
 }
 
 #[test]
@@ -335,8 +335,8 @@ fn compare_external(case: &Case) {
 #[ignore = "requires clingo: recorded recursive aggregate semantics match clingo"]
 fn recorded_recursive_aggregate_semantics_match_clingo() {
     let cases = cases();
-    assert_eq!(cases.len(), 339);
-    assert_eq!(cases.iter().filter(|case| case.valid).count(), 337);
+    assert_eq!(cases.len(), 342);
+    assert_eq!(cases.iter().filter(|case| case.valid).count(), 340);
     for case in cases {
         compare_external(&case);
     }

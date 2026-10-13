@@ -62,6 +62,27 @@ fn a_sum_omits_a_value_only_an_interpretation_outside_the_support_gives() {
 }
 
 #[test]
+fn a_required_extremum_keeps_the_optional_values_before_it() {
+    // The unconditional element is required. The value under a precedes the
+    // required extremum in the function's order, so the carrier holds both and
+    // each interpretation of a finds a root for its own value.
+    for (source, with_a, without_a) in [
+        ("{a}. n(N) :- N = #max{2 : a; 1}.", "n(2)", "n(1)"),
+        ("{a}. n(N) :- N = #min{1 : a; 2}.", "n(1)", "n(2)"),
+    ] {
+        let admitted = formula(source);
+        assert_eq!(
+            possible(&admitted),
+            atoms(&["a", "n(1)", "n(2)"]),
+            "{source}"
+        );
+        let expected = Models::from([atoms(&["a", with_a]), atoms(&[without_a])]);
+        assert_eq!(native(&admitted), expected, "{source}");
+        assert_eq!(exhaustive(&admitted), expected, "{source}");
+    }
+}
+
+#[test]
 fn an_atom_of_either_sign_makes_a_condition_optional() {
     for source in [
         "{p}. q(M) :- M = #count{1 : p}.",

@@ -337,3 +337,6 @@
 ["assignment_projected_negation_condition","q(M) :- M = #count{1 : not r(_)}.",true,[["q(1)"]],null]
 ["assignment_one_required_occurrence","{p}. q(M) :- M = #count{1 : p; 1}.",true,[["p","q(1)"],["q(1)"]],null]
 ["assignment_support_counterexample","x(V) :- V = #sum{1; -1 : p}.",true,[["x(1)"]],null]
+["assignment_required_max_keeps_a_preceding_optional","{a}. n(N) :- N = #max{2 : a; 1}.",true,[["a","n(2)"],["n(1)"]],null]
+["assignment_required_min_keeps_a_preceding_optional","{a}. n(N) :- N = #min{1 : a; 2}.",true,[["a","n(1)"],["n(2)"]],null]
+["assignment_retained_optional_downstream_arithmetic","{a}. n(N) :- N = #max{2 : a; 1}. m(M) :- n(N), M = 10/N.",true,[["a","m(5)","n(2)"],["m(10)","n(1)"]],null]
