@@ -1,5 +1,5 @@
 //! Adversarial contracts are checked independently of the manifest seal.
-use super::{Error, Limits, Resource, assertion, contracts, document, files};
+use super::{Error, Files, Limits, Resource, assertion, contracts, document};
 use std::path::Path;
 
 fn document() -> document::Document {
@@ -21,7 +21,7 @@ fn a_parent_component_is_not_a_relative_corpus_path() {
         "C:source.lp",
     ] {
         assert!(
-            matches!(files::relative(path), Err(Error::Path(_))),
+            matches!(Files::relative(path), Err(Error::Path(_))),
             "{path}"
         );
     }
@@ -234,11 +234,11 @@ fn an_existing_file_read_obeys_the_inclusive_byte_ceiling() {
     let file = tempfile::NamedTempFile::new().unwrap();
     std::fs::write(file.path(), b"abc").unwrap();
     assert_eq!(
-        files::read(file.path(), 3, Resource::SourceBytes).unwrap(),
+        Files::read(file.path(), 3, Resource::SourceBytes).unwrap(),
         b"abc"
     );
     assert!(matches!(
-        files::read(file.path(), 2, Resource::SourceBytes),
+        Files::read(file.path(), 2, Resource::SourceBytes),
         Err(Error::Limit {
             resource: Resource::SourceBytes,
             observed: 3,
@@ -250,7 +250,7 @@ fn an_existing_file_read_obeys_the_inclusive_byte_ceiling() {
 fn a_directory_is_not_a_source_file() {
     let root = tempfile::tempdir().unwrap();
     assert!(matches!(
-        files::read(Path::new(root.path()), 10, Resource::SourceBytes),
+        Files::read(Path::new(root.path()), 10, Resource::SourceBytes),
         Err(Error::Path(_))
     ));
 }

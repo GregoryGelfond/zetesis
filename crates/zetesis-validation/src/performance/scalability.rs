@@ -86,16 +86,16 @@ struct Fixture {
 }
 
 fn fixtures(root: &Path, limits: WorkloadLimits) -> Result<Vec<Fixture>, Error> {
-    let root = examples::files::canonical(root).map_err(Error::Corpus)?;
+    let root = examples::Files::canonical(root).map_err(Error::Corpus)?;
     let path =
-        examples::files::confined(&root, "scalability/manifest.json").map_err(Error::Corpus)?;
-    let bytes = examples::files::read(
+        examples::Files::confined(&root, "scalability/manifest.json").map_err(Error::Corpus)?;
+    let bytes = examples::Files::read(
         &path,
         limits.metadata_bytes,
         examples::Resource::ManifestBytes,
     )
     .map_err(Error::Corpus)?;
-    examples::files::digest("scalability/manifest.json", &bytes, MANIFEST_SHA256)
+    examples::Files::digest("scalability/manifest.json", &bytes, MANIFEST_SHA256)
         .map_err(Error::Corpus)?;
     let manifest: Manifest = serde_json::from_slice(&bytes)
         .map_err(|error| Error::Corpus(examples::Error::Json(error)))?;

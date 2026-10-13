@@ -1,7 +1,7 @@
 //! Integrity of identities and full-model versus selected-display contracts.
 
 use super::document::{CaseRecord, Document};
-use super::{Error, Limits, Resource, UPSTREAM_REVISION, assertion, ceiling, files};
+use super::{Error, Files, Limits, Resource, UPSTREAM_REVISION, assertion, ceiling};
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) const ORIGINALS: &[(&str, &str)] = &[
@@ -105,9 +105,9 @@ fn identity(
     origins: &BTreeMap<&str, &super::document::OriginRecord>,
 ) -> Result<(), Error> {
     let origin = &case.provenance;
-    files::relative(&case.id)?;
-    files::relative(&case.path)?;
-    let file = files::relative(&origin.source_file)?;
+    Files::relative(&case.id)?;
+    Files::relative(&case.path)?;
+    let file = Files::relative(&origin.source_file)?;
     let stem = file
         .file_stem()
         .and_then(|stem| stem.to_str())

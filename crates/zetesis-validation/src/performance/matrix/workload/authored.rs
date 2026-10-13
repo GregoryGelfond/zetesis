@@ -64,8 +64,8 @@ impl Workload {
                 "authored amendments are outside the source or repeated",
             ));
         }
-        let root = examples::files::canonical(program.root).map_err(Error::Corpus)?;
-        let path = examples::files::confined(&root, program.entry).map_err(Error::Corpus)?;
+        let root = examples::Files::canonical(program.root).map_err(Error::Corpus)?;
+        let path = examples::Files::confined(&root, program.entry).map_err(Error::Corpus)?;
         let seal =
             super::super::super::run::checked_seal(&path, limits.source_bytes, program.sha256)?;
         let text = read(&seal, limits.source_bytes)?;
@@ -168,7 +168,7 @@ impl Workload {
         let source = &self.sources[0];
         let derived =
             examples::derive_source(&original, &source.edits, limit).map_err(Error::Corpus)?;
-        examples::files::digest(&source.path, derived.as_bytes(), &source.derived_sha256)
+        examples::Files::digest(&source.path, derived.as_bytes(), &source.derived_sha256)
             .map_err(Error::Corpus)?;
         let path = directory.join(&source.path);
         let parent = path
@@ -185,9 +185,9 @@ impl Workload {
 }
 
 fn read(seal: &FileSeal, limit: usize) -> Result<String, Error> {
-    let bytes = examples::files::read(seal.requested(), limit, examples::Resource::SourceBytes)
+    let bytes = examples::Files::read(seal.requested(), limit, examples::Resource::SourceBytes)
         .map_err(Error::Corpus)?;
-    examples::files::digest("authored source", &bytes, seal.sha256()).map_err(Error::Corpus)?;
+    examples::Files::digest("authored source", &bytes, seal.sha256()).map_err(Error::Corpus)?;
     String::from_utf8(bytes).map_err(|error| Error::Corpus(examples::Error::Utf8(error)))
 }
 

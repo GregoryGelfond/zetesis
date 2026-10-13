@@ -9,7 +9,6 @@
 
 mod contract;
 mod document;
-pub(crate) mod files;
 mod originals;
 
 use std::fmt;
@@ -117,6 +116,36 @@ pub enum Error {
     /// Provenance, dependencies, or a typed contract is inconsistent.
     Contract(String),
 }
+/// This corpus's confined, bounded file reads, failing in its own error type.
+pub(crate) type Files = crate::corpus_files::Files<Error>;
+
+impl crate::corpus_files::Failure for Error {
+    type Resource = Resource;
+    fn io(path: &Path, source: std::io::Error) -> Self {
+        Self::Io {
+            path: path.to_owned(),
+            source,
+        }
+    }
+    fn unconfined(text: String) -> Self {
+        Self::Path(text)
+    }
+    fn limit(resource: Resource, observed: u128, limit: usize) -> Self {
+        Self::Limit {
+            resource,
+            observed,
+            limit,
+        }
+    }
+    fn digest(path: String, expected: String, actual: String) -> Self {
+        Self::Digest {
+            path,
+            expected,
+            actual,
+        }
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
