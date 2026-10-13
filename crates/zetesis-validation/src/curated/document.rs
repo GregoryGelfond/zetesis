@@ -3,6 +3,7 @@
 use super::{
     CASE_COUNT, Error, Files, LICENSE_SHA256, Limits, Resource, UPSTREAM_REVISION, contracts,
 };
+use crate::corpus_files::Failure as _;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -224,7 +225,7 @@ impl<'a> Contract<'a> {
 }
 
 pub(super) fn validate(document: &Document, limits: Limits) -> Result<(), Error> {
-    Files::ceiling(Resource::Cases, document.cases.len() as u128, limits.cases)?;
+    Error::ceiling(Resource::Cases, document.cases.len() as u128, limits.cases)?;
     if document.schema != 1
         || document.upstream_revision != UPSTREAM_REVISION
         || document.cases.len() != CASE_COUNT
@@ -254,7 +255,7 @@ pub(super) fn load(root: PathBuf, document: Document, limits: Limits) -> Result<
             Resource::SourceBytes,
         )?;
         total += bytes.len() as u128;
-        Files::ceiling(Resource::TotalSourceBytes, total, limits.total_source_bytes)?;
+        Error::ceiling(Resource::TotalSourceBytes, total, limits.total_source_bytes)?;
         Files::digest(&record.path, &bytes, &record.source_sha256)?;
         let source = String::from_utf8(bytes)
             .map_err(|_| Error::Contract(format!("{}: source must be UTF-8", record.id)))?;

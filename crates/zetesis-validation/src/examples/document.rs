@@ -1,5 +1,6 @@
 //! Immutable checked corpus values and pinned document admission.
 
+use crate::corpus_files::Failure as _;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
@@ -344,7 +345,7 @@ pub(super) fn load(root: &Path, limits: Limits) -> Result<Corpus, Error> {
         )?;
         Files::digest(&source.path, &bytes, &source.sha256)?;
         total += bytes.len() as u128;
-        Files::ceiling(Resource::TotalSourceBytes, total, limits.total_source_bytes)?;
+        Error::ceiling(Resource::TotalSourceBytes, total, limits.total_source_bytes)?;
         source.text = String::from_utf8(bytes).map_err(Error::Utf8)?;
         if source
             .text
@@ -370,8 +371,8 @@ pub(super) fn load(root: &Path, limits: Limits) -> Result<Corpus, Error> {
 }
 
 fn validate_header(document: &Document, limits: Limits) -> Result<(), Error> {
-    Files::ceiling(Resource::Files, document.files.len() as u128, limits.files)?;
-    Files::ceiling(Resource::Cases, document.cases.len() as u128, limits.cases)?;
+    Error::ceiling(Resource::Files, document.files.len() as u128, limits.files)?;
+    Error::ceiling(Resource::Cases, document.cases.len() as u128, limits.cases)?;
     if document.schema_version != 2
         || document.upstream != "https://github.com/GregoryGelfond/kr-domains"
         || document.revision != UPSTREAM_REVISION
@@ -453,7 +454,7 @@ fn validate_cases(document: &Document, root: &Path, limits: Limits) -> Result<()
             .map(|witness| witness.len() as u128)
             .sum::<u128>()
             + case.contract.required_symbols.len() as u128;
-        Files::ceiling(Resource::ContractSymbols, symbols, limits.contract_symbols)?;
+        Error::ceiling(Resource::ContractSymbols, symbols, limits.contract_symbols)?;
     }
     Ok(())
 }

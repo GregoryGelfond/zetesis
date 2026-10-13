@@ -2,6 +2,7 @@
 
 use super::document::{CaseRecord, Document};
 use super::{Error, Files, Limits, Resource, UPSTREAM_REVISION, assertion};
+use crate::corpus_files::Failure as _;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) const ORIGINALS: &[(&str, &str)] = &[
@@ -59,10 +60,10 @@ pub(super) fn validate(document: &Document, limits: Limits) -> Result<(), Error>
         }
         identity(case, &origins)?;
         models += case.contract.full_models.len() as u128;
-        Files::ceiling(Resource::Models, models, limits.models)?;
+        Error::ceiling(Resource::Models, models, limits.models)?;
         for model in &case.contract.full_models {
             atoms += model.len() as u128;
-            Files::ceiling(Resource::Atoms, atoms, limits.atoms)?;
+            Error::ceiling(Resource::Atoms, atoms, limits.atoms)?;
             let unique: BTreeSet<_> = model.iter().collect();
             if unique.len() != model.len() || model.iter().any(String::is_empty) {
                 return Err(Error::Contract(format!(

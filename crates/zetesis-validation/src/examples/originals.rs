@@ -1,5 +1,6 @@
 //! Explicit original-byte derivation audit; normal loading never interprets tags.
 
+use crate::corpus_files::Failure as _;
 use std::path::Path;
 
 use super::{
@@ -107,7 +108,7 @@ pub fn derive_source(source: &str, edits: &[Edit], limit: usize) -> Result<Strin
         length = length - edit.before.len() as u128 + edit.after.len() as u128;
         previous_end = edit.end_byte;
     }
-    Files::ceiling(Resource::SourceBytes, length, limit)?;
+    Error::ceiling(Resource::SourceBytes, length, limit)?;
     let capacity = usize::try_from(length)
         .map_err(|_| invalid("source derivation exceeds addressable storage"))?;
     let mut result = String::new();

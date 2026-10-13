@@ -78,7 +78,7 @@ pub(crate) fn load(options: &Request) -> Result<Loaded, String> {
         .clone()
         .unwrap_or_else(|| options.repo.join("validation/corpus/manifest.json"));
     let bytes = bounded_read(&path, MAX_MANIFEST)?;
-    if crate::selected::identity::sha256(&bytes) != MANIFEST_SHA256 {
+    if crate::corpus_files::sha256(&bytes) != MANIFEST_SHA256 {
         return Err("manifest identity differs from the trusted pinned target".into());
     }
     let manifest: Manifest =
@@ -122,7 +122,7 @@ pub(crate) fn load(options: &Request) -> Result<Loaded, String> {
     Ok(Loaded {
         root,
         manifest,
-        manifest_sha256: crate::selected::identity::sha256(&bytes),
+        manifest_sha256: crate::corpus_files::sha256(&bytes),
         view: SourceView::Original,
     })
 }
@@ -145,7 +145,7 @@ fn verify(root: &Path, relative: &str, expected: &str) -> Result<(), String> {
         return Err(format!("target symlink leaves corpus: {relative}"));
     }
     let bytes = bounded_read(&actual, MAX_SOURCE)?;
-    if crate::selected::identity::sha256(&bytes) != expected {
+    if crate::corpus_files::sha256(&bytes) != expected {
         return Err(format!("source hash mismatch: {relative}"));
     }
     Ok(())
@@ -199,7 +199,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         std::fs::write(root.path().join("source.lp"), "changed.").unwrap();
         let canonical = root.path().canonicalize().unwrap();
-        let expected = crate::selected::identity::sha256(b"original.");
+        let expected = crate::corpus_files::sha256(b"original.");
         assert!(
             verify(&canonical, "source.lp", &expected)
                 .unwrap_err()

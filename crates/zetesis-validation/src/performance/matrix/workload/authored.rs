@@ -8,8 +8,8 @@ use sha2::{Digest, Sha256};
 use super::{
     Budget, ConstantAmendment, Error, Source, Workload, WorkloadLimits, constants, examples, field,
 };
+use crate::corpus_files;
 use crate::selected::FileSeal;
-use crate::selected::identity;
 
 /// A reviewed source and display contract, independent of the correctness corpus.
 ///
@@ -96,7 +96,7 @@ impl Workload {
         let derived = examples::derive_source(&text, &edits, limits.source_bytes.min(remaining))
             .map_err(Error::Corpus)?;
         budget.source(derived.len())?;
-        let derived_sha256 = identity::sha256(derived.as_bytes());
+        let derived_sha256 = corpus_files::sha256(derived.as_bytes());
         let mut hash = Sha256::new();
         hash.update(b"zetesis-authored-workload-v1\0");
         for part in [
@@ -118,7 +118,7 @@ impl Workload {
         let amended = source.base_sha256 != source.derived_sha256;
         Ok(Self {
             entry,
-            identity: budget.text(&identity::spelled(&hash.finalize()))?,
+            identity: budget.text(&corpus_files::spelled(&hash.finalize()))?,
             manifest_sha256: None,
             sources: vec![source],
             default_contract: program.contract.clone(),
@@ -214,7 +214,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let source = "p.";
         std::fs::write(root.path().join("case.lp"), source).unwrap();
-        let hash = format!("{:x}", Sha256::digest(source));
+        let hash = corpus_files::sha256(source.as_bytes());
         let contract = examples::Contract::complete_family(std::num::NonZeroU64::MIN);
         let workload = Workload::authored(
             AuthoredProgram {
@@ -244,7 +244,7 @@ mod tests {
         let source = "#const n=8. p(n).";
         let path = root.path().join("case.lp");
         std::fs::write(&path, source).unwrap();
-        let hash = format!("{:x}", Sha256::digest(source));
+        let hash = corpus_files::sha256(source.as_bytes());
         let contract = examples::Contract::complete_family(std::num::NonZeroU64::MIN);
         let workload = Workload::authored(
             AuthoredProgram {
@@ -267,7 +267,7 @@ mod tests {
         let bytes = std::fs::read(derived.path().join("case.lp")).unwrap();
         assert_eq!(bytes, b"#const n=9. p(n).");
         assert_eq!(seals.len(), 1);
-        assert_eq!(seals[0].sha256(), format!("{:x}", Sha256::digest(&bytes)));
+        assert_eq!(seals[0].sha256(), corpus_files::sha256(&bytes));
         assert_eq!(std::fs::read_to_string(&path).unwrap(), source);
         std::fs::write(&path, "#const n=7. p(n).").unwrap();
         assert!(

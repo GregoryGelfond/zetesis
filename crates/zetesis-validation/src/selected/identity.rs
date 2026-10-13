@@ -7,6 +7,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use super::Error;
+use crate::corpus_files::spelled;
 
 /// A primary input's requested path, resolved file identity and exact byte seal.
 /// The bounded read must agree with the opened file's length before and after
@@ -193,17 +194,6 @@ fn content_seal<R: Read>(
         ));
     }
     Ok((bytes, spelled(&digest.finalize())))
-}
-
-/// The SHA-256 of `bytes`, spelled as every seal spells a digest.
-pub(crate) fn sha256(bytes: &[u8]) -> String {
-    spelled(&Sha256::digest(bytes))
-}
-
-/// A finished SHA-256 digest in lowercase hexadecimal: how every seal, file
-/// or workload, spells its digest.
-pub(crate) fn spelled(digest: &sha2::digest::Output<Sha256>) -> String {
-    format!("{digest:x}")
 }
 
 pub(crate) fn recheck(before: &FileSeal) -> Change {

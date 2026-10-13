@@ -11,8 +11,8 @@ use std::path::Path;
 
 use super::super::Error;
 use super::super::families::Family;
+use crate::corpus_files;
 use crate::examples;
-use crate::selected::identity;
 
 const MAX_AMENDMENTS: usize = 128;
 
@@ -117,7 +117,7 @@ impl Generated {
             .family
             .source(self.size)
             .map_err(|_| Error::Configuration("generated workload size is not admitted"))?;
-        if source.len() != self.bytes || identity::sha256(source.as_bytes()) != self.sha256 {
+        if source.len() != self.bytes || corpus_files::sha256(source.as_bytes()) != self.sha256 {
             return Err(Error::Configuration(
                 "generated program differs from its admitted program",
             ));
@@ -234,7 +234,7 @@ impl Workload {
             )
             .map_err(Error::Corpus)?;
             budget.source(derived.len())?;
-            let digest = identity::sha256(derived.as_bytes());
+            let digest = corpus_files::sha256(derived.as_bytes());
             sources.push(Source {
                 path: budget.text(path)?,
                 base_sha256: budget.text(source.source_sha256())?,
@@ -283,14 +283,14 @@ impl Workload {
             sources: 0,
         };
         budget.source(source.len())?;
-        let digest = identity::sha256(source.as_bytes());
+        let digest = corpus_files::sha256(source.as_bytes());
         let entry = budget.text(&Generated::entry_of(family, size))?;
         let mut hash = Sha256::new();
         hash.update(b"zetesis-generated-workload-v1\0");
         field(&mut hash, family.label().as_bytes());
         field(&mut hash, &size.to_le_bytes());
         field(&mut hash, digest.as_bytes());
-        let identity = budget.text(&identity::spelled(&hash.finalize()))?;
+        let identity = budget.text(&corpus_files::spelled(&hash.finalize()))?;
         let sha256 = budget.text(&digest)?;
         Ok(Self {
             entry,
@@ -456,7 +456,7 @@ impl Workload {
             let derived = examples::derive_source(original.source(), &source.edits, limit)
                 .map_err(Error::Corpus)?;
             if derived.len() != source.derived_bytes
-                || identity::sha256(derived.as_bytes()) != source.derived_sha256
+                || corpus_files::sha256(derived.as_bytes()) != source.derived_sha256
             {
                 return Err(Error::Configuration(
                     "workload derivation differs from its admitted hash",
@@ -510,7 +510,7 @@ fn corpus_identity(entry: &str, manifest_sha256: &str, sources: &[Source]) -> St
         field(&mut hash, source.base_sha256.as_bytes());
         field(&mut hash, source.derived_sha256.as_bytes());
     }
-    identity::spelled(&hash.finalize())
+    corpus_files::spelled(&hash.finalize())
 }
 
 fn field(hash: &mut Sha256, value: &[u8]) {
