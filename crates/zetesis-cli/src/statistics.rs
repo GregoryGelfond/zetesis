@@ -1113,5 +1113,11 @@ mod tests;
 /// front hands a GPU request to its sibling, the sibling. None when the host
 /// does not report it.
 pub(crate) fn running_executable() -> Option<std::path::PathBuf> {
-    std::env::current_exe().and_then(std::fs::canonicalize).ok()
+    this_executable().ok()
+}
+
+/// This process's executable, resolved through links: where the front finds
+/// its sibling, and what the statistics name.
+pub(crate) fn this_executable() -> io::Result<std::path::PathBuf> {
+    std::env::current_exe().and_then(std::fs::canonicalize)
 }

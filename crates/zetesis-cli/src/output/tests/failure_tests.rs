@@ -216,7 +216,7 @@ fn failure_envelopes_never_invent_search_coverage() {
         (RunError::BackendUnavailable, "backend_unavailable"),
         (
             RunError::GpuExecutableUnavailable {
-                path: "zetesis-libexec/0/zetesis".into(),
+                path: Some("zetesis-libexec/0/zetesis".into()),
                 error: std::io::ErrorKind::NotFound.into(),
             },
             "gpu_executable_unavailable",

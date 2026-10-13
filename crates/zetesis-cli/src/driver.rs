@@ -135,10 +135,10 @@ pub enum RunError {
     /// The default install's front could not run the GPU executable installed
     /// beside it, so a GPU request was not served.
     GpuExecutableUnavailable {
-        /// Where the front looked for the GPU executable, or the front itself
-        /// when its own path could not be resolved.
-        path: std::path::PathBuf,
-        /// Why running it failed.
+        /// Where the front looked for the GPU executable; `None` when the
+        /// front could not resolve its own path, so could not locate it.
+        path: Option<std::path::PathBuf>,
+        /// Why locating or running it failed.
         error: io::Error,
     },
     /// A supplied library executor refused or failed its batch operation.
@@ -259,20 +259,7 @@ impl fmt::Display for RunError {
                 "this zetesis was built without GPU support; install the default build for GPU execution (see INSTALL.md)",
             ),
             Self::GpuExecutableUnavailable { path, error } => {
-                write!(
-                    f,
-                    "this install's GPU executable, {}, could not be run: {error}",
-                    path.display()
-                )?;
-                // Reinstalling repairs a missing or unusable file, not an
-                // exhausted or failing system.
-                if matches!(
-                    error.kind(),
-                    io::ErrorKind::NotFound | io::ErrorKind::PermissionDenied
-                ) {
-                    f.write_str("; rerun scripts/install.sh to repair the install (see INSTALL.md)")?;
-                }
-                Ok(())
+                gpu_executable_unavailable(f, path.as_deref(), error)
             }
             Self::UnsupportedCombination { backend, grounder } => write!(
                 f,
@@ -382,6 +369,35 @@ impl RunError {
         Ok(())
     }
 }
+/// Why this install's GPU executable did not serve a GPU request: it could not
+/// be located, because the front could not resolve its own path, or the one at
+/// `path` could not be run. The remedy is given only where reinstalling repairs
+/// the cause, a missing or unusable file, not an exhausted or failing system.
+fn gpu_executable_unavailable(
+    f: &mut fmt::Formatter<'_>,
+    path: Option<&std::path::Path>,
+    error: &io::Error,
+) -> fmt::Result {
+    let Some(path) = path else {
+        return write!(
+            f,
+            "this install's GPU executable could not be located, because this executable's own path could not be resolved: {error}"
+        );
+    };
+    write!(
+        f,
+        "this install's GPU executable, {}, could not be run: {error}",
+        path.display()
+    )?;
+    if matches!(
+        error.kind(),
+        io::ErrorKind::NotFound | io::ErrorKind::PermissionDenied
+    ) {
+        f.write_str("; rerun scripts/install.sh to repair the install (see INSTALL.md)")?;
+    }
+    Ok(())
+}
+
 impl std::error::Error for RunError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {

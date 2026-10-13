@@ -34,7 +34,7 @@ pub fn entry() -> ExitCode {
     // to the sibling installed with it, before any stream is locked or input is
     // read; it continues here only if that failed.
     #[cfg(all(unix, feature = "front", not(feature = "gpu")))]
-    let handed_off = hand_off(&invocation, &arguments);
+    let handed_off = crate::sibling::hand_off(&invocation, &arguments, IDENTITY);
     let output = io::stdout().lock();
     let output_terminal = output.is_terminal();
     let no_color = std::env::var_os("NO_COLOR");
@@ -67,13 +67,7 @@ pub fn entry() -> ExitCode {
     .with_width(width);
     #[cfg(all(unix, feature = "front", not(feature = "gpu")))]
     if let Some(error) = handed_off {
-        let failure = RunFailure::from(error);
-        let failure = match &invocation {
-            Invocation::Solve(options) if options.json => {
-                crate::output::input_failure(&mut output, failure, options)
-            }
-            _ => failure,
-        };
+        let failure = hand_off_failure(error, &invocation, &mut output);
         return finish_output(output, Err(failure), &mut diagnostics);
     }
     let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
@@ -116,33 +110,35 @@ pub fn entry() -> ExitCode {
     finish_output(output, result, &mut diagnostics)
 }
 
-/// Hand `invocation` to this install's GPU sibling when it opens a GPU device,
-/// returning only the failure of a hand-off; a hand-off that succeeds replaces
-/// the process. The identity is compiled in by the installer, so a front built
-/// without one does not compile.
+/// This install's identity, compiled in by the installer: a front built
+/// without one does not compile, nor does one whose sibling's path would
+/// leave the install's sibling directory.
 #[cfg(all(unix, feature = "front", not(feature = "gpu")))]
-fn hand_off(invocation: &Invocation, arguments: &[std::ffi::OsString]) -> Option<RunError> {
-    if !crate::sibling::opens_device(invocation) {
-        return None;
+const IDENTITY: &str = env!(
+    "ZETESIS_SIBLING_IDENTITY",
+    "the front is built by scripts/install.sh, which supplies its sibling's identity"
+);
+#[cfg(all(unix, feature = "front", not(feature = "gpu")))]
+const _: () = assert!(
+    crate::sibling::names_one_directory(IDENTITY),
+    "the sibling's identity must name one directory"
+);
+
+/// A failed hand-off in the invocation's own view: with `--json`, a solve's
+/// failure document of the error's kind on `output`.
+#[cfg(all(unix, any(test, all(feature = "front", not(feature = "gpu")))))]
+fn hand_off_failure(
+    error: RunError,
+    invocation: &Invocation,
+    output: &mut impl Write,
+) -> RunFailure {
+    let failure = RunFailure::from(error);
+    match invocation {
+        Invocation::Solve(options) if options.json => {
+            crate::output::input_failure(output, failure, options)
+        }
+        _ => failure,
     }
-    Some(
-        match std::env::current_exe().and_then(std::fs::canonicalize) {
-            Ok(front) => crate::sibling::exec(
-                &crate::sibling::sibling(
-                    &front,
-                    env!(
-                        "ZETESIS_SIBLING_IDENTITY",
-                        "the front is built by scripts/install.sh, which supplies its sibling's identity"
-                    ),
-                ),
-                arguments,
-            ),
-            Err(error) => RunError::GpuExecutableUnavailable {
-                path: std::path::PathBuf::from("zetesis"),
-                error,
-            },
-        },
-    )
 }
 
 fn command_status<E: std::fmt::Display>(

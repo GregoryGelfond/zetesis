@@ -219,3 +219,43 @@ fn cooperative_publication_has_the_incomplete_process_status() {
 }
 
 mod human_summary;
+
+/// A hand-off that failed because the sibling is missing.
+#[cfg(unix)]
+fn failed_hand_off() -> RunError {
+    RunError::GpuExecutableUnavailable {
+        path: Some("zetesis-libexec/0/zetesis".into()),
+        error: io::ErrorKind::NotFound.into(),
+    }
+}
+
+#[cfg(unix)]
+#[test]
+fn a_failed_json_hand_off_writes_a_failure_document_of_its_kind() {
+    let invocation =
+        crate::Invocation::try_parse_from(["zetesis", "solve", "-", "--backend", "gpu", "--json"])
+            .unwrap();
+    let mut output = Vec::new();
+    let failure = super::hand_off_failure(failed_hand_off(), &invocation, &mut output);
+    let document: serde_json::Value = serde_json::from_slice(&output).unwrap();
+    assert_eq!(
+        document["outcome"]["error"]["kind"],
+        "gpu_executable_unavailable"
+    );
+    assert!(failure.to_string().contains("zetesis-libexec/0/zetesis"));
+}
+
+#[cfg(unix)]
+#[test]
+fn a_failed_human_hand_off_writes_nothing_to_standard_output() {
+    for arguments in [
+        &["zetesis", "solve", "-", "--backend", "gpu"][..],
+        &["zetesis", "devices"],
+    ] {
+        let invocation = crate::Invocation::try_parse_from(arguments).unwrap();
+        let mut output = Vec::new();
+        let failure = super::hand_off_failure(failed_hand_off(), &invocation, &mut output);
+        assert!(output.is_empty(), "{arguments:?}");
+        assert!(failure.to_string().contains("could not be run"));
+    }
+}
