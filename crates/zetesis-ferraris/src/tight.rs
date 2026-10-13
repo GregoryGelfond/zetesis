@@ -266,7 +266,9 @@ impl TightPlan {
     /// occurrences, producers and roots, and when `limits.max_bytes` holds the
     /// plan's resident bytes with the build's vectors and the finished index,
     /// the entries bounded from the theory; so a build either allowance cannot
-    /// complete spends nothing. Returns whether the index exists afterwards: when
+    /// complete spends nothing. It is also attempted only for a plan of at most
+    /// `u32::MAX` producers, so that the four-byte support count an update keeps
+    /// per atom holds every head's count. Returns whether the index exists afterwards: when
     /// either allowance does not cover the build, the plan keeps complete
     /// evaluation, and a later call with larger limits may build it.
     /// Construction work, construction bytes and resident bytes include the
@@ -286,7 +288,8 @@ impl TightPlan {
                 work: 0,
             };
         }
-        if u128::from(limits.max_work) < self.index_work_bound()
+        if !support_counts_fit(self.producers.len())
+            || u128::from(limits.max_work) < self.index_work_bound()
             || u128::from(limits.max_bytes) < self.index_byte_bound()
         {
             return TightAttempt {
@@ -460,6 +463,12 @@ impl Tick for Meter<'_> {
 }
 
 /// Admit `value` logical bytes under `limit`.
+/// Whether a four-byte support count holds every head's count in a plan with
+/// `producers` producers: no head has more producers than the plan has.
+fn support_counts_fit(producers: usize) -> bool {
+    u32::try_from(producers).is_ok()
+}
+
 fn bytes(value: u128, limit: u64) -> Result<u64, TightError> {
     match u64::try_from(value) {
         Ok(value) if value <= limit => Ok(value),

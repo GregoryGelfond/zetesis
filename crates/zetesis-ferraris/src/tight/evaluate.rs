@@ -587,8 +587,9 @@ impl TightWorkspace {
     }
 
     /// A producer body changed truth; membership is already the new candidate's.
-    /// A support count beyond `u32` is an invariant failure, as it is when the
-    /// counts are first derived; a falling count was raised by the same
+    /// A plan with the index has at most `u32::MAX` producers, so no count can
+    /// pass `u32`; one that would is an invariant failure, as it is when the
+    /// counts are first derived. A falling count was raised by the same
     /// producer, so it is at least one.
     fn support(&mut self, head: usize, holds: bool) -> Result<(), TightError> {
         let retained = &mut self.retained;
