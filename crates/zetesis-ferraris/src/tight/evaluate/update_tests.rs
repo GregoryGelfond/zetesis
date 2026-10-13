@@ -2,8 +2,8 @@
 //! and what it charges (a one-atom change updates the retained evaluation, a
 //! large change or another theory evaluates completely, an update follows rows
 //! whose extremum moves, and every check fits the plan's per-check bound); what
-//! building the index charges and reports; and how a reused workspace's bytes
-//! are admitted.
+//! building the index charges and reports; how a reused workspace's bytes are
+//! admitted; and that an update refuses a support count past `u32`.
 
 use super::{TightWorkspace, large_change};
 use crate::{
@@ -11,7 +11,7 @@ use crate::{
     Node, NodeView, Theory, TightCheckLimits, TightError, TightPlan, TightPlanLimits,
     TightResource, TightVerdict,
 };
-use zetesis_cpu::Cancellation;
+use zetesis_cpu::{Cancellation, Stop};
 
 /// `atoms` atomic choices, a constraint over a chain of conjunctions forbidding
 /// all of them together, and one forbidding the first two together.
@@ -599,4 +599,37 @@ fn a_growth_is_refused_before_it_is_reserved() {
     );
     assert_eq!(attempt.work, 1);
     assert_eq!(workspace.retained_bytes(), before);
+}
+
+#[test]
+fn an_update_refuses_a_support_count_past_u32() {
+    // Four billion producers of one head are out of reach, so the count is
+    // seeded. Atom 3's one producer has the body 0 ∧ 1 ∧ 2, false until the
+    // third candidate.
+    let theory = mixed_theory();
+    let plan = prepared(&theory);
+    let cancellation = Cancellation::default();
+    let mut workspace = TightWorkspace::default();
+    for atoms in [vec![4], vec![0, 4]] {
+        workspace
+            .check(
+                &plan,
+                &world(&theory, atoms),
+                TightCheckLimits::default(),
+                &cancellation,
+            )
+            .result
+            .unwrap();
+    }
+    workspace.retained.support[3] = u32::MAX;
+    let raised = world(&theory, [0, 1, 2, 4]);
+    let refused = workspace.check(&plan, &raised, TightCheckLimits::default(), &cancellation);
+    assert_eq!(
+        refused.result.map(|check| check.verdict),
+        Err(TightError::Stopped(Stop::InvalidProgram))
+    );
+    // The refusal follows the take, so the next check evaluates completely.
+    let after = workspace.check(&plan, &raised, TightCheckLimits::default(), &cancellation);
+    assert!(after.result.is_ok());
+    assert_route(&plan, &raised, after.work, false);
 }
