@@ -551,7 +551,8 @@ fn a_storage_refusal_at_the_start_keeps_the_retained_evaluation() {
     // The start's admission precedes the take of the retained evaluation, so
     // its refusal changes nothing, and the next check, given the bytes it
     // needs, updates. No work charged marks the refusal as the start's
-    // admission: a refused growth follows charged work.
+    // admission: a refused growth, like the final admission, follows charged
+    // work.
     let theory = choices(200);
     let plan = prepared(&theory);
     let cancellation = Cancellation::default();

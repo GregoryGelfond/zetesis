@@ -516,7 +516,7 @@ impl TightWorkspace {
                             self.queue(guard, plan, limits)?;
                         }
                     }
-                    ReaderKind::Producer => self.support(plan.producers[index].head, truth),
+                    ReaderKind::Producer => self.support(plan.producers[index].head, truth)?,
                     ReaderKind::Root => self.root(index, truth),
                 }
             }
@@ -587,13 +587,19 @@ impl TightWorkspace {
     }
 
     /// A producer body changed truth; membership is already the new candidate's.
-    fn support(&mut self, head: usize, holds: bool) {
+    /// A support count beyond `u32` is an invariant failure, as it is when the
+    /// counts are first derived; a falling count was raised by the same
+    /// producer, so it is at least one.
+    fn support(&mut self, head: usize, holds: bool) -> Result<(), TightError> {
         let retained = &mut self.retained;
         let bit = 1_u64 << (head % 64);
         let present = retained.candidate[head / 64] & bit != 0;
         if holds {
-            retained.support[head] += 1;
-            if retained.support[head] == 1 && present {
+            let count = retained.support[head]
+                .checked_add(1)
+                .ok_or(Stop::InvalidProgram)?;
+            retained.support[head] = count;
+            if count == 1 && present {
                 retained.missing[head / 64] &= !bit;
                 retained.missing_count -= 1;
             }
@@ -604,6 +610,7 @@ impl TightWorkspace {
                 retained.missing_count += 1;
             }
         }
+        Ok(())
     }
 
     /// An original root position changed truth.
