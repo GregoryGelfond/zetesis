@@ -1,5 +1,5 @@
 use std::cmp::Reverse;
-use std::collections::BinaryHeap;
+use std::collections::{BinaryHeap, TryReserveError};
 
 use super::readers::{ReaderKind, Readers};
 use super::{
@@ -204,8 +204,10 @@ impl TightWorkspace {
         // last plan's producers computed: a plan's producers and readers are
         // functions of its theory alone.
         let previous = self.retained.theory.take();
-        // Storage admission of what the workspace already holds precedes either
-        // route's work; each later growth admits itself before it is reserved.
+        // Storage admission precedes either route's work. It counts what the
+        // workspace holds, each vector at no less than a complete check
+        // requires; each later growth passes through `grow`, which admits it
+        // before reserving it.
         self.admit(plan, limits.max_bytes)?;
         if retain
             && let Some(readers) = plan.readers.as_ref()
@@ -318,16 +320,11 @@ impl TightWorkspace {
         let more = (words.saturating_sub(self.retained.candidate.capacity())
             + marks.saturating_sub(self.retained.queued.capacity())) as u128
             * size_of::<u64>() as u128;
-        bytes(self.requested(plan, more), limits.max_bytes)?;
+        grow(self.requested(plan, more), limits.max_bytes, || {
+            self.retained.candidate.try_reserve_exact(words)?;
+            self.retained.queued.try_reserve_exact(marks)
+        })?;
         let retained = &mut self.retained;
-        retained
-            .candidate
-            .try_reserve_exact(words)
-            .map_err(|_| Stop::Allocation)?;
-        retained
-            .queued
-            .try_reserve_exact(marks)
-            .map_err(|_| Stop::Allocation)?;
         for &word in &candidate.words {
             meter.tick()?;
             retained.candidate.push(word);
@@ -362,20 +359,16 @@ impl TightWorkspace {
                     .div_ceil(64)
                     .saturating_sub(self.retained.false_roots.capacity())) as u128
                 * size_of::<u64>() as u128;
-        bytes(self.requested(plan, more), limits.max_bytes)?;
+        grow(self.requested(plan, more), limits.max_bytes, || {
+            self.retained.support.try_reserve_exact(atoms)?;
+            self.retained
+                .missing
+                .try_reserve_exact(atoms.div_ceil(64))?;
+            self.retained
+                .false_roots
+                .try_reserve_exact(roots.len().div_ceil(64))
+        })?;
         let retained = &mut self.retained;
-        retained
-            .support
-            .try_reserve_exact(atoms)
-            .map_err(|_| Stop::Allocation)?;
-        retained
-            .missing
-            .try_reserve_exact(atoms.div_ceil(64))
-            .map_err(|_| Stop::Allocation)?;
-        retained
-            .false_roots
-            .try_reserve_exact(roots.len().div_ceil(64))
-            .map_err(|_| Stop::Allocation)?;
         retained.support.resize(atoms, 0);
         retained.missing.resize(atoms.div_ceil(64), 0);
         retained.false_roots.resize(roots.len().div_ceil(64), 0);
@@ -416,7 +409,7 @@ impl TightWorkspace {
     /// readers of changed values. Returns `None`, having changed nothing, when
     /// more atoms changed than [`large_change`] admits. Precondition: the caller
     /// has admitted the workspace's holdings ([`Self::admit`]); each growth here
-    /// admits itself before it is reserved.
+    /// passes through [`grow`].
     fn update(
         &mut self,
         plan: &TightPlan,
@@ -440,14 +433,11 @@ impl TightWorkspace {
                 }
                 if self.retained.changed.len() == self.retained.changed.capacity() {
                     let additional = self.retained.changed.capacity().max(8);
-                    bytes(
+                    grow(
                         self.requested(plan, additional as u128 * size_of::<usize>() as u128),
                         limits.max_bytes,
+                        || self.retained.changed.try_reserve_exact(additional),
                     )?;
-                    self.retained
-                        .changed
-                        .try_reserve_exact(additional)
-                        .map_err(|_| Stop::Allocation)?;
                 }
                 self.retained.changed.push(word);
             }
@@ -550,17 +540,14 @@ impl TightWorkspace {
         }
         if self.retained.pending.len() == self.retained.pending.capacity() {
             let additional = self.retained.pending.capacity().max(64);
-            bytes(
+            grow(
                 self.requested(
                     plan,
                     additional as u128 * size_of::<Reverse<usize>>() as u128,
                 ),
                 limits.max_bytes,
+                || self.retained.pending.try_reserve_exact(additional),
             )?;
-            self.retained
-                .pending
-                .try_reserve_exact(additional)
-                .map_err(|_| Stop::Allocation)?;
         }
         self.retained.queued[node / 64] |= bit;
         self.retained.pending.push(Reverse(node));
@@ -768,6 +755,21 @@ fn unsupported_atom(
         }
     }
     Ok(None)
+}
+
+/// Grow retained storage past what a check's start admitted: admit
+/// `requested`, the workspace's measure with the growth beside it, against
+/// `limit`, and only then run `reserve`. Every such growth passes through here,
+/// so a growth the byte limit refuses reserves nothing and keeps the work
+/// charged before it. Storage that grows only to a complete check's size needs
+/// no step of its own: the measure already counts it at that size.
+fn grow(
+    requested: u128,
+    limit: u64,
+    reserve: impl FnOnce() -> Result<(), TryReserveError>,
+) -> Result<(), TightError> {
+    bytes(requested, limit)?;
+    reserve().map_err(|_| Stop::Allocation.into())
 }
 
 /// The most changed atoms an update takes on; a larger change evaluates
