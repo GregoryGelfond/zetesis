@@ -100,5 +100,3 @@ impl<'a> CatalogRead<'a> {
 
 #[cfg(test)]
 mod tests;
-
-impl CatalogRead<'_> {}
