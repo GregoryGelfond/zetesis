@@ -6962,22 +6962,22 @@
   {
     "name": "Zetesis.SourceSupport.unchanged_round_closed",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 69
+    "line": 71
   },
   {
     "name": "Zetesis.SourceSupport.stages_inside_closed",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 79
+    "line": 81
   },
   {
     "name": "Zetesis.SourceSupport.stable_inside_closed",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 112
+    "line": 114
   },
   {
     "name": "Zetesis.SourceSupport.completed_activity_covers",
     "file": "Zetesis/SourceSupport.lean",
-    "line": 132
+    "line": 134
   },
   {
     "name": "Zetesis.StorageOwners.sum_within_reservations",

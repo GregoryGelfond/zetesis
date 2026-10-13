@@ -2807,7 +2807,9 @@ still coalesce complete ASP tuple keys before supplying contributions; correlate
 conditions can leave carrier values unrealizable, and the original aggregate
 equality retains those conditions. The ordered-extremum form for `#min` and
 `#max` with required keys is not yet stated; their proposals are checked against
-exhaustive reduct enumeration and the clingo campaign.
+exhaustive reduct enumeration and clingo in the aggregate campaign, whose
+sources reach both cases of that form: the required extremum alone, and optional
+values strictly before it.
 
 [`IntegerEnvelopes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/IntegerEnvelopes.lean)
 proves directed bound coverage and integer floor/ceiling laws.

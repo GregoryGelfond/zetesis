@@ -32,8 +32,10 @@ count and sum operations to `SourceMeasures.carrier`
 ordered-extremum closed form for `#min` and `#max` with required keys is not yet
 stated: without required keys their proposals are the family
 `ValueExtrema.completed_candidate_coverage` covers, and with required keys they
-are checked against exhaustive reduct enumeration and the clingo campaign.
-Their original equalities remain in the theory.
+are checked against exhaustive reduct enumeration and clingo in the aggregate
+campaign, whose sources reach both cases of that form: the required extremum
+alone, and optional values strictly before it. Aggregate assignment proposals'
+original equalities remain in the theory.
 These are the ingredients of the projection argument, not a formal refinement
 of parsing, local binding plans, checked arithmetic or the Rust fixed-point
 loop. An interrupted or resource-exhausted loop supplies no closure result.
