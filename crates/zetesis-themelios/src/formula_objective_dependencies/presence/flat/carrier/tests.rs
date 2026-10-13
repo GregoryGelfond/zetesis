@@ -188,21 +188,27 @@ fn maximum_carrier_keeps_same_spelling_symbol_and_string_distinct() {
 
 #[test]
 fn empty_extrema_carriers_keep_bounds_and_all_optional_types() {
-    for function in [AggregateFunction::Min, AggregateFunction::Max] {
+    // Without a required tuple the carrier keeps every optional value, of every
+    // type, and the empty value: #sup for #min, #inf for #max. Each case's
+    // optional values hold the other bound but not its empty value, which only
+    // the carrier can supply.
+    for (function, empty, other) in [
+        (AggregateFunction::Min, Value::Supremum, Value::Infimum),
+        (AggregateFunction::Max, Value::Infimum, Value::Supremum),
+    ] {
         let values = [
-            Value::Infimum,
+            other,
             Value::Number(5),
             Value::Symbol("5".into()),
             Value::String("5".into()),
-            Value::Supremum,
         ];
         with_context(&values, |terms, context| {
-            // Without a required tuple the carrier keeps the empty value and
-            // every optional value, of every type, the bounds included.
             let optional: Vec<_> = terms.iter().copied().map(|term| [term]).collect();
             let optional: Vec<&[Term]> = optional.iter().map(<[Term; 1]>::as_slice).collect();
             let selected = carrier_values(function, &[], &optional, context);
-            assert_values(&selected, &values, &[], context);
+            let mut included = values.to_vec();
+            included.push(empty);
+            assert_values(&selected, &included, &[], context);
         });
     }
 }

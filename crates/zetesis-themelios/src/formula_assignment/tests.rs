@@ -214,10 +214,19 @@ fn the_extremum_carrier_leaves_the_endpoint_guard_to_its_callers() {
 }
 
 #[test]
-fn an_extremum_without_a_required_tuple_keeps_the_empty_value() {
+fn a_minimum_without_a_required_tuple_keeps_its_empty_value() {
     // The empty value of #min is #sup, the last term in term order.
     assert_eq!(
         extrema(AggregateFunction::Min, &[], &[1, 4]),
         [Some(1), Some(4), None]
+    );
+}
+
+#[test]
+fn a_maximum_without_a_required_tuple_keeps_its_empty_value() {
+    // The empty value of #max is #inf, the first term in term order.
+    assert_eq!(
+        extrema(AggregateFunction::Max, &[], &[1, 4]),
+        [None, Some(1), Some(4)]
     );
 }
