@@ -1,8 +1,7 @@
 //! Runtime observation diagnostics retain original sources and publication evidence.
 
+use crate::support::bundles::Fixture;
 use std::error::Error as _;
-use std::fs;
-use std::process::{Command, Output, Stdio};
 
 use clap::Parser;
 use zetesis_cli::{
@@ -105,34 +104,10 @@ fn observation_failure_preserves_verified_unpublished_evidence() {
     assert!(failure.secondary_output.is_none());
 }
 
-struct BundleFixture(tempfile::TempDir);
-impl BundleFixture {
-    fn new() -> Self {
-        let directory = tempfile::tempdir().unwrap();
-        fs::write(
-            directory.path().join("entry.lp"),
-            "#include \"child.lp\".\n",
-        )
-        .unwrap();
-        fs::write(directory.path().join("child.lp"), SOURCE).unwrap();
-        Self(directory)
-    }
-    fn process(&self, arguments: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_zetesis"))
-            .args(["--backend", "cpu", "--models", "0"])
-            .args(arguments)
-            .arg(self.0.path().join("entry.lp"))
-            .stdin(Stdio::null())
-            .output()
-            .unwrap()
-    }
-}
-
 #[test]
 fn included_error_retains_loaded_bytes_after_disk_changes() {
-    let fixture = BundleFixture::new();
-    let bundle =
-        SourceBundle::load(fixture.0.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    let fixture = included_source();
+    let bundle = SourceBundle::load(fixture.path("entry.lp"), BundleLimits::default()).unwrap();
     let child = bundle
         .sources()
         .iter()
@@ -140,7 +115,7 @@ fn included_error_retains_loaded_bytes_after_disk_changes() {
         .unwrap();
     let id = child.id();
     let path = child.path().to_str().unwrap().to_owned();
-    fs::write(fixture.0.path().join("child.lp"), "replacement.\n").unwrap();
+    fixture.write("child.lp", "replacement.\n");
     let failure = run_bundle_finalized_with_diagnostics(
         bundle,
         &options(),
@@ -172,7 +147,7 @@ fn unrelated_source_cannot_replace_the_retained_context() {
 
 #[test]
 fn process_observation_diagnostic_uses_the_existing_color_policy() {
-    let fixture = BundleFixture::new();
+    let fixture = included_source();
     let plain = fixture.process(&["--color", "never"]);
     let colored = fixture.process(&["--color", "always"]);
     for result in [&plain, &colored] {
@@ -208,7 +183,7 @@ fn without_styles(text: &str) -> String {
 
 #[test]
 fn json_observation_failure_keeps_models_empty_and_diagnostics_separate() {
-    let result = BundleFixture::new().process(&["--json", "--color", "always"]);
+    let result = included_source().process(&["--json", "--color", "always"]);
     assert_eq!(result.status.code(), Some(2));
     let document: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
     assert!(document["models"].as_array().unwrap().is_empty());
@@ -291,4 +266,12 @@ fn source_attachment_preserves_the_library_refusal() {
         error.diagnostic_source(),
         Some(admitted.source().expect("source input"))
     );
+}
+
+/// A bundle whose entry includes `SOURCE` as `child.lp`.
+fn included_source() -> Fixture {
+    let fixture = Fixture::new();
+    fixture.write("entry.lp", "#include \"child.lp\".\n");
+    fixture.write("child.lp", SOURCE);
+    fixture
 }

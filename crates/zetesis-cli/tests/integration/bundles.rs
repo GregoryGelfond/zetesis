@@ -1,5 +1,6 @@
 //! Original-file bundle invocation shares solver behavior and keeps refusals located.
 
+use crate::support::bundles::Fixture;
 use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
@@ -10,28 +11,6 @@ use zetesis_cli::{Completion, RunError, run_bundle_with_diagnostics, run_with_di
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{BundleLimits, SourceBundle};
 
-struct Fixture(tempfile::TempDir);
-impl Fixture {
-    fn new() -> Self {
-        Self(tempfile::tempdir().expect("temporary fixture"))
-    }
-    fn write(&self, name: &str, source: &str) {
-        fs::write(self.0.path().join(name), source).unwrap();
-    }
-    fn bundle(&self) -> SourceBundle {
-        SourceBundle::load(self.0.path().join("entry.lp"), BundleLimits::default()).unwrap()
-    }
-    fn process(&self, arguments: &[&str]) -> std::process::Output {
-        Command::new(env!("CARGO_BIN_EXE_zetesis"))
-            .args(["--backend", "cpu", "--models", "0"])
-            .args(arguments)
-            .arg(self.0.path().join("entry.lp"))
-            .stdin(Stdio::null())
-            .output()
-            .unwrap()
-    }
-}
-
 const MALFORMED_CHOICE: &str = "{a,b :- q.\nq :- c.\n";
 
 #[test]
@@ -41,7 +20,7 @@ fn typed_include_depth_bounds_the_loaded_graph() {
     fixture.write("child.lp", "#include \"leaf.lp\".");
     fixture.write("leaf.lp", "a.");
     let refused = SourceBundle::load(
-        fixture.0.path().join("entry.lp"),
+        fixture.path("entry.lp"),
         BundleLimits {
             max_include_depth: 1,
             ..BundleLimits::default()
@@ -56,7 +35,7 @@ fn typed_include_depth_bounds_the_loaded_graph() {
         }
     ));
     let complete_bundle = SourceBundle::load(
-        fixture.0.path().join("entry.lp"),
+        fixture.path("entry.lp"),
         BundleLimits {
             max_include_depth: 2,
             ..BundleLimits::default()
@@ -147,8 +126,8 @@ fn later_root_syntax_failure_keeps_its_source_identity() {
     fixture.write("later.lp", MALFORMED_CHOICE);
     let result = Command::new(env!("CARGO_BIN_EXE_zetesis"))
         .args(["--backend", "cpu", "--color", "never"])
-        .arg(fixture.0.path().join("entry.lp"))
-        .arg(fixture.0.path().join("later.lp"))
+        .arg(fixture.path("entry.lp"))
+        .arg(fixture.path("later.lp"))
         .stdin(Stdio::null())
         .output()
         .unwrap();
@@ -341,7 +320,7 @@ fn typed_file_byte_limit_applies_to_included_files() {
     fixture.write("entry.lp", "#include \"large.lp\".");
     fixture.write("large.lp", &format!("% {}\np.", "padding ".repeat(10)));
     let error = SourceBundle::load(
-        fixture.0.path().join("entry.lp"),
+        fixture.path("entry.lp"),
         BundleLimits {
             max_file_bytes: 32,
             ..BundleLimits::default()
@@ -371,7 +350,7 @@ fn files_resolve_original_includes_but_strings_have_no_implicit_base_path() {
             .contains("Answer: 1\np\n")
     );
     let error = run_with_diagnostics(
-        fs::read_to_string(fixture.0.path().join("entry.lp")).unwrap(),
+        fs::read_to_string(fixture.path("entry.lp")).unwrap(),
         &options(&["--backend", "cpu"]),
         &mut Vec::new(),
         &mut Vec::new(),

@@ -58,27 +58,6 @@ fn solve(extra: &[&str]) -> (zetesis_cli::Report, serde_json::Value, String) {
     solve_source(SOURCE, &options(extra))
 }
 
-fn bounded(
-    source: &str,
-    config: &zetesis_cli::PublicationConfig,
-) -> (zetesis_cli::Report, serde_json::Value) {
-    let mut output = Vec::new();
-    let resources = zetesis_solve::Resources::default();
-    let report = prepared::relational(
-        source,
-        config,
-        &mut zetesis_cli::JsonRenderer::new(
-            &mut output,
-            resources.json_record_bytes(),
-            resources.formula_limits().theory.max_atoms,
-        ),
-        &mut Vec::new(),
-        &Cancellation::default(),
-    )
-    .unwrap();
-    (report, serde_json::from_slice(&output).unwrap())
-}
-
 #[test]
 fn prepared_receipts_accompany_the_complete_family() {
     let (report, json, diagnostics) = solve(&[]);
@@ -118,7 +97,7 @@ fn prepared_receipts_accompany_the_complete_family() {
 fn source_work_refusal_remains_a_preparation_stop() {
     let mut config = zetesis_cli::PublicationConfig::from(&options(&[]));
     config.solve.max_source_work = 0;
-    let (report, json) = bounded(SOURCE, &config);
+    let (report, json) = prepared::relational_json(SOURCE, &config);
     assert_eq!(report.models, 0);
     assert_eq!(report.completion, Completion::Interrupted);
     assert_eq!(
@@ -148,7 +127,7 @@ fn candidate_storage_refusal_follows_admitted_preparation() {
     // Admit exactly the immutable preparation. Mutable candidate storage has
     // no remaining allowance; this is a later boundary than a zero-byte setup.
     config.solve.max_closure_bytes = prepared.statistics().retained_bytes;
-    let (report, json) = bounded("a.", &config);
+    let (report, json) = prepared::relational_json("a.", &config);
     assert_eq!(report.models, 0);
     assert_eq!(report.completion, Completion::Interrupted);
     assert_eq!(

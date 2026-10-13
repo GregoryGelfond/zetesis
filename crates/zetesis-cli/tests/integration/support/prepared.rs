@@ -161,3 +161,27 @@ pub(crate) fn bounded_admission(
     })();
     (result, String::from_utf8(output).unwrap())
 }
+
+/// The report and the JSON document of `source` published on the relational
+/// route under `config`, with the default resources' JSON record and atom
+/// bounds.
+pub(crate) fn relational_json(
+    source: &str,
+    config: &PublicationConfig,
+) -> (Report, serde_json::Value) {
+    let mut output = Vec::new();
+    let resources = zetesis_solve::Resources::default();
+    let report = relational(
+        source,
+        config,
+        &mut zetesis_cli::JsonRenderer::new(
+            &mut output,
+            resources.json_record_bytes(),
+            resources.formula_limits().theory.max_atoms,
+        ),
+        &mut Vec::new(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    (report, serde_json::from_slice(&output).unwrap())
+}
