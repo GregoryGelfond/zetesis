@@ -45,7 +45,8 @@ builds zetesis twice, once with the GPU stack and once without, and installs the
 GPU-capable build in `zetesis-libexec` as described above. Every build finishes
 before anything is replaced, each executable is replaced by a rename, and the
 `zetesis` you run is replaced last, so a failed or interrupted install leaves
-the previous one working. Run one install at a time for a given binary
+the previous one working; an older GPU-capable build the script cannot remove
+afterwards is reported, unused. Run one install at a time for a given binary
 directory and Cargo target directory: both builds of zetesis write the same
 build output.
 `./scripts/install.sh --cpu-only` builds zetesis without GPU support, for

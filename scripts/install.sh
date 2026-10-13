@@ -149,14 +149,18 @@ else
     place "$stage/sibling/zetesis" "$install_dir/$libexec/$identity/zetesis"
     place_tools
     # Only directories named as an identity is: a version, a hyphen and
-    # sixteen hexadecimal digits.
+    # sixteen hexadecimal digits. The new install is complete by now, so a
+    # directory that cannot be removed is reported, unused, and not an error.
     hex='[0-9a-f]'
     superseded="*-$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex$hex"
     for previous in "$install_dir/$libexec"/*; do
         name=${previous##*/}
         if [ -d "$previous" ] && [ "$name" != "$identity" ]; then
             case "$name" in
-                $superseded) rm -rf -- "$previous" ;;
+                $superseded)
+                    if ! rm -rf -- "$previous"; then
+                        printf 'Could not remove %s, which this install no longer uses; remove it by hand.\n' "$previous" >&2
+                    fi ;;
             esac
         fi
     done

@@ -309,3 +309,60 @@ fn a_cpu_only_install_removes_the_sibling_directory() {
     ]);
     assert_eq!(installer.files(), expected);
 }
+
+#[test]
+fn a_superseded_directory_that_cannot_be_removed_is_reported_after_a_complete_install() {
+    use std::os::unix::fs::PermissionsExt;
+    let installer = Installer::new();
+    installer.install("a");
+    let previous = installer
+        .installed()
+        .join("zetesis-libexec")
+        .join(identity("a"));
+    // Its executable cannot be unlinked from a directory without write access.
+    fs::set_permissions(&previous, fs::Permissions::from_mode(0o555)).unwrap();
+    let output = installer.run("b", &[], &[]);
+    fs::set_permissions(&previous, fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let warning = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        warning.contains(&format!("Could not remove {}", previous.display())),
+        "{warning}"
+    );
+    let files = installer.files();
+    assert_eq!(
+        files["zetesis"],
+        built("front", "zetesis", "b", &identity("b"))
+    );
+    assert!(files.contains_key(&format!("zetesis-libexec/{}/zetesis", identity("b"))));
+    assert!(files.contains_key(&format!("zetesis-libexec/{}/zetesis", identity("a"))));
+}
+
+#[test]
+fn a_failure_placing_the_sibling_leaves_the_previous_install_working() {
+    let installer = Installer::new();
+    installer.install("a");
+    let previous = installer.files();
+    // The sibling's temporary name in its new identity directory.
+    let sibling = installer
+        .installed()
+        .join("zetesis-libexec")
+        .join(identity("b"))
+        .join(".zetesis.installing");
+    let output = installer.run(
+        "b",
+        &[],
+        &[("INSTALL_TEST_FAIL_PLACING", sibling.to_str().unwrap())],
+    );
+    assert!(!output.status.success());
+    // Every previous file is as it was; at most an empty new identity
+    // directory remains, which the next install fills or removes.
+    assert_eq!(installer.files(), previous);
+    let mut expected = vec![identity("a"), identity("b")];
+    expected.sort();
+    assert_eq!(installer.identities(), expected);
+}
