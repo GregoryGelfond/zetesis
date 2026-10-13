@@ -14,7 +14,8 @@ use zetesis_themelios::SourceBundle;
 /// an output error, independently of any established semantic outcome.
 #[must_use]
 pub fn entry() -> ExitCode {
-    let mut invocation = match Invocation::try_parse_from(std::env::args_os()) {
+    let arguments: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    let mut invocation = match Invocation::try_parse_from(arguments.iter().cloned()) {
         Ok(invocation) => invocation,
         Err(error) => {
             let status = if error.use_stderr() {
@@ -29,6 +30,11 @@ pub fn entry() -> ExitCode {
             };
         }
     };
+    // The default install's front hands an invocation that opens a GPU device
+    // to the sibling installed with it, before any stream is locked or input is
+    // read; it continues here only if that failed.
+    #[cfg(all(unix, feature = "front", not(feature = "gpu")))]
+    let handed_off = hand_off(&invocation, &arguments);
     let output = io::stdout().lock();
     let output_terminal = output.is_terminal();
     let no_color = std::env::var_os("NO_COLOR");
@@ -59,6 +65,17 @@ pub fn entry() -> ExitCode {
         }
     }
     .with_width(width);
+    #[cfg(all(unix, feature = "front", not(feature = "gpu")))]
+    if let Some(error) = handed_off {
+        let failure = RunFailure::from(error);
+        let failure = match &invocation {
+            Invocation::Solve(options) if options.json => {
+                crate::output::input_failure(&mut output, failure, options)
+            }
+            _ => failure,
+        };
+        return finish_output(output, Err(failure), &mut diagnostics);
+    }
     let cancelled = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     // Only conformance checks own child solvers that an interrupt must settle.
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -97,6 +114,35 @@ pub fn entry() -> ExitCode {
         }
     };
     finish_output(output, result, &mut diagnostics)
+}
+
+/// Hand `invocation` to this install's GPU sibling when it opens a GPU device,
+/// returning only the failure of a hand-off; a hand-off that succeeds replaces
+/// the process. The identity is compiled in by the installer, so a front built
+/// without one does not compile.
+#[cfg(all(unix, feature = "front", not(feature = "gpu")))]
+fn hand_off(invocation: &Invocation, arguments: &[std::ffi::OsString]) -> Option<RunError> {
+    if !crate::sibling::opens_device(invocation) {
+        return None;
+    }
+    Some(
+        match std::env::current_exe().and_then(std::fs::canonicalize) {
+            Ok(front) => crate::sibling::exec(
+                &crate::sibling::sibling(
+                    &front,
+                    env!(
+                        "ZETESIS_SIBLING_IDENTITY",
+                        "the front is built by scripts/install.sh, which supplies its sibling's identity"
+                    ),
+                ),
+                arguments,
+            ),
+            Err(error) => RunError::GpuExecutableUnavailable {
+                path: std::path::PathBuf::from("zetesis"),
+                error,
+            },
+        },
+    )
 }
 
 fn command_status<E: std::fmt::Display>(

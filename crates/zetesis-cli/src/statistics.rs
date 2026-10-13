@@ -19,6 +19,14 @@ fn header(
     )?;
     writeln!(
         sink,
+        "  executable: {}",
+        running_executable().map_or_else(
+            || "unreported".to_owned(),
+            |path| path.display().to_string()
+        )
+    )?;
+    writeln!(
+        sink,
         "  requested: backend={}; oracle={}; grounder={}; search={}",
         options.backend.label(),
         options.oracle.label(),
@@ -1099,3 +1107,11 @@ fn independent_closure(
 
 #[cfg(test)]
 mod tests;
+
+/// The executable doing this run's work, resolved through links, for evidence
+/// that names the binary behind a measurement: after the default install's
+/// front hands a GPU request to its sibling, the sibling. None when the host
+/// does not report it.
+pub(crate) fn running_executable() -> Option<std::path::PathBuf> {
+    std::env::current_exe().and_then(std::fs::canonicalize).ok()
+}

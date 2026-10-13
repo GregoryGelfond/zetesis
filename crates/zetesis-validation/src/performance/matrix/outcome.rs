@@ -63,6 +63,7 @@ pub(super) fn check(document: &Value, exit: Option<Exit>) -> Result<(), Failure>
             exited(exit, 2)?;
             let decision = match kind {
                 "backend_unavailable" => Decision::BackendUnavailable,
+                "gpu_executable_unavailable" => Decision::GpuExecutableUnavailable,
                 "unsupported_combination"
                 | "unsupported_oracle"
                 | "admission"

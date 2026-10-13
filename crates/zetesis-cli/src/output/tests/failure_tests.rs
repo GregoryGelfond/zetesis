@@ -215,6 +215,13 @@ fn failure_envelopes_never_invent_search_coverage() {
         (RunError::Batch(zetesis_cpu::BatchError::Busy), "batch"),
         (RunError::BackendUnavailable, "backend_unavailable"),
         (
+            RunError::GpuExecutableUnavailable {
+                path: "zetesis-libexec/0/zetesis".into(),
+                error: std::io::ErrorKind::NotFound.into(),
+            },
+            "gpu_executable_unavailable",
+        ),
+        (
             RunError::UnsupportedCombination {
                 backend: crate::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal)),
                 grounder: crate::Grounder::Lazy,

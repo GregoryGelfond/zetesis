@@ -27,6 +27,8 @@ mod display;
 mod admission;
 mod devices;
 mod process;
+#[cfg(all(unix, any(test, all(feature = "front", not(feature = "gpu")))))]
+mod sibling;
 mod presentation;
 mod publication;
 mod statistics;

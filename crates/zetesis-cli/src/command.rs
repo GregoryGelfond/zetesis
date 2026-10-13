@@ -8,6 +8,9 @@ use clap::{Arg, ArgAction, ArgMatches, Command, CommandFactory, FromArgMatches, 
 use crate::testing::TestCommand;
 use crate::{Options, StatisticsView};
 
+#[cfg(test)]
+mod tests;
+
 pub(crate) const VERSION_INFORMATION: &str = concat!(
     env!("CARGO_PKG_VERSION"),
     " | Copyright (c) 2026 Gregory Gelfond | MIT License"

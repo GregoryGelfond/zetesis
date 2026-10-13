@@ -66,6 +66,31 @@ fn lazy_statistics_name_interleaved_grounding() {
 }
 
 #[test]
+fn json_statistics_name_the_executable_that_ran() {
+    // Evidence names the binary behind a measurement, the sibling's own path
+    // after the default install's front hands it a GPU request.
+    let result = solve("visible.", &["--json", "--stats"]);
+    assert!(result.status.success());
+    let document: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    let ran = std::fs::canonicalize(env!("CARGO_BIN_EXE_zetesis")).unwrap();
+    assert_eq!(
+        document["statistics"]["executable"],
+        ran.to_string_lossy().as_ref()
+    );
+}
+
+#[test]
+fn record_statistics_name_the_executable_that_ran() {
+    let result = solve("visible.", &["--json", "--stats"]);
+    let ran = std::fs::canonicalize(env!("CARGO_BIN_EXE_zetesis")).unwrap();
+    let diagnostics = String::from_utf8(result.stderr).unwrap();
+    assert!(
+        diagnostics.contains(&format!("  executable: {}", ran.display())),
+        "{diagnostics}"
+    );
+}
+
+#[test]
 fn requested_json_contains_machine_statistics() {
     let result = solve(
         "{hidden}. visible. #show visible/0.",

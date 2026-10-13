@@ -17,6 +17,9 @@ pub enum Decision {
     Refused,
     /// The native envelope explicitly reports unavailable compiled backend support.
     BackendUnavailable,
+    /// The native envelope reports that the default install's front could not
+    /// run its GPU executable: a broken install, not absent GPU support.
+    GpuExecutableUnavailable,
     /// Search or publication is incomplete; independent coverage remains in raw JSON.
     Incomplete,
     /// Authored process timeout expired.
@@ -58,6 +61,7 @@ impl Decision {
             Self::Pass => "pass",
             Self::Refused => "refused",
             Self::BackendUnavailable => "backend_unavailable",
+            Self::GpuExecutableUnavailable => "gpu_executable_unavailable",
             Self::Incomplete => "incomplete",
             Self::Timeout => "timeout",
             Self::Cancelled => "cancelled",

@@ -297,6 +297,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::CompletionPool(_) => "completion_pool",
         RunError::CompletionUnavailable => "completion_unavailable",
         RunError::BackendUnavailable => "backend_unavailable",
+        RunError::GpuExecutableUnavailable { .. } => "gpu_executable_unavailable",
         RunError::Executor(_) => "executor",
         RunError::UnsupportedCombination { .. } => "unsupported_combination",
         RunError::UnsupportedOracle { .. } => "unsupported_oracle",
@@ -588,7 +589,12 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
     // Counts are typed and optional; this is a bounded fixed-shape view, not a
     // serialization of debug text or the human statistics protocol.
     if view.timings.is_some() {
-        out.text("{\"search\":")?;
+        out.text("{\"executable\":")?;
+        match crate::statistics::running_executable() {
+            Some(path) => out.string(&path.to_string_lossy())?,
+            None => out.text("null")?,
+        }
+        out.text(",\"search\":")?;
         search_statistics(
             out,
             view.search,

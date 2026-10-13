@@ -132,6 +132,15 @@ pub enum RunError {
     CompletionPool(rayon::ThreadPoolBuildError),
     /// Requested backend was not compiled into this binary.
     BackendUnavailable,
+    /// The default install's front could not run the GPU executable installed
+    /// beside it, so a GPU request was not served.
+    GpuExecutableUnavailable {
+        /// Where the front looked for the GPU executable, or the front itself
+        /// when its own path could not be resolved.
+        path: std::path::PathBuf,
+        /// Why running it failed.
+        error: io::Error,
+    },
     /// A supplied library executor refused or failed its batch operation.
     Executor(zetesis_solve::ExecutorError),
     /// The requested materialization strategy is unavailable on that backend.
@@ -249,6 +258,22 @@ impl fmt::Display for RunError {
             Self::BackendUnavailable => f.write_str(
                 "this zetesis was built without GPU support; install the default build for GPU execution (see INSTALL.md)",
             ),
+            Self::GpuExecutableUnavailable { path, error } => {
+                write!(
+                    f,
+                    "this install's GPU executable, {}, could not be run: {error}",
+                    path.display()
+                )?;
+                // Reinstalling repairs a missing or unusable file, not an
+                // exhausted or failing system.
+                if matches!(
+                    error.kind(),
+                    io::ErrorKind::NotFound | io::ErrorKind::PermissionDenied
+                ) {
+                    f.write_str("; rerun scripts/install.sh to repair the install (see INSTALL.md)")?;
+                }
+                Ok(())
+            }
             Self::UnsupportedCombination { backend, grounder } => write!(
                 f,
                 "unsupported backend/grounding profile: {} with {}",
@@ -373,6 +398,7 @@ impl std::error::Error for RunError {
             Self::CompletionPool(error) => Some(error),
             Self::Output(error) => Some(error),
             Self::DeadlineTimer(error) => Some(error),
+            Self::GpuExecutableUnavailable { error, .. } => Some(error),
             Self::ExecutionObservation(error) => Some(error.as_ref()),
             Self::Executor(error) => Some(error),
             Self::PublicationStopped(error) => Some(error),

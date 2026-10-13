@@ -104,6 +104,7 @@ fn every_decision_label_is_its_recorded_spelling() {
         Decision::Pass,
         Decision::Refused,
         Decision::BackendUnavailable,
+        Decision::GpuExecutableUnavailable,
         Decision::Incomplete,
         Decision::Timeout,
         Decision::Cancelled,

@@ -37,6 +37,9 @@ workspace = true
 [features]
 default = ["gpu"]
 gpu = ["dep:zetesis-wgpu", "zetesis-solve/gpu"]
+# The default install's front: without `gpu`, hand each invocation that opens a
+# GPU device to the GPU-capable sibling installed beside it. Inert with `gpu`.
+front = []
 
 [[bin]]
 name = "zetesis"
