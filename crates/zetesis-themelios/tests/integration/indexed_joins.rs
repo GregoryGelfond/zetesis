@@ -117,17 +117,7 @@ fn shared_arguments_select_only_matching_rows() {
 #[test]
 fn selective_join_work_limit_is_inclusive() {
     let source = selective_source();
-    let compile = |max_work| {
-        admit_formula(
-            source.clone(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
-                max_work,
-                ..FormulaLimits::default()
-            },
-        )
-    };
+    let compile = |max_work| admit(&source, &limits::formula(FormulaResource::Work, max_work));
     let low = first_success(
         limits::formula_default(FormulaResource::Work),
         |max_work| match compile(max_work) {

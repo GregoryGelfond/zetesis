@@ -13,8 +13,8 @@ use reference::{Models, holds, native, values};
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{admit, canonical, formula, prepared};
 use zetesis_themelios::{
-    AdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    AdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionFailure, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
 };
 
 #[test]
@@ -190,14 +190,7 @@ fn original_sources_remain_owned() {
 fn alias_work_limits_are_inclusive() {
     for source in ["1#count{1:a;1:b}1.", "{b;c}.1#count{1:a:b;2:a:c}1."] {
         for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
-            let attempt = |maximum| {
-                admit_formula(
-                    source.into(),
-                    AdmissionOptions::default(),
-                    ExpansionLimits::default(),
-                    limits::formula(resource, maximum),
-                )
-            };
+            let attempt = |maximum| admit(source, &limits::formula(resource, maximum));
             let maximum = first_success(limits::formula_default(resource), |limit| {
                 attempt(limit).is_ok()
             });

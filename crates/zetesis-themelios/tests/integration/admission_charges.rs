@@ -3,12 +3,11 @@
 
 use crate::support::limits;
 use std::fmt::Write as _;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula};
 use zetesis_test_support::thresholds::first_success;
 
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, ExpansionResource, FormulaLimits, FormulaResource,
-    admit_formula,
+    AdmissionOptions, ExpansionResource, FormulaLimits, FormulaResource, admit_formula,
 };
 
 /// `n` facts and `n - 1` two-literal rules over distinct predicates: the
@@ -26,15 +25,8 @@ fn producer_chain(predicates: usize) -> String {
 
 /// The least formula work ceiling that admits `source`, by bisection.
 fn minimal_work(source: &str) -> u64 {
-    let admits = |max_work| {
-        admit_formula(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits::formula(FormulaResource::Work, max_work),
-        )
-        .is_ok()
-    };
+    let admits =
+        |max_work| admit(source, &limits::formula(FormulaResource::Work, max_work)).is_ok();
     first_success(limits::formula_default(FormulaResource::Work), admits)
 }
 
