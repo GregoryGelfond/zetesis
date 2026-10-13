@@ -394,7 +394,9 @@ fn qualify(
                 && memory.signal.is_none()
                 && match memory.exit_code {
                     Some(0) => true,
-                    Some(10 | 20 | 30) => sample.slot.producer == Producer::Reference,
+                    Some(code) if crate::answers::CLINGO_DECIDED_EXITS.contains(&code) => {
+                        sample.slot.producer == Producer::Reference
+                    }
                     _ => false,
                 }
         })

@@ -108,7 +108,7 @@ impl Run {
 
 /// The exit codes of a run that decided its program: satisfiable (10),
 /// unsatisfiable (20), or satisfiable with its search exhausted (30).
-pub const DECIDED: [i32; 3] = [10, 20, 30];
+pub const DECIDED: [i32; 3] = zetesis_validation::answers::CLINGO_DECIDED_EXITS;
 
 /// Run clingo on `source` with `arguments`, within `limits`, expecting it to
 /// decide the program ([`DECIDED`]).

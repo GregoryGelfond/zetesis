@@ -135,7 +135,7 @@ fn check_case(
             Decision::CaptureFailed(Producer::Reference, failure),
         );
     }
-    if !matches!(exit, Some(10 | 20 | 30)) {
+    if !exit.is_some_and(|code| crate::answers::CLINGO_DECIDED_EXITS.contains(&code)) {
         return decide(result, Decision::ReferenceError);
     }
     let answer = match normalize::reference(&result.reference_process.as_ref().unwrap().stdout) {

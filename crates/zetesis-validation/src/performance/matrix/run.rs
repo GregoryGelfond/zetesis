@@ -696,7 +696,10 @@ fn qualify(
     let (parsed, native) = match sample.slot.producer {
         Producer::Reference => {
             if !exit.is_some_and(|exit| {
-                exit.signal.is_none() && matches!(exit.code, Some(0 | 10 | 20 | 30))
+                exit.signal.is_none()
+                    && exit.code.is_some_and(|code| {
+                        code == 0 || crate::answers::CLINGO_DECIDED_EXITS.contains(&code)
+                    })
             }) {
                 return Err((
                     Decision::InvocationFailure,

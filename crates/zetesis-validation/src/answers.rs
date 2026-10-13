@@ -234,6 +234,12 @@ impl ReportedAnswers {
     }
 }
 
+/// The exit statuses of a clingo run that decided its program: satisfiable
+/// (10), unsatisfiable (20), or satisfiable with its search space exhausted
+/// (30). A caller's exit policy for the reference uses them; a report's
+/// contents establish nothing about the exit.
+pub const CLINGO_DECIDED_EXITS: [i32; 3] = [10, 20, 30];
+
 /// Check clingo's JSON complete-enumeration or optN report convention.
 /// Object decoding keeps the last occurrence of a duplicate key, as in
 /// [`native_json`]. Validation applies to that decoded document and does not
