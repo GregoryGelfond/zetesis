@@ -5,6 +5,7 @@
 //! families and cyclic objective scores. Complete objective-free families remain
 //! checked independently; reference observations do not define native semantics.
 
+use crate::support::admission;
 use std::collections::BTreeSet;
 use std::ffi::OsString;
 use std::time::Duration;
@@ -15,7 +16,7 @@ use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{admit, exhaustive};
 use zetesis_test_support::records::Records;
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
+use zetesis_themelios::FormulaLimits;
 
 const SOURCE: SourceId = SourceId::new(173);
 
@@ -46,16 +47,7 @@ fn missing_extremum_witnesses_have_no_answers() {
         }
         let source = case["source"].as_str().unwrap();
         assert!(matches!(source, "#min{:a}=0." | "#max{:a}=0."));
-        let input = admit_formula(
-            source.into(),
-            AdmissionOptions {
-                source_id: SOURCE,
-                ..AdmissionOptions::default()
-            },
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let input = admission::admit(SOURCE, source).unwrap();
         assert_eq!(input.source().expect("source input").id(), SOURCE);
         assert_eq!(input.source().expect("source input").text(), source);
         assert!(exhaustive(&input).is_empty());

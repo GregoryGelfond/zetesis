@@ -1,5 +1,6 @@
 //! Exact optional cost guards are checked against independent objective evaluation.
 
+use crate::support::objective_plans::exact as plan;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
@@ -30,16 +31,6 @@ fn score(input: &AdmittedFormula, mask: usize) -> Score {
     .expect("independent score")
     .score()
     .clone()
-}
-fn plan(input: &AdmittedFormula) -> ObjectivePlan {
-    ObjectivePlan::new(
-        input.theory(),
-        input.atoms(),
-        input.objectives(),
-        ObjectivePlanLimits::default(),
-        &Cancellation::default(),
-    )
-    .expect("complete eligibility plan")
 }
 fn compare_all(source: &str) {
     let input = formula(source);

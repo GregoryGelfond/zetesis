@@ -1,5 +1,6 @@
 //! Closed structures remain complete semantic atom and contribution identities.
 use crate::support::finite_bindings as reference;
+use crate::support::objective_plans;
 use reference::{Models, exhaustive, native};
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
@@ -98,14 +99,7 @@ fn closed_sources_match_independent_complete_models() {
 fn full_structural_objective_keys_and_candidate_bounds_agree_for_every_model() {
     let p =
         formula("{p(f(1));p(f(2));q((1,))}.#minimize{2@1,X:p(X);2@1,f(1):p(f(2));-1@0,X:q(X)}.");
-    let plan = zetesis_themelios::objective_bound::ObjectivePlan::new(
-        p.theory(),
-        p.atoms(),
-        p.objectives(),
-        zetesis_themelios::objective_bound::ObjectivePlanLimits::default(),
-        &Cancellation::default(),
-    )
-    .unwrap();
+    let plan = objective_plans::exact(&p);
     let scores: Vec<_> = (0..1usize << p.atoms().len())
         .map(|bits| {
             let model = Model::from_positions(

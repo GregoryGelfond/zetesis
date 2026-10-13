@@ -279,16 +279,15 @@ fn original_sources_match_clingo_full_models() {
 
 #[test]
 fn conditionals_consume_aggregate_descendants() {
-    for (source, expanded) in [
+    let pairs = [
         ("q(N):-N=#count{},Y=N+1,p(Y):d.", "q(0):-0=#count{},p(1):d."),
         (
             "q(N):-N=#count{},not p(N):d.",
             "q(0):-0=#count{},not p(0):d.",
         ),
-    ] {
-        assert_eq!(native(&input(source)), native(&input(expanded)));
-        assert_eq!(input(source).source().expect("source input").text(), source);
-    }
+    ];
+    reference::models_match_substitutions(pairs, input);
+    reference::sources_remain_owned(pairs.map(|(source, _)| source), input);
 }
 
 #[test]

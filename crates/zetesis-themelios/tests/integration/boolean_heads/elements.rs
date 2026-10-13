@@ -1,5 +1,6 @@
 //! Boolean elements retain activity without introducing producer atoms.
 
+use crate::support::admission;
 use std::collections::BTreeSet;
 
 use super::{Models, native};
@@ -8,22 +9,13 @@ use themelios_base::source::SourceId;
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, AnalysisBasis, CountPlanLimits, CountPlanStatus,
-    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
-    prepare_formula,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, prepare_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(191);
 
 fn limited(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions {
-            source_id: SOURCE,
-            ..Default::default()
-        },
-        ExpansionLimits::default(),
-        *limits,
-    )
+    admission::admit_with(SOURCE, source, ExpansionLimits::default(), limits)
 }
 
 fn models(source: &str) -> Models {

@@ -1,8 +1,10 @@
 //! Complete-value extrema against full source models and an independent reduct.
+use crate::support::clingo_reports;
 use crate::support::finite_bindings as reference;
 use crate::support::upstream;
+use zetesis_clingo_support as oracle;
 
-use reference::{Models, exhaustive, native};
+use reference::{exhaustive, native};
 use serde_json::Value as Json;
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
@@ -10,21 +12,6 @@ fn cases() -> Vec<Json> {
     include_str!("../fixtures/value-extrema.jsonl")
         .lines()
         .map(|line| serde_json::from_str(line).unwrap())
-        .collect()
-}
-
-fn models(value: &Json) -> Models {
-    value
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|row| {
-            row.as_array()
-                .unwrap()
-                .iter()
-                .map(|atom| atom.as_str().unwrap().to_owned())
-                .collect()
-        })
         .collect()
 }
 
@@ -104,10 +91,15 @@ fn complete_values_preserve_source_models_and_original_reduct_minimality() {
         )
         .unwrap_or_else(|error| panic!("{}: {source}: {error}", row["name"]));
         assert_eq!(input.source().expect("source input").text(), source);
-        assert_eq!(native(&input), models(&row["models"]), "{}", row["name"]);
+        assert_eq!(
+            native(&input),
+            clingo_reports::expected(&row),
+            "{}",
+            row["name"]
+        );
         assert_eq!(
             exhaustive(&input),
-            models(&row["models"]),
+            clingo_reports::expected(&row),
             "{}",
             row["name"]
         );
@@ -201,19 +193,11 @@ fn equal_first_values_share_proposals_but_retain_complete_tuple_limit_counts() {
 fn recorded_sources_match_complete_fresh_clingo_enumeration() {
     for row in cases() {
         let json = reference::external(row["source"].as_str().unwrap(), true);
-        assert_eq!(json["Models"]["More"], "no");
-        let mut actual = Models::new();
-        let mut count = 0;
-        for call in json["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    let wrapped = serde_json::json!([witness["Value"]]);
-                    assert!(actual.insert(models(&wrapped).into_iter().next().unwrap()));
-                }
-            }
-        }
-        assert_eq!(json["Models"]["Number"].as_u64().unwrap(), count);
-        assert_eq!(actual, models(&row["models"]), "{}", row["name"]);
+        assert_eq!(
+            oracle::full_models(&json),
+            clingo_reports::expected(&row),
+            "{}",
+            row["name"]
+        );
     }
 }

@@ -6,7 +6,6 @@ use zetesis_test_support::thresholds::first_success;
 use std::collections::BTreeSet;
 
 use proptest::prelude::*;
-use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{admit, exhaustive};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
@@ -298,11 +297,9 @@ fn selected_carriers_preserve_original_equalities() {
 #[test]
 #[ignore = "requires clingo: selected source carriers match fresh clingo; 12 original filtered-carrier sources"]
 fn selected_source_carriers_match_fresh_clingo() {
-    for case in source_cases::cases(include_str!(
+    source_cases::clingo_matches_every_case(&source_cases::cases(include_str!(
         "../fixtures/objective-filtered-carriers.jsonl"
-    )) {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    )));
 }
 
 #[test]

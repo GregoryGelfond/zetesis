@@ -1,5 +1,6 @@
 //! Finite candidate domains preserve complete guards, scopes and source evidence.
 
+use crate::support::admission;
 use crate::support::finite_bindings as reference;
 use crate::support::finite_bindings::remap;
 use zetesis_test_support::thresholds::first_success;
@@ -8,8 +9,8 @@ use std::collections::BTreeSet;
 
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
+    FormulaLimits, FormulaResource,
 };
 
 use reference::{Models, exhaustive, holds, native, values};
@@ -22,24 +23,11 @@ fn input_with(
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions {
-            source_id: SOURCE,
-            ..Default::default()
-        },
-        expansion,
-        *limits,
-    )
+    admission::admit_with(SOURCE, source, expansion, limits)
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    input_with(
-        source,
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admission::admitted(SOURCE, source)
 }
 
 fn model(atoms: impl IntoIterator<Item = String>) -> Models {

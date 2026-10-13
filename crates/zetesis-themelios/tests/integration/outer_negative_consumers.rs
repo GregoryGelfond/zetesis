@@ -102,16 +102,15 @@ fn negative_atoms_cannot_supply_missing_bindings() {
 
 #[test]
 fn conditionals_consume_completed_outer_values() {
-    for (source, expanded) in [
+    let pairs = [
         ("q(N):-N=#count{},p(N):d.", "q(0):-0=#count{},p(0):d."),
         (
             "q(N):-N=#count{},not p(N):d.",
             "q(0):-0=#count{},not p(0):d.",
         ),
-    ] {
-        assert_eq!(native(&input(source)), native(&input(expanded)));
-        assert_eq!(input(source).source().expect("source input").text(), source);
-    }
+    ];
+    reference::models_match_substitutions(pairs, input);
+    reference::sources_remain_owned(pairs.map(|(source, _)| source), input);
 }
 
 #[test]

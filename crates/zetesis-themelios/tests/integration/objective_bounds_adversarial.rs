@@ -1,6 +1,7 @@
 //! Objective restrictions constrain classical candidates; the original reduct
 //! and independently verified complete stable-model/cost contracts stay fixed.
 
+use crate::support::objective_plans::exact as plan;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::time::Duration;
@@ -124,17 +125,6 @@ fn records(input: &AdmittedFormula, stable: &[usize]) -> Records {
             )
         })
         .collect()
-}
-
-fn plan(input: &AdmittedFormula) -> ObjectivePlan {
-    ObjectivePlan::new(
-        input.theory(),
-        input.atoms(),
-        input.objectives(),
-        ObjectivePlanLimits::default(),
-        &Cancellation::default(),
-    )
-    .expect("complete objective key/eligibility plan in original atom order")
 }
 
 fn bounded_models(

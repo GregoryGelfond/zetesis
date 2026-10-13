@@ -17,12 +17,22 @@ pub(crate) fn options(source_id: SourceId) -> AdmissionOptions {
 
 /// `source` admitted under `source_id` and the default limits.
 pub(crate) fn admit(source_id: SourceId, source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        options(source_id),
+    admit_with(
+        source_id,
+        source,
         ExpansionLimits::default(),
-        FormulaLimits::default(),
+        &FormulaLimits::default(),
     )
+}
+
+/// `source` admitted under `source_id` with `expansion` and `limits`.
+pub(crate) fn admit_with(
+    source_id: SourceId,
+    source: &str,
+    expansion: ExpansionLimits,
+    limits: &FormulaLimits,
+) -> Result<AdmittedFormula, FormulaFailure> {
+    admit_formula(source.into(), options(source_id), expansion, *limits)
 }
 
 /// `source` admitted under `source_id` and the default limits, which the test

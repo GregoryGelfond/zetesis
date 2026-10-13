@@ -1,6 +1,7 @@
 //! Complete source contracts for neutral aggregate-head elements.
 
 mod cases;
+use crate::support::admission;
 use crate::support::finite_bindings as reference;
 use zetesis_test_support::thresholds::first_success;
 
@@ -12,9 +13,8 @@ use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support::canonical;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
-    admit_formula,
+    AdmissionFailure, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
 };
 
 const SOURCE: SourceId = SourceId::new(317);
@@ -24,24 +24,11 @@ fn limited(
     expansion: ExpansionLimits,
     formula: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions {
-            source_id: SOURCE,
-            ..Default::default()
-        },
-        expansion,
-        *formula,
-    )
+    admission::admit_with(SOURCE, source, expansion, formula)
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    limited(
-        source,
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admission::admitted(SOURCE, source)
 }
 
 #[test]
