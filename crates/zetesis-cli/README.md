@@ -25,7 +25,8 @@ zetesis help solve --advanced
 
 Bare `zetesis` shows the task list. Compact solve help lists everyday inputs,
 answers, execution, resources and output options. Advanced help additionally
-describes reduct selection, joins and source batching. Both views describe the
+describes the memory allowance, the GPU APIs by name, reduct selection, search,
+joins and source batching. Both views describe the
 same solver. File-first syntax and numeric `--models` remain compatibility
 adapters, as do `--workers` for `--threads` and `--memory-budget` for `--memory`.
 

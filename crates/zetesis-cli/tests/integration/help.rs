@@ -56,7 +56,14 @@ fn full_help_lists_every_backend_with_its_meaning() {
     // limit are stated where the expert values are offered.
     let full = help("--help-all");
     for backend in Backend::ALL {
-        assert!(full.contains(backend.help()), "missing {}", backend.label());
+        assert!(
+            full.lines().any(|line| {
+                line.split_whitespace().next() == Some(backend.label())
+                    && line.contains(backend.help())
+            }),
+            "missing {}",
+            backend.label()
+        );
     }
 }
 

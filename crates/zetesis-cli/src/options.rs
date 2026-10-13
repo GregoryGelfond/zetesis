@@ -48,10 +48,11 @@ pub struct Options {
     #[arg(value_name = "FILE")]
     pub additional_inputs: Vec<PathBuf>,
     /// Execution backend: cpu (the default) or gpu.
-    ///
-    /// The everyday help names these two; the full help lists every value with
-    /// its meaning from the backend vocabulary, the GPU APIs included, in place
-    /// of the parser's own list of values.
+    // clap lists an argument's possible values in both helps or hides them from
+    // both, and the everyday help must not offer `metal` or `vulkan`; so the
+    // values are hidden and the full help lists them by hand, from the backend
+    // vocabulary. The long help replaces the help, so it restates the summary
+    // line above.
     #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu", hide_possible_values = true, long_help = backend_long_help())]
     pub backend: Backend,
     /// Grounding mode, independent of execution backend.
@@ -155,11 +156,12 @@ fn backend_long_help() -> String {
     )
 }
 
-/// The memory available to the process in bytes, read once per process: when
-/// the command is built, since its default allowance derives from the reading,
-/// so on every invocation, an explicit `--memory` included; or, for a caller
-/// that builds `Options` itself, when the statistics header first prints it.
-/// The header prints the reading the allowance came from.
+/// The memory available to the process in bytes, read once per process on
+/// first use. Building the command uses it, since the default allowance
+/// derives from it, so every invocation reads it, even one with an explicit
+/// `--memory`; a caller that builds `Options` itself first reads it when the
+/// statistics header prints it. The header prints this same reading, the one
+/// any default allowance came from.
 pub(crate) fn host_memory() -> Option<u64> {
     static HOST_MEMORY: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
     *HOST_MEMORY.get_or_init(read_host_memory)
