@@ -1,6 +1,7 @@
 //! Complete selective rounds retain exact carriers while avoiding producer work.
 
 use crate::formula_support::GroundingWork as WorkContext;
+use crate::test_support::prepared;
 use std::cell::Cell;
 use std::fmt::Write;
 
@@ -11,8 +12,8 @@ use crate::formula_support::producers::ProducerPlan;
 use crate::formula_support::{Counters, complete};
 use crate::grounding_observer::Profile;
 use crate::{
-    AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
+    FormulaFailure, FormulaLimits, FormulaResource, GroundingObserver, GroundingOutcome,
+    GroundingPhase, GroundingWork,
 };
 use zetesis_core::{Atom, AtomCatalog, Sign};
 
@@ -387,15 +388,9 @@ fn empty_wake_sets_do_not_discharge_original_constraints() {
         ("p(1).:-p(2).", [false, true]),
     ] {
         let observer = Observer::default();
-        let admitted = crate::prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-        .ground_with_observer(Some(&observer))
-        .unwrap();
+        let admitted = prepared(source)
+            .ground_with_observer(Some(&observer))
+            .unwrap();
         let expected_atom = atom("p", Sign::Positive, &[1]);
         assert_eq!(
             admitted.atoms().iter().collect::<Vec<_>>(),

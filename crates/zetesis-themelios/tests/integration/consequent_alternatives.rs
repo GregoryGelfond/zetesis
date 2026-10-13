@@ -7,11 +7,11 @@ use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::{BundleFixture, canonical, formula};
+use zetesis_reference_support::{BundleFixture, canonical, formula, prepared};
 use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, AnalysisBasis, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
 };
 
 fn corpus_case() -> &'static zetesis_validation::curated::Case {
@@ -549,13 +549,7 @@ fn entered_conditions_retain_value_errors() {
 #[test]
 fn preparation_identifies_dependency_projection() {
     let source = "{p(1..2)}.q:-not p(1;2):#true.";
-    let prepared = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared(source);
     assert_eq!(
         prepared.analysis_basis(),
         AnalysisBasis::DependencyProjection

@@ -11,11 +11,10 @@ use std::fmt::Write as _;
 use cases::CASES;
 use reference::{Models, holds, native, values};
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::{canonical, formula, prepared};
 use zetesis_themelios::{
     AdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
-    prepare_formula,
 };
 
 #[test]
@@ -116,15 +115,9 @@ fn distinct_atoms_can_activate_one_tuple() {
 fn optional_planning_declines_nonbijective_groups() {
     for &(source, _) in CASES {
         let ordinary = formula(source);
-        let planned = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-        .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
-        .unwrap();
+        let planned = prepared(source)
+            .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
+            .unwrap();
         assert!(
             matches!(planned.count_plan(), CountPlanStatus::NoPlan(_)),
             "{source}"
@@ -148,15 +141,9 @@ fn optional_planning_declines_nonbijective_groups() {
 fn alias_groups_preserve_other_count_certificates() {
     let source = "2{a;b;c;d}2.{a;b}1.{c;d}1.1#count{1:e;1:f}1.";
     let ordinary = formula(source);
-    let planned = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
-    .unwrap();
+    let planned = prepared(source)
+        .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
+        .unwrap();
     let CountPlanStatus::Ready(plan) = planned.count_plan() else {
         panic!("the original disjoint atom partition remains applicable");
     };

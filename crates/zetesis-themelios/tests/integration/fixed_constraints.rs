@@ -3,8 +3,7 @@
 use crate::support::stable_models::stable;
 use themelios_program::provenance::Origin;
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{exhaustive, formula};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, prepare_formula};
+use zetesis_reference_support::{exhaustive, formula, prepared};
 
 const SOURCE: &str = include_str!("../fixtures/fixed-constraints/projection.lp");
 const EXPECTED: &str = include_str!("../fixtures/fixed-constraints/expected.lp");
@@ -23,13 +22,7 @@ fn structural_specialization_preserves_the_full_family() {
 
 #[test]
 fn preparation_retains_the_original_program() {
-    let prepared = prepare_formula(
-        SOURCE.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared(SOURCE);
     let original = prepared.original_program().clone();
     let admitted = prepared.ground().unwrap();
     assert_eq!(admitted.original_program(), &original);
@@ -37,15 +30,7 @@ fn preparation_retains_the_original_program() {
 
 #[test]
 fn normalized_program_exposes_the_replacement_family() {
-    let prepare = |source: &str| {
-        prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-    };
+    let prepare = |source: &str| prepared(source);
     assert_eq!(
         prepare(SOURCE).analyzed_program(),
         prepare(EXPECTED).analyzed_program()

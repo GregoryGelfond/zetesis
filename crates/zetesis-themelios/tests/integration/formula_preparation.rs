@@ -1,6 +1,6 @@
 //! Preparation preserves source evidence and budgets before materialization.
 
-use zetesis_reference_support::BundleFixture;
+use zetesis_reference_support::{BundleFixture, prepared};
 
 use crate::support::grounding_observers::Observer;
 use zetesis_themelios::{
@@ -73,13 +73,7 @@ fn send_analysis_precedes_grounding() {
 
 #[test]
 fn materialization_checks_dynamic_arithmetic() {
-    let prepared = prepare_formula(
-        "p(0). q(1/X) :- p(X).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared("p(0). q(1/X) :- p(X).");
     assert!(matches!(
         prepared.ground(),
         Err(FormulaFailure::Expansion(
@@ -224,13 +218,7 @@ fn preparation_enforces_the_source_budget() {
 
 #[test]
 fn preparation_retains_the_pinned_safety_verdict() {
-    let input = prepare_formula(
-        "n(N) :- N=#sum{}.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let input = prepared("n(N) :- N=#sum{}.");
     // zetesis separately checks this aggregate binding extension.
     assert!(!input.source_analysis().safety().is_safe());
     input.ground().unwrap();
@@ -253,13 +241,7 @@ fn explicit_preparation_preserves_the_admitted_theory() {
             FormulaLimits::default(),
         )
         .unwrap();
-        let prepared = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let prepared = prepared(source);
         let analysis = prepared.source_analysis().clone();
         let metadata = prepared.metadata().clone();
         let actual = prepared.ground().unwrap();
@@ -292,13 +274,7 @@ fn explicit_preparation_preserves_the_admitted_theory() {
 #[test]
 fn grounding_observation_begins_at_materialization() {
     let observer = Observer::default();
-    let input = prepare_formula(
-        "p.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let input = prepared("p.");
     assert!(observer.0.borrow().is_empty());
     input.ground_with_observer(Some(&observer)).unwrap();
     assert_eq!(*observer.0.borrow(), [true, false]);

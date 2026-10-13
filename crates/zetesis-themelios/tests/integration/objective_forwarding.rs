@@ -12,12 +12,9 @@ use source_cases::cases;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{admit, canonical, exhaustive};
+use zetesis_reference_support::{admit, canonical, exhaustive, prepared};
 use zetesis_test_support::records::Records;
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    prepare_formula,
-};
+use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const FIXTURE: &str = include_str!("../fixtures/objective-forwarding.jsonl");
 const RECURSIVE_COUNT: &str = "n(N):-N=#count{1:p(X)}.p(X):-n(X).#minimize{X:p(X)}.";
@@ -238,13 +235,7 @@ fn recursive_count_forwarding_matches_clingo() {
 fn preparation_defers_carrier_presence_to_grounding() {
     let source =
         "b.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).m(M):-M=#max{Y:p(Y)}.#minimize{M@7:m(M)}.";
-    let prepared = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared(source);
     let input = prepared.ground().unwrap();
     assert_eq!(input.objectives().priorities(), &[7]);
     let records = exhaustive(&input);

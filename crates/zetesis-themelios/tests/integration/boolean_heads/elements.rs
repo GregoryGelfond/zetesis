@@ -2,14 +2,15 @@
 
 use crate::support::admission;
 use std::collections::BTreeSet;
+use zetesis_reference_support::prepared;
 
 use super::{Models, native};
 use crate::support::finite_bindings::expected;
 use themelios_base::source::SourceId;
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, AnalysisBasis, CountPlanLimits, CountPlanStatus,
-    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, prepare_formula,
+    AdmittedFormula, AnalysisBasis, CountPlanLimits, CountPlanStatus, ExpansionLimits,
+    FormulaFailure, FormulaLimits, FormulaResource,
 };
 
 const SOURCE: SourceId = SourceId::new(191);
@@ -197,15 +198,9 @@ fn boolean_occurrence_limits_are_inclusive() {
 fn boolean_elements_preserve_other_count_certificates() {
     let source = "2{a;b;c;d}2.{a;b}1.{c;d}1.1{#true;e}1.";
     let ordinary = limited(source, &FormulaLimits::default()).unwrap();
-    let planned = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
-    .unwrap();
+    let planned = prepared(source)
+        .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
+        .unwrap();
     let CountPlanStatus::Ready(plan) = planned.count_plan() else {
         panic!("the independent atom partition remains applicable");
     };

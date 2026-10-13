@@ -3,6 +3,7 @@
 use super::PreparedFormula;
 use crate::formula_support::{Computation, Counters, Support};
 use crate::grounding_observer::Work;
+use crate::test_support::prepared;
 use crate::{
     AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
     FormulaLimits, FormulaResource, PreparedFormulaBundle, prepare_formula,
@@ -13,13 +14,7 @@ const SOURCE: &str = "p(1). q(X) :- p(X). :- q(2).";
 const RETAINED: &str = "identity admitted before materialization";
 
 fn prepared_with_identity() -> (PreparedFormula, TermKey) {
-    let mut prepared = prepare_formula(
-        SOURCE.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let mut prepared = prepared(SOURCE);
     let preparation = &mut prepared.preparation;
     let mut counters =
         Counters::resume(std::mem::take(&mut preparation.accounting), Work::default());
@@ -177,13 +172,7 @@ fn grounding_retains_an_independent_scalar_budget_charge() {
 
 #[test]
 fn prepared_einstein_retains_a_terminal_flat_definition() {
-    let prepared = prepare_formula(
-        include_str!("../../../../../examples/einstein-riddle.lp").into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared(include_str!("../../../../../examples/einstein-riddle.lp"));
     assert_eq!(
         prepared.analysis_basis(),
         crate::AnalysisBasis::NormalizedProgram
@@ -276,13 +265,7 @@ fn exact_source_admission_keeps_accepted_work_and_cancellation() {
 
 #[test]
 fn declined_source_class_retains_its_charges_for_the_original_ground_door() {
-    let mut prepared = prepare_formula(
-        "{a}.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let mut prepared = prepared("{a}.");
     let accepted = prepared.preparation.accounting.work;
     let source = std::ptr::from_ref(prepared.original_program());
     let crate::SourceAdmission::NotApplicable(declined) = prepared.try_source().unwrap() else {
@@ -303,15 +286,7 @@ fn declined_source_class_retains_its_charges_for_the_original_ground_door() {
 
 #[test]
 fn exact_source_receipt_bounds_its_complete_preparation() {
-    let make = || {
-        prepare_formula(
-            SOURCE.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-    };
+    let make = || prepared(SOURCE);
     let crate::SourceAdmission::Admitted(owner) = make().try_source().unwrap() else {
         panic!()
     };
@@ -335,13 +310,7 @@ fn exact_source_receipt_bounds_its_complete_preparation() {
 #[test]
 fn exact_source_selection_and_plan_keep_named_storage_limits() {
     for resource in [FormulaResource::Atoms, FormulaResource::SupportBytes] {
-        let mut prepared = prepare_formula(
-            "a.".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let mut prepared = prepared("a.");
         match resource {
             FormulaResource::Atoms => prepared.preparation.limits.theory.max_atoms = 0,
             FormulaResource::SupportBytes => prepared.preparation.limits.max_support_bytes = 0,
@@ -357,15 +326,7 @@ fn exact_source_selection_and_plan_keep_named_storage_limits() {
 
 #[test]
 fn acyclic_order_cannot_cross_an_independently_prepared_source_owner() {
-    let make = || {
-        prepare_formula(
-            SOURCE.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-    };
+    let make = || prepared(SOURCE);
     let mut first = make();
     let order = crate::formula_source::classify(&mut first.preparation)
         .unwrap()

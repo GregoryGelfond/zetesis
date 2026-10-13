@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use reference::{Models, holds, native, values};
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::{canonical, formula, prepared};
 use zetesis_themelios::{
     AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
     FormulaResource, admit_formula, prepare_formula,
@@ -380,13 +380,7 @@ fn local_evaluation_cannot_create_recursive_support() {
 #[test]
 fn prepared_grounding_preserves_witness_models() {
     let source = CASES[0].0;
-    let prepared = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared(source);
     assert_eq!(
         native(&prepared.ground().unwrap()),
         native(&formula(source))

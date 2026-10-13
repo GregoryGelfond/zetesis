@@ -1,20 +1,11 @@
 //! The source subject is checked against the independent complete formula door.
 
+use crate::test_support::prepared;
 use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits, SourceAdmission, prepare_formula};
 use std::{collections::BTreeSet, sync::Arc};
 use zetesis_core::{Atom, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
-
-fn prepared(source: &str) -> crate::PreparedFormula {
-    prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-}
 
 fn admitted(source: &str) -> super::AcyclicSource {
     let SourceAdmission::Admitted(owner) = prepared(source).try_source().unwrap() else {

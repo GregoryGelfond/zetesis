@@ -4,16 +4,13 @@ use crate::support::models::ScoredFamily as Family;
 use std::{convert::Infallible, num::NonZeroUsize};
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::hybrid;
+use zetesis_reference_support::{hybrid, prepared};
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver,
     ExecutionResources, GpuApi, Grounder, Oracle, PreparedInput, SearchMethod, SemanticOutcome,
     Session, SolveConfig, SolveError,
 };
-use zetesis_themelios::{
-    AdmissionOptions, ConstraintCheckLimits, ExpansionLimits, FormulaLimits,
-    FormulaMaterialization, prepare_formula,
-};
+use zetesis_themelios::{ConstraintCheckLimits, FormulaMaterialization};
 use zetesis_wgpu::{AdapterBackend, GpuContext, GpuOptions, GpuSelection};
 
 fn config(api: GpuApi, oracle: Oracle) -> SolveConfig {
@@ -284,15 +281,7 @@ fn cancelled_queue(api: GpuApi) {
 
 fn terminal_families(api: GpuApi) {
     let source = include_str!("../fixtures/hybrid-gpu/terminal.lp");
-    let FormulaMaterialization::Terminal(owner) = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_lazy()
-    .unwrap() else {
+    let FormulaMaterialization::Terminal(owner) = prepared(source).ground_lazy().unwrap() else {
         panic!("expected terminal partition")
     };
     let original = zetesis_reference_support::formula(source);

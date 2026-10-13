@@ -6,11 +6,8 @@
 use crate::support::head_element_reference as reference;
 
 use reference::{Selection, cost_records, expected, external, models};
-use zetesis_reference_support::formula;
-use zetesis_themelios::{
-    AdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionLimits, FormulaLimits,
-    prepare_formula,
-};
+use zetesis_reference_support::{formula, prepared};
+use zetesis_themelios::{CountPlanLimits, CountPlanStatus};
 
 const CASES: &[(&str, &[&[&str]])] = &[
     ("{not a}.", &[&[]]),
@@ -74,19 +71,13 @@ fn independent_unsigned_groups_keep_count_plans() {
         "2{a;b;c;d}2.{a;b}1.{c;d}1.1#count{0:not e}1.",
     ] {
         let ordinary = formula(source);
-        let planned = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-        .ground_with_count_plan(
-            CountPlanLimits::default(),
-            &zetesis_cpu::Cancellation::default(),
-            None,
-        )
-        .unwrap();
+        let planned = prepared(source)
+            .ground_with_count_plan(
+                CountPlanLimits::default(),
+                &zetesis_cpu::Cancellation::default(),
+                None,
+            )
+            .unwrap();
         let CountPlanStatus::Ready(plan) = planned.count_plan() else {
             panic!("the independent unsigned atom partition remains applicable");
         };

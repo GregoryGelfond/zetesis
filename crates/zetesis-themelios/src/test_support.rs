@@ -11,7 +11,7 @@ use zetesis_ferraris::{Interpretation, Theory};
 use crate::formula::Compiled;
 use crate::{
     AdmissionOptions, ExpansionLimits, FormulaLimits, GroundingObserver, GroundingOutcome,
-    GroundingPhase, GroundingWork, HybridFormula,
+    GroundingPhase, GroundingWork, HybridFormula, PreparedFormula,
 };
 
 /// The empty span at the start of source 0.
@@ -73,16 +73,20 @@ pub(crate) fn compiled_atoms(compiled: &Compiled) -> Vec<Atom> {
         .collect()
 }
 
-/// `source` prepared under the default options and limits and grounded for
-/// hybrid execution, which it must allow.
-pub(crate) fn hybrid(source: &str) -> HybridFormula {
+/// `source` prepared under the default options and limits, which must admit
+/// it.
+pub(crate) fn prepared(source: &str) -> PreparedFormula {
     crate::prepare_formula(
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     )
-    .unwrap()
-    .ground_hybrid()
-    .unwrap()
+    .unwrap_or_else(|error| panic!("{source}: {error}"))
+}
+
+/// `source` prepared under the default options and limits and grounded for
+/// hybrid execution, which it must allow.
+pub(crate) fn hybrid(source: &str) -> HybridFormula {
+    prepared(source).ground_hybrid().unwrap()
 }

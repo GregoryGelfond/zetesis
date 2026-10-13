@@ -5,21 +5,15 @@ use crate::execution_observation::Ignore;
 use crate::phase_timing::Recorder;
 use crate::{Backend, Completion, ExecutionResources, Grounder, Interruption, SolveConfig};
 use zetesis_cpu::{Cancellation, Stop};
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaLimits, FormulaMaterialization, prepare_formula,
-};
+use zetesis_reference_support::prepared;
+use zetesis_themelios::FormulaMaterialization;
 
 #[test]
 fn consumed_base_answer_cannot_escape_a_cancelled_reconstruction() {
-    let FormulaMaterialization::Terminal(owner) = prepare_formula(
-        "seed(1). receipt(X):-seed(X).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_adaptive()
-    .unwrap() else {
+    let FormulaMaterialization::Terminal(owner) = prepared("seed(1). receipt(X):-seed(X).")
+        .ground_adaptive()
+        .unwrap()
+    else {
         panic!("a terminal definition is required");
     };
     let config = SolveConfig {

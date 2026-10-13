@@ -10,11 +10,11 @@ use crate::support::objective_dependency_records as objective_dependencies;
 use crate::support::head_element_reference as reference;
 
 use reference::{Selection, cost_records, expected, external, models};
-use zetesis_reference_support::{BundleFixture, formula};
+use zetesis_reference_support::{BundleFixture, formula, prepared};
 use zetesis_themelios::{
     AdmissionOptions, AnalysisBasis, BundleAdmissionOptions, CountPlanLimits, CountPlanStatus,
     ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    admit_bundle_formula, admit_formula, prepare_formula,
+    admit_bundle_formula, admit_formula,
 };
 
 const CASES: &[(&str, &[&[&str]])] = &[
@@ -134,13 +134,7 @@ fn boolean_eligibility_preserves_optimum_ties() {
 #[test]
 fn boolean_choice_analysis_reports_its_basis() {
     for source in ["2{#true;#true}2.", "1{#true}1.1{#true;#true}1."] {
-        let prepared = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let prepared = prepared(source);
         assert_eq!(
             prepared.analysis_basis(),
             AnalysisBasis::DependencyProjection
@@ -322,19 +316,13 @@ fn constants_do_not_certify_atom_count_plans() {
         "2#count{0:#true;1:a;2:b;3:c;4:d}2.{a;b}1.{c;d}1.",
     ] {
         let ordinary = formula(source);
-        let planned = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-        .ground_with_count_plan(
-            CountPlanLimits::default(),
-            &zetesis_cpu::Cancellation::default(),
-            None,
-        )
-        .unwrap();
+        let planned = prepared(source)
+            .ground_with_count_plan(
+                CountPlanLimits::default(),
+                &zetesis_cpu::Cancellation::default(),
+                None,
+            )
+            .unwrap();
         assert!(
             matches!(planned.count_plan(), CountPlanStatus::NoPlan(_)),
             "{source}"

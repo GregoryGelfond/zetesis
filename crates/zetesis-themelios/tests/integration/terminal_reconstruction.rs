@@ -2,21 +2,15 @@
 
 use zetesis_core::{Atom, Model, Predicate, Value};
 use zetesis_cpu::{Cancellation, Stop};
+use zetesis_reference_support::prepared;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaLimits, FormulaMaterialization, ReconstructionError,
     TerminalFormula, prepare_formula,
 };
 
 fn terminal(source: &str) -> TerminalFormula {
-    let FormulaMaterialization::Terminal(owner) = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_adaptive()
-    .unwrap() else {
+    let FormulaMaterialization::Terminal(owner) = prepared(source).ground_adaptive().unwrap()
+    else {
         panic!("terminal profile required")
     };
     owner

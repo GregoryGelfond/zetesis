@@ -4,7 +4,7 @@ use crate::support::thresholds::minimum_preparation_bytes;
 use reference::{Models, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::{canonical, formula, prepared};
 use zetesis_themelios::{
     AdmissionOptions, AnalysisBasis, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
@@ -311,13 +311,7 @@ fn extraction_does_not_bind_unmentioned_names() {
 #[test]
 fn prepared_models_match_source_admission() {
     let source = "q(f(1)).p(X):-q(f(X)).";
-    let prepared = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared(source);
     let admitted = prepared.ground().unwrap();
     assert_eq!(native(&admitted), native(&formula(source)));
 }

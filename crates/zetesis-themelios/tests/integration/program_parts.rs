@@ -5,10 +5,10 @@ use crate::support::finite_bindings as reference;
 
 use reference::native;
 use themelios_base::source::SourceId;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{formula, prepared};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits,
-    InputLimit, ProfileFeature, admit, admit_extended, admit_formula, prepare_formula,
+    InputLimit, ProfileFeature, admit, admit_extended, admit_formula,
 };
 
 const CASES: &[(&str, &str)] = &[
@@ -89,13 +89,7 @@ fn scalar_admission_preserves_explicit_base_rules() {
 #[test]
 fn preparation_retains_original_base_sections() {
     let source = "#program base. p. #program base. q :- p.";
-    let prepared = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared(source);
     assert_eq!(prepared.source().expect("source input").text(), source);
     assert!(
         prepared

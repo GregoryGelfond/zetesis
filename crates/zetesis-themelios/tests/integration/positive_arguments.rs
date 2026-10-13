@@ -4,7 +4,7 @@ use crate::support::thresholds::minimum_preparation_bytes as minimum_bytes;
 use reference::{Models, native};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{formula, prepared};
 use zetesis_themelios::{
     AdmissionOptions, AnalysisBasis, ExpansionFailure, ExpansionLimits, FormulaFailure,
     FormulaLimits, FormulaResource, admit_formula, prepare_formula,
@@ -276,13 +276,7 @@ fn late_mismatch_preserves_the_next_row() {
 #[test]
 fn prepared_models_match_source_admission() {
     let source = "d(1).p(2).q(X):-p(X+1),d(X).";
-    let prepared = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared(source);
     assert_eq!(
         native(&prepared.ground().unwrap()),
         native(&formula(source))

@@ -2,6 +2,7 @@ use super::*;
 use std::collections::BTreeSet;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_reference_support as reference;
+use zetesis_reference_support::prepared;
 
 fn full_family(owner: &HybridFormula) -> BTreeSet<BTreeSet<String>> {
     let count = owner.atom_catalog().atoms().len();
@@ -121,13 +122,7 @@ fn independent_fatal_arithmetic_keeps_its_source_site() {
         ),
     ] {
         for hybrid in [false, true] {
-            let prepared = prepare_formula(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default(),
-            )
-            .unwrap();
+            let prepared = prepared(source);
             let result = if hybrid {
                 prepared.ground_hybrid().map(|_| ())
             } else {

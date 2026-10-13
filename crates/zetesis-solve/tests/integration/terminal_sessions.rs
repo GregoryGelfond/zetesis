@@ -1,6 +1,7 @@
 //! Base membership becomes original membership only after full reconstruction.
 
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
+use zetesis_reference_support::prepared;
 
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::{Cancellation, Stop};
@@ -113,15 +114,8 @@ fn ground_only_definitions_preserve_complete_families() {
             ]),
         ),
     ] {
-        let FormulaMaterialization::Complete(owner) = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-        .ground_adaptive()
-        .unwrap() else {
+        let FormulaMaterialization::Complete(owner) = prepared(source).ground_adaptive().unwrap()
+        else {
             panic!("ground-only definitions require complete materialization");
         };
         let original = admit_formula(

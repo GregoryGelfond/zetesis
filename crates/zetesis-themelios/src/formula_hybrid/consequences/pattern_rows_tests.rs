@@ -5,22 +5,14 @@ use crate::formula_support::testing::budget;
 use crate::formula_support::{Accounting, CompletedQueries, Computation, Join, PreparedRule};
 use crate::grounding_observer::Profile;
 use crate::test_support::Observer;
-use crate::{
-    AdmissionOptions, ConstraintCheckLimits, ExpansionLimits, FormulaLimits, FormulaWarning,
-    GroundingPhase, HybridFormula,
-};
+use crate::test_support::prepared;
+use crate::{ConstraintCheckLimits, FormulaLimits, FormulaWarning, GroundingPhase, HybridFormula};
 use zetesis_core::ValueNodeRef;
 
 const SOURCE: &str = include_str!("../../../tests/fixtures/pattern-rows/partial-signed-body.lp");
 
 fn preparation() -> crate::PreparedFormula {
-    crate::prepare_formula(
-        SOURCE.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
+    prepared(SOURCE)
 }
 
 fn unprepared_rows(

@@ -3,6 +3,7 @@
 use crate::{
     GroundingMeasurement, GroundingOutcome, GroundingPhase, GroundingWork, SolveMeasurements,
 };
+use zetesis_reference_support::prepared;
 use zetesis_test_support::io::BoundedWriter;
 use zetesis_themelios::GroundingObserver as _;
 
@@ -107,9 +108,7 @@ fn attribution_output_preserves_unavailable_values() {
 #[test]
 fn real_domain_work_reaches_the_shared_output_view() {
     use std::fmt::Write as _;
-    use zetesis_themelios::{
-        AdmissionOptions, DomainLimits, ExpansionLimits, FormulaLimits, prepare_formula,
-    };
+    use zetesis_themelios::DomainLimits;
 
     let mut source = String::new();
     for value in 1..=4 {
@@ -123,16 +122,10 @@ fn real_domain_work_reaches_the_shared_output_view() {
     source.push_str("r(X,Y):-a(X),b(Y),c(X,Y).");
     let measurements = SolveMeasurements::new(true);
     let observer = measurements.grounding_observer().unwrap();
-    let admitted = prepare_formula(
-        source,
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .with_domain_analysis(Some(DomainLimits::default()))
-    .ground_with_observer(Some(&observer))
-    .unwrap();
+    let admitted = prepared(&source)
+        .with_domain_analysis(Some(DomainLimits::default()))
+        .ground_with_observer(Some(&observer))
+        .unwrap();
     assert_eq!(
         admitted
             .atoms()

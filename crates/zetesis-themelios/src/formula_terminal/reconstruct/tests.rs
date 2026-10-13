@@ -1,16 +1,13 @@
 use super::*;
-use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits, FormulaMaterialization};
+use crate::test_support::prepared;
+use crate::{FormulaLimits, FormulaMaterialization};
 
 fn terminal() -> TerminalFormula {
-    let FormulaMaterialization::Terminal(owner) = crate::prepare_formula(
-        "{seed(1..3)}. left(X):-seed(X). right(X):-seed(X).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_adaptive()
-    .unwrap() else {
+    let FormulaMaterialization::Terminal(owner) =
+        prepared("{seed(1..3)}. left(X):-seed(X). right(X):-seed(X).")
+            .ground_adaptive()
+            .unwrap()
+    else {
         panic!("terminal profile required")
     };
     assert_eq!(owner.deferred_templates(), 2);

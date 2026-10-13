@@ -5,7 +5,7 @@ use crate::support::finite_bindings as reference;
 use reference::{exhaustive, external, holds, native, values};
 use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{BundleFixture, canonical};
+use zetesis_reference_support::{BundleFixture, canonical, prepared};
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionLimits,
     FormulaLimits, prepare_formula,
@@ -25,13 +25,7 @@ const SOURCES: &[&str] = &[
 ];
 
 fn admitted(source: &str, planned: bool) -> AdmittedFormula {
-    let source = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let source = prepared(source);
     if planned {
         source
             .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
@@ -199,15 +193,9 @@ fn planned_with(
     limits: CountPlanLimits,
     cancellation: &Cancellation,
 ) -> AdmittedFormula {
-    prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_with_count_plan(limits, cancellation, None)
-    .unwrap()
+    prepared(source)
+        .ground_with_count_plan(limits, cancellation, None)
+        .unwrap()
 }
 
 #[test]
@@ -569,15 +557,7 @@ fn source_order_preserves_partition_models() {
 #[test]
 fn count_aliases_do_not_certify_atom_partitions() {
     for source in ["1#count{same:a;same:b}1.", "1#count{x:a;y:a}1."] {
-        let prepare = || {
-            prepare_formula(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default(),
-            )
-            .unwrap()
-        };
+        let prepare = || prepared(source);
         let original = prepare().ground().unwrap();
         let planned = prepare()
             .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
