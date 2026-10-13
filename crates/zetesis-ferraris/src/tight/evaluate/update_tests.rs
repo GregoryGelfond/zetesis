@@ -438,3 +438,57 @@ fn preparing_the_index_reports_its_build_bytes() {
         + rows.div_ceil(64) * size_of::<u64>() as u64;
     assert_eq!(plan.statistics().construction_bytes, held);
 }
+
+#[test]
+fn an_update_reports_the_bytes_it_holds_after_its_last_reservation() {
+    // The first update reserves its worklist, which its report includes.
+    let theory = choices(200);
+    let plan = prepared(&theory);
+    let cancellation = Cancellation::default();
+    let mut workspace = TightWorkspace::default();
+    let limits = TightCheckLimits::default();
+    workspace
+        .check(&plan, &world(&theory, [2, 3]), limits, &cancellation)
+        .result
+        .unwrap();
+    let second = world(&theory, [2, 3, 4]);
+    let update = workspace
+        .check(&plan, &second, limits, &cancellation)
+        .result
+        .unwrap();
+    assert_route(&plan, &second, update.work, true);
+    assert_eq!(
+        u128::from(update.logical_bytes),
+        u128::from(plan.statistics().resident_bytes) + workspace.retained_bytes()
+    );
+}
+
+#[test]
+fn an_update_beyond_the_byte_allowance_is_refused_before_its_work() {
+    let theory = choices(200);
+    let plan = prepared(&theory);
+    let cancellation = Cancellation::default();
+    let mut workspace = TightWorkspace::default();
+    for atoms in [vec![2, 3], vec![2, 3, 4]] {
+        workspace
+            .check(
+                &plan,
+                &world(&theory, atoms),
+                TightCheckLimits::default(),
+                &cancellation,
+            )
+            .result
+            .unwrap();
+    }
+    let held = u128::from(plan.statistics().resident_bytes) + workspace.retained_bytes();
+    let limits = TightCheckLimits {
+        max_bytes: u64::try_from(held).unwrap() - 1,
+        ..TightCheckLimits::default()
+    };
+    let attempt = workspace.check(&plan, &world(&theory, [2, 3, 4, 5]), limits, &cancellation);
+    assert_eq!(
+        attempt.result.map(|check| check.verdict),
+        Err(TightError::Limit(TightResource::Bytes))
+    );
+    assert_eq!(attempt.work, 0);
+}

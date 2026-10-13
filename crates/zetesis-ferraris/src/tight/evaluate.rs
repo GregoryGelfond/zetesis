@@ -417,6 +417,10 @@ impl TightWorkspace {
         limits: TightCheckLimits,
         meter: &mut Meter<'_>,
     ) -> Result<Option<TightCheck>, TightError> {
+        // What the workspace already holds is admitted before any work, as a
+        // complete check admits before evaluating; each growth below admits
+        // itself before it is reserved.
+        self.admit(plan, limits.max_bytes)?;
         // First pass: find the changed words and count changed atoms, with no
         // change to the retained state.
         let threshold = large_change(plan.theory.atom_count());
@@ -504,8 +508,9 @@ impl TightWorkspace {
                 }
             }
         }
-        // Every growth during the update was admitted before it was reserved, so
-        // this reports the bytes the check holds after its last reservation.
+        // Everything held was admitted, before the first pass or before its
+        // reservation, so this only reports the bytes the check holds after its
+        // last reservation; it cannot refuse.
         let logical_bytes = self.admit(plan, limits.max_bytes)?;
         let retained = &self.retained;
         let verdict = if retained.false_root_count > 0 {

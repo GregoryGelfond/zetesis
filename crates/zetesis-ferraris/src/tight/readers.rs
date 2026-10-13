@@ -134,10 +134,11 @@ impl Readers {
     /// one node); and one row mark per 64 rows.
     pub(super) fn byte_bound(theory: &Theory, producers: &[TightProducer]) -> u128 {
         let (nodes, rows) = (theory.nodes().len(), theory.parts().rows().len());
-        let slots = (nodes + theory.atom_count() + rows) as u128;
+        let slots = nodes as u128 + theory.atom_count() as u128 + rows as u128;
         let word = size_of::<usize>() as u128;
-        let readers =
-            (theory.parts().occurrences() + producers.len() + theory.roots().len()) as u128;
+        let readers = theory.parts().occurrences() as u128
+            + producers.len() as u128
+            + theory.roots().len() as u128;
         slots * word
             + (2 * slots + 3) * word
             + readers * size_of::<Reader>() as u128
@@ -162,7 +163,7 @@ impl Readers {
         let nodes = theory.nodes().len();
         let atoms = theory.atom_count();
         let rows = theory.parts().rows().len();
-        let counts = (nodes + atoms + rows) as u128 * size_of::<usize>() as u128;
+        let counts = (nodes as u128 + atoms as u128 + rows as u128) * size_of::<usize>() as u128;
         let marks = rows.div_ceil(64) as u128 * size_of::<u64>() as u128;
         let mut readers = Counted::new(nodes)?;
         let mut atom_nodes = Counted::new(atoms)?;
