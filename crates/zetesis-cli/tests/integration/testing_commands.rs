@@ -315,7 +315,7 @@ fn a_backend_check_refuses_runs_that_name_different_executables() {
     let other = another_zetesis(directory.path()).canonicalize().unwrap();
     // The first case's reference names this build's zetesis, its selected run
     // the other path.
-    let front = front(directory.path(), &[zetesis, other]);
+    let front = front(directory.path(), &[zetesis, other.clone()]);
     let command = command(&[
         "zetesis",
         "test",
@@ -333,11 +333,14 @@ fn a_backend_check_refuses_runs_that_name_different_executables() {
     );
     let report: serde_json::Value = serde_json::from_slice(&output).unwrap();
     assert_eq!(report["passed"], false);
+    let selected = &report["cases"][0]["selected"];
     assert_eq!(report["cases"][0]["decision"], "invalid_report");
     assert!(
-        report["cases"][0]["selected"]["detail"]
+        selected["detail"]
             .as_str()
             .unwrap()
             .contains("an earlier run named")
     );
+    // The refused run keeps the executable it named.
+    assert_eq!(selected["executed"], other.to_str().unwrap());
 }
