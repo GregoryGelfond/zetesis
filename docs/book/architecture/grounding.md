@@ -417,9 +417,14 @@ can supply anchors; enabling default-negated occurrences require a full scan.
 Changes accumulate until that rule is scanned. The current implementation keeps
 up to four distinct atoms per predicate and per pending rule; overflow restores
 a full scan, without limiting the program or its answer sets. Relevant generated
-bindings also retain a full scan. Every matching
-occurrence and the ordinary body test remain required, including overlapping
-occurrences.
+bindings also retain a full scan. The first matching pair of changed atom and
+original positive occurrence owns each binding. Earlier changed atoms are
+excluded from all positive inputs; the current changed atom is excluded from
+earlier occurrences. The indexed join fixes the anchor. These row filters
+partition the complete occurrence union before binding and scalar evaluation,
+independently of physical join order. Repeated occurrences and aliases keep
+their ordinary matching and body tests, without revisiting the same binding
+under a later anchor. Unmapped rows remain conservatively eligible.
 
 A completed productive scan can also be reused after its batch is applied.
 The checker retains the batch's rule identity and checks every emitted decision,
@@ -751,6 +756,17 @@ counting retained rows. This preserves the first-new partition even when the joi
 order changes or a predicate occurs more than once. A round-local proof enables
 only this selector, not generic computed-domain tables or completed source-family
 evidence. Evidence cursors keep their complete traversal.
+
+The optional numeric analysis supplies a separate, static totality certificate
+for flat normal producers with division or remainder. It includes every compiled
+producer and certifies every scalar body expression over complete-binding domains
+before support completion. Such a rule can use the ordinary prefix filters in
+every support round, including delta joins. The retained evidence names the exact
+rule occurrence; it neither retains another analysis nor grants computed-key or
+source-family authority. All source-family checks keep complete traversal, and
+prefix arithmetic remains checked because an early binding need not satisfy a
+later relation. Unknown or mixed inputs, possible zero divisors and overflow
+decline the optimization. Diagnostic output does not control its activation.
 
 Existing structural, computed-domain and table probes retain priority. Multiple
 generation must offer fewer values and retained rows than the ordinary indexed

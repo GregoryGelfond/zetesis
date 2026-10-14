@@ -655,10 +655,18 @@ fn complete(
                     let mut variants =
                         producers.variants(index, rule, &support, rounds == 1, limits, counters)?;
                     let mut computation = Computation::new(&mut delta, &support);
-                    let guards = match domains {
-                        Some(domains) => support.domain_guards(
+                    let candidates = domains
+                        .map(|domains| domains.for_rule(index, rule))
+                        .transpose()?
+                        .flatten();
+                    let totality = domains
+                        .map(|domains| domains.total_body(index, rule))
+                        .transpose()?
+                        .flatten();
+                    let guards = match candidates {
+                        Some(candidates) => support.domain_guards(
                             rule,
-                            domains.for_rule(index, rule)?,
+                            candidates,
                             &computation,
                             limits,
                             counters,
@@ -668,7 +676,7 @@ fn complete(
                     derive_variants(
                         rule,
                         &mut variants,
-                        guards.as_ref(),
+                        (guards.as_ref(), totality),
                         &support,
                         budget,
                         Context::new(&mut computation, limits, counters, rule.location),
@@ -752,7 +760,10 @@ fn finish(
 fn derive_variants<'source>(
     rule: &'source crate::formula_ir::RuleIr,
     variants: &mut delta::Variants<'_, '_>,
-    guards: Option<&queries::Guards<'_, 'source>>,
+    (guards, totality): (
+        Option<&queries::Guards<'_, 'source>>,
+        Option<&crate::formula_domains::numeric_ir::TotalBody<'_>>,
+    ),
     support: &Support<'source>,
     budget: &mut Budget,
     context: Context<'_, &mut Computation<'_, '_>>,
@@ -781,6 +792,9 @@ fn derive_variants<'source>(
                 Context::new(computation, limits, counters, rule.location),
             )?;
             outer.select_round_multiples(rule, computation, limits, counters)?;
+            if let Some(totality) = totality {
+                outer.select_static_total_body(rule, totality, limits, counters)?;
+            }
             derive_rule(
                 rule,
                 &mut outer,
@@ -803,6 +817,9 @@ fn derive_variants<'source>(
             Context::new(computation, limits, counters, rule.location),
         )?;
         let total = outer.select_round_multiples(rule, computation, limits, counters)?;
+        if let Some(totality) = totality {
+            outer.select_static_total_body(rule, totality, limits, counters)?;
+        }
         derive_rule(
             rule,
             &mut outer,
@@ -1439,6 +1456,31 @@ impl<'a, 'source> Join<'a, 'source> {
         join.configure_rule(source_rule, limits, counters)?;
         join.domains = domains;
         Ok(join)
+    }
+
+    /// A completed all-producer analysis can certify scalar totality before
+    /// support completion. It permits prefix filtering in this rule's delta
+    /// cursor, including delta variants, without computed-domain authority or
+    /// source-family evidence.
+    fn select_static_total_body(
+        &mut self,
+        rule: &crate::formula_ir::RuleIr,
+        totality: &crate::formula_domains::numeric_ir::TotalBody<'_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+    ) -> Result<(), FormulaFailure> {
+        counters.work(limits, rule.location)?;
+        if self.source_evidence
+            || !totality.belongs_to(rule)
+            || !std::ptr::eq(self.literals.get(), rule.body.as_slice())
+        {
+            return Err(FormulaFailure::SupportRelation {
+                error: zetesis_core::relation::Failure::Owner,
+                location: rule.location,
+            });
+        }
+        self.coverage = Coverage::Selected;
+        Ok(())
     }
 
     /// After support completion and source-family validation, cover the full

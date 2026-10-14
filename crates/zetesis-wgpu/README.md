@@ -20,8 +20,10 @@ explains their place in ordinary solving, and the
 On an explicit GPU backend, ordinary formula sessions with automatic membership
 policy select `GpuTightOracle` when complete tight preparation succeeds. Other
 formulas use `GpuFormulaOracle` with exact CPU completion of residual queries;
-explicit countermodel policy also retains that general route. Native aggregate
-and relation operations remain explicit library capabilities.
+explicit countermodel policy also retains that general route. Both formula
+checkers retain native threshold and ordinal min/max rows with shared numeric
+columns. The separate eligibility-mask aggregate and relation operations remain
+explicit library capabilities.
 
 Construct an oracle with `GpuOptions` and an explicit `GpuSelection` where
 reproducibility requires a particular backend. Selection distinguishes physical
@@ -61,16 +63,21 @@ All 64 lanes scan distinct semantic-atom positions for the strict-subset
 condition. Their counts and last eligible positions are merged before a zero
 count refutes the query or a unique eligible atom is required to be false.
 Auxiliary nodes never witness strict removal. This uses 24 bytes of workgroup
-storage; a sweep reserves `9*nodes+atoms+65` policy work units, including 64
+storage; a sweep reserves `9*nodes+2*edges+atoms+65` policy work units, including 64
 summary merges and one application. These units are not GPU instruction counts.
 Original truth is evaluated before propagation. A cold graph groups original
 node IDs by dependency level; nodes in a level run in parallel and a barrier
 precedes dependent reads. Pure chains retain serial evaluation because they
 contain no independent node work. Other narrow levels may still pay more in
 synchronization than they gain in parallel work. Setup charges
-`2*nodes+atoms+roots+levels` policy units, with zero level units on the serial path.
+`2*nodes+edges+atoms+roots+levels` policy units, with zero level units on the serial
+path. Both setup and sweeps add conservative numeric-row allowances, documented
+by `FormulaLimits`; these include portable limb arithmetic.
 
-Preparation uses O(nodes + roots + levels) host work. Temporary depth words in
+Preparation uses O(nodes + source_edges + roots + levels + g log g) host work. Source edges
+include numeric occurrences examined before constant folding; g counts variable
+numeric guards. A bounded, fallibly allocated row
+directory shares transported columns and is released after packing. Temporary depth words in
 the node upload buffer become dense output positions before any upload; one
 root buffer contains original roots, level offsets and ordered node IDs. Actual
 retained capacities of both staging vectors are admitted together with device
@@ -82,7 +89,10 @@ allowance are separate from these measured staging capacities.
 
 `FormulaVerdict::Residual` requires the exact host completion path. Candidate
 ordering, original theory identity and the frozen candidate are preserved across
-that boundary. Device results cannot silently change the subject being checked.
+that boundary. No narrowed atom region is returned: exact completion keeps the
+full proper-subset query. Native numeric projection may leave more residuals
+than the previous Boolean expansion. Device results cannot silently change the
+subject being checked.
 
 The static operation receives a complete ground program; `check_batch` performs
 no lazy tuple discovery. Lazy execution instead admits bounded source instances
@@ -168,6 +178,16 @@ the error kind alone cannot justify reuse. Resident buffers may still be dropped
 by their primitive after a failed call, independently of shared context health.
 
 ## Native numeric aggregates
+
+Ordinary formula checking retains nonnegative thresholds and ordinal min/max
+cuts directly. Each original node keeps its ID; guards share condition and
+low/high value columns. Four u32 limbs preserve the full admitted weighted-sum
+range, and two preserve ordinal ranks. Constants omit unused rows. Original
+truth is exact; frozen propagation uses conservative linear reductions with
+explicit CPU completion of residuals. This path does not require optional GPU
+integer features or supplied host eligibility masks.
+
+The following separate operation reduces already-prepared eligibility masks.
 
 Native aggregate admission requires already OR-coalesced complete tuple keys
 and refuses duplicates. `AggregateGpuPlan` accepts an owned native `Group` or a

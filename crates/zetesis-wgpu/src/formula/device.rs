@@ -11,8 +11,16 @@ use zetesis_ferraris::{Interpretation, Theory};
 
 /// GPU original-truth evaluation and sound frozen-query propagation.
 ///
-/// This is a partial reduct primitive; exact residual search remains necessary. No source grounding, objective
-/// scoring, candidate enumeration or CPU oracle fallback occurs here.
+/// The immutable transport retains native threshold and extremum-cut rows as
+/// shared condition/value columns. Portable u32 limbs preserve all admitted
+/// weights and bounds without optional device integer capabilities. Original
+/// truth is exact; frozen numeric projection uses conservative linear bounds,
+/// which can leave more residual work than expanded Boolean formulas.
+///
+/// This is a partial reduct primitive; exact residual search remains necessary.
+/// A residual reports no narrowed atom region: callers retain the full original
+/// proper-subset query. No source grounding, objective scoring, candidate
+/// enumeration or CPU oracle fallback occurs here.
 pub struct GpuFormulaOracle {
     profile: GpuFormulaProfile,
     resident: Option<Resident>,

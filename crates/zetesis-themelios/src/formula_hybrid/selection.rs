@@ -400,6 +400,43 @@ impl ConsequenceMode {
 pub(super) struct ConsequenceSelection<'a, 'source> {
     pub(super) selection: Selection<'a, 'source>,
     pub(super) mode: ConsequenceMode,
+    pub(super) delta: Option<DeltaPartition<'a>>,
+}
+
+/// The first changed-atom/original-occurrence pair owns the binding. Earlier
+/// changed atoms are excluded everywhere; this atom is excluded only before
+/// its anchor. The indexed join separately fixes the anchor itself. This is
+/// independent of physical join order and borrows only authenticated dense IDs.
+#[derive(Clone, Copy)]
+pub(super) struct DeltaPartition<'a> {
+    pub(super) earlier: &'a [usize],
+    pub(super) atom: usize,
+    pub(super) occurrence: usize,
+}
+
+impl DeltaPartition<'_> {
+    fn permits(
+        self,
+        occurrence: usize,
+        atom: usize,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<bool, FormulaFailure> {
+        if occurrence < self.occurrence {
+            counters.work(limits, location)?;
+            if atom == self.atom {
+                return Ok(false);
+            }
+        }
+        for &earlier in self.earlier {
+            counters.work(limits, location)?;
+            if atom == earlier {
+                return Ok(false);
+            }
+        }
+        Ok(true)
+    }
 }
 
 impl ConsequenceSelection<'_, '_> {
@@ -483,6 +520,7 @@ impl<'a, 'source> ConsequenceSelection<'a, 'source> {
         Ok(Some(Self {
             selection,
             mode: ConsequenceMode::SingleOpen { forced },
+            delta: None,
         }))
     }
 }
@@ -536,9 +574,15 @@ impl RowFilter for ConsequenceSelection<'_, '_> {
             return Ok(RowSelection::Possible);
         };
         let decision = self.selection.region.decision(atom);
-        Ok(if !self.mode.accepts(occurrence, decision) {
-            RowSelection::Rejected
-        } else if decision == Some(true) {
+        if !self.mode.accepts(occurrence, decision) {
+            return Ok(RowSelection::Rejected);
+        }
+        if let Some(delta) = self.delta
+            && !delta.permits(occurrence, atom, limits, counters, location)?
+        {
+            return Ok(RowSelection::Rejected);
+        }
+        Ok(if decision == Some(true) {
             RowSelection::Held
         } else {
             // The mapped identity may be lent after exact matching,

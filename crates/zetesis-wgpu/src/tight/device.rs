@@ -23,7 +23,11 @@ use zetesis_ferraris::{Interpretation, TightPlan};
 /// adapter. Ordinary solver dispatch selects this independent primitive only
 /// after preparing its complete certificate; no CPU fallback occurs here.
 ///
-/// Work is linear in candidates times nodes, roots, producers and atoms. Each
+/// Native threshold and extremum-cut rows remain shared condition/value columns
+/// in the immutable transport; both original-truth checkers use the same portable
+/// limb arithmetic. No Boolean numeric expansion or optional-width feature is
+/// required. Work is linear in candidates times nodes, row occurrences, roots,
+/// producers and atoms. Each
 /// workgroup evaluates its DAG sequentially, then shares root/support scans
 /// across 64 invocations. Truth uses one word per node; candidate membership and
 /// producer support use one bit per atom, in separate world-major arrays. Heads
@@ -234,7 +238,8 @@ impl GpuTightOracle {
             .transpose()?;
         poll(cancellation)?;
         let scopes = ErrorScopes::new(self.runtime.device());
-        if let Some((graph, packed)) = fresh.zip(packed) {
+        if let Some((mut graph, packed)) = fresh.zip(packed) {
+            graph.rows.release();
             self.activity.uploaded_bytes = graph.bytes;
             self.resident = Some(Resident::new(self.runtime.device(), graph, &packed));
         }

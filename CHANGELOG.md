@@ -2,6 +2,18 @@
 
 Notable changes by release. Versions follow Semantic Versioning.
 
+## Unreleased
+
+### Changed
+
+- GPU formula checking retains shared numeric aggregate rows instead of expanding
+  them into Boolean formulas. Original satisfaction and reduct membership keep
+  their existing meaning; unresolved device checks still receive exact CPU checks.
+- Lazy constraint checks avoid revisiting the same binding through several newly
+  held atoms or repeated body occurrences.
+- Eligible grounding joins use completed numeric-domain analysis to filter bindings
+  earlier, while retaining checked arithmetic and complete source validation.
+
 ## 0.6.0 — 2026-10-14
 
 ### Added

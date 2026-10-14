@@ -19,9 +19,46 @@ use crate::formula_support::components::{Pattern, Scalar, Term};
 
 use super::census::{Occurrence, Query, Requests};
 use super::reader::Reader;
+use super::totality;
 
 type Error = numeric::Error<ReadError>;
 type Engine<'a, 'b> = Input<'a, Reader<'b>, ProgramSite>;
+
+/// Execution needs scalar certificates; only diagnostics retain their census.
+enum IntegerQueries<'a> {
+    None,
+    Execution,
+    Diagnostics(&'a mut Vec<Query>),
+}
+
+impl IntegerQueries<'_> {
+    fn register(
+        &mut self,
+        literal: usize,
+        roots: [ExpressionId; 2],
+        rule: &mut numeric::Rule,
+        input: &mut Engine<'_, '_>,
+    ) -> Result<(), Error> {
+        let comparisons = match self {
+            Self::None => return Ok(()),
+            Self::Execution => {
+                input.work(2)?;
+                None
+            }
+            Self::Diagnostics(comparisons) => {
+                input.work(3)?;
+                Some(comparisons)
+            }
+        };
+        rule.integer_queries.try_reserve(2)?;
+        if let Some(comparisons) = comparisons {
+            comparisons.try_reserve(1)?;
+            comparisons.push(Query::new(literal, rule.integer_queries.len(), roots));
+        }
+        rule.integer_queries.extend(roots);
+        Ok(())
+    }
+}
 
 pub(super) struct Predicate {
     pub(super) key: DeclaredPredicate,
@@ -35,6 +72,7 @@ pub(super) struct Lowering<'a, 'prepared> {
     pub(super) finite_width: usize,
     pub(super) diagnostics: bool,
     pub(super) occurrences: Vec<Occurrence<'prepared>>,
+    pub(super) totality: Vec<totality::Request<'prepared>>,
 }
 
 impl<'prepared> Lowering<'_, 'prepared> {
@@ -44,18 +82,18 @@ impl<'prepared> Lowering<'_, 'prepared> {
         input: &mut Engine<'_, '_>,
     ) -> Result<(), Error> {
         self.seed_facts(prepared, input)?;
-        for source in prepared.rules_without_facts() {
+        for (index, source) in prepared.rules_without_facts().iter().enumerate() {
             input.context(source.location);
             let mut requests = None;
             match &source.head {
-                HeadIr::Normal(_) => requests = self.normal(source, input)?,
+                HeadIr::Normal(_) => requests = self.normal(index, source, input)?,
                 HeadIr::Disjunction(heads) => {
                     let mut rule = self.body(
                         source.variables,
                         source.variables,
                         &source.body,
                         input,
-                        None,
+                        IntegerQueries::None,
                     )?;
                     for head in heads {
                         input.work(1)?;
@@ -71,7 +109,7 @@ impl<'prepared> Lowering<'_, 'prepared> {
                         source.variables,
                         &source.body,
                         input,
-                        None,
+                        IntegerQueries::None,
                     )?;
                     for head in ordinary {
                         input.work(1)?;
@@ -86,14 +124,14 @@ impl<'prepared> Lowering<'_, 'prepared> {
                             source.body_variables,
                             &source.body,
                             input,
-                            None,
+                            IntegerQueries::None,
                         )?;
                         self.body_into(
                             &element.condition,
                             element.variables,
                             &mut rule,
                             input,
-                            None,
+                            IntegerQueries::None,
                         )?;
                         if let Some(atom) = element.head.positive_atom() {
                             self.head(*atom, &mut rule, input)?;
@@ -109,14 +147,14 @@ impl<'prepared> Lowering<'_, 'prepared> {
                             source.body_variables,
                             &source.body,
                             input,
-                            None,
+                            IntegerQueries::None,
                         )?;
                         self.body_into(
                             &element.condition,
                             element.variables,
                             &mut rule,
                             input,
-                            None,
+                            IntegerQueries::None,
                         )?;
                         if let Some(atom) = element.head.positive_atom() {
                             self.head(*atom, &mut rule, input)?;
@@ -136,21 +174,40 @@ impl<'prepared> Lowering<'_, 'prepared> {
 
     fn normal(
         &mut self,
-        source: &RuleIr,
+        index: usize,
+        source: &'prepared RuleIr,
         input: &mut Engine<'_, '_>,
     ) -> Result<Option<Requests>, Error> {
+        input.work(source.body.len() as u64)?;
+        let totality = totality::requested(source);
         let mut comparisons = Vec::new();
+        let queries = if self.diagnostics {
+            IntegerQueries::Diagnostics(&mut comparisons)
+        } else if totality {
+            IntegerQueries::Execution
+        } else {
+            IntegerQueries::None
+        };
         let mut rule = self.body(
             source.variables,
             source.variables,
             &source.body,
             input,
-            self.diagnostics.then_some(&mut comparisons),
+            queries,
         )?;
         if let HeadIr::Normal(Some(head)) = &source.head {
             self.head(*head, &mut rule, input)?;
         }
         let rule = input.rule(rule)?;
+        if totality {
+            input.work(1)?;
+            self.totality.try_reserve(1)?;
+            self.totality.push(totality::Request {
+                index,
+                source,
+                rule,
+            });
+        }
         Ok(self.diagnostics.then_some(Requests { rule, comparisons }))
     }
 
@@ -308,13 +365,13 @@ impl<'prepared> Lowering<'_, 'prepared> {
         visible: usize,
         body: &[LiteralIr],
         input: &mut Engine<'_, '_>,
-        comparisons: Option<&mut Vec<Query>>,
+        queries: IntegerQueries<'_>,
     ) -> Result<numeric::Rule, Error> {
         let mut rule = numeric::Rule {
             slots,
             ..numeric::Rule::default()
         };
-        self.body_into(body, visible, &mut rule, input, comparisons)?;
+        self.body_into(body, visible, &mut rule, input, queries)?;
         Ok(rule)
     }
 
@@ -347,7 +404,7 @@ impl<'prepared> Lowering<'_, 'prepared> {
         visible: usize,
         rule: &mut numeric::Rule,
         input: &mut Engine<'_, '_>,
-        mut comparisons: Option<&mut Vec<Query>>,
+        mut queries: IntegerQueries<'_>,
     ) -> Result<(), Error> {
         let visible = visible.min(rule.slots);
         // Only the enclosing body prefix belongs to a local element. An outer
@@ -410,14 +467,7 @@ impl<'prepared> Lowering<'_, 'prepared> {
                         relation: comparison.relation(),
                         right,
                     });
-                    if let Some(comparisons) = comparisons.as_deref_mut() {
-                        input.work(3)?;
-                        rule.integer_queries.try_reserve(2)?;
-                        comparisons.try_reserve(1)?;
-                        let first = rule.integer_queries.len();
-                        rule.integer_queries.extend([left, right]);
-                        comparisons.push(Query::new(literal_index, first, [left, right]));
-                    }
+                    queries.register(literal_index, [left, right], rule, input)?;
                 }
                 LiteralIr::Atom(..)
                 | LiteralIr::PatternAtom(_)

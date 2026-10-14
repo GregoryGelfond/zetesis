@@ -151,7 +151,7 @@ fn domain_guards_decline_on_a_fact_rule() {
             let mut checked = 0;
             for (index, rule) in fact_rules(&program) {
                 // A rule without variables has no guard to prepare.
-                let candidates = domains.for_rule(index, rule).unwrap();
+                let candidates = domains.for_rule(index, rule).unwrap().unwrap();
                 assert!(
                     queries
                         .support()

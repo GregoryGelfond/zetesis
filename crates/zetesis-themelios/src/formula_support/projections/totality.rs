@@ -3,7 +3,11 @@
 //! Original-family admission, final emission, hybrid capture and admitted hybrid
 //! checks use this gate over completed support. Possible-head production uses it
 //! only for snapshot-local multiples selection; the proof then covers the full
-//! current columns, not later rounds or completed-family evidence. Each expression
+//! current columns, not later rounds or completed-family evidence. A rule
+//! can alternatively receive static totality from the completed all-producer
+//! analysis, which permits support-round prefix selection without a projection
+//! map. That separate certificate never broadens this snapshot's authority.
+//! Each expression
 //! in an eligible flat normal body is either a leaf, reads one source variable
 //! covered by an ordinary positive atom column, or has checked arithmetic over
 //! several numeric column bounds.

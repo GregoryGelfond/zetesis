@@ -77,9 +77,7 @@ pub(super) struct Graph {
     pub(super) nodes: u32,
     pub(super) roots: u32,
     pub(super) edges: u32,
-    scratch: usize,
-    map: usize,
-    temporary_bytes: u64,
+    pub(super) rows: crate::formula_graph::Rows,
     pub(super) producers: u32,
     pub(super) words: u32,
     pub(super) node_bytes: u64,
@@ -101,18 +99,23 @@ impl Graph {
 
     #[cfg(test)]
     pub(super) fn new(certificate: &TightPlan, packing: Packing<'_>) -> Result<Self, GpuError> {
-        Self::with_control(certificate, packing, &Cancellation::default())
+        Self::with_control(certificate, packing, u64::MAX, &Cancellation::default())
     }
 
     pub(super) fn with_control(
         certificate: &TightPlan,
         packing: Packing<'_>,
+        max_staging_bytes: u64,
         cancellation: &Cancellation,
     ) -> Result<Self, GpuError> {
         let theory = certificate.theory();
         let atoms = address(theory.atom_count())?;
-        let graph =
-            crate::formula_graph::Shape::with_control(theory, packing.device, cancellation)?;
+        let graph = crate::formula_graph::Shape::with_control(
+            theory,
+            packing.device,
+            max_staging_bytes,
+            cancellation,
+        )?;
         let nodes = graph.nodes;
         let roots = address(theory.roots().len())?;
         let producers = address(certificate.producers().len())?;
@@ -133,7 +136,7 @@ impl Graph {
         let bytes = sum(&[node_bytes, root_bytes, producer_bytes])?;
         let packing_bytes = sum(&[
             bytes,
-            graph.temporary_bytes,
+            graph.rows.bytes()?,
             if grouped { u64::from(words) * 4 } else { 0 },
         ])?;
         let mut shape = Self {
@@ -142,9 +145,7 @@ impl Graph {
             nodes,
             roots,
             edges: graph.edges,
-            scratch: graph.scratch,
-            map: graph.map,
-            temporary_bytes: graph.temporary_bytes,
+            rows: graph.rows,
             producers,
             words,
             node_bytes,
@@ -161,6 +162,7 @@ impl Graph {
             .and_then(|n| n.checked_add(shape.edges))
             .and_then(|n| n.checked_add(roots))
             .and_then(|n| n.checked_add(producers))
+            .and_then(|n| n.checked_add(graph.numeric_work))
             .ok_or_else(|| capacity("tight complete-scan work exceeds u32"))?;
         Ok(shape)
     }
@@ -177,28 +179,16 @@ impl Graph {
             ));
         }
         let mut nodes = words(self.node_bytes)?;
-        let mut map = vector(self.map)?;
-        let mut scratch = vector(self.scratch)?;
-        let temporary = (map.capacity() as u128 + scratch.capacity() as u128) * 4;
-        if temporary > u128::from(self.temporary_bytes) {
-            return Err(capacity("tight lowering capacity exceeds admitted staging"));
-        }
-        crate::formula_graph::pack(
-            &self.theory,
-            &mut nodes,
-            &mut map,
-            &mut scratch,
-            cancellation,
-        )?;
+        crate::formula_graph::pack(&self.theory, &self.rows, &mut nodes, cancellation)?;
         let mut roots = words(self.root_bytes)?;
         for &root in self.theory.roots() {
             poll(cancellation)?;
-            roots.push(crate::formula_graph::translated(&map, root)?);
+            roots.push(address(root)?);
         }
         if roots.is_empty() {
             roots.push(0);
         }
-        let producers = self.pack_producers(certificate, &map, cancellation)?;
+        let producers = self.pack_producers(certificate, cancellation)?;
         Ok(Packed {
             nodes,
             roots,
@@ -209,14 +199,13 @@ impl Graph {
     fn pack_producers(
         &self,
         certificate: &TightPlan,
-        map: &[u32],
         cancellation: &Cancellation,
     ) -> Result<Vec<u32>, GpuError> {
         let mut output = words(self.producer_bytes)?;
         if self.support == TightSupport::Atomic {
             for producer in certificate.producers() {
                 poll(cancellation)?;
-                output.extend(producer_record(producer, map)?);
+                output.extend(producer_record(producer)?);
             }
             if output.is_empty() {
                 output.extend([0; 4]);
@@ -246,19 +235,16 @@ impl Graph {
             poll(cancellation)?;
             let cursor = &mut cursors[producer.head() / 32];
             let start = *cursor as usize * 4;
-            output[start..start + 4].copy_from_slice(&producer_record(producer, map)?);
+            output[start..start + 4].copy_from_slice(&producer_record(producer)?);
             *cursor += 1;
         }
         Ok(output)
     }
 }
 
-fn producer_record(
-    producer: &zetesis_ferraris::TightProducer,
-    map: &[u32],
-) -> Result<[u32; 4], GpuError> {
+fn producer_record(producer: &zetesis_ferraris::TightProducer) -> Result<[u32; 4], GpuError> {
     let (body, present) = match producer.body() {
-        Some(body) => (crate::formula_graph::translated(map, body)?, 1),
+        Some(body) => (address(body)?, 1),
         None => (0, 0),
     };
     Ok([address(producer.head())?, body, present, 0])

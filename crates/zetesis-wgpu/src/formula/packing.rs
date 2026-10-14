@@ -47,8 +47,7 @@ pub(super) struct Shape {
     pub(super) roots: u32,
     pub(super) edges: u32,
     pub(super) wide_words: u32,
-    pub(super) scratch: usize,
-    pub(super) map: usize,
+    pub(super) rows: crate::formula_graph::Rows,
     pub(super) temporary_bytes: u64,
     pub(super) variables: u32,
     pub(super) words: u32,
@@ -59,17 +58,28 @@ pub(super) struct Shape {
 impl Shape {
     #[cfg(test)]
     pub(super) fn new(theory: &Theory, device: &wgpu::Limits) -> Result<Self, GpuError> {
-        Self::with_control(theory, device, &zetesis_cpu::Cancellation::default())
+        Self::with_control(
+            theory,
+            device,
+            u64::MAX,
+            &zetesis_cpu::Cancellation::default(),
+        )
     }
 
     pub(super) fn with_control(
         theory: &Theory,
         device: &wgpu::Limits,
+        max_staging_bytes: u64,
         cancellation: &zetesis_cpu::Cancellation,
     ) -> Result<Self, GpuError> {
         let atoms = address(theory.atom_count())?;
         let roots = address(theory.roots().len())?;
-        let graph = crate::formula_graph::Shape::with_control(theory, device, cancellation)?;
+        let graph = crate::formula_graph::Shape::with_control(
+            theory,
+            device,
+            max_staging_bytes,
+            cancellation,
+        )?;
         let nodes = graph.nodes;
         let auxiliary = graph.auxiliary;
         let variables = atoms
@@ -91,9 +101,8 @@ impl Shape {
             roots,
             edges: graph.edges,
             wide_words: graph.wide_words,
-            scratch: graph.scratch,
-            map: graph.map,
-            temporary_bytes: graph.temporary_bytes,
+            temporary_bytes: graph.rows.bytes()?,
+            rows: graph.rows,
             variables,
             words,
             node_bytes,
@@ -105,12 +114,14 @@ impl Shape {
             .and_then(|n| n.checked_add(shape.edges))
             .and_then(|n| n.checked_add(atoms))
             .and_then(|n| n.checked_add(roots))
+            .and_then(|n| n.checked_add(graph.numeric_work))
             .ok_or_else(|| capacity("formula setup work overflows"))?;
         shape.sweep_work = nodes
             .checked_mul(9)
             .and_then(|n| shape.edges.checked_mul(2).and_then(|e| n.checked_add(e)))
             .and_then(|n| n.checked_add(atoms))
             .and_then(|n| n.checked_add(65))
+            .and_then(|n| n.checked_add(graph.numeric_work))
             .ok_or_else(|| capacity("formula sweep work overflows"))?;
         Ok(shape)
     }

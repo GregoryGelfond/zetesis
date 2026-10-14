@@ -12,10 +12,15 @@ pub(crate) mod numeric_ir;
 mod positive;
 pub(crate) use positive::PositiveSource;
 
-/// Only this module constructs the certificate joining an eligible normalized
-/// owner, its original rule occurrences and narrowed canonical candidates.
-/// The full static analysis is temporary; guards retain only selected IDs.
+/// Independent consumers of one completed all-producer analysis. Finite guards
+/// retain their positive-flat certificate; static totality retains exact normal
+/// rule occurrences. The full numeric result is temporary, not another cache.
 pub(crate) struct Domains<'source> {
+    finite: Option<Finite<'source>>,
+    totality: Vec<(usize, numeric_ir::TotalBody<'source>)>,
+}
+
+struct Finite<'source> {
     source: PositiveSource<'source>,
     candidates: Vec<Candidates>,
 }
@@ -25,11 +30,36 @@ impl Domains<'_> {
         &self,
         index: usize,
         rule: &RuleIr,
-    ) -> Result<&Candidates, FormulaFailure> {
-        if self.source.contains(index, rule)
-            && let Some(candidates) = self.candidates.get(index)
+    ) -> Result<Option<&Candidates>, FormulaFailure> {
+        let Some(finite) = &self.finite else {
+            return Ok(None);
+        };
+        if finite.source.contains(index, rule)
+            && let Some(candidates) = finite.candidates.get(index)
         {
-            Ok(candidates)
+            Ok(Some(candidates))
+        } else {
+            Err(FormulaFailure::SupportRelation {
+                error: zetesis_core::relation::Failure::Owner,
+                location: rule.location,
+            })
+        }
+    }
+
+    pub(crate) fn total_body(
+        &self,
+        index: usize,
+        rule: &RuleIr,
+    ) -> Result<Option<&numeric_ir::TotalBody<'_>>, FormulaFailure> {
+        let Ok(position) = self
+            .totality
+            .binary_search_by_key(&index, |(index, _)| *index)
+        else {
+            return Ok(None);
+        };
+        let certificate = &self.totality[position].1;
+        if certificate.belongs_to(rule) {
+            Ok(Some(certificate))
         } else {
             Err(FormulaFailure::SupportRelation {
                 error: zetesis_core::relation::Failure::Owner,
@@ -108,25 +138,30 @@ pub(crate) fn analyze<'source>(
         return Ok(None);
     }
     let before = counters.accounting.work;
+    let totality = analysis.total_bodies(components, limits, counters);
+    counters.record(Event::DomainPrepareWork(counters.accounting.work - before));
+    let totality = totality?;
+    let before = counters.accounting.work;
     let eligible = PositiveSource::check(prepared, Some(components), limits, counters, location);
     counters.record(Event::DomainPrepareWork(counters.accounting.work - before));
-    let Some(source) = eligible? else {
-        return Ok(None);
-    };
+    let source = eligible?;
     let before = counters.accounting.work;
     let mut candidates = Vec::new();
-    candidates
-        .try_reserve_exact(prepared.rules_without_facts().len())
-        .map_err(|error| FormulaFailure::AtomAllocation { error, location })?;
-    for rule in prepared.rules_without_facts() {
-        candidates.push(Candidates::prepare(
-            rule,
-            &analysis,
-            computation,
-            limits,
-            counters,
-        )?);
+    if source.is_some() {
+        candidates
+            .try_reserve_exact(prepared.rules_without_facts().len())
+            .map_err(|error| FormulaFailure::AtomAllocation { error, location })?;
+        for rule in prepared.rules_without_facts() {
+            candidates.push(Candidates::prepare(
+                rule,
+                &analysis,
+                computation,
+                limits,
+                counters,
+            )?);
+        }
     }
     counters.record(Event::DomainPrepareWork(counters.accounting.work - before));
-    Ok(Some(Domains { source, candidates }))
+    let finite = source.map(|source| Finite { source, candidates });
+    Ok((finite.is_some() || !totality.is_empty()).then_some(Domains { finite, totality }))
 }

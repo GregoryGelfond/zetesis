@@ -29,7 +29,7 @@ struct Producer { head: u32, body: u32, has_body: u32, padding: u32 }
 // word-grouped records followed by W+1 half-open producer offsets.
 @group(0) @binding(3) var<storage, read> producers: array<u32>;
 @group(0) @binding(4) var<storage, read> candidates: array<u32>;
-@group(0) @binding(5) var<storage, read_write> truth: array<u32>;
+@group(0) @binding(5) var<storage, read_write> frozen: array<u32>;
 @group(0) @binding(6) var<storage, read_write> support: array<atomic<u32>>;
 @group(0) @binding(7) var<storage, read_write> results: array<u32>;
 var<workgroup> first_root: atomic<u32>;
@@ -60,7 +60,7 @@ fn producer_at(index: u32) -> Producer {
 }
 
 fn enabled(producer: Producer, values: u32) -> bool {
-    if (producer.has_body != 0u) { return truth[values + producer.body] != 0u; }
+    if (producer.has_body != 0u) { return frozen[values + producer.body] != 0u; }
     return true;
 }
 
@@ -76,17 +76,19 @@ fn check_support(world: u32, lane: u32, grouped: bool) {
             var value = false;
             if (node.tag == NODE_ATOM) { value = contains(world, node.left); }
             if (node.tag >= NODE_AND && node.tag <= NODE_IMPLIES) {
-                value = operation(node.tag, truth[values + node.left] != 0u,
-                    truth[values + node.right] != 0u);
+                value = operation(node.tag, frozen[values + node.left] != 0u,
+                    frozen[values + node.right] != 0u);
             }
-            if (node.tag >= NODE_ALL) {
+            if (node.tag == NODE_ALL || node.tag == NODE_ANY) {
                 value = node.tag == NODE_ALL;
                 for (var child = 0u; child < node.right; child++) {
-                    let next = truth[values + operand_at(node, child)] != 0u;
+                    let next = frozen[values + operand_at(node, child)] != 0u;
                     value = select(value || next, value && next, node.tag == NODE_ALL);
                 }
             }
-            truth[values + index] = select(0u, 1u, value);
+            if (node.tag >= 7u && node.tag <= 9u) { value = numeric_truth(values, node); }
+            if (node.tag == 10u) { value = true; }
+            frozen[values + index] = select(0u, 1u, value);
         }
     }
     if (!grouped) {
@@ -97,7 +99,7 @@ fn check_support(world: u32, lane: u32, grouped: bool) {
     storageBarrier();
     workgroupBarrier();
     for (var ordinal = lane; ordinal < params.roots; ordinal += WORKGROUP_SIZE) {
-        if (truth[values + roots[ordinal]] == 0u) {
+        if (frozen[values + roots[ordinal]] == 0u) {
             atomicMin(&first_root, ordinal);
         }
     }

@@ -20,7 +20,7 @@ Paths are under `crates/zetesis-themelios/src/` unless another root is named. En
 
 | Part | Status |
 |---|---|
-| Stage 1: shared analysis and fact input | Implemented: one neutral engine, source and prepared-IR lowerings, borrowed finite values, integrality, intervals, requested integer certificates and diagnostic census; optimizer consumers, aggregate envelopes and acceptance remain open |
+| Stage 1: shared analysis and fact input | Implemented: one neutral engine, source and prepared-IR lowerings, borrowed finite values, integrality, intervals, requested integer certificates, diagnostic census and (1d) support-round selection; static decisions, aggregate envelopes and measured acceptance remain open |
 | (1a) typed integer comparison forms | Deferred, with its return conditions |
 | (1c) interval guards | Folded into (2a) |
 | Stage 2: (2a) range probes and (2b) expression keys | Flat-body (2a) and (2b) implemented in support rounds and eager emission; broader traversal coverage and acceptance remain open; does not need Stage 1 |
@@ -31,7 +31,8 @@ Paths are under `crates/zetesis-themelios/src/` unless another root is named. En
 Stage 1 serves the fact-input target, existing finite-domain consumer and a typed diagnostic census. Ordinary bounds
 describe defined values; separately requested integer certificates establish totality of their expression over the
 complete-binding domains. Neither establishes complete-binding existence or prefix coverage. The census does not
-activate (1b), (1d) or Stage 3. The remaining design below labels these consumers and their obligations separately.
+activate (1b), (1d) or Stage 3. The independent (1d) execution request retains scalar-totality certificates for support
+rounds; the remaining design below labels the other consumers and their obligations separately.
 
 Stage 2 implements checked expression-equality and single-column ordering probes for flat normal bodies during
 support rounds and eager emission. They share one snapshot-owned index and retain residual comparisons, source row
@@ -276,7 +277,7 @@ Consumers query the resulting premise:
   comparison, an aggregate guard and a comparison over a generated variable exclude nothing. The role is static: it
   depends on which occurrences bind the variables, not on the join order.
 
-The current consumer is diagnostic only. Planned (1b) and Stage 3 consumers must retain the exclusion role;
+Separated comparison verdicts remain diagnostic only. Planned (1b) and Stage 3 consumers must retain the exclusion role;
 Stage 2 continues to use its existing checked index and residual filtering contract.
 
 Computed keys become the one-column case of Stage 2's expression keys. Today they invert one-variable expressions under
@@ -292,8 +293,10 @@ identical routes on the programs it serves today.
 `GroundingObserver::domain_diagnostics_enabled()` requests the diagnostic callback, certificate queries and
 census preparation independently of detailed timing. Its default is true, preserving existing diagnostic observers;
 no observer requests no diagnostics, and timing-only observers explicitly decline. Shared numeric analysis and finite
-guards still run when `with_domain_analysis` requests them. Declined diagnostics submit an empty neutral query list,
-retain no occurrence reports and do not prepare a census; no second graph or analysis is introduced.
+guards still run when `with_domain_analysis` requests them. The independent (1d) consumer requests scalar operands for
+eligible partial normal bodies even without diagnostics. Declined diagnostics add no report-only queries, retain no
+occurrence reports and do not prepare a census; no second graph or analysis is introduced. Successful execution
+certificates retain only their exact source occurrence, after the full analysis reaches a fixed point.
 
 `NumericAnalysis::census()` returns `Some(NumericCensus)` only after a completed analysis and report preparation;
 logical stops return `None`, not successful zero populations. `NumericAnalysis::rules()` lends reports in non-fact
@@ -373,8 +376,8 @@ and the exclusion role.
 
 **(1d) Static totality during support rounds.** Query: `integer(e)` with static certificates, for every arithmetic
 expression of a rule body that has a head. It grants prefix pruning (`Coverage::Selected`) for that rule's joins in
-every round, delta joins included, where today the certificate is refused for delta joins and complete coverage
-applies to bodies with division or remainder. It grants no computed keys during rounds; those are Stage 2's. The
+every round, delta joins included, where the snapshot-local certificate alone requires complete coverage for bodies
+with division or remainder. It grants no computed keys during rounds; those are Stage 2's. The
 documented boundary restricts round-local proofs to the multiples selector because one snapshot's columns do not
 cover later rounds' rows. A static certificate's premise covers every complete binding of every round:
 
@@ -387,7 +390,7 @@ The [grounding chapter](../book/architecture/grounding.md), the correspondence a
 `formula_support/projections/totality.rs` gain the static certificate as the second premise source. Reach in the
 maintained programs is one rule, prime-sieve's composite rule, on both formula sub-routes. Its `N \ D` is a remainder
 by a variable divisor whose domain excludes zero. `RemainderIntervals` now proves the general interval law and
-checked-scalar fault conditions; Rust/source correspondence and (1d)'s optimizer activation remain open. Range
+checked-scalar fault conditions; Rust/source correspondence and measured acceptance remain open. Range
 multiples already select its divisors during rounds, so any gain must be measured on both sub-routes before (1d)
 is accepted.
 Sudoku's block constraints have no head and are joined in emission, where today's certificate already applies.
@@ -711,8 +714,9 @@ a literal factor, division by a nonzero literal, and truncating remainder over a
 The remainder also declines a possible `MIN / −1` pair. Every intermediate is checked, including both children of
 correlated subtraction. Absolute value, bitwise operations, powers and variable multiplication/division decline in
 this certificate producer even where the run-time `Range` implementation has a transfer. Ordinary defined-value
-propagation keeps its separate precision and does not establish expression totality. The static consumer remains
-diagnostic; any later (1d) activation needs its own admission-preservation and measured-route evidence.
+propagation keeps its separate precision and does not establish expression totality. Static-totality support selection
+retains the original source-family checks; measured-route evidence and its concrete Rust correspondence remain separate
+obligations. Separated comparison decisions remain diagnostic.
 
 **Rust obligations**, listed in the correspondence: the IR lowering covers every produced value (the transfer table,
 matched exhaustively); `Range` implements the laws within i32 for the operators whose laws are proved, an obligation

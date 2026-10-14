@@ -38,7 +38,7 @@ comparisons; use the ordinary session for the composed native search.
 min/max cut over an ordered value dictionary. Both borrow shared numeric rows.
 Exhaustive visitors must handle these variants and preserve their original-truth
 gates when evaluating a frozen reduct. The [aggregate representation](../architecture/alignment.md#ordered-comparisons-and-objective-reductions)
-explains their semantics and the Boolean lowering used for device transport.
+explains their semantics and the shared numeric columns used for device transport.
 
 Keep all arenas together when copying a formula. `theory.parts().try_clone()`
 copies its complete raw storage, including shared numeric rows; the result still

@@ -9,12 +9,14 @@ mod incremental;
 #[cfg(test)]
 mod pattern_rows_tests;
 #[cfg(test)]
+mod partition_tests;
+#[cfg(test)]
 mod pivot_tests;
 #[cfg(test)]
 mod shared_tests;
 pub(super) use incremental::{Incremental, Plan as IncrementalPlan};
 
-use super::selection::{ConsequenceMode, ConsequenceSelection};
+use super::selection::{ConsequenceMode, ConsequenceSelection, DeltaPartition};
 use super::{
     Candidate, ConstraintCheckCause, ConstraintCheckFailure, ConstraintChecker,
     PreparedConstraints, literal_atom,
@@ -271,14 +273,14 @@ fn scan_selected_rule(
                 &mut visit,
             );
         };
-        for &atom in atoms {
+        for (index, &atom) in atoms.iter().enumerate() {
             let consequence = scan_anchors(
                 prepared,
                 budget,
                 counters,
                 region,
                 rule_index,
-                (mode, atom),
+                (mode, atom, &atoms[..index]),
                 &mut visit,
             )?;
             if consequence != ConstraintConsequence::NoConsequence {
@@ -301,6 +303,7 @@ fn scan_selected_rule(
         if !(ConsequenceSelection {
             selection: prepared.selection(rule_index, region),
             mode,
+            delta: None,
         })
         .possible(rule, &prepared.completed, &prepared.limits, counters)?
         {
@@ -322,24 +325,23 @@ fn scan_selected_rule(
     Ok(ConstraintConsequence::NoConsequence)
 }
 
-/// Exhaust all matching original occurrences without changing their prepared
-/// depths. An unchanged witness was excluded by the old complete negative scan;
-/// every new witness must read the held delta at one of these occurrences.
+/// Exhaust the first matching changed-atom/original-occurrence partition without
+/// changing prepared depths. An unchanged witness was excluded by the previous
+/// complete negative scan. Every new witness reads a changed held atom and is
+/// visited by its first matching anchor alone, before binding/scalar evaluation.
 fn scan_anchors(
     prepared: &mut PreparedConstraints<'_>,
     budget: &mut Budget,
     counters: &mut Counters,
     region: &Region,
     rule_index: usize,
-    delta: (ConsequenceMode, usize),
+    delta: (ConsequenceMode, usize, &[usize]),
     visit: &mut impl FnMut(
         ConstraintConsequence,
         Context<'_, &crate::formula_support::Computation<'_, '_>>,
     ) -> Result<bool, FormulaFailure>,
 ) -> Result<ConstraintConsequence, FormulaFailure> {
-    let (mode, atom) = delta;
-    // Overlapping anchors are intentional. Every duplicate substitution
-    // pays the ordinary work; the existing pending queue coalesces units.
+    let (mode, atom, earlier) = delta;
     for occurrence in 0..prepared.source.rules[rule_index].body.len() {
         let rule = &prepared.source.rules[rule_index];
         counters.work(&prepared.limits, rule.location)?;
@@ -376,7 +378,11 @@ fn scan_anchors(
             rule_index,
             Query {
                 mode,
-                anchor: Some((occurrence, atom)),
+                anchor: Some(DeltaPartition {
+                    earlier,
+                    atom,
+                    occurrence,
+                }),
             },
             visit,
         )?;
@@ -390,9 +396,9 @@ fn scan_anchors(
 /// The current consequence mode, optionally restricted at one original
 /// positive occurrence to a dense atom from the authenticated core.
 #[derive(Clone, Copy)]
-struct Query {
+struct Query<'a> {
     mode: ConsequenceMode,
-    anchor: Option<(usize, usize)>,
+    anchor: Option<DeltaPartition<'a>>,
 }
 
 fn scan_mode(
@@ -401,7 +407,7 @@ fn scan_mode(
     counters: &mut Counters,
     region: &Region,
     rule_index: usize,
-    query: Query,
+    query: Query<'_>,
     visit: &mut impl FnMut(
         ConstraintConsequence,
         Context<'_, &crate::formula_support::Computation<'_, '_>>,
@@ -409,9 +415,13 @@ fn scan_mode(
 ) -> Result<ConstraintConsequence, FormulaFailure> {
     let rule = &prepared.source.rules[rule_index];
     prepared.prepare_rule(rule_index, budget, counters)?;
+    let delta = query.anchor;
+    #[cfg(test)]
+    let delta = delta.filter(|_| partition_tests::enabled());
     let selection = ConsequenceSelection {
         selection: prepared.selection(rule_index, region),
         mode: query.mode,
+        delta,
     };
     let queries = prepared.completed.queries(
         crate::JoinStrategy::Indexed,
@@ -431,16 +441,22 @@ fn scan_mode(
             budget,
             counters,
         )?;
-    if let Some((occurrence, atom)) = query.anchor {
+    if let Some(anchor) = query.anchor {
         counters.work(&prepared.limits, rule.location)?;
         let atom = prepared
             .index
             .expect("prepared core")
             .catalog()
             .atoms()
-            .at(atom)
+            .at(anchor.atom)
             .expect("authenticated positive delta");
-        join = join.anchored(occurrence, atom, &prepared.limits, counters, rule.location)?;
+        join = join.anchored(
+            anchor.occurrence,
+            atom,
+            &prepared.limits,
+            counters,
+            rule.location,
+        )?;
     }
     while let Some(row) = join.next_row(
         &mut computation,

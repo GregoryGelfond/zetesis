@@ -11,7 +11,10 @@ use std::{fmt, time::Duration};
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::TightVerdict;
 
-const SHADER: &str = include_str!("check.wgsl");
+const SHADER: &str = concat!(
+    include_str!("check.wgsl"),
+    include_str!("../formula_graph/numeric.wgsl")
+);
 
 /// Physical construction of the same complete producer-support relation.
 /// This selects a library primitive; it does not change answer-set semantics or
@@ -36,7 +39,10 @@ pub struct TightGpuLimits {
     /// driver-private allocations and deferred retirement are excluded. Not RSS.
     pub max_batch_bytes: u64,
     /// Each candidate reserves `nodes + edges + roots + producers + 2 * words`
-    /// operations, where `edges` counts child occurrences and
+    /// operations, plus `48*n+32` for each variable threshold and `24*n+16`
+    /// for each variable extremum cut with `n` condition occurrences. These
+    /// conservative units cover portable limb arithmetic; constant guards carry
+    /// no numeric row charge. Here `edges` counts child occurrences and
     /// `words = ceil(atoms / 32)`. One word scan initializes
     /// or constructs packed support under the selected [`TightSupport`] policy;
     /// the other finds unsupported candidate bits by words. This replaces the

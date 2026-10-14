@@ -57,8 +57,13 @@ publication and reset/work/storage receipts are additional Rust obligations;
 the laws do not verify them or the changed `Theory` data layout. The
 [reading guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/ordinal-extrema.md)
 distinguishes these mathematical facts from the remaining proof of the Rust
-sort, row identity, packed validity, traversal, memory accounting and device
-lowering. The retained extracted evaluator does not yet cover ordinal nodes.
+sort, row identity, packed validity, traversal and memory accounting. Ordinary
+GPU formula transport preserves native cut nodes and shared condition/rank
+columns. Original truth uses qualifying witnesses and endpoint constants; frozen
+propagation applies the original truth gate before projecting those witnesses.
+Portable limb comparison, physical addresses, atomic observations and resource
+receipts remain unproved executable correspondences. The retained extracted
+evaluator does not yet cover ordinal nodes.
 
 ## Ordinary resource policy
 
@@ -89,6 +94,18 @@ positions retain their contributions even when their conditions are equal.
 `ThresholdPropagation` proves lower/upper sum bounds, mandatory contributions
 with repeated condition identities, and the corresponding formula consequences.
 These are general laws over complete rows and truth bounds.
+
+The ordinary GPU formula and tight checkers retain shared native threshold rows.
+Four little-endian `u32` limbs preserve admitted nonnegative sums and signed-bound
+constants without optional device integer features. The general kernel's two
+linear scans use conservative lower/upper sums; repeated physical slots and
+concurrent shrinking domains can weaken deductions. An original-false node stays
+false without constraining its children. A residual returns no narrowed atom
+region, so exact CPU completion retains the original proper-subset query. These
+are implementation contracts, not a new Lean refinement claim: packing, limb
+operations, atomic observations and the conclusive refutation still need their
+executable correspondence. Physical comparisons independently check original
+truth and retain every explicit proper-subset witness as a residual.
 
 [`ThresholdResidues`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ThresholdResidues.lean)
 separates a compatible sum into known and undecided contributions. A common
@@ -2986,7 +3003,7 @@ pass and opaque-expression treatment must preserve every possible produced value
 These are currently Rust obligations, exercised by source and prepared-IR tests;
 the existing `DomainBindings` laws do not prove this concrete analyzer sound.
 Stopped analysis publishes no usable domains. The separate positive-flat guard
-certificate remains required before any binding is excluded.
+certificate remains required for finite-value guards.
 
 The neutral analyzer can also certify requested integer expressions over a
 rule's complete-binding domains. It checks every intermediate, including both
@@ -2998,6 +3015,18 @@ diagnostic: it does not remove literals or bypass arithmetic-family admission.
 proves the signed variable-divisor envelope and the corresponding scalar fault
 conditions. Analyzer soundness, occurrence mapping and the certificate walk
 remain Rust correspondence obligations.
+
+Static totality also enables ordinary prefix filtering during support completion
+for eligible flat normal producers, independently of diagnostic requests. Its
+compact certificate borrows the exact rule; all producers contribute to the
+finished analysis, while complete source-family traversal remains separate. No
+computed-key coverage or complete-binding witness follows from this certificate.
+The preservation argument is that a defined false plan-decided prefix excludes
+every extension, and static totality rules out hidden arithmetic failures on
+complete bindings. Earlier prefix failures retain the checked evaluator's
+deferred treatment. The all-producer domain correspondence, certificate issuance,
+owner authentication and preservation of admission remain Rust obligations;
+existing Lean laws do not certify this new execution consumer.
 
 The optional Rust
 [finite totality certificate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/totality.rs)

@@ -440,7 +440,7 @@ fn derive(source: &str, shared: bool) -> (BTreeSet<Atom>, u64) {
                 crate::formula_support::derive_variants(
                     rule,
                     &mut variants,
-                    None,
+                    (None, None),
                     support,
                     &mut budget,
                     Context::new(computation, &limits, counters, rule.location),

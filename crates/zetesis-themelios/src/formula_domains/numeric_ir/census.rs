@@ -371,7 +371,7 @@ fn body_result(
 
 /// Match the initial ordinary join profile. This collects only its positive
 /// slot coverage; the shared Decisions fold remains the readiness authority.
-fn readiness(
+pub(super) fn readiness(
     source: &RuleIr,
     components: TemplateComponentsRef<'_>,
     limits: &FormulaLimits,
@@ -423,7 +423,7 @@ fn operand(certificate: Option<numeric::IntegerCertificate<'_>>, leaf: bool) -> 
     }
 }
 
-fn leaf(expression: &Expression, bound: Option<&[Option<usize>]>) -> bool {
+pub(super) fn leaf(expression: &Expression, bound: Option<&[Option<usize>]>) -> bool {
     match expression.nodes.as_slice() {
         [Operation::Constant(_)] => true,
         [Operation::Variable(slot)] => bound

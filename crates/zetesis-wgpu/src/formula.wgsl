@@ -45,13 +45,15 @@ fn original(world: u32, mask_base: u32, index: u32) {
         value = operation(node.tag, frozen[mask_base + node.left] != 0u,
             frozen[mask_base + node.right] != 0u);
     }
-    if (node.tag >= 5u) {
+    if (node.tag == 5u || node.tag == 6u) {
         value = node.tag == 5u;
         for (var child = 0u; child < node.right; child++) {
             let next = frozen[mask_base + operand_at(node, child)] != 0u;
             value = select(value || next, value && next, node.tag == 5u);
         }
     }
+    if (node.tag >= 7u && node.tag <= 9u) { value = numeric_truth(mask_base, node); }
+    if (node.tag == 10u) { value = true; }
     frozen[mask_base + index] = select(0u, 1u, value);
 }
 fn narrow(index: u32, allowed: u32) {
@@ -205,7 +207,10 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
             // Crucial reduct boundary: an M-false composite is just false.
             // Its original connective must not constrain the children.
             if (frozen[mask_base + index] != 0u) {
-                if (node.tag >= 5u) { group_gate(base, node); }
+                if (node.tag == 10u) { narrow(base + node.output, 2u); }
+                else if (node.tag >= 8u) { extremum_gate(base, node); }
+                else if (node.tag == 7u) { threshold_gate(base, node); }
+                else if (node.tag >= 5u) { group_gate(base, node); }
                 else if (node.tag >= 2u) { gate(base, node); }
             }
         }

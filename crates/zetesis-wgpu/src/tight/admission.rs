@@ -32,7 +32,12 @@ impl Admission {
             if cached.is_some_and(|(graph, _)| graph.theory.same_instance(certificate.theory())) {
                 None
             } else {
-                Some(Graph::with_control(certificate, packing, cancellation)?)
+                Some(Graph::with_control(
+                    certificate,
+                    packing,
+                    limits.max_batch_bytes,
+                    cancellation,
+                )?)
             };
         let graph = fresh
             .as_ref()

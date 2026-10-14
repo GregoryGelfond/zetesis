@@ -46,7 +46,7 @@ impl Preparation {
         epoch: u32,
         cancellation: &Cancellation,
     ) -> Result<Self, GpuError> {
-        let shape = Shape::with_control(theory, device, cancellation)?;
+        let shape = Shape::with_control(theory, device, limits.max_batch_bytes, cancellation)?;
         let serial = Schedule::new(&shape, 0, device)?;
         let minimum = Plan::layout(&shape, &serial, worlds, limits, device, true, epoch)?;
         Ok(Self {
@@ -81,24 +81,13 @@ impl Preparation {
             0,
             self.limits.max_batch_bytes,
         )?;
-        let mut map = vector(self.shape.map)?;
-        let mut scratch = vector(self.shape.scratch)?;
-        let temporary_bytes = retained_bytes(&map)?
-            .checked_add(retained_bytes(&scratch)?)
-            .ok_or_else(|| capacity("formula lowering capacity overflows"))?;
-        self.minimum.staging(
-            self.shape.temporary_bytes,
-            temporary_bytes,
-            0,
-            self.limits.max_batch_bytes,
-        )?;
         crate::formula_graph::pack(
             &self.shape.theory,
+            &self.shape.rows,
             &mut nodes,
-            &mut map,
-            &mut scratch,
             cancellation,
         )?;
+        self.shape.rows.release();
         let depth_count = pack_depths(&self.shape, &mut nodes, cancellation)?;
         // A pure chain has no independent node work. This structural choice is
         // not a measured crossover policy for other skinny/unbalanced DAGs.
@@ -123,12 +112,6 @@ impl Preparation {
             0,
             self.limits.max_batch_bytes,
         )?;
-        plan.staging(
-            self.shape.temporary_bytes,
-            temporary_bytes,
-            0,
-            self.limits.max_batch_bytes,
-        )?;
         poll(cancellation)?;
         let mut roots = reserve_words(&mut reserve, schedule.root_bytes)?;
         plan.staging(
@@ -137,14 +120,7 @@ impl Preparation {
             retained_bytes(&roots)?,
             self.limits.max_batch_bytes,
         )?;
-        pack_schedule(
-            &self.shape,
-            &schedule,
-            &nodes,
-            &map,
-            &mut roots,
-            cancellation,
-        )?;
+        pack_schedule(&self.shape, &schedule, &nodes, &mut roots, cancellation)?;
         finalize_outputs(&self.shape, &mut nodes, cancellation)?;
         poll(cancellation)?;
         Ok((
@@ -209,16 +185,22 @@ fn pack_depths(
             Ok(nodes[child as usize * 4 + 3])
         };
         let depth = match header[0] {
-            0 | 1 => 0,
+            0 | 1 | 10 => 0,
             2..=4 => child_depth(header[1])?
                 .max(child_depth(header[2])?)
                 .checked_add(1)
                 .ok_or_else(|| capacity("formula dependency depth overflows"))?,
-            5 | 6 => {
+            5..=9 => {
                 let mut depth = 0_u32;
                 for offset in 0..header[2] as usize {
                     poll(cancellation)?;
-                    let child = nodes[shape.nodes as usize * 4 + header[1] as usize + offset];
+                    let tail = shape.nodes as usize * 4;
+                    let row = if header[0] >= 7 {
+                        nodes[tail + header[1] as usize]
+                    } else {
+                        header[1]
+                    };
+                    let child = nodes[tail + row as usize + offset];
                     depth = depth.max(child_depth(child)?);
                 }
                 depth
@@ -241,7 +223,6 @@ fn pack_schedule(
     shape: &Shape,
     schedule: &Schedule,
     nodes: &[u32],
-    map: &[u32],
     roots: &mut Vec<u32>,
     cancellation: &Cancellation,
 ) -> Result<(), GpuError> {
@@ -253,7 +234,7 @@ fn pack_schedule(
     );
     for (index, root) in shape.theory.roots().iter().enumerate() {
         poll(cancellation)?;
-        roots[index] = crate::formula_graph::translated(map, *root)?;
+        roots[index] = address(*root)?;
     }
     if schedule.levels == 0 {
         return Ok(());

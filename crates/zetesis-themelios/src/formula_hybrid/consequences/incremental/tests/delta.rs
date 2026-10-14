@@ -1,5 +1,5 @@
-//! A completed negative scan covers unchanged witnesses; the occurrence union
-//! supplies every new witness without changing the conservative unit operation.
+//! A completed negative scan covers unchanged witnesses; disjoint occurrence
+//! anchors supply every new witness without changing the conservative unit test.
 
 mod cuts;
 mod polarities;
@@ -157,6 +157,14 @@ fn bounded_unions_match_complete_region_scans() {
                 multi_changes += usize::from(changed.as_slice().len() > 1);
                 let (full, _) = scan(&owner, &next, None);
                 let (anchored, _) = scan(&owner, &next, Some(changed.as_slice()));
+                let (overlapping, _) =
+                    crate::formula_hybrid::consequences::partition_tests::overlapping(|| {
+                        scan(&owner, &next, Some(changed.as_slice()))
+                    });
+                assert_eq!(
+                    anchored, overlapping,
+                    "disjoint and overlapping anchors: {source}, {changed:?}"
+                );
                 assert_eq!(
                     anchored, full,
                     "{source}: region {encoding}, changes {changed:?}"

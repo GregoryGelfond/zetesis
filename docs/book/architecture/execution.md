@@ -480,9 +480,13 @@ the same storage buffer. Binary pairs remain inline; a wider conjunction or
 disjunction remains one node with its ordered, repeated child occurrences.
 No binary expansion or per-candidate graph copy is made. This immutable view
 is retained for one exact theory identity. Unused raw arena cells are omitted;
-overlapping raw spans are copied once per logical row.
+overlapping raw Boolean spans are copied once per logical row. Numeric guards
+retain their original node IDs and share condition, low-word and high-word
+columns by the admitted row's identity. Each variable guard has a five-word
+descriptor. Constant thresholds and extremum endpoints or impossible cuts need
+only a constant header. No host eligibility masks are substituted for formulas.
 
-For `N` nodes and `W` wide operand occurrences, packing checks `4*N+W` against
+For `N` nodes and `W` appended operand/descriptor words, packing checks `4*N+W` against
 the 32-bit word-address range. The padded byte size `4*max(4,4*N+W)` is checked
 independently against both device buffer limits and included in resident and
 cold-upload accounting. Formula cold admission also checks actual retained
@@ -517,16 +521,26 @@ if count = 1: intersect_domain(last, {false})
 
 `last` identifies an atom only when the count is one; zero is a valid atom index.
 Auxiliary formula nodes never participate in this subset test. An original-false
-subformula remains disabled by the frozen mask throughout propagation.
+subformula remains disabled by the frozen mask throughout propagation. Native
+numeric projections make at most two linear scans per guard. Their conservative
+bounds preserve completions but may infer less than expanded Boolean formulas.
+A residual reports no narrowed atom region; exact host completion retains the
+original proper-subset query.
 
 Mandatory device setup charges `2*nodes+edges+atoms+roots+levels`; pure chains
 and empty graphs use zero levels. Each complete sweep reserves
 `9*nodes+2*edges+atoms+65`, covering binary relation rows, both possible native
-operand scans and the strict-subset reduction. These are bounded policy units,
-not raw instruction counts. A limit below setup is refused before dispatch;
+operand scans and the strict-subset reduction. Setup and each sweep also reserve
+`48*n+32` per variable threshold and `24*n+16` per variable extremum cut, where
+`n` counts its condition occurrences. These conservative units include portable
+limb arithmetic; they are not raw instruction counts. A limit below setup is refused before dispatch;
 a limit preventing another sweep returns an explicit residual for completion.
-Cold host preparation takes `O(nodes+edges+roots+levels)` work outside that
-per-candidate device budget.
+Cold host preparation takes `O(nodes+source_edges+roots+levels+g*log(g))` work outside
+that per-candidate device budget, where `source_edges` includes numeric occurrences
+examined before constant folding, and `g` counts variable numeric guards. The
+numeric row directory is bounded before reservation, charged by actual capacity,
+and released after node packing. The sorted directory shares row transport;
+it does not cache a second semantic representation.
 
 [Preparation](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/formula/preparation.rs)
 owns temporary depth and schedule storage and releases staging after upload.

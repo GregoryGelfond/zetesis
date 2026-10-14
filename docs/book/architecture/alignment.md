@@ -78,8 +78,10 @@ backend. Explicit GPU execution with automatic membership policy uses complete
 tight certificates when available; other formulas use GPU propagation and exact
 host completion.
 With multiple workers, joined Rayon rounds produce bounded candidate batches
-before device checking. Device-native aggregate reduction remains an explicit
-library capability; ordinary GPU formula execution still uses Boolean lowering.
+before device checking. Ordinary GPU formula execution retains native threshold
+and ordinal min/max rows. The separate `GpuAggregateOracle` remains an explicit
+library capability over supplied eligibility masks; ordinary solving does not
+route through that interface.
 
 ## Positive inference is a composition with a fixed point
 
@@ -274,7 +276,8 @@ weights by predecessor truth, reduce them in checked `i128`, then compare the
 bound. A family of bounds shares its condition and weight columns. The frozen
 reading retains the original threshold truth gate. Admitted whole-theory CPU
 passes reduce a shared weighted row once, then compare each bound separately;
-GPU transport expands the row's guards into its Boolean device format.
+GPU transport preserves each guard and shares the authoritative row's condition
+and value columns. Portable integer limbs retain the admitted numeric range.
 The common source compiler uses this representation for nonnegative count and
 sum guards, including choice bounds. Shared counters propagate their necessary
 consequences. Signed sums retain their existing exact translation.
@@ -300,9 +303,11 @@ the theory owner. Each frozen guard also retains its own original-truth gate. An
 scratch when no numeric node is present. Fresh initialization, resets, physical
 row reads and actual retained capacities remain charged. Candidate propagation borrows prefixes of sorted distinct-condition columns and uses the
 existing connective counters. The authoritative row still retains every tuple
-occurrence. GPU transport currently lowers cuts to Boolean device formulas;
-this is not a native device min/max reduction and may require work proportional
-to the row width times its guard count.
+occurrence. GPU transport retains the same ordinal cuts. Its original-truth
+consumer scans qualifying witnesses for each cut, and its frozen consumer
+propagates their necessary consequences. Each guard still scans its row; sharing
+the uploaded columns does not yet give the device the CPU's once-per-row measure
+reuse. Constant endpoints and impossible cuts omit unused row transport.
 The [ordinal laws](../lean/correspondence.md#ordinal-extrema) describe the
 semantic contract. Runtime refinement and application speed remain separate
 obligations.

@@ -7,13 +7,17 @@ use std::borrow::Cow;
 fn default_shader_remains_the_borrowed_baseline() {
     assert!(
         matches!(GateProjection::Enumerated.shader().unwrap(), Cow::Borrowed(source)
-        if source == include_str!("../../formula.wgsl"))
+        if source == concat!(include_str!("../../formula.wgsl"), include_str!("../../formula_graph/numeric.wgsl"), include_str!("../numeric.wgsl")))
     );
 }
 
 #[test]
 fn bitwise_transfer_preserves_the_shader_scaffold() {
-    let baseline = include_str!("../../formula.wgsl");
+    let baseline = concat!(
+        include_str!("../../formula.wgsl"),
+        include_str!("../../formula_graph/numeric.wgsl"),
+        include_str!("../numeric.wgsl")
+    );
     let (prefix, transfer) = baseline.split_once("fn gate(").unwrap();
     let suffix = &transfer[transfer.find("fn finish(").unwrap()..];
     let assembled = GateProjection::Bitwise.shader().unwrap();

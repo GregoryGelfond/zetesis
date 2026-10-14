@@ -895,7 +895,7 @@ fn threshold_producer_bodies_use_physical_result_addresses() {
         )
         .unwrap();
         let packed = graph.pack(&certificate, &Cancellation::default()).unwrap();
-        assert!(graph.nodes as usize > theory.nodes().len());
+        assert_eq!(graph.nodes as usize, theory.nodes().len());
         for record in packed
             .producers
             .chunks_exact(4)
@@ -903,7 +903,7 @@ fn threshold_producer_bodies_use_physical_result_addresses() {
         {
             if record[2] != 0 {
                 let physical = record[1] as usize;
-                assert_eq!(packed.nodes[physical * 4], 3);
+                assert_eq!(packed.nodes[physical * 4], 7);
                 let root = packed.roots[record[0] as usize];
                 assert_eq!(packed.nodes[root as usize * 4 + 1], record[1]);
             }
@@ -957,8 +957,7 @@ fn ordinal_producer_bodies_use_physical_result_addresses() {
         )
         .unwrap();
         let packed = graph.pack(&certificate, &Cancellation::default()).unwrap();
-        assert_eq!(graph.scratch, 0);
-        assert!(graph.nodes as usize > theory.nodes().len());
+        assert_eq!(graph.nodes as usize, theory.nodes().len());
         for record in packed
             .producers
             .chunks_exact(4)
@@ -966,7 +965,7 @@ fn ordinal_producer_bodies_use_physical_result_addresses() {
         {
             if record[2] != 0 {
                 let physical = record[1] as usize;
-                assert_eq!(packed.nodes[physical * 4], 3);
+                assert_eq!(packed.nodes[physical * 4], 8);
                 let root = packed.roots[record[0] as usize];
                 assert_eq!(packed.nodes[root as usize * 4 + 1], record[1]);
             }

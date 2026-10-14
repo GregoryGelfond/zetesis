@@ -6,6 +6,8 @@ pub use census::{
     NumericBody, NumericCensus, NumericComparison, NumericOperand, NumericRuleAnalysis,
 };
 mod reader;
+mod totality;
+pub(crate) use totality::TotalBody;
 
 use zetesis_core::TemplateComponentsRef;
 use zetesis_core::catalog::{CatalogRead, PredicateRef, ReadError, TermKey};
@@ -22,6 +24,7 @@ pub(crate) struct Analysis<'prepared> {
     predicates: Vec<lower::Predicate>,
     occurrences: Vec<census::Occurrence<'prepared>>,
     census: Option<NumericCensus>,
+    totality: Vec<totality::Request<'prepared>>,
 }
 
 /// A borrowed numeric-domain report over the prepared program's canonical terms.
@@ -159,6 +162,7 @@ pub(crate) fn analyze<'prepared>(
         finite_width: limits.max_values_per_argument,
         diagnostics,
         occurrences: Vec::new(),
+        totality: Vec::new(),
     };
     let values = numeric::analyze(&reader, limits, |input| lower.program(prepared, input))
         .map_err(|failure| Failure {
@@ -167,16 +171,17 @@ pub(crate) fn analyze<'prepared>(
             context: failure.context,
         })?;
     // A stopped analysis publishes no usable argument coordinates.
-    let (predicates, occurrences) = if values.status() == numeric::Status::FixedPoint {
-        (lower.predicates, lower.occurrences)
+    let (predicates, occurrences, totality) = if values.status() == numeric::Status::FixedPoint {
+        (lower.predicates, lower.occurrences, lower.totality)
     } else {
-        (Vec::new(), Vec::new())
+        (Vec::new(), Vec::new(), Vec::new())
     };
     Ok(Analysis {
         values,
         predicates,
         occurrences,
         census: None,
+        totality,
     })
 }
 

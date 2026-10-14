@@ -3,6 +3,7 @@
 mod census;
 mod diagnostic_requests;
 mod observation;
+mod static_totality;
 
 use observation::{Argument, Observation};
 use zetesis_domain::numeric::{Bound, Integrality, Interval, Status};

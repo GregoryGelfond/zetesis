@@ -182,7 +182,9 @@ impl PreparedFormula {
     ///
     /// Observers request certificates and a typed census through
     /// [`GroundingObserver::domain_diagnostics_enabled`]. Without that request,
-    /// shared analysis and finite guards still run without diagnostic work.
+    /// shared analysis, finite guards and static scalar-totality selection still
+    /// run without diagnostic work. Static selection applies only to certified
+    /// flat normal producers; source-family evidence retains complete traversal.
     #[must_use]
     pub const fn with_domain_analysis(mut self, limits: Option<crate::DomainLimits>) -> Self {
         self.preparation.options.domains = limits;

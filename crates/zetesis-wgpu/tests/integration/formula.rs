@@ -9,7 +9,12 @@ pub(crate) mod wide;
 
 #[test]
 fn cooperative_formula_shader_validates_without_optional_capabilities() {
-    let module = naga::front::wgsl::parse_str(include_str!("../../src/formula.wgsl")).unwrap();
+    let module = naga::front::wgsl::parse_str(concat!(
+        include_str!("../../src/formula.wgsl"),
+        include_str!("../../src/formula_graph/numeric.wgsl"),
+        include_str!("../../src/formula/numeric.wgsl")
+    ))
+    .unwrap();
     naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::empty(),

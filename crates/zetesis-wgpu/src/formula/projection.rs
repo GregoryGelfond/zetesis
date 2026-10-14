@@ -7,8 +7,8 @@ use std::borrow::Cow;
 ///
 /// Both implementations use the same three atomic observations and intersections,
 /// including physical-slot aliases and observations taken at different instants.
-/// Native groups use the shared operand reduction, which preserves satisfying
-/// completions without claiming exact projection of racing aliased observations.
+/// Native Boolean and numeric groups use shared operand reductions, preserving
+/// satisfying completions without claiming exact projection of racing aliased observations.
 /// Both policies retain the frozen query, work bounds and result protocol.
 /// Selecting an alternative establishes no physical qualification or speedup.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -41,7 +41,11 @@ impl GateProjection {
     // A fixed-size, fallible reservation precedes construction. No user text or
     // repeated replacement occurs; both variants therefore share the scaffold.
     pub(super) fn shader(self) -> Result<Cow<'static, str>, GpuError> {
-        const BASELINE: &str = include_str!("../formula.wgsl");
+        const BASELINE: &str = concat!(
+            include_str!("../formula.wgsl"),
+            include_str!("../formula_graph/numeric.wgsl"),
+            include_str!("numeric.wgsl")
+        );
         match self {
             Self::Enumerated => Ok(Cow::Borrowed(BASELINE)),
             Self::Bitwise => {

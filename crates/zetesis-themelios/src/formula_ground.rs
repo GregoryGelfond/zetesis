@@ -807,10 +807,14 @@ impl<'source> Builder<'_, '_, 'source> {
         if crate::formula_factor::rule(self, rule, support)? {
             return Ok(());
         }
-        let guards = if let Some(domains) = domains {
+        let candidates = domains
+            .map(|domains| domains.for_rule(index, rule))
+            .transpose()?
+            .flatten();
+        let guards = if let Some(candidates) = candidates {
             support.domain_guards(
                 rule,
-                domains.for_rule(index, rule)?,
+                candidates,
                 self.computation,
                 self.limits,
                 self.counters,

@@ -78,6 +78,7 @@ fn with_pivot_rows(
             region: &region,
         },
         mode: ConsequenceMode::Pivot(pivot),
+        delta: None,
     };
     let plan = PreparedRule::new(
         rule,

@@ -207,7 +207,7 @@ fn cancelled_group_packing_has_no_partial_output() {
     cancellation.cancel();
     assert_eq!(
         grouped
-            .pack_producers(&certificate, &[], &cancellation)
+            .pack_producers(&certificate, &cancellation)
             .err()
             .unwrap()
             .interruption,

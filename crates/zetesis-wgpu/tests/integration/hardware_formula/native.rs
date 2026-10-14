@@ -4,6 +4,7 @@ use super::*;
 use zetesis_ferraris::{ExtremumCutRule, ExtremumRow, FormulaNodes, FormulaParts};
 
 pub(super) fn qualify(oracle: &mut GpuFormulaOracle) {
+    qualify_full_width(oracle);
     for bound in -1..=8 {
         let mut nodes = FormulaNodes::new(
             FormulaParts::new(
@@ -62,9 +63,15 @@ pub(super) fn qualify(oracle: &mut GpuFormulaOracle) {
     ] {
         qualify_ordinal(oracle, rule, false);
     }
-    for rule in [ExtremumCutRule::Prefix(3), ExtremumCutRule::Suffix(3)] {
-        qualify_ordinal(oracle, rule, true);
+    for bound in 0..=5 {
+        for rule in [
+            ExtremumCutRule::Prefix(bound),
+            ExtremumCutRule::Suffix(bound),
+        ] {
+            qualify_ordinal(oracle, rule, true);
+        }
     }
+    qualify_wide_ordinals(oracle);
 }
 
 fn compare_native(oracle: &mut GpuFormulaOracle, theory: &Theory) {
@@ -87,6 +94,23 @@ fn compare_native(oracle: &mut GpuFormulaOracle, theory: &Theory) {
             );
             if matches!(result.verdict(), FormulaVerdict::NoProperSubset) {
                 assert!(expected.accepted());
+            }
+            // Device domains never cross this API. A surviving proper-subset
+            // reduct model must leave exact CPU completion as a residual query.
+            if !matches!(expected.verdict(), Verdict::NotModel { .. }) {
+                let frozen =
+                    FrozenReduct::new(candidate, Limits::default(), &Cancellation::default())
+                        .unwrap();
+                for tested in &inputs {
+                    if tested.atoms().all(|atom| candidate.contains(atom))
+                        && tested.atoms().count() < candidate.atoms().count()
+                        && frozen
+                            .is_satisfied_by(tested, Limits::default(), &Cancellation::default())
+                            .unwrap()
+                    {
+                        assert!(matches!(result.verdict(), FormulaVerdict::Residual(_)));
+                    }
+                }
             }
         }
     }
@@ -134,4 +158,90 @@ fn qualify_ordinal(oracle: &mut GpuFormulaOracle, rule: ExtremumCutRule, empty: 
     )
     .unwrap();
     compare_native(oracle, &theory);
+}
+
+fn qualify_full_width(oracle: &mut GpuFormulaOracle) {
+    for bound in [
+        i128::MIN,
+        0,
+        1,
+        1i128 << 32,
+        i128::from(u64::MAX),
+        i128::from(u64::MAX) + 1,
+        i128::from(u64::MAX) * 2,
+        i128::MAX,
+    ] {
+        let mut nodes = FormulaNodes::new(
+            FormulaParts::new(vec![Node::atom(0), Node::atom(0), Node::atom(1)], vec![]).unwrap(),
+        );
+        let mut tx = nodes.transaction();
+        let root = tx
+            .push(
+                NodeView::Threshold(zetesis_ferraris::Threshold {
+                    conditions: &[0, 1, 2, 2],
+                    weights: &[u64::MAX, u64::MAX, 1, 0],
+                    bound,
+                }),
+                usize::MAX,
+                usize::MAX,
+            )
+            .unwrap();
+        tx.commit();
+        let theory = Theory::new(
+            2,
+            nodes.into_parts(),
+            vec![root],
+            zetesis_ferraris::AdmissionLimits::default(),
+        )
+        .unwrap();
+        compare_native(oracle, &theory);
+    }
+}
+
+fn qualify_wide_ordinals(oracle: &mut GpuFormulaOracle) {
+    for bound in [0, 1, 1u64 << 32, (1u64 << 32) + 1, u64::MAX - 1, u64::MAX] {
+        for rule in [
+            ExtremumCutRule::Prefix(bound),
+            ExtremumCutRule::Suffix(bound),
+        ] {
+            let mut nodes = FormulaNodes::new(
+                FormulaParts::new(
+                    vec![Node::atom(0), Node::atom(0), Node::atom(1), Node::falsum()],
+                    vec![],
+                )
+                .unwrap(),
+            );
+            let mut tx = nodes.transaction();
+            let cut = tx
+                .push_extremum_cut_family_range(
+                    ExtremumRow {
+                        conditions: &[0, 1, 2],
+                        ranks: &[0, 1u64 << 32, u64::MAX - 1],
+                        rank_count: u64::MAX,
+                    },
+                    &[rule],
+                    usize::MAX,
+                    usize::MAX,
+                )
+                .unwrap()
+                .start;
+            // Both a direct guard and its negation exercise the M-false frozen
+            // boundary under a true original root, with aliased semantic atoms.
+            let negated = tx
+                .push(NodeView::Implies(cut, 3), usize::MAX, usize::MAX)
+                .unwrap();
+            let root = tx
+                .push(NodeView::Or(&[cut, negated]), usize::MAX, usize::MAX)
+                .unwrap();
+            tx.commit();
+            let theory = Theory::new(
+                2,
+                nodes.into_parts(),
+                vec![root],
+                zetesis_ferraris::AdmissionLimits::default(),
+            )
+            .unwrap();
+            compare_native(oracle, &theory);
+        }
+    }
 }

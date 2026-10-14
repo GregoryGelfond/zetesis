@@ -1,4 +1,4 @@
-//! Native positive numeric bodies retain ranked support through physical lowering.
+//! Native positive numeric bodies retain ranked support through native device rows.
 
 use super::*;
 use zetesis_ferraris::{
@@ -6,7 +6,18 @@ use zetesis_ferraris::{
 };
 
 pub(super) fn qualify(oracle: &mut GpuTightOracle) {
-    for bound in [1, 2, 3, 4] {
+    for (weights, bound) in [
+        ([1, 2], 1),
+        ([1, 2], 2),
+        ([1, 2], 3),
+        ([1, 2], 4),
+        ([u64::MAX, u64::MAX], i128::MIN),
+        ([u64::MAX, 0], 0),
+        ([u64::MAX, u64::MAX], 1i128 << 32),
+        ([u64::MAX, u64::MAX], i128::from(u64::MAX) + 1),
+        ([u64::MAX, u64::MAX], i128::from(u64::MAX) * 2),
+        ([u64::MAX, u64::MAX], i128::MAX),
+    ] {
         let mut nodes = FormulaNodes::new(
             FormulaParts::new(vec![Node::atom(0), Node::atom(1), Node::atom(2)], vec![]).unwrap(),
         );
@@ -17,7 +28,7 @@ pub(super) fn qualify(oracle: &mut GpuTightOracle) {
                 .push(
                     NodeView::Threshold(Threshold {
                         conditions: &[atom, atom],
-                        weights: &[1, 2],
+                        weights: &weights,
                         bound,
                     }),
                     usize::MAX,
@@ -48,11 +59,24 @@ pub(super) fn qualify(oracle: &mut GpuTightOracle) {
         ExtremumCutRule::Suffix(2),
         ExtremumCutRule::Suffix(4),
     ] {
-        qualify_ordinal(oracle, rule);
+        qualify_ordinal(oracle, rule, 4, &[1, 3]);
+    }
+    for bound in [0, 1, 1u64 << 32, (1u64 << 32) + 1, u64::MAX - 1, u64::MAX] {
+        for rule in [
+            ExtremumCutRule::Prefix(bound),
+            ExtremumCutRule::Suffix(bound),
+        ] {
+            qualify_ordinal(oracle, rule, u64::MAX, &[1u64 << 32, u64::MAX - 1]);
+        }
     }
 }
 
-fn qualify_ordinal(oracle: &mut GpuTightOracle, rule: ExtremumCutRule) {
+fn qualify_ordinal(
+    oracle: &mut GpuTightOracle,
+    rule: ExtremumCutRule,
+    rank_count: u64,
+    ranks: &[u64],
+) {
     let mut nodes = FormulaNodes::new(
         FormulaParts::new(vec![Node::atom(0), Node::atom(1), Node::atom(2)], vec![]).unwrap(),
     );
@@ -63,8 +87,8 @@ fn qualify_ordinal(oracle: &mut GpuTightOracle, rule: ExtremumCutRule) {
             .push_extremum_cut_family_range(
                 ExtremumRow {
                     conditions: &[atom, atom],
-                    ranks: &[1, 3],
-                    rank_count: 4,
+                    ranks,
+                    rank_count,
                 },
                 &[rule],
                 usize::MAX,

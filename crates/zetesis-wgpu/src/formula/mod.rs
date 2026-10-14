@@ -19,10 +19,12 @@ pub struct FormulaLimits {
     /// Maximum candidate worlds, additionally bounded by device dispatch limits.
     pub max_candidates: usize,
     /// Conservative authored graph, transport, host packing and result bytes.
-    /// Cold preparation first admits a minimum envelope, then the complete
+    /// Cold preparation bounds its numeric-row directory before allocating it,
+    /// then admits a minimum envelope, followed by the complete
     /// schedule and actual retained node/root upload-vector element capacities.
     /// These staging buffers coexist with device copies during upload and are
-    /// released afterward. Seed/result host allowances remain requested sizes.
+    /// released afterward. The directory is charged by capacity and released once
+    /// node packing finishes. Seed/result host allowances remain requested sizes.
     /// Caller-owned inputs, allocator overhead and driver-private allocations
     /// or deferred retirement are excluded; this is not an RSS bound.
     pub max_batch_bytes: u64,
@@ -37,7 +39,11 @@ pub struct FormulaLimits {
     /// Leaf nodes are visited but need no separate domain initialization store.
     /// A sweep reserves `9*nodes+2*edges+atoms+65` units, including eight possible gate
     /// truth-table rows per binary node, two native operand walks, 64 lane-summary merges and one strict-subset
-    /// projection. These are policy units, not raw GPU instructions.
+    /// projection. Both setup and each sweep additionally reserve `48*n+32` for
+    /// each variable threshold and `24*n+16` for each variable extremum cut,
+    /// where `n` is its number of condition occurrences. These cover linear
+    /// condition visits and portable limb arithmetic; constant guards carry no
+    /// numeric row charge. These are policy units, not raw GPU instructions.
     /// Inactive nodes still consume their allowance.
     /// A budget below mandatory setup is refused before dispatch.
     pub max_work_per_candidate: u32,
