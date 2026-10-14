@@ -724,6 +724,9 @@ fn countermodel(
             },
             counts.work,
         )?;
+        if let Some(workers) = regions.workers {
+            region_workers(sink, workers)?;
+        }
     }
     writeln!(
         sink,
@@ -777,6 +780,84 @@ fn countermodel(
         certificate(sink, &certified, config.max_completion_scratch_bytes)?;
     }
     Ok(())
+}
+
+/// The parallel walk's engagement record, one optional value per key: each
+/// state's values are absent outside that state.
+#[derive(Default)]
+pub(crate) struct WorkerRecord {
+    pub(crate) elapsed: Option<Duration>,
+    pub(crate) walking: Option<Duration>,
+    pub(crate) after: Option<Duration>,
+    pub(crate) launched: Option<usize>,
+    pub(crate) spawn: Option<Duration>,
+}
+
+impl From<zetesis_sat::RegionWalkEngagement> for WorkerRecord {
+    fn from(engagement: zetesis_sat::RegionWalkEngagement) -> Self {
+        use zetesis_sat::RegionWalkEngagement as State;
+        match engagement {
+            State::Unengaged { elapsed, walking } => Self {
+                elapsed: Some(elapsed),
+                walking: Some(walking),
+                ..Self::default()
+            },
+            State::Engaged {
+                after,
+                walking,
+                launched,
+                spawn,
+            } => Self {
+                walking: Some(walking),
+                after: Some(after),
+                launched: Some(launched),
+                spawn: Some(spawn),
+                ..Self::default()
+            },
+            // A walk not begun has no values, nor has a state this build
+            // does not name.
+            _ => Self::default(),
+        }
+    }
+}
+
+/// The parallel walk's workers, under its candidate regions, with the JSON's
+/// keys: `engagement_delay_ns=never` for a delay whose deadline overflows.
+fn region_workers(
+    sink: &mut impl Write,
+    workers: zetesis_sat::RegionWorkerStatistics,
+) -> io::Result<()> {
+    let record = WorkerRecord::from(workers.engagement);
+    write!(
+        sink,
+        "    workers: configured={}; engagement_delay_ns=",
+        workers.configured
+    )?;
+    match workers.engagement_delay {
+        Some(delay) => write!(sink, "{}", delay.as_nanos())?,
+        None => write!(sink, "never")?,
+    }
+    write!(
+        sink,
+        "; engagement={}",
+        workers.engagement.label().replace('_', " ")
+    )?;
+    if let Some(elapsed) = record.elapsed {
+        write!(sink, "; elapsed_ns={}", elapsed.as_nanos())?;
+    }
+    if let Some(after) = record.after {
+        write!(sink, "; engaged_after_ns={}", after.as_nanos())?;
+    }
+    if let Some(walking) = record.walking {
+        write!(sink, "; walking_ns={}", walking.as_nanos())?;
+    }
+    if let Some(launched) = record.launched {
+        write!(sink, "; launched={launched}")?;
+    }
+    if let Some(spawn) = record.spawn {
+        write!(sink, "; spawn_ns={}", spawn.as_nanos())?;
+    }
+    writeln!(sink)
 }
 
 fn certificate(

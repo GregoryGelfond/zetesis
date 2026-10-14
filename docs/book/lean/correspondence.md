@@ -1589,6 +1589,13 @@ re-check. The wait stays bounded, which is how an idle worker sees a cancellatio
 or a region left in a queue its re-check found busy; completeness never depends on
 a wake.
 
+Before its workers start, the walk runs on the calling thread: the coordinator
+takes the newest region of deque 0 as a worker takes its own, and decides it with
+the same per-region step. At engagement every outstanding region is in deque 0
+and none is in hand, so the workers start with the count equal to the regions in
+the deques. The coordinator phase and this handoff are Rust refinement
+obligations beside the queue and gate protocols.
+
 `Pending.Step.perm` and `Pending.Walk.exhausted` describe the abstract preservation
 and exhaustion laws; the atomic count, the queue and gate protocols (including the gate's idle count) and absence
 of lost ownership remain Rust refinement obligations. Depth-first local order

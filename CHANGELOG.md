@@ -211,9 +211,28 @@ Notable changes by release. Versions follow Semantic Versioning.
   `Extraction::choice_heads`, and `OriginalSubject::with_choices` gives a
   self-selecting narrowing the same ranking; `OriginalSubject::theory` and
   `OriginalSubject::choices` read the subject's parts.
+- A parallel region walk begins on the calling thread and starts its workers
+  once it has run, in wall time since it began, longer than starting them
+  costs: twenty microseconds per configured worker, the cost measured on the
+  reference host and recorded in the observation records. A walk that ends
+  sooner starts no thread, and its models arrive in the scalar walk's order.
+  `Engagement` selects another delay through
+  `StableModels::with_region_workers_engaging`; `Engagement::Immediate` starts
+  the workers at the first pull, as before. The region statistics report the
+  workers configured, the engagement delay, and whether the walk engaged: not
+  begun, unengaged (on the calling thread) or engaged. The CLI writes them as
+  `statistics.search.candidate_regions.workers` and as a `workers:` line under
+  the candidate regions, and its `Parallel regions` line now reads "up to N
+  workers, started once the walk outlasts their start".
 
 ### Compatibility
 
+- `RegionSearchStatistics` has a new `workers` field and, like the new
+  `RegionWorkerStatistics`, is `#[non_exhaustive]`: build it with
+  `Default::default()` and read its fields. The record's state is the new
+  `#[non_exhaustive]` enum `RegionWalkEngagement`, and the new
+  `#[non_exhaustive]` `Engagement` and the constructor
+  `StableModels::with_region_workers_engaging` select when the workers start.
 - Exhaustive Rust matches on `zetesis_cli::RunError` must handle the new
   `GpuExecutableUnavailable` variant, and those on
   `zetesis_validation::performance::matrix::Decision` its new

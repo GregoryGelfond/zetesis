@@ -54,8 +54,9 @@ pub enum RegionConsequence {
 /// evidence and return [`Incomplete::RegionFilter`] to identify it.
 ///
 /// A checker is prepared on the first region not refuted by original narrowing.
-/// Serial traversal, each persistent native worker and each joined producer
-/// slot retain their checker, borrowing this factory across answer pulls.
+/// Serial traversal, a parallel walk's coordinator until its workers start,
+/// each persistent native worker and each joined producer slot retain their
+/// checker, borrowing this factory across answer pulls.
 /// Joined slots can move between executor threads. Separate determined-candidate
 /// checks prepare per operation. Preparation is not assumed free.
 /// The factory owns all external resource limits: shared allowances must be
@@ -122,7 +123,8 @@ pub trait RegionFilterWorker: Send {
 /// unless counter overflow explicitly marked the measurement incomplete.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RegionFilterStatistics {
-    /// Worker preparations attempted, including refused preparations.
+    /// Checker preparations attempted, by every traversal worker including a
+    /// parallel walk's coordinator, including refused preparations.
     pub preparations: u64,
     /// Source passes attempted, including continuations and refused checks.
     pub checks: u64,

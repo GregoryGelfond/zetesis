@@ -82,7 +82,10 @@ pub enum ExecutionObservation<'a> {
         /// How candidates are proposed and the reduct queried.
         search: SearchMethod,
     },
-    /// Several workers walk the region tree at once and decide its leaves.
+    /// Up to `workers` threads walk the region tree at once and decide its
+    /// leaves. The walk begins on the calling thread and starts them once it
+    /// has run, in wall time since it began, for longer than starting them
+    /// costs; a walk that ends sooner starts none.
     ParallelRegions {
         /// Requested worker population.
         workers: NonZeroUsize,

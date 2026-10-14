@@ -9,7 +9,10 @@
 //! can return the same family. The deterministic coordination tests exercise
 //! stealing and split publication separately. Each selected worker count is run
 //! repeatedly to sample interleavings; this is not exhaustive schedule coverage.
-//! Model arrival order is deliberately not asserted; only the family is.
+//! Each runs with the workers started at the first pull, and again under the
+//! default engagement, which samples whichever handoff points from the calling
+//! thread to the workers the host's clock produces. Model arrival order is
+//! deliberately not asserted; only the family is.
 
 use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
@@ -17,7 +20,7 @@ use std::time::{Duration, Instant};
 use zetesis_reference_support::formula;
 
 use zetesis_ferraris::Theory;
-use zetesis_sat::{Cancellation, Limits, StableModels};
+use zetesis_sat::{Cancellation, Engagement, Limits, RegionWalkEngagement, StableModels};
 
 /// A standalone eight-queens encoding: 92 answer sets, enough independent
 /// choices to expose a substantial branching tree.
@@ -38,12 +41,14 @@ fn theory() -> Theory {
     formula(QUEENS).theory().clone()
 }
 
-/// Enumerate the complete family under `workers` region walkers. Asserts the
-/// walk covered the space and never emitted a model twice; returns the family.
-fn family(theory: &Theory, workers: usize) -> BTreeSet<Vec<usize>> {
-    let mut search = StableModels::with_region_workers(
+/// Enumerate the complete family under `workers` region walkers, started as
+/// `engagement` says. Asserts the walk covered the space and never emitted a
+/// model twice; returns the family.
+fn family(theory: &Theory, workers: usize, engagement: Engagement) -> BTreeSet<Vec<usize>> {
+    let mut search = StableModels::with_region_workers_engaging(
         theory,
         NonZeroUsize::new(workers).unwrap(),
+        engagement,
         Limits::default(),
         Cancellation::with_deadline(Instant::now() + HANG_GUARD).unwrap(),
     )
@@ -60,6 +65,13 @@ fn family(theory: &Theory, workers: usize) -> BTreeSet<Vec<usize>> {
         search.exhausted(),
         "the walk stopped before covering the candidate space"
     );
+    if workers > 1 && engagement == Engagement::Immediate {
+        let record = search.statistics().regions.unwrap().workers.unwrap();
+        assert!(
+            matches!(record.engagement, RegionWalkEngagement::Engaged { launched, .. } if launched == workers),
+            "{record:?}"
+        );
+    }
     models
 }
 
@@ -67,15 +79,17 @@ fn family(theory: &Theory, workers: usize) -> BTreeSet<Vec<usize>> {
 fn many_workers_return_the_scalar_family_on_every_run() {
     let theory = theory();
     // One worker is the scalar regions walk: the family every schedule must equal.
-    let expected = family(&theory, 1);
+    let expected = family(&theory, 1, Engagement::default());
     assert_eq!(expected.len(), EXPECTED_MODELS);
-    for workers in [2usize, 4, 8, 14] {
-        for run in 0..RUNS {
-            assert_eq!(
-                family(&theory, workers),
-                expected,
-                "worker count {workers}, run {run} returned a different family"
-            );
+    for engagement in [Engagement::Immediate, Engagement::default()] {
+        for workers in [2usize, 4, 8, 14] {
+            for run in 0..RUNS {
+                assert_eq!(
+                    family(&theory, workers, engagement),
+                    expected,
+                    "{engagement:?}, worker count {workers}, run {run} returned a different family"
+                );
+            }
         }
     }
 }

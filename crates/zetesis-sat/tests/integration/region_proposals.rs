@@ -6,12 +6,13 @@ use crate::support::formula_theories as theories;
 use zetesis_theory_support::theories::theory;
 
 use std::collections::BTreeSet;
+use std::time::Duration;
 
 use crate::support::interpretations::stable_models as expected;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_sat::{
-    BatchError, BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Incomplete, Limits,
-    RegionFrontierStatistics, SearchLimits, SearchMethod, StableModels,
+    BatchError, BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Engagement,
+    Incomplete, Limits, RegionFrontierStatistics, SearchLimits, SearchMethod, StableModels,
 };
 use zetesis_test_support::counts::nonzero;
 
@@ -65,10 +66,16 @@ fn shared_indexes_preserve_non_tight_answer_families() {
         reference.countermodels > 0,
         "present unsupported cycles must be rejected"
     );
-    for workers in [2, 4] {
-        let mut native = StableModels::with_region_workers(
+    for (workers, engagement) in [2, 4].into_iter().flat_map(|workers| {
+        [
+            (workers, Engagement::Immediate),
+            (workers, Engagement::After(Duration::MAX)),
+        ]
+    }) {
+        let mut native = StableModels::with_region_workers_engaging(
             &theory,
             nonzero(workers),
+            engagement,
             Limits::default(),
             Cancellation::default(),
         )

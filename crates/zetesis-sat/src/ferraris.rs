@@ -33,12 +33,16 @@ pub(crate) use original_index::IndexedTheory;
 use original_index::OriginalIndex;
 
 mod parallel_regions;
+pub use parallel_regions::Engagement;
 use parallel_regions::ParallelRegions;
 mod region_proposals;
 use region_proposals::RegionProposals;
 pub(crate) use regions::ReductQuery;
 use regions::RegionSearch;
-pub use regions::{RegionCounts, RegionFrontierStatistics, RegionSearchStatistics, SearchMethod};
+pub use regions::{
+    RegionCounts, RegionFrontierStatistics, RegionSearchStatistics, RegionWalkEngagement,
+    RegionWorkerStatistics, SearchMethod,
+};
 
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
 #[derive(Clone, Copy, Debug)]
@@ -398,19 +402,68 @@ impl StableModels {
         Self::with_method(theory, SearchMethod::default(), limits, cancellation)
     }
 
-    /// Enumerate by regions with several workers walking the tree at once,
-    /// each with its own knowledge, budget lease and reduct query state, sharing
-    /// the immutable original index and stealing from per-worker deques of
+    /// Enumerate by regions with up to `workers` walking the tree at once:
+    /// the walk begins on the calling thread and starts the workers once it
+    /// has run, in wall time since it began, for longer than starting them
+    /// costs (see [`Self::with_region_workers_engaging`]). Each worker has its
+    /// own knowledge, budget lease and reduct query state, sharing the
+    /// immutable original index and stealing from per-worker deques of
     /// regions still to visit. Deque growth can return an allocation refusal.
-    /// The models arrive in the schedule's
-    /// order, which is not a property of the result and differs between
-    /// runs; the family is exact. One worker is the scalar regions method.
+    /// The models arrive in the scalar walk's order until the workers start,
+    /// and in the schedule's order after, which is not a property of the
+    /// result and differs between runs; the family is exact. One worker is
+    /// the scalar regions method.
     ///
     /// # Errors
     /// Refuses admission, work limits, cancellation or allocation.
     pub fn with_region_workers(
         theory: &Theory,
         workers: std::num::NonZeroUsize,
+        limits: Limits,
+        cancellation: Cancellation,
+    ) -> Result<Self, Incomplete> {
+        Self::with_region_workers_engaging(
+            theory,
+            workers,
+            Engagement::default(),
+            limits,
+            cancellation,
+        )
+    }
+
+    /// Enumerate by regions with up to `workers` walking the tree at once,
+    /// starting them as `engagement` says.
+    ///
+    /// The walk begins at the first pull on the calling thread, and returns the
+    /// models it verifies there in the scalar walk's order. Once its engagement
+    /// delay has passed, it starts `workers` threads, which continue from its
+    /// remaining frontier. The delay is wall time since the walk began, the
+    /// caller's time between pulls included, checked between the walk's steps.
+    /// Models then arrive in the schedule's order, which is not a property of the
+    /// result; the family is exact under every engagement.
+    ///
+    /// The enumeration owns the threads and joins them when it is exhausted,
+    /// stopped or dropped. Until it engages it owns one worker's workspace instead,
+    /// released when the walk ends, engages, stops or is dropped. One worker is the
+    /// scalar regions method, and `engagement` is then ignored.
+    ///
+    /// # Errors
+    /// Refuses admission, work limits, cancellation or allocation, as
+    /// [`Self::with_region_workers`] does. Threads are created at engagement, not
+    /// here. A thread creation the host refuses then stops the enumeration with
+    /// `Incomplete::Allocation`, after the models already returned: the threads
+    /// already started are joined and the models they queued are discarded. A
+    /// refused thread creation never establishes exhaustion.
+    ///
+    /// # Costs
+    /// A walk that ends within its delay starts no thread. Against
+    /// `Engagement::Immediate`, a walk that engages finishes at most about its
+    /// delay plus one step later. Until engagement the walk advances only inside
+    /// pulls, so the caller's per-model work does not overlap it.
+    pub fn with_region_workers_engaging(
+        theory: &Theory,
+        workers: std::num::NonZeroUsize,
+        engagement: Engagement,
         limits: Limits,
         cancellation: Cancellation,
     ) -> Result<Self, Incomplete> {
@@ -423,8 +476,14 @@ impl StableModels {
             cancellation: &cancellation,
             statistics: SearchStatistics::default(),
         };
-        let parallel =
-            ParallelRegions::new(theory, workers, limits, cancellation.clone(), &mut budget)?;
+        let parallel = ParallelRegions::new(
+            theory,
+            workers,
+            engagement,
+            limits,
+            cancellation.clone(),
+            &mut budget,
+        )?;
         let statistics = Statistics {
             search: budget.statistics,
             ..Default::default()
@@ -571,8 +630,11 @@ impl StableModels {
         })
     }
     /// Enable coarse host timing from this point onward. Repeated calls retain
-    /// existing measurements. No clock is read while timing is disabled, and
-    /// initial CNF construction is deliberately outside these intervals.
+    /// existing measurements. No timing clock is read while timing is
+    /// disabled; a parallel region walk reads the clock between its
+    /// coordinator's steps until its workers start, to keep its engagement
+    /// deadline. A walk's timing is fixed when the walk begins. Initial CNF
+    /// construction is deliberately outside these intervals.
     pub fn enable_phase_timing(&mut self) {
         self.statistics.phase_timings.get_or_insert_default();
     }

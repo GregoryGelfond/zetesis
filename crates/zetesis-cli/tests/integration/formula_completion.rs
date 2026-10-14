@@ -233,7 +233,7 @@ fn native_parallel_statistics_do_not_claim_scalar_execution() {
         assert!(
             actual
                 .2
-                .contains(&format!("Parallel regions: {workers} workers"))
+                .contains(&format!("Parallel regions: up to {workers} workers, started once the walk outlasts their start; models arrive in the scalar walk's order until then, and in the schedule's order after\n"))
         );
         assert!(
             actual

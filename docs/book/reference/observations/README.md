@@ -1467,6 +1467,54 @@ cells and within a twentieth of it on three more; what remains above the
 reference is the closure route's fixed cost on small programs and the
 per-region cost of one long chain of refutations.
 
+## The region workers' engagement cost
+
+One hyperfine pair of runs on 13 October 2026 on the reference host: a
+Mac16,8 with the Apple M4 Pro (ten performance and four efficiency cores),
+48 GiB of memory, macOS 26.6.2 (25G83), Rust 1.97.1. The executable is built
+from `c610fa3d` with
+`ZETESIS_SIBLING_IDENTITY=0.0.0-0123456789abcdef cargo build --locked --release --no-default-features --features front -p zetesis-cli`
+(SHA-256
+`5b059e2a97d60e15262e4c532ef20bf121fc5be0c060eaa7b74b521e8b8adcc7`), a
+build in which a parallel region walk starts every worker at its first
+pull. The case is `examples/correctness/scenarios/shortest-path/variant-01/01-basic.lp`
+(SHA-256
+`e249cd28f18a406a41533ae04cd5e862c8a224acb53e91e97eb13f9bddbefdfb`), run as
+`zetesis solve CASE --all --backend cpu --threads W --json --stats`, a walk
+that ends before a started worker finds anything to steal. One worker is
+the scalar walk, which starts no thread.
+[engagement-cost-c610fa3d.json](engagement-cost-c610fa3d.json) is the
+derived record; raw report SHA-256
+`a40b1e8ab69e89df7c2ca8b6936736f5e86bb149f74f178431f1c5ac2e70e405` (pair) and
+`d94c4ad3342d8e5e5aeab191ed3ea56147fd8849be0bc7bc1449d49e1c176877` (scaling).
+
+The pair, 300 runs each after 20 warm-up runs, in milliseconds:
+
+| Search, workers | wall (mean ± σ) | system |
+|---|---:|---:|
+| regions, 1 | 3.266 ± 0.142 | 0.969 |
+| regions, 14 | 3.544 ± 0.169 | 1.647 |
+| clauses, 1 | 3.206 ± 0.153 | 0.942 |
+| clauses, 14 | 3.227 ± 0.162 | 0.954 |
+
+Fourteen region workers add 0.279 ms of wall time (95% interval 0.254 to
+0.304) and 0.679 ms of system time: 19.9 µs of wall time per worker started.
+The clause search, which starts no thread here, adds 0.021 ms (−0.004 to
+0.046). The scaling run, 200 runs at each worker count in sequence, adds
+0.356, 0.065, 0.199 and 0.214 ms at 2, 4, 8 and 14 workers; a line through
+the origin fits 19.8 µs per worker. The two-worker excess, 178 µs per worker,
+is unexplained: load drift between hyperfine's sequential batches is not
+excluded, and the fit weighs that point least.
+
+The default engagement delay is therefore 20 µs per configured worker: a
+parallel walk runs on the calling thread until it has run that long, in wall
+time since it began, and a walk that ends sooner pays none of this cost. The
+figures difference the walk that starts its workers at once against the
+scalar walk, so they include the parallel structure's own residual beside the
+workers' start, idle spinning and joins; a measurement of the engaging build
+itself, `Engagement::Immediate` against a walk that never engages, is to
+replace them.
+
 ## The scoreboard, the parts of a cell and the memory rounds
 
 Four campaigns on 18 September 2026, the reports written between 08:12:02

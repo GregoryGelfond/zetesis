@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use zetesis_cpu::regions::Region;
 use zetesis_ferraris::Theory;
 use zetesis_sat::{
-    BatchLimits, Cancellation, Incomplete, Limits, RegionFeasibility, RegionFilter,
+    BatchLimits, Cancellation, Engagement, Incomplete, Limits, RegionFeasibility, RegionFilter,
     RegionFilterWorker, StableModels,
 };
 
@@ -18,10 +18,19 @@ use super::batching::residual;
 pub(crate) enum Route {
     Scalar,
     Producers,
+    /// Native region workers, started at the first pull.
     Native,
+    /// The native walk that never engages its workers: it stays on the
+    /// calling thread, its coordinator retaining one checker across pulls.
+    Coordinator,
 }
 
-pub(crate) const ROUTES: [Route; 3] = [Route::Scalar, Route::Producers, Route::Native];
+pub(crate) const ROUTES: [Route; 4] = [
+    Route::Scalar,
+    Route::Producers,
+    Route::Native,
+    Route::Coordinator,
+];
 
 impl Route {
     /// A search of `theory` on this route under the default limits, with four
@@ -49,9 +58,20 @@ impl Route {
             Self::Producers => {
                 StableModels::with_region_producers(theory, workers, limits, cancellation)
             }
-            Self::Native => {
-                StableModels::with_region_workers(theory, workers, limits, cancellation)
-            }
+            Self::Native => StableModels::with_region_workers_engaging(
+                theory,
+                workers,
+                Engagement::Immediate,
+                limits,
+                cancellation,
+            ),
+            Self::Coordinator => StableModels::with_region_workers_engaging(
+                theory,
+                workers,
+                Engagement::After(std::time::Duration::MAX),
+                limits,
+                cancellation,
+            ),
         }
         .unwrap()
     }

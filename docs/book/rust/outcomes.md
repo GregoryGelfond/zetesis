@@ -77,7 +77,14 @@ it does not turn a completed answer into a rejected candidate. Under
 leaves, the propagations, atoms held and cut, whether the support cut
 applied, and the reading work, a subtotal of cumulative search work, and
 `statistics.search.reduct_query_regions` the regions of the reduct queries; under
-`--search clauses` the former is `null` and the latter zero.
+`--search clauses` the former is `null` and the latter zero. Its `workers`
+object, `null` unless several workers walk the regions, reports the workers
+`configured`, the `engagement_delay_ns` in force (`null` for a delay that never
+engages), and the walk's `engagement`: `"not_begun"`, `"unengaged"` (the walk
+has run on the calling thread only, with `elapsed_ns` since it began and its
+own `walking_ns`) or `"engaged"` (with `engaged_after_ns`, `walking_ns`, the
+threads `launched` and the spawn loop's `spawn_ns`). Each state's keys are
+`null` outside it.
 
 Under `--workers` above one the answer sets of the formula route
 arrive in the schedule's order: the family is exact and each answer appears

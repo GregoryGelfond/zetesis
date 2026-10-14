@@ -33,7 +33,7 @@ fn cancellation_preserves_settled_interruption() {
         panic!("parallel region workers were not selected")
     };
     search.synchronize_budget(before).unwrap();
-    search.started = true;
+    search.record = super::engaged(1);
     let shared = Arc::clone(&search.shared);
     let settled = Arc::new(AtomicBool::new(false));
     let worker_settled = Arc::clone(&settled);

@@ -425,20 +425,28 @@ incomplete. The regions proposer needs no exclusion: a leaf is visited once.
 ## Walking the tree with several workers
 
 `StableModels::with_region_workers(&Theory, workers, Limits, Cancellation)` walks
-the region tree with that many workers at once. Each worker owns a stack of
-regions with their knowledge, a budget leased for each region from the enumeration's
-shared allowance, and a mutable reduct evaluation workspace. Workers share the
-authenticated original-theory index, certificate, restrictions, cumulative
-limits, live counters and pool of donated regions. Candidate and reduct knowledge
-remain separate. A worker narrows a region, drops it when refuted, splits it and keeps
-both children, offering one to the pool when the pool runs short, and at a
-leaf decides membership as the scalar walk does, by the class certificate
-when one applies and else by the proper-subset query, sending a stable
-model to the enumeration. The regions partition the candidate space exactly
+the region tree with up to that many workers at once, starting them once the
+walk has run, in wall time since it began, longer than their start costs;
+`with_region_workers_engaging` takes an `Engagement` that selects another delay.
+The walk begins at the first pull on the calling thread, whose coordinator steps
+the region tree in the scalar walk's depth-first order and returns the models it
+verifies; a walk that ends within its delay starts no thread. Once the delay has
+passed, the coordinator starts every worker, and its remaining frontier becomes
+worker 0's deque. Each worker owns a work-stealing deque of regions with their
+knowledge, a lease on the enumeration's shared allowance that serves its
+consecutive regions, and a mutable reduct evaluation workspace. Workers share
+the authenticated original-theory index, certificate, restrictions, cumulative
+limits and live counters. Candidate and reduct knowledge remain separate. A
+worker narrows a region, drops it when refuted, splits it and pushes both
+children onto its deque, steals from a peer when its own deque is empty, and at
+a leaf decides membership as the scalar walk does, by the class certificate
+when one applies and else by the proper-subset query, sending a stable model to
+the enumeration. The regions partition the candidate space exactly
 (`Search.split_partition`, `split_disjoint`), so every stable model arrives
-once and none is missed, whatever the interleaving; the order of arrival is
-the schedule's, differs between runs, and is not a property of the result.
-A restriction added while the workers run narrows the regions not yet
+once and none is missed, whatever the interleaving; the models arrive in the
+scalar walk's order until the workers start and in the schedule's order after,
+which differs between runs and is not a property of the result.
+A restriction added while the walk runs narrows the regions not yet
 visited; models already on their way are returned as they are, as the
 scalar contract already allows. The work, decision and candidate ceilings
 are shared: the first worker to exhaust one raises the stop and the others
@@ -446,26 +454,30 @@ stop at their next charge or their next region; the models the workers
 verified before they stopped are delivered first and the stop after them,
 so a leaf admitted under the candidate ceiling is never lost to a worker
 the ceiling refused. The region counts and reading work, the candidates, the
-countermodel counts and the phase timings are the workers' live counters,
-current while they run; the certificate and reduct receipts are merged when
-the workers finish, so a snapshot taken earlier lacks them. One worker is
-the scalar regions walk. This particular operation does not use the batched
-protocol, since its workers decide their leaves themselves.
+countermodel counts and the phase timings are live counters, current while
+the walk runs; the coordinator's certificate and reduct receipts are merged
+after each of its pulls and the workers' when they have finished, so a
+snapshot taken while workers run lacks theirs. The region statistics report
+the workers configured, the delay in force, and whether the walk engaged: not
+begun, unengaged (on the calling thread) or engaged. One worker is the scalar
+regions walk. This particular operation does not use the batched protocol,
+since its workers decide their leaves themselves.
 
-Taking a worker-owned region reads the shared closure flag without acquiring the
-pool lock. Only an empty local stack enters the locked donation and idle protocol.
-Every closure transition holds that lock, so registering an idle worker and
-deciding that all workers are idle remain synchronized with donation. A worker
-with local or active work is never idle. An idle worker records an observed
-cancellation or deadline before closing the pool, so the coordinator cannot
-mistake the resulting disconnection for exhaustion.
+Each deque has its own mutex: taking a worker's own region locks only that
+deque, a split publication locks it and then, after releasing it, the idle gate
+to wake one waiter, and a thief skips a busy peer. An atomic count of
+unresolved regions carries termination: a split raises it before publishing
+the children, a resolved region lowers it once, and an idle worker stops only
+once it has reached zero. An atomic closed flag, set on the first stop or when
+the enumeration stops listening, halts the others at their next region. An
+idle worker records an observed cancellation or deadline before closing the
+walk, so the enumeration cannot mistake the resulting disconnection for
+exhaustion.
 
-The held child's knowledge is copied before taking the donation lock; selecting
-and publishing a shared destination remain inside it, while local children stay
-worker-owned. These changes preserve
-the same split, one knowledge copy per split and the existing bound on the number
-of donated regions. They do not establish a bound on all local stacks or total
-process memory.
+A worker's depth-first walk keeps at most one older sibling per ancestor and
+the two newest children, and it steals only with an empty deque, so each deque
+holds at most `atom_count + 1` regions. Deque storage grows with the observed
+depth and is released after joining. This does not bound total process memory.
 
 `StableModels::with_region_producers` instead retains its region preparation
 and an owned Rayon pool across bounded production rounds, each reading the

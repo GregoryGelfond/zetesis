@@ -1,0 +1,172 @@
+{
+  "schema": 1,
+  "record": "The region workers' engagement cost",
+  "date": "2026-10-13",
+  "host": {
+    "machine": "Mac16,8",
+    "chip": "Apple M4 Pro",
+    "performance_cores": 10,
+    "efficiency_cores": 4,
+    "memory_bytes": 51539607552,
+    "operating_system": "macOS 26.6.2 (25G83)",
+    "rust": "1.97.1"
+  },
+  "build": {
+    "revision": "c610fa3d",
+    "sha256": "5b059e2a97d60e15262e4c532ef20bf121fc5be0c060eaa7b74b521e8b8adcc7",
+    "command": "ZETESIS_SIBLING_IDENTITY=0.0.0-0123456789abcdef cargo build --locked --release --no-default-features --features front -p zetesis-cli"
+  },
+  "case": {
+    "path": "examples/correctness/scenarios/shortest-path/variant-01/01-basic.lp",
+    "sha256": "e249cd28f18a406a41533ae04cd5e862c8a224acb53e91e97eb13f9bddbefdfb",
+    "command": "zetesis solve CASE --all --backend cpu --threads W --json --stats"
+  },
+  "attribution": {
+    "tool": "hyperfine -N -i --warmup 20 --runs 300",
+    "raw_sha256": "a40b1e8ab69e89df7c2ca8b6936736f5e86bb149f74f178431f1c5ac2e70e405",
+    "results": {
+      "regions-w1": {
+        "runs": 300,
+        "mean_ms": 3.2656,
+        "stddev_ms": 0.1415,
+        "median_ms": 3.2229,
+        "user_ms": 1.8867,
+        "system_ms": 0.9685
+      },
+      "regions-w14": {
+        "runs": 300,
+        "mean_ms": 3.5445,
+        "stddev_ms": 0.169,
+        "median_ms": 3.5095,
+        "user_ms": 2.0959,
+        "system_ms": 1.6474
+      },
+      "clauses-w1": {
+        "runs": 300,
+        "mean_ms": 3.206,
+        "stddev_ms": 0.1534,
+        "median_ms": 3.1676,
+        "user_ms": 1.8558,
+        "system_ms": 0.9422
+      },
+      "clauses-w14": {
+        "runs": 300,
+        "mean_ms": 3.227,
+        "stddev_ms": 0.1617,
+        "median_ms": 3.186,
+        "user_ms": 1.8671,
+        "system_ms": 0.9538
+      }
+    },
+    "regions_excess_at_14": {
+      "workers": 14,
+      "wall_excess_ms": 0.2789,
+      "interval_95_ms": [
+        0.254,
+        0.3038
+      ],
+      "per_worker_us": 19.9,
+      "system_excess_ms": 0.6789
+    },
+    "clauses_excess_at_14": {
+      "workers": 14,
+      "wall_excess_ms": 0.021,
+      "interval_95_ms": [
+        -0.0042,
+        0.0462
+      ],
+      "per_worker_us": 1.5,
+      "system_excess_ms": 0.0116
+    }
+  },
+  "scaling": {
+    "tool": "hyperfine -N -i --warmup 20 --runs 200",
+    "raw_sha256": "d94c4ad3342d8e5e5aeab191ed3ea56147fd8849be0bc7bc1449d49e1c176877",
+    "results": {
+      "w1": {
+        "runs": 200,
+        "mean_ms": 3.2041,
+        "stddev_ms": 0.1734,
+        "median_ms": 3.1741,
+        "user_ms": 1.9061,
+        "system_ms": 0.8647
+      },
+      "w2": {
+        "runs": 200,
+        "mean_ms": 3.5605,
+        "stddev_ms": 0.2853,
+        "median_ms": 3.531,
+        "user_ms": 2.1068,
+        "system_ms": 1.0478
+      },
+      "w4": {
+        "runs": 200,
+        "mean_ms": 3.2687,
+        "stddev_ms": 0.1111,
+        "median_ms": 3.2519,
+        "user_ms": 1.9726,
+        "system_ms": 1.0188
+      },
+      "w8": {
+        "runs": 200,
+        "mean_ms": 3.403,
+        "stddev_ms": 0.2148,
+        "median_ms": 3.3641,
+        "user_ms": 2.0321,
+        "system_ms": 1.3284
+      },
+      "w14": {
+        "runs": 200,
+        "mean_ms": 3.4178,
+        "stddev_ms": 0.1492,
+        "median_ms": 3.3947,
+        "user_ms": 2.0837,
+        "system_ms": 1.6467
+      }
+    },
+    "excess": [
+      {
+        "workers": 2,
+        "wall_excess_ms": 0.3564,
+        "interval_95_ms": [
+          0.3101,
+          0.4027
+        ],
+        "per_worker_us": 178.2,
+        "system_excess_ms": 0.1831
+      },
+      {
+        "workers": 4,
+        "wall_excess_ms": 0.0646,
+        "interval_95_ms": [
+          0.0361,
+          0.0931
+        ],
+        "per_worker_us": 16.1,
+        "system_excess_ms": 0.1541
+      },
+      {
+        "workers": 8,
+        "wall_excess_ms": 0.1989,
+        "interval_95_ms": [
+          0.1606,
+          0.2372
+        ],
+        "per_worker_us": 24.9,
+        "system_excess_ms": 0.4637
+      },
+      {
+        "workers": 14,
+        "wall_excess_ms": 0.2137,
+        "interval_95_ms": [
+          0.182,
+          0.2454
+        ],
+        "per_worker_us": 15.3,
+        "system_excess_ms": 0.782
+      }
+    ],
+    "fit_through_origin_us_per_worker": 19.8
+  },
+  "constant_us_per_worker": 20
+}

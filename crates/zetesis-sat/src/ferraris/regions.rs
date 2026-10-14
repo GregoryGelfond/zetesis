@@ -156,6 +156,7 @@ pub struct RegionFrontierStatistics {
 /// What the region proposer did, cumulatively: the counts of its walk over
 /// the candidate tree, and whether the theory lies in the producer
 /// fragment.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RegionSearchStatistics {
     /// The walk's counts.
@@ -166,6 +167,71 @@ pub struct RegionSearchStatistics {
     /// Frontier ownership measured by parallel candidate production. Other
     /// schedules do not currently measure it; absence does not mean zero bytes.
     pub frontier: Option<RegionFrontierStatistics>,
+    /// The parallel region walk's workers. The scalar walk starts no worker,
+    /// and the device route's pool starts at construction, so both report
+    /// `None`.
+    pub workers: Option<RegionWorkerStatistics>,
+}
+
+/// The parallel region walk's workers: how many, when they were to start,
+/// and whether and when they did.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RegionWorkerStatistics {
+    /// The workers the walk was configured with.
+    pub configured: usize,
+    /// The engagement delay in force, `configured × c` by default; `None` for
+    /// a delay whose deadline overflows, which never engages.
+    pub engagement_delay: Option<std::time::Duration>,
+    /// Whether and when the walk engaged its workers, and what it did before.
+    pub engagement: RegionWalkEngagement,
+}
+
+/// Whether a parallel region walk engaged its workers. The record is frozen
+/// once the walk ends.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RegionWalkEngagement {
+    /// No pull has begun the walk. A run whose candidates a positive
+    /// certificate determined never walks.
+    NotBegun,
+    /// The walk has run on the calling thread only. `elapsed` runs from the
+    /// walk's beginning to the end of its last pull that stepped, the caller's
+    /// time between pulls included; `walking` is the coordinator's own time
+    /// inside those pulls.
+    Unengaged {
+        /// From the walk's beginning to the end of its last pull that stepped.
+        elapsed: std::time::Duration,
+        /// The coordinator's own time inside the pulls that stepped.
+        walking: std::time::Duration,
+    },
+    /// The workers started `after` the walk's beginning, once the coordinator
+    /// had spent `walking` inside its pulls; `launched` threads were spawned
+    /// (fewer than configured only after a refused reservation or spawn), and
+    /// the spawn loop took `spawn`.
+    Engaged {
+        /// When the workers started, from the walk's beginning.
+        after: std::time::Duration,
+        /// The coordinator's own time inside its pulls before then.
+        walking: std::time::Duration,
+        /// The threads actually spawned.
+        launched: usize,
+        /// The spawn loop's wall duration.
+        spawn: std::time::Duration,
+    },
+}
+
+impl RegionWalkEngagement {
+    /// Stable machine-readable identifier of the state: `not_begun`,
+    /// `unengaged` or `engaged`.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::NotBegun => "not_begun",
+            Self::Unengaged { .. } => "unengaged",
+            Self::Engaged { .. } => "engaged",
+        }
+    }
 }
 
 type Checker<'a> = Option<crate::region_filter::Worker<'a>>;
@@ -247,6 +313,7 @@ pub(crate) fn open(theory: &Theory, budget: &mut Budget<'_>) -> Result<Opened, I
             },
             producers: extraction.producers.is_some(),
             frontier: None,
+            workers: None,
         },
         parts: OriginalParts {
             producers: extraction.producers,
@@ -329,6 +396,7 @@ impl RegionSearch {
             },
             producers: self.statistics.producers,
             frontier: None,
+            workers: None,
         }
     }
 

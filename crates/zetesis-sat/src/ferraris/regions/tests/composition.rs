@@ -71,7 +71,7 @@ fn assert_family(original: &Theory, conditions: &Conditions<(Theory, Narrower)>,
             .accepted()
         })
         .collect();
-    let mut search = enumeration(original, 1, false, Limits::default());
+    let mut search = enumeration(original, "scalar", 1, false, Limits::default());
     for (restriction, _) in &conditions.permanent {
         search.restrict_candidates(restriction).unwrap();
     }

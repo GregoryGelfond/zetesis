@@ -179,11 +179,14 @@ fn positive_checks_borrow_the_core_selection() {
 fn persistent_workers_borrow_the_core_selection() {
     let filter = Arc::new(Filter::new("{p(1..4)}. :-p(X),p(Y),X<Y."));
     // A short search need not distribute work to every thread. Two traversals
-    // guarantee distinct checkers without assuming a particular schedule.
+    // guarantee distinct checkers without assuming a particular schedule. The
+    // workers start at the first pull: under the default engagement a walk
+    // this short would stay on the calling thread.
     for _ in 0..2 {
-        let mut search = StableModels::with_region_workers(
+        let mut search = StableModels::with_region_workers_engaging(
             filter.owner.core_theory(),
             NonZeroUsize::new(4).unwrap(),
+            zetesis_sat::Engagement::Immediate,
             Limits::default(),
             Cancellation::default(),
         )
@@ -192,6 +195,16 @@ fn persistent_workers_borrow_the_core_selection() {
         let models: Vec<_> = search.by_ref().map(Result::unwrap).collect();
         assert_eq!(models.len(), 5);
         assert!(search.exhausted());
+        assert!(matches!(
+            search
+                .statistics()
+                .regions
+                .unwrap()
+                .workers
+                .unwrap()
+                .engagement,
+            zetesis_sat::RegionWalkEngagement::Engaged { launched: 4, .. }
+        ));
     }
     assert!(filter.workers.load(Ordering::Relaxed) > 1);
     assert!(filter.checks.load(Ordering::Relaxed) > 0);

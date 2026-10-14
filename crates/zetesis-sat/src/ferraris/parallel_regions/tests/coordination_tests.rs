@@ -15,7 +15,18 @@ fn search(workers: usize) -> (ParallelRegions, Arc<IndexedTheory>) {
     search_atoms(workers, 1)
 }
 
+/// A walk over `atoms` independent tautologies whose workers start at the
+/// first proposal, which keeps the meaning of every test written before the
+/// coordinator phase existed.
 fn search_atoms(workers: usize, atoms: usize) -> (ParallelRegions, Arc<IndexedTheory>) {
+    search_engaging(workers, atoms, Engagement::Immediate)
+}
+
+fn search_engaging(
+    workers: usize,
+    atoms: usize,
+    engagement: Engagement,
+) -> (ParallelRegions, Arc<IndexedTheory>) {
     use zetesis_ferraris::Node;
 
     let mut nodes = vec![Node::falsum()];
@@ -47,6 +58,7 @@ fn search_atoms(workers: usize, atoms: usize) -> (ParallelRegions, Arc<IndexedTh
     let search = ParallelRegions::new(
         &theory,
         NonZeroUsize::new(workers).unwrap(),
+        engagement,
         limits,
         cancellation.clone(),
         &mut budget,
@@ -503,10 +515,18 @@ fn a_deep_local_walk_retains_one_sibling_per_level() {
 #[test]
 fn a_refused_worker_launch_joins_the_started_subset() {
     let (mut search, _) = search(2);
+    let cancellation = search.shared.cancellation.clone();
+    let mut budget = Budget {
+        quota: crate::search::LocalQuota,
+        limits: search.shared.limits.search,
+        cancellation: &cancellation,
+        statistics: search.search_statistics(),
+    };
+    search.begin(None, false, &mut budget).unwrap();
     let before = search.search_statistics().work;
     let finished = Arc::new(AtomicBool::new(false));
     let (ready, running) = mpsc::sync_channel(1);
-    let result = search.start_with(None, false, |shared, index, _sender| {
+    let result = search.engage_with(&mut budget, |shared, index, _sender| {
         if index == 1 {
             running.recv_timeout(WAIT).unwrap();
             return Err(std::io::Error::other("injected thread creation refusal"));
@@ -529,6 +549,10 @@ fn a_refused_worker_launch_joins_the_started_subset() {
         })
     });
     assert_eq!(result, Err(Incomplete::Allocation));
+    assert!(matches!(
+        search.record,
+        WalkRecord::Engaged { launched: 1, .. }
+    ));
     assert!(finished.load(Ordering::Acquire));
     assert!(search.handles.is_empty());
     assert!(search.receiver.is_none());
@@ -594,7 +618,15 @@ impl crate::RegionFilterWorker for RefuseChildrenWorker<'_> {
 
 #[test]
 fn an_allocation_stop_closes_and_settles_the_frontier() {
-    let (mut search, original) = search(2);
+    // Under `After(Duration::MAX)` the refused child is the coordinator's
+    // step, and its pull releases the frontier before it returns the stop.
+    for engagement in [Engagement::Immediate, Engagement::After(Duration::MAX)] {
+        allocation_stop_closes_and_settles_the_frontier(engagement);
+    }
+}
+
+fn allocation_stop_closes_and_settles_the_frontier(engagement: Engagement) {
+    let (mut search, original) = search_engaging(2, 1, engagement);
     search
         .set_filter(crate::region_filter::Filter::new(Arc::new(RefuseChildren(
             original.theory().clone(),
@@ -614,6 +646,14 @@ fn an_allocation_stop_closes_and_settles_the_frontier() {
         search.propose(&original, None, false, &mut budget),
         Err(Incomplete::Allocation)
     ));
+    if engagement == Engagement::Immediate {
+        assert!(matches!(
+            search.record,
+            WalkRecord::Engaged { launched: 2, .. }
+        ));
+    } else {
+        assert!(matches!(search.record, WalkRecord::Unengaged { .. }));
+    }
     assert_eq!(outstanding(&search.shared), 2);
     assert_eq!(search.shared.stopped(), Some(Incomplete::Allocation));
     assert!(search.shared.termination.is_closed());
@@ -792,6 +832,7 @@ fn a_worker_splits_the_root_on_the_original_choice_head() {
     let search = ParallelRegions::new(
         &theory,
         NonZeroUsize::new(1).unwrap(),
+        Engagement::Immediate,
         limits,
         cancellation.clone(),
         &mut Budget {

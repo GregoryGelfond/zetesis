@@ -181,7 +181,9 @@ fn parallel_regions_publish_the_actual_countermodel_procedure() {
     assert!(
         std::str::from_utf8(&text)
             .unwrap()
-            .contains("Parallel regions: 2 workers")
+            .contains(
+                "Parallel regions: up to 2 workers, started once the walk outlasts their start; models arrive in the scalar walk's order until then, and in the schedule's order after\n"
+            )
     );
     let observation = Observation::from_statistics(
         &document,

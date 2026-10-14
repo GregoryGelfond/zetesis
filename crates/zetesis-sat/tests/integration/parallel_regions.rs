@@ -7,14 +7,75 @@ use crate::support::choice_theories;
 use crate::support::formula_theories as theories;
 
 use std::collections::BTreeSet;
+use std::time::Duration;
 
-use zetesis_ferraris::{Node, TightPlanLimits};
-use zetesis_sat::{Cancellation, Incomplete, Limits, SearchLimits, SearchMethod, StableModels};
+use zetesis_ferraris::{Node, Theory, TightPlanLimits};
+use zetesis_sat::{
+    Cancellation, Engagement, Incomplete, Limits, RegionWalkEngagement, SearchLimits, SearchMethod,
+    StableModels,
+};
 use zetesis_test_support::{counts::nonzero as workers, harness};
 
 use crate::support::interpretations::models as family;
 use choice_theories::{choices, theory_over};
 use theories::mixed;
+
+/// The routes a claim that does not depend on the schedule runs on: workers
+/// started at the first pull, and a walk that stays on the calling thread.
+const ROUTES: [Engagement; 2] = [Engagement::Immediate, Engagement::After(Duration::MAX)];
+
+/// `count` region workers that start as `engagement` says.
+fn region_workers(
+    theory: &Theory,
+    count: usize,
+    engagement: Engagement,
+    limits: Limits,
+    cancellation: Cancellation,
+) -> StableModels {
+    StableModels::with_region_workers_engaging(
+        theory,
+        workers(count),
+        engagement,
+        limits,
+        cancellation,
+    )
+    .unwrap()
+}
+
+/// Several workers that start at the first pull: the claims about threads,
+/// the model channel, stealing, joins and per-worker storage.
+fn engaged(theory: &Theory, count: usize, limits: Limits) -> StableModels {
+    region_workers(
+        theory,
+        count,
+        Engagement::Immediate,
+        limits,
+        Cancellation::default(),
+    )
+}
+
+/// The walk's record, once it has begun.
+fn record(search: &StableModels) -> RegionWalkEngagement {
+    search
+        .statistics()
+        .regions
+        .unwrap()
+        .workers
+        .unwrap()
+        .engagement
+}
+
+/// The walk ran on the route `engagement` names: every configured worker
+/// started, or none.
+fn assert_route(search: &StableModels, engagement: Engagement, count: usize) {
+    match (engagement, record(search)) {
+        (Engagement::Immediate, RegionWalkEngagement::Engaged { launched, .. }) => {
+            assert_eq!(launched, count);
+        }
+        (Engagement::After(Duration::MAX), RegionWalkEngagement::Unengaged { .. }) => {}
+        (engagement, record) => panic!("{engagement:?} ran as {record:?}"),
+    }
+}
 
 #[test]
 fn four_workers_return_the_scalar_family_once_each() {
@@ -27,15 +88,10 @@ fn four_workers_return_the_scalar_family_once_each() {
         )
         .unwrap();
         let expected: BTreeSet<Vec<usize>> = family(&mut scalar).into_iter().collect();
-        let mut parallel = StableModels::with_region_workers(
-            &theory,
-            workers(4),
-            Limits::default(),
-            Cancellation::default(),
-        )
-        .unwrap();
+        let mut parallel = engaged(&theory, 4, Limits::default());
         let found = family(&mut parallel);
         assert!(parallel.exhausted());
+        assert_route(&parallel, Engagement::Immediate, 4);
         let distinct: BTreeSet<Vec<usize>> = found.iter().cloned().collect();
         assert_eq!(distinct.len(), found.len(), "each model once");
         assert_eq!(distinct, expected);
@@ -52,14 +108,9 @@ fn four_workers_return_the_scalar_family_once_each() {
 #[test]
 fn a_restriction_reaches_the_workers_for_what_they_have_not_visited() {
     let theory = choices(8);
-    let mut parallel = StableModels::with_region_workers(
-        &theory,
-        workers(4),
-        Limits::default(),
-        Cancellation::default(),
-    )
-    .unwrap();
+    let mut parallel = engaged(&theory, 4, Limits::default());
     let first: Vec<usize> = parallel.next().unwrap().unwrap().atoms().collect();
+    assert_route(&parallel, Engagement::Immediate, 4);
     let restriction = theory_over(&theory, vec![Node::atom(7)], vec![0]);
     parallel.restrict_candidates(&restriction).unwrap();
     let rest = family(&mut parallel);
@@ -81,70 +132,68 @@ fn a_restriction_reaches_the_workers_for_what_they_have_not_visited() {
 
 #[test]
 fn a_restriction_charges_its_indexing_to_the_shared_search_work() {
-    // The workers start on the first proposal, so before it the only work
-    // between the two readings is the restriction's indexing, which the
-    // shared allowance is charged and the region receipts count.
+    // The walk begins on the first pull, so before it the only work between
+    // the two readings is the restriction's indexing, which the shared
+    // allowance is charged and the region receipts count.
     let theory = choices(8);
-    let mut parallel = StableModels::with_region_workers(
-        &theory,
-        workers(4),
-        Limits::default(),
-        Cancellation::default(),
-    )
-    .unwrap();
-    let before = parallel.statistics();
-    let restriction = theory_over(&theory, vec![Node::atom(7)], vec![0]);
-    parallel.restrict_candidates(&restriction).unwrap();
-    let after = parallel.statistics();
-    let indexed = after.regions.unwrap().counts.work - before.regions.unwrap().counts.work;
-    assert!(indexed > 0);
-    assert_eq!(after.search.work - before.search.work, indexed);
+    for engagement in ROUTES {
+        let mut parallel = region_workers(
+            &theory,
+            4,
+            engagement,
+            Limits::default(),
+            Cancellation::default(),
+        );
+        let before = parallel.statistics();
+        let restriction = theory_over(&theory, vec![Node::atom(7)], vec![0]);
+        parallel.restrict_candidates(&restriction).unwrap();
+        let after = parallel.statistics();
+        let indexed = after.regions.unwrap().counts.work - before.regions.unwrap().counts.work;
+        assert!(indexed > 0);
+        assert_eq!(after.search.work - before.search.work, indexed);
+        assert_eq!(record(&parallel), RegionWalkEngagement::NotBegun);
+    }
 }
 
 #[test]
 fn a_restriction_beyond_the_shared_search_work_is_refused() {
     let theory = choices(8);
-    let construction = StableModels::with_region_workers(
-        &theory,
-        workers(4),
-        Limits::default(),
-        Cancellation::default(),
-    )
-    .unwrap()
-    .statistics()
-    .search
-    .work;
-    let limits = Limits {
-        search: SearchLimits {
-            max_work: construction,
-            ..SearchLimits::default()
-        },
-        ..Limits::default()
-    };
-    let mut parallel =
-        StableModels::with_region_workers(&theory, workers(4), limits, Cancellation::default())
-            .unwrap();
-    let restriction = theory_over(&theory, vec![Node::atom(7)], vec![0]);
-    assert!(matches!(
-        parallel.restrict_candidates(&restriction),
-        Err(Incomplete::WorkLimit)
-    ));
-    assert_eq!(parallel.statistics().candidate_restrictions, 0);
+    for engagement in ROUTES {
+        let construction = region_workers(
+            &theory,
+            4,
+            engagement,
+            Limits::default(),
+            Cancellation::default(),
+        )
+        .statistics()
+        .search
+        .work;
+        let limits = Limits {
+            search: SearchLimits {
+                max_work: construction,
+                ..SearchLimits::default()
+            },
+            ..Limits::default()
+        };
+        let mut parallel = region_workers(&theory, 4, engagement, limits, Cancellation::default());
+        let restriction = theory_over(&theory, vec![Node::atom(7)], vec![0]);
+        assert!(matches!(
+            parallel.restrict_candidates(&restriction),
+            Err(Incomplete::WorkLimit)
+        ));
+        assert_eq!(parallel.statistics().candidate_restrictions, 0);
+        assert_eq!(record(&parallel), RegionWalkEngagement::NotBegun);
+    }
 }
 
 #[test]
 fn a_shared_work_ceiling_stops_every_worker_without_exhaustion() {
     let theory = choices(10);
-    let construction = StableModels::with_region_workers(
-        &theory,
-        workers(4),
-        Limits::default(),
-        Cancellation::default(),
-    )
-    .unwrap()
-    .statistics()
-    .search
-    .work;
+    let construction = engaged(&theory, 4, Limits::default())
+        .statistics()
+        .search
+        .work;
     let limits = Limits {
         search: SearchLimits {
             max_work: construction + 200,
@@ -152,12 +201,11 @@ fn a_shared_work_ceiling_stops_every_worker_without_exhaustion() {
         },
         ..Limits::default()
     };
-    let mut parallel =
-        StableModels::with_region_workers(&theory, workers(4), limits, Cancellation::default())
-            .unwrap();
+    let mut parallel = engaged(&theory, 4, limits);
     let outcomes: Vec<_> = parallel.by_ref().collect();
     assert!(matches!(outcomes.last(), Some(Err(Incomplete::WorkLimit))));
     assert!(!parallel.exhausted());
+    assert_route(&parallel, Engagement::Immediate, 4);
 }
 
 #[test]
@@ -173,14 +221,9 @@ fn a_candidate_ceiling_delivers_the_admitted_leaves_before_it_stops() {
         ..Limits::default()
     };
     for _ in 0..20 {
-        let mut parallel = StableModels::with_region_workers(
-            &theory,
-            workers(16),
-            limits,
-            Cancellation::default(),
-        )
-        .unwrap();
+        let mut parallel = engaged(&theory, 16, limits);
         let outcomes: Vec<_> = parallel.by_ref().collect();
+        assert_route(&parallel, Engagement::Immediate, 16);
         assert_eq!(outcomes.len(), 2, "{outcomes:?}");
         assert!(outcomes[0].is_ok(), "{outcomes:?}");
         assert!(matches!(outcomes[1], Err(Incomplete::CandidateLimit)));
@@ -194,19 +237,14 @@ fn a_candidate_ceiling_delivers_the_admitted_leaves_before_it_stops() {
 #[test]
 fn a_tight_certificate_decides_the_workers_leaves() {
     let theory = choices(5);
-    let mut parallel = StableModels::with_region_workers(
-        &theory,
-        workers(3),
-        Limits::default(),
-        Cancellation::default(),
-    )
-    .unwrap();
+    let mut parallel = engaged(&theory, 3, Limits::default());
     assert!(
         parallel
             .enable_certified_checking(TightPlanLimits::default())
             .unwrap()
     );
     let outcomes: Vec<_> = parallel.by_ref().collect();
+    assert_route(&parallel, Engagement::Immediate, 3);
     let found: Vec<Vec<usize>> = outcomes
         .into_iter()
         .map(|model| match model {
@@ -222,15 +260,10 @@ fn a_tight_certificate_decides_the_workers_leaves() {
 #[test]
 fn phase_timings_sum_the_workers_narrowing_and_leaf_decisions() {
     let theory = choices(6);
-    let mut parallel = StableModels::with_region_workers(
-        &theory,
-        workers(4),
-        Limits::default(),
-        Cancellation::default(),
-    )
-    .unwrap();
+    let mut parallel = engaged(&theory, 4, Limits::default());
     parallel.enable_phase_timing();
     assert_eq!(family(&mut parallel).len(), 64);
+    assert_route(&parallel, Engagement::Immediate, 4);
     let timings = parallel.statistics().phase_timings.unwrap();
     // Every leaf is decided by the reduct query once, in some worker; every
     // region is narrowed once; no certificate was enabled.
@@ -243,23 +276,26 @@ fn phase_timings_sum_the_workers_narrowing_and_leaf_decisions() {
 #[test]
 fn a_timed_parallel_walk_reports_its_index_build_as_candidate_generation() {
     let theory = choices(6);
-    let mut parallel = StableModels::with_region_workers(
-        &theory,
-        workers(4),
-        Limits::default(),
-        Cancellation::default(),
-    )
-    .unwrap();
-    parallel.enable_phase_timing();
-    assert_eq!(family(&mut parallel).len(), 64);
-    let statistics = parallel.statistics();
-    let regions = statistics.regions.unwrap().counts.regions;
-    // Each worker times one candidate call per region it narrows; the
-    // coordinator's index build, before the workers launch, is one more.
-    assert_eq!(
-        statistics.phase_timings.unwrap().candidates.calls,
-        u64::try_from(regions).unwrap() + 1
-    );
+    for engagement in ROUTES {
+        let mut parallel = region_workers(
+            &theory,
+            4,
+            engagement,
+            Limits::default(),
+            Cancellation::default(),
+        );
+        parallel.enable_phase_timing();
+        assert_eq!(family(&mut parallel).len(), 64);
+        assert_route(&parallel, engagement, 4);
+        let statistics = parallel.statistics();
+        let regions = statistics.regions.unwrap().counts.regions;
+        // The coordinator and each worker time one candidate call per region
+        // they narrow; the index build, before the walk begins, is one more.
+        assert_eq!(
+            statistics.phase_timings.unwrap().candidates.calls,
+            u64::try_from(regions).unwrap() + 1
+        );
+    }
 }
 
 #[test]
@@ -277,20 +313,108 @@ fn four_workers_report_the_scalar_walks_reading_work() {
         )
         .unwrap();
         let models = family(&mut scalar).len();
-        let mut parallel = StableModels::with_region_workers(
-            &theory,
-            workers(4),
-            Limits::default(),
-            Cancellation::default(),
-        )
-        .unwrap();
+        let mut parallel = engaged(&theory, 4, Limits::default());
         assert_eq!(family(&mut parallel).len(), models);
+        assert_route(&parallel, Engagement::Immediate, 4);
         let one = scalar.statistics().regions.unwrap();
         let four = parallel.statistics().regions.unwrap();
         assert_eq!(four.counts.regions, one.counts.regions);
         assert_eq!(four.counts.leaves, one.counts.leaves);
         assert_eq!(four.counts.work, one.counts.work);
     }
+}
+
+#[test]
+fn an_unengaged_walk_reports_the_scalar_walks_receipts() {
+    // The walk that never engages steps the scalar walk's order on the
+    // calling thread with one retained workspace, so its receipts are the
+    // scalar walk's, checking work and peak check storage included.
+    for (theory, certified) in [(mixed(), false), (choices(6), false), (choices(5), true)] {
+        let mut scalar = StableModels::with_method(
+            &theory,
+            SearchMethod::Regions,
+            Limits::default(),
+            Cancellation::default(),
+        )
+        .unwrap();
+        let unengaged = Engagement::After(Duration::MAX);
+        let mut walk = region_workers(
+            &theory,
+            4,
+            unengaged,
+            Limits::default(),
+            Cancellation::default(),
+        );
+        if certified {
+            for search in [&mut scalar, &mut walk] {
+                assert!(
+                    search
+                        .enable_certified_checking(TightPlanLimits::default())
+                        .unwrap()
+                );
+            }
+        }
+        let expected: BTreeSet<Vec<usize>> = family(&mut scalar).into_iter().collect();
+        let found = family(&mut walk);
+        assert_eq!(found.iter().cloned().collect::<BTreeSet<_>>(), expected);
+        assert_eq!(found.len(), expected.len(), "each model once");
+        assert!(scalar.exhausted() && walk.exhausted());
+        assert_route(&walk, unengaged, 4);
+        let (one, coordinator) = (scalar.statistics(), walk.statistics());
+        assert_eq!(
+            (
+                coordinator.candidates,
+                coordinator.countermodel_queries,
+                coordinator.countermodels,
+                coordinator.stable_models,
+            ),
+            (
+                one.candidates,
+                one.countermodel_queries,
+                one.countermodels,
+                one.stable_models,
+            )
+        );
+        assert_eq!(coordinator.certified, one.certified);
+        assert_eq!(
+            (coordinator.reduct.original_work, coordinator.reduct.regions),
+            (one.reduct.original_work, one.reduct.regions)
+        );
+        assert_eq!(
+            coordinator.regions.unwrap().counts,
+            one.regions.unwrap().counts
+        );
+        assert_eq!(coordinator.search, one.search);
+    }
+}
+
+#[test]
+fn a_determined_candidate_run_never_begins_the_walk() {
+    // A positive program has one possible answer set, its least model, which
+    // the certificate decides without a candidate walk.
+    let theory = theory_over(
+        &choices(2),
+        vec![Node::atom(0), Node::atom(1), Node::implies(0, 1)],
+        vec![0, 2],
+    );
+    let mut search = region_workers(
+        &theory,
+        4,
+        Engagement::Immediate,
+        Limits::default(),
+        Cancellation::default(),
+    );
+    assert!(
+        search
+            .enable_class_checking(
+                zetesis_sat::CertificateLimits::default(),
+                zetesis_sat::CertificateOrder::PositiveFirst
+            )
+            .unwrap()
+    );
+    assert_eq!(family(&mut search), vec![vec![0, 1]]);
+    assert!(search.exhausted());
+    assert_eq!(record(&search), RegionWalkEngagement::NotBegun);
 }
 
 #[test]
@@ -355,14 +479,9 @@ fn bounded_child(name: &str, run: impl FnOnce()) {
 #[test]
 fn dropping_a_full_model_channel_joins_the_workers() {
     bounded_child("dropping_a_full_model_channel_joins_the_workers", || {
-        let mut search = StableModels::with_region_workers(
-            &choices(10),
-            workers(2),
-            Limits::default(),
-            Cancellation::default(),
-        )
-        .unwrap();
+        let mut search = engaged(&choices(10), 2, Limits::default());
         assert!(search.next().unwrap().is_ok());
+        assert_route(&search, Engagement::Immediate, 2);
         // One returned model, 32 channel slots and two workers holding the
         // next models: joining must release blocked sends as well as waiters.
         let expires = std::time::Instant::now() + std::time::Duration::from_secs(5);
@@ -378,16 +497,10 @@ fn dropping_a_full_model_channel_joins_the_workers() {
 fn idle_workers_return_unused_work_permits() {
     bounded_child("idle_workers_return_unused_work_permits", || {
         let theory = choices(2);
-        let construction = StableModels::with_region_workers(
-            &theory,
-            workers(4),
-            Limits::default(),
-            Cancellation::default(),
-        )
-        .unwrap()
-        .statistics()
-        .search
-        .work;
+        let construction = engaged(&theory, 4, Limits::default())
+            .statistics()
+            .search
+            .work;
         // Small allowances cross each point where one branch can finish
         // while another still needs an idle worker's unused grant.
         for remaining in 0..256 {
@@ -403,38 +516,53 @@ fn idle_workers_return_unused_work_permits() {
             )
             .unwrap();
             let mut search =
-                StableModels::with_region_workers(&theory, workers(4), limits, cancellation)
-                    .unwrap();
+                region_workers(&theory, 4, Engagement::Immediate, limits, cancellation);
             for result in search.by_ref() {
                 assert!(
                     result.is_ok() || matches!(result, Err(Incomplete::WorkLimit)),
                     "allowance {remaining} waited instead of returning its work outcome: {result:?}"
                 );
             }
+            // An allowance too small to begin the walk leaves it unbegun.
+            match record(&search) {
+                RegionWalkEngagement::NotBegun => {}
+                _ => assert_route(&search, Engagement::Immediate, 4),
+            }
         }
     });
 }
 
-fn certified_family(worker_count: usize, limits: Limits) -> (usize, zetesis_sat::Statistics, bool) {
-    let mut search = StableModels::with_region_workers(
+/// The certified family of `choices(5)`, with the walk's statistics and
+/// whether it was exhausted; several workers start as `engagement` says, and
+/// the route is asserted.
+fn certified_family(
+    worker_count: usize,
+    engagement: Engagement,
+    limits: Limits,
+) -> (usize, zetesis_sat::Statistics, bool) {
+    let mut search = region_workers(
         &choices(5),
-        workers(worker_count),
+        worker_count,
+        engagement,
         limits,
         Cancellation::default(),
-    )
-    .unwrap();
+    );
     assert!(
         search
             .enable_certified_checking(TightPlanLimits::default())
             .unwrap()
     );
     let found = family(&mut search).len();
+    if worker_count > 1 {
+        assert_route(&search, engagement, worker_count);
+    }
     (found, search.statistics(), search.exhausted())
 }
 
 #[test]
 fn joined_workers_report_their_certificate_checks() {
-    let (found, statistics, exhausted) = certified_family(3, Limits::default());
+    let (found, statistics, exhausted) =
+        certified_family(3, Engagement::Immediate, Limits::default());
     assert!(exhausted);
     assert_eq!(found, 32);
     let certified = statistics.certified.unwrap();
@@ -447,16 +575,20 @@ fn joined_workers_report_their_certificate_checks() {
 fn parallel_certificates_charge_the_scalar_regions_and_construction() {
     // Checking work depends on what each worker checked before (its retained
     // evaluation), so only region and construction work match the scalar run.
-    let (scalar_models, scalar, scalar_exhausted) = certified_family(1, Limits::default());
-    let (parallel_models, parallel, parallel_exhausted) = certified_family(3, Limits::default());
-    assert!(scalar_exhausted && parallel_exhausted);
-    assert_eq!((scalar_models, parallel_models), (32, 32));
-    assert_eq!(
-        parallel.regions.unwrap().counts.work,
-        scalar.regions.unwrap().counts.work
-    );
-    let (scalar, parallel) = (scalar.certified.unwrap(), parallel.certified.unwrap());
-    assert_eq!(parallel.construction_work, scalar.construction_work);
+    let (scalar_models, scalar, scalar_exhausted) =
+        certified_family(1, Engagement::default(), Limits::default());
+    for engagement in ROUTES {
+        let (parallel_models, parallel, parallel_exhausted) =
+            certified_family(3, engagement, Limits::default());
+        assert!(scalar_exhausted && parallel_exhausted);
+        assert_eq!((scalar_models, parallel_models), (32, 32));
+        assert_eq!(
+            parallel.regions.unwrap().counts.work,
+            scalar.regions.unwrap().counts.work
+        );
+        let (scalar, parallel) = (scalar.certified.unwrap(), parallel.certified.unwrap());
+        assert_eq!(parallel.construction_work, scalar.construction_work);
+    }
 }
 
 #[test]
@@ -467,29 +599,34 @@ fn no_certified_check_is_refused_under_its_reservation() {
     // worker is the scalar method, which reserves nothing, so only worker
     // counts above one apply.
     for worker_count in [2, 3] {
-        let mut search = StableModels::with_region_workers(
-            &choices(5),
-            workers(worker_count),
-            Limits::default(),
-            Cancellation::default(),
-        )
-        .unwrap();
-        assert!(
-            search
-                .enable_certified_checking(TightPlanLimits::default())
-                .unwrap()
-        );
-        assert_eq!(family(&mut search).len(), 32);
-        assert!(search.exhausted());
-        let certified = search.statistics().certified.unwrap();
-        assert_eq!((certified.checks, certified.stable), (32, 32));
+        for engagement in ROUTES {
+            let mut search = region_workers(
+                &choices(5),
+                worker_count,
+                engagement,
+                Limits::default(),
+                Cancellation::default(),
+            );
+            assert!(
+                search
+                    .enable_certified_checking(TightPlanLimits::default())
+                    .unwrap()
+            );
+            assert_eq!(family(&mut search).len(), 32);
+            assert!(search.exhausted());
+            assert_route(&search, engagement, worker_count);
+            let certified = search.statistics().certified.unwrap();
+            assert_eq!((certified.checks, certified.stable), (32, 32));
+        }
     }
 }
 
 #[test]
 fn tight_check_storage_is_local_to_each_worker() {
-    let (scalar_models, scalar, scalar_exhausted) = certified_family(1, Limits::default());
-    let (parallel_models, parallel, parallel_exhausted) = certified_family(3, Limits::default());
+    let (scalar_models, scalar, scalar_exhausted) =
+        certified_family(1, Engagement::default(), Limits::default());
+    let (parallel_models, parallel, parallel_exhausted) =
+        certified_family(3, Engagement::Immediate, Limits::default());
     assert!(scalar_exhausted && parallel_exhausted);
     assert_eq!((scalar_models, parallel_models), (32, 32));
     let scalar = scalar.certified.unwrap();
@@ -535,7 +672,7 @@ fn certificate_work_cannot_exceed_the_shared_ceiling() {
     // unlike checking work, which follows each worker's retained evaluation. A
     // ceiling one unit below them alone therefore denies the enumeration
     // whatever the checks cost, and every check that starts must fit beneath it.
-    let (_, scalar, _) = certified_family(1, Limits::default());
+    let (_, scalar, _) = certified_family(1, Engagement::default(), Limits::default());
     let checking = scalar.certified.unwrap().checking_work;
     let limits = Limits {
         search: SearchLimits {
@@ -544,30 +681,32 @@ fn certificate_work_cannot_exceed_the_shared_ceiling() {
         },
         ..Limits::default()
     };
-    let mut search =
-        StableModels::with_region_workers(&choices(5), workers(3), limits, Cancellation::default())
-            .unwrap();
-    assert!(
-        search
-            .enable_certified_checking(TightPlanLimits::default())
-            .unwrap()
-    );
-    let last = search.by_ref().last();
-    assert!(matches!(last, Some(Err(Incomplete::WorkLimit))), "{last:?}");
-    assert!(
-        !search.exhausted(),
-        "full enumeration requires more than the ceiling admits"
-    );
-    let statistics = search.statistics();
-    let certificate = statistics.certified.unwrap();
-    assert!(
-        certificate.construction_work
-            + certificate.checking_work
-            + statistics.regions.unwrap().counts.work
-            + statistics.search.decisions
-            <= limits.search.max_work,
-        "certificate work must be bounded before execution: {statistics:?}",
-    );
+    for engagement in ROUTES {
+        let mut search =
+            region_workers(&choices(5), 3, engagement, limits, Cancellation::default());
+        assert!(
+            search
+                .enable_certified_checking(TightPlanLimits::default())
+                .unwrap()
+        );
+        let last = search.by_ref().last();
+        assert!(matches!(last, Some(Err(Incomplete::WorkLimit))), "{last:?}");
+        assert!(
+            !search.exhausted(),
+            "full enumeration requires more than the ceiling admits"
+        );
+        assert_route(&search, engagement, 3);
+        let statistics = search.statistics();
+        let certificate = statistics.certified.unwrap();
+        assert!(
+            certificate.construction_work
+                + certificate.checking_work
+                + statistics.regions.unwrap().counts.work
+                + statistics.search.decisions
+                <= limits.search.max_work,
+            "certificate work must be bounded before execution: {statistics:?}",
+        );
+    }
 }
 
 #[test]
@@ -576,14 +715,14 @@ fn a_certificate_retains_its_verification_work_refusal() {
         max_verification_work: 1,
         ..Limits::default()
     };
-    for worker_count in [1, 3] {
-        let mut search = StableModels::with_region_workers(
+    for (worker_count, engagement) in [(1, Engagement::default()), (3, ROUTES[0]), (3, ROUTES[1])] {
+        let mut search = region_workers(
             &choices(2),
-            workers(worker_count),
+            worker_count,
+            engagement,
             limits,
             Cancellation::default(),
-        )
-        .unwrap();
+        );
         assert!(
             search
                 .enable_certified_checking(TightPlanLimits::default())
@@ -602,34 +741,40 @@ fn a_certificate_retains_its_verification_work_refusal() {
             "{last:?}"
         );
         assert!(!search.exhausted());
+        if worker_count > 1 {
+            assert_route(&search, engagement, worker_count);
+        }
     }
 }
 
 #[test]
 fn certificate_configuration_precedes_region_candidates() {
-    for worker_count in [1, 3] {
+    for (worker_count, engagement) in [(1, Engagement::default()), (3, ROUTES[0]), (3, ROUTES[1])] {
         let theory = choices(2);
-        let mut before = StableModels::with_region_workers(
+        let mut before = region_workers(
             &theory,
-            workers(worker_count),
+            worker_count,
+            engagement,
             Limits::default(),
             Cancellation::default(),
-        )
-        .unwrap();
+        );
         assert!(
             before
                 .enable_certified_checking(TightPlanLimits::default())
                 .unwrap()
         );
         assert_eq!(family(&mut before).len(), 4);
+        if worker_count > 1 {
+            assert_route(&before, engagement, worker_count);
+        }
 
-        let mut after = StableModels::with_region_workers(
+        let mut after = region_workers(
             &theory,
-            workers(worker_count),
+            worker_count,
+            engagement,
             Limits::default(),
             Cancellation::default(),
-        )
-        .unwrap();
+        );
         assert!(after.next().unwrap().is_ok());
         assert_eq!(
             after.enable_certified_checking(TightPlanLimits::default()),
@@ -643,30 +788,33 @@ fn certificate_configuration_precedes_region_candidates() {
 #[test]
 fn restrictions_after_certificate_setup_charge_the_shared_work() {
     let theory = choices(3);
-    let mut search = StableModels::with_region_workers(
-        &theory,
-        workers(3),
-        Limits::default(),
-        Cancellation::default(),
-    )
-    .unwrap();
-    assert!(
-        search
-            .enable_certified_checking(TightPlanLimits::default())
-            .unwrap()
-    );
-    let before = search.statistics().search.work;
-    let restriction = theory_over(&theory, vec![Node::atom(2)], vec![0]);
-    search.restrict_candidates(&restriction).unwrap();
-    assert_eq!(search.statistics().search.work, before + 1);
-    assert_eq!(family(&mut search).len(), 4);
-    let final_statistics = search.statistics();
-    let certificate = final_statistics.certified.unwrap();
-    assert_eq!(
-        final_statistics.search.work,
-        final_statistics.regions.unwrap().counts.work
-            + final_statistics.search.decisions
-            + certificate.construction_work
-            + certificate.checking_work,
-    );
+    for engagement in ROUTES {
+        let mut search = region_workers(
+            &theory,
+            3,
+            engagement,
+            Limits::default(),
+            Cancellation::default(),
+        );
+        assert!(
+            search
+                .enable_certified_checking(TightPlanLimits::default())
+                .unwrap()
+        );
+        let before = search.statistics().search.work;
+        let restriction = theory_over(&theory, vec![Node::atom(2)], vec![0]);
+        search.restrict_candidates(&restriction).unwrap();
+        assert_eq!(search.statistics().search.work, before + 1);
+        assert_eq!(family(&mut search).len(), 4);
+        assert_route(&search, engagement, 3);
+        let final_statistics = search.statistics();
+        let certificate = final_statistics.certified.unwrap();
+        assert_eq!(
+            final_statistics.search.work,
+            final_statistics.regions.unwrap().counts.work
+                + final_statistics.search.decisions
+                + certificate.construction_work
+                + certificate.checking_work,
+        );
+    }
 }

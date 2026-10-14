@@ -998,6 +998,45 @@ fn region_statistics(
     out.number_field("reading_work", counts.work)?;
     out.text(",\"frontier\":")?;
     frontier_statistics(out, stats.frontier)?;
+    out.text(",\"workers\":")?;
+    worker_statistics(out, stats.workers)?;
+    out.text("}")
+}
+
+/// The parallel walk's workers, `null` on routes without one. Each state's
+/// keys are `null` outside that state, and so is the delay of a walk whose
+/// deadline overflows, which never engages.
+fn worker_statistics(
+    out: &mut Buffer,
+    statistics: Option<zetesis_sat::RegionWorkerStatistics>,
+) -> Result<(), RunError> {
+    let Some(stats) = statistics else {
+        return out.text("null");
+    };
+    let record = crate::statistics::WorkerRecord::from(stats.engagement);
+    out.text("{\"configured\":")?;
+    out.text(&stats.configured.to_string())?;
+    out.text(",\"engagement_delay_ns\":")?;
+    optional_number(out, stats.engagement_delay.map(|delay| delay.as_nanos()))?;
+    out.text(",\"engagement\":")?;
+    out.string(stats.engagement.label())?;
+    for (key, value) in [
+        ("elapsed_ns", record.elapsed),
+        ("walking_ns", record.walking),
+        ("engaged_after_ns", record.after),
+    ] {
+        out.text(",")?;
+        out.string(key)?;
+        out.text(":")?;
+        optional_number(out, value.map(|duration| duration.as_nanos()))?;
+    }
+    out.text(",\"launched\":")?;
+    match record.launched {
+        Some(launched) => out.text(&launched.to_string())?,
+        None => out.text("null")?,
+    }
+    out.text(",\"spawn_ns\":")?;
+    optional_number(out, record.spawn.map(|duration| duration.as_nanos()))?;
     out.text("}")
 }
 

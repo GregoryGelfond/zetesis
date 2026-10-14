@@ -179,8 +179,9 @@ open atoms in ascending order, excluding decided atoms and unused final bits;
 each inspected parent count spends one work permit.
 The traversal itself is one operation in `zetesis-cpu`, shared by both
 routes when one worker walks; with several workers the formula route walks
-the same tree in `zetesis-sat`'s parallel regions, each worker owning a stack
-of regions and a shared pool offering regions to idle workers. The closure
+the same tree in `zetesis-sat`'s parallel regions: the walk begins on the
+calling thread, and the workers it then starts each own a deque of regions,
+from which idle workers steal. The closure
 route narrows by its two closures, the formula route by
 the readings.
 
@@ -196,11 +197,13 @@ are then the same operation over the same index of the theory, and no
 clause form is built anywhere on the route.
 
 Because the regions share nothing, several workers can walk the tree at
-once (`--threads`, the host's available parallelism by default), each deciding
-the leaves it reaches, over a pool of regions still to visit. The family is exact at any worker count, each
-answer arriving once, by the partition law; the order in which answers
-arrive is the schedule's, is not promised to repeat between runs, and is
-not a property of the result. Verification rests on the laws and on the
+once (`--threads`, the host's available parallelism by default), started once
+the walk has run on one thread, in wall time since it began, for longer than
+their start costs, each deciding the leaves it reaches. The family is exact at
+any worker count, each answer arriving once, by the partition law; the order in
+which answers arrive is the scalar walk's until the workers start and the
+schedule's after, is not promised to repeat between runs, and is not a property
+of the result. Verification rests on the laws and on the
 oracle comparison of answer sets as sets, not on order or determinism.
 
 Candidate production and membership need not run on the same executor.

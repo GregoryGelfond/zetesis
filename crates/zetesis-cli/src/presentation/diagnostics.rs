@@ -259,7 +259,7 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 format_args!("cpu (shared {} source rounds, {workers} workers; collective source and per-world evaluation budgets)", batching.label())),
             Event::CpuFormula { oracle, grounder, search } => self.cpu_formula(oracle, grounder, search),
             Event::ParallelRegions { workers } => writeln!(self,
-                "Parallel regions: {workers} workers; models arrive in the schedule's order"),
+                "Parallel regions: up to {workers} workers, started once the walk outlasts their start; models arrive in the scalar walk's order until then, and in the schedule's order after"),
             Event::ParallelProposals { workers } => writeln!(self,
                 "Parallel candidate production: {workers} workers; joined before batch membership checking"),
             Event::ExactCompletion { workers, max_scratch_bytes } => writeln!(self,

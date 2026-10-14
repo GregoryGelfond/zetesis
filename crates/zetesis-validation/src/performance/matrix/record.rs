@@ -265,7 +265,7 @@ pub struct HybridStatistics {
 /// Completed candidate-region restriction counts, independent of membership.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct RegionChecks {
-    /// Worker-local checker preparations, including attempts.
+    /// Checker preparations, including attempts.
     pub preparations: u64,
     /// Candidate regions checked before splitting or membership.
     pub checks: u64,

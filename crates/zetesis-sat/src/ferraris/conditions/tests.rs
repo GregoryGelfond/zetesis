@@ -160,7 +160,21 @@ fn search(
     match route {
         0 => StableModels::new(original, limits, cancellation),
         1 => StableModels::with_region_producers(original, workers, limits, cancellation),
-        2 => StableModels::with_region_workers(original, workers, limits, cancellation),
+        // Workers started at the first pull, then a walk that never starts them.
+        2 => StableModels::with_region_workers_engaging(
+            original,
+            workers,
+            super::super::Engagement::Immediate,
+            limits,
+            cancellation,
+        ),
+        3 => StableModels::with_region_workers_engaging(
+            original,
+            workers,
+            super::super::Engagement::After(std::time::Duration::MAX),
+            limits,
+            cancellation,
+        ),
         _ => unreachable!(),
     }
     .unwrap()
@@ -170,7 +184,7 @@ fn search(
 fn refused_preparation_does_not_advance_the_bound_generation() {
     let original = theory(2, vec![], vec![]);
     let first = guard(false);
-    for route in 0..3 {
+    for route in 0..4 {
         let mut measured = search(route, &original, Limits::default(), Cancellation::default());
         measured.tighten_candidate_bound(&first).unwrap();
         let ceiling = measured.statistics().search.work;
@@ -191,7 +205,7 @@ fn refused_preparation_does_not_advance_the_bound_generation() {
 #[test]
 fn cancellation_does_not_advance_the_bound_generation() {
     let original = theory(2, vec![], vec![]);
-    for route in 0..3 {
+    for route in 0..4 {
         let cancellation = Cancellation::default();
         let mut search = search(route, &original, Limits::default(), cancellation.clone());
         search.tighten_candidate_bound(&guard(false)).unwrap();
