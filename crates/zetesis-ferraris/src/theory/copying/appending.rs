@@ -1,8 +1,8 @@
 use std::ops::Range;
 
 use super::super::{
-    AdmissionError, ContributionRow, FormulaTransaction, FormulaView, Node, OperandSpan, Storage,
-    ThresholdDescriptor, count_occurrences, validate_children,
+    AdmissionError, ExtremumCutDescriptor, FormulaTransaction, FormulaView, Node, NumericRow,
+    OperandSpan, Storage, ThresholdDescriptor, count_occurrences, validate_children,
 };
 
 fn sum(left: usize, right: usize, maximum: usize) -> Result<usize, AdmissionError> {
@@ -17,7 +17,18 @@ fn reserve<T>(target: &mut Vec<T>, additional: usize) -> Result<(), AdmissionErr
         .map_err(|_| AdmissionError::Allocation)
 }
 
-fn relocate(node: Node, operands: usize, thresholds: usize) -> Node {
+fn reserve_numeric(
+    target: &mut super::super::numeric::NumericStorage,
+    source: &super::super::numeric::NumericStorage,
+) -> Result<(), AdmissionError> {
+    reserve(&mut target.conditions, source.conditions.len())?;
+    reserve(&mut target.values, source.values.len())?;
+    reserve(&mut target.rows, source.rows.len())?;
+    reserve(&mut target.thresholds, source.thresholds.len())?;
+    reserve(&mut target.cuts, source.cuts.len())
+}
+
+fn relocate(node: Node, operands: usize, thresholds: usize, cuts: usize) -> Node {
     let span = |span: OperandSpan| OperandSpan {
         start: span.start + operands,
         length: span.length,
@@ -26,6 +37,7 @@ fn relocate(node: Node, operands: usize, thresholds: usize) -> Node {
         Storage::AndSpan(row) => Storage::AndSpan(span(row)),
         Storage::OrSpan(row) => Storage::OrSpan(span(row)),
         Storage::Threshold(descriptor) => Storage::Threshold(descriptor + thresholds),
+        Storage::ExtremumCut(descriptor) => Storage::ExtremumCut(descriptor + cuts),
         other => other,
     })
 }
@@ -33,10 +45,10 @@ fn relocate(node: Node, operands: usize, thresholds: usize) -> Node {
 impl FormulaTransaction<'_> {
     /// Append complete raw storage, preserving shared rows and absolute child IDs.
     ///
-    /// Internal Boolean-span, numeric-row and threshold-descriptor offsets are
+    /// Internal Boolean-span, numeric-row and numeric-descriptor offsets are
     /// relocated into this owner. Each child must precede its destination node;
     /// source node positions need not equal those absolute IDs. Atom admission stays
-    /// with Theory. All six source arenas, including unused cells, are copied once.
+    /// with Theory. All seven source arenas, including unused cells, are copied once.
     /// Validate and reserve every destination before publishing any cell. On error
     /// lengths/frontier are unchanged, but successfully reserved capacity remains.
     /// Work covers source nodes, logical edges, numeric rows and their entries,
@@ -66,8 +78,8 @@ impl FormulaTransaction<'_> {
             max_operands,
         )?;
         let numeric = &self.parts.numeric;
-        if numeric.conditions.len() != numeric.weights.len() {
-            return Err(AdmissionError::ThresholdShape);
+        if numeric.conditions.len() != numeric.values.len() {
+            return Err(AdmissionError::NumericShape);
         }
         sum(
             numeric.conditions.len(),
@@ -75,8 +87,8 @@ impl FormulaTransaction<'_> {
             max_operands,
         )?;
         sum(
-            numeric.weights.len(),
-            source.numeric.weights.len(),
+            numeric.values.len(),
+            source.numeric.values.len(),
             max_operands,
         )?;
         sum(numeric.rows.len(), source.numeric.rows.len(), max_nodes)?;
@@ -85,6 +97,7 @@ impl FormulaTransaction<'_> {
             source.numeric.thresholds.len(),
             max_nodes,
         )?;
+        sum(numeric.cuts.len(), source.numeric.cuts.len(), max_nodes)?;
         let occurrences = sum(
             self.parts.occurrences,
             count_occurrences(source.nodes, source.numeric)?,
@@ -97,31 +110,30 @@ impl FormulaTransaction<'_> {
         reserve(&mut self.parts.nodes, source.nodes.len())?;
         reserve(&mut self.parts.operands, source.operands.len())?;
         let numeric = &mut self.parts.numeric;
-        reserve(&mut numeric.conditions, source.numeric.conditions.len())?;
-        reserve(&mut numeric.weights, source.numeric.weights.len())?;
-        reserve(&mut numeric.rows, source.numeric.rows.len())?;
-        reserve(&mut numeric.thresholds, source.numeric.thresholds.len())?;
+        reserve_numeric(numeric, source.numeric)?;
         let operands = self.parts.operands.len();
         let conditions = numeric.conditions.len();
         let rows = numeric.rows.len();
         let thresholds = numeric.thresholds.len();
+        let cuts = numeric.cuts.len();
         self.parts.nodes.extend(
             source
                 .nodes
                 .iter()
                 .copied()
-                .map(|node| relocate(node, operands, thresholds)),
+                .map(|node| relocate(node, operands, thresholds, cuts)),
         );
         self.parts.operands.extend_from_slice(source.operands);
         numeric
             .conditions
             .extend_from_slice(&source.numeric.conditions);
-        numeric.weights.extend_from_slice(&source.numeric.weights);
+        numeric.values.extend_from_slice(&source.numeric.values);
         numeric
             .rows
-            .extend(source.numeric.rows.iter().map(|row| ContributionRow {
+            .extend(source.numeric.rows.iter().map(|row| NumericRow {
                 start: row.start + conditions,
                 length: row.length,
+                domain: row.domain,
             }));
         numeric
             .thresholds
@@ -135,6 +147,12 @@ impl FormulaTransaction<'_> {
                         bound: threshold.bound,
                     }),
             );
+        numeric
+            .cuts
+            .extend(source.numeric.cuts.iter().map(|cut| ExtremumCutDescriptor {
+                row: cut.row + rows,
+                rule: cut.rule,
+            }));
         self.parts.occurrences = occurrences;
         if *self.validated == first {
             *self.validated = end;

@@ -12,17 +12,17 @@ use serde_json::Value as Json;
 use zetesis_cli::Options;
 use zetesis_clingo_support as oracle;
 use zetesis_clingo_support::costs;
+use zetesis_reference_support::{BundleFixture, resource_limits};
+use zetesis_themelios::BundleResource;
 
 type Records = Vec<(BTreeSet<String>, Option<Vec<i64>>)>;
-struct Fixture(tempfile::TempDir);
+struct Fixture(BundleFixture);
 impl Fixture {
     fn new() -> Self {
-        Self(tempfile::tempdir().expect("fixture"))
+        Self(BundleFixture::new())
     }
     fn write(&self, name: &str, source: &str) {
-        let path = self.0.path().join(name);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(path, source).unwrap();
+        self.0.write(name, source);
     }
     fn case(case: &Json) -> Self {
         let fixture = Self::new();
@@ -36,12 +36,12 @@ impl Fixture {
             Command::new(env!("CARGO_BIN_EXE_zetesis"))
                 .args(["--backend", "cpu", "--workers", "1", "--models", "0"])
                 .args(arguments)
-                .current_dir(self.0.path()),
+                .current_dir(self.0.directory()),
         )
     }
     /// Remove the directory, failing the test if it cannot be removed.
     fn close(self) {
-        self.0.close().expect("only this fixture's files");
+        self.0.close();
     }
 }
 
@@ -102,17 +102,7 @@ fn expected(case: &Json) -> Records {
         .as_array()
         .unwrap()
         .iter()
-        .map(|record| {
-            (
-                record[0]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|atom| atom.as_str().unwrap().to_owned())
-                    .collect(),
-                costs(&record[1]),
-            )
-        })
+        .map(|record| (oracle::atoms(&record[0]), costs(&record[1])))
         .collect();
     records.sort();
     records
@@ -249,29 +239,20 @@ fn cumulative_source_and_root_limits_refuse_before_model_output() {
     fixture.write("b.lp", "q.");
     for (limits, resource) in [
         (
-            zetesis_themelios::BundleLimits {
-                max_roots: 1,
-                ..Default::default()
-            },
+            resource_limits::bundle_loading(BundleResource::Roots, 1),
             zetesis_themelios::BundleResource::Roots,
         ),
         (
-            zetesis_themelios::BundleLimits {
-                max_files: 1,
-                ..Default::default()
-            },
+            resource_limits::bundle_loading(BundleResource::Files, 1),
             zetesis_themelios::BundleResource::Files,
         ),
         (
-            zetesis_themelios::BundleLimits {
-                max_total_bytes: 3,
-                ..Default::default()
-            },
+            resource_limits::bundle_loading(BundleResource::TotalBytes, 3),
             zetesis_themelios::BundleResource::TotalBytes,
         ),
     ] {
         let error = zetesis_themelios::SourceBundle::load_many(
-            [fixture.0.path().join("a.lp"), fixture.0.path().join("b.lp")],
+            [fixture.0.path("a.lp"), fixture.0.path("b.lp")],
             limits,
         )
         .unwrap_err();
@@ -306,7 +287,7 @@ fn root_aliases_are_explicit_refusals_while_identical_roots_are_shared() {
         native_records(fixture.native(&["a.lp", "a.lp"])),
         vec![(BTreeSet::from(["p(1)".into()]), None)]
     );
-    let absolute = fixture.0.path().join("a.lp").to_string_lossy().into_owned();
+    let absolute = fixture.0.path("a.lp").to_string_lossy().into_owned();
     for second in ["./a.lp", absolute.as_str()] {
         let result = fixture.native(&["a.lp", second]);
         assert_eq!(result.status.code(), Some(2));
@@ -333,7 +314,7 @@ fn original_file_sets_match_fresh_complete_clingo_optima() {
             .map(|root| root.as_str().unwrap())
             .collect();
         let run = oracle::run_in(
-            fixture.0.path(),
+            fixture.0.directory(),
             oracle::ENUMERATION.iter().chain(&roots),
             &oracle::DECIDED,
             oracle::Limits::default(),
@@ -349,17 +330,7 @@ fn original_file_sets_match_fresh_complete_clingo_optima() {
                     .as_array()
                     .into_iter()
                     .flatten()
-                    .map(|witness| {
-                        (
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect(),
-                            costs(&witness["Costs"]),
-                        )
-                    })
+                    .map(|witness| (oracle::atoms(&witness["Value"]), costs(&witness["Costs"])))
             })
             .collect();
         assert_eq!(
@@ -395,20 +366,20 @@ fn include_lookup_errors_fall_back_but_selected_source_failures_do_not() {
     fixture.write("unreadable.lp", "wrong.");
     fixture.write("sub/unreadable.lp", "fallback.");
     fs::set_permissions(
-        fixture.0.path().join("unreadable.lp"),
+        fixture.0.path("unreadable.lp"),
         fs::Permissions::from_mode(0o0),
     )
     .unwrap();
     // A privileged test process may still read mode-zero files. Its lookup
     // correctly selects that original cwd file instead of the fallback.
-    let expected = if fs::File::open(fixture.0.path().join("unreadable.lp")).is_ok() {
+    let expected = if fs::File::open(fixture.0.path("unreadable.lp")).is_ok() {
         "wrong"
     } else {
         "fallback"
     };
     let result = fixture.native(&["sub/entry.lp"]);
     fs::set_permissions(
-        fixture.0.path().join("unreadable.lp"),
+        fixture.0.path("unreadable.lp"),
         fs::Permissions::from_mode(0o600),
     )
     .unwrap();
@@ -419,7 +390,7 @@ fn include_lookup_errors_fall_back_but_selected_source_failures_do_not() {
 
     fixture.write("sub/loop-entry.lp", "#include \"loop.lp\".");
     fixture.write("sub/loop.lp", "loop_fallback.");
-    symlink("loop.lp", fixture.0.path().join("loop.lp")).unwrap();
+    symlink("loop.lp", fixture.0.path("loop.lp")).unwrap();
     assert_eq!(
         native_records(fixture.native(&["sub/loop-entry.lp"])),
         [(BTreeSet::from(["loop_fallback".to_owned()]), None)]
@@ -451,7 +422,7 @@ fn include_lookup_errors_fall_back_but_selected_source_failures_do_not() {
 #[test]
 fn nonregular_roots_and_includes_are_refused_before_blocking_open() {
     let fixture = Fixture::new();
-    let fifo = fixture.0.path().join("pipe.lp");
+    let fifo = fixture.0.path("pipe.lp");
     assert!(
         Command::new("mkfifo")
             .arg(&fifo)

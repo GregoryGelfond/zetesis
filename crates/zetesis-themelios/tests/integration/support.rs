@@ -1,17 +1,25 @@
 //! Helpers shared by the integration test modules.
 
+pub(crate) mod admission;
 pub(crate) mod answer_records;
 pub(crate) mod atom_models;
+pub(crate) mod bundle_fixtures;
 pub(crate) mod clingo_reports;
+pub(crate) mod count_plan_resources;
 pub(crate) mod finite_bindings;
 pub(crate) mod fixtures;
 pub(crate) mod formula_trees;
+pub(crate) mod frozen_truth;
 pub(crate) mod grounding_observers;
 pub(crate) mod head_element_reference;
 pub(crate) mod head_models;
+pub(crate) mod metadata_resources;
+pub(crate) mod objective_bound_resources;
 pub(crate) mod objective_boundaries;
 pub(crate) mod objective_contract;
 pub(crate) mod objective_dependency_records;
+pub(crate) mod objective_plans;
+pub(crate) mod observation_construction;
 pub(crate) mod observation_rendering;
 pub(crate) mod observation_reference;
 pub(crate) mod priority_contracts;
@@ -20,5 +28,6 @@ pub(crate) mod sourced_admission;
 pub(crate) mod stable_models;
 pub(crate) mod thresholds;
 pub(crate) mod unsigned_spellings;
+pub(crate) mod unevaluable_directives;
 pub(crate) mod upstream;
 pub(crate) mod witnesses;

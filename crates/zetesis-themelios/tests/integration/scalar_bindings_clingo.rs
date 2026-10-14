@@ -4,6 +4,7 @@
 //! historical integer-maximum singleton-range timeout is deliberately excluded.
 
 use std::collections::BTreeSet;
+use zetesis_reference_support::{admit, formula, resource_limits};
 
 use crate::support::finite_bindings::Models;
 use crate::support::unsigned_spellings::atom_text;
@@ -13,8 +14,8 @@ use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula,
+    AdmissionFailure, AdmittedFormula, ExpansionFailure, FormulaFailure, FormulaLimits,
+    FormulaResource, ProfileFeature,
 };
 
 struct Case {
@@ -41,18 +42,10 @@ fn cases() -> Vec<Case> {
                     .as_array()
                     .expect("recorded models")
                     .iter()
-                    .map(atoms)
+                    .map(oracle::atoms)
                     .collect(),
             }
         })
-        .collect()
-}
-fn atoms(values: &Json) -> BTreeSet<String> {
-    values
-        .as_array()
-        .expect("complete canonical atom identities")
-        .iter()
-        .map(|value| value.as_str().expect("canonical ground atom").to_owned())
         .collect()
 }
 // This fixed corpus has scalar numbers, simple symbols and ordinary quoted
@@ -140,19 +133,11 @@ fn scalar_and_interval_admissions_match_complete_models_with_explicit_boundaries
         // this particular source by a mandatory negative gate. Four rounds make
         // the resource regression small and independent of default work tuning.
         let limits = if case.native == "SupportRounds" {
-            FormulaLimits {
-                max_support_rounds: 4,
-                ..FormulaLimits::default()
-            }
+            resource_limits::formula(FormulaResource::SupportRounds, 4)
         } else {
             FormulaLimits::default()
         };
-        let result = admit_formula(
-            case.source.clone(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        );
+        let result = admit(&case.source, &limits);
         // Keep historical native labels and original reference models intact.
         // Evaluated choice heads, separate bounds and mixed arithmetic families
         // promote these cases without altering the independent reference record.
@@ -223,26 +208,7 @@ fn clingo(case: &Case) -> Models {
         assert!(String::from_utf8_lossy(run.stderr()).contains("unsafe"));
         return Models::new();
     }
-    assert_eq!(json["Models"]["More"].as_str(), Some("no"));
-    assert!(matches!(
-        json["Result"].as_str(),
-        Some("SATISFIABLE" | "UNSATISFIABLE")
-    ));
-    let mut models = Models::new();
-    let mut count = 0;
-    for call in json["Call"].as_array().expect("oracle calls") {
-        if let Some(witnesses) = call["Witnesses"].as_array() {
-            for witness in witnesses {
-                count += 1;
-                assert!(
-                    models.insert(atoms(&witness["Value"])),
-                    "duplicate full model"
-                );
-            }
-        }
-    }
-    assert_eq!(json["Models"]["Number"].as_u64(), Some(count));
-    models
+    oracle::objective_free_models(&json)
 }
 #[test]
 #[ignore = "requires clingo: scalar and interval reference models and unsafe cases match fresh clingo; 118 bounded reference source programs"]
@@ -276,13 +242,8 @@ fn nonnumeric_fact_ranges_match_clingo() {
             native: "admit".into(),
             expected: Models::from([BTreeSet::new()]),
         };
-        let input = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .expect("defined nonnumeric endpoints");
+        // Nonnumeric endpoints are defined, so the source is admitted.
+        let input = formula(source);
         assert_eq!(exhaustive(&input), case.expected, "{source}");
         assert_eq!(clingo(&case), case.expected, "{source}");
     }

@@ -1,7 +1,8 @@
 //! The bounds of each argument are an upper domain of every closure's atoms:
 //! constants contribute themselves, a head variable ranges within the
 //! positions binding it, and a too-wide argument is unknown.
-use zetesis_core::{Predicate, Program, Term, Value};
+use std::collections::BTreeSet;
+use zetesis_core::{DomainPositions, Predicate, Program, TemplateTerm, Term, Value};
 
 use super::{ArgumentBounds, Bound, infer};
 use crate::oracle::{PreparationLimits, Work};
@@ -41,6 +42,7 @@ fn bounds(program: &Program) -> ArgumentBounds {
     let mut work = Work::source(&cancellation, Limits::default().max_work);
     infer(
         program,
+        None,
         PreparationLimits::default().max_dense_atoms,
         &mut work,
     )
@@ -69,6 +71,7 @@ fn facts_bound_their_arguments() {
     let mut work = Work::source(&cancellation, Limits::default().max_work);
     let bounds = infer(
         &reachability(),
+        None,
         PreparationLimits::default().max_dense_atoms,
         &mut work,
     )
@@ -155,7 +158,7 @@ fn three_values_through_two_rules() -> Program {
 fn narrow_bounds(program: &Program) -> ArgumentBounds {
     let cancellation = Cancellation::default();
     let mut work = Work::source(&cancellation, Limits::default().max_work);
-    infer(program, 2, &mut work).unwrap()
+    infer(program, None, 2, &mut work).unwrap()
 }
 
 #[test]
@@ -186,8 +189,126 @@ fn a_work_ceiling_stops_the_inference() {
     let mut work = Work::source(&cancellation, 1);
     let stopped = infer(
         &program,
+        None,
         PreparationLimits::default().max_dense_atoms,
         &mut work,
     );
     assert!(matches!(stopped, Err(Stop::WorkLimit)));
+}
+
+/// The fixed point as it was computed before the domain position table:
+/// every pass adds each constant head term's content-search position beside
+/// its variables' bounds. The reference the table's inference must equal.
+fn reference(program: &Program, max_values: usize) -> Vec<Vec<Bound>> {
+    use super::{Growing, table, variable_bound, widen};
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, Limits::default().max_work);
+    let work = &mut work;
+    let mut growing: Vec<Vec<Growing>> = program
+        .predicates()
+        .iter()
+        .map(|predicate| {
+            (0..predicate.arity())
+                .map(|_| Growing::Finite(BTreeSet::new()))
+                .collect()
+        })
+        .collect();
+    loop {
+        let mut changed = false;
+        for template in program.templates() {
+            let Some(head) = template.head() else {
+                continue;
+            };
+            let target = table(program, head.predicate(), work).unwrap();
+            for (index, term) in head.terms().iter().enumerate() {
+                let contribution = match term {
+                    TemplateTerm::Constant(value) => Growing::Finite(BTreeSet::from([program
+                        .domain()
+                        .binary_search(value)
+                        .unwrap()])),
+                    TemplateTerm::Variable(variable) => {
+                        variable_bound(program, template, variable, &growing, work).unwrap()
+                    }
+                };
+                changed |=
+                    widen(&mut growing[target][index], contribution, max_values, work).unwrap();
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+    growing
+        .into_iter()
+        .map(|arguments| {
+            arguments
+                .into_iter()
+                .map(|argument| match argument {
+                    Growing::Finite(values) => Bound::Finite(values.into_iter().collect()),
+                    Growing::Unknown => Bound::Unknown,
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// The bounds under the given ceiling, read through the program's domain
+/// position table.
+fn bounds_by_identity(program: &Program, max_values: usize) -> Vec<Vec<Bound>> {
+    let positions = DomainPositions::build(program, |slots| Ok::<_, ()>(Vec::with_capacity(slots)))
+        .unwrap()
+        .unwrap();
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, Limits::default().max_work);
+    infer(program, Some(&positions), max_values, &mut work)
+        .unwrap()
+        .bounds
+}
+
+#[test]
+fn bounds_by_identity_equal_the_previous_fixed_point() {
+    for program in [reachability(), three_values_through_two_rules()] {
+        for max_values in [1, 2, 3, PreparationLimits::default().max_dense_atoms] {
+            let expected = reference(&program, max_values);
+            assert_eq!(bounds_by_identity(&program, max_values), expected);
+            let cancellation = Cancellation::default();
+            let mut work = Work::source(&cancellation, Limits::default().max_work);
+            let by_search = infer(&program, None, max_values, &mut work).unwrap().bounds;
+            assert_eq!(by_search, expected);
+        }
+    }
+}
+
+#[test]
+fn the_table_spares_the_constants_content_search() {
+    // The same bounds for less work: each constant is read by identity once,
+    // instead of searched by content on every pass.
+    let program = reachability();
+    let positions =
+        DomainPositions::build(&program, |slots| Ok::<_, ()>(Vec::with_capacity(slots)))
+            .unwrap()
+            .unwrap();
+    let cancellation = Cancellation::default();
+    let mut by_identity = Work::source(&cancellation, Limits::default().max_work);
+    let max = PreparationLimits::default().max_dense_atoms;
+    infer(&program, Some(&positions), max, &mut by_identity).unwrap();
+    let mut by_search = Work::source(&cancellation, Limits::default().max_work);
+    infer(&program, None, max, &mut by_search).unwrap();
+    assert!(by_identity.statistics.work < by_search.statistics.work);
+}
+
+#[test]
+fn another_programs_table_falls_back_to_the_content_search() {
+    let program = reachability();
+    let other = reachability();
+    let positions = DomainPositions::build(&other, |slots| Ok::<_, ()>(Vec::with_capacity(slots)))
+        .unwrap()
+        .unwrap();
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, Limits::default().max_work);
+    let max = PreparationLimits::default().max_dense_atoms;
+    let foreign = infer(&program, Some(&positions), max, &mut work)
+        .unwrap()
+        .bounds;
+    assert_eq!(foreign, reference(&program, max));
 }

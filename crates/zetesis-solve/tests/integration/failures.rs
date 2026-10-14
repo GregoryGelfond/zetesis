@@ -1,13 +1,14 @@
 //! Typed failure decomposition preserves input identity and established evidence.
 
 use std::{error::Error as _, fmt, sync::Arc};
+use zetesis_reference_support::formula;
 
 use zetesis_cpu::Cancellation;
 use zetesis_solve::{
     Backend, ExecutionObservation, ExecutionObserver, PreparedInput, Session, SolveConfig,
     SolveError, SolveFailure, Subject,
 };
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit, admit_formula};
+use zetesis_themelios::{AdmissionOptions, admit};
 
 #[derive(Debug)]
 struct Refusal(Arc<()>);
@@ -93,13 +94,7 @@ fn setup_failure_decomposition_preserves_evidence() {
 
 #[test]
 fn execution_failure_decomposition_preserves_evidence() {
-    let owner = admit_formula(
-        "1 {a;b} 1. #minimize {1@2,a:a; 2@2,b:b}.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let owner = formula("1 {a;b} 1. #minimize {1@2,a:a; 2@2,b:b}.");
     let mut session = Session::new(
         PreparedInput::formula(&owner),
         config(),

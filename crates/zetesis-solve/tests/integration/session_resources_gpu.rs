@@ -8,14 +8,13 @@ use zetesis_core::{
     relation::{Limits, Relation},
 };
 use zetesis_cpu::{Cancellation, Stop};
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{formula, prepared};
 use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionObservation, ExecutionObserver,
     ExecutionResources, GpuApi, Grounder, Interruption, Oracle, PreparedInput, SemanticOutcome,
     Session, SolveConfig, SolveError, Subject,
 };
 use zetesis_test_support::programs::signed as atom;
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits};
 use zetesis_wgpu::{
     AdapterBackend, AdapterCategory, GateProjection, GpuContext, GpuError, GpuErrorKind,
     GpuFormulaProfile, GpuOptions, GpuRelationExecutor, GpuSelection, RelationGpuLimits,
@@ -258,6 +257,10 @@ fn independent_closures(resources: &ExecutionResources, device: GpuApi) {
     let first = normal(NORMAL_NUMBER);
     let second = normal(NORMAL_STRING);
     assert!(!first.program().same_instance(second.program()));
+    for owner in [&first, &second] {
+        assert_eq!(owner.program().facts().len(), 2);
+        assert!(owner.program().fact_catalog().is_some());
+    }
     for profile in [Profile::Eager, Profile::Lazy] {
         let subject = Subject::Program(first.program().clone());
         let mut limited = config(device.backend(), profile);
@@ -1052,15 +1055,7 @@ fn terminal_families(device: GpuApi) {
     assert_eq!(reference.outcome.completion(), Some(Completion::Exhausted));
     assert_eq!(reference.records.len(), 4);
 
-    let materialized = zetesis_themelios::prepare_formula(
-        SOURCE.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_adaptive()
-    .unwrap();
+    let materialized = prepared(SOURCE).ground_adaptive().unwrap();
     let zetesis_themelios::FormulaMaterialization::Terminal(owner) = materialized else {
         panic!("fixture requires actual terminal source materialization");
     };

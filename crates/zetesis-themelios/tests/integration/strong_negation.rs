@@ -1,21 +1,22 @@
 //! Strong predicate signs remain distinct atoms, with explicit coherence.
 
+use crate::support::atom_models::answer_sets;
 use std::collections::BTreeSet;
-use std::fs::{self};
 
 use crate::support::answer_records::Record;
-use crate::support::clingo_reports::optimal;
+use crate::support::clingo_reports::{optimal, optimal_witnesses};
 use crate::support::finite_bindings::{holds, values};
 use crate::support::objective_boundaries;
 use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
 use zetesis_core::{Model, Sign};
-use zetesis_cpu::{Cancellation, CandidateLimits, Candidates};
+use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Node, Theory};
-use zetesis_reference_support::canonical;
+use zetesis_reference_support::{BundleFixture, canonical, resource_limits};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    ProfileFeature, SourceBundle, admit, admit_bundle_formula, admit_extended, admit_formula,
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit,
+    admit_bundle_formula, admit_extended,
 };
 
 const SIGNED_ANONYMOUS_PROJECTIONS: [(&str, &str); 2] = [
@@ -127,6 +128,7 @@ fn reference(raw: &Json) -> Vec<Record> {
         .iter()
         .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
         .map(|witness| {
+            // A display is a multiset: clingo repeats a value two show directives select.
             let mut atoms: Vec<_> = witness["Value"]
                 .as_array()
                 .unwrap()
@@ -134,10 +136,7 @@ fn reference(raw: &Json) -> Vec<Record> {
                 .map(|atom| atom.as_str().unwrap().to_owned())
                 .collect();
             atoms.sort();
-            let costs = witness["Costs"]
-                .as_array()
-                .map(|costs| costs.iter().map(|cost| cost.as_i64().unwrap()).collect());
-            (atoms, costs)
+            (atoms, oracle::costs(&witness["Costs"]))
         })
         .collect();
     assert_eq!(
@@ -147,32 +146,7 @@ fn reference(raw: &Json) -> Vec<Record> {
     match raw["Result"].as_str().unwrap() {
         "SATISFIABLE" => assert!(records.iter().all(|(_, costs)| costs.is_none())),
         "UNSATISFIABLE" => assert!(records.is_empty()),
-        "OPTIMUM FOUND" => {
-            let cost: Vec<_> = raw["Models"]["Costs"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|value| value.as_i64().unwrap())
-                .collect();
-            let first = records
-                .iter()
-                .position(|(_, found)| found.as_ref() == Some(&cost))
-                .unwrap();
-            assert!(
-                records[first + 1..].contains(&records[first]),
-                "one optN incumbent replay"
-            );
-            records = records.into_iter().skip(first + 1).collect();
-            assert!(
-                records
-                    .iter()
-                    .all(|(_, found)| found.as_ref() == Some(&cost))
-            );
-            assert_eq!(
-                raw["Models"]["Optimal"].as_u64().unwrap(),
-                records.len() as u64
-            );
-        }
+        "OPTIMUM FOUND" => records = optimal_witnesses(&raw["Models"], records),
         other => panic!("incomplete reference: {other}"),
     }
     records.sort();
@@ -314,35 +288,7 @@ fn ordinary_and_extended_closure_routes_enforce_the_same_signed_coherence() {
             )
             .unwrap(),
         ] {
-            let mut actual = BTreeSet::new();
-            for seed in Candidates::new(
-                admitted.program(),
-                CandidateLimits::default(),
-                Cancellation::default(),
-            ) {
-                let checked = zetesis_cpu::check(
-                    admitted.program(),
-                    &seed.unwrap(),
-                    zetesis_cpu::Limits::default(),
-                    &Cancellation::default(),
-                )
-                .unwrap();
-                if checked.accepted() {
-                    assert!(
-                        actual.insert(
-                            checked
-                                .closure()
-                                .atoms()
-                                .iter()
-                                .map(|atom| atom
-                                    .to_atom(zetesis_core::ValueLimits::default())
-                                    .unwrap())
-                                .collect::<BTreeSet<_>>()
-                        )
-                    );
-                }
-            }
-            assert_eq!(actual, expected, "{source}");
+            assert_eq!(answer_sets(admitted.program()), expected, "{source}");
         }
     }
 }
@@ -475,16 +421,10 @@ fn coherence_roots_are_bounded_and_keep_both_original_source_locations() {
         })
         .collect();
     assert_eq!(origins, BTreeSet::from(["p.", "-p."]));
-    let roots = admitted.theory().roots().len();
+    let roots = u64::try_from(admitted.theory().roots().len()).unwrap();
     for (limit, succeeds) in [(roots, true), (roots - 1, false)] {
-        let mut limits = FormulaLimits::default();
-        limits.theory.max_roots = limit;
-        let result = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        );
+        let limits = resource_limits::formula(FormulaResource::Roots, limit);
+        let result = zetesis_reference_support::admit(source, &limits);
         if succeeds {
             assert!(result.is_ok());
         } else {
@@ -497,8 +437,7 @@ fn coherence_roots_are_bounded_and_keep_both_original_source_locations() {
             ));
         }
     }
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_templates = 2;
+    let options = resource_limits::admission_core(zetesis_core::AdmissionResource::Templates, 2);
     assert!(
         matches!(
             admit(source.into(), options),
@@ -510,15 +449,10 @@ fn coherence_roots_are_bounded_and_keep_both_original_source_locations() {
 
 #[test]
 fn opposite_signs_across_bundle_files_share_coherence_and_original_provenance() {
-    let directory = tempfile::tempdir().unwrap();
-    fs::write(
-        directory.path().join("entry.lp"),
-        "#include \"negative.lp\". p(1).",
-    )
-    .unwrap();
-    fs::write(directory.path().join("negative.lp"), "-p(1).").unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", "#include \"negative.lp\". p(1).");
+    fixture.write("negative.lp", "-p(1).");
+    let bundle = fixture.bundle();
     let input = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

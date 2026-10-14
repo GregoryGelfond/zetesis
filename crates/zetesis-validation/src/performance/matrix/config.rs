@@ -25,7 +25,7 @@ pub enum Suite {
     /// the series' own list, the queens, SEND and task-allocation cases;
     /// a plain run under this suite measures only those, unchanged.
     Series,
-    /// Authored queens/pigeonhole sizes and the three baseline corpus entries,
+    /// Maintained authored scalability sizes and three baseline corpus entries,
     /// with optional Einstein. Requires explicit workloads, normally supplied by
     /// [`super::super::scalability::run_with_cancellation`].
     Scalability,

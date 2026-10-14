@@ -1,8 +1,8 @@
 use std::mem::size_of;
 
 use super::{
-    AdmissionError, ContributionRow, FormulaParts, FormulaTransaction, FormulaView, Node, Storage,
-    ThresholdDescriptor,
+    AdmissionError, ExtremumCutDescriptor, FormulaParts, FormulaTransaction, FormulaView, Node,
+    NumericRow, Storage, ThresholdDescriptor,
 };
 
 pub(super) fn copy<T: Copy>(source: &[T]) -> Result<Vec<T>, AdmissionError> {
@@ -19,7 +19,7 @@ fn bytes<T>(count: usize) -> u128 {
 }
 
 impl FormulaParts {
-    /// Copy all six arenas fallibly, preserving sharing and absolute child IDs.
+    /// Copy all seven arenas fallibly, preserving sharing and absolute child IDs.
     /// The copy is raw storage and carries no admission or original owner identity.
     /// Work and temporary payload are linear in all stored cells, including unused
     /// cells. [`Self::copy_work`] reports the complete logical copy/recount charge.
@@ -32,7 +32,7 @@ impl FormulaParts {
     }
 
     /// Complete logical work for [`Self::try_clone`]: one visit per copied cell
-    /// in all six arenas, then one visit per node to recount child occurrences.
+    /// in all seven arenas, then one visit per node to recount child occurrences.
     /// Shared numeric entries are copied once, irrespective of how many nodes
     /// reference their row. Unreferenced arena cells still contribute.
     ///
@@ -45,33 +45,36 @@ impl FormulaParts {
         2 * self.nodes.len() as u128
             + self.operands.len() as u128
             + self.numeric.conditions.len() as u128
-            + self.numeric.weights.len() as u128
+            + self.numeric.values.len() as u128
             + self.numeric.rows.len() as u128
             + self.numeric.thresholds.len() as u128
+            + self.numeric.cuts.len() as u128
     }
 
-    /// Bytes occupied by the lengths of all six vector payloads.
+    /// Bytes occupied by the lengths of all seven vector payloads.
     /// Excludes vector headers, this owner, allocator overhead and roots.
     #[must_use]
     pub fn payload_bytes(&self) -> u128 {
         bytes::<Node>(self.nodes.len())
             + bytes::<usize>(self.operands.len())
             + bytes::<usize>(self.numeric.conditions.len())
-            + bytes::<u64>(self.numeric.weights.len())
-            + bytes::<ContributionRow>(self.numeric.rows.len())
+            + bytes::<u64>(self.numeric.values.len())
+            + bytes::<NumericRow>(self.numeric.rows.len())
             + bytes::<ThresholdDescriptor>(self.numeric.thresholds.len())
+            + bytes::<ExtremumCutDescriptor>(self.numeric.cuts.len())
     }
 
-    /// Bytes retained by the actual capacities of all six vector allocations.
+    /// Bytes retained by the actual capacities of all seven vector allocations.
     /// Excludes vector headers, this owner, allocator overhead and roots.
     #[must_use]
     pub fn retained_bytes(&self) -> u128 {
         bytes::<Node>(self.nodes.capacity())
             + bytes::<usize>(self.operands.capacity())
             + bytes::<usize>(self.numeric.conditions.capacity())
-            + bytes::<u64>(self.numeric.weights.capacity())
-            + bytes::<ContributionRow>(self.numeric.rows.capacity())
+            + bytes::<u64>(self.numeric.values.capacity())
+            + bytes::<NumericRow>(self.numeric.rows.capacity())
             + bytes::<ThresholdDescriptor>(self.numeric.thresholds.capacity())
+            + bytes::<ExtremumCutDescriptor>(self.numeric.cuts.capacity())
     }
 }
 
@@ -84,7 +87,7 @@ impl FormulaView<'_> {
     ///
     /// # Errors
     /// Refuses failed reservations or overflow in declared logical occurrences.
-    pub fn try_to_parts(self) -> Result<FormulaParts, AdmissionError> {
+    pub(crate) fn try_to_parts(self) -> Result<FormulaParts, AdmissionError> {
         let nodes = copy(self.nodes)?;
         let operands = copy(self.operands)?;
         let numeric = self.numeric.try_clone()?;
@@ -132,30 +135,34 @@ impl FormulaView<'_> {
 }
 
 impl FormulaTransaction<'_> {
-    /// Current appended payload across all six arenas, excluding retained capacity.
-    /// Includes nodes, both numeric columns and row/threshold descriptors.
+    /// Current appended payload across all seven arenas, excluding retained capacity.
+    /// Includes nodes, both numeric columns and row and numeric descriptors.
     #[must_use]
     pub fn appended_payload_bytes(&self) -> u128 {
         bytes::<Node>(self.parts.nodes.len() - self.first)
             + bytes::<usize>(self.parts.operands.len() - self.operand_start)
             + bytes::<usize>(self.parts.numeric.conditions.len() - self.numeric_start.conditions)
-            + bytes::<u64>(self.parts.numeric.weights.len() - self.numeric_start.weights)
-            + bytes::<ContributionRow>(self.parts.numeric.rows.len() - self.numeric_start.rows)
+            + bytes::<u64>(self.parts.numeric.values.len() - self.numeric_start.values)
+            + bytes::<NumericRow>(self.parts.numeric.rows.len() - self.numeric_start.rows)
             + bytes::<ThresholdDescriptor>(
                 self.parts.numeric.thresholds.len() - self.numeric_start.thresholds,
             )
+            + bytes::<ExtremumCutDescriptor>(
+                self.parts.numeric.cuts.len() - self.numeric_start.cuts,
+            )
     }
 
-    /// Physical appended cells across all six arenas, for complete detachment work.
+    /// Physical appended cells across all seven arenas, for complete detachment work.
     /// A shared row is counted once, unlike logical threshold child occurrences.
     #[must_use]
     pub fn appended_cells(&self) -> u128 {
         (self.parts.nodes.len() - self.first) as u128
             + (self.parts.operands.len() - self.operand_start) as u128
             + (self.parts.numeric.conditions.len() - self.numeric_start.conditions) as u128
-            + (self.parts.numeric.weights.len() - self.numeric_start.weights) as u128
+            + (self.parts.numeric.values.len() - self.numeric_start.values) as u128
             + (self.parts.numeric.rows.len() - self.numeric_start.rows) as u128
             + (self.parts.numeric.thresholds.len() - self.numeric_start.thresholds) as u128
+            + (self.parts.numeric.cuts.len() - self.numeric_start.cuts) as u128
     }
 }
 

@@ -133,7 +133,9 @@ impl Capture<'_, '_> {
     fn literal(&mut self, literal: &LiteralIr) -> Result<(), FormulaFailure> {
         self.reader.work(1)?;
         match literal {
-            LiteralIr::Compare(left, relation, right) => self.comparison(left, *relation, right)?,
+            LiteralIr::Compare(comparison) => {
+                self.comparison(comparison.left(), comparison.relation(), comparison.right())?;
+            }
             LiteralIr::Guard(Guard::Comparisons {
                 negation: DefaultNegation::None | DefaultNegation::NotNot,
                 comparisons,

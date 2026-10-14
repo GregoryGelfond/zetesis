@@ -209,6 +209,10 @@ impl Term {
     }
 }
 impl Predicate {
+    /// Borrow an authenticated occurrence; accounting belongs to the caller.
+    pub(crate) fn resolve(self, view: TemplateComponentsRef<'_>) -> Option<PredicateRef<'_>> {
+        view.predicate(self.0)
+    }
     pub(crate) fn get<'a>(
         self,
         view: TemplateComponentsRef<'a>,
@@ -217,10 +221,14 @@ impl Predicate {
         location: ProgramSite,
     ) -> Result<PredicateRef<'a>, FormulaFailure> {
         counters.work(limits, location)?;
-        view.predicate(self.0).ok_or_else(|| missing(location))
+        self.resolve(view).ok_or_else(|| missing(location))
     }
 }
 impl Pattern {
+    /// Borrow an authenticated occurrence; accounting belongs to the caller.
+    pub(crate) fn resolve(self, view: TemplateComponentsRef<'_>) -> Option<PatternRef<'_>> {
+        view.pattern(self.0)
+    }
     pub(crate) fn get<'a>(
         self,
         view: TemplateComponentsRef<'a>,
@@ -238,7 +246,7 @@ impl Pattern {
         before: impl FnOnce() -> Result<(), FormulaFailure>,
     ) -> Result<PatternRef<'_>, FormulaFailure> {
         before()?;
-        view.pattern(self.0).ok_or_else(|| missing(location))
+        self.resolve(view).ok_or_else(|| missing(location))
     }
 }
 impl Filter {

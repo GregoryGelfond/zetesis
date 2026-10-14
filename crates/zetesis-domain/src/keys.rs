@@ -194,47 +194,95 @@ impl<'p> FactIndex<'p> {
         };
         for carrier in program.statements() {
             work.step()?;
-            match carrier.get() {
-                Statement::Rule(rule) => match rule.head().get() {
-                    Head::Literal(literal) => {
-                        let LiteralInner::Atom(atom) = &literal.inner else {
-                            continue;
-                        };
-                        let atom = atom.get();
-                        let fact = literal.negation == DefaultNegation::None
-                            && rule.body().get().elements().next().is_none();
-                        for terms in atom.alternatives() {
-                            let Some(signature) = atom_signature(atom, terms.len()) else {
-                                continue;
-                            };
-                            let rows = index
-                                .signatures
-                                .entry(signature)
-                                .or_insert_with(|| Some(Vec::new()));
-                            match rows {
-                                Some(rows) if fact => rows.push(terms),
-                                _ => *rows = None,
-                            }
-                        }
-                    }
-                    Head::Choice(choice) => {
-                        for element in choice.elements() {
-                            index.produced(element.get().literal());
-                        }
-                    }
-                    Head::Disjunction(disjunction) => {
-                        for element in disjunction.elements() {
-                            index.produced(element.get().literal());
-                        }
-                    }
-                    Head::Falsum | Head::Verum => {}
-                    Head::Aggregate(_) | Head::TheoryAtom(_) => index.opaque = true,
-                },
-                Statement::External(external) => index.atom_produced(external.atom().get()),
-                _ => {}
-            }
+            index.statement(carrier.get());
         }
         Ok(index)
+    }
+
+    /// Read a program supplied as its non-fact statements and fact atoms,
+    /// without constructing or copying a statement for each fact.
+    ///
+    /// `producers` must include every other statement, including choice,
+    /// disjunctive, aggregate, theory and external producers. `facts` describes
+    /// body-free atom heads without default negation, with either sign, in the
+    /// fact order of the described program.
+    /// Each input is read exactly once and costs one work step. Tuples borrow
+    /// their original terms; this operation neither deduplicates nor sorts them.
+    ///
+    /// To reproduce [`Self::read`] for a canonical [`Program`], provide its
+    /// canonical, deduplicated fact sequence and all remaining statements once.
+    /// Original occurrence counts and provenance remain the caller's separate
+    /// responsibility; this constructor establishes no occurrence identity.
+    ///
+    /// # Errors
+    /// Returns the work stop with accepted steps retained and no partial index.
+    pub fn read_parts(
+        producers: impl IntoIterator<Item = &'p Statement>,
+        facts: impl IntoIterator<Item = &'p Atom>,
+        work: &mut KeyWork,
+    ) -> Result<Self, Stop> {
+        let mut index = Self {
+            opaque: false,
+            signatures: BTreeMap::new(),
+        };
+        for statement in producers {
+            work.step()?;
+            index.statement(statement);
+        }
+        for fact in facts {
+            work.step()?;
+            index.atom(fact, true);
+        }
+        Ok(index)
+    }
+
+    /// Apply the shared all-producer reading to one already charged statement.
+    fn statement(&mut self, statement: &'p Statement) {
+        match statement {
+            Statement::Rule(rule) => match rule.head().get() {
+                Head::Literal(literal) => {
+                    let LiteralInner::Atom(atom) = &literal.inner else {
+                        return;
+                    };
+                    let atom = atom.get();
+                    let fact = literal.negation == DefaultNegation::None
+                        && rule.body().get().elements().next().is_none();
+                    self.atom(atom, fact);
+                }
+                Head::Choice(choice) => {
+                    for element in choice.elements() {
+                        self.produced(element.get().literal());
+                    }
+                }
+                Head::Disjunction(disjunction) => {
+                    for element in disjunction.elements() {
+                        self.produced(element.get().literal());
+                    }
+                }
+                Head::Falsum | Head::Verum => {}
+                Head::Aggregate(_) | Head::TheoryAtom(_) => self.opaque = true,
+            },
+            Statement::External(external) => self.atom_produced(external.atom().get()),
+            _ => {}
+        }
+    }
+
+    /// Record an atom's alternatives; another producer can only invalidate its
+    /// fixed relation, including when it was encountered before these facts.
+    fn atom(&mut self, atom: &'p Atom, fact: bool) {
+        for terms in atom.alternatives() {
+            let Some(signature) = atom_signature(atom, terms.len()) else {
+                continue;
+            };
+            let rows = self
+                .signatures
+                .entry(signature)
+                .or_insert_with(|| Some(Vec::new()));
+            match rows {
+                Some(rows) if fact => rows.push(terms),
+                _ => *rows = None,
+            }
+        }
     }
 
     /// Borrow complete argument tuples when facts are the only producers.

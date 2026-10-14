@@ -42,17 +42,14 @@ impl<'source> PositiveSource<'source> {
         applicable(prepared, components, limits, counters, location)
     }
 
-    pub(crate) fn prepared(&self) -> &'source Prepared {
-        self.prepared
-    }
-
     pub(crate) fn has_objectives(&self) -> bool {
         self.objectives
     }
 
+    /// Whether `rule` is the prepared program's rule at `index` among its rules.
     pub(crate) fn contains(&self, index: usize, rule: &RuleIr) -> bool {
         self.prepared
-            .rules
+            .rules_without_facts()
             .get(index)
             .is_some_and(|original| std::ptr::eq(original, rule))
     }
@@ -74,7 +71,7 @@ fn applicable<'source>(
     // Check every source carrier as well as every compiled rule. These lists
     // need not have equal lengths: source deduplication does not erase the IR's
     // original occurrence/provenance population.
-    for part in prepared.analyzed.parts() {
+    for part in prepared.analyzed.program().parts() {
         counters.work(limits, location)?;
         if part.key().name.as_str() != "base" || !part.key().formals.is_empty() {
             return Ok(None);
@@ -110,7 +107,19 @@ fn applicable<'source>(
             }
         }
     }
-    for rule in &prepared.rules {
+    // A fact block is a positive-flat producer when each of its constants
+    // is one a head may hold. That test is a function of each value alone, so
+    // each admitted cell is checked once, for all the rows that select it.
+    for block in prepared.items().blocks() {
+        let location = block.location();
+        for cell in block.cells() {
+            counters.work(limits, location)?;
+            if !flat_constant(cell, components, limits, counters, location)? {
+                return Ok(None);
+            }
+        }
+    }
+    for rule in prepared.rules_without_facts() {
         counters.work(limits, rule.location)?;
         if rule.bindings.is_some() || rule.body_variables != rule.variables {
             return Ok(None);
@@ -211,17 +220,39 @@ fn flat(
         let term = terms.at(index).expect("checked pattern arity");
         match term {
             zetesis_core::TemplateTerm::Variable(slot) if slot < variables => {}
-            zetesis_core::TemplateTerm::Constant(value) => match value.descriptor() {
-                zetesis_core::ValueNodeRef::Number(_)
-                | zetesis_core::ValueNodeRef::Infimum
-                | zetesis_core::ValueNodeRef::Supremum => {}
-                zetesis_core::ValueNodeRef::String(text)
-                | zetesis_core::ValueNodeRef::Symbol(text)
-                    if text.len() <= MAX_ATOMIC_BYTES => {}
-                _ => return Ok(false),
-            },
-            zetesis_core::TemplateTerm::Variable(_) => return Ok(false),
+            zetesis_core::TemplateTerm::Constant(value) if flat_value(value) => {}
+            zetesis_core::TemplateTerm::Constant(_) | zetesis_core::TemplateTerm::Variable(_) => {
+                return Ok(false);
+            }
         }
     }
     Ok(true)
+}
+
+/// Whether a head constant is flat: a number, a sentinel, or a string or
+/// symbol within the atomic payload bound.
+fn flat_value(value: zetesis_core::catalog::TermRef<'_>) -> bool {
+    match value.descriptor() {
+        zetesis_core::ValueNodeRef::Number(_)
+        | zetesis_core::ValueNodeRef::Infimum
+        | zetesis_core::ValueNodeRef::Supremum => true,
+        zetesis_core::ValueNodeRef::String(text) | zetesis_core::ValueNodeRef::Symbol(text) => {
+            text.len() <= MAX_ATOMIC_BYTES
+        }
+        _ => false,
+    }
+}
+
+/// The per-term test [`flat`] applies to a head's constant, for one fact cell.
+fn flat_constant(
+    cell: crate::formula_support::components::Scalar,
+    components: Option<zetesis_core::TemplateComponentsRef<'_>>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> Result<bool, FormulaFailure> {
+    let components =
+        components.ok_or_else(|| crate::formula_support::components::missing(location))?;
+    let value = cell.get(components, limits, counters, location)?;
+    Ok(flat_value(value))
 }

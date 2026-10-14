@@ -2,26 +2,12 @@ mod evidence;
 mod predicates;
 use super::*;
 use crate::formula_support::RowSelection;
-use crate::{
-    AdmissionOptions, ConstraintCheckCause, ConstraintCheckLimits, ExpansionLimits,
-    FormulaResource, HybridFormula, prepare_formula,
-};
+use crate::test_support::hybrid;
+use crate::{ConstraintCheckCause, ConstraintCheckLimits, FormulaResource, HybridFormula};
 use zetesis_core::relation::{Limits, Relation};
 
 fn owner() -> HybridFormula {
-    owner_of("{p(1);p(2);-p(1)}. :-p(X),not -p(X).")
-}
-
-fn owner_of(source: &str) -> HybridFormula {
-    prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_hybrid()
-    .unwrap()
+    hybrid("{p(1);p(2);-p(1)}. :-p(X),not -p(X).")
 }
 
 fn workspace_bytes(prepared: &super::super::PreparedConstraints<'_>) -> u128 {
@@ -360,7 +346,7 @@ fn a_later_checker_borrows_the_core_index_for_one_unit() {
         "{p(1..2)}. :-p(X),p(Y),X<Y.",
         "{p(1..200)}. :-p(X),p(Y),X+Y=7,X<Y.",
     ] {
-        let owner = owner_of(source);
+        let owner = hybrid(source);
         let (built, first) = index_charge(&owner);
         let (borrowed, second) = index_charge(&owner);
         assert!(built > 1, "{source}");
@@ -387,7 +373,7 @@ fn a_borrowing_checker_counts_the_index_in_its_ledger() {
 
 #[test]
 fn checkers_racing_on_first_use_share_one_published_index() {
-    let owner = owner_of("{p(1..50)}. :-p(X),p(Y),X+Y=7,X<Y.");
+    let owner = hybrid("{p(1..50)}. :-p(X),p(Y),X+Y=7,X<Y.");
     let indexes: Vec<usize> = std::thread::scope(|scope| {
         let workers: Vec<_> = (0..8)
             .map(|_| scope.spawn(|| index_charge(&owner).1 as usize))
@@ -430,8 +416,8 @@ fn rows_charge(owner: &HybridFormula) -> u64 {
 fn a_later_checker_borrows_the_core_row_positions() {
     // One source predicate read in either core; the larger has 100 times
     // the rows. A later checker pays per predicate, not per row.
-    let small = owner_of("{p(1..2)}. :-p(X),p(Y),X<Y.");
-    let large = owner_of("{p(1..200)}. :-p(X),p(Y),X+Y=7,X<Y.");
+    let small = hybrid("{p(1..2)}. :-p(X),p(Y),X<Y.");
+    let large = hybrid("{p(1..200)}. :-p(X),p(Y),X+Y=7,X<Y.");
     let built = (rows_charge(&small), rows_charge(&large));
     let borrowed = (rows_charge(&small), rows_charge(&large));
     assert!(built.1 > borrowed.1, "a build maps every row");

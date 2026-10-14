@@ -1,10 +1,10 @@
 //! Positive tuple matching preserves full source atoms and frozen semantics.
 use crate::support::finite_bindings as reference;
 use crate::support::finite_bindings::expected as models;
-use reference::{Models, exhaustive, external, holds, native, values};
+use reference::{exhaustive, holds, native, values};
 use std::collections::BTreeSet;
-use zetesis_reference_support::{canonical, formula};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
+use zetesis_reference_support::{admit, canonical, formula, resource_limits};
+use zetesis_themelios::{ExpansionLimits, FormulaLimits, FormulaResource, admit_formula};
 
 const PROJECTION: &str = "q((1,x),2).\np(A) :- q((A,_),_).\np(B) :- q((A,_),B).\n";
 const EXTREMA_SOURCE: &str = "q((#inf,a)).q((#sup,b)).q((\"#inf\",c)).p(X):-q((X,_)).";
@@ -150,34 +150,12 @@ fn every_frozen_pair_matches_explicit_ground_rules() {
 #[test]
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
-    for source in [PROJECTION, EXTREMA_SOURCE]
-        .into_iter()
-        .chain(CASES.iter().map(|&(source, _)| source))
-    {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    assert!(
-                        expected.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&formula(source)), expected, "{source}");
-    }
+    reference::original_sources_match_clingo_full_models(
+        [PROJECTION, EXTREMA_SOURCE]
+            .into_iter()
+            .chain(CASES.iter().map(|&(source, _)| source)),
+        formula,
+    );
 }
 
 #[test]
@@ -235,27 +213,11 @@ fn structural_bindings_can_feed_later_support_rounds() {
 }
 #[test]
 fn a_negative_tuple_occurrence_cannot_make_a_name_safe() {
-    assert!(
-        admit_formula(
-            "p(X):-not q((X,_)).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        )
-        .is_err()
-    );
+    assert!(admit("p(X):-not q((X,_)).", &FormulaLimits::default()).is_err());
 }
 #[test]
 fn an_arithmetic_tuple_pattern_is_not_a_producer() {
-    assert!(
-        admit_formula(
-            "q((2,x)).p(X):-q((X+1,_)).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        )
-        .is_err()
-    );
+    assert!(admit("q((2,x)).p(X):-q((X+1,_)).", &FormulaLimits::default()).is_err());
 }
 #[test]
 fn a_named_pattern_retains_the_complete_source_atom() {
@@ -266,12 +228,10 @@ fn a_named_pattern_retains_the_complete_source_atom() {
 }
 #[test]
 fn nested_anonymous_nodes_do_not_consume_variable_slots() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 1;
     assert!(
         admit_formula(
             "q((1,2)).p:-q((_,_)).".into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 1),
             ExpansionLimits::default(),
             FormulaLimits::default()
         )
@@ -280,11 +240,9 @@ fn nested_anonymous_nodes_do_not_consume_variable_slots() {
 }
 #[test]
 fn a_whole_argument_capture_obeys_the_variable_ceiling() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 1;
     let error = admit_formula(
         "q((1,2)).p(X):-q((X,_)).".into(),
-        options,
+        resource_limits::admission_formula(FormulaResource::Variables, 1),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     )
@@ -292,7 +250,7 @@ fn a_whole_argument_capture_obeys_the_variable_ceiling() {
     assert!(matches!(
         error,
         zetesis_themelios::FormulaFailure::Limit {
-            resource: zetesis_themelios::FormulaResource::Variables,
+            resource: FormulaResource::Variables,
             observed: 2,
             limit: 1,
             ..

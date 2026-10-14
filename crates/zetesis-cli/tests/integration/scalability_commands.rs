@@ -202,7 +202,7 @@ mod campaigns {
         );
         assert_eq!(
             qualified["report"]["workloads"].as_array().unwrap().len(),
-            14
+            20
         );
         assert!(
             qualified["report"]["samples"]
@@ -281,6 +281,16 @@ mod campaigns {
         assert_eq!(failure["kind"], "scalability_publication");
     }
 
+    fn json_publication_refused(stderr: &str) -> bool {
+        stderr.lines().any(|line| {
+            matches!(
+                line,
+                "zetesis: model JSON view refused: Bytes"
+                    | "zetesis: secondary output: model JSON view refused: Bytes"
+            )
+        })
+    }
+
     #[test]
     fn compact_conformance_retains_memory_refusal_diagnostics() {
         use std::os::unix::fs::PermissionsExt;
@@ -325,11 +335,12 @@ mod campaigns {
             .enumerate()
             .filter(|(_, check)| check["slot"]["producer"]["solver"] == "native")
             .collect::<Vec<_>>();
-        assert_eq!(native.len(), 14);
+        assert_eq!(native.len(), 20);
         // Other workloads can fail to publish their larger diagnostic footer.
         // That remains an invalid report, never a qualified memory refusal.
-        // Require retained evidence of this exact publication cause; malformed
-        // reports without that cause still fail with their case identity.
+        // Publication can be the primary failure after a completed solve or
+        // secondary to an earlier refusal. Require this exact retained cause;
+        // malformed reports without it still fail with their case identity.
         for (index, check) in &native {
             if check["decision"] == "invalid_report" {
                 let retained = &evidence["report"]["samples"][*index];
@@ -339,7 +350,7 @@ mod campaigns {
                     .expect_err("an incomplete diagnostic cannot be valid JSON");
                 assert!(error.is_eof(), "{check}: {error}; stderr: {stderr}");
                 assert!(
-                    stderr.contains("secondary output: model JSON view refused: Bytes"),
+                    json_publication_refused(stderr),
                     "{check}; stderr: {stderr}"
                 );
                 assert_eq!(check["detail"], retained["detail"], "{check}");
@@ -397,6 +408,65 @@ mod campaigns {
             assert!(check["capture"].get("stdout").is_none());
         }
         assert!(view["before"].as_array().unwrap().len() >= 3);
+    }
+
+    #[test]
+    fn a_campaign_seals_the_executable_its_native_runs_name() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let fixture = Fixture::new();
+        let zetesis = std::path::Path::new(env!("CARGO_BIN_EXE_zetesis"))
+            .canonicalize()
+            .unwrap();
+        // A stand-in front, handing every run to this build's zetesis by exec
+        // as the default install's front hands GPU runs to its sibling.
+        let front = fixture.directory.path().join("front");
+        std::fs::write(
+            &front,
+            format!("#!/bin/sh\nexec '{}' \"$@\"\n", zetesis.display()),
+        )
+        .unwrap();
+        std::fs::set_permissions(&front, std::fs::Permissions::from_mode(0o700)).unwrap();
+        let report = fixture.directory.path().join("bench.json");
+        let arguments = [
+            fixture.corpus.to_str().unwrap(),
+            "--zetesis",
+            front.to_str().unwrap(),
+            "--without-clingo",
+            "--case",
+            "scenarios/shortest-path/variant-01/01-basic.lp",
+            "--warmups",
+            "0",
+            "--repetitions",
+            "1",
+            "--memory-runs",
+            "0",
+            "--report",
+            report.to_str().unwrap(),
+            "--json",
+        ];
+        assert_eq!(
+            benchmark::execute_with_cancellation(
+                &BenchCommand::Run(Box::new(bench(&arguments))),
+                Layout::default(),
+                &mut Vec::new(),
+                &mut Vec::new(),
+                &AtomicBool::new(false),
+            )
+            .unwrap(),
+            benchmark::Completion::Passed
+        );
+        let evidence: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(report).unwrap()).unwrap();
+        assert_eq!(evidence["passed"], true);
+        assert_eq!(
+            evidence["report"]["before"][0]["canonical"],
+            front.canonicalize().unwrap().to_str().unwrap()
+        );
+        assert_eq!(
+            evidence["report"]["executed"]["canonical"],
+            zetesis.to_str().unwrap()
+        );
+        assert_eq!(evidence["report"]["executed_after"]["unchanged"], true);
     }
 }
 

@@ -1,8 +1,10 @@
 //! Boundary laws against real themelios parsing and raising. These fixtures test
 //! source admission and normalized structure, not solver outcomes.
 
+use crate::support::admission;
 use themelios_base::source::SourceId;
-use zetesis_core::{Filter, Term, Value};
+use zetesis_core::{AdmissionResource, Filter, Term, Value};
+use zetesis_reference_support::resource_limits;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, Admitted, ExpansionLimits, ExpansionUsage, InputLimit,
     ProfileFeature, admit, admit_extended,
@@ -66,14 +68,7 @@ fn constraints_share_gates_and_scalar_filters() {
 #[test]
 fn scalar_values_keep_their_types_and_decode_strings() {
     let input = accepted("p(a, \"a\", 12, -7, \"a\\\"b\").");
-    let terms = input
-        .program()
-        .templates()
-        .at(0)
-        .unwrap()
-        .head()
-        .expect("fact head")
-        .terms();
+    let terms = input.program().facts().at(0).unwrap().pattern().terms();
     assert_eq!(
         terms.iter().collect::<Vec<_>>(),
         [
@@ -142,14 +137,7 @@ fn raw_choice_shape_is_checked_before_set_canonicalization() {
     ] {
         let source_id = SourceId::new(220);
         let source = Source::new(source_id, text.into()).unwrap();
-        let error = admit(
-            text.into(),
-            AdmissionOptions {
-                source_id,
-                ..AdmissionOptions::default()
-            },
-        )
-        .unwrap_err();
+        let error = admit(text.into(), admission::options(source_id)).unwrap_err();
         let AdmissionFailure::Profile {
             feature: actual,
             location,
@@ -231,14 +219,7 @@ fn relational_refusals_preserve_the_profile_diagnostic() {
     ] {
         let source_id = SourceId::new(219);
         let source = Source::new(source_id, text.into()).unwrap();
-        let error = admit(
-            text.into(),
-            AdmissionOptions {
-                source_id,
-                ..AdmissionOptions::default()
-            },
-        )
-        .unwrap_err();
+        let error = admit(text.into(), admission::options(source_id)).unwrap_err();
         let AdmissionFailure::Profile {
             feature: actual,
             location,
@@ -367,10 +348,7 @@ fn negated_anonymous_atoms_require_projection() {
 
 #[test]
 fn byte_limits_are_checked_before_syntax() {
-    let options = AdmissionOptions {
-        max_source_bytes: 2,
-        ..AdmissionOptions::default()
-    };
+    let options = resource_limits::admission(InputLimit::SourceBytes, 2);
     assert!(matches!(
         admit("invalid input".to_owned(), options),
         Err(AdmissionFailure::Limit {
@@ -383,10 +361,7 @@ fn byte_limits_are_checked_before_syntax() {
 
 #[test]
 fn body_limits_count_source_occurrences_before_deduplication() {
-    let options = AdmissionOptions {
-        max_body_elements: 1,
-        ..AdmissionOptions::default()
-    };
+    let options = resource_limits::admission(InputLimit::BodyElements, 1);
     assert!(matches!(
         admit("p :- q,q.".to_owned(), options),
         Err(AdmissionFailure::Limit {
@@ -398,22 +373,8 @@ fn body_limits_count_source_occurrences_before_deduplication() {
 
 #[test]
 fn syntax_node_and_depth_limits_refuse_with_locations() {
-    for (options, expected) in [
-        (
-            AdmissionOptions {
-                max_syntax_nodes: 0,
-                ..AdmissionOptions::default()
-            },
-            InputLimit::SyntaxNodes,
-        ),
-        (
-            AdmissionOptions {
-                max_syntax_depth: 1,
-                ..AdmissionOptions::default()
-            },
-            InputLimit::SyntaxDepth,
-        ),
-    ] {
+    for (expected, limit) in [(InputLimit::SyntaxNodes, 0), (InputLimit::SyntaxDepth, 1)] {
+        let options = resource_limits::admission(expected, limit);
         match admit("p(a).".to_owned(), options) {
             Err(AdmissionFailure::Limit {
                 resource, location, ..
@@ -428,8 +389,7 @@ fn syntax_node_and_depth_limits_refuse_with_locations() {
 
 #[test]
 fn core_limits_remain_an_independent_admission_door() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_templates = 1;
+    let options = resource_limits::admission_core(AdmissionResource::Templates, 1);
     assert!(matches!(
         admit("p. q.".to_owned(), options),
         Err(AdmissionFailure::Core { .. })
@@ -438,10 +398,7 @@ fn core_limits_remain_an_independent_admission_door() {
 
 #[test]
 fn syntax_refusal_preserves_dependency_diagnostics_and_source_identity() {
-    let options = AdmissionOptions {
-        source_id: SourceId::new(42),
-        ..AdmissionOptions::default()
-    };
+    let options = admission::options(SourceId::new(42));
     let error = admit("p(.".to_owned(), options).expect_err("broken source");
     assert!(matches!(error, AdmissionFailure::Syntax(_)));
     let diagnostics = error.diagnostics();
@@ -456,8 +413,9 @@ fn syntax_refusal_preserves_dependency_diagnostics_and_source_identity() {
 #[test]
 fn merged_rules_retain_all_source_origins() {
     let input = accepted("p(a). p(a).");
-    assert_eq!(input.program().templates().len(), 1);
-    assert_eq!(input.template_origins()[0].len(), 2);
+    assert!(input.program().templates().is_empty());
+    assert_eq!(input.program().facts().len(), 1);
+    assert_eq!(input.fact_origins()[0].len(), 2);
     assert_eq!(input.source().text(), "p(a). p(a).");
 }
 
@@ -497,10 +455,10 @@ fn extended_admission_reports_the_expansion_it_used() {
     let usage = admitted.expansion_usage();
     assert!(usage.term_work > 0);
     assert!(usage.term_work <= limits.max_term_work);
-    assert!(usage.templates >= admitted.program().templates().len());
+    assert!(usage.templates >= admitted.program().rules().len());
     assert!(usage.templates <= limits.max_templates);
     assert!(usage.values >= 3);
-    assert!(usage.origin_locations >= admitted.program().templates().len());
+    assert!(usage.origin_locations >= admitted.program().rules().len());
 }
 
 #[test]

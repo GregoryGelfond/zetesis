@@ -19,6 +19,7 @@ fn program(atoms: &[Arc<Atom>]) -> Program {
                 Template::new(Some(head.clone()), vec![], vec![head], vec![], vec![])
             })
             .collect(),
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap()

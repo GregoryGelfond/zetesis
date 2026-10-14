@@ -55,7 +55,12 @@ fn program() -> Program {
         .unwrap();
         rules.push(Template::new(Some(p), vec![], vec![], vec![], vec![]));
     }
-    Program::new(rules, AdmissionLimits::default()).unwrap()
+    Program::new(
+        rules,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn tokens(program: &Program) -> Vec<Arc<GateAtom>> {
@@ -215,6 +220,7 @@ fn nullary_gate_positions_do_not_require_domain_values() {
             vec![],
             vec![],
         )],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();
@@ -225,7 +231,12 @@ fn nullary_gate_positions_do_not_require_domain_values() {
         selected.view().entries().next().unwrap().resolve_in(&graph),
         Ok(0)
     );
-    let empty = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let empty = Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     assert!(empty.indexed_gate_atoms().next().is_none());
 }
 
@@ -308,6 +319,7 @@ fn direct_rank_keeps_nullary_atoms_in_an_empty_domain() {
             vec![],
             vec![],
         )],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();
@@ -322,7 +334,12 @@ fn direct_rank_keeps_nullary_atoms_in_an_empty_domain() {
         selected.view().entries().next().unwrap().resolve_in(&graph),
         Ok(0)
     );
-    let empty = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let empty = Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let index = GateIndex::new(&empty).unwrap();
     assert_eq!(index.len(), 0);
     assert!(index.is_empty());
@@ -345,6 +362,7 @@ fn overflow_program() -> Program {
             Template::new(Some(p.clone()), vec![], vec![p], vec![], vec![]),
             Template::new(Some(one), vec![], vec![], vec![], vec![]),
         ],
+        zetesis_core::FactTables::default(),
         AdmissionLimits {
             max_predicate_arity: arity,
             ..AdmissionLimits::default()

@@ -31,6 +31,7 @@
 //! Source acceptance is not a parser-to-Lean or Rust implementation proof.
 #![forbid(unsafe_code)]
 
+mod automatic;
 mod compile;
 mod diagnostic;
 mod parsed_source;
@@ -65,6 +66,7 @@ mod formula_conditional_ir;
 mod formula_conditional_projection;
 mod formula_consequent_ir;
 mod formula_factor;
+mod formula_facts;
 mod formula_ground;
 mod formula_guard;
 mod formula_head_aggregate;
@@ -80,7 +82,9 @@ mod formula_project_ir;
 mod formula_projection_ir;
 mod formula_raise;
 mod formula_range_ir;
+mod formula_source;
 mod formula_source_activity;
+pub use formula_source::{AcyclicSource, SourceAdmission, SourceEvaluationStatistics};
 mod formula_support;
 mod formula_value;
 mod formula_value_ir;
@@ -94,6 +98,10 @@ pub mod observation;
 mod scalar_arithmetic;
 pub mod symbols;
 
+pub use automatic::{
+    AutomaticAdmission, AutomaticAdmissionFailure, admit_bundle_automatic_with_cancellation,
+    prepare_program_automatic,
+};
 pub use parsed_source::{ParsedSource, SourceFailure};
 pub use program_admission::{
     AdmittedProgram, CompilationFailure, ProgramAdmissionFailure, ProgramAdmissionOptions,
@@ -135,6 +143,7 @@ pub use formula::{
     prepare_bundle_formula, prepare_bundle_formula_with_cancellation, prepare_formula,
     prepare_program_formula, prepare_program_formula_with, validate_program_formula,
 };
+pub use formula_ir::ComparisonForms;
 pub use formula_warning::FormulaWarning;
 mod formula_hybrid;
 mod formula_terminal;
@@ -155,9 +164,9 @@ pub use formula_count_plan::{
     CountPlanStatistics, CountPlanStatus, RequiredChoices,
 };
 mod formula_domains;
+mod formula_fixed_constraints;
 mod formula_keys;
 mod formula_rewrite;
-mod formula_fixed_constraints;
 mod grounding_options;
 #[cfg(test)]
 mod test_support;
@@ -206,12 +215,13 @@ impl Default for AdmissionOptions {
 }
 
 /// An admitted program and the source evidence retained by its boundary.
-/// Template origins follow the core program's unchanged template order.
+/// Template and fact origins follow their respective core occurrence orders.
 #[derive(Debug)]
 pub struct Admitted {
     program: Program,
     source: Source,
     template_origins: Vec<Vec<Location>>,
+    fact_origins: Vec<Vec<Location>>,
     metadata: SourceMetadata,
     expansion: ExpansionUsage,
 }
@@ -234,6 +244,13 @@ impl Admitted {
     #[must_use]
     pub fn template_origins(&self) -> &[Vec<Location>] {
         &self.template_origins
+    }
+
+    /// Parsed origins per fact occurrence, including duplicate rows. The order
+    /// is parallel to [`Program::facts`], independently of template origins.
+    #[must_use]
+    pub fn fact_origins(&self) -> &[Vec<Location>] {
+        &self.fact_origins
     }
 
     /// Original source declarations and display selection. Display metadata
@@ -275,34 +292,34 @@ pub fn admit(text: String, options: AdmissionOptions) -> Result<Admitted, Admiss
         source: source.source().id(),
         span: source.source().span(),
     };
-    let (mut templates, mut template_origins) =
-        compile::program(raised.program(), source_location)?;
+    let mut compiled = compile::program(raised.program(), source_location)?;
     coherence::append(
-        &mut templates,
-        &mut template_origins,
+        &mut compiled,
         options.core_limits,
         source_location,
         |_, _, _| Ok::<(), AdmissionFailure>(()),
     )?;
-    let program = Program::new(templates, options.core_limits).map_err(|error| {
-        let location = error
-            .template_index()
-            .and_then(|index| template_origins.get(index))
-            .and_then(|origins| origins.first())
-            .copied()
-            .unwrap_or(source_location);
+    let compiled = compiled.admit(options.core_limits, |error, origins| {
+        let location = origins.first().copied().unwrap_or(source_location);
         AdmissionFailure::Core {
             error,
             location: location.into(),
         }
     })?;
     Ok(Admitted {
-        program,
+        program: compiled.program,
         source: source.into_source(),
-        template_origins,
+        template_origins: compiled.template_origins,
+        fact_origins: compiled.fact_origins,
         metadata: SourceMetadata::default(),
         expansion: ExpansionUsage::default(),
     })
 }
 
 mod structural_value;
+
+/// Borrowed numeric-domain evidence from prepared canonical producers.
+pub use formula_domains::numeric_ir::{
+    NumericAnalysis, NumericBody, NumericCensus, NumericComparison, NumericOperand,
+    NumericRuleAnalysis,
+};

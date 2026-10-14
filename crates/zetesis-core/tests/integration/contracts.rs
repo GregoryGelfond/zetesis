@@ -118,8 +118,12 @@ fn gates_and_filters_never_establish_variable_safety() {
         vec![],
         vec![],
     );
-    let error = Program::new(vec![unsafe_gate], AdmissionLimits::default())
-        .expect_err("gate is not positive support");
+    let error = Program::new(
+        vec![unsafe_gate],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .expect_err("gate is not positive support");
     assert_eq!(error.template_index(), Some(0));
     assert!(matches!(
         error,
@@ -133,7 +137,11 @@ fn gates_and_filters_never_establish_variable_safety() {
         vec![Filter::Eq(Term::Variable(0), number(0))],
     );
     assert!(matches!(
-        Program::new(vec![unsafe_filter], AdmissionLimits::default()),
+        Program::new(
+            vec![unsafe_filter],
+            zetesis_core::FactTables::default(),
+            AdmissionLimits::default()
+        ),
         Err(AdmissionError::UnsafeVariable { .. })
     ));
 }
@@ -148,7 +156,11 @@ fn sparse_variable_ids_and_limits_are_typed_refusals() {
         vec![],
     );
     assert!(matches!(
-        Program::new(vec![sparse], AdmissionLimits::default()),
+        Program::new(
+            vec![sparse],
+            zetesis_core::FactTables::default(),
+            AdmissionLimits::default()
+        ),
         Err(AdmissionError::NonDenseVariable {
             expected: 0,
             actual: usize::MAX,
@@ -160,7 +172,11 @@ fn sparse_variable_ids_and_limits_are_typed_refusals() {
         ..AdmissionLimits::default()
     };
     assert!(matches!(
-        Program::new(vec![fact("a", 0)], limits),
+        Program::new(
+            vec![fact("a", 0)],
+            zetesis_core::FactTables::default(),
+            limits
+        ),
         Err(AdmissionError::LimitExceeded {
             resource: AdmissionResource::Templates,
             template: None,
@@ -172,7 +188,11 @@ fn sparse_variable_ids_and_limits_are_typed_refusals() {
         ..AdmissionLimits::default()
     };
     assert!(matches!(
-        Program::new(vec![fact("a", 0)], limits),
+        Program::new(
+            vec![fact("a", 0)],
+            zetesis_core::FactTables::default(),
+            limits
+        ),
         Err(AdmissionError::LimitExceeded {
             resource: AdmissionResource::PredicateArity,
             template: Some(0),
@@ -462,6 +482,7 @@ fn static_work_limits_and_cartesian_overflow_do_not_become_partial_graphs() {
                 vec![],
             ),
         ],
+        zetesis_core::FactTables::default(),
         limits,
     )
     .expect("symbolically finite");

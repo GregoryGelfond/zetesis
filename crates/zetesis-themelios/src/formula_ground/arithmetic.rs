@@ -1,7 +1,9 @@
 //! Authoritative family evidence over completed support, before formula emission.
 //!
 //! Comparison/domain pruning and support delta shortcuts are deliberately absent
-//! here. A complete false row still witnesses defined arithmetic. Each local
+//! in evidence cursors. A whole flat family whose scalar and key obligations
+//! are proved total on completed support needs no such scan. A complete false
+//! row otherwise still witnesses defined arithmetic. Each local
 //! source occurrence is finalized for its fixed outer binding, after combining
 //! its normalized alternatives. Top-level fragments with the same original
 //! source span likewise merge their evidence.
@@ -10,6 +12,7 @@
 //! visited. Each push spends grounding work and reserves fallibly; transient
 //! frame cells do not consume the cumulative scalar-payload allowance.
 
+mod certified;
 mod constant_divisors;
 
 use crate::formula_support::{Context, GroundingWork};
@@ -21,7 +24,7 @@ use crate::formula_binding::Binding;
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, Projection, RuleIr};
 use crate::formula_support::family::{Evidence, Warnings};
-use crate::formula_support::{Computation, Counters, Join, Support};
+use crate::formula_support::{Computation, Counters, Ir, Join, Support};
 use crate::{FormulaFailure, FormulaLimits};
 
 #[derive(Clone, Copy)]
@@ -34,9 +37,9 @@ enum Continue<'a> {
 
 struct Frame<'a, 'source> {
     join: Join<'a, 'source>,
-    body: &'a [LiteralIr],
+    body: &'source [LiteralIr],
     body_variables: usize,
-    continuation: Continue<'a>,
+    continuation: Continue<'source>,
     location: ProgramSite,
     root: bool,
 }
@@ -60,32 +63,23 @@ struct Scan<'a, 'source, 'context, 'compute> {
     stack: Vec<Task<'a, 'source>>,
 }
 
-pub(super) fn prepare<'a, 'source>(
-    prepared: &'a Prepared,
-    support: &'a Support<'source>,
+pub(crate) fn prepare<'source>(
+    prepared: &'source Prepared,
+    support: &Support<'source>,
     computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
 ) -> Result<Warnings, FormulaFailure> {
     let mut warnings = Warnings::default();
-    let mut affected = Vec::new();
-    for rule in prepared.rules.iter().chain(&prepared.projection) {
-        if contains_partial(rule, limits, counters)?
-            && !constant_divisors::deferred(
-                rule,
-                prepared,
-                Context::new(&*computation, limits, counters, rule.location),
-            )?
-        {
-            affected
-                .try_reserve(1)
-                .map_err(|_| allocation(rule.location))?;
-            affected.push(rule.location);
-        }
-    }
+    let affected = affected(prepared, support, computation, limits, budget, counters)?;
     let mut families: Vec<(ProgramSite, Evidence)> = Vec::new();
-    for rule in prepared.rules.iter().chain(&prepared.projection) {
+    // A fact holds no arithmetic: facts with evaluated arguments stay rules.
+    for rule in prepared
+        .rules_without_facts()
+        .iter()
+        .chain(&prepared.projection)
+    {
         counters.charge_work(affected.len() as u128, limits, rule.location)?;
         if !affected.contains(&rule.location) {
             continue;
@@ -100,7 +94,7 @@ pub(super) fn prepare<'a, 'source>(
             stack: Vec::new(),
         };
         let join = Join::rule(
-            rule,
+            Ir::Source(rule),
             support,
             scan.computation,
             limits,
@@ -140,12 +134,78 @@ pub(super) fn prepare<'a, 'source>(
     Ok(warnings)
 }
 
+/// Original sites whose complete family still needs explicit evidence.
+fn affected<'source>(
+    prepared: &'source Prepared,
+    support: &Support<'source>,
+    computation: &mut Computation<'_, 'source>,
+    limits: &FormulaLimits,
+    budget: &mut Budget,
+    counters: &mut Counters,
+) -> Result<Vec<ProgramSite>, FormulaFailure> {
+    let mut affected = Vec::new();
+    for (position, rule) in prepared
+        .rules_without_facts()
+        .iter()
+        .chain(&prepared.projection)
+        .enumerate()
+    {
+        if contains_partial(rule, limits, counters)?
+            && !earlier_partial(prepared, position, rule.location, limits, counters)?
+            && !constant_divisors::deferred(
+                rule,
+                prepared,
+                Context::new(&*computation, limits, counters, rule.location),
+            )?
+            && !certified::family(
+                prepared,
+                rule.location,
+                support,
+                computation,
+                limits,
+                budget,
+                counters,
+            )?
+        {
+            affected
+                .try_reserve(1)
+                .map_err(|_| allocation(rule.location))?;
+            affected.push(rule.location);
+        }
+    }
+    Ok(affected)
+}
+
+/// Process each original partial family once without retaining another index.
+/// Only earlier siblings at this site need a partiality check. Every metadata
+/// visit is charged; the scan is bounded by the prepared fragment population.
+fn earlier_partial(
+    prepared: &Prepared,
+    position: usize,
+    location: ProgramSite,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Result<bool, FormulaFailure> {
+    for previous in prepared
+        .rules_without_facts()
+        .iter()
+        .chain(&prepared.projection)
+        .take(position)
+    {
+        counters.work(limits, location)?;
+        if previous.location == location && contains_partial(previous, limits, counters)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
 /// Objective rows use the same independent nested-scope evidence before their
 /// priority, weight and tuple expressions complete the enclosing family.
-pub(super) fn body<'a, 'source>(
-    literals: &'a [LiteralIr],
+pub(super) fn body<'source>(
+    literals: &'source [LiteralIr],
     binding: &Binding,
-    support: &'a Support<'source>,
+    support: &Support<'source>,
     budget: &mut Budget,
     warnings: &mut Warnings,
     context: Context<'_, &mut Computation<'_, 'source>>,
@@ -219,10 +279,10 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
 
     fn local(
         &mut self,
-        body: &'a [LiteralIr],
+        body: &'source [LiteralIr],
         binding: &Binding,
         variables: usize,
-        continuation: Continue<'a>,
+        continuation: Continue<'source>,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.local_fragment(body, binding, variables, continuation, location, None)
@@ -230,15 +290,15 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
 
     fn local_fragment(
         &mut self,
-        body: &'a [LiteralIr],
+        body: &'source [LiteralIr],
         binding: &Binding,
         variables: usize,
-        continuation: Continue<'a>,
+        continuation: Continue<'source>,
         location: ProgramSite,
         destination: Option<usize>,
     ) -> Result<(), FormulaFailure> {
-        let mut join = Join::new(
-            body,
+        let mut join = Join::local(
+            Ir::Source(body),
             binding,
             variables,
             self.support,
@@ -317,7 +377,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
 
     fn children(
         &mut self,
-        body: &'a [LiteralIr],
+        body: &'source [LiteralIr],
         binding: &Binding,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
@@ -375,7 +435,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
 
     fn projection(
         &mut self,
-        projection: &'a Projection,
+        projection: &'source Projection,
         binding: &Binding,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
@@ -399,7 +459,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
 
     fn continue_with(
         &mut self,
-        continuation: Continue<'a>,
+        continuation: Continue<'source>,
         binding: &Binding,
         location: ProgramSite,
         destination: usize,
@@ -428,8 +488,8 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
             }
             Continue::Consequent(Consequent::Guards(alternatives)) => {
                 for alternative in alternatives {
-                    let mut join = Join::new(
-                        &alternative.bindings,
+                    let mut join = Join::local(
+                        Ir::Source(alternative.bindings.as_slice()),
                         binding,
                         alternative.variables,
                         self.support,
@@ -456,7 +516,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
 
     fn head(
         &mut self,
-        head: &'a HeadIr,
+        head: &'source HeadIr,
         binding: &Binding,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
@@ -469,7 +529,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
                     let group = self.group(location)?;
                     for element in elements {
                         let join = Join::element(
-                            element,
+                            Ir::Source(element),
                             binding,
                             self.support,
                             self.budget,
@@ -494,7 +554,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
                     let group = self.group(location)?;
                     for element in elements {
                         let join = Join::local_head(
-                            &element.condition,
+                            Ir::Source(element.condition.as_slice()),
                             &binding.prefix(element.outer_variables),
                             element.body_variables..element.variables,
                             self.support,
@@ -597,12 +657,12 @@ impl<'a> SyntaxScan<'a, '_> {
         for literal in body {
             self.counters.work(self.limits, self.location)?;
             match literal {
-                LiteralIr::Compare(left, _, right)
-                | LiteralIr::ArgumentCheck {
-                    captured: left,
-                    value: right,
+                LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => {
+                    if self.expression(comparison.left())? || self.expression(comparison.right())? {
+                        return Ok(true);
+                    }
                 }
-                | LiteralIr::Range {
+                LiteralIr::Range {
                     lower: left,
                     upper: right,
                     ..

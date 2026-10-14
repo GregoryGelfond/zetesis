@@ -48,7 +48,12 @@ fn fixture(masks: &[u8]) -> (Program, Vec<Seed>) {
         vec![],
         vec![],
     ));
-    let program = Program::new(rules, AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        rules,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let seeds = masks
         .iter()
         .map(|mask| {

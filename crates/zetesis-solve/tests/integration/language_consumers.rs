@@ -6,6 +6,7 @@ use std::{
     num::NonZeroUsize,
     path::Path,
 };
+use zetesis_reference_support::formula;
 use zetesis_test_support::programs::atom;
 
 use zetesis_clingo_support as oracle;
@@ -16,9 +17,7 @@ use zetesis_solve::{
     AnswerSelection, AnswerSet, Backend, Completion, ExecutionResources, Grounder, Oracle,
     PreparedInput, Session, SolveConfig, WorldViewLimits,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula, observation,
-};
+use zetesis_themelios::{AdmittedFormula, observation};
 
 mod ordinary_composition;
 mod projected_families;
@@ -270,13 +269,7 @@ fn independent_objectives() -> Case {
 }
 
 fn admit(case: &Case) -> AdmittedFormula {
-    admit_formula(
-        case.source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{}: {error}", case.source))
+    formula(case.source)
 }
 
 fn config(workers: usize, batch: usize) -> SolveConfig {
@@ -429,13 +422,7 @@ fn device_evidence(outcome: &zetesis_solve::SemanticOutcome, backend: Backend, c
 #[test]
 fn observation_failure_preserves_the_complete_family() {
     let source = "1#sum{1:a;1:b}1. #minimize{1@1,k:not a;1@1,l:not b}. #show. #show broken(1/0).";
-    let owner = admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let owner = formula(source);
     let family = Session::builder(
         PreparedInput::formula(&owner),
         config(4, 3),

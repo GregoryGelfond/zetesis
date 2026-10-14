@@ -124,6 +124,13 @@ fn countermodel_stops_have_distinct_machine_codes() {
             },
             "reduct_storage",
         ),
+        (
+            Incomplete::NativeNarrowingStorage {
+                required: 65,
+                limit: 64,
+            },
+            "native_narrowing_storage",
+        ),
         (Incomplete::BatchCandidateLimit, "batch_candidate_limit"),
         (Incomplete::PendingBatch, "pending_batch"),
         (Incomplete::Allocation, "allocation"),
@@ -207,6 +214,13 @@ fn failure_envelopes_never_invent_search_coverage() {
         (RunError::MixedStandardInput, "mixed_standard_input"),
         (RunError::Batch(zetesis_cpu::BatchError::Busy), "batch"),
         (RunError::BackendUnavailable, "backend_unavailable"),
+        (
+            RunError::GpuExecutableUnavailable {
+                path: Some("zetesis-libexec/0/zetesis".into()),
+                error: std::io::ErrorKind::NotFound.into(),
+            },
+            "gpu_executable_unavailable",
+        ),
         (
             RunError::UnsupportedCombination {
                 backend: crate::Backend::Gpu(Some(zetesis_backend::GpuApi::Metal)),

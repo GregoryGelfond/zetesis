@@ -1,6 +1,6 @@
 use super::super::{
-    AdmissionError, ContributionRow, FormulaParts, FormulaView, Node, NodeView, OperandSpan,
-    Storage, ThresholdDescriptor,
+    AdmissionError, ExtremumCutDescriptor, FormulaParts, FormulaView, Node, NodeView, NumericRow,
+    OperandSpan, Storage, ThresholdDescriptor,
 };
 
 fn absent_map(length: usize) -> Result<Vec<Option<usize>>, AdmissionError> {
@@ -18,6 +18,7 @@ struct Sizes {
     conditions: usize,
     rows: usize,
     thresholds: usize,
+    cuts: usize,
 }
 
 fn add(left: usize, right: usize) -> Result<usize, AdmissionError> {
@@ -36,6 +37,7 @@ struct Selection<'a> {
     result: FormulaParts,
     rows: Vec<Option<usize>>,
     thresholds: Vec<Option<usize>>,
+    cuts: Vec<Option<usize>>,
 }
 
 impl<'a> Selection<'a> {
@@ -49,6 +51,7 @@ impl<'a> Selection<'a> {
             result: FormulaParts::default(),
             rows: absent_map(source.numeric.rows.len())?,
             thresholds: absent_map(source.numeric.thresholds.len())?,
+            cuts: absent_map(source.numeric.cuts.len())?,
         };
         selection.reserve_output()?;
         Ok(selection)
@@ -67,30 +70,41 @@ impl<'a> Selection<'a> {
                 }
                 _ => {}
             }
-            if let Storage::Threshold(descriptor) = self.source.nodes[index].0 {
-                if self.thresholds[descriptor].is_none() {
-                    self.thresholds[descriptor] = Some(0);
-                    sizes.thresholds = add(sizes.thresholds, 1)?;
+            let row = match self.source.nodes[index].0 {
+                Storage::Threshold(descriptor) => {
+                    if self.thresholds[descriptor].is_none() {
+                        self.thresholds[descriptor] = Some(0);
+                        sizes.thresholds = add(sizes.thresholds, 1)?;
+                    }
+                    Some(self.source.numeric.thresholds[descriptor].row)
                 }
-                let threshold = self.source.numeric.thresholds[descriptor];
-                if self.rows[threshold.row].is_none() {
-                    self.rows[threshold.row] = Some(0);
-                    sizes.rows = add(sizes.rows, 1)?;
-                    sizes.conditions = add(
-                        sizes.conditions,
-                        self.source.numeric.rows[threshold.row].length,
-                    )?;
+                Storage::ExtremumCut(descriptor) => {
+                    if self.cuts[descriptor].is_none() {
+                        self.cuts[descriptor] = Some(0);
+                        sizes.cuts = add(sizes.cuts, 1)?;
+                    }
+                    Some(self.source.numeric.cuts[descriptor].row)
                 }
+                _ => None,
+            };
+            if let Some(row) = row
+                && self.rows[row].is_none()
+            {
+                self.rows[row] = Some(0);
+                sizes.rows = add(sizes.rows, 1)?;
+                sizes.conditions = add(sizes.conditions, self.source.numeric.rows[row].length)?;
             }
         }
         exact(&mut self.result.nodes, sizes.nodes)?;
         exact(&mut self.result.operands, sizes.operands)?;
         exact(&mut self.result.numeric.conditions, sizes.conditions)?;
-        exact(&mut self.result.numeric.weights, sizes.conditions)?;
+        exact(&mut self.result.numeric.values, sizes.conditions)?;
         exact(&mut self.result.numeric.rows, sizes.rows)?;
         exact(&mut self.result.numeric.thresholds, sizes.thresholds)?;
+        exact(&mut self.result.numeric.cuts, sizes.cuts)?;
         self.rows.fill(None);
         self.thresholds.fill(None);
+        self.cuts.fill(None);
         Ok(())
     }
 
@@ -135,25 +149,8 @@ impl<'a> Selection<'a> {
         if let Some(mapped) = self.thresholds[descriptor] {
             return Ok(Node::threshold(mapped));
         }
-        let original = self.source.numeric.view(descriptor)?;
-        let row = if let Some(mapped) = self.rows[threshold.row] {
-            mapped
-        } else {
-            let mapped = self.result.numeric.rows.len();
-            self.result.numeric.rows.push(ContributionRow {
-                start: self.result.numeric.conditions.len(),
-                length: original.conditions.len(),
-            });
-            for &id in original.conditions {
-                self.result.numeric.conditions.push(self.child(id)?);
-            }
-            self.result
-                .numeric
-                .weights
-                .extend_from_slice(original.weights);
-            self.rows[threshold.row] = Some(mapped);
-            mapped
-        };
+        self.source.numeric.view(descriptor)?;
+        let row = self.row(threshold.row)?;
         let mapped = self.result.numeric.thresholds.len();
         self.result.numeric.thresholds.push(ThresholdDescriptor {
             row,
@@ -161,6 +158,42 @@ impl<'a> Selection<'a> {
         });
         self.thresholds[descriptor] = Some(mapped);
         Ok(Node::threshold(mapped))
+    }
+
+    fn row(&mut self, index: usize) -> Result<usize, AdmissionError> {
+        if let Some(mapped) = self.rows[index] {
+            return Ok(mapped);
+        }
+        let original = self.source.numeric.rows[index];
+        let (conditions, values) = self.source.numeric.columns(original)?;
+        let mapped = self.result.numeric.rows.len();
+        self.result.numeric.rows.push(NumericRow {
+            start: self.result.numeric.conditions.len(),
+            length: original.length,
+            domain: original.domain,
+        });
+        for &id in conditions {
+            self.result.numeric.conditions.push(self.child(id)?);
+        }
+        self.result.numeric.values.extend_from_slice(values);
+        self.rows[index] = Some(mapped);
+        Ok(mapped)
+    }
+
+    fn cut(&mut self, descriptor: usize) -> Result<Node, AdmissionError> {
+        if let Some(mapped) = self.cuts[descriptor] {
+            return Ok(Node::extremum_cut(mapped));
+        }
+        self.source.numeric.cut_view(descriptor)?;
+        let original = self.source.numeric.cuts[descriptor];
+        let row = self.row(original.row)?;
+        let mapped = self.result.numeric.cuts.len();
+        self.result.numeric.cuts.push(ExtremumCutDescriptor {
+            row,
+            rule: original.rule,
+        });
+        self.cuts[descriptor] = Some(mapped);
+        Ok(Node::extremum_cut(mapped))
     }
 
     fn append(&mut self, index: usize) -> Result<(), AdmissionError> {
@@ -181,6 +214,7 @@ impl<'a> Selection<'a> {
                 self.group(super::super::read_span(self.source.operands, span)?, false)?
             }
             Storage::Threshold(descriptor) => self.threshold(descriptor)?,
+            Storage::ExtremumCut(descriptor) => self.cut(descriptor)?,
         };
         self.result.nodes.push(node);
         Ok(())
@@ -194,7 +228,7 @@ impl FormulaView<'_> {
     /// it and supplies its absolute ID for remapping every selected child reference.
     /// Output positions remain the selected source order, independently of the
     /// supplied IDs, so the raw result may be appended into another owner's prefix.
-    /// Every selected child needs a selected map entry, including zero-weight rows.
+    /// Every selected child needs a selected map entry, including zero-weight contributions and constant ordinal cuts.
     /// Unreferenced arena cells are discarded. A first pass counts selected cells,
     /// then each destination reserves exactly once before the second pass copies.
     /// Row and descriptor maps use O(source
@@ -211,9 +245,10 @@ impl FormulaView<'_> {
 
     /// Select and remap like [`Self::try_select`], measuring actual allocation peak.
     ///
-    /// The second return value is the byte capacity of the output's six arenas plus
-    /// both internal row/descriptor maps while they coexist. It excludes the borrowed
-    /// source and child map, vector headers, stack values and allocator overhead.
+    /// The second return value is the byte capacity of the output's seven arenas plus
+    /// all three internal row/descriptor maps while they coexist. It excludes the
+    /// borrowed source and child map, vector headers, stack values and allocator
+    /// overhead.
     /// Exact reservations request compact storage; this receipt measures actual
     /// capacities even if the allocator supplies more than requested. The maps are
     /// released before returning, leaving only the returned formula's retained bytes.
@@ -232,16 +267,19 @@ impl FormulaView<'_> {
             }
         }
         let peak = selection.result.retained_bytes()
-            + (selection.rows.capacity() as u128 + selection.thresholds.capacity() as u128)
+            + (selection.rows.capacity() as u128
+                + selection.thresholds.capacity() as u128
+                + selection.cuts.capacity() as u128)
                 * std::mem::size_of::<Option<usize>>() as u128;
         let result = selection.result;
-        let parts = FormulaParts::from_raw(
+        let parts = FormulaParts::from_numeric_raw(
             result.nodes,
             result.operands,
             result.numeric.conditions,
-            result.numeric.weights,
+            result.numeric.values,
             result.numeric.rows,
             result.numeric.thresholds,
+            result.numeric.cuts,
         )?;
         Ok((parts, peak))
     }

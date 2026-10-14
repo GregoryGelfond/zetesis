@@ -2,13 +2,17 @@
 
 mod compile;
 mod evaluate;
+mod readers;
+#[cfg(test)]
+mod tests;
 
+use evaluate::SupportCount;
 pub use evaluate::TightWorkspace;
 
 use std::fmt;
 
 use crate::Theory;
-use zetesis_cpu::Stop;
+use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
 
 /// Admission bounds for the optional class certificate. Logical bytes cover the
 /// plan and all construction vectors, excluding the borrowed theory, allocator
@@ -19,9 +23,13 @@ pub struct TightPlanLimits {
     pub max_producers: usize,
     /// Maximum edges in the positive formula/atom dependency graph.
     pub max_dependencies: usize,
-    /// Logical payload bytes for construction and the retained plan.
+    /// Logical payload bytes for construction and the retained plan, including
+    /// the readers index [`TightPlan::prepare_updates`] adds to it.
     pub max_bytes: u64,
-    /// Charged node, root, edge and rank operations during certification.
+    /// Charged node, root, edge and rank operations during certification, and
+    /// the node, operand, condition, producer and root visits of each pass that
+    /// builds the readers index. Compilation and the index build each run under
+    /// this limit separately.
     pub max_work: u64,
 }
 
@@ -39,12 +47,19 @@ impl Default for TightPlanLimits {
 /// Per-candidate bounds, independent of enumeration and exact-query budgets.
 #[derive(Clone, Copy, Debug)]
 pub struct TightCheckLimits {
-    /// Logical bytes for the retained plan and actual evaluation-vector capacities,
-    /// including capacity retained from earlier checks. Vector headers, the
-    /// shared theory and allocator overhead are excluded.
+    /// Logical bytes for the retained plan and actual workspace-vector
+    /// capacities, including the evaluation a workspace keeps for its next check
+    /// and capacity retained from earlier checks. Vector headers, the shared
+    /// theory and allocator overhead are excluded.
     pub max_bytes: u64,
     /// Charged node evaluations, visited operands, original-root tests,
-    /// producers and packed candidate-word scans.
+    /// producers and packed candidate-word scans. With the plan's readers
+    /// index, a workspace also charges each candidate word and queued-mark word
+    /// it keeps for the next check, and an update charges each candidate word
+    /// it compares, each changed word and atom, each atom-node and reader entry
+    /// it visits, each guard it queues, each node it re-evaluates with that
+    /// node's operands, the producers, roots and words it summarizes once per
+    /// complete evaluation, and the words its verdict scans.
     pub max_work: u64,
 }
 
@@ -127,6 +142,24 @@ impl From<Stop> for TightError {
     }
 }
 
+impl Refusal for TightError {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Limit(_) => true,
+            Self::Stopped(stop) => stop.is_resource_refusal(),
+            Self::UnsupportedRoot { .. }
+            | Self::UnsupportedBody { .. }
+            | Self::PositiveCycle { .. }
+            | Self::RankShape
+            | Self::RankOrder { .. } => false,
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
+}
+
 /// A producer's original head form. Choice has the original `h ∨ not h`
 /// consequent, whose reduct requires h exactly when the candidate contains h.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -171,13 +204,16 @@ impl TightProducer {
 /// Construction accounting for a successfully checked class certificate.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct TightPlanStatistics {
-    /// Charged certification operations.
+    /// Charged certification operations, and the readers index's passes when
+    /// [`TightPlan::prepare_updates`] built it.
     pub work: u64,
     /// Positive dependency graph edges, including formula-node edges.
     pub dependencies: usize,
-    /// Conservative simultaneous logical payload bound during construction.
+    /// Conservative simultaneous logical payload bound during construction,
+    /// including the readers index's build.
     pub construction_bytes: u64,
-    /// Retained producer and rank payload; shared theory storage is excluded.
+    /// Retained producer, rank and readers-index payload; shared theory storage
+    /// is excluded.
     pub resident_bytes: u64,
 }
 
@@ -186,13 +222,19 @@ pub struct TightPlanStatistics {
 /// Every original root is either an extracted producer or a frozen constraint.
 /// Every unnegated producer-body atom has strictly lower rank than the head.
 /// Construction is the only way to obtain this value; clones of its theory
-/// share identity, while independent equal theories do not. This certificate
+/// share identity, while independent equal theories do not. The plan owns its
+/// readers index: [`Self::prepare_updates`] adds it while the plan's owner holds
+/// it exclusively, before sharing it, and a plan shared without the index keeps
+/// checking every candidate completely. This certificate
 /// says nothing about missing source rules or an incomplete lazy registry.
 #[derive(Debug)]
 pub struct TightPlan {
     theory: Theory,
     producers: Vec<TightProducer>,
     ranks: Vec<usize>,
+    /// Who reads each node's truth, present once [`Self::prepare_updates`]
+    /// built it; a reused workspace then updates its retained evaluation.
+    readers: Option<readers::Readers>,
     statistics: TightPlanStatistics,
 }
 impl TightPlan {
@@ -215,6 +257,164 @@ impl TightPlan {
     #[must_use]
     pub fn statistics(&self) -> TightPlanStatistics {
         self.statistics
+    }
+
+    /// Build the reverse index that lets a reused [`TightWorkspace`] bring its
+    /// retained complete evaluation up to the next candidate instead of
+    /// evaluating it completely. The build makes two charged passes over nodes,
+    /// operands, numeric conditions, producers and root positions. It is
+    /// attempted only when `limits.max_work` covers twice the nodes, operand
+    /// occurrences, producers and roots, and when `limits.max_bytes` holds the
+    /// plan's resident bytes with the build's vectors and the finished index,
+    /// the entries bounded from the theory; so a build either allowance cannot
+    /// complete spends nothing. It is also attempted only for a plan of at most
+    /// `u32::MAX` producers, so that the support count an update keeps per atom
+    /// holds every head's count. Returns whether the index exists afterwards. A
+    /// plan past `u32::MAX` producers never receives it; when an allowance falls
+    /// short, the plan keeps complete evaluation, and a later call with larger
+    /// limits may build it. Construction work, construction bytes and resident
+    /// bytes include the index.
+    ///
+    /// # Errors
+    /// Refuses cancellation, deadlines and allocation; the plan is unchanged
+    /// then.
+    pub fn prepare_updates(
+        &mut self,
+        limits: TightPlanLimits,
+        cancellation: &Cancellation,
+    ) -> TightAttempt<bool> {
+        if self.readers.is_some() {
+            return TightAttempt {
+                result: Ok(true),
+                work: 0,
+            };
+        }
+        if !Self::index_admitted(
+            self.producers.len(),
+            self.index_work_bound(),
+            self.index_byte_bound(),
+            limits,
+        ) {
+            return TightAttempt {
+                result: Ok(false),
+                work: 0,
+            };
+        }
+        let base = u128::from(self.statistics.resident_bytes);
+        let Self {
+            theory,
+            producers,
+            readers,
+            statistics,
+            ..
+        } = self;
+        let metered = cancellation.metered(limits.max_work, |meter| {
+            // Both allowances cover the build, so neither runs out within it.
+            let (index, held) = readers::Readers::build(theory, producers, base, meter)?;
+            // The finished index is the held figure less the counts, cursors and
+            // row marks, so its bytes lie within the allowance too.
+            let resident = u64::try_from(base + index.bytes()).map_err(|_| Stop::InvalidProgram)?;
+            let work = statistics
+                .work
+                .checked_add(meter.charged())
+                .ok_or(TightError::Limit(TightResource::Work))?;
+            statistics.resident_bytes = resident;
+            statistics.construction_bytes = statistics.construction_bytes.max(held);
+            statistics.work = work;
+            *readers = Some(index);
+            Ok(true)
+        });
+        TightAttempt {
+            result: metered.result,
+            work: metered.charged,
+        }
+    }
+
+    /// Whether the readers index may be built for a plan of `producers`
+    /// producers whose build is bounded by `work_bound` and `byte_bound`: every
+    /// head's support count fits [`SupportCount`], since no head has more
+    /// producers than the plan, and both allowances cover the build. The one
+    /// decision [`Self::prepare_updates`] makes before it starts.
+    fn index_admitted(
+        producers: usize,
+        work_bound: u128,
+        byte_bound: u128,
+        limits: TightPlanLimits,
+    ) -> bool {
+        SupportCount::try_from(producers).is_ok()
+            && u128::from(limits.max_work) >= work_bound
+            && u128::from(limits.max_bytes) >= byte_bound
+    }
+
+    /// The most logical bytes the plan holds while building its readers index:
+    /// its resident bytes and [`readers::Readers::byte_bound`].
+    fn index_byte_bound(&self) -> u128 {
+        u128::from(self.statistics.resident_bytes)
+            + readers::Readers::byte_bound(&self.theory, &self.producers)
+    }
+
+    /// The most work building the readers index can charge: two passes, each
+    /// visiting every node, operand occurrence, producer and root at most once.
+    fn index_work_bound(&self) -> u128 {
+        let theory = &self.theory;
+        2 * (theory.nodes().len() as u128
+            + theory.parts().occurrences() as u128
+            + self.producers.len() as u128
+            + theory.roots().len() as u128)
+    }
+
+    /// The most work any one [`TightWorkspace`] check can charge under this
+    /// plan: the larger of its complete route's and its update route's terms.
+    /// Without the readers index every check evaluates completely. With it, a
+    /// check that retained an evaluation first counts the changed atoms, one
+    /// charged operation per candidate word, and then chooses: when more atoms
+    /// changed than an update admits (an eighth of the atoms, at least 64), it
+    /// evaluates completely and keeps the result, so the complete route's term
+    /// includes that counting pass; otherwise it derives the summaries if they
+    /// are missing, applies the changed words and propagates. An update
+    /// evaluates each node at most once, reads each operand and numeric
+    /// condition at most once per evaluation, and visits each reader entry and
+    /// each guard of a withdrawn row at most once per change of its input.
+    #[must_use]
+    pub fn check_work_bound(&self) -> u128 {
+        self.complete_work_bound()
+            .max(self.update_work_bound().unwrap_or(0))
+    }
+
+    /// The most work a complete check charges: every node, operand occurrence
+    /// and root, numeric cache resets, every producer and every 32-bit support
+    /// word. With the readers index it may follow a counting pass that found
+    /// too many changed atoms, and it keeps its candidate's words and clears
+    /// the queued marks.
+    fn complete_work_bound(&self) -> u128 {
+        let theory = &self.theory;
+        let complete = crate::EvaluationWorkspace::work_bound(theory)
+            + self.producers.len() as u128
+            + theory.atom_count().div_ceil(32) as u128;
+        if self.readers.is_none() {
+            return complete;
+        }
+        let words = theory.atom_count().div_ceil(64) as u128;
+        complete + 2 * words + theory.nodes().len().div_ceil(64) as u128
+    }
+
+    /// The most work an update charges, when the plan has the readers index:
+    /// the summaries derived once per complete evaluation, the difference's
+    /// two passes over the candidate words with each changed atom and its atom
+    /// nodes, propagation, and the verdict's word scans.
+    fn update_work_bound(&self) -> Option<u128> {
+        let readers = self.readers.as_ref()?;
+        let theory = &self.theory;
+        let atoms = theory.atom_count() as u128;
+        let words = theory.atom_count().div_ceil(64) as u128;
+        let nodes = theory.nodes().len() as u128;
+        let roots = theory.roots().len() as u128;
+        let occurrences = theory.parts().occurrences() as u128;
+        let summaries = self.producers.len() as u128 + roots + words;
+        let difference = 2 * words + atoms + readers.atom_node_count() as u128;
+        let propagation = nodes + 2 * occurrences + readers.reader_count() as u128;
+        let verdict = theory.roots().len().div_ceil(64) as u128 + words;
+        Some(summaries + difference + propagation + verdict)
     }
 }
 
@@ -261,28 +461,32 @@ pub struct TightAttempt<T> {
     pub work: u64,
 }
 
-struct Work<'a> {
-    used: u64,
-    max: u64,
-    cancellation: zetesis_cpu::CancellationPoll<'a>,
+/// A certificate operation's charge, in the certificate's error vocabulary.
+///
+/// The other metered contexts name this charge `tick` on a context that holds
+/// their meter. The certificate has no such context: its operations take the
+/// meter itself, so a per-node loop reaches the count through one reference
+/// instead of two.
+trait Tick {
+    fn tick(&mut self) -> Result<(), TightError>;
 }
-impl Work<'_> {
+
+impl Tick for Meter<'_> {
+    #[inline]
     fn tick(&mut self) -> Result<(), TightError> {
-        self.cancellation.poll()?;
-        if self.used == self.max {
-            return Err(TightError::Limit(TightResource::Work));
-        }
-        self.used += 1;
-        Ok(())
+        self.charge().map_err(|error| match error {
+            ChargeError::Stopped(stop) => stop.into(),
+            ChargeError::WorkLimit => TightError::Limit(TightResource::Work),
+        })
     }
 }
 
+/// Admit `value` logical bytes under `limit`.
 fn bytes(value: u128, limit: u64) -> Result<u64, TightError> {
-    let value = u64::try_from(value).map_err(|_| TightError::Limit(TightResource::Bytes))?;
-    if value > limit {
-        return Err(TightError::Limit(TightResource::Bytes));
+    match u64::try_from(value) {
+        Ok(value) if value <= limit => Ok(value),
+        _ => Err(TightError::Limit(TightResource::Bytes)),
     }
-    Ok(value)
 }
 
 fn reserve<T>(count: usize) -> Result<Vec<T>, TightError> {

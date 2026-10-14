@@ -224,7 +224,12 @@ fn growth_program() -> Program {
         vec![],
         vec![],
     ));
-    Program::new(templates, AdmissionLimits::default()).unwrap()
+    Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn growth_seeds(program: &Program) -> Vec<Seed> {
@@ -768,7 +773,12 @@ fn qualify_immutable_uploads(backend: GpuApi) {
             vec![],
         )
     };
-    let program = Program::new(vec![fact("a"), fact("b")], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![fact("a"), fact("b")],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let seeds = [Seed::new(&program, []).unwrap()];
     for selection in [lazy::SourceSelection::Union, lazy::SourceSelection::Worlds] {
         // A fresh public batch must upload again, even on the same oracle and

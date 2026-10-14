@@ -6,7 +6,7 @@ use std::ops::Range;
 
 use super::{Failure, Fault, budget, control::Work};
 use crate::catalog::Limits;
-use crate::{Sign, ValueError, ValueNodeRef, ValueResource};
+use crate::{Sign, ValueNodeRef, ValueResource};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub(super) enum Kind {
@@ -222,23 +222,9 @@ pub(super) fn descriptor_measures<E>(
     })
 }
 
-pub(super) const fn arity(descriptor: ValueNodeRef<'_>) -> usize {
-    match descriptor {
-        ValueNodeRef::Function { arity, .. } | ValueNodeRef::Tuple { arity } => arity,
-        _ => 0,
-    }
-}
-
+/// [`crate::structured::ceiling`], reported as a storage fault.
 pub(super) fn ceiling(resource: ValueResource, observed: u128, limit: usize) -> Result<(), Fault> {
-    if observed > limit as u128 {
-        return Err(ValueError::Limit {
-            resource,
-            observed,
-            limit,
-        }
-        .into());
-    }
-    Ok(())
+    crate::structured::ceiling(resource, observed, limit).map_err(Fault::from)
 }
 
 #[cfg(test)]

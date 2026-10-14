@@ -1,22 +1,10 @@
 //! A closed subject needs revisiting only after a later subject changes its input.
 
 use super::super::{CandidateKnowledge, Conditions, Narrower, Region, RegionCounts, narrow};
-use super::{NARROWING_ATTEMPTS, budget, enumeration};
+use super::{NARROWING_ATTEMPTS, budget, enumeration, theory};
 use crate::ferraris::conditions::Bound;
 use crate::{Cancellation, Limits};
-use zetesis_ferraris::{
-    AdmissionLimits, FormulaParts, Interpretation, Narrowing, NarrowingScratch, Node, Theory,
-};
-
-fn theory(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(
-        3,
-        FormulaParts::new(nodes, vec![]).unwrap(),
-        roots,
-        AdmissionLimits::default(),
-    )
-    .unwrap()
-}
+use zetesis_ferraris::{Interpretation, Narrowing, NarrowingScratch, Node, Theory};
 
 /// `b <- a` and the choice of c. The first root makes a either a fact or a choice.
 fn original(fact: bool) -> Theory {
@@ -83,7 +71,7 @@ fn assert_family(original: &Theory, conditions: &Conditions<(Theory, Narrower)>,
             .accepted()
         })
         .collect();
-    let mut search = enumeration(original, 1, false, Limits::default());
+    let mut search = enumeration(original, "scalar", 1, false, Limits::default());
     for (restriction, _) in &conditions.permanent {
         search.restrict_candidates(restriction).unwrap();
     }
@@ -111,7 +99,10 @@ fn close(original: &Theory, conditions: &Conditions<(Theory, Narrower)>) -> (Reg
     let before = NARROWING_ATTEMPTS.get();
     assert_eq!(
         narrow(
-            (original, &narrower, None),
+            (
+                zetesis_ferraris::OriginalSubject::new(original, None),
+                &narrower
+            ),
             conditions,
             (&mut region, &mut knowledge),
             &mut scratch,
@@ -130,7 +121,10 @@ fn close(original: &Theory, conditions: &Conditions<(Theory, Narrower)>) -> (Reg
     // knowledge and scratch so stale pending work cannot hide in a fresh state.
     assert_eq!(
         narrow(
-            (original, &narrower, None),
+            (
+                zetesis_ferraris::OriginalSubject::new(original, None),
+                &narrower
+            ),
             conditions,
             (&mut region, &mut knowledge),
             &mut scratch,
@@ -151,7 +145,9 @@ fn original_decisions_do_not_repeat_closed_subjects() {
     let tautology = theory(vec![Node::atom(0), Node::implies(0, 0)], vec![1]);
     let conditions = Conditions {
         permanent: vec![],
-        bound: Some(Bound::prepare(&tautology, 1).unwrap()),
+        bound: Some(
+            Bound::prepare(&tautology, 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
+        ),
     };
     let (region, attempts) = close(&original, &conditions);
     // The old joint loop invoked original and bound twice. Neither invocation
@@ -171,7 +167,9 @@ fn later_decisions_reclose_earlier_subjects() {
         },
         Conditions {
             permanent: vec![],
-            bound: Some(Bound::prepare(&held_a, 1).unwrap()),
+            bound: Some(
+                Bound::prepare(&held_a, 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
+            ),
         },
     ] {
         let (region, attempts) = close(&original, &conditions);

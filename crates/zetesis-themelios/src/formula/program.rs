@@ -75,12 +75,16 @@ pub fn validate_program_formula(
 /// fact expansion; callers requiring a validation-only lowering boundary use
 /// [`validate_program_formula`] first.
 ///
-/// Control is polled at existing charged expansion and formula-work boundaries,
-/// around structural inspection and bounded upstream analysis, and during
+/// Formula work observes control at entry, each charged range crossing a
+/// 256-unit boundary, before a work refusal, and at its controlled exit; a stop
+/// observed at exit outranks resource refusals while preserving site and input.
+/// Expansion retains its observation at every charge. Explicit observations
+/// bracket structural inspection and bounded upstream analysis, and run during
 /// observation compilation. Upstream analysis has no internal cancellation hook;
 /// its already bounded call is one cooperative interval. Control is checked again
-/// before a successful preparation or materialization is returned. This is not a
-/// hard real-time deadline or an allocator/RSS bound.
+/// before a successful preparation or materialization is returned. A stop
+/// arriving after the last observation requires a later caller observation.
+/// This is not a hard real-time deadline or an allocator/RSS bound.
 ///
 /// # Errors
 /// Retains the original program with every structural, capability, arithmetic,
@@ -114,7 +118,7 @@ pub fn prepare_program_formula_with(
         let mut compilation = crate::formula_ir::CompilationOptions::from(options.admission);
         compilation.purpose = options.purpose;
         let result = super::prepare(
-            owner.program(),
+            owner.shared_program(),
             compilation,
             budget,
             &options.formula,

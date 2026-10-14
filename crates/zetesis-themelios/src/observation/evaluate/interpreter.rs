@@ -20,7 +20,7 @@ pub(super) struct Interpreter<'input, 'work, 'cancel> {
     pub keys: super::anonymous::Keys<'input>,
 }
 impl<'input> Interpreter<'input, '_, '_> {
-    pub fn observe(&mut self) {
+    pub(super) fn observe(&mut self) {
         self.work.statistics.term_storage_bytes = self.terms.storage_bytes() + self.keys.bytes();
         self.work.statistics.peak_term_storage_bytes = self
             .work
@@ -67,29 +67,29 @@ impl<'input> Interpreter<'input, '_, '_> {
             }
         })
     }
-    pub fn value<'a>(&'a self, key: &TermKey) -> TermRef<'a> {
+    pub(super) fn value<'a>(&'a self, key: &TermKey) -> TermRef<'a> {
         self.terms
             .read()
             .term(key)
             .expect("interpreter key belongs to its retained arena")
     }
-    pub fn input(&mut self, value: TermRef<'input>) -> Result<TermKey, Error> {
+    pub(super) fn input(&mut self, value: TermRef<'input>) -> Result<TermKey, Error> {
         self.prepare()?;
         let result = self.terms.borrow_with(value, || self.work.step(1));
         self.finish(result)
     }
-    pub fn child(&mut self, key: &TermKey, index: usize) -> Result<Option<TermKey>, Error> {
+    pub(super) fn child(&mut self, key: &TermKey, index: usize) -> Result<Option<TermKey>, Error> {
         self.prepare()?;
         let result = self.terms.child_with(key, index, || self.work.step(1));
         self.finish(result)
     }
-    pub fn scalar(&mut self, value: ValueNodeRef<'_>) -> Result<TermKey, Error> {
+    pub(super) fn scalar(&mut self, value: ValueNodeRef<'_>) -> Result<TermKey, Error> {
         self.prepare()?;
         let logical = self.logical_limits();
         let result = self.terms.scalar_with(value, logical, || self.work.step(1));
         self.finish(result)
     }
-    pub fn number(&mut self, value: i32) -> Result<TermKey, Error> {
+    pub(super) fn number(&mut self, value: i32) -> Result<TermKey, Error> {
         self.scalar(ValueNodeRef::Number(value))
     }
     fn logical_limits(&self) -> zetesis_core::catalog::Limits {
@@ -101,7 +101,7 @@ impl<'input> Interpreter<'input, '_, '_> {
             max_bytes: usize::MAX,
         }
     }
-    pub fn build(
+    pub(super) fn build(
         &mut self,
         shape: &DeclaredConstructor,
         assignment: AssignmentSlice<'_>,
@@ -114,7 +114,7 @@ impl<'input> Interpreter<'input, '_, '_> {
             .construct_with(shape, assignment, slots, logical, || self.work.step(1));
         self.finish(result)
     }
-    pub fn frame(&mut self, count: usize) -> Result<TermAssignment, Error> {
+    pub(super) fn frame(&mut self, count: usize) -> Result<TermAssignment, Error> {
         let mut frame = self.terms.read().assignment();
         frame
             .resize_with(count, self.work.limits.max_term_storage_bytes, || {
@@ -123,7 +123,7 @@ impl<'input> Interpreter<'input, '_, '_> {
             .map_err(|error| super::binding::failure(error, self.work))?;
         Ok(frame)
     }
-    pub fn set(
+    pub(super) fn set(
         &mut self,
         frame: &mut TermAssignment,
         slot: usize,
@@ -142,13 +142,13 @@ impl<'input> Interpreter<'input, '_, '_> {
                 .map_err(|error| self.work.error(ErrorKind::TermAssignment(error)))
         }
     }
-    pub fn compare(&mut self, left: &TermKey, right: &TermKey) -> Result<Ordering, Error> {
+    pub(super) fn compare(&mut self, left: &TermKey, right: &TermKey) -> Result<Ordering, Error> {
         let read = self.terms.read();
         let left = read.term(left).expect("retained local key");
         let right = read.term(right).expect("retained local key");
         left.compare_terms_with(right, || self.work.step(1))
     }
-    pub fn measure_key(
+    pub(super) fn measure_key(
         &mut self,
         key: &TermKey,
         depth: usize,
@@ -160,7 +160,7 @@ impl<'input> Interpreter<'input, '_, '_> {
             metric,
         )
     }
-    pub fn metric(&mut self, key: &TermKey) -> Result<Metric, Error> {
+    pub(super) fn metric(&mut self, key: &TermKey) -> Result<Metric, Error> {
         let mut metric = Metric::default();
         self.work.measure_reference(
             self.terms.read().term(key).expect("local key"),
@@ -169,7 +169,11 @@ impl<'input> Interpreter<'input, '_, '_> {
         )?;
         Ok(metric)
     }
-    pub fn numeric(&mut self, term: &Template, binding: &Binding<'input>) -> Result<i32, Error> {
+    pub(super) fn numeric(
+        &mut self,
+        term: &Template,
+        binding: &Binding<'input>,
+    ) -> Result<i32, Error> {
         self.work.step(1)?;
         let result = match term {
             Template::Constant(scalar) => match self
@@ -203,7 +207,7 @@ impl<'input> Interpreter<'input, '_, '_> {
         };
         result.map_err(|error| self.work.error(ErrorKind::Evaluation(error)))
     }
-    pub fn measure(
+    pub(super) fn measure(
         &mut self,
         term: &Template,
         binding: &Binding<'input>,
@@ -254,7 +258,7 @@ impl<'input> Interpreter<'input, '_, '_> {
         }
         Ok(())
     }
-    pub fn own(
+    pub(super) fn own(
         &mut self,
         term: &Template,
         binding: &Binding<'input>,
@@ -269,7 +273,7 @@ impl<'input> Interpreter<'input, '_, '_> {
         )?;
         self.construct(term, binding).map(|key| (key, metric))
     }
-    pub fn construct(
+    pub(super) fn construct(
         &mut self,
         term: &Template,
         binding: &Binding<'input>,
@@ -307,7 +311,7 @@ impl<'input> Interpreter<'input, '_, '_> {
             }
         }
     }
-    pub fn negate(&mut self, key: &TermKey) -> Result<TermKey, Error> {
+    pub(super) fn negate(&mut self, key: &TermKey) -> Result<TermKey, Error> {
         let descriptor = self.value(key).descriptor();
         let (sign, arity) = match descriptor {
             ValueNodeRef::Number(value) => {
@@ -346,7 +350,7 @@ impl<'input> Interpreter<'input, '_, '_> {
         }
         self.build(&shape, frame.as_slice(), &slots)
     }
-    pub fn compare_templates(
+    pub(super) fn compare_templates(
         &mut self,
         left: &Template,
         right: &Template,

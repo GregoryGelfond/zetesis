@@ -1,6 +1,7 @@
 //! A composed request preserves selection, control and failure boundaries.
 
 use std::{collections::BTreeSet, io};
+use zetesis_reference_support::formula;
 
 use crate::support::sessions::config;
 use zetesis_cpu::Cancellation;
@@ -9,18 +10,10 @@ use zetesis_solve::{
     ExecutionResources, GpuApi, Grounder, Oracle, PreparedInput, Session, SolveConfig, SolveError,
     Subject,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit, admit_formula,
-};
+use zetesis_themelios::{AdmissionOptions, AdmittedFormula, admit};
 
 fn objective() -> AdmittedFormula {
-    admit_formula(
-        "1 {a;b} 1. #minimize {1@2,a:a; 2@2,b:b}. #show.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
+    formula("1 {a;b} 1. #minimize {1@2,a:a; 2@2,b:b}. #show.")
 }
 
 #[test]

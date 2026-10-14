@@ -1,46 +1,148 @@
-//! Merge sorted subset-sum runs under the caller's shared storage allowance.
+//! Distinct finite assignment sums with leased sorted or packed execution.
+//!
+//! Every input occurrence is independently optional above a seed, the exact
+//! total of the required contributions. The returned `Numbers` are always
+//! ascending, distinct i32 values; packed words are private scratch.
+mod packed;
+
 use crate::ProgramSite;
 use crate::formula::ceiling;
-use crate::formula_support::Buffer;
-use crate::formula_support::{Computation, Counters};
+use crate::formula_support::{Buffer, Computation, Context, Counters};
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 use themelios_program::term::EvalError;
 
 pub(crate) type Numbers = Buffer<i32>;
 
+/// The sums of `seed` and every selection of `weights`. Every value a run
+/// holds is the seed plus a selection of the weights added so far, which is
+/// itself a sum of the result, so a checked addition fails exactly when a
+/// resulting sum leaves `i32`.
 pub(crate) fn sums(
+    seed: i32,
     weights: impl IntoIterator<Item = i32>,
     computation: &Computation<'_, '_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<Numbers, FormulaFailure> {
+    // Preserve the empty proposal's refusal before input, work or storage.
     ceiling(
         FormulaResource::AssignmentValues,
         1,
         limits.max_assignment_values as u128,
         location,
     )?;
-    let mut sums = Buffer::new(computation, limits, counters, location)?;
-    let mut next = Buffer::new(computation, limits, counters, location)?;
-    sums.push(0_i32, computation, limits, counters, location)?;
-    for weight in weights {
-        // Adding a fixed integer preserves order. Check every addition before
-        // merging so an overflowing possible subset remains a source refusal.
-        for sum in sums.iter() {
-            counters.work(limits, location)?;
-            sum.checked_add(weight)
-                .ok_or(ExpansionFailure::Evaluation {
-                    error: EvalError::Overflow,
-                    location,
-                })?;
+    let mut context = Context::new(computation, limits, counters, location);
+    let mut runs = Runs::new(seed, &mut context)?;
+    let mut weights = weights.into_iter();
+    for weight in weights.by_ref() {
+        tick(&mut context)?;
+        if let Some(plan) = packed::Plan::for_runs(&runs.values, seed, weight, &mut context)? {
+            // This is the only entry into packed execution. A later signed or
+            // sparse contribution returns to merging without trying it again.
+            drop(runs.next);
+            return packed::finish(runs.values, seed, weight, weights, plan, &mut context);
         }
-        next.clear();
+        runs.add(weight, &mut context)?;
+    }
+    Ok(runs.values)
+}
+
+fn tick(context: &mut Context<'_, &Computation<'_, '_>>) -> Result<(), FormulaFailure> {
+    context
+        .work
+        .counters
+        .work(context.work.limits, context.work.location)
+}
+
+fn overflow(location: ProgramSite) -> FormulaFailure {
+    ExpansionFailure::Evaluation {
+        error: EvalError::Overflow,
+        location,
+    }
+    .into()
+}
+
+struct Runs {
+    values: Numbers,
+    next: Numbers,
+}
+
+impl Runs {
+    fn new(
+        seed: i32,
+        context: &mut Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Self, FormulaFailure> {
+        let mut values = Buffer::new(
+            context.computation,
+            context.work.limits,
+            context.work.counters,
+            context.work.location,
+        )?;
+        let next = Buffer::new(
+            context.computation,
+            context.work.limits,
+            context.work.counters,
+            context.work.location,
+        )?;
+        values.push(
+            seed,
+            context.computation,
+            context.work.limits,
+            context.work.counters,
+            context.work.location,
+        )?;
+        Ok(Self { values, next })
+    }
+
+    fn from_values(
+        values: Numbers,
+        context: &mut Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Self, FormulaFailure> {
+        let next = Buffer::new(
+            context.computation,
+            context.work.limits,
+            context.work.counters,
+            context.work.location,
+        )?;
+        Ok(Self { values, next })
+    }
+
+    fn finish(
+        mut self,
+        weights: impl IntoIterator<Item = i32>,
+        context: &mut Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Numbers, FormulaFailure> {
+        for weight in weights {
+            tick(context)?;
+            self.add(weight, context)?;
+        }
+        Ok(self.values)
+    }
+
+    fn add(
+        &mut self,
+        weight: i32,
+        context: &mut Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        // Adding a fixed integer preserves order. The caller paid the first
+        // value's work/cancellation charge before choosing the physical route.
+        // Check every addition before merging: each value is the seed plus a
+        // selection, so an overflowing addition is a resulting sum that leaves
+        // i32, a source refusal. The seed ensures this run is never empty.
+        for (index, sum) in self.values.iter().enumerate() {
+            if index != 0 {
+                tick(context)?;
+            }
+            sum.checked_add(weight)
+                .ok_or_else(|| overflow(context.work.location))?;
+        }
+        self.next.clear();
         let (mut original, mut shifted) = (0, 0);
-        while original < sums.len() || shifted < sums.len() {
-            counters.work(limits, location)?;
-            let left = sums.slice().get(original).copied();
-            let right = sums.slice().get(shifted).map(|sum| sum + weight);
+        while original < self.values.len() || shifted < self.values.len() {
+            tick(context)?;
+            let left = self.values.slice().get(original).copied();
+            let right = self.values.slice().get(shifted).map(|sum| sum + weight);
             let value = match (left, right) {
                 (Some(left), Some(right)) => left.min(right),
                 (Some(value), None) | (None, Some(value)) => value,
@@ -54,33 +156,29 @@ pub(crate) fn sums(
             }
             ceiling(
                 FormulaResource::AssignmentValues,
-                next.len() as u128 + 1,
-                limits.max_assignment_values as u128,
-                location,
+                self.next.len() as u128 + 1,
+                context.work.limits.max_assignment_values as u128,
+                context.work.location,
             )?;
-            next.push(value, computation, limits, counters, location)?;
+            self.next.push(
+                value,
+                context.computation,
+                context.work.limits,
+                context.work.counters,
+                context.work.location,
+            )?;
         }
-        std::mem::swap(&mut sums, &mut next);
+        std::mem::swap(&mut self.values, &mut self.next);
+        Ok(())
     }
-    Ok(sums)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::formula_support::testing::Fixture;
+    use crate::test_support::given_site;
     use std::collections::BTreeSet;
-    use themelios_base::{
-        source::SourceId,
-        span::{ByteOffset, Span},
-    };
-    fn location() -> ProgramSite {
-        ProgramSite::source(themelios_base::span::Location {
-            source: SourceId::new(89),
-            span: Span::empty(ByteOffset::new(0)),
-        })
-    }
-
     #[test]
     fn merged_runs_equal_all_distinct_subset_sums() {
         for weights in [vec![2, -3, 2, 0], vec![-5, 9, 4], Vec::new()] {
@@ -94,13 +192,14 @@ mod tests {
                         .sum::<i32>()
                 })
                 .collect();
-            Fixture::default().with(location(), |_, computation, counters| {
+            Fixture::default().with(given_site(), |_, computation, counters| {
                 let actual = sums(
+                    0,
                     weights,
                     computation,
                     &FormulaLimits::default(),
                     counters,
-                    location(),
+                    given_site(),
                 )
                 .unwrap();
                 assert_eq!(actual.slice(), expected.into_iter().collect::<Vec<_>>());
@@ -109,13 +208,13 @@ mod tests {
     }
     #[test]
     fn candidate_limit_counts_distinct_sums() {
-        Fixture::default().with(location(), |_, computation, counters| {
+        Fixture::default().with(given_site(), |_, computation, counters| {
             let limits = FormulaLimits {
                 max_assignment_values: 3,
                 ..Default::default()
             };
             assert_eq!(
-                sums([1, 1], computation, &limits, counters, location())
+                sums(0, [1, 1], computation, &limits, counters, given_site())
                     .unwrap()
                     .slice(),
                 &[0, 1, 2]
@@ -125,7 +224,7 @@ mod tests {
                 ..limits
             };
             assert!(matches!(
-                sums([1, 1], computation, &limits, counters, location()),
+                sums(0, [1, 1], computation, &limits, counters, given_site()),
                 Err(FormulaFailure::Limit {
                     resource: FormulaResource::AssignmentValues,
                     observed: 3,
@@ -138,14 +237,15 @@ mod tests {
     #[test]
     fn any_overflowing_subset_refuses_the_carrier() {
         for weights in [[i32::MAX, 1], [i32::MIN, -1]] {
-            Fixture::default().with(location(), |_, computation, counters| {
+            Fixture::default().with(given_site(), |_, computation, counters| {
                 assert!(matches!(
                     sums(
+                        0,
                         weights,
                         computation,
                         &FormulaLimits::default(),
                         counters,
-                        location()
+                        given_site()
                     ),
                     Err(FormulaFailure::Expansion(ExpansionFailure::Evaluation {
                         error: EvalError::Overflow,
@@ -157,33 +257,36 @@ mod tests {
     }
     #[test]
     fn every_work_stop_releases_both_sum_runs() {
-        let needed = Fixture::default().with(location(), |_, computation, counters| {
+        let needed = Fixture::default().with(given_site(), |_, computation, counters| {
             let before = counters.accounting.work;
             sums(
+                0,
                 [2, -3, 5],
                 computation,
                 &FormulaLimits::default(),
                 counters,
-                location(),
+                given_site(),
             )
             .unwrap();
             counters.accounting.work - before
         });
         for cutoff in 0..needed {
-            Fixture::default().with(location(), |_, computation, counters| {
+            Fixture::default().with(given_site(), |_, computation, counters| {
                 let limits = FormulaLimits::default();
                 let observer = computation.lease();
                 let before = computation
-                    .allowance(&observer, &limits, location())
+                    .allowance(&observer, &limits, given_site())
                     .unwrap();
                 let bounded = FormulaLimits {
                     max_work: counters.accounting.work + cutoff,
                     ..limits
                 };
-                assert!(sums([2, -3, 5], computation, &bounded, counters, location()).is_err());
+                assert!(
+                    sums(0, [2, -3, 5], computation, &bounded, counters, given_site()).is_err()
+                );
                 assert_eq!(
                     computation
-                        .allowance(&observer, &limits, location())
+                        .allowance(&observer, &limits, given_site())
                         .unwrap(),
                     before
                 );

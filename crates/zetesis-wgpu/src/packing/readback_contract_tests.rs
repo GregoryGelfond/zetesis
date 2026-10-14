@@ -13,7 +13,12 @@ use zetesis_cpu::{Cancellation, Limits, check_static};
 use zetesis_test_support::programs::nullary_pattern as atom;
 
 fn compile(templates: Vec<Template>) -> GroundProgram {
-    let program = Program::new(templates, AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     GroundProgram::compile(&program, StaticLimits::default()).unwrap()
 }
 

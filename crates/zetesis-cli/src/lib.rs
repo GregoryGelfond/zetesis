@@ -10,7 +10,10 @@
 //! without argument parsing or complete-family buffering. [`HumanRenderer`] and
 //! [`JsonRenderer`] use that same contract; semantic evidence stays independent
 //! of the renderer's acknowledgement.
-#![forbid(unsafe_code)]
+// Denied rather than forbidden: the one named foreign-interface exception, the
+// host-memory reading in `options.rs`, is expected in place and listed by the
+// authored-lints audit.
+#![deny(unsafe_code)]
 
 mod options;
 mod command;
@@ -24,6 +27,8 @@ mod display;
 mod admission;
 mod devices;
 mod process;
+#[cfg(all(unix, any(test, all(feature = "front", not(feature = "gpu")))))]
+mod sibling;
 mod presentation;
 mod publication;
 mod statistics;
@@ -36,8 +41,9 @@ mod view;
 use driver::fixture as publication_fixture;
 
 pub use view::{
-    AnswerRenderer, AnswerView, BackendView, ConfigurationView, GroundingDisplay, HumanRenderer,
-    JsonRenderer, PublicationConfig, PublicationView, SummaryDelivery, SummaryStage,
+    AnswerRenderer, AnswerView, BackendView, ConfigurationView, CountRenderer, GroundingDisplay,
+    HumanRenderer, JsonRenderer, PublicationConfig, PublicationMode, PublicationView,
+    SummaryDelivery, SummaryStage,
 };
 
 pub use devices::devices;

@@ -1,9 +1,8 @@
 //! Finite priorities partition complete eligible objective rows.
 
 use crate::support::source_cases;
+use zetesis_reference_support::{admit, exhaustive, resource_limits};
 
-use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{admit, exhaustive};
 use zetesis_themelios::{
     AdmissionFailure, ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource,
     ProfileFeature,
@@ -128,9 +127,8 @@ fn specialization_retains_objective_origins() {
 #[test]
 fn specialization_limits_are_inclusive() {
     let source = "p(1;2).#minimize{1@X:p(X)}.";
-    let mut limits = FormulaLimits::default();
-    limits.objective.max_templates = 1;
-    let error = admit(source, &limits).unwrap_err();
+    let limits = |maximum| resource_limits::formula(FormulaResource::ObjectiveElements, maximum);
+    let error = admit(source, &limits(1)).unwrap_err();
     let FormulaFailure::Limit {
         resource: FormulaResource::ObjectiveElements,
         limit: 1,
@@ -140,8 +138,7 @@ fn specialization_limits_are_inclusive() {
     else {
         panic!("unexpected specialization boundary: {error}");
     };
-    limits.objective.max_templates = 2;
-    let input = admit(source, &limits).unwrap();
+    let input = admit(source, &limits(2)).unwrap();
     assert_eq!(input.objectives().templates().len(), 2);
     assert_eq!(
         location.location().expect("parsed source").source,
@@ -160,7 +157,5 @@ fn specialization_limits_are_inclusive() {
 #[test]
 #[ignore = "requires clingo: priority sources match complete clingo records"]
 fn priority_sources_match_complete_clingo_records() {
-    for case in source_cases::cases(CASES.trim()) {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    source_cases::clingo_matches_every_case(&source_cases::cases(CASES.trim()));
 }

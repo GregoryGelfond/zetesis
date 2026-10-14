@@ -1,11 +1,13 @@
 //! Conditional heads preserve finite existential scope and original reducts.
 
 use crate::support::finite_bindings as reference;
+use zetesis_reference_support::{admit, canonical, formula, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 
 use crate::support::finite_bindings::expected;
-use reference::{Models, exhaustive, external, holds, native, values};
+use reference::{external, holds, native, values};
 use std::collections::BTreeSet;
-use zetesis_reference_support::{admit, canonical, formula};
+use zetesis_clingo_support as oracle;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &[(&str, &[&[&str]])] = &[
@@ -36,10 +38,7 @@ fn complete_families_preserve_conditional_eligibility() {
 
 #[test]
 fn membership_matches_independent_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]
@@ -67,26 +66,7 @@ fn original_occurrences_keep_their_source() {
 fn original_sources_match_clingo_full_models() {
     let mut models = 0;
     for &(source, records) in CASES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut actual = Models::new();
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    assert!(witness["Costs"].is_null());
-                    assert!(
-                        actual.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
+        let actual = oracle::objective_free_models(&external(source, true));
         assert_eq!(actual, expected(records), "{source}");
         assert_eq!(native(&formula(source)), actual, "{source}");
         models += actual.len();
@@ -215,20 +195,14 @@ fn local_instance_limit_is_inclusive() {
     let source = "d(1..3).a(X):d(X).";
     let admitted = admit(
         source,
-        &FormulaLimits {
-            max_disjunction_elements: 3,
-            ..Default::default()
-        },
+        &resource_limits::formula(FormulaResource::DisjunctionElements, 3),
     )
     .unwrap();
     assert_eq!(native(&admitted), native(&formula(source)));
     assert!(matches!(
         admit(
             source,
-            &FormulaLimits {
-                max_disjunction_elements: 2,
-                ..Default::default()
-            }
+            &resource_limits::formula(FormulaResource::DisjunctionElements, 2)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::DisjunctionElements,
@@ -242,27 +216,16 @@ fn local_instance_limit_is_inclusive() {
 #[test]
 fn work_refusal_never_publishes_a_prefix() {
     let source = "d(1..2).a(X):d(X).";
-    let mut lower = 0;
-    let mut upper = 16_384;
     let attempt = |work| {
         admit(
             source,
-            &FormulaLimits {
-                max_work: work,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::Work, work),
         )
     };
-    assert!(attempt(upper).is_ok());
-    while lower < upper {
-        let middle = lower + (upper - lower) / 2;
-        if attempt(middle).is_ok() {
-            upper = middle;
-        } else {
-            lower = middle + 1;
-        }
-    }
-    assert!(lower > 0);
+    let lower = first_success(
+        resource_limits::formula_default(FormulaResource::Work),
+        |middle| attempt(middle).is_ok(),
+    );
     assert_eq!(native(&attempt(lower).unwrap()), native(&formula(source)));
     assert!(
         matches!(attempt(lower-1), Err(FormulaFailure::Limit { resource: FormulaResource::Work, limit, observed, .. })

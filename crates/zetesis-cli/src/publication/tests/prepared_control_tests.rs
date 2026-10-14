@@ -2,17 +2,11 @@
 
 use clap::Parser;
 use zetesis_cpu::Cancellation;
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
+use zetesis_reference_support::formula;
 
 #[test]
 fn stopped_formula_adapter_retains_admitted_subject() {
-    let admitted = admit_formula(
-        "a | b.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("a | b.");
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let options = crate::Options::try_parse_from(["zetesis", "--backend", "cpu"]).unwrap();

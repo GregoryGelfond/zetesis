@@ -1,6 +1,7 @@
 //! Successful formula warnings use the source palette and a separate fallible sink.
 
-use std::{fs, io};
+use std::io;
+use zetesis_reference_support::BundleFixture;
 
 use clap::Parser;
 use zetesis_cli::{
@@ -10,7 +11,6 @@ use zetesis_cli::{
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::fixtures::ZERO_DIVISOR as SOURCE;
 use zetesis_test_support::io::BoundedWriter;
-use zetesis_themelios::{BundleLimits, SourceBundle};
 
 const WARNING: &str = "warning[zetesis::zero-divisor]";
 
@@ -136,13 +136,11 @@ fn warning_writer_failure_stops_before_semantic_search() {
 
 #[test]
 fn bundle_warnings_resolve_original_included_source() {
-    let directory = tempfile::tempdir().unwrap();
-    let entry = directory.path().join("entry.lp");
-    let child = directory.path().join("child.lp");
-    fs::write(&entry, "#include \"child.lp\".\n").unwrap();
-    fs::write(&child, SOURCE).unwrap();
-    let bundle = SourceBundle::load(&entry, BundleLimits::default()).unwrap();
-    fs::write(&child, "replacement.\n").unwrap();
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", "#include \"child.lp\".\n");
+    fixture.write("child.lp", SOURCE);
+    let bundle = fixture.bundle();
+    fixture.write("child.lp", "replacement.\n");
     let mut diagnostics = Vec::new();
     let report = run_bundle_with_diagnostics(
         bundle,

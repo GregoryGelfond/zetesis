@@ -14,8 +14,9 @@ use zetesis_sat::{
 use zetesis_theory_support::theories::theory;
 
 use crate::support::batching::{batch, residual};
+use crate::support::choice_theories::choices;
 use crate::support::interpretations::stable_models;
-use crate::support::region_filters::{ROUTES, Route, choices};
+use crate::support::region_filters::{ROUTES, Route};
 
 type Callback = fn(&Region, RegionPass, &Cancellation) -> Result<RegionConsequence, Incomplete>;
 
@@ -134,7 +135,9 @@ fn limited(route: Route, subject: &Theory, max_work: u64) -> StableModels {
         Route::Producers => {
             StableModels::with_region_producers(subject, workers, limits, cancellation)
         }
-        Route::Native => StableModels::with_region_workers(subject, workers, limits, cancellation),
+        Route::Native | Route::Coordinator => {
+            return route.search_with(subject, workers, limits, cancellation);
+        }
     }
     .unwrap()
 }

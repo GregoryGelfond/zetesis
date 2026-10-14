@@ -6,7 +6,7 @@ use crate::{
 use std::io::{self, Write};
 
 /// Shared field vocabulary for the human and JSON views of the same data.
-pub(crate) fn work_fields(work: &GroundingWork) -> [(&'static str, Option<u64>); 37] {
+pub(crate) fn work_fields(work: &GroundingWork) -> [(&'static str, Option<u64>); 52] {
     [
         ("support_construction_work", work.support_construction_work),
         ("support_production_work", work.support_production_work),
@@ -17,10 +17,15 @@ pub(crate) fn work_fields(work: &GroundingWork) -> [(&'static str, Option<u64>);
         ("support_publication_work", work.support_publication_work),
         ("support_rounds", work.support_rounds),
         ("support_producer_visits", work.support_producer_visits),
+        ("support_rich_traversals", work.support_rich_traversals),
+        ("support_unchanged_visits", work.support_unchanged_visits),
         (
             "support_snapshot_preparations",
             work.support_snapshot_preparations,
         ),
+        ("local_plan_requests", work.local_plan_requests),
+        ("local_plan_preparations", work.local_plan_preparations),
+        ("local_plan_reuses", work.local_plan_reuses),
         ("support_atoms", work.support_atoms),
         ("support_index_entries", work.support_index_entries),
         ("join_probes", work.join_probes),
@@ -43,6 +48,19 @@ pub(crate) fn work_fields(work: &GroundingWork) -> [(&'static str, Option<u64>);
         ("binding_snapshots", work.binding_snapshots),
         ("expression_evaluations", work.expression_evaluations),
         ("expression_nodes", work.expression_nodes),
+        ("integer_comparisons", work.integer_comparisons),
+        (
+            "integer_comparison_declines",
+            work.integer_comparison_declines,
+        ),
+        ("numeric_index_builds", work.numeric_index_builds),
+        ("numeric_index_declines", work.numeric_index_declines),
+        ("range_probes", work.range_probes),
+        ("range_probe_rows", work.range_probe_rows),
+        ("expression_key_probes", work.expression_key_probes),
+        ("expression_key_rows", work.expression_key_rows),
+        ("row_atoms", work.row_atoms),
+        ("row_atom_reuses", work.row_atom_reuses),
         ("atom_lookups", work.atom_lookups),
         ("atoms_inserted", work.atoms_inserted),
         ("node_lookups", work.node_lookups),

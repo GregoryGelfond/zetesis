@@ -1,18 +1,14 @@
 //! Typed source limits preserve the library's distinct resource populations.
 
 use zetesis_cli::{Completion, RunError};
-use zetesis_themelios::{FormulaFailure, FormulaResource};
+use zetesis_reference_support::resource_limits;
+use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
-fn formula(
-    source: &str,
-    configure: impl FnOnce(&mut zetesis_themelios::FormulaLimits),
-) -> Result<Completion, RunError> {
-    let mut limits = zetesis_themelios::FormulaLimits::default();
-    configure(&mut limits);
+fn formula(source: &str, limits: &FormulaLimits) -> Result<Completion, RunError> {
     let (result, output) = crate::support::prepared::bounded_admission(
         source,
         zetesis_themelios::ExpansionLimits::default(),
-        &limits,
+        limits,
     );
     if result.is_err() {
         assert!(output.is_empty(), "admission precedes publication");
@@ -24,7 +20,10 @@ fn formula(
 fn domain_limit_controls_formula_admission() {
     let source = "p(1). p(2).";
     assert!(matches!(
-        formula(source, |limits| limits.max_domain_values = 1),
+        formula(
+            source,
+            &resource_limits::formula(FormulaResource::DomainValues, 1)
+        ),
         Err(RunError::FormulaAdmission(FormulaFailure::Limit {
             resource: FormulaResource::DomainValues,
             observed: 2,
@@ -33,7 +32,11 @@ fn domain_limit_controls_formula_admission() {
         }))
     ));
     assert_eq!(
-        formula(source, |limits| limits.max_domain_values = 2).unwrap(),
+        formula(
+            source,
+            &resource_limits::formula(FormulaResource::DomainValues, 2)
+        )
+        .unwrap(),
         Completion::Exhausted
     );
 }
@@ -42,7 +45,10 @@ fn domain_limit_controls_formula_admission() {
 fn assignment_limit_bounds_one_range() {
     let source = "p(X):-X=1..2.";
     assert!(matches!(
-        formula(source, |limits| limits.max_assignment_values = 1),
+        formula(
+            source,
+            &resource_limits::formula(FormulaResource::AssignmentValues, 1)
+        ),
         Err(RunError::FormulaAdmission(FormulaFailure::Limit {
             resource: FormulaResource::AssignmentValues,
             observed: 2,
@@ -51,7 +57,11 @@ fn assignment_limit_bounds_one_range() {
         }))
     ));
     assert_eq!(
-        formula(source, |limits| limits.max_assignment_values = 2).unwrap(),
+        formula(
+            source,
+            &resource_limits::formula(FormulaResource::AssignmentValues, 2)
+        )
+        .unwrap(),
         Completion::Exhausted
     );
 }
@@ -60,7 +70,10 @@ fn assignment_limit_bounds_one_range() {
 fn generated_values_have_a_cumulative_limit() {
     let source = "d(1..2).p(f(X)):-d(X).";
     assert!(matches!(
-        formula(source, |limits| limits.max_generated_values = 1),
+        formula(
+            source,
+            &resource_limits::formula(FormulaResource::GeneratedValues, 1)
+        ),
         Err(RunError::FormulaAdmission(FormulaFailure::Limit {
             resource: FormulaResource::GeneratedValues,
             observed: 2,
@@ -69,7 +82,11 @@ fn generated_values_have_a_cumulative_limit() {
         }))
     ));
     assert_eq!(
-        formula(source, |limits| limits.max_generated_values = 2).unwrap(),
+        formula(
+            source,
+            &resource_limits::formula(FormulaResource::GeneratedValues, 2)
+        )
+        .unwrap(),
         Completion::Exhausted
     );
 }
@@ -80,10 +97,14 @@ fn generated_values_remain_charged_after_support() {
     // generator runs during final instantiation and produces no head value.
     let source = "p(X):-X=1..1. :-Y=2..2.";
     assert!(matches!(
-        formula(source, |limits| {
-            limits.max_assignment_values = 1;
-            limits.max_generated_values = 1;
-        }),
+        formula(
+            source,
+            &FormulaLimits {
+                max_assignment_values: 1,
+                max_generated_values: 1,
+                ..FormulaLimits::default()
+            }
+        ),
         Err(RunError::FormulaAdmission(FormulaFailure::Limit {
             resource: FormulaResource::GeneratedValues,
             observed: 2,
@@ -92,10 +113,14 @@ fn generated_values_remain_charged_after_support() {
         }))
     ));
     assert_eq!(
-        formula(source, |limits| {
-            limits.max_assignment_values = 1;
-            limits.max_generated_values = 2;
-        })
+        formula(
+            source,
+            &FormulaLimits {
+                max_assignment_values: 1,
+                max_generated_values: 2,
+                ..FormulaLimits::default()
+            }
+        )
         .unwrap(),
         Completion::Exhausted
     );
@@ -104,7 +129,10 @@ fn generated_values_remain_charged_after_support() {
 #[test]
 fn support_round_limit_preserves_incomplete_admission() {
     assert!(matches!(
-        formula("a.", |limits| limits.max_support_rounds = 0),
+        formula(
+            "a.",
+            &resource_limits::formula(FormulaResource::SupportRounds, 0)
+        ),
         Err(RunError::FormulaAdmission(FormulaFailure::Limit {
             resource: FormulaResource::SupportRounds,
             observed: 1,
@@ -112,5 +140,8 @@ fn support_round_limit_preserves_incomplete_admission() {
             ..
         }))
     ));
-    assert_eq!(formula("a.", |_| {}).unwrap(), Completion::Exhausted);
+    assert_eq!(
+        formula("a.", &FormulaLimits::default()).unwrap(),
+        Completion::Exhausted
+    );
 }

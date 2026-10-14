@@ -1,32 +1,25 @@
 //! Finite substitutions keep each aggregate equality; proposals are not truth.
+use crate::support::admission;
 use crate::support::finite_bindings as reference;
-use reference::{Models, exhaustive, external, holds, native, values};
+use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 use themelios_base::source::SourceId;
+use zetesis_reference_support::{canonical, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, admit_formula, prepare_formula,
 };
 
 use crate::support::objective_dependency_records as objective_dependencies;
-use zetesis_reference_support::canonical;
 
 const SOURCE: SourceId = SourceId::new(113);
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admission::admitted(SOURCE, source)
 }
 
 // Ground references are authored independently of the runtime schedule. The
@@ -221,17 +214,12 @@ const CASES: &[(&str, &str)] = &[
 
 #[test]
 fn models_match_finite_substitutions() {
-    for &(source, expanded) in CASES {
-        assert_eq!(native(&input(source)), native(&input(expanded)), "{source}");
-    }
+    reference::models_match_substitutions(CASES.iter().copied(), input);
 }
 
 #[test]
 fn stability_matches_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = input(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), input);
 }
 
 #[test]
@@ -283,48 +271,23 @@ fn frozen_truth_matches_finite_substitutions() {
 #[test]
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
-    let mut total = 0;
-    for &(source, _) in CASES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    assert!(
-                        expected.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&input(source)), expected, "{source}");
-        total += count;
-    }
-    println!("complete_sources={} full_models={total}", CASES.len());
+    reference::original_sources_match_clingo_full_models(
+        CASES.iter().map(|&(source, _)| source),
+        input,
+    );
 }
 
 #[test]
 fn conditionals_consume_aggregate_descendants() {
-    for (source, expanded) in [
+    let pairs = [
         ("q(N):-N=#count{},Y=N+1,p(Y):d.", "q(0):-0=#count{},p(1):d."),
         (
             "q(N):-N=#count{},not p(N):d.",
             "q(0):-0=#count{},not p(0):d.",
         ),
-    ] {
-        assert_eq!(native(&input(source)), native(&input(expanded)));
-        assert_eq!(input(source).source().expect("source input").text(), source);
-    }
+    ];
+    reference::models_match_substitutions(pairs, input);
+    reference::sources_remain_owned(pairs.map(|(source, _)| source), input);
 }
 
 #[test]
@@ -432,10 +395,7 @@ fn generated_values_obey_the_assignment_ceiling() {
         "{p}.q(N+1):-N=#count{1:p}.".into(),
         options(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_assignment_values: 1,
-            ..Default::default()
-        },
+        resource_limits::formula(FormulaResource::AssignmentValues, 1),
     )
     .unwrap_err();
     assert!(
@@ -458,10 +418,7 @@ fn generated_rows_obey_the_substitution_ceiling() {
         "q(N+1):-N=#count{}.".into(),
         options(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_substitutions: 0,
-            ..Default::default()
-        },
+        resource_limits::formula(FormulaResource::Substitutions, 0),
     )
     .unwrap_err();
     assert!(
@@ -484,47 +441,20 @@ fn preparation_limits_are_inclusive() {
     // Locate its exact boundary without assuming a host usize/Vec layout.
     let source = "q(f(Y)):-N=#count{},Y=N+1.";
     for resource in [ExpansionResource::TermWork, ExpansionResource::ScalarBytes] {
-        let limits = |ceiling| {
-            let mut result = ExpansionLimits::default();
-            match resource {
-                ExpansionResource::TermWork => result.max_term_work = ceiling,
-                ExpansionResource::ScalarBytes => result.max_scalar_bytes = ceiling,
-                _ => unreachable!(),
-            }
-            result
-        };
-        let mut lower = 0;
-        let mut upper = 16_384;
-        assert!(
+        let lower = first_success(resource_limits::expansion_default(resource), |middle| {
             prepare_formula(
                 source.into(),
                 options(),
-                limits(upper),
-                FormulaLimits::default()
-            )
-            .is_ok()
-        );
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2;
-            if prepare_formula(
-                source.into(),
-                options(),
-                limits(middle),
+                resource_limits::expansion(resource, middle),
                 FormulaLimits::default(),
             )
             .is_ok()
-            {
-                upper = middle;
-            } else {
-                lower = middle + 1;
-            }
-        }
-        assert!(lower > 0);
+        });
         assert!(
             prepare_formula(
                 source.into(),
                 options(),
-                limits(lower),
+                resource_limits::expansion(resource, lower),
                 FormulaLimits::default()
             )
             .is_ok()
@@ -532,14 +462,14 @@ fn preparation_limits_are_inclusive() {
         let error = prepare_formula(
             source.into(),
             options(),
-            limits(lower - 1),
+            resource_limits::expansion(resource, lower - 1),
             FormulaLimits::default(),
         )
         .unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit {
             resource: actual, limit, observed, ..
-        }) if actual == resource && limit == (lower-1) as u128 && observed == lower as u128),
+        }) if actual == resource && limit == u128::from(lower - 1) && observed == u128::from(lower)),
             "{error}"
         );
         assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);

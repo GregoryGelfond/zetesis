@@ -1,7 +1,8 @@
 # zetesis-domain
 
-Conservative argument domains over the exact borrowed
-`themelios_program::program::Program`. The crate uses the pinned
+Conservative argument domains through one neutral producer engine. The source entry point borrows the exact
+`themelios_program::program::Program`; the prepared-IR adapter supplies authenticated catalog keys through a reader.
+The crate uses the pinned
 `themelios-program` dependency declared in the workspace; it has no solver,
 oracle, CLI, GPU or `zetesis-core` dependency. It neither accepts source strings
 nor reparses, normalizes, unpools or grounds its input. Callers supply the complete
@@ -109,7 +110,7 @@ as an implicit observation query belongs to separate task-relative demand
 analysis. Hidden predicates remain accounted for. `#defined` retains its clingo
 diagnostic semantics and creates no open-input domain here.
 
-## Transfers
+## Source transfers
 
 - Ordinary positive literal heads contribute direct bounded symbolic terms.
   Numeric arithmetic is not evaluated; it widens its affected head argument.
@@ -140,15 +141,15 @@ diagnostic semantics and creates no open-input domain here.
   argument values. Ignoring their restrictions is conservative for this upper
   cover; their validity and observable solver behavior are separate concerns.
 
-In-place monotone passes union every producer's result into its target until
-unchanged. Every concrete binding value belongs to each positive body position's
-upper domain, and hence to their intersection; union covers every producer.
-Growing an input can only grow the intersection, so starting from empty domains
-and repeating these inflationary passes preserves recursive coverage. Local
-widening only moves a domain upward to `Unknown`; another finite binding can
-still bound a conjunction. The bounded source symbols and width widening bound
-strict changes, while the global round/work ceilings bound the attempt. No
-partial fixed point survives a global stop.
+Both lowerings use `numeric`'s synchronous engine. Each producer reads one frozen
+previous state, its positive bindings intersect their argument domains, and all
+producer outputs join with the fact seeds. Ascent also joins the previous state,
+so no component narrows before convergence. Finite width overflow moves a set to
+Unknown; another finite positive binding can still bound a conjunction. Numeric
+endpoints use finite outward thresholds. A stable accumulated state W satisfies
+F(W) ⊑ W; one complete unwidened image F(W) then narrows soundly. The final local
+rule bounds are recomputed from that result. Work and round ceilings bound the
+attempt, and no partial fixed point survives a global stop.
 
 For the stated ordinary positive profile, every value in its concrete
 least-model closure is covered. For broader forms the result deliberately
@@ -167,24 +168,77 @@ enters an ordered set; oversized symbols widen locally without deep comparison.
 The bounded traversal checks child counts before extending its explicit stack.
 Stored symbol comparisons therefore have bounded structure and payload.
 
-Each variable transfer scans its inputs to select the smallest finite argument,
-then snapshots only its borrowed symbol references before changing the target
-(which may itself be an input). Every retained value must pass all the input
-bounds. Iteration establishes membership in the selected source occurrence, so
-that occurrence needs no additional visit. Other occurrences are charged before
-inspection; duplicate source occurrences need no additional set lookup. With k
-input positions, smallest finite width m and maximum finite width
-V, a pass uses O(k + m k log(V + 1)) ordered-set operations and O(m) temporary
-references; admitted symbol size bounds each comparison. All-Unknown inputs
-need only the input scan. Input scans, snapshot copies, membership probes and
-value merges charge work before their operations, including copy work before
-scratch allocation. No intersection set or symbol payload is copied. Distinct
-producer outputs retain the existing global value-entry and local width limits.
-Statistics count charged logical operations/reservations, including work before
-fallback; they do not measure allocator overhead or peak RSS. Changed work
-cutoffs describe the new traversal, not an unchanged numeric performance claim.
-Caller-supplied query symbols and the already constructed input Program are
-outside the analysis allocation contract.
+Each finite meet scans its smaller set and checks both operands by binary search
+over registered constant coordinates. An O(V log(V + 1)) meet retains O(V)
+temporary references, where V is `max_values_per_argument`. Key classification
+and semantic deduplication happen at registration; transfers copy references,
+not symbol payloads. The same live-entry ledger covers seeds, current arguments,
+candidate vectors and scratch sets, releasing reservations when their owners
+are dropped, including failure paths. `Statistics::value_entries` reports live
+occupancy at the receipt boundary, not a peak allocation count.
+
+Lowering, expression and refinement visits, threshold searches, finite equality,
+membership and reduction, metadata copies and actual key inspection charge work
+before their operations. Logical receipts consequently differ from the previous
+source-only engine; the limits remain inclusive and retain original stop context.
+No old numeric receipt schedule is simulated. Statistics do not measure allocator
+overhead or RSS. The source compatibility wrapper retains its host collection
+allocation boundary. Its final `BTreeSet<&Symbol>` materialization is outside the
+engine work meter: completed `value_entries` counts those entries, while `work`
+counts lowering and the shared engine. Conversion costs at most
+O(Σ arguments V log(V + 1)) ordered-set comparisons and O(total finite entries)
+references; admitted symbol node/depth/payload limits bound each comparison.
+The prepared-IR consumer reads coordinates and authentic keys directly, without
+this source conversion. The neutral and prepared-IR path reports fallible metadata
+allocation as typed failure rather than inventing a logical limit. Caller-supplied
+query values and the already constructed input are outside this allocation bound.
+
+## Neutral numeric analysis
+
+`numeric::analyze(reader, limits, lower)` supplies one checked `Input` to the
+lowering closure and returns `numeric::Analysis<K, C>`. The `Values` reader
+classifies authentic keys and compares them using a consistent semantic equality;
+its order is not used as ASP relational order. Finite `entries(argument)` lend
+keys with `ConstantId` coordinates ordered only within that analysis. A consumer
+may intersect those coordinates, then read the original key through its owner.
+
+Each argument has a finite component, integrality (`Integer` or `Mixed`), and a
+numeric interval (`Bottom`, bounded i32 endpoints, or `Unbounded`). Nonnumeric
+values, including infinities, remain possible under `Mixed`; a numeric comparison
+does not establish integrality. Every producer must be submitted, using a local
+Unknown expression when precision is unavailable. Facts seed columns directly;
+compact wide integer segments contribute their hull without row products.
+
+`RuleBounds::domains` covers complete bindings before comparisons, whereas
+`produced` includes a single ordered guard pass and is used for head transfer.
+Neither establishes prefix coverage, arithmetic totality or binding existence.
+Those stronger premises remain the responsibility of an execution consumer.
+The engine retains authentic finite constants, copies and intersections; it does
+not construct finite arithmetic image sets or new catalog keys. Generated ranges
+and arithmetic therefore have Unknown finite components even when small.
+
+The first static transfer scope includes negation, addition/subtraction,
+multiplication by a literal, and division/remainder by a nonzero literal.
+Unproved operators, including absolute value, bitwise operations, powers and
+variable multiplication/division/remainder, yield Integer and Unbounded defined
+results. Opaque Unknown summaries are never denotational identities, including
+when their coordinates are reused in subtraction or guard/head expressions.
+Count and sum assignments remain Integer and Unbounded; min/max remain Mixed and
+Unbounded. Tighter aggregate envelopes remain open.
+
+`Rule::integer_queries` requests separate integer-totality checks in that rule's
+scope. `RuleBounds::integer` lends a certificate only when every intermediate
+is defined over the complete-binding domains. It also covers remainder with a
+bounded variable divisor, excluding zero and the minimum-integer/-1 overflow.
+A declined request proves neither undefinedness nor impossibility. A successful
+one does not establish that a binding exists or cover earlier join prefixes.
+The prepared-IR observer uses these certificates for diagnostic reports; no
+static pruning or family-admission shortcut is enabled by that report.
+
+Every logical limit becomes `numeric::Status::Stopped` with all queryable results
+cleared. Reader/control failures, invalid plans and fallible allocation remain
+typed failures with committed statistics and original context. No failure becomes
+a finite key, an empty domain or a claim about answer-set existence.
 
 ```sh
 cargo test -p zetesis-domain --offline
@@ -203,10 +257,14 @@ upper coverage under deliberate width widening. Test parsing is confined to
 development fixtures; the production API receives Program directly. No Lean
 refinement or external-oracle coverage is claimed for this crate.
 
-Different immutable Programs can be analyzed independently. A future synchronous
-transfer/reduction implementation could parallelize independent components after
-profiling. This first bounded implementation has no threading/device dependency
+Different immutable Programs can be analyzed independently. The synchronous
+transfer/reduction mechanism may allow independent components to run in parallel
+after profiling. This bounded implementation has no threading/device dependency
 and makes no hardware speedup claim. The source bridge consumes domain analysis
 for eligible grounding guards and terminal-definition reconstruction; those
-operations belong to the grounder and solver, not this analysis crate. Abstract
-intervals, arithmetic transfer and demand/magic-set rewriting remain future work.
+operations belong to the grounder and solver, not this analysis crate. Static
+certificates, stronger aggregate precision and demand/magic-set rewriting remain
+future work. The numeric tests additionally cover mixed-term guard conservatism,
+recursive caps, opaque expression identity, complete-stop publication and actual
+work at finite/threshold/refinement inspection boundaries. These tests do not
+establish Rust refinement of the Lean laws.

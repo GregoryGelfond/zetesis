@@ -3,36 +3,43 @@
 use themelios_program::program::{
     Arguments, Atom, BodyElement, DefaultNegation, Head, Literal, LiteralInner, Rule, Statement,
 };
-use themelios_program::provenance::WithProvenance;
 use themelios_program::symbol::Signature;
 use themelios_program::term::{Term, Variable};
 
-use crate::analysis::{Engine, Failure, Producer, Transfer, empty_argument};
-use crate::limits::check;
-use crate::{Context, Resource, UnknownReason, Widening};
+use crate::analysis::Symbols;
+use crate::numeric::{self, ArgumentId, Binding, Error, Expression, Input, PredicateId};
+use crate::{Context, UnknownReason, Widening};
+use std::collections::BTreeMap;
+type Failure = Error<UnknownReason>;
+pub(super) struct Compiler<'p, 'i, 'r> {
+    pub program: &'p themelios_program::program::Program,
+    pub input: &'i mut Input<'r, Symbols<'p>, Context<'p>>,
+    pub signatures: &'i mut BTreeMap<Signature, (PredicateId, usize)>,
+    pub positions: usize,
+}
 
-impl<'p> Engine<'p> {
-    pub fn compile(&mut self) -> Result<(), Failure> {
-        for part in self.result.program.parts() {
-            self.result.context = Some(Context::Part(part));
+impl<'p> Compiler<'p, '_, '_> {
+    pub(crate) fn compile(&mut self) -> Result<(), Failure> {
+        for part in self.program.parts() {
+            self.input.context(Context::Part(part));
             self.work()?;
             if part.key().name.as_str() != "base" || !part.key().formals.is_empty() {
-                return Err(Failure::Unknown(UnknownReason::ProgramPart));
+                return Err(Error::Read(UnknownReason::ProgramPart));
             }
             for source in part.statements() {
-                self.result.context = Some(Context::Statement(source));
+                self.input.context(Context::Statement(source));
                 self.work()?;
                 match source.get() {
-                    Statement::Rule(rule) => self.rule(rule, source)?,
-                    Statement::Const(_) => return Err(Failure::Unknown(UnknownReason::Constants)),
-                    Statement::Include(_) => return Err(Failure::Unknown(UnknownReason::Include)),
+                    Statement::Rule(rule) => self.rule(rule)?,
+                    Statement::Const(_) => return Err(Error::Read(UnknownReason::Constants)),
+                    Statement::Include(_) => return Err(Error::Read(UnknownReason::Include)),
                     Statement::External(_) => {
-                        return Err(Failure::Unknown(UnknownReason::External));
+                        return Err(Error::Read(UnknownReason::External));
                     }
                     Statement::TheoryDefinition(_) => {
-                        return Err(Failure::Unknown(UnknownReason::Theory));
+                        return Err(Error::Read(UnknownReason::Theory));
                     }
-                    Statement::Script(_) => return Err(Failure::Unknown(UnknownReason::Script)),
+                    Statement::Script(_) => return Err(Error::Read(UnknownReason::Script)),
                     Statement::Optimize(_)
                     | Statement::WeakConstraint(_)
                     | Statement::Show(_)
@@ -41,115 +48,116 @@ impl<'p> Engine<'p> {
                     | Statement::Edge(_)
                     | Statement::Heuristic(_)
                     | Statement::Query(_) => {}
-                    _ => return Err(Failure::Unknown(UnknownReason::Statement)),
+                    _ => return Err(Error::Read(UnknownReason::Statement)),
                 }
             }
         }
         Ok(())
     }
-    fn register(&mut self, atom: &Atom, arity: usize) -> Result<usize, Failure> {
+    fn work(&mut self) -> Result<(), Failure> {
+        self.input.work(1)
+    }
+    fn bytes(&mut self, bytes: usize) -> Result<(), Failure> {
+        self.input
+            .bytes(u64::try_from(bytes).map_err(|_| Error::InvalidInput)?)
+    }
+    fn register(&mut self, atom: &Atom, arity: usize) -> Result<PredicateId, Failure> {
         self.work()?;
         self.bytes(atom.name.as_str().len())?;
-        let Ok(arity32) = u32::try_from(arity) else {
-            return Err(Failure::Unknown(UnknownReason::Head));
-        };
+        let arity32 = u32::try_from(arity).map_err(|_| Error::Read(UnknownReason::Head))?;
         let signature = Signature {
             sign: atom.sign,
             name: atom.name.clone(),
             arity: arity32,
         };
-        if let Some(&start) = self.result.signatures.get(&signature) {
-            return Ok(start);
+        if let Some(&(id, _)) = self.signatures.get(&signature) {
+            return Ok(id);
         }
-        let stats = &self.result.statistics;
-        check(
-            Resource::Predicates,
-            stats.predicates as u128 + 1,
-            self.limits.max_predicates as u128,
-        )?;
-        check(
-            Resource::Positions,
-            stats.positions as u128 + arity as u128,
-            self.limits.max_positions as u128,
-        )?;
-        let start = self.result.arguments.len();
-        self.result
-            .arguments
-            .extend((0..arity).map(|_| empty_argument()));
-        self.result.signatures.insert(signature, start);
-        self.result.statistics.predicates += 1;
-        self.result.statistics.positions += arity;
-        Ok(start)
+        let id = self.input.predicate(arity)?;
+        self.signatures.insert(signature, (id, self.positions));
+        self.positions += arity;
+        Ok(id)
     }
-    fn rule(
-        &mut self,
-        rule: &'p Rule,
-        source: &'p WithProvenance<Statement>,
-    ) -> Result<(), Failure> {
+    fn rule(&mut self, rule: &'p Rule) -> Result<(), Failure> {
         match rule.head().get() {
-            Head::Literal(literal) => self.head(literal, rule, source, false),
+            Head::Literal(literal) => self.head(literal, rule, false),
             Head::Choice(choice) => {
                 for element in choice.elements() {
                     self.work()?;
-                    self.head(element.get().literal(), rule, source, true)?;
+                    self.head(element.get().literal(), rule, true)?;
                 }
                 Ok(())
             }
             Head::Disjunction(disjunction) => {
                 for element in disjunction.elements() {
                     self.work()?;
-                    self.head(element.get().literal(), rule, source, true)?;
+                    self.head(element.get().literal(), rule, true)?;
                 }
                 Ok(())
             }
             Head::Falsum | Head::Verum => Ok(()),
-            Head::TheoryAtom(_) => Err(Failure::Unknown(UnknownReason::Theory)),
-            Head::Aggregate(_) => Err(Failure::Unknown(UnknownReason::Head)),
+            Head::TheoryAtom(_) => Err(Error::Read(UnknownReason::Theory)),
+            Head::Aggregate(_) => Err(Error::Read(UnknownReason::Head)),
         }
     }
     fn head(
         &mut self,
         literal: &'p Literal,
         rule: &'p Rule,
-        source: &'p WithProvenance<Statement>,
         uncertain: bool,
     ) -> Result<(), Failure> {
         let LiteralInner::Atom(atom) = &literal.inner else {
-            return Err(Failure::Unknown(UnknownReason::Head));
+            return Err(Error::Read(UnknownReason::Head));
         };
         let atom = atom.get();
         for terms in atom.alternatives() {
             self.work()?;
-            let start = self.register(atom, terms.len())?;
+            let predicate = self.register(atom, terms.len())?;
             for (index, term) in terms.iter().enumerate() {
                 self.work()?;
-                self.links(2)?;
-                let transfer = if uncertain || literal.negation != DefaultNegation::None {
-                    Transfer::Unknown(Widening::HeadForm)
+                let argument = self.input.argument(predicate, index)?;
+                if !uncertain
+                    && literal.negation == DefaultNegation::None
+                    && !atom.is_pooled()
+                    && rule.body().get().is_empty()
+                    && let Term::Symbolic(value) = term
+                {
+                    let value = self.input.constant(value)?;
+                    self.input.seed_value(argument, value)?;
+                    continue;
+                }
+                let mut plan = numeric::Rule::default();
+                let unknown = |reason| Expression::Unknown {
+                    integer: false,
+                    reason,
+                };
+                let value = if uncertain || literal.negation != DefaultNegation::None {
+                    unknown(Widening::HeadForm)
                 } else if atom.is_pooled() {
-                    Transfer::Unknown(Widening::HeadTerm)
+                    unknown(Widening::HeadTerm)
                 } else {
                     match term {
-                        Term::Symbolic(value) if self.symbol(value)? => Transfer::Value(value),
-                        Term::Symbolic(_) => Transfer::Unknown(Widening::SymbolSize),
+                        Term::Symbolic(value) => Expression::Constant(self.input.constant(value)?),
                         Term::Variable(Variable::Named(variable)) => {
                             self.bytes(variable.as_str().len())?;
                             let inputs = self.inputs(variable, rule)?;
                             if inputs.is_empty() {
-                                Transfer::Unknown(Widening::UnboundVariable)
+                                unknown(Widening::UnboundVariable)
                             } else {
-                                Transfer::Intersection(inputs)
+                                plan.slots = 1;
+                                plan.bindings = inputs
+                                    .into_iter()
+                                    .map(|argument| Binding::Positive { slot: 0, argument })
+                                    .collect();
+                                Expression::Slot(0)
                             }
                         }
-                        _ => Transfer::Unknown(Widening::HeadTerm),
+                        _ => unknown(Widening::HeadTerm),
                     }
                 };
-                self.result.arguments[start + index].producers.push(source);
-                self.producers.push(Producer {
-                    target: start + index,
-                    transfer,
-                    source,
-                });
+                let value = self.input.expression(value)?;
+                plan.heads.push(numeric::Head { argument, value });
+                self.input.rule(plan)?;
             }
         }
         Ok(())
@@ -158,7 +166,7 @@ impl<'p> Engine<'p> {
         &mut self,
         variable: &themelios_program::symbol::VarName,
         rule: &'p Rule,
-    ) -> Result<Vec<usize>, Failure> {
+    ) -> Result<Vec<ArgumentId>, Failure> {
         let mut inputs = Vec::new();
         for element in rule.body().get().elements() {
             self.work()?;
@@ -180,9 +188,9 @@ impl<'p> Engine<'p> {
                 if let Term::Variable(Variable::Named(bound)) = term {
                     self.bytes(bound.as_str().len())?;
                     if bound == variable {
-                        let start = self.register(atom, terms.len())?;
-                        self.links(1)?;
-                        inputs.push(start + index);
+                        let predicate = self.register(atom, terms.len())?;
+                        inputs.try_reserve(1)?;
+                        inputs.push(self.input.argument(predicate, index)?);
                     }
                 }
             }

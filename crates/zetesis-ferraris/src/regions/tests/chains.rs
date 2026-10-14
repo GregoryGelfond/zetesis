@@ -17,6 +17,7 @@ fn parent_rows(theory: &Theory) -> Vec<Vec<usize>> {
         let operands = match theory.view().node(parent).unwrap() {
             NodeView::And(operands) | NodeView::Or(operands) => operands,
             NodeView::Threshold(row) => row.conditions,
+            NodeView::ExtremumCut(cut) => cut.row.conditions,
             NodeView::Implies(a, b) => {
                 pair = [a, b];
                 &pair
@@ -78,7 +79,11 @@ fn compare_definition(theory: &Theory) {
     assert_eq!(
         actual
             .into_iter()
-            .map(|chain| (chain.root, chain.disjunction, chain.operands))
+            .map(|chain| (
+                chain.root,
+                chain.disjunction,
+                chain.ordinary_leaves().to_vec()
+            ))
             .collect::<Vec<_>>(),
         expected
     );
@@ -144,9 +149,9 @@ fn chain_operands_keep_first_occurrence_order() {
     // and repeated direct child 5 contribute no additional operand.
     assert_eq!(actual.len(), 2);
     assert_eq!(actual[0].root, 3);
-    assert_eq!(actual[0].operands, [0, 1]);
+    assert_eq!(actual[0].ordinary_leaves(), [0, 1]);
     assert_eq!(actual[1].root, 6);
-    assert_eq!(actual[1].operands, [3, 2]);
+    assert_eq!(actual[1].ordinary_leaves(), [3, 2]);
     compare_definition(&theory);
 }
 
@@ -181,7 +186,7 @@ fn deep_chains_preserve_operand_order() {
             if reversed {
                 expected.reverse();
             }
-            assert_eq!(actual[0].operands, expected);
+            assert_eq!(actual[0].ordinary_leaves(), expected);
             assert_eq!(links.iter().filter(|link| link.is_some()).count(), 1);
             assert_eq!(links[root].map(chain_position), Some(0));
             assert_eq!(absorbed.iter().filter(|&&value| value).count(), atoms - 2);
@@ -222,11 +227,11 @@ fn native_wide_groups_preserve_shared_parent_boundaries() {
         assert_eq!(theory.nodes().len(), 6);
         assert_eq!(actual.len(), 2);
         assert_eq!(
-            (actual[0].root, actual[0].operands.as_slice()),
+            (actual[0].root, actual[0].ordinary_leaves()),
             (3, &[0, 1][..])
         );
         assert_eq!(
-            (actual[1].root, actual[1].operands.as_slice()),
+            (actual[1].root, actual[1].ordinary_leaves()),
             (5, &[3, 2][..])
         );
         compare_definition(&theory);

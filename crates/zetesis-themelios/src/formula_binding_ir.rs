@@ -5,7 +5,7 @@ use themelios_program::program::{Arguments, Literal, LiteralInner, Relation};
 use themelios_program::term::{Term, Variable};
 
 use crate::diagnostic::unsupported;
-use crate::formula_ir::{Compiler, Expression, LiteralIr, Operation, Variables};
+use crate::formula_ir::{ComparisonParts, Compiler, LiteralIr, Operation, Variables};
 use crate::{FormulaFailure, ProfileFeature};
 
 impl Compiler<'_> {
@@ -35,7 +35,12 @@ impl Compiler<'_> {
                 binder: false,
             });
         }
-        self.comparison(left, relation, right, variables)
+        match self.comparison(left, relation, right, variables)? {
+            ComparisonParts::Scalar(left, relation, right) => self.compare(left, relation, right),
+            ComparisonParts::Tuple(left, relation, right) => {
+                Ok(LiteralIr::TupleCompare(left, relation, right))
+            }
+        }
     }
 
     pub(super) fn generated_head(
@@ -71,13 +76,7 @@ impl Compiler<'_> {
             (3 * std::mem::size_of::<LiteralIr>() + std::mem::size_of::<Operation>()) as u128,
             self.location,
         )?;
-        bindings.push(LiteralIr::Compare(
-            Expression {
-                nodes: vec![Operation::Variable(target)],
-            },
-            Relation::Eq,
-            value,
-        ));
+        bindings.push(self.generated_equality(target, value)?);
         Ok(CoreTerm::Variable(target))
     }
 
@@ -159,7 +158,7 @@ impl Compiler<'_> {
             if literal.negation == DefaultNegation::None {
                 let left = self.ranged_expression(comparison.first(), variables, body)?;
                 let right = self.ranged_expression(right, variables, body)?;
-                body.push(LiteralIr::Compare(left, relation, right));
+                body.push(self.compare(left, relation, right)?);
                 return Ok(true);
             }
         }
@@ -204,13 +203,8 @@ impl Compiler<'_> {
                         binder: false,
                     }
                 } else {
-                    LiteralIr::Compare(
-                        Expression {
-                            nodes: vec![Operation::Variable(target)],
-                        },
-                        Relation::Eq,
-                        self.ranged_expression(term, variables, body)?,
-                    )
+                    let value = self.ranged_expression(term, variables, body)?;
+                    self.generated_equality(target, value)?
                 };
                 body.push(binding);
                 terms.push(CoreTerm::Variable(target));

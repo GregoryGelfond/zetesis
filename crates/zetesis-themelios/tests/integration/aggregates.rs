@@ -4,12 +4,12 @@ use std::collections::BTreeSet;
 
 use crate::support::atom_models::Models;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_sat::{Limits, StableModels};
 use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, admit_extended, admit_formula,
+    FormulaResource, admit_extended,
 };
 
 fn models(input: &AdmittedFormula) -> Models {
@@ -98,12 +98,7 @@ fn aggregate_local_variables_do_not_bind_globals_and_flat_tuple_filters_are_exac
     for source in ["p(X) :- #count{X:q(X)}>0.", "p :- #count{X:not q(X)}>0."] {
         assert!(
             matches!(
-                admit_formula(
-                    source.to_owned(),
-                    AdmissionOptions::default(),
-                    ExpansionLimits::default(),
-                    FormulaLimits::default()
-                ),
+                admit(source, &FormulaLimits::default()),
                 Err(FormulaFailure::UnsafeVariable { .. })
             ),
             "{source}"
@@ -135,40 +130,24 @@ fn aggregate_limits_and_original_rule_evidence_are_independent() {
             .iter()
             .all(|origins| !origins.is_empty())
     );
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_elements = 1;
+    let limits = resource_limits::formula(FormulaResource::AggregateElements, 1);
     assert!(matches!(
-        admit_formula(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits
-        ),
+        admit(source, &limits),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::AggregateElements,
             ..
         })
     ));
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_work = 0;
+    let limits =
+        resource_limits::formula_aggregate(zetesis_ferraris::AggregateErrorKind::WorkLimit, 0);
     assert!(matches!(
-        admit_formula(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits
-        ),
+        admit(source, &limits),
         Err(FormulaFailure::Aggregate { .. })
     ));
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_subsets = 1;
+    let limits =
+        resource_limits::formula_aggregate(zetesis_ferraris::AggregateErrorKind::SubsetLimit, 1);
     assert!(matches!(
-        admit_formula(
-            "{a;b}. q :- #sum{-1:a;1:b}=0.".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits
-        ),
+        admit("{a;b}. q :- #sum{-1:a;1:b}=0.", &limits),
         Err(FormulaFailure::Aggregate { .. })
     ));
 }

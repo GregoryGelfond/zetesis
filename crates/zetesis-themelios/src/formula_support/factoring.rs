@@ -40,7 +40,7 @@ impl<'join, 'a, 'source> Continuations<'join, 'a, 'source> {
                     location,
                 },
         } = context;
-        if !std::ptr::eq(join.literals, rule.body.as_slice()) {
+        if !std::ptr::eq(join.literals.get(), rule.body.as_slice()) {
             return Err(FormulaFailure::SupportRelation {
                 error: zetesis_core::relation::Failure::Owner,
                 location,
@@ -65,10 +65,10 @@ impl<'join, 'a, 'source> Continuations<'join, 'a, 'source> {
                 return Ok(None);
             }
         }
-        for (index, literal) in join.literals.iter().enumerate() {
+        for (index, literal) in join.literals.get().iter().enumerate() {
             counters.work(limits, location)?;
             if join.plan.decisions.decides(index) {
-                let (left, _, right) = comparison(literal).expect("prefix comparison");
+                let ([left, right], _) = comparison(literal).expect("prefix comparison").operands();
                 for node in left.nodes.iter().chain(&right.nodes) {
                     counters.work(limits, location)?;
                     if !matches!(node, Operation::Constant(_) | Operation::Variable(_)) {

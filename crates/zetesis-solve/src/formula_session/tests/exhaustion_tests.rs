@@ -10,8 +10,8 @@ use crate::{
 };
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
+use zetesis_reference_support::formula;
 use zetesis_sat::StableModels;
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 struct TruncatedExecution {
     remaining: usize,
@@ -47,13 +47,7 @@ fn unexhausted_execution_preserves_only_established_evidence() {
             1,
         ),
     ] {
-        let owner = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let owner = formula(source);
         let measurements = SolveMeasurements::new(false);
         let phases = measurements.recorder();
         let config = SolveConfig {

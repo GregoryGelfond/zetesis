@@ -21,13 +21,13 @@ impl Values {
             bytes: 0,
         }
     }
-    pub fn len(&self) -> usize {
+    pub(super) fn len(&self) -> usize {
         self.metrics.len()
     }
-    pub fn metric(&self, index: usize) -> Metric {
+    pub(super) fn metric(&self, index: usize) -> Metric {
         self.metrics[index]
     }
-    pub fn key(
+    pub(super) fn key(
         &self,
         index: usize,
         context: &mut Interpreter<'_, '_, '_>,

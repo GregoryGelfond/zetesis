@@ -258,12 +258,32 @@ fn already_loaded_original_bundle_receives_driver_phases_on_both_oracles() {
         assert_eq!(report.completion, Completion::Exhausted);
         assert_eq!(report.models, 1);
         assert_eq!(report.checked, direct.checked);
-        entered(
-            &report.phase_timings.unwrap(),
-            SolvePhase::AdmissionMaterialization,
+        let timing = report.phase_timings.unwrap();
+        entered(&timing, SolvePhase::AdmissionMaterialization);
+        // Bundles arrive parsed. Closure admission is one call; formula
+        // preparation and consuming its owner for grounding are two calls.
+        // The string door also counts its parse separately for closure.
+        let bundle_calls = if oracle == "closure" { 1 } else { 2 };
+        assert_eq!(
+            timing
+                .get(SolvePhase::AdmissionMaterialization)
+                .unwrap()
+                .calls,
+            bundle_calls
+        );
+        assert_eq!(
+            direct
+                .phase_timings
+                .unwrap()
+                .get(SolvePhase::AdmissionMaterialization)
+                .unwrap()
+                .calls,
+            2
         );
         let text = String::from_utf8(diagnostics).unwrap();
-        assert!(text.contains("phase admission_materialization: calls=1;"));
+        assert!(text.contains(&format!(
+            "phase admission_materialization: calls={bundle_calls};"
+        )));
         assert!(text.contains("source_loading=excluded"));
     }
 }

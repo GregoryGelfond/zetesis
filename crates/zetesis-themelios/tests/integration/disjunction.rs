@@ -1,8 +1,9 @@
 //! Finite signed source disjunctions retain their original reduct.
 //! Hand-written formula trees are independent of source normalization and SAT.
 
-use crate::support::head_models::{Names, expected, names, truth};
+use crate::support::head_models::{Names, expected, manual_holds, truth};
 use crate::support::objective_dependency_records as objective_dependencies;
+use zetesis_reference_support::{admit, canonical, resource_limits};
 
 use std::time::Duration;
 
@@ -12,11 +13,10 @@ use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits as OracleLimits, models, models_reduct};
-use zetesis_reference_support::{admit, canonical};
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_extended, admit_formula,
+    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_extended,
 };
 
 fn cases() -> Vec<Json> {
@@ -36,25 +36,18 @@ fn subset(atoms: &[String], mask: usize) -> Names {
 
 // Every M-false subtree becomes falsum, including non-atomic implications.
 // This evaluates JSON trees directly, without a production DAG or compiler.
-fn holds(theory: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
-    theory["roots"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|root| truth(root, tested, frozen))
-}
 fn manual_models(theory: &Json) -> Models {
-    let atoms: Vec<_> = names(&theory["atoms"]).into_iter().collect();
+    let atoms: Vec<_> = oracle::atoms(&theory["atoms"]).into_iter().collect();
     assert!(atoms.len() <= 8, "tiny independent exhaustive carrier");
     (0..1 << atoms.len())
         .filter_map(|mask| {
             let outer = subset(&atoms, mask);
-            if !holds(theory, &outer, None) {
+            if !manual_holds(theory, &outer, None) {
                 return None;
             }
             let true_atoms: Vec<_> = outer.iter().cloned().collect();
             let proper_model = (0..(1 << true_atoms.len()) - 1)
-                .any(|bits| holds(theory, &subset(&true_atoms, bits), Some(&outer)));
+                .any(|bits| manual_holds(theory, &subset(&true_atoms, bits), Some(&outer)));
             (!proper_model).then_some(outer)
         })
         .collect()
@@ -158,7 +151,7 @@ fn every_frozen_subset_matches_manual_formulas_and_necessary_support() {
                     &cancellation
                 )
                 .unwrap(),
-                supported && holds(manual, &outer, None),
+                supported && manual_holds(manual, &outer, None),
                 "{label}: original M={outer:?}"
             );
             for tested in &all {
@@ -175,7 +168,7 @@ fn every_frozen_subset_matches_manual_formulas_and_necessary_support() {
                         &cancellation
                     )
                     .unwrap(),
-                    supported && holds(manual, &inner, Some(&outer)),
+                    supported && manual_holds(manual, &inner, Some(&outer)),
                     "{label}: frozen M={outer:?}, J={inner:?}"
                 );
             }
@@ -311,14 +304,9 @@ fn conditional_head_preserves_the_recorded_complete_family() {
 #[test]
 fn disjunction_element_ceiling_is_inclusive_and_independent_of_body_limits() {
     let admit = |text: &str, count| {
-        admit_formula(
-            text.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
-                max_disjunction_elements: count,
-                ..FormulaLimits::default()
-            },
+        zetesis_reference_support::admit(
+            text,
+            &resource_limits::formula(FormulaResource::DisjunctionElements, count),
         )
     };
     assert!(admit("a | b.", 2).is_ok());
@@ -377,11 +365,7 @@ fn normalized_reference(raw: &Json) -> (String, Models, Option<Vec<i64>>) {
     ));
     let costs: Vec<Option<Vec<i64>>> = witnesses
         .iter()
-        .map(|witness| {
-            witness["Costs"]
-                .as_array()
-                .map(|costs| costs.iter().map(|x| x.as_i64().unwrap()).collect())
-        })
+        .map(|witness| oracle::costs(&witness["Costs"]))
         .collect();
     let best = costs.iter().min().cloned().flatten();
     assert!(
@@ -393,7 +377,7 @@ fn normalized_reference(raw: &Json) -> (String, Models, Option<Vec<i64>>) {
         .iter()
         .zip(costs)
         .filter(|(_, cost)| cost == &best)
-        .map(|(witness, _)| names(&witness["Value"]))
+        .map(|(witness, _)| oracle::atoms(&witness["Value"]))
         .collect();
     (result, models, best)
 }

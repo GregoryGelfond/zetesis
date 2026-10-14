@@ -10,10 +10,8 @@ use std::{
     ops::ControlFlow,
 };
 use zetesis_cpu::{Cancellation, Stop};
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula,
-    observation::{ErrorKind, ViewError},
-};
+use zetesis_reference_support::formula;
+use zetesis_themelios::observation::{ErrorKind, ViewError};
 
 fn options(json: bool) -> Options {
     let mut options = Options::try_parse_from([
@@ -248,13 +246,7 @@ fn cancellation_between_optimal_ties_preserves_exhaustion_and_framing() {
 fn publication_stop_before_a_signature_show_record_is_an_observation_stop() {
     // Preparing a signature selection must not move a stop that the first
     // record's observation evaluation would report.
-    let owner = admit_formula(
-        "{a;b}. #show a/0. #show x:a.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let owner = formula("{a;b}. #show a/0. #show x:a.");
     let options = options(true);
     let cancellation = Cancellation::default();
     let input = crate::PreparedInput::formula(&owner);
@@ -289,13 +281,7 @@ fn publication_stop_before_a_signature_show_record_is_an_observation_stop() {
 #[test]
 fn publication_stop_before_first_record_keeps_unclassified_search() {
     for json in [false, true] {
-        let owner = admit_formula(
-            "{a;b}. #show x:a.".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let owner = formula("{a;b}. #show x:a.");
         let options = options(json);
         let cancellation = Cancellation::default();
         let input = crate::PreparedInput::formula(&owner);

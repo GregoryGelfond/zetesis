@@ -1,8 +1,8 @@
 //! Complete public formula sessions consume whole-theory positive certificates.
 
+use crate::support::models::{CostFamily as Family, cost_family as family};
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
 
-use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{NodeView, PositiveError, PositiveResource, TightError, TightResource};
 use zetesis_reference_support::formula;
@@ -14,8 +14,6 @@ use zetesis_solve::{
 };
 use zetesis_test_support::programs::model;
 use zetesis_themelios::{AdmittedFormula, AnalysisBasis, analysis::classify::HornKind};
-
-type Family = BTreeSet<(Model, Option<Vec<(i32, i64)>>)>;
 
 #[derive(Debug, PartialEq, Eq)]
 enum Membership {
@@ -82,19 +80,6 @@ fn collect(owner: &AdmittedFormula, config: SolveConfig) -> (WorldView, Observat
     assert_eq!(view.outcome().selection(), Some(AnswerSelection::All));
     assert_eq!(view.outcome().completion(), Some(Completion::Exhausted));
     (view, observations)
-}
-
-fn family(view: &WorldView) -> Family {
-    view.answer_sets()
-        .iter()
-        .map(|answer| {
-            assert!(answer.subject().same_instance(view.subject()));
-            (
-                answer.interpretation().clone(),
-                answer.score().map(|score| score.costs().to_vec()),
-            )
-        })
-        .collect()
 }
 
 fn positive(view: &WorldView, observations: &Observations, workers: usize) {

@@ -265,22 +265,20 @@ mod tests {
     fn undeclared_inputs_do_not_affect_evaluation() {
         use crate::formula_ir::{Expression, Operation};
         let mut fixture = Fixture::default();
-        let expression = Expression {
-            nodes: vec![
-                Operation::Variable(1),
-                Operation::Constructor(Box::new(Constructor {
-                    shape: fixture.constructor(
-                        ValueNodeRef::Function {
-                            name: "f",
-                            sign: Sign::Positive,
-                            arity: 1,
-                        },
-                        location(),
-                    ),
-                    arguments: vec![0],
-                })),
-            ],
-        };
+        let expression = Expression::new(vec![
+            Operation::Variable(1),
+            Operation::Constructor(Box::new(Constructor {
+                shape: fixture.constructor(
+                    ValueNodeRef::Function {
+                        name: "f",
+                        sign: Sign::Positive,
+                        arity: 1,
+                    },
+                    location(),
+                ),
+                arguments: vec![0],
+            })),
+        ]);
         assert_eq!(expression.inputs().collect::<Vec<_>>(), vec![1]);
         fixture.with(location(), |_, computation, counters| {
             for ignored in -4..=4 {

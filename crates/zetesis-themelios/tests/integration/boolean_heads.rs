@@ -1,6 +1,8 @@
 //! Boolean heads retain their original truth without supplying atom support.
 
 use crate::support::objective_dependency_records as objective_dependencies;
+use zetesis_reference_support::{BundleFixture, admit, canonical, formula, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 
 mod cases;
 mod comparisons;
@@ -12,12 +14,11 @@ use std::collections::BTreeSet;
 
 use cases::CASES;
 use proptest::prelude::*;
-use reference::{Models, exhaustive, external, holds, native, values};
-use zetesis_reference_support::{admit, canonical, formula};
+use reference::{Models, external, holds, native, values};
+use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
-    AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, SourceBundle,
-    admit_bundle_formula, admit_formula,
+    AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula, admit_formula,
 };
 
 #[test]
@@ -29,20 +30,12 @@ fn complete_models_match_original_contracts() {
 
 #[test]
 fn stability_matches_independent_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]
 fn original_source_text_is_retained() {
-    for &(source, _) in CASES {
-        assert_eq!(
-            formula(source).source().expect("source input").text(),
-            source
-        );
-    }
+    reference::sources_remain_owned(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]
@@ -64,32 +57,10 @@ fn boolean_constants_introduce_no_atoms() {
 fn original_sources_match_clingo_full_models() {
     let mut models = 0;
     for &(source, records) in CASES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut actual = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    assert!(witness["Costs"].is_null());
-                    count += 1;
-                    assert!(
-                        actual.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|value| value.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
+        let actual = oracle::objective_free_models(&external(source, true));
         assert_eq!(actual, expected(records), "{source}");
         assert_eq!(native(&formula(source)), actual, "{source}");
-        models += count;
+        models += actual.len();
     }
     println!("complete_sources={} full_models={models}", CASES.len());
 }
@@ -274,14 +245,11 @@ fn boolean_disjuncts_preserve_scored_answers() {
 #[test]
 fn head_element_limits_count_boolean_operands() {
     for (source, count) in [("#true.", 1), ("#true|a.", 2), ("not #false|a|b.", 3)] {
-        let mut limits = FormulaLimits {
-            max_disjunction_elements: count,
-            ..FormulaLimits::default()
-        };
-        assert!(admit(source, &limits).is_ok());
-        limits.max_disjunction_elements = count - 1;
+        let limits =
+            |maximum| resource_limits::formula(FormulaResource::DisjunctionElements, maximum);
+        assert!(admit(source, &limits(count)).is_ok());
         assert!(
-            matches!(admit(source, &limits), Err(FormulaFailure::Limit { resource: FormulaResource::DisjunctionElements, observed, .. }) if observed == count as u128)
+            matches!(admit(source, &limits(count - 1)), Err(FormulaFailure::Limit { resource: FormulaResource::DisjunctionElements, observed, .. }) if observed == u128::from(count))
         );
     }
 }
@@ -303,31 +271,11 @@ fn tautologies_preserve_arithmetic_refusals() {
 
 const BUDGET_SOURCE: &str = "d(1..2).#true|p(X+1):-d(X).";
 
-fn first_success(mut attempt: impl FnMut(u64) -> bool) -> u64 {
-    let mut high = 1;
-    while !attempt(high) {
-        high *= 2;
-        assert!(high <= 1_048_576, "qualification threshold exceeded");
-    }
-    let mut low = 0;
-    while low + 1 < high {
-        let middle = low + (high - low) / 2;
-        if attempt(middle) {
-            high = middle;
-        } else {
-            low = middle;
-        }
-    }
-    high
-}
-
-fn exact_formula_budget(resource: FormulaResource, configure: impl Fn(&mut FormulaLimits, u64)) {
-    let attempt = |limit| {
-        let mut limits = FormulaLimits::default();
-        configure(&mut limits, limit);
-        admit(BUDGET_SOURCE, &limits)
-    };
-    let threshold = first_success(|limit| attempt(limit).is_ok());
+fn exact_formula_budget(resource: FormulaResource) {
+    let attempt = |limit| admit(BUDGET_SOURCE, &resource_limits::formula(resource, limit));
+    let threshold = first_success(resource_limits::formula_default(resource), |limit| {
+        attempt(limit).is_ok()
+    });
     assert_eq!(
         native(&attempt(threshold).unwrap()),
         native(&formula(BUDGET_SOURCE))
@@ -344,30 +292,22 @@ fn exact_formula_budget(resource: FormulaResource, configure: impl Fn(&mut Formu
 
 #[test]
 fn tautologies_preserve_work_accounting() {
-    exact_formula_budget(FormulaResource::Work, |limits, value| {
-        limits.max_work = value;
-    });
+    exact_formula_budget(FormulaResource::Work);
 }
 
 #[test]
 fn tautologies_preserve_substitution_accounting() {
-    exact_formula_budget(FormulaResource::Substitutions, |limits, value| {
-        limits.max_substitutions = value;
-    });
+    exact_formula_budget(FormulaResource::Substitutions);
 }
 
 #[test]
 fn tautologies_preserve_node_accounting() {
-    exact_formula_budget(FormulaResource::Nodes, |limits, value| {
-        limits.theory.max_nodes = usize::try_from(value).unwrap();
-    });
+    exact_formula_budget(FormulaResource::Nodes);
 }
 
 #[test]
 fn tautologies_preserve_atom_accounting() {
-    exact_formula_budget(FormulaResource::Atoms, |limits, value| {
-        limits.theory.max_atoms = usize::try_from(value).unwrap();
-    });
+    exact_formula_budget(FormulaResource::Atoms);
 }
 
 #[test]
@@ -376,14 +316,14 @@ fn tautologies_preserve_term_work_accounting() {
         admit_formula(
             BUDGET_SOURCE.into(),
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_term_work: usize::try_from(limit).unwrap(),
-                ..ExpansionLimits::default()
-            },
+            resource_limits::expansion(ExpansionResource::TermWork, limit),
             FormulaLimits::default(),
         )
     };
-    let threshold = first_success(|limit| attempt(limit).is_ok());
+    let threshold = first_success(
+        resource_limits::expansion_default(ExpansionResource::TermWork),
+        |limit| attempt(limit).is_ok(),
+    );
     assert_eq!(
         native(&attempt(threshold).unwrap()),
         native(&formula(BUDGET_SOURCE))
@@ -402,16 +342,11 @@ fn tautologies_preserve_term_work_accounting() {
 
 #[test]
 fn duplicate_boolean_heads_retain_original_file_identity() {
-    let directory = tempfile::tempdir().unwrap();
+    let fixture = BundleFixture::new();
     let rule = "#true|p(1..2).";
-    std::fs::write(
-        directory.path().join("entry.lp"),
-        format!("#include \"other.lp\".\n{rule}"),
-    )
-    .unwrap();
-    std::fs::write(directory.path().join("other.lp"), rule).unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    fixture.write("entry.lp", &format!("#include \"other.lp\".\n{rule}"));
+    fixture.write("other.lp", rule);
+    let bundle = fixture.bundle();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

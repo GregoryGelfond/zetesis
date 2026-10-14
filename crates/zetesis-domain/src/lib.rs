@@ -29,11 +29,14 @@ mod analysis;
 mod compile;
 mod keys;
 mod limits;
+mod range;
 mod value;
 
+pub mod numeric;
 pub mod terminal;
 
 pub use analysis::analyze;
 pub use keys::{FactIndex, KeyWork, KeyedRelation, atom_signature, keys};
 pub use limits::{Limits, Resource, Statistics, Stop};
+pub use range::Range;
 pub use value::{Analysis, Argument, Context, Domain, Status, UnknownReason, Widening};

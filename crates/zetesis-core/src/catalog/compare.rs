@@ -45,7 +45,7 @@ impl<'a> Preorder<'a> {
         }
         let (next, parent) = if let Some(current) = self.current {
             before()?;
-            if arity(current.descriptor()) != 0 {
+            if current.descriptor().arity() != 0 {
                 before()?;
                 (
                     current.child(0).expect("admitted first child"),
@@ -57,7 +57,7 @@ impl<'a> Preorder<'a> {
             } else if let Some(parent) = self.parent {
                 before()?;
                 let sibling = parent.child + 1;
-                if sibling < arity(parent.term.descriptor()) {
+                if sibling < parent.term.descriptor().arity() {
                     before()?;
                     (
                         parent.term.child(sibling).expect("admitted sibling"),
@@ -100,7 +100,7 @@ fn select<'a, E>(
         position -= 1;
         before()?;
         let mut low = 0;
-        let mut high = arity(current.descriptor());
+        let mut high = current.descriptor().arity();
         // Child ends partition the admitted parent's expanded descendants.
         while low < high {
             let middle = low + (high - low) / 2;
@@ -131,13 +131,6 @@ pub(super) fn subterm_with<'a, E>(
     before: &mut impl FnMut() -> Result<(), E>,
 ) -> Result<TermRef<'a>, E> {
     select(root, position, before).map(|(term, _)| term)
-}
-
-pub(super) const fn arity(node: ValueNodeRef<'_>) -> usize {
-    match node {
-        ValueNodeRef::Function { arity, .. } | ValueNodeRef::Tuple { arity } => arity,
-        _ => 0,
-    }
 }
 
 pub(super) const fn structured(node: ValueNodeRef<'_>) -> bool {
@@ -275,7 +268,7 @@ fn nodes_with<E>(
         }
     }
     let comparison = order.compare(left_root, right_root, canonical_text, before)?;
-    if !comparison.is_eq() || (arity(left_root) == 0 && arity(right_root) == 0) {
+    if !comparison.is_eq() || (left_root.arity() == 0 && right_root.arity() == 0) {
         return Ok(comparison);
     }
     loop {

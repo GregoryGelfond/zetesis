@@ -36,6 +36,11 @@ true-atom set. Inspect `Session::outcome` separately to determine what completed
   An interrupted incumbent is not a proved optimum; inspect the outcome.
 - `Session::builder(...).collect(...)` returns a `WorldView` only after complete
   capture within `WorldViewLimits`. Failure retains a checked prefix instead.
+- `Session::builder(...).counting().start()` requests exhaustive full-answer
+  counting, or all optimal ties under optimal selection. Drain the session, then
+  read `complete_answer_count()` from its outcome; incomplete coverage returns
+  `None`. Counting ignores projection and retains at most one optimal model.
+  See [complete counts](../../docs/book/rust/outcomes.md).
 
 `models: 0` requests all answers. A positive answer limit or early stop does not
 establish exhaustive search. A complete empty `WorldView` establishes

@@ -62,7 +62,7 @@ pub fn native_answers(mut base: native_json::Limits) -> native_json::Limits {
 
 /// Reviewed metadata for the default scalability fixtures.
 pub const MANIFEST_SHA256: &str =
-    "1f978515ed0278391b6e952e5c3fed271886433d82a06498c01c3a745f7f1bcb";
+    "75b83b6666efe9563cdaaf2a1a15afef801987409954b960b486d3a20d898abe";
 const SUDOKU_SHA256: &str = "9ee5cb65a0ad7e563af9378a46e04b3a19762850ce7cb476ad7d9adbe27466ef";
 const EINSTEIN_SHA256: &str = "d142a0b2f515954e6d4bbceeebac7f25f87f040ebc72897049c666dd9db1652b";
 
@@ -86,23 +86,23 @@ struct Fixture {
 }
 
 fn fixtures(root: &Path, limits: WorkloadLimits) -> Result<Vec<Fixture>, Error> {
-    let root = examples::files::canonical(root).map_err(Error::Corpus)?;
+    let root = examples::Files::canonical(root).map_err(Error::Corpus)?;
     let path =
-        examples::files::confined(&root, "scalability/manifest.json").map_err(Error::Corpus)?;
-    let bytes = examples::files::read(
+        examples::Files::confined(&root, "scalability/manifest.json").map_err(Error::Corpus)?;
+    let bytes = examples::Files::read(
         &path,
         limits.metadata_bytes,
         examples::Resource::ManifestBytes,
     )
     .map_err(Error::Corpus)?;
-    examples::files::digest("scalability/manifest.json", &bytes, MANIFEST_SHA256)
+    examples::Files::digest("scalability/manifest.json", &bytes, MANIFEST_SHA256)
         .map_err(Error::Corpus)?;
     let manifest: Manifest = serde_json::from_slice(&bytes)
         .map_err(|error| Error::Corpus(examples::Error::Json(error)))?;
     if manifest.schema_version != 1
         || manifest.description.is_empty()
         || manifest.reference_toolchain != "clingo version 5.8.2"
-        || manifest.cases.len() != 4
+        || manifest.cases.len() != 6
     {
         return Err(Error::Configuration("unsupported scalability manifest"));
     }
@@ -213,8 +213,9 @@ pub fn einstein(root: &Path, limits: WorkloadLimits) -> Result<Workload, Error> 
 /// Queens at n=8/9/10, pigeonhole at h=5/6/7 and Mastermind at colors=5/6/8,
 /// nested Mastermind at colors=8, followed by unchanged queens variant 02,
 /// SEND+MORE=MONEY, task allocation and the authored Sudoku grid.
-/// Einstein is an optional fifteenth case. Amended sizes are qualified against
-/// a complete reference enumeration.
+/// Prime sieve at n=30/100/300 and subset sum at n=12/20/30 follow these fourteen
+/// workloads. Einstein is an optional twenty-first case. Amended sizes are
+/// qualified against a complete reference enumeration.
 ///
 /// # Errors
 /// Refuses fixture/corpus identity changes and checked-amendment limits.
@@ -225,9 +226,10 @@ pub fn workloads(
     limits: WorkloadLimits,
 ) -> Result<Vec<Workload>, Error> {
     let fixtures = fixtures(root, limits)?;
-    let mut result = Vec::with_capacity(15);
+    let mut result = Vec::with_capacity(21);
     let sizes: [&[i32]; 4] = [&[8, 9, 10], &[5, 6, 7], &[5, 6, 8], &[8]];
-    for (fixture, sizes) in fixtures.iter().zip(sizes) {
+    let (established, arithmetic) = fixtures.split_at(sizes.len());
+    for (fixture, sizes) in established.iter().zip(sizes) {
         for &size in sizes {
             result.push(workload(root, fixture, size, limits)?);
         }
@@ -240,6 +242,12 @@ pub fn workloads(
         result.push(Workload::original(corpus, case.path(), limits)?);
     }
     result.push(sudoku(root, limits)?);
+    let arithmetic_sizes: [&[i32]; 2] = [&[30, 100, 300], &[12, 20, 30]];
+    for (fixture, sizes) in arithmetic.iter().zip(arithmetic_sizes) {
+        for &size in sizes {
+            result.push(workload(root, fixture, size, limits)?);
+        }
+    }
     if include_einstein {
         result.push(einstein(root, limits)?);
     }

@@ -327,19 +327,22 @@ impl<'a> Implications<'a> {
         }
     }
 
-    fn reading(&self, goal: usize) -> Reading {
+    fn reading(&self, goal: usize, work: &mut Work<'_>) -> Result<Reading, ObjectiveBoundError> {
         if goal >= self.atoms {
-            return if self.facts[goal - self.atoms] {
+            return Ok(if self.facts[goal - self.atoms] {
                 Reading::Constant(true)
             } else {
                 Reading::Any
-            };
+            });
         }
-        match self.node(goal) {
+        Ok(match self.node(goal) {
             NodeView::Atom(_) | NodeView::Or(_) => Reading::Any,
             NodeView::And(_) => Reading::All,
             NodeView::False => Reading::Constant(false),
             NodeView::Threshold(threshold) => Reading::Weighted(threshold.bound),
+            NodeView::ExtremumCut(cut) => {
+                cut.endpoint_truth().map_or(Reading::Any, Reading::Constant)
+            }
             NodeView::Implies(left, right) => {
                 let base = if goal < self.objective {
                     0
@@ -347,30 +350,85 @@ impl<'a> Implications<'a> {
                     self.objective
                 };
                 Reading::Constant(
-                    self.node(base + left) == NodeView::False
-                        && self.node(base + right) == NodeView::False,
+                    self.structural_falsum(base + left, work)?
+                        && self.structural_falsum(base + right, work)?,
                 )
             }
+        })
+    }
+
+    /// Preserve the former literal-falsum implication proof for an empty native
+    /// witness set. Failure to prove a child is never used as negative evidence.
+    fn structural_falsum(
+        &self,
+        goal: usize,
+        work: &mut Work<'_>,
+    ) -> Result<bool, ObjectiveBoundError> {
+        match self.node(goal) {
+            NodeView::False => Ok(true),
+            NodeView::ExtremumCut(cut) => {
+                if let Some(value) = cut.endpoint_truth() {
+                    return Ok(!value);
+                }
+                for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+                    work.tick()?;
+                    let base = if goal < self.objective {
+                        0
+                    } else {
+                        self.objective
+                    };
+                    if cut.qualifies(rank) && self.node(base + child) != NodeView::False {
+                        return Ok(false);
+                    }
+                }
+                Ok(true)
+            }
+            _ => Ok(false),
         }
     }
 
-    fn child(&self, goal: usize, position: usize) -> Option<usize> {
+    /// Advance a physical occurrence cursor. Skipped ordinal ranks are charged
+    /// once, avoiding repeated prefix scans when witnesses are sparse.
+    fn child(
+        &self,
+        goal: usize,
+        position: &mut usize,
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, ObjectiveBoundError> {
         if goal >= self.atoms {
-            return self.bodies[goal - self.atoms].get(position).copied();
+            let child = self.bodies[goal - self.atoms].get(*position).copied();
+            *position += usize::from(child.is_some());
+            return Ok(child);
         }
         let base = if goal < self.objective {
             0
         } else {
             self.objective
         };
-        match self.node(goal) {
-            NodeView::Atom(atom) => (position == 0).then_some(self.atoms + atom),
-            NodeView::And(row) | NodeView::Or(row) => row.get(position).map(|node| base + node),
+        let child = match self.node(goal) {
+            NodeView::Atom(atom) => (*position == 0).then_some(self.atoms + atom),
+            NodeView::And(row) | NodeView::Or(row) => row.get(*position).map(|node| base + node),
             NodeView::Threshold(threshold) => {
-                threshold.conditions.get(position).map(|node| base + node)
+                threshold.conditions.get(*position).map(|node| base + node)
+            }
+            NodeView::ExtremumCut(cut) => {
+                if cut.endpoint_truth().is_some() {
+                    return Ok(None);
+                }
+                while let Some(&rank) = cut.row.ranks.get(*position) {
+                    work.tick()?;
+                    let child = cut.row.conditions[*position];
+                    *position += 1;
+                    if cut.qualifies(rank) {
+                        return Ok(Some(base + child));
+                    }
+                }
+                return Ok(None);
             }
             NodeView::False | NodeView::Implies(..) => None,
-        }
+        };
+        *position += usize::from(child.is_some());
+        Ok(child)
     }
 
     fn weight(&self, goal: usize, position: usize) -> u64 {
@@ -422,17 +480,16 @@ impl<'a> Implications<'a> {
                         memory.grow(targets, 1, work)?;
                         targets.push(Key { priority, index });
                     }
-                    if matches!(self.reading(goal), Reading::Constant(_)) {
+                    if matches!(self.reading(goal, work)?, Reading::Constant(_)) {
                         continue;
                     }
                     let mut position = 0;
-                    while let Some(child) = self.child(goal, position) {
+                    while let Some(child) = self.child(goal, &mut position, work)? {
                         work.tick()?;
                         if proof.states[child] == 0 {
                             proof.mark(child, 1);
                             pending.push(child);
                         }
-                        position += 1;
                     }
                 }
             }
@@ -527,6 +584,14 @@ impl Proof {
                         }
                     }
                 }
+                NodeView::ExtremumCut(cut) => {
+                    if let Some(child) = unique_witness(cut, work)?
+                        && self.states[child] != 3
+                    {
+                        self.mark(child, 3);
+                        self.frames.push(Frame::new(child));
+                    }
+                }
                 NodeView::Threshold(threshold) => {
                     let mut total = 0_i128;
                     for &weight in threshold.weights {
@@ -574,7 +639,7 @@ impl Proof {
         }) = self.frames.last()
         {
             work.tick()?;
-            let reading = graph.reading(current);
+            let reading = graph.reading(current, work)?;
             let child_result = result.take();
             if matches!(reading, Reading::Weighted(_)) && child_result == Some(true) {
                 let weight = i128::from(graph.weight(current, position - 1));
@@ -601,8 +666,8 @@ impl Proof {
                 result = Some(value);
                 continue;
             }
-            if let Some(child) = graph.child(current, position) {
-                self.frames.last_mut().expect("active proof frame").position += 1;
+            let frame = self.frames.last_mut().expect("active proof frame");
+            if let Some(child) = graph.child(current, &mut frame.position, work)? {
                 if self.states[child] == 0 {
                     self.mark(child, 1);
                     self.frames.push(Frame::new(child));
@@ -618,6 +683,28 @@ impl Proof {
         }
         Ok(result == Some(true))
     }
+}
+
+/// A true disjunction forces its only distinct child, including a composite
+/// child or repeated occurrences. Endpoint truth has no witness obligation.
+fn unique_witness(
+    cut: zetesis_ferraris::ExtremumCut<'_>,
+    work: &mut Work<'_>,
+) -> Result<Option<usize>, ObjectiveBoundError> {
+    if cut.endpoint_truth().is_some() {
+        return Ok(None);
+    }
+    let mut witness = None;
+    for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+        work.tick()?;
+        if cut.qualifies(rank) {
+            if witness.is_some_and(|previous| previous != child) {
+                return Ok(None);
+            }
+            witness = Some(child);
+        }
+    }
+    Ok(witness)
 }
 
 pub(super) fn strengthen(

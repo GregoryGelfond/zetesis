@@ -8,7 +8,7 @@
 
 use std::{fmt, iter::Copied, slice};
 use zetesis_core::{
-    AtomKey, Model, PatternRef, Program, TemplateRef,
+    AtomKey, Model, PatternRef, Program, RuleRef, TemplateRef,
     catalog::{AtomRef, TermRef},
 };
 
@@ -125,12 +125,12 @@ impl<'a> IntoIterator for InstanceAtoms<'a> {
 }
 
 /// Exact double-ended iteration over checked keys in source occurrence order.
-pub type InstanceAtomIter<'a> = Copied<slice::Iter<'a, AtomKey<'a>>>;
+pub(crate) type InstanceAtomIter<'a> = Copied<slice::Iter<'a, AtomKey<'a>>>;
 
 /// Progress retained for both complete and interrupted scans.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ScanStatistics {
-    /// Charged template, tuple, filter and key-admission work, including any
+    /// Charged source-rule, tuple, filter and key-admission work, including any
     /// private world-membership construction/intersections and the lazy batch's
     /// checked identity preparation and callback interning charges.
     pub work: u64,
@@ -205,7 +205,9 @@ impl<E: std::error::Error + 'static> std::error::Error for ScanFailure<E> {
 /// index and the current join frame. Offered instances borrow that frame; gates
 /// remain symbolic, and the callback cannot retain the instance after returning.
 /// The snapshot is borrowed immutably for the whole scan. Repeated source
-/// instances remain repeated; a consumer may coalesce consequences.
+/// instances remain repeated; a consumer may coalesce consequences. Anchored
+/// table facts are offered once per occurrence in source-rule order, including
+/// duplicates, under the same instance limits as body-free templates.
 ///
 /// A successful return proves exhaustion only of this supplied snapshot, not
 /// closure or candidate-stream exhaustion. Source work is bounded by `limits`;
@@ -299,7 +301,11 @@ fn scan_inner<'a, E>(
     for atom in atoms {
         relations.push_with(atom, 0, limits.max_scan_bytes, &mut peak, work)?;
     }
-    for template in program.templates() {
+    for rule in program.rules() {
+        let template = match rule {
+            RuleRef::Template { template, .. } => template,
+            RuleRef::Fact(fact) => fact.as_template(),
+        };
         work.tick()?;
         visit(
             template,
@@ -472,7 +478,12 @@ mod tests {
         let head = atom("head", vec![value.clone(), value.clone()]);
         let gate = atom("gate", vec![value]);
         (
-            Program::new(vec![template], AdmissionLimits::default()).unwrap(),
+            Program::new(
+                vec![template],
+                zetesis_core::FactTables::default(),
+                AdmissionLimits::default(),
+            )
+            .unwrap(),
             snapshot,
             head,
             gate,
@@ -592,6 +603,7 @@ mod tests {
                 vec![],
                 vec![],
             )],
+            zetesis_core::FactTables::default(),
             AdmissionLimits {
                 max_predicate_arity: 256,
                 ..AdmissionLimits::default()
@@ -626,3 +638,6 @@ mod tests {
         assert_eq!(completed.bindings, 0);
     }
 }
+
+#[cfg(test)]
+mod fact_tables;

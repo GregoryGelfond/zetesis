@@ -3,6 +3,7 @@
 
 use super::{
     Comparisons, Computation, Counters, Coverage, Evaluation, Failures, Join, compare, comparison,
+    integer_comparisons,
 };
 use crate::ProgramSite;
 use crate::formula_binding::Binding;
@@ -33,7 +34,7 @@ impl Join<'_, '_> {
         let binding = frame.binding(&self.values);
         if self.coverage == Coverage::Complete {
             self.projections.prepare(
-                self.literals,
+                self.literals.get(),
                 super::Context::new(&*computation, limits, counters, location),
             )?;
         }
@@ -45,7 +46,7 @@ impl Join<'_, '_> {
             }
             Comparisons::Verified | Comparisons::Deferred => None,
         };
-        for (index, literal) in self.literals.iter().enumerate() {
+        for (index, literal) in self.literals.get().iter().enumerate() {
             if crate::formula_binding_cursor::target(literal)
                 .is_some_and(|target| target >= binding.len())
                 || (self.coverage == Coverage::Selected
@@ -54,14 +55,23 @@ impl Join<'_, '_> {
             {
                 continue;
             }
-            let result = if let Some((left, relation, right)) = comparison(literal) {
-                self.projections.compare(
-                    index,
-                    ([left, right], relation),
+            let result = if let Some(comparison) = comparison(literal) {
+                let decided = integer_comparisons::decide(
+                    comparison,
                     &binding,
-                    &mut self.evaluation,
-                    super::Context::new(computation, limits, counters, location),
-                )
+                    super::Context::new(&*computation, limits, counters, location),
+                )?;
+                if let Some(holds) = decided {
+                    Ok(holds)
+                } else {
+                    self.projections.compare(
+                        index,
+                        comparison.operands(),
+                        &binding,
+                        &mut self.evaluation,
+                        super::Context::new(computation, limits, counters, location),
+                    )
+                }
             } else {
                 check(
                     literal,
@@ -187,7 +197,16 @@ fn pending_check(
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
-    if let Some((left, relation, right)) = comparison(literal) {
+    if let Some(comparison) = comparison(literal) {
+        // An unavailable generated input declines, like any unread slot.
+        if let Some(holds) = integer_comparisons::decide(
+            comparison,
+            binding,
+            super::Context::new(&*computation, limits, counters, location),
+        )? {
+            return Ok(holds);
+        }
+        let ([left, right], relation) = comparison.operands();
         let mut failures = Failures::default();
         let result = evaluation.source_partial(
             left,

@@ -30,6 +30,7 @@ import Zetesis.ThresholdReduct
 import Zetesis.ThresholdDivision
 import Zetesis.ThresholdPrefixes
 import Zetesis.ThresholdConnectives
+import Zetesis.AssociativeWitnesses
 import Zetesis.AggregateAssignment
 import Zetesis.DagSharing
 import Zetesis.DependencySchedule
@@ -57,6 +58,8 @@ import Zetesis.CountHeads
 import Zetesis.TightPlans
 import Zetesis.CertifiedExecution
 import Zetesis.ValueExtrema
+import Zetesis.RankedExtrema
+import Zetesis.OrdinalExtrema
 import Zetesis.FinitePools
 import Zetesis.Outcomes
 import Zetesis.WorldViews
@@ -67,6 +70,7 @@ import Zetesis.ProjectedConditionals
 import Zetesis.SingletonHeads
 import Zetesis.ConstructorPatterns
 import Zetesis.ScalarArithmetic
+import Zetesis.RemainderIntervals
 import Zetesis.ArithmeticFamilies
 import Zetesis.GateProjection
 import Zetesis.PositiveArguments
@@ -118,6 +122,7 @@ import Zetesis.OrderedBounds
 import Zetesis.ObjectivePriorities
 import Zetesis.AggregateInvariants
 import Zetesis.IntegerEnvelopes
+import Zetesis.BoundedMultiples
 import Zetesis.SourceMeasures
 import Zetesis.ColumnRelations
 import Zetesis.CompactColumns
@@ -174,6 +179,10 @@ import Zetesis.TightBodyRecognition
 import Zetesis.SupportTransposition
 import Zetesis.FactRejection
 import Zetesis.StratifiedEvaluation
+import Zetesis.AcyclicEvaluation
 import Zetesis.RequiredChoiceCosts
 
 import Zetesis.ThresholdPropagation
+import Zetesis.ThresholdResidues
+
+import Zetesis.ChargeCadence

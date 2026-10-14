@@ -11,7 +11,7 @@ fn structural_scratch_survives_join_backtracking() {
                   p(f(g(1),g(2))). p(f(g(2),g(2))). \
                   r(K,X) :- k(K), p(f(g(X),g(X))).";
     testing::with_completed_source(source, |program, support, computation, counters| {
-        let rule = program.rules.last().unwrap();
+        let rule = program.rules_without_facts().last().unwrap();
         let location = rule.location;
         let limits = FormulaLimits::default();
         let HeadIr::Normal(Some(head)) = rule.head else {
@@ -92,7 +92,7 @@ fn commit_refusals_clear_structural_scratch() {
     testing::with_completed_source(
         "p(f(g(1),g(1))). r(X) :- p(f(g(X),g(X))).",
         |program, support, computation, counters| {
-            let rule = program.rules.last().unwrap();
+            let rule = program.rules_without_facts().last().unwrap();
             let location = rule.location;
             let mut attempt = |allowance: Option<u64>| {
                 let limits = FormulaLimits::default();

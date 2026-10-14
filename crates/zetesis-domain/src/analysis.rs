@@ -1,231 +1,35 @@
-//! Monotone producer unions over bounded source-derived intersections.
+//! Source compatibility wrapper over the shared neutral producer engine.
+use crate::numeric::{self, Classification, Error, Values};
+use crate::{Analysis, Argument, Context, Domain, Limits, Statistics, Status, UnknownReason};
+use std::{cmp::Ordering, collections::BTreeMap};
+use themelios_program::{program::Program, symbol::Symbol};
 
-use std::collections::{BTreeMap, BTreeSet};
-
-use themelios_program::program::{Program, Statement};
-use themelios_program::provenance::WithProvenance;
-use themelios_program::symbol::Symbol;
-
-use crate::limits::check;
-use crate::{
-    Analysis, Context, Domain, Limits, Resource, Statistics, Status, Stop, UnknownReason, Widening,
-};
-
-pub(super) enum Transfer<'p> {
-    Value(&'p Symbol),
-    Intersection(Vec<usize>),
-    Unknown(Widening),
-}
-pub(super) struct Producer<'p> {
-    pub target: usize,
-    pub transfer: Transfer<'p>,
-    pub source: &'p WithProvenance<Statement>,
-}
-pub(super) enum Failure {
-    Stop(Stop),
-    Unknown(UnknownReason),
-}
-impl From<Stop> for Failure {
-    fn from(value: Stop) -> Self {
-        Self::Stop(value)
-    }
-}
-pub(super) struct Engine<'p> {
-    pub result: Analysis<'p>,
-    pub limits: Limits,
-    pub producers: Vec<Producer<'p>>,
-}
-
-/// Infer conservative argument bounds without altering or reinterpreting the
-/// supplied program. No strings, source loader, or normalization context is used.
-///
-/// A global resource stop or unresolved source context clears every finite result.
-/// Unsupported local producers and finite-width overflow instead widen their
-/// affected argument. All callers must inspect [`Analysis::status`].
-#[must_use]
-pub fn analyze(program: &Program, limits: Limits) -> Analysis<'_> {
-    let mut engine = Engine {
-        result: Analysis {
-            program,
-            signatures: BTreeMap::new(),
-            arguments: Vec::new(),
-            status: Status::FixedPoint,
-            context: None,
-            statistics: Statistics::default(),
-        },
-        limits,
-        producers: Vec::new(),
-    };
-    if let Err(error) = engine.compile().and_then(|()| engine.run()) {
-        engine.result.status = match error {
-            Failure::Stop(stop) => Status::Stopped(stop),
-            Failure::Unknown(reason) => Status::Unknown(reason),
+pub(super) struct Symbols<'p>(pub std::marker::PhantomData<&'p Symbol>);
+impl<'p> Values for Symbols<'p> {
+    type Key = &'p Symbol;
+    type Error = UnknownReason;
+    fn classify(
+        &self,
+        key: &&'p Symbol,
+        limits: &Limits,
+        budget: &numeric::Budget,
+    ) -> Result<Classification, Error<UnknownReason>> {
+        let number = match key {
+            Symbol::Number(number) => Some(*number),
+            _ => None,
         };
-        engine.result.signatures.clear();
-        engine.result.arguments.clear();
-    } else {
-        engine.result.context = None;
-    }
-    engine.result
-}
-
-impl<'p> Engine<'p> {
-    pub fn work(&mut self) -> Result<(), Stop> {
-        self.steps(1)
-    }
-    fn steps(&mut self, count: usize) -> Result<(), Stop> {
-        let stats = &mut self.result.statistics;
-        let observed = u128::from(stats.work) + count as u128;
-        check(Resource::Work, observed, u128::from(self.limits.max_work))?;
-        stats.work = u64::try_from(observed).expect("bounded by u64 ceiling");
-        Ok(())
-    }
-    pub fn bytes(&mut self, bytes: usize) -> Result<(), Stop> {
-        let stats = &mut self.result.statistics;
-        let observed = u128::from(stats.inspected_bytes) + bytes as u128;
-        check(
-            Resource::InspectedBytes,
-            observed,
-            u128::from(self.limits.max_inspected_bytes),
-        )?;
-        stats.inspected_bytes = u64::try_from(observed).expect("bounded by u64 ceiling");
-        Ok(())
-    }
-    pub fn links(&mut self, count: usize) -> Result<(), Stop> {
-        let stats = &mut self.result.statistics;
-        let observed = stats.links as u128 + count as u128;
-        check(Resource::Links, observed, self.limits.max_links as u128)?;
-        stats.links = usize::try_from(observed).expect("bounded by usize ceiling");
-        Ok(())
-    }
-    fn widen(&mut self, target: usize, reason: Widening) -> bool {
-        let argument = &mut self.result.arguments[target];
-        let Domain::Finite(values) = &argument.domain else {
-            return false;
-        };
-        self.result.statistics.value_entries -= values.len();
-        self.result.statistics.widened += 1;
-        argument.domain = Domain::Unknown;
-        argument.widening = Some(reason);
-        true
-    }
-    fn merge(&mut self, target: usize, value: &'p Symbol) -> Result<bool, Stop> {
-        self.work()?;
-        let Domain::Finite(values) = &mut self.result.arguments[target].domain else {
-            return Ok(false);
-        };
-        if values.contains(value) {
-            return Ok(false);
+        if limits.max_symbol_nodes == 0 || limits.max_symbol_depth == 0 {
+            return Ok(Classification {
+                number,
+                retain: false,
+            });
         }
-        if values.len() >= self.limits.max_values_per_argument {
-            return Ok(self.widen(target, Widening::ValueWidth));
-        }
-        check(
-            Resource::ValueEntries,
-            self.result.statistics.value_entries as u128 + 1,
-            self.limits.max_value_entries as u128,
-        )?;
-        values.insert(value);
-        self.result.statistics.value_entries += 1;
-        Ok(true)
-    }
-    fn run(&mut self) -> Result<(), Failure> {
-        if self.producers.is_empty() {
-            return Ok(());
-        }
-        loop {
-            check(
-                Resource::Rounds,
-                u128::from(self.result.statistics.rounds) + 1,
-                u128::from(self.limits.max_rounds),
-            )?;
-            self.result.statistics.rounds += 1;
-            let mut changed = false;
-            for index in 0..self.producers.len() {
-                self.result.context = Some(Context::Statement(self.producers[index].source));
-                self.work()?;
-                let target = self.producers[index].target;
-                match &self.producers[index].transfer {
-                    Transfer::Value(value) => changed |= self.merge(target, value)?,
-                    Transfer::Unknown(reason) => changed |= self.widen(target, *reason),
-                    Transfer::Intersection(_) => changed |= self.intersection(index)?,
-                }
-            }
-            if !changed {
-                return Ok(());
-            }
-        }
-    }
-    // A producer binds its head variable at every listed positive body column.
-    // Unknown is top: a finite column still bounds the conjunction. Growing an
-    // input can only grow this intersection, so unioning the result into the
-    // target preserves the inflationary fixed-point iteration, including cycles.
-    fn intersection(&mut self, producer: usize) -> Result<bool, Stop> {
-        let Transfer::Intersection(inputs) = &self.producers[producer].transfer else {
-            unreachable!("intersection transfer")
-        };
-        let length = inputs.len();
-        let target = self.producers[producer].target;
-        let mut smallest: Option<(usize, usize, usize)> = None;
-        for input in 0..length {
-            self.work()?;
-            let Transfer::Intersection(inputs) = &self.producers[producer].transfer else {
-                unreachable!("immutable transfer kind")
-            };
-            let from = inputs[input];
-            if let Domain::Finite(values) = &self.result.arguments[from].domain
-                && smallest.is_none_or(|(_, _, count)| values.len() < count)
-            {
-                smallest = Some((input, from, values.len()));
-            }
-        }
-        let Some((selected, from, count)) = smallest else {
-            return Ok(self.widen(target, Widening::Dependency));
-        };
-        // Snapshot only borrowed references, before the target can change. It
-        // may itself be an input. Admit every copy before allocating scratch;
-        // its length is at most one finite argument's admitted width.
-        self.steps(count)?;
-        let Domain::Finite(values) = &self.result.arguments[from].domain else {
-            unreachable!("work charging does not change domains")
-        };
-        let snapshot = values.iter().copied().collect::<Vec<_>>();
-        let mut changed = false;
-        for value in snapshot {
-            let mut permitted = true;
-            // The selected occurrence needs no visit: snapshot iteration
-            // already establishes membership. Every other occurrence is
-            // charged before inspecting it, including duplicates of the source.
-            for input in (0..selected).chain(selected + 1..length) {
-                self.work()?;
-                let Transfer::Intersection(inputs) = &self.producers[producer].transfer else {
-                    unreachable!("immutable transfer kind")
-                };
-                let other = inputs[input];
-                // A repeated source occurrence needs no additional set lookup.
-                if other == from {
-                    continue;
-                }
-                if !self.result.arguments[other].domain.permits(value) {
-                    permitted = false;
-                    break;
-                }
-            }
-            if permitted {
-                changed |= self.merge(target, value)?;
-            }
-        }
-        Ok(changed)
-    }
-    pub fn symbol(&mut self, symbol: &'p Symbol) -> Result<bool, Stop> {
-        if self.limits.max_symbol_nodes == 0 || self.limits.max_symbol_depth == 0 {
-            return Ok(false);
-        }
-        let mut stack = vec![(symbol, 1_usize)];
-        let mut nodes = 0_usize;
-        let mut bytes = 0_u128;
+        let mut stack = Vec::new();
+        stack.try_reserve(1)?;
+        stack.push((*key, 1_usize));
+        let (mut nodes, mut bytes) = (0_usize, 0_u128);
         while let Some((symbol, depth)) = stack.pop() {
-            self.work()?;
+            budget.work(1)?;
             nodes += 1;
             let payload = match symbol {
                 Symbol::String(value) => value.len(),
@@ -233,27 +37,141 @@ impl<'p> Engine<'p> {
                 _ => 0,
             };
             bytes += payload as u128;
-            if bytes > u128::from(self.limits.max_symbol_bytes) {
-                return Ok(false);
+            if bytes > u128::from(limits.max_symbol_bytes) {
+                return Ok(Classification {
+                    number,
+                    retain: false,
+                });
             }
-            self.bytes(payload)?;
+            budget.bytes(u64::try_from(payload).map_err(|_| Error::InvalidInput)?)?;
             let children = symbol.arguments();
             if nodes as u128 + stack.len() as u128 + children.len() as u128
-                > self.limits.max_symbol_nodes as u128
-                || (!children.is_empty() && depth >= self.limits.max_symbol_depth)
+                > limits.max_symbol_nodes as u128
+                || (!children.is_empty() && depth >= limits.max_symbol_depth)
             {
-                return Ok(false);
+                return Ok(Classification {
+                    number,
+                    retain: false,
+                });
             }
+            stack.try_reserve(children.len())?;
             stack.extend(children.iter().map(|child| (child, depth + 1)));
         }
-        Ok(true)
+        Ok(Classification {
+            number,
+            retain: true,
+        })
+    }
+    fn compare(
+        &self,
+        left: &&Symbol,
+        right: &&Symbol,
+        budget: &numeric::Budget,
+    ) -> Result<Ordering, Error<UnknownReason>> {
+        budget.work(1)?;
+        for root in [*left, *right] {
+            let mut pending = Vec::new();
+            pending.try_reserve(1)?;
+            pending.push(root);
+            while let Some(value) = pending.pop() {
+                budget.work(1)?;
+                let bytes = match value {
+                    Symbol::String(value) => value.len(),
+                    Symbol::Function { name, .. } => name.as_str().len(),
+                    _ => 0,
+                };
+                budget.bytes(u64::try_from(bytes).map_err(|_| Error::InvalidInput)?)?;
+                pending.try_reserve(value.arguments().len())?;
+                pending.extend(value.arguments());
+            }
+        }
+        Ok(left.cmp(right))
     }
 }
 
-pub(super) fn empty_argument<'p>() -> crate::Argument<'p> {
-    crate::Argument {
-        domain: Domain::Finite(BTreeSet::new()),
-        producers: Vec::new(),
-        widening: None,
+/// Infer conservative argument bounds over this exact immutable program.
+/// The source lowering retains its existing conservative unsupported-shape
+/// behavior; the neutral engine also serves already admitted producer input.
+/// Global logical stops and unresolved source contexts clear every finite map.
+/// Local unsupported producers widen only their output argument. Work receipts
+/// count this shared mechanism, not the previous source-only transfer schedule.
+///
+/// This infallible compatibility API retains its existing host-allocation
+/// boundary (panic/abort), rather than inventing a logical limit. Final conversion
+/// to the public ordered sets also remains outside the engine work meter: its
+/// entries and per-symbol comparison size are bounded by the admitted limits.
+/// On completion, `statistics().value_entries` counts the materialized entries;
+/// `statistics().work` reports engine and lowering work, not this conversion.
+/// The neutral [`numeric::analyze`] entry reports typed allocation failures to
+/// fallible users and does not reconstruct source symbols or ordered sets.
+///
+/// # Panics
+/// Panics on a reported host allocation failure or an internal source-lowering
+/// or result invariant violation. The host allocator may also abort.
+#[must_use]
+pub fn analyze(program: &Program, limits: Limits) -> Analysis<'_> {
+    let mut signatures = BTreeMap::new();
+    let result = numeric::analyze(&Symbols(std::marker::PhantomData), limits, |input| {
+        crate::compile::Compiler {
+            program,
+            input,
+            signatures: &mut signatures,
+            positions: 0,
+        }
+        .compile()
+    });
+    let mut output = Analysis {
+        program,
+        signatures: BTreeMap::new(),
+        arguments: Vec::new(),
+        status: Status::FixedPoint,
+        context: None,
+        statistics: Statistics::default(),
+    };
+    match result {
+        Ok(result) => {
+            output.statistics = result.statistics();
+            output.context = result.context();
+            match result.status() {
+                numeric::Status::Stopped(stop) => output.status = Status::Stopped(stop),
+                numeric::Status::FixedPoint => {
+                    output.signatures = signatures
+                        .into_iter()
+                        .map(|(signature, (_, start))| (signature, start))
+                        .collect();
+                    output.arguments = result
+                        .arguments()
+                        .map(|(id, _)| Argument {
+                            domain: result.values(id).map_or(Domain::Unknown, |values| {
+                                Domain::Finite(values.copied().collect())
+                            }),
+                            producers: result
+                                .producers(id)
+                                .expect("registered argument")
+                                .iter()
+                                .map(|context| match context {
+                                    Context::Statement(source) => *source,
+                                    Context::Part(_) => {
+                                        unreachable!("only a statement produces an argument")
+                                    }
+                                })
+                                .collect(),
+                            widening: result.widening(id),
+                        })
+                        .collect();
+                }
+            }
+        }
+        Err(failure) => {
+            output.statistics = failure.statistics;
+            output.context = failure.context;
+            match failure.error {
+                Error::Read(reason) => output.status = Status::Unknown(reason),
+                Error::Limit(stop) => output.status = Status::Stopped(stop),
+                Error::Allocation(error) => panic!("source domain analysis allocation: {error}"),
+                Error::InvalidInput => panic!("source lowering submitted an invalid domain plan"),
+            }
+        }
     }
+    output
 }

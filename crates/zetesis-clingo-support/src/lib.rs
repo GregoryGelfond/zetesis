@@ -2,9 +2,12 @@
 //!
 //! A test that compares zetesis with clingo finds clingo ([`executable`]),
 //! runs it within bounds on a source ([`run`], [`run_accepting`]) or on
-//! program files ([`run_in`]), and decodes its JSON report ([`json`],
-//! [`model_records`], [`answers()`]); [`records`] does all three for a complete
-//! enumeration. Each test keeps the clingo arguments its comparison needs.
+//! program files ([`run_in`]), and decodes its JSON report ([`json`]): as
+//! complete records of atoms and costs ([`model_records`]), as full models
+//! ([`full_models`], [`objective_free_models`]), from a witness's parts
+//! ([`atoms`], [`costs`]), or as `zetesis-validation` reads it ([`answers()`]).
+//! [`records`] runs and decodes a complete enumeration in one call. Each test
+//! keeps the clingo arguments its comparison needs.
 //!
 //! The crate depends on `zetesis-validation`, whose bounded process capture
 //! runs clingo, and on nothing that solves, so a test reaches clingo without
@@ -16,7 +19,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use serde_json::Value;
-use zetesis_test_support::records::Records;
+use zetesis_test_support::records::{Models, Records};
 use zetesis_validation::{answers, process};
 
 /// The clingo release the comparisons are recorded against.
@@ -108,7 +111,7 @@ impl Run {
 
 /// The exit codes of a run that decided its program: satisfiable (10),
 /// unsatisfiable (20), or satisfiable with its search exhausted (30).
-pub const DECIDED: [i32; 3] = [10, 20, 30];
+pub const DECIDED: [i32; 3] = zetesis_validation::answers::CLINGO_DECIDED_EXITS;
 
 /// Run clingo on `source` with `arguments`, within `limits`, expecting it to
 /// decide the program ([`DECIDED`]).
@@ -278,8 +281,9 @@ pub fn records(source: &str) -> Records {
 ///
 /// # Panics
 /// Panics unless the enumeration is complete and satisfiable, unsatisfiable
-/// or optimal, if a witness repeats, or if the report's model count differs
-/// from its witnesses.
+/// or optimal, if a witness's atoms are not an array of distinct strings or
+/// its present costs are not an array of integers, if a witness repeats, or if
+/// the report's model count differs from its witnesses.
 #[must_use]
 pub fn model_records(report: &Value) -> Records {
     assert_eq!(
@@ -316,29 +320,75 @@ pub fn model_records(report: &Value) -> Records {
     records
 }
 
-/// A witness's atoms, as their spellings.
+/// The full models of a complete JSON report: its witnesses' atoms.
 ///
 /// # Panics
-/// Panics if `values` is not an array of strings.
+/// As [`model_records`].
 #[must_use]
-pub fn atoms(values: &Value) -> BTreeSet<String> {
-    values
-        .as_array()
-        .unwrap()
-        .iter()
-        .map(|atom| atom.as_str().unwrap().into())
+pub fn full_models(report: &Value) -> Models {
+    model_records(report)
+        .into_iter()
+        .map(|(atoms, _)| atoms)
         .collect()
 }
 
-/// A witness's costs, absent when the program has no objective.
+/// The full models of a complete JSON report of a program without an
+/// objective.
 ///
 /// # Panics
-/// Panics if a cost is not an integer.
+/// As [`model_records`], and if a witness has costs.
+#[must_use]
+pub fn objective_free_models(report: &Value) -> Models {
+    model_records(report)
+        .into_iter()
+        .map(|(atoms, costs)| {
+            assert_eq!(
+                costs, None,
+                "a witness of a program without an objective has costs"
+            );
+            atoms
+        })
+        .collect()
+}
+
+/// A witness's atoms, as their spellings.
+///
+/// # Panics
+/// Panics if `values` is not an array of strings, or names an atom twice.
+#[must_use]
+pub fn atoms(values: &Value) -> BTreeSet<String> {
+    let values = values
+        .as_array()
+        .expect("a witness's atoms are an array of strings");
+    let atoms: BTreeSet<String> = values
+        .iter()
+        .map(|atom| {
+            atom.as_str()
+                .expect("a witness's atoms are an array of strings")
+                .into()
+        })
+        .collect();
+    assert_eq!(atoms.len(), values.len(), "full atom identities are unique");
+    atoms
+}
+
+/// A witness's costs: absent when the report omits them or gives `null`, as
+/// for a program without an objective.
+///
+/// # Panics
+/// Panics if present costs are not an array of integers.
 #[must_use]
 pub fn costs(values: &Value) -> Option<Vec<i64>> {
-    values
-        .as_array()
-        .map(|values| values.iter().map(|value| value.as_i64().unwrap()).collect())
+    if values.is_null() {
+        return None;
+    }
+    let values = values.as_array().expect("costs are an array of integers");
+    Some(
+        values
+            .iter()
+            .map(|value| value.as_i64().expect("costs are an array of integers"))
+            .collect(),
+    )
 }
 
 /// The answers a run reports, as `zetesis-validation` reads a clingo JSON
@@ -389,6 +439,68 @@ mod tests {
         let empty = tempfile::tempdir().unwrap();
         let search = std::env::join_paths([empty.path()]).unwrap();
         let _ = discover(None, Some(&search));
+    }
+
+    /// A complete report of two witnesses, with `costs` on each.
+    fn report(costs: &Value) -> Value {
+        json!({
+            "Result": "SATISFIABLE",
+            "Call": [{"Witnesses": [
+                {"Value": ["a"], "Costs": costs},
+                {"Value": ["b", "c"], "Costs": costs}
+            ]}],
+            "Models": {"Number": 2, "More": "no"}
+        })
+    }
+
+    #[test]
+    fn full_models_are_the_witnesses_atoms() {
+        let expected: Models = [vec!["a"], vec!["b", "c"]]
+            .iter()
+            .map(|atoms| atoms.iter().map(|&atom| atom.to_owned()).collect())
+            .collect();
+        assert_eq!(full_models(&report(&json!([1]))), expected);
+        assert_eq!(objective_free_models(&report(&Value::Null)), expected);
+    }
+
+    #[test]
+    #[should_panic(expected = "without an objective has costs")]
+    fn a_witness_with_costs_is_refused_where_there_is_no_objective() {
+        let _ = objective_free_models(&report(&json!([1])));
+    }
+
+    #[test]
+    #[should_panic(expected = "incomplete enumeration")]
+    fn full_models_refuse_an_incomplete_enumeration() {
+        let mut incomplete = report(&Value::Null);
+        incomplete["Models"]["More"] = json!("yes");
+        let _ = full_models(&incomplete);
+    }
+
+    #[test]
+    fn absent_and_null_costs_are_no_costs() {
+        assert_eq!(costs(&Value::Null), None);
+        assert_eq!(costs(&json!({})["Costs"]), None);
+        assert_eq!(costs(&json!([2, -1])), Some(vec![2, -1]));
+    }
+
+    #[test]
+    #[should_panic(expected = "costs are an array of integers")]
+    fn malformed_costs_are_refused() {
+        let _ = costs(&json!("3"));
+    }
+
+    // A set decoding a repeated atom would silently collapse a multiset.
+    #[test]
+    #[should_panic(expected = "full atom identities are unique")]
+    fn atoms_refuses_a_repeated_atom() {
+        let _ = atoms(&json!(["a", "a"]));
+    }
+
+    #[test]
+    #[should_panic(expected = "a witness's atoms are an array of strings")]
+    fn atoms_refuses_an_atom_that_is_not_a_string() {
+        let _ = atoms(&json!(["a", 1]));
     }
 
     /// The shell stands in for clingo in the tests of a run's contract.

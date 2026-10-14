@@ -43,7 +43,7 @@ impl OutputLimits {
     /// Ordinary output capacities from the same resource policy as source and
     /// solving. The symbol-work counter has only its representation maximum.
     #[must_use]
-    pub fn for_resources(resources: zetesis_solve::Resources) -> Self {
+    pub(crate) fn for_resources(resources: zetesis_solve::Resources) -> Self {
         Self {
             max_atoms: resources.formula_limits().theory.max_atoms,
             max_atom_bytes: resources.json_record_bytes() as u128,

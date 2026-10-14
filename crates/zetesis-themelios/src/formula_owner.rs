@@ -47,6 +47,10 @@ impl Owner {
         &self.program
     }
 
+    pub(crate) fn shared_program(&self) -> &Arc<Program> {
+        &self.program
+    }
+
     pub(crate) fn source(&self) -> Option<&Source> {
         match &self.sources {
             Sources::Single(source) => Some(source),

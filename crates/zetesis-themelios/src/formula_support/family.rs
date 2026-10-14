@@ -99,11 +99,9 @@ impl Warnings {
 
 pub(crate) fn partial(literals: &[LiteralIr]) -> bool {
     literals.iter().any(|literal| match literal {
-        LiteralIr::Compare(left, _, right)
-        | LiteralIr::ArgumentCheck {
-            captured: left,
-            value: right,
-        } => expression(left) || expression(right),
+        LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => {
+            expression(comparison.left()) || expression(comparison.right())
+        }
         LiteralIr::TupleCompare(left, _, right) => left.iter().chain(right).any(expression),
         LiteralIr::Guard(guard) | LiteralIr::HeadGuard(guard) => {
             guard.expressions().any(expression)

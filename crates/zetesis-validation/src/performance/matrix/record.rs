@@ -17,6 +17,9 @@ pub enum Decision {
     Refused,
     /// The native envelope explicitly reports unavailable compiled backend support.
     BackendUnavailable,
+    /// The native envelope reports that the default install's front could not
+    /// run its GPU executable: a broken install, not absent GPU support.
+    GpuExecutableUnavailable,
     /// Search or publication is incomplete; independent coverage remains in raw JSON.
     Incomplete,
     /// Authored process timeout expired.
@@ -33,7 +36,10 @@ pub enum Decision {
     CampaignCaptureBudget,
     /// Spawn/exit/capture/cleanup failed; a GPU error is not assumed to mean absence.
     InvocationFailure,
-    /// Captured producer output is malformed or contradictory.
+    /// Captured producer output is malformed or contradictory, or the
+    /// executable its statistics name was refused: none (`null`, or a value
+    /// that is not a path), a third one, beside the invoked executable and the
+    /// one an earlier run named, or one that could not be sealed.
     InvalidReport,
     /// Completed selected answers violate the source contract or reference family.
     ParityMismatch,
@@ -58,6 +64,7 @@ impl Decision {
             Self::Pass => "pass",
             Self::Refused => "refused",
             Self::BackendUnavailable => "backend_unavailable",
+            Self::GpuExecutableUnavailable => "gpu_executable_unavailable",
             Self::Incomplete => "incomplete",
             Self::Timeout => "timeout",
             Self::Cancelled => "cancelled",
@@ -79,6 +86,8 @@ impl Decision {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Procedure {
+    /// Complete signed-acyclic source evaluation during admission.
+    AcyclicSource,
     /// Least reduct closure.
     Closure,
     /// General reduct countermodel procedure.
@@ -192,6 +201,20 @@ pub struct Observation {
     /// ordinary and streamed-constraint routes and older records.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub terminal: Option<TerminalStatistics>,
+    /// Exact source preparation, absent for formula and relational routes and
+    /// older records. These charges are not repeated session search work.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_evaluation: Option<SourceEvaluationStatistics>,
+}
+
+/// Accepted admission charges for a completely evaluated acyclic source.
+/// The reader authenticates the original receipt's `source_admission` scope.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
+pub struct SourceEvaluationStatistics {
+    /// Cumulative source preparation work, including support and arithmetic.
+    pub work: u64,
+    /// Cumulative complete source substitutions admitted during preparation.
+    pub substitutions: u64,
 }
 
 /// Original-answer reconstruction receipt, independent of base membership work.
@@ -242,7 +265,7 @@ pub struct HybridStatistics {
 /// Completed candidate-region restriction counts, independent of membership.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 pub struct RegionChecks {
-    /// Worker-local checker preparations, including attempts.
+    /// Checker preparations, including attempts.
     pub preparations: u64,
     /// Candidate regions checked before splitting or membership.
     pub checks: u64,

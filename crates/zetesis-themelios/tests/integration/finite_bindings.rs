@@ -1,17 +1,21 @@
 //! Finite candidate domains preserve complete guards, scopes and source evidence.
 
+use crate::support::admission;
 use crate::support::finite_bindings as reference;
 use crate::support::finite_bindings::remap;
+use zetesis_reference_support::resource_limits;
+use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 
 use themelios_base::source::SourceId;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
+    FormulaLimits, FormulaResource,
 };
 
 use reference::{Models, exhaustive, holds, native, values};
+use zetesis_clingo_support as oracle;
 
 const SOURCE: SourceId = SourceId::new(113);
 
@@ -20,24 +24,11 @@ fn input_with(
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions {
-            source_id: SOURCE,
-            ..Default::default()
-        },
-        expansion,
-        *limits,
-    )
+    admission::admit_with(SOURCE, source, expansion, limits)
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    input_with(
-        source,
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admission::admitted(SOURCE, source)
 }
 
 fn model(atoms: impl IntoIterator<Item = String>) -> Models {
@@ -256,10 +247,7 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
         let error = input_with(
             source,
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_assignment_values: 2,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::AssignmentValues, 2),
         )
         .unwrap_err();
         assert!(
@@ -269,10 +257,7 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
         let program = input_with(
             source,
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_assignment_values: 3,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::AssignmentValues, 3),
         )
         .unwrap();
         assert_eq!(
@@ -289,10 +274,7 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
         let program = input_with(
             source,
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_assignment_values: 0,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::AssignmentValues, 0),
         )
         .unwrap();
         assert_eq!(native(&program), model([]), "{source}");
@@ -302,49 +284,36 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
 #[test]
 fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
     let source = "{p(X):0<X,X<3}.q:-p(Y):not not (Y,1)=(2,1).";
-    let mut lower = 0;
-    let mut upper = ExpansionLimits::default().max_term_work;
-    while lower < upper {
-        let limit = lower + (upper - lower) / 2;
-        match input_with(
-            source,
-            ExpansionLimits {
-                max_term_work: limit,
-                ..Default::default()
-            },
-            &FormulaLimits::default(),
-        ) {
-            Ok(_) => upper = limit,
+    // Preparation owns finite binding planning. Grounding additionally charges
+    // a local-plan table whose address ordering belongs to each prepared owner.
+    let prepare = |limit| {
+        zetesis_themelios::prepare_formula(
+            source.into(),
+            admission::options(SOURCE),
+            resource_limits::expansion(ExpansionResource::TermWork, limit),
+            FormulaLimits::default(),
+        )
+    };
+    let lower = first_success(
+        resource_limits::expansion_default(ExpansionResource::TermWork),
+        |limit| match prepare(limit) {
+            Ok(_) => true,
             Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
                 resource: ExpansionResource::TermWork,
                 ..
-            })) => lower = limit + 1,
+            })) => false,
             Err(error) => panic!("unexpected refusal: {error}"),
-        }
-    }
-    assert!(lower > 0);
-    let error = input_with(
-        source,
-        ExpansionLimits {
-            max_term_work: lower - 1,
-            ..Default::default()
         },
-        &FormulaLimits::default(),
-    )
-    .unwrap_err();
-    assert!(
-        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: ExpansionResource::TermWork, limit, observed, location }) if limit == (lower - 1) as u128 && observed > limit && location.location().expect("parsed source").source == SOURCE)
     );
-    let program = input_with(
-        source,
-        ExpansionLimits {
-            max_term_work: lower,
-            ..Default::default()
-        },
-        &FormulaLimits::default(),
-    )
-    .unwrap();
-    assert_eq!(native(&program), exhaustive(&input("{p(1);p(2)}.q:-p(2).")));
+    let error = prepare(lower - 1).unwrap_err();
+    assert!(
+        matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: ExpansionResource::TermWork, limit, observed, location }) if limit == u128::from(lower - 1) && observed > limit && location.location().expect("parsed source").source == SOURCE)
+    );
+    prepare(lower).unwrap();
+    assert_eq!(
+        native(&input(source)),
+        exhaustive(&input("{p(1);p(2)}.q:-p(2)."))
+    );
 }
 
 #[test]
@@ -357,31 +326,7 @@ fn finite_bindings_match_clingo() {
             .map(|(source, specified)| (source.into(), exhaustive(&input(specified)))),
     );
     for (source, expected) in cases {
-        let actual = reference::external(&source, true);
-        assert_eq!(actual["Models"]["More"], "no", "{source}");
-        let witnesses: Vec<_> = actual["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .collect();
-        assert!(witnesses.iter().all(|witness| witness["Costs"].is_null()));
-        let models: Models = witnesses
-            .iter()
-            .map(|witness| {
-                witness["Value"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|atom| atom.as_str().unwrap().to_owned())
-                    .collect()
-            })
-            .collect();
-        assert_eq!(models.len(), witnesses.len(), "full models are unique");
-        assert_eq!(
-            actual["Models"]["Number"].as_u64().unwrap(),
-            u64::try_from(models.len()).unwrap()
-        );
+        let models = oracle::objective_free_models(&reference::external(&source, true));
         assert_eq!(models, expected, "{source}");
         assert_eq!(native(&input(&source)), expected, "{source}");
     }

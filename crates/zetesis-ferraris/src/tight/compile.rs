@@ -1,11 +1,11 @@
 use std::mem::size_of;
 
 use super::{
-    TightAttempt, TightError, TightPlan, TightPlanLimits, TightPlanStatistics, TightProducer,
-    TightProducerKind, TightResource, Work, bytes, filled, reserve,
+    Tick, TightAttempt, TightError, TightPlan, TightPlanLimits, TightPlanStatistics, TightProducer,
+    TightProducerKind, TightResource, bytes, filled, reserve,
 };
-use crate::{NodeView, Theory, Threshold};
-use zetesis_cpu::{Cancellation, Stop};
+use crate::{ExtremumCut, NodeView, Theory, Threshold};
+use zetesis_cpu::{Cancellation, Meter, Stop};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Body {
@@ -31,7 +31,9 @@ impl TightPlan {
     /// negations. Bodies admit atoms, falsum, conjunction, disjunction and
     /// default negation; a negation freezes its whole interior. General
     /// Nonnegative thresholds preserve the body classification of their positive
-    /// contributions; zero weights add no rank edge. General head disjunctions,
+    /// contributions; zero weights add no rank edge. Ordinal cuts use only
+    /// qualifying witnesses, and endpoint-bound constants add no rank edge.
+    /// General head disjunctions,
     /// unnegated body implications and positive cycles fall back.
     /// Every root is inspected, including constraints and candidate guards.
     ///
@@ -54,15 +56,11 @@ impl TightPlan {
         limits: TightPlanLimits,
         cancellation: &Cancellation,
     ) -> TightAttempt<Self> {
-        let mut work = Work {
-            used: 0,
-            max: limits.max_work,
-            cancellation: cancellation.polling(),
-        };
-        let result = build(theory, None, limits, &mut work);
+        let metered =
+            cancellation.metered(limits.max_work, |meter| build(theory, None, limits, meter));
         TightAttempt {
-            result,
-            work: work.used,
+            result: metered.result,
+            work: metered.charged,
         }
     }
 
@@ -78,19 +76,18 @@ impl TightPlan {
         limits: TightPlanLimits,
         cancellation: &Cancellation,
     ) -> Result<Self, TightError> {
-        let mut work = Work {
-            used: 0,
-            max: limits.max_work,
-            cancellation: cancellation.polling(),
-        };
-        build(theory, Some(ranks), limits, &mut work)
+        cancellation
+            .metered(limits.max_work, |meter| {
+                build(theory, Some(ranks), limits, meter)
+            })
+            .result
     }
 }
 
-fn classify(theory: &Theory, work: &mut Work<'_>) -> Result<Vec<Body>, TightError> {
+fn classify(theory: &Theory, meter: &mut Meter<'_>) -> Result<Vec<Body>, TightError> {
     let mut classes = reserve(theory.nodes().len())?;
     for index in 0..theory.view().len() {
-        classify_step(theory, index, &mut classes, work)?;
+        classify_step(theory, index, &mut classes, meter)?;
     }
     Ok(classes)
 }
@@ -100,10 +97,10 @@ fn classify_step(
     theory: &Theory,
     index: usize,
     classes: &mut Vec<Body>,
-    work: &mut Work<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<(), TightError> {
-    work.tick()?;
-    let class = classify_node(theory, index, classes, work)?;
+    meter.tick()?;
+    let class = classify_node(theory, index, classes, meter)?;
     classes.push(class);
     Ok(())
 }
@@ -114,7 +111,7 @@ fn classify_node(
     theory: &Theory,
     index: usize,
     classes: &[Body],
-    work: &mut Work<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<Body, TightError> {
     match theory
         .view()
@@ -124,7 +121,7 @@ fn classify_node(
         NodeView::Atom(_) => Ok(Body::Positive),
         NodeView::False => Ok(Body::Frozen),
         NodeView::Implies(_, consequent) => {
-            work.tick()?;
+            meter.tick()?;
             let node = theory
                 .view()
                 .node(consequent)
@@ -136,21 +133,44 @@ fn classify_node(
             })
         }
         NodeView::And(operands) | NodeView::Or(operands) => {
-            classify_operands(operands, classes, work)
+            classify_operands(operands, classes, meter)
         }
-        NodeView::Threshold(threshold) => classify_threshold(threshold, classes, work),
+        NodeView::Threshold(threshold) => classify_threshold(threshold, classes, meter),
+        NodeView::ExtremumCut(cut) => classify_cut(cut, classes, meter),
     }
+}
+
+fn classify_cut(
+    cut: ExtremumCut<'_>,
+    classes: &[Body],
+    meter: &mut Meter<'_>,
+) -> Result<Body, TightError> {
+    if cut.endpoint_truth().is_some() {
+        return Ok(Body::Frozen);
+    }
+    let mut class = Body::Frozen;
+    for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+        meter.tick()?;
+        if cut.qualifies(rank) {
+            class = match (class, classes[child]) {
+                (Body::Opaque, _) | (_, Body::Opaque) => Body::Opaque,
+                (Body::Frozen, Body::Frozen) => Body::Frozen,
+                _ => Body::Positive,
+            };
+        }
+    }
+    Ok(class)
 }
 
 fn classify_threshold(
     threshold: Threshold<'_>,
     classes: &[Body],
-    work: &mut Work<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<Body, TightError> {
     let mut total = 0_i128;
     let mut class = Body::Frozen;
     for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
-        work.tick()?;
+        meter.tick()?;
         total = total
             .checked_add(i128::from(weight))
             .ok_or(Stop::InvalidProgram)?;
@@ -172,11 +192,11 @@ fn classify_threshold(
 fn classify_operands(
     operands: &[usize],
     classes: &[Body],
-    work: &mut Work<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<Body, TightError> {
     let mut class = Body::Frozen;
     for &child in operands {
-        work.tick()?;
+        meter.tick()?;
         class = match (class, classes[child]) {
             (Body::Opaque, _) | (_, Body::Opaque) => Body::Opaque,
             (Body::Frozen, Body::Frozen) => Body::Frozen,
@@ -231,11 +251,11 @@ fn extract(
     theory: &Theory,
     classes: &[Body],
     limits: TightPlanLimits,
-    work: &mut Work<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<Vec<TightProducer>, TightError> {
     let mut count = 0usize;
     for &root in theory.roots() {
-        work.tick()?;
+        meter.tick()?;
         if producer(theory, root, classes)?.is_some() {
             if count == limits.max_producers {
                 return Err(TightError::Limit(TightResource::Producers));
@@ -250,7 +270,7 @@ fn extract(
     )?;
     let mut producers = reserve(count)?;
     for &root in theory.roots() {
-        work.tick()?;
+        meter.tick()?;
         if let Some(producer) = producer(theory, root, classes)? {
             producers.push(producer);
         }
@@ -262,12 +282,12 @@ fn each_dependency(
     theory: &Theory,
     classes: &[Body],
     producers: &[TightProducer],
-    work: &mut Work<'_>,
+    meter: &mut Meter<'_>,
     mut visit: impl FnMut(usize, usize, bool) -> Result<(), TightError>,
 ) -> Result<(), TightError> {
     let offset = theory.atom_count();
     for index in 0..theory.view().len() {
-        work.tick()?;
+        meter.tick()?;
         match theory
             .view()
             .node(index)
@@ -280,7 +300,7 @@ fn each_dependency(
                 // Duplicate operands contribute duplicate edges and matching
                 // indegrees. Neither is silently deduplicated on its own.
                 for &child in operands {
-                    work.tick()?;
+                    meter.tick()?;
                     if classes[child] == Body::Positive {
                         visit(offset + child, offset + index, false)?;
                     }
@@ -288,8 +308,16 @@ fn each_dependency(
             }
             NodeView::Threshold(threshold) if classes[index] == Body::Positive => {
                 for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
-                    work.tick()?;
+                    meter.tick()?;
                     if weight != 0 && classes[child] == Body::Positive {
+                        visit(offset + child, offset + index, false)?;
+                    }
+                }
+            }
+            NodeView::ExtremumCut(cut) if classes[index] == Body::Positive => {
+                for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+                    meter.tick()?;
+                    if cut.qualifies(rank) && classes[child] == Body::Positive {
                         visit(offset + child, offset + index, false)?;
                     }
                 }
@@ -298,7 +326,7 @@ fn each_dependency(
         }
     }
     for producer in producers {
-        work.tick()?;
+        meter.tick()?;
         if let Some(body) = producer.body
             && classes[body] == Body::Positive
         {
@@ -312,17 +340,17 @@ fn build(
     theory: &Theory,
     proposed: Option<&[usize]>,
     limits: TightPlanLimits,
-    work: &mut Work<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<TightPlan, TightError> {
-    work.cancellation.poll()?;
+    meter.poll()?;
     bytes(
         theory.nodes().len() as u128 * size_of::<Body>() as u128,
         limits.max_bytes,
     )?;
-    let classes = classify(theory, work)?;
-    let producers = extract(theory, &classes, limits, work)?;
+    let classes = classify(theory, meter)?;
+    let producers = extract(theory, &classes, limits, meter)?;
     let mut dependencies = 0usize;
-    each_dependency(theory, &classes, &producers, work, |_, _, _| {
+    each_dependency(theory, &classes, &producers, meter, |_, _, _| {
         if dependencies == limits.max_dependencies {
             return Err(TightError::Limit(TightResource::Dependencies));
         }
@@ -351,19 +379,20 @@ fn build(
         limits.max_bytes,
     )?;
     let ranks = if let Some(ranks) = proposed {
-        validate_ranks(theory, &classes, &producers, ranks, work)?;
+        validate_ranks(theory, &classes, &producers, ranks, meter)?;
         let mut owned = reserve(ranks.len())?;
         owned.extend_from_slice(ranks);
         owned
     } else {
-        derive_ranks(theory, &classes, &producers, vertices, dependencies, work)?
+        derive_ranks(theory, &classes, &producers, vertices, dependencies, meter)?
     };
     Ok(TightPlan {
         theory: theory.clone(),
         producers,
         ranks,
+        readers: None,
         statistics: TightPlanStatistics {
-            work: work.used,
+            work: meter.charged(),
             dependencies,
             construction_bytes,
             resident_bytes,
@@ -377,7 +406,7 @@ fn derive_ranks(
     producers: &[TightProducer],
     vertices: usize,
     dependency_count: usize,
-    work: &mut Work<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<Vec<usize>, TightError> {
     let mut links = filled(vertices, END)?;
     let mut indegrees = filled(vertices, 0usize)?;
@@ -388,7 +417,7 @@ fn derive_ranks(
         theory,
         classes,
         producers,
-        work,
+        meter,
         |source, target, strict| {
             edges.push(Edge {
                 target,
@@ -401,19 +430,19 @@ fn derive_ranks(
         },
     )?;
     for (index, &degree) in indegrees.iter().enumerate() {
-        work.tick()?;
+        meter.tick()?;
         if degree == 0 {
             queue.push(index);
         }
     }
     let mut cursor = 0;
     while cursor < queue.len() {
-        work.tick()?;
+        meter.tick()?;
         let source = queue[cursor];
         cursor += 1;
         let mut edge_index = links[source];
         while edge_index != END {
-            work.tick()?;
+            meter.tick()?;
             let edge = edges[edge_index];
             rank[edge.target] = rank[edge.target].max(rank[source] + usize::from(edge.strict));
             indegrees[edge.target] -= 1;
@@ -425,7 +454,7 @@ fn derive_ranks(
     }
     if queue.len() != vertices {
         for (atom, degree) in indegrees[..theory.atom_count()].iter().enumerate() {
-            work.tick()?;
+            meter.tick()?;
             if *degree != 0 {
                 return Err(TightError::PositiveCycle { atom });
             }
@@ -436,7 +465,7 @@ fn derive_ranks(
     }
     let mut atoms = reserve(theory.atom_count())?;
     atoms.extend_from_slice(&rank[..theory.atom_count()]);
-    validate_ranks(theory, classes, producers, &atoms, work)?;
+    validate_ranks(theory, classes, producers, &atoms, meter)?;
     Ok(atoms)
 }
 
@@ -445,20 +474,20 @@ fn validate_ranks(
     classes: &[Body],
     producers: &[TightProducer],
     ranks: &[usize],
-    work: &mut Work<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<(), TightError> {
     if ranks.len() != theory.atom_count() {
         return Err(TightError::RankShape);
     }
     for &rank in ranks {
-        work.tick()?;
+        meter.tick()?;
         if rank >= ranks.len() {
             return Err(TightError::RankShape);
         }
     }
     let mut maximum = reserve::<usize>(theory.nodes().len())?;
     for (index, &class) in classes.iter().enumerate() {
-        work.tick()?;
+        meter.tick()?;
         maximum.push(
             match theory
                 .view()
@@ -467,13 +496,23 @@ fn validate_ranks(
             {
                 NodeView::Atom(atom) => ranks[atom],
                 NodeView::And(operands) | NodeView::Or(operands) if class == Body::Positive => {
-                    maximum_operand(operands, &maximum, work)?
+                    maximum_operand(operands, &maximum, meter)?
                 }
                 NodeView::Threshold(threshold) if class == Body::Positive => {
                     let mut value = 0;
                     for (&child, &weight) in threshold.conditions.iter().zip(threshold.weights) {
-                        work.tick()?;
+                        meter.tick()?;
                         if weight != 0 && classes[child] == Body::Positive {
+                            value = value.max(maximum[child]);
+                        }
+                    }
+                    value
+                }
+                NodeView::ExtremumCut(cut) if class == Body::Positive => {
+                    let mut value = 0;
+                    for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+                        meter.tick()?;
+                        if cut.qualifies(rank) && classes[child] == Body::Positive {
                             value = value.max(maximum[child]);
                         }
                     }
@@ -484,7 +523,7 @@ fn validate_ranks(
         );
     }
     for producer in producers {
-        work.tick()?;
+        meter.tick()?;
         if let Some(body) = producer.body
             && classes[body] == Body::Positive
             && maximum[body] >= ranks[producer.head]
@@ -500,11 +539,11 @@ fn validate_ranks(
 fn maximum_operand(
     operands: &[usize],
     maximum: &[usize],
-    work: &mut Work<'_>,
+    meter: &mut Meter<'_>,
 ) -> Result<usize, TightError> {
     let mut value = 0;
     for &child in operands {
-        work.tick()?;
+        meter.tick()?;
         value = value.max(maximum[child]);
     }
     Ok(value)

@@ -2,7 +2,7 @@
 
 use std::mem::size_of;
 
-use zetesis_ferraris::{Interpretation, Theory};
+use zetesis_ferraris::{EvaluationWorkspace, Interpretation, Theory};
 
 use super::Outcome;
 use crate::{Incomplete, Limits, Literal, PreparedReduct, ReductWorkspace};
@@ -28,12 +28,16 @@ pub(super) fn transient(prepared: &PreparedReduct) -> u128 {
         prepared.theory().atom_count() as u128,
         prepared.theory().nodes().len() as u128,
         variables as u128,
+        EvaluationWorkspace::requested_payload_bytes(prepared.theory()),
     )
 }
 
-fn transient_counts(atoms: u128, nodes: u128, variables: u128) -> u128 {
+fn transient_counts(atoms: u128, nodes: u128, variables: u128, evaluation: u128) -> u128 {
     variables * size_of::<bool>() as u128
-        + 2 * nodes * size_of::<bool>() as u128
+        // Frozen truth plus independent verification truth/cache; the worker
+        // evaluation and its cache remain live and are counted separately.
+        + nodes * size_of::<bool>() as u128
+        + evaluation
         + atoms * size_of::<usize>() as u128
         + atoms.div_ceil(64) * size_of::<u64>() as u128
         + size_of::<Interpretation>() as u128
@@ -92,6 +96,7 @@ pub(super) fn prepared(
             owner.parameter_count() as u128,
             variables as u128,
             clauses as u128,
+            EvaluationWorkspace::requested_payload_bytes(owner.theory()),
         ))?,
         result_bytes: narrow(result_bytes(candidates as u128))?,
     })
@@ -107,6 +112,7 @@ pub(super) fn requirements(
         narrow(theory.nodes().len() as u128)?,
         narrow(theory.parts().occurrences() as u128)?,
         narrow(theory.roots().len() as u128)?,
+        EvaluationWorkspace::requested_payload_bytes(theory),
         limits,
         narrow(candidates as u128)?,
     )
@@ -117,6 +123,7 @@ fn counts(
     nodes: u64,
     operands: u64,
     roots: u64,
+    evaluation: u128,
     limits: Limits,
     candidates: u64,
 ) -> Result<CompletionScratch, Incomplete> {
@@ -139,19 +146,33 @@ fn counts(
             crate::prepared_reduct::retained_header_bytes()
                 + (2 * clauses + literals + nodes) * size_of::<usize>() as u128,
         )?,
-        query_bytes: narrow(query_bytes(atoms, nodes, atoms + nodes, variables, clauses))?,
+        query_bytes: narrow(query_bytes(
+            atoms,
+            nodes,
+            atoms + nodes,
+            variables,
+            clauses,
+            evaluation,
+        ))?,
         result_bytes: narrow(result_bytes(u128::from(candidates)))?,
     })
 }
 
-fn query_bytes(atoms: u128, nodes: u128, parameters: u128, variables: u128, clauses: u128) -> u128 {
+fn query_bytes(
+    atoms: u128,
+    nodes: u128,
+    parameters: u128,
+    variables: u128,
+    clauses: u128,
+    evaluation: u128,
+) -> u128 {
     // Search scratch already includes its assignment output. The extra
     // verification allowance therefore omits that one output term here.
     (size_of::<ReductWorkspace>() - size_of::<crate::search::Workspace>()) as u128
-        + nodes * size_of::<bool>() as u128
+        + evaluation
         + parameters * size_of::<Literal>() as u128
         + crate::search::scratch_bytes(variables, clauses)
-        + transient_counts(atoms, nodes, 0)
+        + transient_counts(atoms, nodes, 0, evaluation)
 }
 
 fn result_bytes(candidates: u128) -> u128 {
@@ -207,11 +228,19 @@ mod tests {
     #[test]
     fn logical_byte_overflow_is_refused_before_allocation() {
         assert_eq!(
-            counts(u64::MAX, u64::MAX, u64::MAX, u64::MAX, Limits::default(), 1),
+            counts(
+                u64::MAX,
+                u64::MAX,
+                u64::MAX,
+                u64::MAX,
+                u128::from(u64::MAX),
+                Limits::default(),
+                1
+            ),
             Err(Incomplete::CounterOverflow)
         );
         assert_eq!(
-            counts(0, 0, 0, 0, Limits::default(), u64::MAX),
+            counts(0, 0, 0, 0, 0, Limits::default(), u64::MAX),
             Err(Incomplete::CounterOverflow)
         );
         let limits = CompletionScratch {
@@ -226,3 +255,6 @@ mod tests {
         assert_eq!(limits.admit(0, 0), Err(Incomplete::CompletionScratch));
     }
 }
+
+#[cfg(test)]
+mod ordinal_tests;

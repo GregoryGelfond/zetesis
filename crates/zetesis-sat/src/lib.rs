@@ -25,6 +25,8 @@ pub use region_filter::{
 };
 mod checked;
 mod prepared_reduct;
+#[cfg(test)]
+mod test_support;
 pub use prepared_reduct::{
     PreparedReduct, ReductPreparationAttempt, ReductPreparationLimits, ReductPreparationStatistics,
     ReductQueryStatistics, ReductStatistics, ReductWorkspace,
@@ -39,9 +41,9 @@ pub use error::Incomplete;
 pub use ferraris::{
     BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertificateError, CertificateLimits,
     CertificateOrder, CertificatePlanStatistics, CertifiedStatistics, Check, CompletionExecutor,
-    CompletionScratch, CompletionStatistics, Limits, RegionCounts, RegionFrontierStatistics,
-    RegionSearchStatistics, SearchMethod, StableModels, Statistics, SupportStatistics,
-    SupportStatus, check, check_with,
+    CompletionScratch, CompletionStatistics, Engagement, Limits, RegionCounts,
+    RegionFrontierStatistics, RegionSearchStatistics, RegionWalkEngagement, RegionWorkerStatistics,
+    SearchMethod, StableModels, Statistics, SupportStatistics, SupportStatus, check, check_with,
 };
 pub use projection::{ProjectionLimits, ProjectionResource, ProjectionStatistics};
 pub use search::{SearchLimits, SearchStatistics, Solve, solve, solve_with_statistics};

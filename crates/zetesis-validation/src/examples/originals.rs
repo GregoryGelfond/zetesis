@@ -1,10 +1,11 @@
 //! Explicit original-byte derivation audit; normal loading never interprets tags.
 
+use crate::corpus_files::Failure as _;
 use std::path::Path;
 
 use super::{
-    Annotation, Contract, Corpus, Edit, Error, Family, Limits, Resource, Satisfiability, ceiling,
-    document, files,
+    Annotation, Contract, Corpus, Edit, Error, Family, Files, Limits, Resource, Satisfiability,
+    document,
 };
 use crate::answers;
 
@@ -16,26 +17,28 @@ use crate::answers;
 ///
 /// # Errors
 /// Refuses changed originals, deletion spans outside ordinary leading comments,
-/// changed includes, mismatched contracts, unconfined paths or source-byte limits.
+/// changed includes, mismatched contracts, unconfined paths, files inside
+/// `original_root` that are not regular files ([`Error::Irregular`]) or
+/// source-byte limits.
 pub fn verify_originals(
     corpus: &Corpus,
     original_root: &Path,
     limits: Limits,
 ) -> Result<(), Error> {
-    let root = files::canonical(original_root)?;
-    let license = files::read(
-        &files::confined(&root, "LICENSE")?,
+    let root = Files::canonical(original_root)?;
+    let license = Files::read(
+        &Files::confined(&root, "LICENSE")?,
         limits.source_bytes,
         Resource::SourceBytes,
     )?;
-    files::digest("LICENSE", &license, corpus.license_sha256())?;
+    Files::digest("LICENSE", &license, corpus.license_sha256())?;
     for source in corpus.files() {
-        let bytes = files::read(
-            &files::confined(&root, source.path())?,
+        let bytes = Files::read(
+            &Files::confined(&root, source.path())?,
             limits.source_bytes,
             Resource::SourceBytes,
         )?;
-        files::digest(source.path(), &bytes, source.original_sha256())?;
+        Files::digest(source.path(), &bytes, source.original_sha256())?;
         let original = String::from_utf8(bytes).map_err(Error::Utf8)?;
         let stripped = remove_annotations(&original, source.removed_annotations())?;
         let cleaned = derive_source(&stripped, source.edits(), limits.source_bytes)?;
@@ -107,7 +110,7 @@ pub fn derive_source(source: &str, edits: &[Edit], limit: usize) -> Result<Strin
         length = length - edit.before.len() as u128 + edit.after.len() as u128;
         previous_end = edit.end_byte;
     }
-    ceiling(Resource::SourceBytes, length, limit)?;
+    Error::ceiling(Resource::SourceBytes, length, limit)?;
     let capacity = usize::try_from(length)
         .map_err(|_| invalid("source derivation exceeds addressable storage"))?;
     let mut result = String::new();

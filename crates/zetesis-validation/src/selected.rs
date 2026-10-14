@@ -366,6 +366,13 @@ pub struct Report {
     physical_execution_qualified: bool,
     before: Vec<FileSeal>,
     after: Vec<Change>,
+    /// The executable native runs named as doing their work in place of the
+    /// native one, sealed at its first report, and its recheck when the
+    /// campaign closed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    executed: Option<FileSeal>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    executed_after: Option<Change>,
     cases: Vec<CaseResult>,
     total_capture_bytes: usize,
     unresolved_children: Vec<u32>,
@@ -376,7 +383,8 @@ pub struct Report {
     max_report_bytes: usize,
 }
 impl Report {
-    /// True only for all 24 complete exact comparisons and unchanged inputs.
+    /// True only for all 24 complete exact comparisons with unchanged inputs,
+    /// including any executable the native runs named in the native one's place.
     #[must_use]
     pub fn passed(&self) -> bool {
         self.cases.len() == CASE_COUNT
@@ -385,8 +393,15 @@ impl Report {
                 .iter()
                 .all(|case| case.decision() == Decision::Pass)
             && self.after.iter().all(Change::unchanged)
+            && self.executed_after.as_ref().is_none_or(Change::unchanged)
             && self.unresolved_children.is_empty()
             && self.faults.is_empty()
+    }
+    /// The executable native runs named as doing their work in place of the
+    /// native one, as sealed at its first report.
+    #[must_use]
+    pub const fn executed(&self) -> Option<&FileSeal> {
+        self.executed.as_ref()
     }
     /// Every attempted case, including all retained failures.
     #[must_use]

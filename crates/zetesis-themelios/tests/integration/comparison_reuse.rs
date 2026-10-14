@@ -1,9 +1,10 @@
 //! A comparison certificate belongs to one completed nongenerative binding.
 
 use crate::support::source_cases;
+use zetesis_reference_support::resource_limits;
+use zetesis_test_support::thresholds::first_success;
 
 use themelios_program::term::EvalError;
-use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
@@ -85,17 +86,14 @@ fn reused_comparisons_keep_the_work_ceiling_inclusive() {
     let admitted = |maximum| {
         reference::admit(
             source,
-            &FormulaLimits {
-                max_work: maximum,
-                ..FormulaLimits::default()
-            },
+            &resource_limits::formula(FormulaResource::Work, maximum),
         )
     };
     // This test locates an inclusive work boundary, not a fixed cost target.
     // Start from an actually admitted endpoint under the public finite policy;
     // checked lookup operations may change the amount of work this source needs.
-    let mut upper = FormulaLimits::default().max_work;
-    let complete = admitted(upper).expect("finite comparison fixture is admitted");
+    let complete = admitted(resource_limits::formula_default(FormulaResource::Work))
+        .expect("finite comparison fixture is admitted");
     let expected = Records::from([(
         ["d(1)", "d(2)", "d(3)", "p(1,3)", "p(3,1)"]
             .into_iter()
@@ -114,16 +112,11 @@ fn reused_comparisons_keep_the_work_ceiling_inclusive() {
         }) if limit == u128::from(maximum) && observed > limit => false,
         Err(error) => panic!("expected only a work refusal at {maximum}: {error:?}"),
     };
-    let mut lower = 0;
-    while lower + 1 < upper {
-        let middle = lower + (upper - lower) / 2;
-        if has_enough_work(middle) {
-            upper = middle;
-        } else {
-            lower = middle;
-        }
-    }
-    assert_eq!(upper, lower + 1);
+    let upper = first_success(
+        resource_limits::formula_default(FormulaResource::Work),
+        has_enough_work,
+    );
+    let lower = upper - 1;
     let exact = admitted(upper).expect("the exact work ceiling is inclusive");
     assert_eq!(reference::exhaustive(&exact), expected);
     for maximum in [0, lower] {
@@ -142,7 +135,5 @@ fn reused_comparisons_keep_the_work_ceiling_inclusive() {
 #[test]
 #[ignore = "requires clingo: original comparison sources retain fresh clingo records"]
 fn original_comparison_sources_retain_fresh_clingo_records() {
-    for case in source_cases::cases(FIXTURE) {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    source_cases::clingo_matches_every_case(&source_cases::cases(FIXTURE));
 }

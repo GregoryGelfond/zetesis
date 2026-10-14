@@ -105,6 +105,46 @@ fn statistics_report_the_regions_the_search_visited() {
 }
 
 #[test]
+fn statistics_report_the_parallel_walks_workers_under_its_regions() {
+    let mut configured = options(&["--stats", "--oracle", "countermodel", "--search", "regions"]);
+    configured.workers = std::num::NonZeroUsize::new(2).unwrap();
+    let (report, _, text) = solve("a | b.", &configured);
+    let workers = report
+        .countermodel_statistics
+        .unwrap()
+        .regions
+        .unwrap()
+        .workers
+        .unwrap();
+    let delay = workers.engagement_delay.unwrap().as_nanos();
+    // Under the default delay the host's clock decides whether so small a
+    // walk engages; the line follows the state it took.
+    let line = match workers.engagement {
+        zetesis_sat::RegionWalkEngagement::Unengaged { elapsed, walking } => format!(
+            "    workers: configured=2; engagement_delay_ns={delay}; engagement=unengaged; elapsed_ns={}; walking_ns={}\n",
+            elapsed.as_nanos(),
+            walking.as_nanos()
+        ),
+        zetesis_sat::RegionWalkEngagement::Engaged {
+            after,
+            walking,
+            launched,
+            spawn,
+        } => format!(
+            "    workers: configured=2; engagement_delay_ns={delay}; engagement=engaged; engaged_after_ns={}; walking_ns={}; launched={launched}; spawn_ns={}\n",
+            after.as_nanos(),
+            walking.as_nanos(),
+            spawn.as_nanos()
+        ),
+        other => panic!("a walk that returned models has begun: {other:?}"),
+    };
+    assert!(
+        text.contains(&format!("(included in search work)\n{line}")),
+        "{text}"
+    );
+}
+
+#[test]
 fn statistics_report_the_support_cut_in_place_of_the_disjunctive_certificate() {
     let text = regions_statistics();
     assert!(

@@ -15,6 +15,9 @@
 //! closure check are outside timing; each constructed index is dropped after
 //! timing. Throughput counts admitted nodes, not charged propagation work.
 
+#[path = "admission/marking.rs"]
+mod marking;
+
 use std::hint::black_box;
 
 use criterion::{BatchSize, BenchmarkId, Criterion, Throughput};
@@ -346,5 +349,6 @@ fn main() {
     benchmark.finish();
     benchmark_topology(&mut criterion);
     benchmark_narrower(&mut criterion);
+    marking::benchmark(&mut criterion);
     criterion.final_summary();
 }

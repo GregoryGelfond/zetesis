@@ -4,13 +4,15 @@
 //! must preserve nested values and conditions; a refusal must retain its original
 //! location and the exact independently selected resource.
 
+use crate::support::metadata_resources;
 use zetesis_core::{Atom, Model, Predicate, Value};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::resource_limits;
 use zetesis_themelios::base::source::{Source, SourceId};
 use zetesis_themelios::base::span::Location;
 use zetesis_themelios::logical::program::Program;
 use zetesis_themelios::logical::symbol::{Name, Sign, Symbol};
-use zetesis_themelios::observation::{AdmissionLimits, ErrorKind, Limits, Resource};
+use zetesis_themelios::observation::{ErrorKind, Limits, Resource};
 use zetesis_themelios::{
     FormulaFailure, MetadataError, MetadataLimits, MetadataResource, SourceMetadata,
 };
@@ -71,18 +73,6 @@ fn bounded_metadata_preserves_nested_conditions() {
     }
 }
 
-fn metadata_limit(resource: MetadataResource, limit: usize) -> MetadataLimits {
-    let mut limits = MetadataLimits::default();
-    match resource {
-        MetadataResource::Statements => limits.max_statements = limit,
-        MetadataResource::Nodes => limits.max_nodes = limit,
-        MetadataResource::Depth => limits.max_depth = limit,
-        MetadataResource::TextBytes => limits.max_text_bytes = limit,
-        MetadataResource::Origins => limits.max_origins = limit,
-    }
-    limits
-}
-
 #[test]
 fn every_incomplete_input_budget_refuses_the_policy() {
     let (source, program, location) = input();
@@ -97,7 +87,11 @@ fn every_incomplete_input_budget_refuses_the_policy() {
         let mut complete = false;
         // This is a finite fixture exploration ceiling, not a production limit.
         for limit in 0..=512 {
-            match SourceMetadata::compile(&program, metadata_limit(resource, limit), location) {
+            match SourceMetadata::compile(
+                &program,
+                metadata_resources::limits(resource, limit),
+                location,
+            ) {
                 Ok(actual) => {
                     assert!(limit > 0);
                     assert_eq!(actual, expected);
@@ -134,22 +128,6 @@ fn every_incomplete_input_budget_refuses_the_policy() {
     }
 }
 
-fn observation_limit(resource: Resource, limit: u32) -> AdmissionLimits {
-    let mut limits = AdmissionLimits::default();
-    match resource {
-        Resource::Directives => limits.max_directives = limit,
-        Resource::Nodes => limits.max_nodes = limit,
-        Resource::Depth => limits.max_depth = limit,
-        Resource::Bytes => limits.max_bytes = limit,
-        Resource::Variables => limits.max_variables = limit,
-        Resource::BodyElements => limits.max_body_elements = limit,
-        Resource::Arity => limits.max_arity = limit,
-        Resource::Origins => limits.max_origins = limit,
-        _ => panic!("not a template admission resource"),
-    }
-    limits
-}
-
 #[test]
 fn every_incomplete_template_budget_refuses_the_policy() {
     let (source, program, location) = input();
@@ -165,9 +143,9 @@ fn every_incomplete_template_budget_refuses_the_policy() {
         Resource::Origins,
     ] {
         let mut complete = false;
-        for limit in 0..=512 {
+        for limit in 0..=512_u32 {
             let limits = MetadataLimits {
-                observations: observation_limit(resource, limit),
+                observations: resource_limits::observation(resource, u64::from(limit)),
                 ..MetadataLimits::default()
             };
             match SourceMetadata::compile(&program, limits, location) {

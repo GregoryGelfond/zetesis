@@ -6,9 +6,12 @@ use crate::{
     AdmissionLimits, AggregateComparison, AggregateElement, AggregateError, AggregateLimits,
     FormulaNodes, NodeView, Theory,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
 
 use super::Plan;
+
+#[cfg(test)]
+mod tests;
 
 /// Bounds for emitting a separate consequence theory, excluding the borrowed plan.
 /// The existing aggregate translator also bounds each temporary state frontier.
@@ -54,6 +57,26 @@ pub enum RestrictionErrorKind {
     Theory(crate::AdmissionError),
     /// Cancellation or fallible allocation stopped emission.
     Stopped(Stop),
+}
+
+impl Refusal for RestrictionErrorKind {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Atoms
+            | Self::Nodes
+            | Self::Roots
+            | Self::Elements
+            | Self::Work
+            | Self::Overflow => true,
+            Self::Aggregate(error) => error.kind().is_resource_refusal(),
+            Self::Theory(error) => error.is_resource_refusal(),
+            Self::Stopped(stop) => stop.is_resource_refusal(),
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
 }
 
 /// Typed emission refusal with its charged work prefix.
@@ -144,35 +167,37 @@ impl Plan {
         limits: RestrictionLimits,
         cancellation: &Cancellation,
     ) -> Result<Restriction, RestrictionError> {
-        let mut builder = Builder {
-            nodes: FormulaNodes::default(),
-            roots: Vec::new(),
-            work: 0,
-            limits,
-            cancellation,
-        };
-        let result = builder.build(self);
-        result
-            .map(|theory| Restriction {
-                theory,
-                work: builder.work,
-            })
-            .map_err(|kind| RestrictionError {
-                kind,
-                work: builder.work,
-            })
+        let metered = cancellation.metered(limits.max_work, |meter| {
+            Builder {
+                nodes: FormulaNodes::default(),
+                roots: Vec::new(),
+                limits,
+                cancellation,
+                meter,
+            }
+            .build(self)
+        });
+        let work = metered.charged;
+        metered
+            .result
+            .map(|theory| Restriction { theory, work })
+            .map_err(|kind| RestrictionError { kind, work })
     }
 }
 
-struct Builder<'a> {
+/// One emission's output under construction, its limits and its meter.
+/// Cardinality lowering, an operation of another arrangement that polls before
+/// every step, runs under the smaller of its per-translation work ceiling and
+/// the meter's remaining allowance, and its reported work is counted afterwards.
+struct Builder<'a, 'c> {
     nodes: FormulaNodes,
     roots: Vec<usize>,
-    work: u64,
     limits: RestrictionLimits,
-    cancellation: &'a Cancellation,
+    cancellation: &'c Cancellation,
+    meter: &'a mut Meter<'c>,
 }
 
-impl Builder<'_> {
+impl Builder<'_, '_> {
     fn build(&mut self, plan: &Plan) -> Result<Theory, RestrictionErrorKind> {
         self.poll()?;
         if plan.atom_count() > self.limits.theory.max_atoms {
@@ -221,7 +246,7 @@ impl Builder<'_> {
         let mut limits = self.limits.aggregate;
         limits.max_nodes = limits.max_nodes.min(self.limits.theory.max_nodes);
         limits.max_operands = limits.max_operands.min(self.limits.theory.max_operands);
-        limits.max_work = limits.max_work.min(self.limits.max_work - self.work);
+        limits.max_work = limits.max_work.min(self.meter.remaining());
         let result = self.nodes.append_aggregate(
             &elements,
             AggregateComparison::Ge,
@@ -233,28 +258,18 @@ impl Builder<'_> {
             Ok(build) => build.statistics().work,
             Err(error) => error.statistics().work,
         };
-        self.work = self
-            .work
-            .checked_add(work)
-            .ok_or(RestrictionErrorKind::Overflow)?;
+        self.meter.absorb(work).map_err(refused)?;
         result
             .map(crate::AggregateBuild::root)
             .map_err(RestrictionErrorKind::Aggregate)
     }
 
     fn poll(&self) -> Result<(), RestrictionErrorKind> {
-        self.cancellation
-            .poll()
-            .map_err(RestrictionErrorKind::Stopped)
+        self.meter.poll().map_err(RestrictionErrorKind::Stopped)
     }
 
     fn tick(&mut self) -> Result<(), RestrictionErrorKind> {
-        self.poll()?;
-        if self.work == self.limits.max_work {
-            return Err(RestrictionErrorKind::Work);
-        }
-        self.work += 1;
-        Ok(())
+        self.meter.charge().map_err(refused)
     }
 
     fn node(&mut self, node: NodeView<'_>) -> Result<usize, RestrictionErrorKind> {
@@ -284,5 +299,14 @@ impl Builder<'_> {
             .map_err(|_| RestrictionErrorKind::Stopped(Stop::Allocation))?;
         self.roots.push(root);
         Ok(())
+    }
+}
+
+/// A refused charge in the emission's vocabulary: a requested stop, or the
+/// emission's work limit.
+fn refused(error: ChargeError) -> RestrictionErrorKind {
+    match error {
+        ChargeError::Stopped(stop) => RestrictionErrorKind::Stopped(stop),
+        ChargeError::WorkLimit => RestrictionErrorKind::Work,
     }
 }

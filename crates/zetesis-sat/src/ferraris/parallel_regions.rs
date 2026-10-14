@@ -1,6 +1,13 @@
 //! Regions walked by several workers at once, sharing immutable preparation,
 //! a cumulative allowance and a work-stealing frontier of regions still to visit.
 //!
+//! The walk begins on the coordinator, the calling thread, which steps slot
+//! 0's deque itself and returns the models it verifies, in the scalar walk's
+//! depth-first order. Once the walk has run, in wall time since it began, for
+//! longer than starting the workers costs (its [`Engagement`] delay), the
+//! coordinator starts them all, and its remaining frontier becomes worker 0's
+//! deque. A walk that ends within its delay starts no thread.
+//!
 //! Each worker owns a work-stealing deque of regions with their knowledge, a
 //! lease on the enumeration's shared allowance that serves its consecutive
 //! regions, and its own evaluation workspace. The enumeration builds the
@@ -14,10 +21,10 @@
 //! does, by the class certificate when one applies and else by the
 //! proper-subset query as a region tree; a stable model is sent to the
 //! enumeration. The regions partition the candidate space exactly
-//! (`Cube.split_partition`, `Cube.split_disjoint` of `Search.lean`), so no leaf
-//! is visited by two workers and every leaf by one, whatever the interleaving;
-//! the order in which models arrive is the schedule's and is not a property of
-//! the result, and no two runs promise the same order.
+//! (`Cube.split_partition`, `Cube.split_disjoint` of `Search.lean`), so every
+//! leaf is visited once, by the coordinator or a worker, whatever the
+//! interleaving. Before engagement models arrive in the scalar walk's order;
+//! afterwards their order is the schedule's and is not a property of the result.
 //!
 //! A restriction added while the workers run narrows the regions not yet
 //! visited: each worker reads the restrictions before a narrowing, and a
@@ -29,13 +36,14 @@
 //! after them, so a leaf admitted under the candidate ceiling is never
 //! lost to a worker the ceiling refused. A cancellation observed by the
 //! coordinator can end its pull immediately; explicit stop or drop joins any
-//! remaining workers. The region counts and reading
-//! work, the candidates, the countermodel counts and the phase timings are
-//! the workers' live counters, current while they run; the certificate and
-//! reduct receipts are merged when the workers have finished, so a snapshot
-//! taken earlier lacks them. Phase timings, when enabled, are the workers'
-//! own narrowing and leaf decisions summed over the workers, so they may
-//! exceed the wall time of the walk.
+//! remaining workers. The region counts and reading work, the candidates,
+//! the countermodel counts and the phase timings are the live counters,
+//! current while the walk runs; the coordinator's certificate and reduct
+//! receipts are merged after each of its pulls, and the workers' when they
+//! have finished, so a snapshot taken while workers run lacks theirs. Phase
+//! timings, when enabled, are the coordinator's and the workers' own
+//! narrowing and leaf decisions summed, so they may exceed the wall time of
+//! the walk.
 //!
 //! Each deque has its own mutex: local removal locks only that deque, a split
 //! publication locks that deque and then, after releasing it, the idle gate to
@@ -70,15 +78,17 @@ use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::mpsc::{Receiver, SyncSender, sync_channel};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, PoisonError, RwLock, TryLockError};
 use std::thread::JoinHandle;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use zetesis_cpu::regions::{Narrowing, Region};
-use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Producers, Theory};
+use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Theory};
 
 use super::certified::{self, Certification};
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
 use super::original_index::IndexedTheory;
-use super::regions::{RegionCounts, RegionSearchStatistics};
+use super::regions::{
+    RegionCounts, RegionSearchStatistics, RegionWalkEngagement, RegionWorkerStatistics,
+};
 use super::timing::{self, Phase, PhaseMeasurement};
 use crate::ferraris::Decision;
 use crate::search::{Budget, SharedBudget, WorkLease};
@@ -88,8 +98,61 @@ use crate::{Cancellation, Incomplete, Limits, SearchPhaseTimings, SearchStatisti
 /// least once per timed wait; a publication or the end of the walk wakes it at
 /// once.
 const IDLE_WAIT: Duration = Duration::from_millis(1);
-/// Models a worker may have sent and the enumeration not yet taken, per worker.
+/// Models the workers may have sent and the enumeration not yet taken:
+/// sixteen per configured worker.
 const CHANNEL_SLACK: usize = 16;
+/// The wall cost of engaging one region worker on the reference host: its
+/// thread's start, idle spinning and wakes, and its join, on a walk too short
+/// to use it. The default engagement delay is this times the configured
+/// workers. Its measurement is recorded in the repository's observation
+/// records, "The region workers' engagement cost"
+/// (`docs/book/reference/observations/README.md`).
+const ENGAGEMENT_COST_PER_WORKER: Duration = Duration::from_micros(20);
+
+/// When a parallel region walk starts its workers.
+///
+/// A walk begins at the first pull, once the enumeration's original index
+/// is built. It then runs on the calling thread: its coordinator steps the
+/// region tree in the scalar walk's depth-first order and returns the models it
+/// verifies. Its workers start once the walk has run for its engagement delay,
+/// measured in wall time from the walk's beginning. The caller's own time
+/// between pulls counts toward the delay, so a caller doing heavy work per model
+/// can carry a walk past it. The delay is checked on each pull and between
+/// the coordinator's steps. A step in progress or time between pulls can
+/// postpone engagement. A walk that ends within its delay starts no thread.
+///
+/// The answer family is the same under every engagement; what differs is the
+/// order in which models arrive, the threads started and the time taken.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Engagement {
+    /// The default delay, `w × c` for `w` configured workers, where `c` is the
+    /// measured wall cost of engaging one region worker on the reference host,
+    /// recorded in the repository's observation records. The delay governs
+    /// engagement; it does not bound elapsed-time differences between
+    /// independently scheduled runs.
+    #[default]
+    AfterStartCost,
+    /// No delay: the walk begins and starts every worker at the first pull,
+    /// before any step.
+    Immediate,
+    /// A delay of the given duration. A delay whose deadline, counted from the
+    /// walk's beginning, overflows the monotonic clock never engages:
+    /// `After(Duration::MAX)` keeps the whole walk on the calling thread.
+    After(Duration),
+}
+
+impl Engagement {
+    /// The delay this engagement sets for `workers` configured workers.
+    fn delay(self, workers: usize) -> Duration {
+        match self {
+            Self::AfterStartCost => ENGAGEMENT_COST_PER_WORKER
+                .saturating_mul(u32::try_from(workers).unwrap_or(u32::MAX)),
+            Self::Immediate => Duration::ZERO,
+            Self::After(delay) => delay,
+        }
+    }
+}
 /// Idle steal rounds a worker spins (yielding) before it waits for the walk
 /// to end or the wait to time out: the busy-wait/wait backoff crossover,
 /// distinct from `CHANNEL_SLACK`.
@@ -99,7 +162,8 @@ const SPIN_ROUNDS_BEFORE_WAIT: u32 = 16;
 type Entry = (Region, CandidateKnowledge);
 
 struct Shared {
-    producers: Option<Producers>,
+    /// What the walk reads of the original theory beyond the theory itself.
+    parts: super::regions::OriginalParts,
     certificate: Option<Arc<Certification>>,
     filter: Option<crate::region_filter::Filter>,
     restrictions: RwLock<Conditions<Arc<(Theory, Narrower)>>>,
@@ -430,33 +494,172 @@ impl Shared {
     }
 }
 
-/// The parallel proposer: verified stable models arrive from the workers.
+/// The parallel proposer: verified stable models come from the coordinator
+/// until the workers start, and from the workers after.
 pub(crate) struct ParallelRegions {
     shared: Arc<Shared>,
     /// Taken before joining on drop, releasing workers blocked on a send.
     receiver: Option<Receiver<Interpretation>>,
     sender: Option<SyncSender<Interpretation>>,
     handles: Vec<JoinHandle<Option<WorkerReport>>>,
-    started: bool,
+    /// Where the walk ran and what it did there; frozen once the walk ends.
+    record: WalkRecord,
+    /// The coordinator's retained state, owned exactly while the walk is
+    /// unengaged and has neither ended nor been closed.
+    coordinator: Option<CoordinatorCell>,
+    /// The engagement delay in force; `None` for a delay whose deadline
+    /// overflows, which never engages.
+    delay: Option<Duration>,
     exhausted: bool,
     statistics: RegionSearchStatistics,
-    /// The workers' own membership receipts, merged when they finish.
+    /// The membership receipts: the coordinator's, merged after each of its
+    /// pulls, and the workers', merged when they finish.
     merged: Statistics,
     /// The worklists of the coordinator's own positive checks.
     scratch: NarrowingScratch,
 }
 
-/// What a worker did, returned when it finishes.
+/// Where a parallel walk ran and what it did there, with the instants it is
+/// computed from. It never owns a resource; what the walk owns is held beside
+/// it. Only pulls that step and the engagement operation write it, so it is
+/// frozen once the walk has ended.
+#[derive(Clone, Copy, Debug)]
+enum WalkRecord {
+    /// No pull has begun the walk.
+    NotBegun,
+    /// The walk has run on the calling thread only. `since` is its beginning,
+    /// `deadline` the instant it engages (`None`: never), `elapsed` runs from
+    /// `since` to the end of the last pull that stepped, and `walking` sums the
+    /// coordinator's time inside those pulls.
+    Unengaged {
+        since: Instant,
+        deadline: Option<Instant>,
+        elapsed: Duration,
+        walking: Duration,
+    },
+    /// The workers started `after` the walk's beginning, once the coordinator
+    /// had walked for `walking`; `launched` threads were spawned and the spawn
+    /// loop took `spawn`.
+    Engaged {
+        after: Duration,
+        walking: Duration,
+        launched: usize,
+        spawn: Duration,
+    },
+}
+
+impl WalkRecord {
+    const fn public(self) -> RegionWalkEngagement {
+        match self {
+            Self::NotBegun => RegionWalkEngagement::NotBegun,
+            Self::Unengaged {
+                elapsed, walking, ..
+            } => RegionWalkEngagement::Unengaged { elapsed, walking },
+            Self::Engaged {
+                after,
+                walking,
+                launched,
+                spawn,
+            } => RegionWalkEngagement::Engaged {
+                after,
+                walking,
+                launched,
+                spawn,
+            },
+        }
+    }
+}
+
+/// What the coordinator reuses across its pulls, as a worker reuses its
+/// workspaces across regions: the workspaces, the membership receipts not yet
+/// merged, and the phase timings it has published.
+struct Coordinator<'a> {
+    workspaces: Workspaces<'a>,
+    report: WorkerReport,
+    reported: SearchPhaseTimings,
+}
+
+self_cell::self_cell! {
+    /// The coordinator's retained state, borrowing the shared structure
+    /// through a clone of its `Arc`, as the scalar walk's retained filter
+    /// borrows its factory. Its checker is prepared once and retained across
+    /// pulls; it is released when the walk ends, engages, stops or is dropped.
+    struct CoordinatorCell {
+        owner: Arc<Shared>,
+        #[not_covariant]
+        dependent: Coordinator,
+    }
+}
+
+/// Why a coordinator pull's walk stopped.
+enum Exit {
+    /// A step verified a model.
+    Model(Interpretation),
+    /// Guard 3: every region is resolved.
+    Resolved,
+    /// Guard 4: the deadline passed.
+    Deadline,
+    /// Guard 1: the caller's cancellation.
+    Cancelled(Incomplete),
+    /// Guard 2: the walk is closed.
+    Closed,
+    /// A step's error, or an inconsistency, already raised as the stop.
+    Failed,
+    /// A step panicked; `WorkerPanicked` is already raised as the stop.
+    Panicked,
+}
+
+/// What a coordinator pull ends in: an answer for the caller, or the
+/// passage to the receive loop once the workers have started.
+enum Coordinated {
+    Answer(Option<Interpretation>),
+    Engage,
+}
+
+/// What a worker did, returned when it finishes; the coordinator keeps one
+/// across its pulls.
 struct WorkerReport {
     regions: RegionCounts,
     statistics: Statistics,
+}
+
+impl WorkerReport {
+    /// An empty report for a walk over `shared`: certificate receipts when a
+    /// certificate is configured, and phase timings when the walk is timed.
+    fn for_walk(shared: &Shared) -> Self {
+        Self {
+            regions: RegionCounts::default(),
+            statistics: Statistics {
+                // The certificate records its checks in these receipts.
+                certified: shared
+                    .certificate
+                    .as_ref()
+                    .map(|_| super::certified::CertifiedStatistics::default()),
+                phase_timings: shared.timed.then(SearchPhaseTimings::default),
+                ..Statistics::default()
+            },
+        }
+    }
+
+    /// Merge the certificate and reduct receipts into `into` and take them,
+    /// reseeding them empty as a fresh report starts, so each merge adds only
+    /// the work since the last. The counters merged before a failing one stay
+    /// merged.
+    fn merge_into(&mut self, into: &mut Statistics) -> Result<(), Incomplete> {
+        let merged = merge_membership(into, &self.statistics);
+        self.statistics.reduct = crate::ReductStatistics::default();
+        if self.statistics.certified.is_some() {
+            self.statistics.certified = Some(super::certified::CertifiedStatistics::default());
+        }
+        merged
+    }
 }
 
 impl std::fmt::Debug for ParallelRegions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ParallelRegions")
             .field("workers", &self.shared.workers)
-            .field("started", &self.started)
+            .field("record", &self.record)
             .field("exhausted", &self.exhausted)
             .finish_non_exhaustive()
     }
@@ -464,20 +667,20 @@ impl std::fmt::Debug for ParallelRegions {
 
 impl ParallelRegions {
     /// Prepare the shared structure, queueing the root region with no
-    /// knowledge; its first narrowing creates each knowledge slot. The
-    /// workers start on the first proposal, once the enumeration's
-    /// certificates are configured and its original index is built.
+    /// knowledge; its first narrowing creates each knowledge slot. The walk
+    /// begins on the first call to `propose`, once the enumeration's
+    /// certificates are configured and its original index is built; the
+    /// workers start when it has run for its engagement delay.
     pub(crate) fn new(
         theory: &Theory,
         workers: NonZeroUsize,
+        engagement: Engagement,
         limits: Limits,
         cancellation: Cancellation,
         budget: &mut Budget<'_>,
     ) -> Result<Self, Incomplete> {
-        let super::regions::Opened {
-            producers,
-            statistics,
-        } = super::regions::open(theory, budget)?;
+        let delay = engagement.delay(workers.get());
+        let super::regions::Opened { parts, statistics } = super::regions::open(theory, budget)?;
         let (sender, receiver) = sync_channel(workers.get() * CHANNEL_SLACK);
         let root = (
             Region::all_open(theory.atom_count()),
@@ -493,7 +696,7 @@ impl ParallelRegions {
         }
         Ok(Self {
             shared: Arc::new(Shared {
-                producers,
+                parts,
                 certificate: None,
                 filter: None,
                 restrictions: RwLock::new(Conditions::default()),
@@ -511,7 +714,9 @@ impl ParallelRegions {
             receiver: Some(receiver),
             sender: Some(sender),
             handles: Vec::new(),
-            started: false,
+            record: WalkRecord::NotBegun,
+            coordinator: None,
+            delay: Instant::now().checked_add(delay).map(|_| delay),
             exhausted: false,
             statistics,
             merged: Statistics::default(),
@@ -523,7 +728,7 @@ impl ParallelRegions {
         &mut self,
         filter: crate::region_filter::Filter,
     ) -> Result<(), Incomplete> {
-        if self.started {
+        if !matches!(self.record, WalkRecord::NotBegun) {
             return Err(Incomplete::LateRegionFilter);
         }
         Arc::get_mut(&mut self.shared)
@@ -542,14 +747,36 @@ impl ParallelRegions {
         self.shared.filter.as_ref()
     }
 
-    /// Stop admission, release blocked senders, then join before exposing the
-    /// final source-accounting receipt. The caller's token is unchanged.
+    /// Close the walk, release the coordinator's state and blocked senders,
+    /// then join before exposing the final source-accounting receipt. The
+    /// caller's token is unchanged.
     pub(crate) fn stop(&mut self) -> Result<(), Incomplete> {
+        self.teardown()
+    }
+
+    /// The one teardown, the same in every state, run by `stop`, by drop and
+    /// by every failure: it tears down whatever the walk owns and keeps the
+    /// record. Each step is a no-op when nothing is owned, so a second
+    /// teardown changes nothing and reports the same stop.
+    fn teardown(&mut self) -> Result<(), Incomplete> {
         self.shared.close();
+        if let Err(error) = self.release_coordinator() {
+            self.shared.stop(error);
+        }
         drop(self.receiver.take());
         drop(self.sender.take());
         let joined = self.join();
         self.shared.stopped().map_or(joined, Err)
+    }
+
+    /// Release the coordinator's retained state through a contained drop: a
+    /// checker whose teardown panics becomes `WorkerPanicked`, never
+    /// exhaustion, as in the scalar walk.
+    fn release_coordinator(&mut self) -> Result<(), Incomplete> {
+        self.coordinator.take().map_or(Ok(()), |cell| {
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || drop(cell)))
+                .map_err(|_| Incomplete::WorkerPanicked)
+        })
     }
 
     pub(crate) fn counts_mut(&mut self) -> &mut RegionCounts {
@@ -593,11 +820,17 @@ impl ParallelRegions {
             },
             producers: self.statistics.producers,
             frontier: None,
+            workers: Some(RegionWorkerStatistics {
+                configured: self.shared.workers,
+                engagement_delay: self.delay,
+                engagement: self.record.public(),
+            }),
         }
     }
 
-    /// The workers' membership receipts: the counters current while they
-    /// run, and the certificate and reduct receipts merged when they finish.
+    /// The membership receipts: the counters current while the walk runs,
+    /// and the certificate and reduct receipts, the coordinator's merged
+    /// after each of its pulls and the workers' when they finish.
     pub(crate) fn merged(&self) -> Statistics {
         let live = &self.shared.live;
         Statistics {
@@ -618,10 +851,14 @@ impl ParallelRegions {
         restriction: &Theory,
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
-        if !self.started {
+        if matches!(self.record, WalkRecord::NotBegun) {
             self.synchronize_budget(budget.statistics)?;
         }
-        let narrower = Narrower::try_new(restriction).map_err(super::regions::stopped)?;
+        let narrower = super::original_index::prepare(
+            restriction,
+            self.shared.limits.max_native_narrowing_bytes,
+            budget.cancellation,
+        )?;
         self.shared.budget.charge(narrower.work())?;
         self.account(budget);
         self.statistics.counts.work += narrower.work();
@@ -642,6 +879,10 @@ impl ParallelRegions {
 
     /// A worker's existing snapshot may finish under the old generation;
     /// future snapshots see this replacement and all permanent restrictions.
+    ///
+    /// This follows `Bound::tightened`'s order but stays separate from it: the
+    /// charge lands on the workers' shared allowance, synchronized first, and
+    /// is accounted to the caller's budget even when refused.
     pub(crate) fn tighten(
         &mut self,
         restriction: &Theory,
@@ -649,10 +890,15 @@ impl ParallelRegions {
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
         budget.cancellation.poll()?;
-        if !self.started {
+        if matches!(self.record, WalkRecord::NotBegun) {
             self.synchronize_budget(budget.statistics)?;
         }
-        let bound = Bound::prepare(restriction, generation)?;
+        let bound = Bound::prepare(
+            restriction,
+            generation,
+            self.shared.limits.max_native_narrowing_bytes,
+            budget.cancellation,
+        )?;
         let charged = self.shared.budget.charge(bound.work());
         self.account(budget);
         charged?;
@@ -682,7 +928,7 @@ impl ParallelRegions {
         budget: &mut Budget<'_>,
         timings: &mut Option<crate::SearchPhaseTimings>,
     ) -> Result<bool, Incomplete> {
-        if self.started {
+        if !matches!(self.record, WalkRecord::NotBegun) {
             return Err(Incomplete::LateCertificate);
         }
         let restrictions = self
@@ -701,12 +947,14 @@ impl ParallelRegions {
         )
     }
 
-    /// The next verified stable model, or `None` once the workers have
-    /// covered the root. Starts the workers on the first call, handing each
+    /// The next verified stable model, or `None` once the root is covered.
+    /// Begins the walk on the first call and steps it on the coordinator until
+    /// the engagement delay has passed, then starts the workers, handing each
     /// a clone of `index`, the enumeration's one original index, with the
-    /// certificate the enumeration holds at that moment, timing their
-    /// phases when `timed`. A stop a worker raised is returned once every
-    /// model the workers sent has been taken, and on every call after that.
+    /// certificate the enumeration held when the walk began, timing their
+    /// phases when `timed`. A raised stop is returned once every model already
+    /// verified has been returned, and on every later call, `stop()` included;
+    /// a walk closed without a stop returns `ClosedEnumerator`.
     pub(crate) fn propose(
         &mut self,
         index: &Arc<IndexedTheory>,
@@ -714,24 +962,45 @@ impl ParallelRegions {
         timed: bool,
         budget: &mut Budget<'_>,
     ) -> Result<Option<Interpretation>, Incomplete> {
+        self.propose_with(index, certificate, timed, budget, &mut |deadline| {
+            Instant::now() >= deadline
+        })
+    }
+
+    /// `propose`, asking `deadline_passed` whether the engagement deadline has
+    /// passed: on entry to each coordinator iteration and after each step that
+    /// returned no model. A walk without a deadline never asks it.
+    fn propose_with(
+        &mut self,
+        index: &Arc<IndexedTheory>,
+        certificate: Option<&Arc<Certification>>,
+        timed: bool,
+        budget: &mut Budget<'_>,
+        deadline_passed: &mut impl FnMut(Instant) -> bool,
+    ) -> Result<Option<Interpretation>, Incomplete> {
         if self.exhausted {
             return Ok(None);
         }
-        if !self.started {
-            self.synchronize_budget(budget.statistics)?;
-            if let Err(error) = self.start(index, certificate, timed) {
-                self.account(budget);
-                return Err(error);
+        if matches!(self.record, WalkRecord::NotBegun) {
+            self.begin(certificate, timed, budget)?;
+        }
+        if matches!(self.record, WalkRecord::Unengaged { .. }) {
+            match self.pull_coordinator(index, budget, deadline_passed)? {
+                Coordinated::Answer(answer) => return Ok(answer),
+                Coordinated::Engage => self.engage(index, budget)?,
             }
         }
         loop {
             budget.cancellation.poll()?;
-            match self
-                .receiver
-                .as_ref()
-                .ok_or(Incomplete::ClosedEnumerator)?
-                .recv_timeout(IDLE_WAIT)
-            {
+            // A closed walk answers alike in every state: its recorded stop
+            // first, and else the closed enumerator.
+            let Some(receiver) = self.receiver.as_ref() else {
+                return Err(self
+                    .shared
+                    .stopped()
+                    .unwrap_or(Incomplete::ClosedEnumerator));
+            };
+            match receiver.recv_timeout(IDLE_WAIT) {
                 Ok(model) => {
                     self.account(budget);
                     return Ok(Some(model));
@@ -766,20 +1035,160 @@ impl ParallelRegions {
 
     /// Before workers own leases, the coordinator's counters include every
     /// setup charge, including certificate configuration since construction.
-    /// Reconcile them before another restriction or the first worker starts.
+    /// Reconcile them before another restriction or the walk begins.
     fn synchronize_budget(&mut self, statistics: SearchStatistics) -> Result<(), Incomplete> {
         let shared = Arc::get_mut(&mut self.shared).ok_or(Incomplete::InvalidWitness)?;
         shared.budget = SharedBudget::new(shared.limits.search, statistics);
         Ok(())
     }
 
-    fn start(
+    /// Begin the walk at the first pull: poll cancellation and refuse a closed
+    /// walk, leaving it unbegun in either case; synchronize the budget and install the
+    /// certificate and the timing flag, while no other party holds the shared
+    /// structure; record the beginning and the deadline; and create the
+    /// coordinator's retained state unless the delay is zero. A timing enable
+    /// made after the walk has begun is ignored for the whole walk.
+    fn begin(
         &mut self,
-        index: &Arc<IndexedTheory>,
         certificate: Option<&Arc<Certification>>,
         timed: bool,
+        budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
-        self.start_with(certificate, timed, |shared, slot, sender| {
+        budget.cancellation.poll()?;
+        if self.shared.termination.is_closed() {
+            return Err(self
+                .shared
+                .stopped()
+                .unwrap_or(Incomplete::ClosedEnumerator));
+        }
+        let shared = Arc::get_mut(&mut self.shared).ok_or(Incomplete::InvalidWitness)?;
+        shared.budget = SharedBudget::new(shared.limits.search, budget.statistics);
+        // The certificate is shared read-only; the Arc is cloned into the
+        // shared structure before any other party holds it.
+        shared.certificate = certificate.map(Arc::clone);
+        shared.timed = timed;
+        let since = Instant::now();
+        let deadline = self.delay.and_then(|delay| since.checked_add(delay));
+        if deadline.is_none() {
+            self.delay = None;
+        }
+        self.record = WalkRecord::Unengaged {
+            since,
+            deadline,
+            elapsed: Duration::ZERO,
+            walking: Duration::ZERO,
+        };
+        if self.delay != Some(Duration::ZERO) {
+            self.coordinator = Some(CoordinatorCell::new(Arc::clone(&self.shared), |shared| {
+                Coordinator {
+                    workspaces: Workspaces::new(),
+                    report: WorkerReport::for_walk(shared),
+                    reported: SearchPhaseTimings::default(),
+                }
+            }));
+        }
+        Ok(())
+    }
+
+    /// One coordinator pull: its walk, then the end of its coordinator part
+    /// (the lease settled and dropped, the membership receipts merged and
+    /// taken, the record updated if it stepped, the shared allowance
+    /// accounted), then the exit's own effect.
+    fn pull_coordinator(
+        &mut self,
+        index: &Arc<IndexedTheory>,
+        budget: &mut Budget<'_>,
+        deadline_passed: &mut impl FnMut(Instant) -> bool,
+    ) -> Result<Coordinated, Incomplete> {
+        let WalkRecord::Unengaged {
+            since, deadline, ..
+        } = self.record
+        else {
+            return Err(Incomplete::InvalidWitness);
+        };
+        let entry = Instant::now();
+        let caller = budget.cancellation;
+        let merged = &mut self.merged;
+        let original: &IndexedTheory = index;
+        let (exit, stepped, merge) = match self.coordinator.as_mut() {
+            Some(cell) => cell.with_dependent_mut(|shared, coordinator| {
+                coordinate(
+                    shared,
+                    Some(coordinator),
+                    original,
+                    caller,
+                    deadline,
+                    deadline_passed,
+                    merged,
+                )
+            }),
+            None => coordinate(
+                &self.shared,
+                None,
+                original,
+                caller,
+                deadline,
+                deadline_passed,
+                merged,
+            ),
+        };
+        if stepped {
+            let now = Instant::now();
+            if let WalkRecord::Unengaged {
+                elapsed, walking, ..
+            } = &mut self.record
+            {
+                *walking = walking.saturating_add(now.saturating_duration_since(entry));
+                *elapsed = now.saturating_duration_since(since);
+            }
+        }
+        self.account(budget);
+        if let Err(error) = merge {
+            // Raised as join raises its merge failure. A model in hand is
+            // still returned; the stop follows on the next pull.
+            self.shared.stop(error);
+            let _ = self.teardown();
+            return match exit {
+                Exit::Model(model) => Ok(Coordinated::Answer(Some(model))),
+                _ => Err(self.shared.stopped().unwrap_or(error)),
+            };
+        }
+        match exit {
+            Exit::Model(model) => Ok(Coordinated::Answer(Some(model))),
+            Exit::Resolved => {
+                if let Err(error) = self.release_coordinator() {
+                    self.shared.stop(error);
+                    let _ = self.teardown();
+                    return Err(self.shared.stopped().unwrap_or(error));
+                }
+                self.release_frontier();
+                debug_assert_eq!(
+                    self.shared.termination.outstanding.load(Ordering::Acquire),
+                    0,
+                    "a resolved walk left regions outstanding"
+                );
+                self.exhausted = true;
+                Ok(Coordinated::Answer(None))
+            }
+            Exit::Deadline => Ok(Coordinated::Engage),
+            Exit::Cancelled(error) => Err(error),
+            Exit::Closed => Err(self
+                .shared
+                .stopped()
+                .unwrap_or(Incomplete::ClosedEnumerator)),
+            Exit::Failed | Exit::Panicked => {
+                let _ = self.teardown();
+                Err(self.shared.stopped().unwrap_or(Incomplete::InvalidWitness))
+            }
+        }
+    }
+
+    fn engage(
+        &mut self,
+        index: &Arc<IndexedTheory>,
+        budget: &mut Budget<'_>,
+    ) -> Result<(), Incomplete> {
+        self.engage_with(budget, |shared, slot, sender| {
             let original = Arc::clone(index);
             std::thread::Builder::new()
                 .name("zetesis-region".into())
@@ -789,34 +1198,54 @@ impl ParallelRegions {
         })
     }
 
-    /// Thread creation is an execution boundary: a refused launch closes and
-    /// joins the already launched subset before the incomplete result escapes.
-    fn start_with(
+    /// Start the workers: release the coordinator's state, then reserve the
+    /// handles and spawn every slot in order, so worker 0 continues the
+    /// coordinator's depth-first walk from deque 0 and the others steal from
+    /// it. Thread creation is an execution boundary: a refused reservation or
+    /// spawn records the threads actually launched, raises `Allocation`,
+    /// and runs the teardown, which joins the launched subset and discards the
+    /// models it queued, before the incomplete result escapes.
+    fn engage_with(
         &mut self,
-        certificate: Option<&Arc<Certification>>,
-        timed: bool,
-        spawn: impl FnMut(
+        budget: &mut Budget<'_>,
+        mut spawn: impl FnMut(
             Arc<Shared>,
             usize,
             SyncSender<Interpretation>,
         ) -> std::io::Result<JoinHandle<Option<WorkerReport>>>,
     ) -> Result<(), Incomplete> {
-        // The certificate is shared read-only; the Arc is cloned into the
-        // shared structure before any worker starts.
-        let shared = Arc::get_mut(&mut self.shared).ok_or(Incomplete::InvalidWitness)?;
-        shared.certificate = certificate.map(Arc::clone);
-        shared.timed = timed;
-        if let Err(error) = self.launch(spawn) {
+        let WalkRecord::Unengaged { since, walking, .. } = self.record else {
+            return Err(Incomplete::InvalidWitness);
+        };
+        if let Err(error) = self.release_coordinator() {
             self.shared.stop(error);
-            return self.stop().and(Err(error));
+            let _ = self.teardown();
+            self.account(budget);
+            return Err(self.shared.stopped().unwrap_or(error));
         }
-        self.started = true;
+        let start = Instant::now();
+        let launched = self.launch(&mut spawn);
+        self.record = WalkRecord::Engaged {
+            after: start.saturating_duration_since(since),
+            walking,
+            launched: self.handles.len(),
+            spawn: start.elapsed(),
+        };
+        if let Err(error) = launched {
+            self.shared.stop(error);
+            let _ = self.teardown();
+            self.account(budget);
+            return Err(error);
+        }
         Ok(())
     }
 
+    /// Reserve the handles, then spawn each slot and push its handle as it is
+    /// created, so the handles are the threads actually launched at every
+    /// point. The original sender is dropped on return.
     fn launch(
         &mut self,
-        mut spawn: impl FnMut(
+        spawn: &mut impl FnMut(
             Arc<Shared>,
             usize,
             SyncSender<Interpretation>,
@@ -854,11 +1283,17 @@ impl ParallelRegions {
         }
         // No worker can still own or publish work. Release abandoned payloads
         // and high-water slot capacity even if the caller keeps the enumerator.
+        self.release_frontier();
+        failure.map_or(Ok(()), Err)
+    }
+
+    /// Release every deque's payloads and capacity, once no party can still
+    /// own or publish work.
+    fn release_frontier(&self) {
         for index in 0..self.shared.workers {
             let pending = std::mem::take(&mut *self.shared.queue(index));
             drop(pending);
         }
-        failure.map_or(Ok(()), Err)
     }
 
     /// The shared allowance's spent work and decisions become the
@@ -897,8 +1332,9 @@ impl Drop for ParallelRegions {
 
 /// Merge a joined worker's certificate and reduct receipts; its candidate,
 /// query and countermodel counts reached the live counters as it went, and
-/// the coordinator counts the stable models it returns. A sum beyond its
-/// counter's width is the counter refusal.
+/// the coordinator counts the stable models it returns. A peak is the largest
+/// of any one workspace's. A sum beyond its counter's width is the counter
+/// refusal.
 fn merge_membership(into: &mut Statistics, from: &Statistics) -> Result<(), Incomplete> {
     fn add(counter: &mut u64, value: u64) -> Result<(), Incomplete> {
         *counter = counter
@@ -907,6 +1343,10 @@ fn merge_membership(into: &mut Statistics, from: &Statistics) -> Result<(), Inco
         Ok(())
     }
     add(&mut into.reduct.original_work, from.reduct.original_work)?;
+    into.reduct.peak_workspace_bytes = into
+        .reduct
+        .peak_workspace_bytes
+        .max(from.reduct.peak_workspace_bytes);
     if let Some(from) = from.certified.as_ref() {
         let into = into.certified.get_or_insert_default();
         add(&mut into.checks, from.checks)?;
@@ -937,6 +1377,133 @@ fn merge_membership(into: &mut Statistics, from: &Statistics) -> Result<(), Inco
     into.reduct.regions.add(from.reduct.regions)
 }
 
+/// One coordinator pull's walk, with its guards in this order at every
+/// iteration: the caller's cancellation; a closed walk; a resolved frontier;
+/// the engagement deadline, asked through `deadline_passed`; then a step of
+/// the newest region of deque 0 through `advance`, under the pull's one lease,
+/// taken at its first step. A step's error or panic is raised as the shared
+/// stop before the pull's coordinator part ends, so it is the stop reported.
+///
+/// Before returning, the lease is settled and dropped, and unless a step
+/// panicked the coordinator's certificate and reduct receipts are merged into
+/// `merged` and taken. Returns the exit, whether the pull stepped, and the
+/// merge's outcome.
+///
+/// Between iterations the outstanding count equals the length of deque 0,
+/// every other deque is empty, no region is in hand and no worker exists, so
+/// deque 0 cannot be empty at the step; an empty deque or a missing
+/// coordinator state is an inconsistency, refused as an invalid witness and
+/// never taken for exhaustion. Each iteration returns, engages or steps, and
+/// a step splits or resolves a region of a finite tree, so the pull ends.
+fn coordinate<'a>(
+    shared: &'a Shared,
+    mut coordinator: Option<&mut Coordinator<'a>>,
+    original: &IndexedTheory,
+    caller: &Cancellation,
+    deadline: Option<Instant>,
+    deadline_passed: &mut impl FnMut(Instant) -> bool,
+    merged: &mut Statistics,
+) -> (Exit, bool, Result<(), Incomplete>) {
+    let mut lease: Option<WorkLease<'a>> = None;
+    let mut search = SearchStatistics::default();
+    let mut stepped = false;
+    let exit = loop {
+        if let Err(stop) = caller.poll() {
+            break Exit::Cancelled(stop.into());
+        }
+        if shared.termination.is_closed() {
+            break Exit::Closed;
+        }
+        if shared.termination.is_resolved() {
+            break Exit::Resolved;
+        }
+        // With no delay the walk holds no coordinator state and engages before
+        // any step.
+        if let Some(deadline) = deadline
+            && (coordinator.is_none() || deadline_passed(deadline))
+        {
+            break Exit::Deadline;
+        }
+        let (Some(coordinator), Some(entry)) = (coordinator.as_deref_mut(), shared.take_local(0))
+        else {
+            shared.stop(Incomplete::InvalidWitness);
+            break Exit::Failed;
+        };
+        stepped = true;
+        let quota = lease
+            .take()
+            .unwrap_or_else(|| shared.budget.lease(&shared.cancellation));
+        let mut budget = Budget {
+            quota,
+            limits: shared.limits.search,
+            cancellation: &shared.cancellation,
+            statistics: search,
+        };
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            advance(
+                shared,
+                original,
+                entry,
+                0,
+                &mut coordinator.workspaces,
+                &mut budget,
+                (&mut coordinator.report, &mut coordinator.reported),
+            )
+        }));
+        search = budget.statistics;
+        lease = Some(budget.quota);
+        match outcome {
+            Ok(Ok(Stepped::Split | Stepped::Resolved(None))) => {}
+            Ok(Ok(Stepped::Resolved(Some(model)))) => break Exit::Model(model),
+            Ok(Err(error)) => {
+                shared.stop(error);
+                break Exit::Failed;
+            }
+            Err(_) => {
+                shared.stop(Incomplete::WorkerPanicked);
+                break Exit::Panicked;
+            }
+        }
+    };
+    if let Some(lease) = lease {
+        lease.settle();
+    }
+    let merge = match (coordinator, &exit) {
+        // A panicking pull's receipts are discarded with the coordinator's
+        // state, as a panicked worker's report is.
+        (_, Exit::Panicked) => Ok(()),
+        (Some(coordinator), _) if stepped => coordinator.report.merge_into(merged),
+        _ => Ok(()),
+    };
+    (exit, stepped, merge)
+}
+
+/// Step one region through `step`, then publish its phase timings to the live
+/// counters as the difference from the reported baseline, and resolve the
+/// region once when it is resolved. The workers and the coordinator both
+/// drive this one unit, so they step alike.
+fn advance<'a>(
+    shared: &'a Shared,
+    original: &IndexedTheory,
+    entry: Entry,
+    index: usize,
+    workspaces: &mut Workspaces<'a>,
+    budget: &mut Budget<'a, WorkLease<'a>>,
+    (report, reported): (&mut WorkerReport, &mut SearchPhaseTimings),
+) -> Result<Stepped, Incomplete> {
+    let stepped = step(shared, original, entry, index, workspaces, budget, report);
+    if let Some(measured) = report.statistics.phase_timings {
+        shared.live.add_timings(reported, &measured);
+        *reported = measured;
+    }
+    // A resolved region leaves the frontier: resolve once, here, so the count
+    // has exactly one structural decrement point.
+    if let Ok(Stepped::Resolved(_)) = stepped {
+        shared.termination.resolve();
+    }
+    stepped
+}
+
 /// One worker's walk over `original`, the enumeration's index, until the run
 /// closes, a stop is raised, or the enumeration stops listening.
 fn worker(
@@ -945,18 +1512,7 @@ fn worker(
     index: usize,
     sender: &SyncSender<Interpretation>,
 ) -> WorkerReport {
-    let mut report = WorkerReport {
-        regions: RegionCounts::default(),
-        statistics: Statistics {
-            // The certificate records its checks in these receipts.
-            certified: shared
-                .certificate
-                .as_ref()
-                .map(|_| super::certified::CertifiedStatistics::default()),
-            phase_timings: shared.timed.then(SearchPhaseTimings::default),
-            ..Statistics::default()
-        },
-    };
+    let mut report = WorkerReport::for_walk(shared);
     let mut reported = SearchPhaseTimings::default();
     let mut search = SearchStatistics::default();
     let mut workspaces = Workspaces::new();
@@ -986,31 +1542,25 @@ fn worker(
                 cancellation: &shared.cancellation,
                 statistics: search,
             };
-            let result = step(
+            let result = advance(
                 shared,
                 original,
                 entry,
                 index,
                 &mut workspaces,
                 &mut budget,
-                &mut report,
+                (&mut report, &mut reported),
             );
             search = budget.statistics;
             quota = budget.quota;
             result
         };
-        if let Some(measured) = report.statistics.phase_timings {
-            shared.live.add_timings(&reported, &measured);
-            reported = measured;
-        }
         match stepped {
             // A split's children are on this worker's deque; `outstanding` was
             // already incremented before they were pushed.
             Ok(Stepped::Split) => {}
-            // A resolved region leaves the frontier: resolve once, here, so
-            // the count has exactly one structural decrement point.
+            // `advance` resolved the region once.
             Ok(Stepped::Resolved(model)) => {
-                shared.termination.resolve();
                 if let Some(model) = model {
                     quota.settle();
                     if sender.send(model).is_err() {
@@ -1138,11 +1688,7 @@ fn step<'a>(
             timings: &mut report.statistics.phase_timings,
         });
     let narrowing = super::regions::narrow(
-        (
-            original.theory(),
-            original.narrower(),
-            shared.producers.as_ref(),
-        ),
+        (shared.parts.subject(original.theory()), original.narrower()),
         &restrictions,
         (&mut region, &mut knowledge),
         &mut workspaces.scratch,

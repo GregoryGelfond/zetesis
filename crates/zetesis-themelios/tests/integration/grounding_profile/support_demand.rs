@@ -2,16 +2,14 @@
 //! no join reads keeps none, and every probe a join makes finds its posting.
 
 use super::{Observer, compile};
-use zetesis_themelios::FormulaLimits;
+use zetesis_reference_support::resource_limits;
+use zetesis_themelios::{FormulaLimits, FormulaResource};
 
 #[test]
 fn demanded_support_fits_its_storage_allowance() {
     // This admits 200 rows and one demand table. Charging that table again
     // for each publication exceeds this bound before support completes.
-    let limits = FormulaLimits {
-        max_support_bytes: 100_000,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::SupportBytes, 100_000);
     let observer = Observer::default();
     let admitted = compile("d(1..100). p(X):-d(X).", &limits, Some(&observer)).unwrap();
     assert_eq!(admitted.atoms().len(), 200);
@@ -105,15 +103,10 @@ fn every_kind_of_join_finds_its_posting() {
 
 #[test]
 fn a_streamed_constraint_finds_its_posting() {
-    use zetesis_themelios::{AdmissionOptions, ExpansionLimits, prepare_formula};
     let observer = Observer::default();
-    prepare_formula(
-        "{ a(1..6) }.\n{ b(1..6, 1..2) }.\nc(X) :- a(X).\n:- c(X), b(X, 2).\n".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
+    zetesis_reference_support::prepared(
+        "{ a(1..6) }.\n{ b(1..6, 1..2) }.\nc(X) :- a(X).\n:- c(X), b(X, 2).\n",
     )
-    .expect("prepared")
     .ground_hybrid_with_observer(Some(&observer))
     .expect("admitted");
     let unindexed: u64 = observer

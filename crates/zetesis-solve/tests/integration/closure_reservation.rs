@@ -1,6 +1,7 @@
 //! CPU closure setup owns its collective reservation; other routes do not.
 
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
+use zetesis_reference_support::formula;
 
 use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Template};
 use zetesis_cpu::{Cancellation, Stop};
@@ -8,7 +9,6 @@ use zetesis_solve::{
     Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder, Interruption,
     PreparedInput, Session, SolveConfig, SolveError, SolveMeasurements, SolvePhase, SourceBatching,
 };
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 #[derive(Default)]
 struct Observations(usize);
@@ -30,6 +30,7 @@ fn program() -> Program {
     };
     Program::new(
         ["a", "b", "c", "d", "e"].map(choice).to_vec(),
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap()
@@ -183,13 +184,7 @@ fn policy_incompatibility_precedes_cancellation() {
 
 #[test]
 fn formula_execution_does_not_reserve_closure_storage() {
-    let owner = admit_formula(
-        "{a;b}.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let owner = formula("{a;b}.");
     let mut session = Session::builder(
         PreparedInput::formula(&owner),
         SolveConfig {

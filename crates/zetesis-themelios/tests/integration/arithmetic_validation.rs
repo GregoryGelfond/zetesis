@@ -8,8 +8,9 @@
 use std::collections::BTreeSet;
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
+use zetesis_reference_support::resource_limits;
 use zetesis_themelios::{
-    ExpansionFailure, FormulaFailure, FormulaLimits, observation::EvaluationError,
+    ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource, observation::EvaluationError,
 };
 
 fn refused(source: &str, expected: &EvaluationError) {
@@ -422,10 +423,7 @@ fn staged_head_families_match_clingo() {
 
 #[test]
 fn head_generation_charges_only_selected_rows() {
-    let limits = FormulaLimits {
-        max_generated_values: 0,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::GeneratedValues, 0);
     for source in ["d(0).p(X+1):-d(X),1=2.", "d(0).{p(X+1):d(X),1=2}."] {
         let admitted = reference::admit(source, &limits).unwrap();
         assert_eq!(

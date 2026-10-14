@@ -317,36 +317,6 @@ impl ExportStorage {
     }
 }
 
-/// Reconstruct the upstream output directly from borrowed logical nodes.
-/// The owned description already supplies an exact node/text preflight; its
-/// payload is not included among the conversion's retained allocations.
-pub(crate) fn to_symbol(value: &zetesis_core::StructuralValue) -> Result<Symbol, BridgeError> {
-    let count = value.nodes().len();
-    let text = value
-        .nodes()
-        .iter()
-        .map(|node| node.view().text_bytes() as u128)
-        .sum::<u128>();
-    let limit = 2 * count as u128 * size_of::<Symbol>() as u128 + 2 * text;
-    let mut storage = ExportStorage::new(limit)?;
-    let mut nodes = value.nodes().iter();
-    let result = from_nodes(
-        count,
-        value.depth(),
-        &mut storage,
-        |before| {
-            before()?;
-            Ok(nodes.next().map(ValueNode::view))
-        },
-        || Ok::<_, std::convert::Infallible>(()),
-    );
-    match result {
-        Ok(symbol) => Ok(symbol),
-        Err(BridgeFailure::Bridge(error)) => Err(error),
-        Err(BridgeFailure::Stopped(never)) => match never {},
-    }
-}
-
 /// Export a canonical term without an owned Value intermediate. The caller
 /// chooses the construction allowance; the usual observation preflight is two
 /// Symbol cells per expanded node plus twice its UTF-8 text. Actual frame,
@@ -562,3 +532,33 @@ pub(crate) fn symbol_bytes(symbol: &Symbol) -> u128 {
 
 #[cfg(test)]
 mod tests;
+
+// The expanded-source reference compiler is test-only; ordinary admission
+// exports authenticated catalog terms without this owned-value conversion.
+#[cfg(test)]
+pub(crate) fn to_symbol(value: &zetesis_core::StructuralValue) -> Result<Symbol, BridgeError> {
+    let count = value.nodes().len();
+    let text = value
+        .nodes()
+        .iter()
+        .map(|node| node.view().text_bytes() as u128)
+        .sum::<u128>();
+    let limit = 2 * count as u128 * size_of::<Symbol>() as u128 + 2 * text;
+    let mut storage = ExportStorage::new(limit)?;
+    let mut nodes = value.nodes().iter();
+    let result = from_nodes(
+        count,
+        value.depth(),
+        &mut storage,
+        |before| {
+            before()?;
+            Ok(nodes.next().map(ValueNode::view))
+        },
+        || Ok::<_, std::convert::Infallible>(()),
+    );
+    match result {
+        Ok(symbol) => Ok(symbol),
+        Err(BridgeFailure::Bridge(error)) => Err(error),
+        Err(BridgeFailure::Stopped(never)) => match never {},
+    }
+}

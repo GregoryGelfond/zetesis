@@ -1,7 +1,10 @@
 //! Native metadata consumers use canonical vocabulary through the frontend alone.
 
+use crate::support::admission;
+use crate::support::metadata_resources;
 use zetesis_core::{Atom, Model, Predicate, Sign, Value};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::resource_limits;
 use zetesis_themelios::base::source::{Source, SourceId};
 use zetesis_themelios::base::span::{ByteOffset, Location, Span};
 use zetesis_themelios::logical::program::{Const, Program, Show, Statement};
@@ -11,8 +14,8 @@ use zetesis_themelios::logical::term::{BinaryOp, Term, Variable};
 use zetesis_themelios::observation::{ErrorKind, Feature, Limits, ObservationProgram};
 use zetesis_themelios::{
     AdmissionOptions, AtomSelection, AtomSelectionError, AtomSelectionLimits, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaLimits, MetadataError, MetadataFeature, MetadataLimits,
-    MetadataResource, ProgramSite, SourceMetadata, admit_formula,
+    ExpansionResource, FormulaFailure, MetadataError, MetadataFeature, MetadataLimits,
+    MetadataResource, ProgramSite, SourceMetadata,
 };
 
 fn fallback() -> Location {
@@ -56,6 +59,7 @@ fn canonical_source_types_are_nameable() {
     let (source, program) = program("p.");
     let analysis: zetesis_themelios::analysis::Analysis =
         zetesis_themelios::analysis::Analysis::of(&program);
+    // Spelled out, since the test is that the options type can be named.
     let options = AdmissionOptions {
         source_id: source.id(),
         ..Default::default()
@@ -183,16 +187,7 @@ fn native_metadata_matches_source_admission() {
     let source = "#const c=2+1. #show -p/1. #show f(X,c):p(X). #defined q/1.";
     let (_, shared) = program(source);
     let native = SourceMetadata::compile(&shared, MetadataLimits::default(), fallback()).unwrap();
-    let admitted = admit_formula(
-        source.into(),
-        AdmissionOptions {
-            source_id: fallback().source,
-            ..Default::default()
-        },
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = admission::admitted(fallback().source, source);
     assert_eq!(&native, admitted.metadata());
     let observations =
         ObservationProgram::compile(&shared, MetadataLimits::default(), fallback()).unwrap();
@@ -346,43 +341,14 @@ fn native_constants_refuse_unground_values() {
 #[test]
 fn native_input_limits_precede_compilation() {
     let (_, shared) = program("#show f(1).");
-    for (limits, expected) in [
-        (
-            MetadataLimits {
-                max_statements: 0,
-                ..Default::default()
-            },
-            MetadataResource::Statements,
-        ),
-        (
-            MetadataLimits {
-                max_nodes: 0,
-                ..Default::default()
-            },
-            MetadataResource::Nodes,
-        ),
-        (
-            MetadataLimits {
-                max_text_bytes: 0,
-                ..Default::default()
-            },
-            MetadataResource::TextBytes,
-        ),
-        (
-            MetadataLimits {
-                max_origins: 0,
-                ..Default::default()
-            },
-            MetadataResource::Origins,
-        ),
-        (
-            MetadataLimits {
-                max_depth: 0,
-                ..Default::default()
-            },
-            MetadataResource::Depth,
-        ),
+    for expected in [
+        MetadataResource::Statements,
+        MetadataResource::Nodes,
+        MetadataResource::TextBytes,
+        MetadataResource::Origins,
+        MetadataResource::Depth,
     ] {
+        let limits = metadata_resources::limits(expected, 0);
         assert!(
             matches!(SourceMetadata::compile(&shared, limits, fallback()), Err(MetadataError::Limit { resource, .. }) if resource == expected)
         );
@@ -451,10 +417,7 @@ fn native_depth_cap_precedes_recursive_compilation() {
     assert!(matches!(
         SourceMetadata::compile(
             &shared,
-            MetadataLimits {
-                max_depth: usize::MAX,
-                ..Default::default()
-            },
+            metadata_resources::limits(MetadataResource::Depth, usize::MAX),
             fallback()
         ),
         Err(MetadataError::Limit {
@@ -498,10 +461,7 @@ fn native_constants_refuse_annotated_policy() {
 fn native_constant_work_limit_is_enforced() {
     let (_, shared) = program("#const a=1. #show a.");
     let limits = MetadataLimits {
-        expansion: ExpansionLimits {
-            max_term_work: 0,
-            ..Default::default()
-        },
+        expansion: resource_limits::expansion(ExpansionResource::TermWork, 0),
         ..Default::default()
     };
     assert!(matches!(
@@ -519,10 +479,7 @@ fn native_constant_work_limit_is_enforced() {
 fn native_directive_limit_counts_originals() {
     let (_, shared) = program("#show p/1. #show p/1.");
     let limits = MetadataLimits {
-        expansion: ExpansionLimits {
-            max_metadata_statements: 1,
-            ..Default::default()
-        },
+        expansion: resource_limits::expansion(ExpansionResource::MetadataStatements, 1),
         ..Default::default()
     };
     assert!(matches!(
@@ -600,11 +557,12 @@ fn constructed_tuple_limits_count_the_borrowed_nodes() {
         Symbol::Tuple(vec![Symbol::Number(1), Symbol::String("x".into())]).into(),
     )))]);
     // One directive, its symbolic term, the tuple and its two children.
-    let limits = MetadataLimits {
-        max_nodes: 5,
-        ..MetadataLimits::default()
-    };
-    let native = SourceMetadata::compile(&shared, limits, fallback()).unwrap();
+    let native = SourceMetadata::compile(
+        &shared,
+        metadata_resources::limits(MetadataResource::Nodes, 5),
+        fallback(),
+    )
+    .unwrap();
     assert_eq!(
         native
             .observations()
@@ -622,10 +580,7 @@ fn constructed_tuple_limits_count_the_borrowed_nodes() {
     );
     let error = SourceMetadata::compile(
         &shared,
-        MetadataLimits {
-            max_nodes: 4,
-            ..limits
-        },
+        metadata_resources::limits(MetadataResource::Nodes, 4),
         fallback(),
     )
     .unwrap_err();

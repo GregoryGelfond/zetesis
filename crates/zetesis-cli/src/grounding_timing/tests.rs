@@ -3,6 +3,7 @@
 use crate::{
     GroundingMeasurement, GroundingOutcome, GroundingPhase, GroundingWork, SolveMeasurements,
 };
+use zetesis_reference_support::{prepared, resource_limits};
 use zetesis_test_support::io::BoundedWriter;
 use zetesis_themelios::GroundingObserver as _;
 
@@ -10,8 +11,7 @@ use zetesis_themelios::GroundingObserver as _;
 fn a_grounding_failure_retains_its_phase_outcome() {
     let measurements = SolveMeasurements::new(true);
     let observer = measurements.grounding_observer().unwrap();
-    let mut limits = zetesis_themelios::FormulaLimits::default();
-    limits.theory.max_atoms = 0;
+    let limits = resource_limits::formula(zetesis_themelios::FormulaResource::Atoms, 0);
     let cause = zetesis_themelios::admit_formula_with_grounding_observer(
         "1{p;q}1.".into(),
         zetesis_themelios::AdmissionOptions::default(),
@@ -107,9 +107,7 @@ fn attribution_output_preserves_unavailable_values() {
 #[test]
 fn real_domain_work_reaches_the_shared_output_view() {
     use std::fmt::Write as _;
-    use zetesis_themelios::{
-        AdmissionOptions, DomainLimits, ExpansionLimits, FormulaLimits, prepare_formula,
-    };
+    use zetesis_themelios::DomainLimits;
 
     let mut source = String::new();
     for value in 1..=4 {
@@ -123,16 +121,10 @@ fn real_domain_work_reaches_the_shared_output_view() {
     source.push_str("r(X,Y):-a(X),b(Y),c(X,Y).");
     let measurements = SolveMeasurements::new(true);
     let observer = measurements.grounding_observer().unwrap();
-    let admitted = prepare_formula(
-        source,
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .with_domain_analysis(Some(DomainLimits::default()))
-    .ground_with_observer(Some(&observer))
-    .unwrap();
+    let admitted = prepared(&source)
+        .with_domain_analysis(Some(DomainLimits::default()))
+        .ground_with_observer(Some(&observer))
+        .unwrap();
     assert_eq!(
         admitted
             .atoms()
@@ -166,4 +158,27 @@ fn real_domain_work_reaches_the_shared_output_view() {
     let output = std::str::from_utf8(&output).unwrap();
     assert!(output.contains("grounding domain_analysis:"));
     assert!(output.contains("domain_rejected_rows=6;"));
+}
+
+#[test]
+fn integer_comparison_counters_keep_their_own_names() {
+    // X < 2 is decided by its form on p(1) and p(2) and declines on p(a):
+    // distinct nonzero counts, which a swapped name in the shared field view
+    // would exchange.
+    let measurements = SolveMeasurements::new(true);
+    let observer = measurements.grounding_observer().unwrap();
+    prepared("p(1). p(2). p(a). r(X) :- p(X), X < 2.")
+        .ground_with_observer(Some(&observer))
+        .unwrap();
+    let timings = measurements.snapshot().unwrap().grounding;
+    let rules = timings.get(GroundingPhase::RuleInstantiation).unwrap();
+    let fields = super::work_fields(&rules.work);
+    assert!(
+        fields.contains(&("integer_comparisons", Some(2))),
+        "{fields:?}"
+    );
+    assert!(
+        fields.contains(&("integer_comparison_declines", Some(1))),
+        "{fields:?}"
+    );
 }

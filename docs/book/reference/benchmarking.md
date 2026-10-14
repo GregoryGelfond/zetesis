@@ -60,7 +60,7 @@ inputs.
 | `baseline` | SEND, queens variant 02 and task allocation |
 | `queens` | The six unchanged eight-queens encodings |
 | `series` | The maintained 22 generated, constant-amended and original workloads |
-| `scalability` | Fourteen authored and corpus workloads, with indexed formula joins and region search |
+| `scalability` | Twenty authored and corpus workloads, with indexed formula joins and region search |
 
 `--case PATH` measures one case of the suite, named relative to the corpus
 directory; repeat it to measure several, in the order given. For `series`, use
@@ -70,7 +70,9 @@ cells in their series order. A case outside the suite is refused before anything
 launches. The scalability suite measures its
 own workloads and accepts no `--case`; it alone accepts `--examples`, its
 authored root, which defaults to `examples`, and `--include-einstein`, which
-adds the unchanged Einstein riddle as a fifteenth workload. The maintained
+adds the unchanged Einstein riddle as a twenty-first workload. Prime sieve at
+n=30/100/300 and subset sum at n=12/20/30 follow the established fourteen
+workloads; the separate 94-case corpus is unchanged. The maintained
 Sudoku case has eight givens per row: it tests grounding and language handling,
 not difficult Sudoku search. The series suite raises the per-invocation,
 capture, evidence and native-decoder ceilings to the sizes of its records.
@@ -84,6 +86,51 @@ The report records the resulting capacities in `limits` and
 resource limits or relax complete-family comparison. Library callers explicitly
 apply `scalability::limits` and `scalability::native_answers` before constructing
 their matrix request; execution itself never raises supplied limits.
+
+### Declared external bundles
+
+`run --workloads PATH` measures the external programs in a source-bundle JSON
+manifest through the same matrix. It requires a runnable clingo for fresh
+complete-family qualification, including every final optimum tie. It conflicts
+with `--suite`, `--case`, `--examples`, `--include-einstein` and
+`--without-clingo`; profile, schedule, capture and output controls still apply.
+The positional corpus remains the correctness-catalog context. Source files are
+copied byte for byte into each workload's private directory, preserving their
+relative paths and include spellings.
+
+The version 1 manifest contains `schema_version: 1`, a `root` and a `cases`
+array. A relative root resolves against the manifest's parent directory.
+Each case supplies its root-relative `entry`, existing display `contract`, and
+`files`. Each file records its root-relative `path`, expected `sha256`, and an
+`includes` array of `{ "spelling": "...", "target": "..." }` entries in source
+occurrence order. Targets name declared root-relative members; include
+spellings may use `..` only when the declared graph remains confined. Admission
+checks the actual directives, complete reachable closure, byte hashes and
+resource ceilings. Cycles, undeclared files and conflicting cwd-first include
+lookups are refused. Reports retain the manifest, original-file and copied
+source identities; host paths do not determine portable workload identity.
+When `--memory-runs` is nonzero, the copied source root reserves `child-rss.json`
+for the existing RSS helper. A source file or directory at that path, including
+an alias on the destination filesystem, is refused before any process launches.
+
+Library callers use `performance::bundles::load` and pass its sealed workloads
+to `matrix::run_workloads_with_cancellation`. The declared contracts remain
+expectations; the reference run supplies fresh qualification.
+
+Large complete families may require larger measurement capacities. The advanced
+`--native-atoms` and `--native-value-nodes` controls bound native report
+normalization across all model occurrences, including atoms reused through the
+compact report table. Their defaults follow the decoder: 262,144 atoms and
+1,048,576 value nodes. Existing suite minimum capacities still apply and keep
+larger caller values. The effective bounds are recorded in
+`native_normalization_limits`; they do not change solver resource budgets.
+`--answer-bytes` bounds reference-answer decoding and native displayed-symbol
+spelling, with the existing answer decoder's default of 8 MiB. Its occurrence
+ceilings derive from that byte bound, and existing suite minimum capacities
+still apply. The effective values appear in `limits.answers` and
+`native_normalization_limits.spelling_bytes`. Set `--sample-bytes` and
+`--native-report-bytes` separately for capture and native full-report decoding.
+A refusal retains the failed comparison; it does not establish an incomplete family as complete.
 
 ### Profiles
 

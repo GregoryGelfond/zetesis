@@ -13,7 +13,7 @@ use crate::Threshold;
 /// A malformed numerical row or an unrepresentable physical expansion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {
-    /// Parallel columns differ, the total overflows, or scratch is too small.
+    /// Columns, ranks or bounds are invalid, the total overflows, or scratch is too small.
     Invalid,
     /// Physical gates or scratch cannot be addressed by the host.
     Capacity,
@@ -124,7 +124,7 @@ impl Shape {
     }
 }
 
-/// Backend operations used by the common recurrence.
+/// Backend Boolean operations shared by threshold and ordinal-cut lowering.
 ///
 /// Implementations preserve existing semantic atom identities. `gate` may
 /// simplify classical expressions; it must never replace the semantic owner.
@@ -133,7 +133,7 @@ pub trait Sink {
     type Value: Copy;
     /// Caller-owned typed resource, control and shape failures.
     type Error: From<Error>;
-    /// Charge one recurrence/input visit and poll cancellation.
+    /// Charge one recurrence or input visit and poll cancellation.
     ///
     /// # Errors
     /// Returns a work or control refusal.

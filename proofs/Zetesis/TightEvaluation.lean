@@ -298,4 +298,108 @@ theorem completed_computation_exact [DecidableEq α] (candidate : α → Bool) (
     linked covered original ranked
   exact CertifiedExecution.completed_membership_exact _ _ _ exact result checkedVerdict oracle done
 
+/-! ## Updating a retained truth table
+
+A checker that keeps the truth table of the previous candidate can bring it to
+the next candidate by re-evaluating, in table order, exactly the nodes whose
+inputs changed: an atom node whose atom's membership changed, or a connective
+with an operand whose truth changed. Every other node keeps its retained truth.
+The laws below show that this yields the new candidate's table exactly. Row
+re-reduction, the maintained support counts and the unsupported-atom and
+false-root summaries are separate obligations; the Rust update realizes this
+node-table rule with a worklist and a reverse index, which are not modeled. -/
+
+/-- Whether a node's inputs differ between two candidates: its atom's membership,
+or the truth of an operand in the two candidates' computed prefixes. -/
+def inputChanged (old new : α → Bool) (oldEarlier newEarlier : List Bool) :
+    DagSharing.Node α → Bool
+  | .atom atom => old atom != new atom
+  | .bot => false
+  | .conj left right | .disj left right | .imp left right =>
+    oldEarlier.getD left false != newEarlier.getD left false ||
+      oldEarlier.getD right false != newEarlier.getD right false
+
+/-- One update step over the pair of the retained table and the updated table:
+the retained table grows by the old candidate's truth of the node, and the
+updated table re-evaluates the node only when its inputs changed, keeping the
+retained truth otherwise. -/
+def updateStep (old new : α → Bool) (tables : List Bool × List Bool)
+    (node : DagSharing.Node α) : List Bool × List Bool :=
+  let retained := nodeValue old tables.1 node
+  (tables.1 ++ [retained],
+    tables.2 ++ [if inputChanged old new tables.1 tables.2 node then
+      nodeValue new tables.2 node else retained])
+
+/-- The table an update produces from the old candidate's table. -/
+def updatedValues (old new : α → Bool) (table : List (DagSharing.Node α)) : List Bool :=
+  (table.foldl (updateStep old new) ([], [])).2
+
+/-- A node whose inputs did not change has the same truth under both candidates.
+An atom node reads the same membership; a connective reads equal operand truth. -/
+theorem unchanged_inputs_keep_truth (old new : α → Bool) (oldEarlier newEarlier : List Bool)
+    (node : DagSharing.Node α)
+    (unchanged : inputChanged old new oldEarlier newEarlier node = false) :
+    nodeValue old oldEarlier node = nodeValue new newEarlier node := by
+  cases node with
+  | atom atom =>
+    have same : old atom = new atom := by simpa [inputChanged] using unchanged
+    simp [nodeValue, same]
+  | bot => rfl
+  | conj left right =>
+    have same : oldEarlier.getD left false = newEarlier.getD left false ∧
+        oldEarlier.getD right false = newEarlier.getD right false := by
+      simpa [inputChanged] using unchanged
+    simp only [nodeValue]
+    rw [same.1, same.2]
+  | disj left right =>
+    have same : oldEarlier.getD left false = newEarlier.getD left false ∧
+        oldEarlier.getD right false = newEarlier.getD right false := by
+      simpa [inputChanged] using unchanged
+    simp only [nodeValue]
+    rw [same.1, same.2]
+  | imp left right =>
+    have same : oldEarlier.getD left false = newEarlier.getD left false ∧
+        oldEarlier.getD right false = newEarlier.getD right false := by
+      simpa [inputChanged] using unchanged
+    simp only [nodeValue]
+    rw [same.1, same.2]
+
+/-- Whichever branch an update step takes, it appends each candidate's own
+truth of the node: a re-evaluated node by definition, a kept node by
+`unchanged_inputs_keep_truth`. -/
+theorem update_step_appends_truth (old new : α → Bool) (oldEarlier newEarlier : List Bool)
+    (node : DagSharing.Node α) :
+    updateStep old new (oldEarlier, newEarlier) node =
+      (oldEarlier ++ [nodeValue old oldEarlier node],
+        newEarlier ++ [nodeValue new newEarlier node]) := by
+  cases changed : inputChanged old new oldEarlier newEarlier node with
+  | true => simp [updateStep, changed]
+  | false =>
+    have kept := unchanged_inputs_keep_truth old new oldEarlier newEarlier node changed
+    simp [updateStep, changed, kept]
+
+/-- Updating runs both candidates' table folds side by side, from any prefixes. -/
+theorem update_fold_pairs (old new : α → Bool) (table : List (DagSharing.Node α))
+    (oldEarlier newEarlier : List Bool) :
+    table.foldl (updateStep old new) (oldEarlier, newEarlier) =
+      (table.foldl (fun earlier node => earlier ++ [nodeValue old earlier node]) oldEarlier,
+        table.foldl (fun earlier node => earlier ++ [nodeValue new earlier node]) newEarlier) := by
+  induction table generalizing oldEarlier newEarlier with
+  | nil => rfl
+  | cons node tail inductionHypothesis =>
+    simp only [List.foldl_cons, update_step_appends_truth]
+    exact inductionHypothesis _ _
+
+/-- Re-evaluating, in table order, exactly the nodes whose inputs changed, and
+keeping the retained truth of every other node, yields the new candidate's
+truth table. -/
+theorem updated_values_exact (old new : α → Bool) (table : List (DagSharing.Node α)) :
+    updatedValues old new table = values new table := by
+  simp only [updatedValues, values, update_fold_pairs]
+
+/-- The truth the update keeps is the old candidate's own table. -/
+theorem update_retains_old_values (old new : α → Bool) (table : List (DagSharing.Node α)) :
+    (table.foldl (updateStep old new) ([], [])).1 = values old table := by
+  simp only [values, update_fold_pairs]
+
 end Zetesis.TightEvaluation

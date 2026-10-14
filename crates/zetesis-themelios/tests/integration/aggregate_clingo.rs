@@ -1,16 +1,18 @@
 //! Aggregate reference cases include recursive formulas whose classical truth
 //! tables agree but whose reducts have different subset models.
 //!
-//! The fixture contains 321 sources: 315 admitted comparisons/assignments and
-//! six explicit refusals, including two unsafe programs. The portable test
+//! The fixture contains 342 sources: 333 admitted comparisons/assignments and
+//! nine explicit refusals, including two unsafe programs. The portable test
 //! compares every admission with independent exhaustive reduct enumeration;
 //! the optional test reruns the full external reference campaign. A recorded
 //! unsupported case is a refusal regression, never a compatibility pass.
 //! Formal references: Ferraris (arXiv:0812.1462),
 //! Proposition 12; Abstract Gringo (arXiv:1507.06576), equation 22 and Theorem 1.
 
+use crate::support::atom_models::atom;
 use crate::support::finite_bindings::Models;
 use crate::support::objective_dependency_records as objective_dependencies;
+use zetesis_reference_support::{admit, formula, resource_limits};
 
 use std::collections::BTreeSet;
 
@@ -18,10 +20,10 @@ use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Atom, Model};
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{AggregateErrorKind, AggregateLimits, Interpretation, Limits, check};
+use zetesis_ferraris::{AggregateErrorKind, Interpretation, Limits, check};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit, admit_formula,
+    AdmissionFailure, AdmittedFormula, ExpansionFailure, FormulaFailure, FormulaLimits,
+    FormulaResource, ProfileFeature,
 };
 
 struct Case {
@@ -37,26 +39,8 @@ fn models(items: &Json) -> Models {
         .as_array()
         .expect("recorded complete models")
         .iter()
-        .map(model)
+        .map(oracle::atoms)
         .collect()
-}
-
-fn model(items: &Json) -> BTreeSet<String> {
-    items
-        .as_array()
-        .expect("whole canonical atom identities")
-        .iter()
-        .map(|atom| atom.as_str().expect("canonical atom").to_owned())
-        .collect()
-}
-
-fn costs(items: &Json) -> Option<Vec<i64>> {
-    items.as_array().map(|costs| {
-        costs
-            .iter()
-            .map(|cost| cost.as_i64().expect("integer cost"))
-            .collect()
-    })
 }
 
 fn cases() -> Vec<Case> {
@@ -69,44 +53,10 @@ fn cases() -> Vec<Case> {
                 source: row[1].as_str().expect("source program").to_owned(),
                 valid: row[2].as_bool().expect("source validity"),
                 models: models(&row[3]),
-                costs: costs(&row[4]),
+                costs: oracle::costs(&row[4]),
             }
         })
         .collect()
-}
-
-fn atom(source: &str) -> Atom {
-    let fact = admit(format!("{source}."), AdmissionOptions::default())
-        .expect("complete scalar atom identity");
-    let head = fact
-        .program()
-        .templates()
-        .at(0)
-        .unwrap()
-        .head()
-        .expect("fact head");
-    let values = head
-        .terms()
-        .iter()
-        .map(|term| match term {
-            zetesis_core::TemplateTerm::Constant(value) => value
-                .to_value(zetesis_core::ValueLimits::default())
-                .unwrap(),
-            zetesis_core::TemplateTerm::Variable(_) => {
-                panic!("recorded model atoms must be ground")
-            }
-        })
-        .collect();
-    Atom::new(
-        zetesis_core::Predicate::with_sign(
-            head.predicate().name(),
-            head.predicate().arity(),
-            head.predicate().sign(),
-        )
-        .unwrap(),
-        values,
-    )
-    .expect("ground atom arity")
 }
 
 fn exhaustive(input: &AdmittedFormula) -> (BTreeSet<BTreeSet<Atom>>, Option<Vec<i64>>) {
@@ -184,7 +134,17 @@ fn expected_refusal(name: &str) -> Option<Refusal> {
         // Finite aggregate tuple expressions are admitted, but reached 1/0
         // remains an evaluation failure. clingo's discarded-term result is
         // retained as reference data, not substituted for this source contract.
-        "sum_local_undefined" => Some(Refusal::Evaluation),
+        // An assignment's family is its carrier, the measures of the selections
+        // between its required and possible tuples: when every carrier value
+        // divides by zero, in its own rule or in a rule that reads its head,
+        // the family is entirely undefined and refused,
+        // and clingo's answer, which drops the undefined instances, is
+        // retained as reference data. A carrier value outside i32 is refused;
+        // clingo's recorded answers wrap the sum to -2147483648 in both models.
+        "sum_local_undefined"
+        | "assignment_required_count_zero_divisor"
+        | "assignment_downstream_zero_divisor"
+        | "assignment_required_sum_overflow" => Some(Refusal::Evaluation),
         _ => None,
     }
 }
@@ -213,17 +173,12 @@ fn assert_refusal(error: &FormulaFailure, expected: Refusal) {
 #[test]
 fn recorded_aggregate_comparisons_match_exhaustive_reduct_models() {
     let cases = cases();
-    assert_eq!(cases.len(), 321);
-    assert_eq!(cases.iter().filter(|case| case.valid).count(), 319);
+    assert_eq!(cases.len(), 342);
+    assert_eq!(cases.iter().filter(|case| case.valid).count(), 340);
     let mut admitted = 0;
     let mut refused = 0;
     for case in cases {
-        let result = admit_formula(
-            case.source.clone(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        );
+        let result = admit(&case.source, &FormulaLimits::default());
         if let Some(expected) = expected_refusal(&case.name) {
             let Err(error) = result else {
                 panic!(
@@ -250,58 +205,24 @@ fn recorded_aggregate_comparisons_match_exhaustive_reduct_models() {
             admitted += 1;
         }
     }
-    assert_eq!((admitted, refused), (315, 6));
+    assert_eq!((admitted, refused), (333, 9));
 }
 
 #[test]
 fn aggregate_translation_refusals_identify_original_rule_and_resource() {
     let rule = "a :- #sum{1:p;-1:q} >= 0.";
     let source = format!("p.\nq.\n{rule}");
-    let input = admit_formula(
-        source.clone(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .expect("reference admission with complete budgets");
-    for (aggregate, expected) in [
-        (
-            AggregateLimits {
-                max_nodes: 0,
-                ..AggregateLimits::default()
-            },
-            AggregateErrorKind::NodeLimit,
-        ),
-        (
-            AggregateLimits {
-                max_work: 0,
-                ..AggregateLimits::default()
-            },
-            AggregateErrorKind::WorkLimit,
-        ),
-        (
-            AggregateLimits {
-                max_states: 0,
-                ..AggregateLimits::default()
-            },
-            AggregateErrorKind::StateLimit,
-        ),
-        (
-            AggregateLimits {
-                max_subsets: 1,
-                ..AggregateLimits::default()
-            },
-            AggregateErrorKind::SubsetLimit,
-        ),
+    // The default budgets admit the reference; each case below lowers one.
+    let input = formula(&source);
+    for (expected, limit) in [
+        (AggregateErrorKind::NodeLimit, 0),
+        (AggregateErrorKind::WorkLimit, 0),
+        (AggregateErrorKind::StateLimit, 0),
+        (AggregateErrorKind::SubsetLimit, 1),
     ] {
-        let error = admit_formula(
-            source.clone(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
-                aggregate,
-                ..FormulaLimits::default()
-            },
+        let error = admit(
+            &source,
+            &resource_limits::formula_aggregate(expected, limit),
         )
         .expect_err("bounded constructor refusal, never semantic UNSAT");
         let FormulaFailure::Aggregate { error, location } = error else {
@@ -317,17 +238,9 @@ fn aggregate_translation_refusals_identify_original_rule_and_resource() {
             rule
         );
     }
-    let error = admit_formula(
-        source,
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits {
-            aggregate: AggregateLimits {
-                max_elements: 1,
-                ..AggregateLimits::default()
-            },
-            ..FormulaLimits::default()
-        },
+    let error = admit(
+        &source,
+        &resource_limits::formula(FormulaResource::AggregateElements, 1),
     )
     .expect_err("preflight distinct tuple storage");
     let FormulaFailure::Limit {
@@ -380,7 +293,12 @@ fn compare_external(case: &Case) {
         return;
     }
     assert_eq!(json["Models"]["More"], "no", "{}", case.name);
-    assert_eq!(costs(&json["Models"]["Costs"]), case.costs, "{}", case.name);
+    assert_eq!(
+        oracle::costs(&json["Models"]["Costs"]),
+        case.costs,
+        "{}",
+        case.name
+    );
     let witnesses: Vec<_> = json["Call"]
         .as_array()
         .expect("reference calls")
@@ -393,8 +311,8 @@ fn compare_external(case: &Case) {
     );
     let actual: Models = witnesses
         .iter()
-        .filter(|witness| costs(&witness["Costs"]) == case.costs)
-        .map(|witness| model(&witness["Value"]))
+        .filter(|witness| oracle::costs(&witness["Costs"]) == case.costs)
+        .map(|witness| oracle::atoms(&witness["Value"]))
         .collect();
     assert_eq!(actual, case.models, "{}: {}", case.name, case.source);
     if case.costs.is_some() {
@@ -417,8 +335,8 @@ fn compare_external(case: &Case) {
 #[ignore = "requires clingo: recorded recursive aggregate semantics match clingo"]
 fn recorded_recursive_aggregate_semantics_match_clingo() {
     let cases = cases();
-    assert_eq!(cases.len(), 321);
-    assert_eq!(cases.iter().filter(|case| case.valid).count(), 319);
+    assert_eq!(cases.len(), 342);
+    assert_eq!(cases.iter().filter(|case| case.valid).count(), 340);
     for case in cases {
         compare_external(&case);
     }

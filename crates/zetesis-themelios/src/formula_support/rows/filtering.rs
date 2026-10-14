@@ -80,6 +80,25 @@ fn with_fixture<T>(
     })
 }
 
+/// Keep the work of one filtered traversal, including its final failure.
+fn with_observed_fixture<T>(
+    fixture: Fixture,
+    consume: impl FnOnce(&Support<'_>, &mut Computation<'_, '_>, &mut Budget, &mut Counters) -> T,
+) -> (T, crate::GroundingWork) {
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let observer = crate::test_support::Observer::default();
+        let profile = crate::grounding_observer::Profile::new(Some(&observer));
+        let previous = std::mem::replace(&mut counters.observed, profile.work());
+        let result = profile
+            .phase(crate::GroundingPhase::RuleInstantiation, None, || {
+                Ok::<_, std::convert::Infallible>(consume(support, computation, budget, counters))
+            })
+            .unwrap();
+        counters.observed = previous;
+        (result, observer.0.get())
+    })
+}
+
 struct Select<F>(F);
 
 impl<F> RowFilter for Select<F>
@@ -384,17 +403,18 @@ fn structural_rows_are_selected_before_matching() {
 fn rejected_rows_do_not_evaluate_partial_scalars() {
     let mut fixture = Fixture::from_atoms([atom("p", &[0])], location());
     let one = fixture.scalar(&Value::Number(1), location());
-    let division = || Expression {
-        nodes: vec![
+    let division = || {
+        vec![
             Operation::Constant(one),
             Operation::Variable(0),
             Operation::Binary(BinaryOp::Div, 0, 1),
-        ],
+        ]
     };
+    let comparison = fixture.comparison(division(), Relation::Eq, division(), location());
     let rule = rule(
         vec![
             pattern(&mut fixture, "p", &[0]),
-            LiteralIr::Compare(division(), Relation::Eq, division()),
+            LiteralIr::Compare(comparison),
         ],
         1,
     );
@@ -438,13 +458,9 @@ fn rejected_rows_do_not_evaluate_partial_scalars() {
 fn empty_positive_inputs_keep_their_scalar_row() {
     let mut fixture = Fixture::default();
     let one = fixture.scalar(&Value::Number(1), location());
-    let constant = || Expression {
-        nodes: vec![Operation::Constant(one)],
-    };
-    let rule = rule(
-        vec![LiteralIr::Compare(constant(), Relation::Eq, constant())],
-        0,
-    );
+    let constant = || vec![Operation::Constant(one)];
+    let comparison = fixture.comparison(constant(), Relation::Eq, constant(), location());
+    let rule = rule(vec![LiteralIr::Compare(comparison)], 0);
     let calls = Cell::new(0);
     let selection = Select(|_: zetesis_core::relation::Row<'_, '_>| {
         calls.set(calls.get() + 1);
@@ -610,7 +626,7 @@ fn filter_cancellation_stops_before_binding() {
             ),
         )
         .unwrap();
-        counters.cancellation = Some(cancellation.clone());
+        counters.attach_test_control(&cancellation);
         let result = rows
             .next_row(
                 computation,

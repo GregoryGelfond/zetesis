@@ -92,12 +92,7 @@ fn explicit_closure_refuses_interval_choices_without_emitting_answers() {
 #[test]
 fn exhausted_choice_admission_never_emits_answers() {
     for resource in [FormulaResource::Atoms, FormulaResource::Substitutions] {
-        let mut limits = zetesis_themelios::FormulaLimits::default();
-        if resource == FormulaResource::Atoms {
-            limits.theory.max_atoms = 1;
-        } else {
-            limits.max_substitutions = 1;
-        }
+        let limits = zetesis_reference_support::resource_limits::formula(resource, 1);
         let (result, output) = crate::support::prepared::bounded_admission(
             "1 {p(1..4)} 1.",
             zetesis_themelios::ExpansionLimits::default(),

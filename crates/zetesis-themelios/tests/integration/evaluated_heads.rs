@@ -1,18 +1,17 @@
 //! Evaluated heads retain original grouping, atom identities and frozen reducts.
 
 use std::collections::BTreeSet;
-use std::fs::{self};
 
-use crate::support::finite_bindings::{holds, remap, values};
-use crate::support::head_models::{clingo, complete, expected, limited, manual_holds, selected};
+use crate::support::finite_bindings::{holds, values};
+use crate::support::head_models::{self, complete, expected, limited, manual_holds, selected};
 use crate::support::objective_boundaries;
-use crate::support::thresholds::first_success;
 use serde_json::{Value as Json, json};
-use zetesis_reference_support::admit;
+use zetesis_reference_support::{BundleFixture, admit, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
-    ProfileFeature, SourceBundle, admit_bundle_formula,
+    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
+    admit_bundle_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -58,54 +57,7 @@ fn complete_models_match_explicit_source_expansions_and_independent_expected_dat
 }
 #[test]
 fn source_expansions_preserve_every_original_and_frozen_pair() {
-    let mut pairs = 0;
-    for case in cases() {
-        let source = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
-        let expanded = admit(
-            case["expanded"].as_str().unwrap(),
-            &FormulaLimits::default(),
-        )
-        .unwrap();
-        assert_eq!(
-            source.atoms().iter().collect::<BTreeSet<_>>(),
-            expanded.atoms().iter().collect::<BTreeSet<_>>(),
-            "{}: exact carrier",
-            case["name"]
-        );
-        assert!(source.atoms().len() <= 6);
-        for mask in 0..1_usize << source.atoms().len() {
-            let outer = values(source.theory(), mask, None);
-            let other = values(
-                expanded.theory(),
-                remap(mask, source.atoms(), expanded.atoms()),
-                None,
-            );
-            assert_eq!(
-                holds(source.theory(), &outer),
-                holds(expanded.theory(), &other)
-            );
-            for inner in 0..1_usize << source.atoms().len() {
-                assert_eq!(
-                    holds(
-                        source.theory(),
-                        &values(source.theory(), inner, Some(&outer))
-                    ),
-                    holds(
-                        expanded.theory(),
-                        &values(
-                            expanded.theory(),
-                            remap(inner, source.atoms(), expanded.atoms()),
-                            Some(&other)
-                        )
-                    ),
-                    "{}: M={mask}, J={inner}",
-                    case["name"]
-                );
-                pairs += 1;
-            }
-        }
-    }
-    assert!(pairs > 1_000);
+    head_models::expansions_preserve_every_original_and_frozen_pair(&cases());
 }
 // Every M-false subtree becomes falsum, including non-atomic implications.
 // This evaluates JSON trees directly, without a production DAG or compiler.
@@ -232,27 +184,22 @@ fn generated_slot_arity_and_range_width_limits_are_inclusive() {
         ("d(1).{p(X+1..X+2,X)}:-d(X).", 2),
         ("1{p(X+1..X+2,X):X=1}1.", 2),
     ] {
-        let mut options = AdmissionOptions::default();
-        options.core_limits.max_variables_per_template = slots;
         assert!(
             limited(
                 source,
-                options,
+                resource_limits::admission_formula(FormulaResource::Variables, slots),
                 ExpansionLimits::default(),
                 &FormulaLimits::default()
             )
             .is_ok()
         );
-        options.core_limits.max_variables_per_template -= 1;
+        let options = resource_limits::admission_formula(FormulaResource::Variables, slots - 1);
         assert!(
-            matches!(limited(source, options, ExpansionLimits::default(), &FormulaLimits::default()), Err(FormulaFailure::Limit { resource: FormulaResource::Variables, observed, .. }) if observed == slots as u128)
+            matches!(limited(source, options, ExpansionLimits::default(), &FormulaLimits::default()), Err(FormulaFailure::Limit { resource: FormulaResource::Variables, observed, .. }) if observed == u128::from(slots))
         );
     }
     let source = "n(1).{p(N..N+1):n(N)}.";
-    let limits = FormulaLimits {
-        max_assignment_values: 2,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::AssignmentValues, 2);
     assert!(
         limited(
             source,
@@ -267,10 +214,7 @@ fn generated_slot_arity_and_range_width_limits_are_inclusive() {
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_assignment_values: 1,
-                ..limits
-            }
+            &resource_limits::formula(FormulaResource::AssignmentValues, 1)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::AssignmentValues,
@@ -291,12 +235,10 @@ fn generated_slot_arity_and_range_width_limits_are_inclusive() {
             ..
         })
     ));
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_predicate_arity = 1;
     assert!(matches!(
         limited(
             "d(1).{p(X+1,X)}:-d(X).",
-            options,
+            resource_limits::admission_formula(FormulaResource::Arity, 1),
             ExpansionLimits::default(),
             &FormulaLimits::default()
         ),
@@ -316,20 +258,16 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
     ] {
         for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
             let attempt = |limit| {
-                let mut limits = FormulaLimits::default();
-                if resource == FormulaResource::Work {
-                    limits.max_work = limit;
-                } else {
-                    limits.max_substitutions = limit;
-                }
                 limited(
                     source,
                     AdmissionOptions::default(),
                     ExpansionLimits::default(),
-                    &limits,
+                    &resource_limits::formula(resource, limit),
                 )
             };
-            let threshold = first_success(|limit| attempt(limit).is_ok());
+            let threshold = first_success(resource_limits::formula_default(resource), |limit| {
+                attempt(limit).is_ok()
+            });
             assert!(
                 matches!(attempt(threshold - 1), Err(FormulaFailure::Limit { resource: actual, observed, .. }) if actual == resource && observed == u128::from(threshold))
             );
@@ -342,14 +280,14 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
             limited(
                 source,
                 AdmissionOptions::default(),
-                ExpansionLimits {
-                    max_term_work: usize::try_from(limit).unwrap(),
-                    ..ExpansionLimits::default()
-                },
+                resource_limits::expansion(ExpansionResource::TermWork, limit),
                 &FormulaLimits::default(),
             )
         };
-        let threshold = first_success(|limit| attempt(limit).is_ok());
+        let threshold = first_success(
+            resource_limits::expansion_default(ExpansionResource::TermWork),
+            |limit| attempt(limit).is_ok(),
+        );
         assert!(matches!(
             attempt(threshold - 1),
             Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
@@ -358,23 +296,22 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
             }))
         ));
         let admitted = admit(source, &FormulaLimits::default()).unwrap();
-        let mut limits = FormulaLimits::default();
-        limits.theory.max_nodes = admitted.theory().nodes().len();
+        let nodes = u64::try_from(admitted.theory().nodes().len()).unwrap();
+        let limits = |maximum| resource_limits::formula(FormulaResource::Nodes, maximum);
         assert!(
             limited(
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                &limits
+                &limits(nodes)
             )
             .is_ok()
         );
-        limits.theory.max_nodes -= 1;
         let refusal = limited(
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            &limits,
+            &limits(nodes - 1),
         );
         // Aggregate compilation uses the same total-node ceiling before its
         // suffix is interned. Shared support guards can make the final graph
@@ -399,15 +336,10 @@ fn construction_work_nodes_and_substitutions_fail_before_partial_admission() {
 #[test]
 fn generated_instances_preserve_every_duplicate_source_origin() {
     for rule in ["1{p(X+1..X+2):X=1}1.", "a(X+1)|b:-X=1."] {
-        let directory = tempfile::tempdir().unwrap();
-        fs::write(
-            directory.path().join("entry.lp"),
-            format!("#include \"other.lp\".\n{rule}"),
-        )
-        .unwrap();
-        fs::write(directory.path().join("other.lp"), rule).unwrap();
-        let bundle =
-            SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+        let fixture = BundleFixture::new();
+        fixture.write("entry.lp", &format!("#include \"other.lp\".\n{rule}"));
+        fixture.write("other.lp", rule);
+        let bundle = fixture.bundle();
         let admitted = admit_bundle_formula(
             bundle,
             BundleAdmissionOptions::default(),
@@ -444,15 +376,5 @@ fn generated_instances_preserve_every_duplicate_source_origin() {
 #[test]
 #[ignore = "requires clingo: fresh clingo original and expanded sources match complete models; each original and expansion has a bounded complete capture"]
 fn fresh_clingo_original_and_expanded_sources_match_complete_models() {
-    for case in cases() {
-        let predicted = expected(&case["models"]);
-        for field in ["source", "expanded"] {
-            assert_eq!(
-                clingo(case[field].as_str().unwrap()),
-                predicted,
-                "{}: {field}",
-                case["name"]
-            );
-        }
-    }
+    head_models::clingo_matches_every_source_and_expansion(&cases());
 }

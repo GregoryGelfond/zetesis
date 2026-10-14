@@ -15,6 +15,7 @@ fn program() -> Program {
             vec![atom("b")],
             vec![],
         )],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap()

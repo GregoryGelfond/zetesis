@@ -3,11 +3,22 @@
 `zetesis-themelios` has two materialization boundaries. Relational admission
 returns templates for lazy or eager normal-rule execution. Formula preparation
 returns scoped instructions; grounding consumes them to construct a finite
-Ferraris theory. Neither boundary searches for answer sets.
+Ferraris theory. Automatic CPU solving can instead certify and directly evaluate
+a complete acyclic normal source, retaining its original program and canonical
+interpretation without a formula graph. None of these preparation paths searches
+candidate regions.
 
 This chapter maps the implementation for readers extending the source language.
 The [source API guide](../rust/source.md) describes the public entry points;
 [grounding](grounding.md) explains their mathematical contracts.
+
+Closed-range facts use one checked product cursor in both relational and formula
+admission. It retains interval endpoints and scalar alternatives, then emits one
+head at a time in source order. Formula admission consumes that head directly;
+relational admission retains the templates its executor needs. Complete-family
+validation and logical expansion limits precede emission. This removes temporary
+range columns and per-statement template vectors, without changing duplicates,
+provenance or arithmetic diagnostics.
 
 ## Follow the owned objects
 
@@ -79,6 +90,7 @@ those instructions rather than interpreting the plan as new program semantics.
 | Source catalog and includes | `bundle`, `bundle_admission` | Original files, paths, source identities and located failures |
 | Diagnostic and strict-profile checks | `profile`, `diagnostic`, `source_diagnostics` | Typed refusals and source views; no recovered partial program |
 | Relational templates | `compile`, `extended`, `expansion`, `fact_expansion` | Closed values, bounded constants/arithmetic/fact expansion and template admission |
+| Fact blocks | `formula_facts`, `formula_ir::facts` | On the formula route, facts held in fact blocks, products and runs of admitted values, with their statements' evidence, standing in item order where rules with empty bodies would have stood |
 | Classical negation | `coherence` | Distinct signed predicates and consistency constraints |
 | Semantic value conversion | `structural_value`, `scalar_arithmetic`, `formula_value` | Typed closed values and checked arithmetic; no atom support |
 | Formula preparation | `formula`, `formula::preparation`, `formula_ir` | Public owned preparation, scoped rule/objective IR and cumulative budgets |
@@ -96,7 +108,7 @@ those instructions rather than interpreting the plan as new program semantics.
 | Formula emission | `formula_ground`, `formula_guard`, `formula_conditional` | Original implications, aggregate conditions and universal instances |
 | Optional formula factoring | `formula_factor` | Qualified existential components with the complete-join path as fallback |
 | Optional count certificates | `formula_count_plan` | Capture, derivation and emitted correspondence to the original theory |
-| Source activity | `formula_source_activity` | Bounded absent/optional/required producer refinement over completed support, shared by objectives and projection |
+| Source activity | `formula_source_activity` | Bounded absent/optional/required producer refinement over completed support, shared by objectives and projection; each fact row is a required producer |
 | Original-model queries | `formula_source_activity::model_query` | Closed conditions over full original atom identities, separate from source activity and reduct formulas |
 | Objective source preparation | `formula_weak`, `formula_ir::objective_scope`, `formula_objective_dependencies` | Scoped weak bodies and independently applicable objective precision plans |
 | Objective materialization | `formula_ground::objectives`, `formula_ground::scoped_body` | Retained objective templates and bounded body validation without producer support |

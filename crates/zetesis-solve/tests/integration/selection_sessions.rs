@@ -88,7 +88,12 @@ impl Fixture {
                 ));
             }
         }
-        let program = Program::new(rules, AdmissionLimits::default()).unwrap();
+        let program = Program::new(
+            rules,
+            zetesis_core::FactTables::default(),
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         Self { program, values }
     }
 
@@ -361,6 +366,7 @@ fn a_refuted_root_never_prepares_the_oracle() {
             Template::new(Some(gate.clone()), vec![], vec![gate], vec![], vec![]),
             Template::new(None, vec![], vec![], vec![], vec![]),
         ],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();

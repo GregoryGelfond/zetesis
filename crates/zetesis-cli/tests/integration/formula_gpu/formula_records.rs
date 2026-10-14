@@ -5,7 +5,7 @@ use zetesis_validation::answers::native_json;
 
 type FullRecord = (Vec<Atom>, Option<Vec<(i32, i64)>>);
 
-pub fn full_records(output: &[u8]) -> Vec<FullRecord> {
+pub(super) fn full_records(output: &[u8]) -> Vec<FullRecord> {
     let answers = native_json::parse(output, native_json::Limits::default()).unwrap();
     let mut rows: Vec<_> = answers
         .records()
@@ -21,7 +21,7 @@ pub fn full_records(output: &[u8]) -> Vec<FullRecord> {
     rows
 }
 
-pub fn displayed_records(output: &[u8]) -> Vec<(Vec<String>, Option<String>)> {
+pub(super) fn displayed_records(output: &[u8]) -> Vec<(Vec<String>, Option<String>)> {
     let text = std::str::from_utf8(output).unwrap();
     let mut rows = Vec::new();
     let mut lines = text.lines().peekable();

@@ -297,6 +297,7 @@ fn error_kind(error: &RunError) -> &'static str {
         RunError::CompletionPool(_) => "completion_pool",
         RunError::CompletionUnavailable => "completion_unavailable",
         RunError::BackendUnavailable => "backend_unavailable",
+        RunError::GpuExecutableUnavailable { .. } => "gpu_executable_unavailable",
         RunError::Executor(_) => "executor",
         RunError::UnsupportedCombination { .. } => "unsupported_combination",
         RunError::UnsupportedOracle { .. } => "unsupported_oracle",
@@ -369,6 +370,7 @@ fn reason_code(reason: Interruption) -> &'static str {
                 Incomplete::PendingBytes => "pending_bytes",
                 Incomplete::CompletionScratch => "completion_scratch",
                 Incomplete::ReductStorage { .. } => "reduct_storage",
+                Incomplete::NativeNarrowingStorage { .. } => "native_narrowing_storage",
                 Incomplete::BatchCandidateLimit => "batch_candidate_limit",
                 Incomplete::PendingBatch => "pending_batch",
                 Incomplete::Allocation => "allocation",
@@ -587,7 +589,12 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
     // Counts are typed and optional; this is a bounded fixed-shape view, not a
     // serialization of debug text or the human statistics protocol.
     if view.timings.is_some() {
-        out.text("{\"search\":")?;
+        out.text("{\"executable\":")?;
+        match crate::statistics::running_executable() {
+            Some(path) => out.string(&path.to_string_lossy())?,
+            None => out.text("null")?,
+        }
+        out.text(",\"search\":")?;
         search_statistics(
             out,
             view.search,
@@ -607,6 +614,8 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
         hybrid_statistics(out, view.hybrid_execution)?;
         out.text(",\"terminal_execution\":")?;
         terminal_statistics(out, view.terminal_execution)?;
+        out.text(",\"source_evaluation\":")?;
+        source_evaluation_statistics(out, view.source_evaluation)?;
         out.text(",\"objective_work\":")?;
         out.optional_number(view.objective_work)?;
         out.text(",\"model_construction\":")?;
@@ -636,6 +645,19 @@ fn statistics(out: &mut Buffer, view: &SummaryView<'_>) -> Result<(), RunError> 
         out.text("null")?;
     }
     Ok(())
+}
+
+fn source_evaluation_statistics(
+    out: &mut Buffer,
+    statistics: Option<&zetesis_themelios::SourceEvaluationStatistics>,
+) -> Result<(), RunError> {
+    let Some(statistics) = statistics else {
+        return out.text("null");
+    };
+    out.text("{\"scope\":\"source_admission\"")?;
+    out.number_field("work", statistics.work)?;
+    out.number_field("substitutions", statistics.substitutions)?;
+    out.text("}")
 }
 
 fn model_construction_statistics(
@@ -760,6 +782,7 @@ struct SummaryView<'a> {
     execution: Option<&'a crate::FormulaExecutionStatistics>,
     hybrid_execution: Option<&'a zetesis_solve::HybridExecutionStatistics>,
     terminal_execution: Option<&'a zetesis_solve::TerminalExecutionStatistics>,
+    source_evaluation: Option<&'a zetesis_themelios::SourceEvaluationStatistics>,
     model_construction: Option<&'a zetesis_solve::ModelConstructionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
@@ -789,6 +812,7 @@ impl<'a> SummaryView<'a> {
                     hybrid_execution: semantic.and_then(crate::SemanticOutcome::hybrid_execution),
                     terminal_execution: semantic
                         .and_then(crate::SemanticOutcome::terminal_execution),
+                    source_evaluation: semantic.and_then(crate::SemanticOutcome::source_evaluation),
                     model_construction: semantic
                         .and_then(crate::SemanticOutcome::model_construction),
                     lazy_execution: semantic.and_then(crate::SemanticOutcome::lazy_execution),
@@ -822,6 +846,7 @@ impl<'a> SummaryView<'a> {
                     execution: partial.and_then(|p| p.formula_execution.as_ref()),
                     hybrid_execution: partial.and_then(|p| p.hybrid_execution.as_ref()),
                     terminal_execution: partial.and_then(|p| p.terminal_execution.as_ref()),
+                    source_evaluation: partial.and_then(|p| p.source_evaluation.as_ref()),
                     model_construction: partial.and_then(|p| p.model_construction.as_ref()),
                     lazy_execution: partial.and_then(|p| p.lazy_execution.as_ref()),
                     shared_execution: partial.and_then(|p| p.shared_execution.as_ref()),
@@ -973,6 +998,45 @@ fn region_statistics(
     out.number_field("reading_work", counts.work)?;
     out.text(",\"frontier\":")?;
     frontier_statistics(out, stats.frontier)?;
+    out.text(",\"workers\":")?;
+    worker_statistics(out, stats.workers)?;
+    out.text("}")
+}
+
+/// The parallel walk's workers, `null` on routes without one. Each state's
+/// keys are `null` outside that state, and so is the delay of a walk whose
+/// deadline overflows, which never engages.
+fn worker_statistics(
+    out: &mut Buffer,
+    statistics: Option<zetesis_sat::RegionWorkerStatistics>,
+) -> Result<(), RunError> {
+    let Some(stats) = statistics else {
+        return out.text("null");
+    };
+    let record = crate::statistics::WorkerRecord::from(stats.engagement);
+    out.text("{\"configured\":")?;
+    out.text(&stats.configured.to_string())?;
+    out.text(",\"engagement_delay_ns\":")?;
+    optional_number(out, stats.engagement_delay.map(|delay| delay.as_nanos()))?;
+    out.text(",\"engagement\":")?;
+    out.string(stats.engagement.label())?;
+    for (key, value) in [
+        ("elapsed_ns", record.elapsed),
+        ("walking_ns", record.walking),
+        ("engaged_after_ns", record.after),
+    ] {
+        out.text(",")?;
+        out.string(key)?;
+        out.text(":")?;
+        optional_number(out, value.map(|duration| duration.as_nanos()))?;
+    }
+    out.text(",\"launched\":")?;
+    match record.launched {
+        Some(launched) => out.text(&launched.to_string())?,
+        None => out.text("null")?,
+    }
+    out.text(",\"spawn_ns\":")?;
+    optional_number(out, record.spawn.map(|duration| duration.as_nanos()))?;
     out.text("}")
 }
 

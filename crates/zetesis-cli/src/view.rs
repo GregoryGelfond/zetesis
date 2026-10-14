@@ -2,11 +2,13 @@
 
 pub(crate) mod human;
 mod json;
+mod count;
 pub(crate) mod builtin;
 pub(crate) mod session;
 pub(crate) mod configuration;
 
 pub use configuration::{BackendView, ConfigurationView, GroundingDisplay};
+pub use count::CountRenderer;
 pub use human::HumanRenderer;
 pub use json::JsonRenderer;
 
@@ -15,11 +17,25 @@ use zetesis_themelios::observation::{Limits, ModelView};
 
 use crate::{Publication, PublicationFailure, PublicationStop, RunError, SemanticOutcome};
 
+/// Which semantic records the publication controller requests.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum PublicationMode {
+    /// Stream the selected answer records through their display channels.
+    #[default]
+    Answers,
+    /// Exhaust the full selected family, skipping display evaluation and
+    /// projection. Only a terminal callback is delivered; use `CountRenderer`
+    /// to publish its exact total as one integer.
+    Count,
+}
+
 /// Solver and observation policy for publication of an already prepared input.
 /// Renderer-specific byte limits, styling and output state belong to the chosen
 /// renderer. Construction uses ordinary typed values and does not parse arguments.
 #[derive(Clone, Debug)]
 pub struct PublicationConfig {
+    /// Answer records or exhaustive full-identity counting.
+    pub mode: PublicationMode,
     /// Exact solver execution and answer-selection limits.
     pub solve: crate::SolveConfig,
     /// Independent bounds for evaluating the displayed term channel.
@@ -30,6 +46,7 @@ impl Default for PublicationConfig {
     fn default() -> Self {
         let resources = zetesis_solve::Resources::default();
         Self {
+            mode: PublicationMode::Answers,
             solve: resources.solve_config(),
             observations: resources.observation_limits(),
         }
@@ -39,6 +56,11 @@ impl Default for PublicationConfig {
 impl From<&crate::Options> for PublicationConfig {
     fn from(options: &crate::Options) -> Self {
         Self {
+            mode: if options.count {
+                PublicationMode::Count
+            } else {
+                PublicationMode::Answers
+            },
             solve: options.into(),
             observations: options.resources().observation_limits(),
         }

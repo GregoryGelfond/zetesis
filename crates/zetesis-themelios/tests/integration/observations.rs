@@ -1,19 +1,21 @@
 //! Independent complete display multisets; observation never changes the reduct.
 
-use std::fs::{self};
+use crate::support::clingo_reports::optimal_witnesses;
 use std::time::{Duration, Instant};
 
+use crate::support::admission;
 use crate::support::answer_records::Record;
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
+use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::{Interpretation, check};
-use zetesis_reference_support::admit;
+use zetesis_reference_support::{BundleFixture, admit, resource_limits};
 use zetesis_themelios::observation::{ErrorKind, Feature, Limits, Resource};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, admit_formula,
+    AdmissionFailure, AdmittedFormula, ExpansionFailure, ExpansionLimits, FormulaFailure,
+    FormulaLimits, InputLimit, admit_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -64,6 +66,7 @@ fn reference(case: &Json) -> Vec<Record> {
     let mut records: Vec<Record> = witnesses
         .iter()
         .map(|witness| {
+            // A display is a multiset: clingo repeats a value two show directives select.
             let mut values: Vec<String> = witness["Value"]
                 .as_array()
                 .unwrap()
@@ -71,31 +74,11 @@ fn reference(case: &Json) -> Vec<Record> {
                 .map(|value| value.as_str().unwrap().to_owned())
                 .collect();
             values.sort();
-            let costs = witness["Costs"]
-                .as_array()
-                .map(|costs| costs.iter().map(|cost| cost.as_i64().unwrap()).collect());
-            (values, costs)
+            (values, oracle::costs(&witness["Costs"]))
         })
         .collect();
     if case["reference_result"] == "OPTIMUM FOUND" {
-        let summary = &case["reference_summary"];
-        let best: Vec<_> = summary["Costs"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|cost| cost.as_i64().unwrap())
-            .collect();
-        let first = records
-            .iter()
-            .position(|(_, cost)| cost.as_ref() == Some(&best))
-            .unwrap();
-        assert!(
-            records[first + 1..].contains(&records[first]),
-            "first final incumbent must recur in optN enumeration"
-        );
-        records = records.into_iter().skip(first + 1).collect();
-        assert!(records.iter().all(|(_, cost)| cost.as_ref() == Some(&best)));
-        assert_eq!(summary["Optimal"].as_u64().unwrap(), records.len() as u64);
+        records = optimal_witnesses(&case["reference_summary"], records);
     }
     records.sort();
     records
@@ -232,14 +215,9 @@ fn every_outside_profile_source_has_an_explicit_typed_refusal() {
 #[test]
 fn metadata_preserves_the_original_formula_and_source_identity() {
     let plain = admit("p(1). {q}. a:-missing.", &FormulaLimits::default()).unwrap();
-    let observed = admit_formula(
-        "p(1). {q}. a:-missing. #show f(X):p(X). #show f(X):p(X). #show missing.".into(),
-        AdmissionOptions {
-            source_id: SourceId::new(71),
-            ..Default::default()
-        },
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
+    let observed = admission::admit(
+        SourceId::new(71),
+        "p(1). {q}. a:-missing. #show f(X):p(X). #show f(X):p(X). #show missing.",
     )
     .unwrap();
     assert_eq!(plain.atoms(), observed.atoms());
@@ -443,73 +421,19 @@ fn public_model_spelling_is_validated_before_output() {
 
 #[test]
 fn all_source_ceilings_preflight_owned_templates_and_origin_copies() {
-    use zetesis_themelios::observation::AdmissionLimits;
-    for (limits, resource) in [
-        (
-            AdmissionLimits {
-                max_directives: 0,
-                ..Default::default()
-            },
-            Resource::Directives,
-        ),
-        (
-            AdmissionLimits {
-                max_nodes: 0,
-                ..Default::default()
-            },
-            Resource::Nodes,
-        ),
-        (
-            AdmissionLimits {
-                max_depth: 0,
-                ..Default::default()
-            },
-            Resource::Depth,
-        ),
-        (
-            AdmissionLimits {
-                max_bytes: 0,
-                ..Default::default()
-            },
-            Resource::Bytes,
-        ),
-        (
-            AdmissionLimits {
-                max_variables: 0,
-                ..Default::default()
-            },
-            Resource::Variables,
-        ),
-        (
-            AdmissionLimits {
-                max_body_elements: 0,
-                ..Default::default()
-            },
-            Resource::BodyElements,
-        ),
-        (
-            AdmissionLimits {
-                max_arity: 0,
-                ..Default::default()
-            },
-            Resource::Arity,
-        ),
-        (
-            AdmissionLimits {
-                max_origins: 0,
-                ..Default::default()
-            },
-            Resource::Origins,
-        ),
+    for resource in [
+        Resource::Directives,
+        Resource::Nodes,
+        Resource::Depth,
+        Resource::Bytes,
+        Resource::Variables,
+        Resource::BodyElements,
+        Resource::Arity,
+        Resource::Origins,
     ] {
-        let result = admit_formula(
-            "p(1). #show f(X):p(X).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
-                observation: limits,
-                ..Default::default()
-            },
+        let result = admit(
+            "p(1). #show f(X):p(X).",
+            &resource_limits::formula_observation(resource, 0),
         );
         assert!(
             matches!(result, Err(FormulaFailure::Observation { error }) if matches!(error.kind(), ErrorKind::Limit { resource: actual, .. } if *actual == resource)),
@@ -519,10 +443,7 @@ fn all_source_ceilings_preflight_owned_templates_and_origin_copies() {
     let deep = format!("#show {}x{}.", "f(".repeat(65), ")".repeat(65));
     let result = admit_formula(
         deep,
-        AdmissionOptions {
-            max_syntax_depth: 1_000,
-            ..Default::default()
-        },
+        resource_limits::admission(InputLimit::SyntaxDepth, 1_000),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     );
@@ -533,18 +454,13 @@ fn all_source_ceilings_preflight_owned_templates_and_origin_copies() {
 
 #[test]
 fn original_bundle_constants_and_duplicate_locations_remain_separate_from_terms() {
-    let directory = tempfile::tempdir().unwrap();
-    fs::write(
-        directory.path().join("root.lp"),
+    let fixture = BundleFixture::new();
+    fixture.write(
+        "entry.lp",
         "#include \"other.lp\". #const k=2. p(k). #show. #show f(X):p(X).",
-    )
-    .unwrap();
-    fs::write(directory.path().join("other.lp"), "#show f(X):p(X).").unwrap();
-    let bundle = zetesis_themelios::SourceBundle::load(
-        directory.path().join("root.lp"),
-        zetesis_themelios::BundleLimits::default(),
-    )
-    .unwrap();
+    );
+    fixture.write("other.lp", "#show f(X):p(X).");
+    let bundle = fixture.bundle();
     let input = zetesis_themelios::admit_bundle_formula(
         bundle,
         zetesis_themelios::BundleAdmissionOptions::default(),
@@ -588,7 +504,7 @@ fn original_bundle_constants_and_duplicate_locations_remain_separate_from_terms(
                 .starts_with("#show")
         );
     }
-    directory.close().unwrap();
+    fixture.close();
 }
 
 #[test]
@@ -611,10 +527,7 @@ fn show_traversal_preserves_closed_logical_values_and_raw_body_limits() {
     }
     let result = admit_formula(
         "p. #show x:p,p.".into(),
-        AdmissionOptions {
-            max_body_elements: 1,
-            ..Default::default()
-        },
+        resource_limits::admission(InputLimit::BodyElements, 1),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     );
@@ -622,7 +535,7 @@ fn show_traversal_preserves_closed_logical_values_and_raw_body_limits() {
         result,
         Err(FormulaFailure::Expansion(ExpansionFailure::Admission(
             AdmissionFailure::Limit {
-                resource: zetesis_themelios::InputLimit::BodyElements,
+                resource: InputLimit::BodyElements,
                 observed: 2,
                 ..
             }

@@ -9,22 +9,29 @@
 
 #![forbid(unsafe_code)]
 
+mod aggregate;
+mod atomic_choice;
+mod checked;
+mod evaluation;
+mod extremum_cut;
+pub mod extremum_lowering;
+mod normal;
+mod numeric_evaluation;
+mod oracle;
+pub mod partition;
+mod positive;
+mod reduct;
+mod regions;
+mod stratified;
+mod support;
+#[cfg(test)]
+mod test_support;
 mod theory;
 mod threshold;
 pub mod threshold_lowering;
-mod oracle;
-mod evaluation;
-mod reduct;
-mod normal;
-mod aggregate;
 mod tight;
-mod checked;
-mod support;
-mod atomic_choice;
-mod positive;
-mod stratified;
-mod regions;
-pub mod partition;
+
+pub use extremum_cut::{ExtremaMeasure, ExtremumCut, ExtremumCutRule, ExtremumRow};
 
 pub use checked::{CheckedInterpretation, StableInterpretation, check_interpretation};
 
@@ -33,8 +40,9 @@ pub use aggregate::{
     AggregateBuild, AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind,
     AggregateExtremum, AggregateFamilyBuild, AggregateFamilyLimits, AggregateGuard,
     AggregateLimits, AggregateProfile, AggregateStatistics, ExtremumBound, FormulaNodes,
-    ValueExtremumElement, append_aggregate, append_aggregate_family, append_extremum,
-    append_value_extremum, append_value_extremum_refs,
+    ValueExtremumElement, ValueExtremumFamilyAttempt, ValueExtremumFamilySpace, ValueExtremumGuard,
+    append_aggregate, append_aggregate_family, append_extremum, append_value_extremum,
+    append_value_extremum_family_refs, append_value_extremum_refs,
 };
 
 pub use evaluation::{
@@ -44,14 +52,15 @@ pub use normal::{from_ground_program, from_ground_program_supported};
 pub use oracle::{Check, Limits, Statistics, Verdict, check, models, models_reduct};
 pub use reduct::FrozenReduct;
 pub use regions::{
-    Extraction, FrozenSubject, Knowledge, NARROWING_BATCH, Narrower, NarrowingAttempt,
+    ChoiceHeads, Extraction, FrozenSubject, Knowledge, NARROWING_BATCH, Narrower, NarrowingAttempt,
     NarrowingQuota, NarrowingScratch, NarrowingStatistics, OriginalSubject, PreferenceAttempt,
     Producers, RegionLimits, producers,
 };
 pub use theory::{
-    AdmissionError, AdmissionLimits, ContributionRow, FormulaParts, FormulaSuffix,
-    FormulaTransaction, FormulaView, Interpretation, InterpretationWords, Node, NodeView,
-    OperandSpan, Theory, TheoryAdmission, Threshold, ThresholdDescriptor,
+    AdmissionError, AdmissionLimits, ContributionRow, ExtremumCutDescriptor, FormulaParts,
+    FormulaSuffix, FormulaTransaction, FormulaView, Interpretation, InterpretationWords, Node,
+    NodeView, NumericDomain, NumericRow, OperandSpan, Theory, TheoryAdmission, Threshold,
+    ThresholdDescriptor,
 };
 pub use zetesis_cpu::regions::{Narrowing, Region};
 

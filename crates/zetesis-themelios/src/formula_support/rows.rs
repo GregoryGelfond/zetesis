@@ -303,7 +303,7 @@ impl<'a, 'source> FilteredRows<'a, 'source> {
                     && prefix.matched == self.join.plan.patterns.len()
             });
             let positives = prefix.map(|prefix| PositiveRows {
-                literals: self.join.literals,
+                literals: self.join.literals.get(),
                 truth: prefix
                     .pivot
                     .map_or(PositiveTruth::Held, |pivot| PositiveTruth::Open {

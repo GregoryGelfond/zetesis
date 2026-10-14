@@ -74,12 +74,18 @@ impl fmt::Debug for PreparedFormula {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PreparedFormula")
             .field("source", &self.source)
-            .field("analyzed_program", self.analyzed_program())
+            .field("analysis_summary", &self.preparation.program.analyzed)
             .finish_non_exhaustive()
     }
 }
 
 impl PreparedFormula {
+    /// The preparation, for tests that compare admission receipts and options.
+    #[cfg(test)]
+    pub(crate) fn preparation(&self) -> &Preparation {
+        &self.preparation
+    }
+
     pub(super) fn new(preparation: Preparation, source: Owner, metadata: SourceMetadata) -> Self {
         Self {
             preparation,
@@ -91,17 +97,34 @@ impl PreparedFormula {
     /// Structural facts about exactly [`Self::analyzed_program`]. Unknown verdicts
     /// establish neither nonmembership in a class nor a grounder requirement.
     /// Consult [`Self::analysis_basis`] before interpreting these as source facts.
+    /// If preparation has not needed the complete normalized input, the first
+    /// full inspection constructs and retains it and its analysis. Later calls
+    /// borrow that shared result. Preparation's summary has the same dependency
+    /// graph and class verdicts; full inspection pays canonical ingestion and
+    /// analysis work and full-program storage, without an expansion charge.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
-        &self.preparation.program.analysis
+        self.preparation
+            .program
+            .analyzed
+            .full_analysis(&self.preparation.program.analysis)
+    }
+
+    /// Structural classes of the retained source analysis. This view does not
+    /// require constructing the full analyzed program. Consult
+    /// [`Self::analysis_basis`] before using a verdict as a source property.
+    #[must_use]
+    pub fn source_classes(&self) -> &themelios_analysis::classify::Classes {
+        self.preparation.program.analysis.classes()
     }
 
     /// Bounded, pool-free analysis input retaining available provenance. Its semantic
     /// status is identified by [`Self::analysis_basis`].
     /// Metadata and subsequently generated support/coherence formulas are separate.
+    /// Shares the complete view and its construction cost with [`Self::source_analysis`].
     #[must_use]
     pub fn analyzed_program(&self) -> &Program {
-        &self.preparation.program.analyzed
+        self.preparation.program.analyzed.full_program()
     }
 
     /// Meaning of the retained analysis input. A dependency projection is not
@@ -109,6 +132,13 @@ impl PreparedFormula {
     #[must_use]
     pub fn analysis_basis(&self) -> super::AnalysisBasis {
         self.preparation.program.analysis_basis
+    }
+
+    /// How the prepared program's comparison literals were compiled: with an
+    /// integer comparison form, or without one by reason, once per literal.
+    #[must_use]
+    pub fn comparison_forms(&self) -> crate::ComparisonForms {
+        self.preparation.program.comparison_forms
     }
 
     /// Original canonical program before normalization or analysis projection.
@@ -139,21 +169,62 @@ impl PreparedFormula {
         self
     }
 
-    /// Attempt finite-domain guards during final instantiation of an exact
-    /// normalized positive flat program. Disabled by default. Inapplicable,
-    /// Unknown or Stopped analysis leaves the complete join unchanged.
+    /// Attempt numeric analysis over all prepared producers and compact facts.
+    /// Disabled by default. Finite-domain guards retain their exact normalized
+    /// positive-flat scope; unavailable bounds leave the complete join unchanged.
     ///
-    /// The analysis borrows this exact normalized source and keeps its logical
-    /// population limits separate from support/guard capacity. Its work and all
-    /// bridge/guard work consume the original cumulative formula budget.
-    /// Analysis uses bounded infallible collections and has no internal control
-    /// hook. A configured preparation token is polled around that bounded call;
-    /// it does not provide a hard real-time deadline or allocator/RSS bound.
-    /// Observers receive the typed analysis outcome.
+    /// The analysis borrows this preparation's canonical terms and keeps its
+    /// logical population limits separate from support/guard capacity. Its work
+    /// and all bridge/guard work consume the original cumulative formula budget.
+    /// Allocation and owner failures remain explicit. A configured preparation
+    /// token is polled around the bounded analysis; this is not a hard real-time
+    /// deadline or allocator/RSS bound.
+    ///
+    /// Observers request certificates and a typed census through
+    /// [`GroundingObserver::domain_diagnostics_enabled`]. Without that request,
+    /// shared analysis and finite guards still run without diagnostic work.
     #[must_use]
     pub const fn with_domain_analysis(mut self, limits: Option<crate::DomainLimits>) -> Self {
         self.preparation.options.domains = limits;
         self
+    }
+
+    /// Admit and evaluate a complete signed acyclic normal source once, before
+    /// formula construction. Complete support and original arithmetic admission
+    /// still run. Inapplicable sources retain the ordinary ground/query door and
+    /// all accepted classification charges. Objectives, projections, recursive
+    /// components and non-flat source bodies use that ordinary door.
+    ///
+    /// # Errors
+    /// Returns the original typed admission, arithmetic, control or resource
+    /// failure. No admitted-class failure retries through another evaluator.
+    pub fn try_source(self) -> Result<crate::SourceAdmission<Self>, FormulaFailure> {
+        self.try_source_with_observer(None)
+    }
+
+    /// Exact source admission with the ordinary source phase observer. All
+    /// support and consequence work is reported during this call.
+    ///
+    /// # Errors
+    /// Returns the same failures as [`Self::try_source`].
+    pub fn try_source_with_observer(
+        mut self,
+        observer: Option<&dyn GroundingObserver>,
+    ) -> Result<crate::SourceAdmission<Self>, FormulaFailure> {
+        let plan = crate::formula_source::classify(&mut self.preparation)
+            .map_err(|error| self.source.retain_failure(error))?;
+        let Some(plan) = plan else {
+            return Ok(crate::SourceAdmission::NotApplicable(self));
+        };
+        let evaluation = grounding_observer::observe(observer, || {
+            crate::formula_source::evaluate(self.preparation, plan, observer)
+        })
+        .map_err(|error| self.source.retain_failure(error))?;
+        Ok(crate::SourceAdmission::Admitted(crate::AcyclicSource::new(
+            evaluation,
+            self.source,
+            self.metadata,
+        )))
     }
 
     /// Materialize producers and ineligible constraints while retaining ordinary
@@ -356,12 +427,18 @@ impl fmt::Debug for PreparedFormulaBundle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PreparedFormulaBundle")
             .field("bundle", &self.bundle())
-            .field("analyzed_program", self.analyzed_program())
+            .field("analysis_summary", &self.preparation.program.analyzed)
             .finish_non_exhaustive()
     }
 }
 
 impl PreparedFormulaBundle {
+    /// The preparation, for tests that read the prepared program.
+    #[cfg(test)]
+    pub(crate) fn preparation(&self) -> &Preparation {
+        &self.preparation
+    }
+
     /// Bundle counterpart of [`PreparedFormula::ground_adaptive`].
     ///
     /// # Errors
@@ -442,19 +519,78 @@ impl PreparedFormulaBundle {
         }
     }
 
+    /// Admit and evaluate the complete signed acyclic normal source bundle.
+    /// Inapplicability retains the same original bundle and cumulative budgets.
+    ///
+    /// # Errors
+    /// Preserves the original bundle with every admission or resource refusal.
+    pub fn try_source(self) -> Result<crate::SourceAdmission<Self>, FormulaBundleFailure> {
+        self.try_source_with_observer(None)
+    }
+
+    /// Exact source admission with phase observations and retained bundle errors.
+    ///
+    /// # Errors
+    /// Returns the same failures as [`Self::try_source`].
+    pub fn try_source_with_observer(
+        mut self,
+        observer: Option<&dyn GroundingObserver>,
+    ) -> Result<crate::SourceAdmission<Self>, FormulaBundleFailure> {
+        let plan = match crate::formula_source::classify(&mut self.preparation) {
+            Ok(Some(plan)) => plan,
+            Ok(None) => return Ok(crate::SourceAdmission::NotApplicable(self)),
+            Err(error) => {
+                return Err(FormulaBundleFailure {
+                    bundle: self.source.into_bundle(),
+                    error: Box::new(error),
+                });
+            }
+        };
+        match grounding_observer::observe(observer, || {
+            crate::formula_source::evaluate(self.preparation, plan, observer)
+        }) {
+            Ok(evaluation) => Ok(crate::SourceAdmission::Admitted(crate::AcyclicSource::new(
+                evaluation,
+                self.source,
+                self.metadata,
+            ))),
+            Err(error) => Err(FormulaBundleFailure {
+                bundle: self.source.into_bundle(),
+                error: Box::new(error),
+            }),
+        }
+    }
+
     /// Structural facts about exactly [`Self::analyzed_program`], not a guarantee
     /// that grounding succeeds or that lazy formula execution is implemented.
     /// Consult [`Self::analysis_basis`] before interpreting these as source facts.
+    /// If preparation has not needed the complete normalized input, the first
+    /// full inspection constructs and retains it and its analysis. Later calls
+    /// borrow that shared result. Preparation's summary has the same dependency
+    /// graph and class verdicts; full inspection pays canonical ingestion and
+    /// analysis work and full-program storage, without an expansion charge.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
-        &self.preparation.program.analysis
+        self.preparation
+            .program
+            .analyzed
+            .full_analysis(&self.preparation.program.analysis)
+    }
+
+    /// Structural classes of the retained source analysis. This view does not
+    /// require constructing the full analyzed program. Consult
+    /// [`Self::analysis_basis`] before using a verdict as a source property.
+    #[must_use]
+    pub fn source_classes(&self) -> &themelios_analysis::classify::Classes {
+        self.preparation.program.analysis.classes()
     }
 
     /// Bounded, pool-free combined analysis input retaining available provenance;
     /// consult [`Self::analysis_basis`] before interpreting its verdicts.
+    /// Shares the complete view and its construction cost with [`Self::source_analysis`].
     #[must_use]
     pub fn analyzed_program(&self) -> &Program {
-        &self.preparation.program.analyzed
+        self.preparation.program.analyzed.full_program()
     }
 
     /// Meaning of the retained analysis input. A dependency projection is not
@@ -462,6 +598,13 @@ impl PreparedFormulaBundle {
     #[must_use]
     pub fn analysis_basis(&self) -> super::AnalysisBasis {
         self.preparation.program.analysis_basis
+    }
+
+    /// How the prepared program's comparison literals were compiled: with an
+    /// integer comparison form, or without one by reason, once per literal.
+    #[must_use]
+    pub fn comparison_forms(&self) -> crate::ComparisonForms {
+        self.preparation.program.comparison_forms
     }
 
     /// Original canonical program before normalization or analysis projection.

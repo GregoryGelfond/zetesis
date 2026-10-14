@@ -20,7 +20,8 @@ use zetesis_ferraris::{
     AggregateErrorKind, AggregateExtremum, Interpretation, Limits, models, models_reduct,
 };
 use zetesis_ferraris::{
-    ContributionRow, FormulaNodes, NodeView as Node, Theory, ThresholdDescriptor, append_aggregate,
+    ExtremumCutDescriptor, FormulaNodes, NodeView as Node, NumericRow, Theory, ThresholdDescriptor,
+    append_aggregate,
 };
 
 fn copy(nodes: &FormulaNodes) -> FormulaNodes {
@@ -33,8 +34,9 @@ struct Snapshot {
     operands: Vec<usize>,
     conditions: Vec<usize>,
     weights: Vec<u64>,
-    rows: Vec<ContributionRow>,
+    rows: Vec<NumericRow>,
     thresholds: Vec<ThresholdDescriptor>,
+    cuts: Vec<ExtremumCutDescriptor>,
 }
 
 fn snapshot(nodes: &FormulaNodes) -> Snapshot {
@@ -43,9 +45,10 @@ fn snapshot(nodes: &FormulaNodes) -> Snapshot {
         nodes: parts.nodes().to_vec(),
         operands: parts.operands().to_vec(),
         conditions: parts.conditions().to_vec(),
-        weights: parts.weights().to_vec(),
+        weights: parts.numeric_values().to_vec(),
         rows: parts.rows().to_vec(),
         thresholds: parts.thresholds().to_vec(),
+        cuts: parts.extremum_cuts().to_vec(),
     }
 }
 
@@ -72,9 +75,7 @@ fn with_guards<T>(
         .iter()
         .map(|(relation, value)| AggregateGuard {
             relation: *relation,
-            bound: Expression {
-                nodes: vec![Operation::Constant(fixture.scalar(value, location()))],
-            },
+            bound: Expression::new(vec![Operation::Constant(fixture.scalar(value, location()))]),
         })
         .collect();
     fixture.with(location(), |_, computation, counters| {
@@ -103,20 +104,15 @@ fn with_guards<T>(
                 .node(Node::Implies(tail, first), location())
                 .unwrap();
         }
-        let mut elements = Buffer::new(
-            builder.computation,
-            limits,
-            &mut builder.counters,
-            location(),
-        )
-        .unwrap();
+        let mut elements =
+            Buffer::new(builder.computation, limits, builder.counters, location()).unwrap();
         for (weight, condition) in weights.into_iter().zip([first, second]) {
             elements
                 .push(
                     AggregateElement { weight, condition },
                     builder.computation,
                     limits,
-                    &mut builder.counters,
+                    builder.counters,
                     location(),
                 )
                 .unwrap();
@@ -678,8 +674,8 @@ fn guard_family_uses_preparation_control() {
                 panic!("the numeric family uses native aggregate compilation");
             };
             let cancellation = Cancellation::default();
-            builder.counters =
-                std::mem::take(&mut builder.counters).with_cancellation(Some(&cancellation));
+            *builder.counters =
+                std::mem::take(builder.counters).with_cancellation(Some(&cancellation));
             let before = copy(&builder.nodes);
             cancellation.cancel();
             let guards = numeric(&[(Relation::Ge, Value::Number(1))]);
@@ -707,8 +703,8 @@ fn signed_aggregate_uses_the_preparation_token() {
                 panic!("signed contributions use numeric compilation");
             };
             let cancellation = Cancellation::default();
-            builder.counters =
-                std::mem::take(&mut builder.counters).with_cancellation(Some(&cancellation));
+            *builder.counters =
+                std::mem::take(builder.counters).with_cancellation(Some(&cancellation));
             let before = copy(&builder.nodes);
             cancellation.cancel();
             let error = builder
@@ -738,13 +734,13 @@ fn extrema_use_the_preparation_token() {
                 binding,
                 builder.computation,
                 builder.limits,
-                &mut builder.counters,
+                builder.counters,
                 location(),
             )
             .unwrap();
             let cancellation = Cancellation::default();
-            builder.counters =
-                std::mem::take(&mut builder.counters).with_cancellation(Some(&cancellation));
+            *builder.counters =
+                std::mem::take(builder.counters).with_cancellation(Some(&cancellation));
             let before = copy(&builder.nodes);
             cancellation.cancel();
             for kind in [AggregateExtremum::Min, AggregateExtremum::Max] {
@@ -757,8 +753,10 @@ fn extrema_use_the_preparation_token() {
                         location(),
                     )
                     .unwrap_err();
-                assert!(matches!(error, FormulaFailure::Aggregate { error, .. }
-                    if error.kind() == AggregateErrorKind::Control(zetesis_cpu::Stop::Cancelled)));
+                // Native preparation may observe the same token before the
+                // aggregate publisher is entered. Preserve its typed cause.
+                assert_eq!(error.interruption(), Some(zetesis_cpu::Stop::Cancelled));
+                assert_eq!(error.site(), Some(location()));
                 assert_eq!(snapshot(&builder.nodes), snapshot(&before));
             }
         },

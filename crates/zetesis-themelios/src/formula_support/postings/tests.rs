@@ -5,10 +5,10 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueLimits, ValueNode};
 
 use super::{Limits, Stop, begin_support, record};
+use crate::FormulaLimits;
 use crate::formula_support::testing::numbers;
 use crate::formula_support::{Counters, SupportCatalog};
 use crate::test_support::location;
-use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 fn relation(rows: Vec<Vec<Value>>) -> SupportCatalog {
     let mut support = SupportCatalog::default();
@@ -267,15 +267,7 @@ fn observation_preserves_the_compiled_subject() {
         "p(1,2). p(2,1). q(X) :- p(X,Y), X+Y=3.",
         "p(1).p(2).#minimize { X@1,X : p(X) }.",
     ] {
-        let compile = || {
-            admit_formula(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default(),
-            )
-            .unwrap()
-        };
+        let compile = || crate::test_support::formula(source);
         let (observed, report) = record(Limits::default(), compile);
         let plain = compile();
         assert_eq!(report.stop, None);

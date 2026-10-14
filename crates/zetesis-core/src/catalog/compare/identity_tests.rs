@@ -1,5 +1,7 @@
 use std::{cmp::Ordering, convert::Infallible};
 
+use crate::test_support::compare_terms;
+
 use crate::catalog::{Limits, PredicateRef, TermRef, storage::Store};
 use crate::{Predicate, Sign, Value, ValueLimits, ValueNode};
 
@@ -14,19 +16,6 @@ fn compound() -> Value {
     ];
     nodes.push(ValueNode::String("long shared payload".repeat(128)));
     Value::from_nodes(nodes, ValueLimits::default()).unwrap()
-}
-
-fn compare<E>(
-    left: TermRef<'_>,
-    right: TermRef<'_>,
-    asp: bool,
-    before: impl FnMut() -> Result<(), E>,
-) -> Result<Ordering, E> {
-    if asp {
-        left.compare_terms_with(right, before)
-    } else {
-        left.compare_ref_with(right, before)
-    }
 }
 
 #[test]
@@ -44,7 +33,7 @@ fn equal_canonical_terms_need_one_permit_across_prefixes() {
         for asp in [false, true] {
             let mut calls = 0;
             assert_eq!(
-                compare(left, right, asp, || {
+                compare_terms(left, right, asp, || {
                     calls += 1;
                     if calls == 1 {
                         Ok(())
@@ -68,7 +57,7 @@ fn canonical_equality_refuses_before_its_identity_probe() {
     for asp in [false, true] {
         let mut calls = 0;
         assert_eq!(
-            compare(term, term, asp, || {
+            compare_terms(term, term, asp, || {
                 calls += 1;
                 Err("stop")
             }),
@@ -118,7 +107,7 @@ fn foreign_equal_ids_do_not_establish_term_equality() {
     let right = TermRef::new(&right, right_id).unwrap();
     for asp in [false, true] {
         assert_eq!(
-            compare(left, right, asp, || Ok::<_, Infallible>(())),
+            compare_terms(left, right, asp, || Ok::<_, Infallible>(())),
             Ok(Ordering::Less)
         );
     }

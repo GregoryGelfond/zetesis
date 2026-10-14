@@ -1,6 +1,6 @@
 use super::*;
 use crate::ProgramSite;
-use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation};
+use crate::formula_ir::{HeadIr, LiteralIr, Operation};
 use crate::formula_support::testing::budget;
 use crate::formula_support::{CompletedCatalog, build, testing};
 use crate::{ConstraintAllowance, ConstraintCheckLimits, ExpansionLimits, FormulaResource};
@@ -29,9 +29,6 @@ fn fixture() -> (CompletedCatalog, RuleIr) {
             )
             .unwrap();
     }
-    let variable = |slot| Expression {
-        nodes: vec![Operation::Variable(slot)],
-    };
     let mut body: Vec<_> = [("p", 0), ("q", 1)]
         .into_iter()
         .map(|(name, slot)| {
@@ -47,7 +44,16 @@ fn fixture() -> (CompletedCatalog, RuleIr) {
             )
         })
         .collect();
-    body.push(LiteralIr::Compare(variable(0), Relation::Lt, variable(1)));
+    body.push(LiteralIr::Compare(testing::comparison(
+        &mut catalog,
+        (
+            vec![Operation::Variable(0)],
+            Relation::Lt,
+            vec![Operation::Variable(1)],
+        ),
+        &mut Counters::default(),
+        location,
+    )));
     let completed = build(
         catalog,
         &preparation.program,
@@ -258,7 +264,7 @@ fn computed_fixture(source: &str) -> (CompletedCatalog, crate::formula_ir::Prepa
             .unwrap();
         let mut computation = Computation::new(&mut append, queries.support());
         let rule = program
-            .rules
+            .rules_without_facts()
             .iter()
             .find(|rule| matches!(rule.head, HeadIr::Normal(None)))
             .unwrap();
@@ -272,7 +278,7 @@ fn computed_fixture(source: &str) -> (CompletedCatalog, crate::formula_ir::Prepa
         )
         .unwrap();
         assert!(
-            join.select_total_constraint(rule, &mut computation, &limits, &mut counters)
+            join.select_total_body(rule, &mut computation, &limits, &mut counters)
                 .unwrap()
         );
     }
@@ -302,7 +308,7 @@ fn values(
 fn retained_domains_avoid_repeated_preparation_work() {
     let (catalog, program) = computed_fixture("p(1..32).q(2). :-p(X),q(Y),X/2=Y.");
     let rule = program
-        .rules
+        .rules_without_facts()
         .iter()
         .find(|rule| matches!(rule.head, HeadIr::Normal(None)))
         .unwrap();
@@ -361,7 +367,7 @@ fn retained_domains_avoid_repeated_preparation_work() {
             &Binding::new(&computation, &limits, &mut counters, rule.location).unwrap(),
             rule.variables,
             queries.support(),
-            std::borrow::Cow::Borrowed(&prepared.plan),
+            crate::formula_support::JoinPlan::Borrowed(&prepared.plan),
             None,
             Context::new(&computation, &limits, &mut counters, rule.location),
         )
@@ -369,7 +375,7 @@ fn retained_domains_avoid_repeated_preparation_work() {
         fresh.configure_rule(rule, &limits, &mut counters).unwrap();
         assert!(
             fresh
-                .select_total_constraint(rule, &mut computation, &limits, &mut counters)
+                .select_total_body(rule, &mut computation, &limits, &mut counters)
                 .unwrap()
         );
         let mut expected = Vec::new();
@@ -397,7 +403,7 @@ fn retained_domains_avoid_repeated_preparation_work() {
 fn refused_totality_releases_preparation_storage() {
     let (catalog, program) = computed_fixture("p(1..32).q(2). :-p(X),q(Y),X/2=Y.");
     let rule = program
-        .rules
+        .rules_without_facts()
         .iter()
         .find(|rule| matches!(rule.head, HeadIr::Normal(None)))
         .unwrap();
@@ -446,7 +452,7 @@ fn retained_domains_refuse_a_foreign_workspace() {
     ] {
         let (catalog, program) = computed_fixture(source);
         let rule = program
-            .rules
+            .rules_without_facts()
             .iter()
             .find(|rule| matches!(rule.head, HeadIr::Normal(None)))
             .unwrap();

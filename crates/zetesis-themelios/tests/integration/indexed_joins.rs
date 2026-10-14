@@ -2,6 +2,8 @@
 
 use std::cell::Cell;
 use std::fmt::Write;
+use zetesis_reference_support::{admit, formula, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 
 use zetesis_themelios::ProgramSite;
 
@@ -115,37 +117,28 @@ fn shared_arguments_select_only_matching_rows() {
 fn selective_join_work_limit_is_inclusive() {
     let source = selective_source();
     let compile = |max_work| {
-        admit_formula(
-            source.clone(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
-                max_work,
-                ..FormulaLimits::default()
-            },
+        admit(
+            &source,
+            &resource_limits::formula(FormulaResource::Work, max_work),
         )
     };
-    let (mut low, mut high) = (0, FormulaLimits::default().max_work);
-    assert!(compile(high).is_ok());
-    while low < high {
-        let middle = low + (high - low) / 2;
-        match compile(middle) {
-            Ok(_) => high = middle,
+    let low = first_success(
+        resource_limits::formula_default(FormulaResource::Work),
+        |max_work| match compile(max_work) {
+            Ok(_) => true,
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::Work,
                 observed,
                 limit,
                 ..
             }) => {
-                assert_eq!(limit, u128::from(middle));
+                assert_eq!(limit, u128::from(max_work));
                 assert!(observed > limit);
-                low = middle + 1;
+                false
             }
             other => panic!("unexpected admission: {other:?}"),
-        }
-    }
-    assert!(low > 0);
-    assert!(compile(low).is_ok());
+        },
+    );
     let Err(FormulaFailure::Limit {
         resource: FormulaResource::Work,
         observed,
@@ -179,13 +172,7 @@ fn selective_join_work_limit_is_inclusive() {
 
 #[test]
 fn indexed_candidates_still_validate_repeated_variables_and_every_constant() {
-    let input = admit_formula(
-        "p(1;2).q(1,2,a).q(1,1,b).q(2,2,b).q(2,2,a).r(X):-p(X),q(X,X,a).".to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .expect("full row match");
+    let input = formula("p(1;2).q(1,2,a).q(1,1,b).q(2,2,b).q(2,2,a).r(X):-p(X),q(X,X,a).");
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("finite theory");
     let model = search.next().expect("one model").expect("verified model");
@@ -207,14 +194,9 @@ fn indexed_candidates_still_validate_repeated_variables_and_every_constant() {
 fn retained_index_entries_have_an_independent_inclusive_ceiling() {
     for maximum in [0, 1, 2] {
         // q's rule reads both columns of p, through its head; q is unread.
-        let result = admit_formula(
-            "p(1,2). q(X,Y) :- p(X,Y).".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
-                max_support_index_entries: maximum,
-                ..FormulaLimits::default()
-            },
+        let result = admit(
+            "p(1,2). q(X,Y) :- p(X,Y).",
+            &resource_limits::formula(FormulaResource::SupportIndexEntries, maximum),
         );
         if maximum == 2 {
             assert!(result.is_ok());
@@ -230,14 +212,9 @@ fn retained_index_entries_have_an_independent_inclusive_ceiling() {
         }
     }
     assert!(
-        admit_formula(
-            "p.".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
-                max_support_index_entries: 0,
-                ..FormulaLimits::default()
-            }
+        admit(
+            "p.",
+            &resource_limits::formula(FormulaResource::SupportIndexEntries, 0)
         )
         .is_ok()
     );
@@ -249,10 +226,7 @@ fn ready_filters_prune_before_later_relations_without_reading_generated_slots() 
         "left(1..30).right(1..30).tail(1..30).p(X):-left(X),right(Y),tail(Z),X=Y.".to_owned(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_substitutions: 5_000,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::Substitutions, 5_000),
     )
     .expect("ready equality removes incompatible partial rows before tail expansion");
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
@@ -269,13 +243,7 @@ fn ready_filters_prune_before_later_relations_without_reading_generated_slots() 
     assert!(search.next().is_none());
     assert!(search.exhausted());
 
-    let input = admit_formula(
-        "d(5).p(Y):-d(X),Y=X+1,Y>5.".to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .expect("generated comparison waits for binding");
+    let input = formula("d(5).p(Y):-d(X),Y=X+1,Y>5.");
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("theory");
     let model = search.next().expect("one model").expect("verified model");
@@ -299,13 +267,8 @@ fn invalid_arithmetic_on_unextendable_prefixes_does_not_refuse_the_source() {
         "a(0;1).b(1;2).p(X):-a(X),b(X),1/X>0.",
         "a(1;2147483647).b(1;2).p(X):-a(X),b(X),X+1>0.",
     ] {
-        let input = admit_formula(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .expect("dead relational prefix cannot justify scalar refusal");
+        // A dead relational prefix cannot justify a scalar refusal.
+        let input = formula(source);
         let mut search =
             StableModels::new(input.theory(), Limits::default(), Cancellation::default())
                 .expect("theory");
@@ -327,13 +290,7 @@ fn invalid_arithmetic_on_unextendable_prefixes_does_not_refuse_the_source() {
 
 #[test]
 fn duplicate_support_heads_do_not_remove_alternative_final_reduct_witnesses() {
-    let input = admit_formula(
-        "d(1;2).{q(1);q(2)}.p:-d(X),q(X).".to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .expect("support projection preserves full final body disjunction");
+    let input = formula("d(1;2).{q(1);q(2)}.p:-d(X),q(X).");
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("theory");
     let mut count = 0;
@@ -356,13 +313,7 @@ fn a_false_filter_excludes_the_body_assignment() {
     // The empty positive join has one substitution. 1=2 is defined and false
     // over it, so the assignment that would overflow the i32 scalar N is
     // never reached. The family is {a,b}, as the external reference records.
-    let input = admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .expect("the excluded substitution reaches no assignment");
+    let input = formula(source);
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("theory");
     let mut families = Vec::new();

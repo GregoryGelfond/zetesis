@@ -1,6 +1,6 @@
 //! Original sources shared by semantic sessions and physical formula checks.
 
-pub const SOURCES: [&str; 14] = [
+pub(crate) const SOURCES: [&str; 14] = [
     include_str!("../../fixtures/finite-carriers/independent.lp"),
     include_str!("../../fixtures/finite-carriers/coupled.lp"),
     include_str!("../../fixtures/finite-carriers/conditional.lp"),

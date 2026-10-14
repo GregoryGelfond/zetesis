@@ -247,8 +247,9 @@ impl<'owner, 'source> Table<'owner, 'source> {
     ///
     /// The same algorithm and local limits implement [`Self::prepare`]. The
     /// callback receives zero at entry, allocation boundaries, and before each
-    /// local work-ceiling check: zero polls control and consumes no work. A
-    /// positive amount requests the entire next charged group after its local
+    /// local work-ceiling check. Zero marks an observation point and consumes no
+    /// work; the callback observes there by its own rule (legacy control observes
+    /// at every such point). A positive amount requests the entire next charged group after its local
     /// ceiling check and before its effect or receipt increment. The callback
     /// must admit that group atomically or return its original typed refusal.
     /// Already accepted groups are never refunded. No callback is retained.

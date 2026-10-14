@@ -153,6 +153,11 @@ impl<'a> Read<'a> {
     pub(crate) fn contains_term(self, id: TermId) -> bool {
         (id.0 as usize) < self.counts().terms
     }
+    /// The terms this read resolves, so that the terms below it are exactly
+    /// the identifiers `0..term_count()`.
+    pub(crate) fn term_count(self) -> usize {
+        self.counts().terms
+    }
     pub(crate) fn contains_text(self, id: TextId) -> bool {
         (id.0 as usize) < self.counts().texts
     }
@@ -231,21 +236,6 @@ impl<'a> Read<'a> {
             }
             _ => None,
         }
-    }
-    pub(crate) fn predicate_constructor(
-        self,
-        id: PredicateId,
-    ) -> Option<crate::catalog::ConstructorData> {
-        if !self.contains_predicate(id) {
-            return None;
-        }
-        let segment = self.vocabulary_segment(id.0 as usize, |counts| counts.predicates)?;
-        let signature = segment.predicates[id.0 as usize - segment.start.predicates];
-        Some(crate::catalog::ConstructorData::Function {
-            name: signature.name,
-            sign: signature.sign,
-            arity: signature.arity,
-        })
     }
     pub(crate) fn predicate(self, id: PredicateId) -> Option<Predicate<'a>> {
         if !self.contains_predicate(id) {

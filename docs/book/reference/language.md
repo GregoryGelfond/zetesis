@@ -751,6 +751,32 @@ the defined `K=1` family does not rescue it. If no `e(0,X)` fact is present, tha
 local family is empty and has no arithmetic error. An absent fact is not an
 undefined arithmetic value.
 
+An aggregate assignment such as `N = #count{...}` substitutes, under each fixed
+outer binding, its *carrier*: the measure of every selection of its tuples that
+contains the *required* tuples and lies within the possible ones. A tuple is
+required when one of its elements' conditions consists only of comparisons,
+intervals and `#true`/`#false`, with no atom of either sign; such a condition
+holds for every binding its element yields. So
+`p(M+1) :- M = #min{1; 5}.` substitutes `M = 1` alone and answers `p(2)`
+without evaluating `#sup + 1`; `q :- N = #count{1}, 1/N <= #count{}.` evaluates
+only `N = 1` and retains no warning; and `q(Y) :- N = #count{1}, Y = 1/(N-1).`
+has the single instance `N = 1`, which divides by zero, so its family is
+entirely undefined and refused. The heads an assignment publishes are taken over
+the same values, so the families of the rules that read them follow:
+`p(M) :- M = #count{1}. q(1/(X-1)) :- p(X).` is refused for the same reason, and
+`p(M) :- M = #min{1; 5}. r(X+1) :- p(X).` answers with `p(1)` and `r(2)`.
+
+The required tuples under-approximate those present in every interpretation. In
+`{p}. q(Y) :- N = #count{1 : p; 1 : not p}, Y = 1/(N-1).` the tuple `1` is
+present through `p` or through `not p`, but neither condition is atom-free, so
+`N = 0` is substituted too, divides by zero, and the program is admitted with a
+warning. A sum's values are checked as values:
+`{p; q}. x(V) :- V = #sum{-10,a; 2147483647,b : p; 1,c : q}.` is admitted,
+since each of its values `-10`, `-9`, `2147483637` and `2147483638` fits the
+32-bit range although its two optional weights alone exceed it, while
+`{p}. x(V) :- V = #sum{2147483647,a; 1,b : p}.` is refused because
+`2147483648` does not fit.
+
 Overflow, arithmetic on nonnumeric values and invalid exponents remain hard
 errors. They cannot be hidden by a defined instance elsewhere. Within a reached
 evaluation phase, a zero divisor does not stop checks of independent branches: an
@@ -784,16 +810,17 @@ The [arithmetic validation contracts](https://github.com/GregoryGelfond/zetesis/
 check defined complete families, incomplete joins, required failures and explicit
 clingo differences.
 
-There is also a conservative **zetesis extrema guard**: numeric values
+There is also a conservative **numeric endpoint guard**: numeric values
 `-2147483648` and `2147483647` are refused when reached as `#min`/`#max` bounds or
-the first component of a possible aggregate tuple, including assignment values.
+as the first component of a possible `#min`/`#max` tuple, including assignment
+values.
 It does not ban these integers as ordinary data, later tuple-key components or
 integers nested inside a structured value. The guard applies independently of
 the comparison operator or recursion.
 
 The typed refusal is `AdmissionFailure::ExtremumEndpoint`, with the evaluated
 value and its source location. Its diagnostic code is `zetesis::extremum-endpoint`;
-the message names the numeric endpoint and the zetesis guard.
+the message names the numeric endpoint and the guard.
 
 This is an internal source-admission guard, not a themelios parser rejection.
 Separately, the pinned themelios program raiser cannot represent the unsigned
@@ -805,7 +832,7 @@ The guard protects unresolved correspondence between source extrema semantics
 and the native formula interpretation. It is not proof that every guarded input
 is undefined or a modeling error. The lower-level finite formula library can
 represent endpoint formulas. The
-[admission predicate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment.rs)
+[numeric endpoint guard](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment.rs)
 and [source regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/extrema_source.rs)
 locate the current boundary.
 

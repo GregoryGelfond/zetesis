@@ -68,6 +68,10 @@ pub(super) fn campaign(
         .flat_map(|case| case.input.corpus_source_paths())
         .collect();
     let before = seal_inputs(&corpus, &sources, request, workloads)?;
+    let executables = identity::Executables::new(
+        &before[super::super::run::NATIVE_SEAL],
+        request.limits.max_executable_bytes,
+    );
     let destination = publication::prepare(request.report, corpus.root(), &before)?;
     let directory = tempfile::tempdir()
         .map_err(|e| super::super::io(Path::new("private matrix sources"), e))?;
@@ -80,7 +84,7 @@ pub(super) fn campaign(
         },
         tool: request.tool.clone(),
         manifest_sha256: examples::MANIFEST_SHA256,
-        manifest_scope: "correctness_catalog_context; authored_and_generated_workloads_retain_independent_source_and_contract_identities",
+        manifest_scope: "correctness_catalog_context; authored_generated_and_external_bundle_workloads_retain_independent_source_and_contract_identities",
         plan: RecordedPlan {
             plan: request.plan.clone(),
             reference_policy: request.reference.map(|reference| reference.policy).into(),
@@ -103,6 +107,9 @@ pub(super) fn campaign(
         },
         before,
         after: Vec::new(),
+        executed: None,
+        executed_after: None,
+        executables,
         metadata: Vec::new(),
         samples: Vec::new(),
         total_capture_bytes: 0,
@@ -130,7 +137,16 @@ pub(super) fn campaign(
             fill_unattempted(&mut report)?;
         }
     }
+    close(&mut report, directory);
+    Ok(report)
+}
+
+/// Recheck every sealed input and any executable the runs named in the
+/// native one's place, release the private sources and record when the
+/// campaign finished, keeping each failure as a fault.
+fn close(report: &mut Report, directory: tempfile::TempDir) {
     report.after = report.before.iter().map(identity::recheck).collect();
+    (report.executed, report.executed_after) = report.executables.close();
     if let Err(error) = directory.close() {
         report.faults.push(Fault::InputCleanup(error.to_string()));
     }
@@ -138,7 +154,6 @@ pub(super) fn campaign(
     if report.finished_unix_ns.is_none() {
         report.faults.push(Fault::Clock);
     }
-    Ok(report)
 }
 
 /// What a sample's wall time covers; clingo's output only when it takes part.
@@ -184,7 +199,7 @@ fn seal_inputs(
         sealed.extend(
             workloads
                 .iter()
-                .filter_map(Workload::authored_seal)
+                .flat_map(Workload::independent_seals)
                 .cloned(),
         );
     }
@@ -285,6 +300,10 @@ fn prepare<'a>(
                 "explicit workloads repeat a content identity",
             ));
         }
+        workload.validate_bundle_campaign(
+            request.reference.is_some(),
+            request.plan.memory_runs() > 0,
+        )?;
         workload.validate(corpus, request.limits)?;
         metadata = metadata
             .checked_add(workload.metadata_bytes)
@@ -305,7 +324,7 @@ fn prepare<'a>(
         .try_reserve_exact(workloads.len())
         .map_err(|_| Error::Configuration("workload population allocation failed"))?;
     for (position, workload) in workloads.iter().enumerate() {
-        let input = if workload.is_generated() || workload.is_authored() {
+        let input = if workload.is_generated() || workload.is_authored() || workload.is_bundle() {
             Input::Independent(workload)
         } else {
             Input::Corpus {
@@ -352,6 +371,17 @@ fn materialize(
             &directory.join(&case.directory),
             request.limits.corpus.source_bytes,
         )?);
+    }
+    // Check after every workload has been copied: a later sibling can otherwise
+    // create a cwd-relative shadow that was absent during an earlier copy.
+    for case in cases {
+        case.input
+            .workload()
+            .ok_or(Error::Configuration("mixed workload preparation"))?
+            .validate_bundle_directory(
+                &directory.join(&case.directory),
+                request.plan.memory_runs() > 0,
+            )?;
     }
     Ok(sealed)
 }
@@ -558,8 +588,9 @@ fn execute(
             continue;
         }
         let contract = selected.input.contract();
+        let census = &mut censuses[slot.case];
         if let Err((decision, detail)) =
-            censuses[slot.case].check(&mut sample, contract, request, curtailed)
+            qualified(census, &mut sample, contract, request, curtailed, report)
         {
             sample.decision = decision;
             sample.detail = Some(detail);
@@ -569,6 +600,25 @@ fn execute(
         report.samples.push(sample);
     }
     Ok(())
+}
+/// Check `sample` against its workload's census, then settle the executable
+/// a native run named as having done its work against the native executable
+/// the campaign sealed.
+fn qualified(
+    census: &mut Census,
+    sample: &mut Sample,
+    contract: Option<&examples::Contract>,
+    request: &Request<'_>,
+    curtailed: Curtailed,
+    report: &mut Report,
+) -> Result<(), (Decision, String)> {
+    let Some(named) = census.check(sample, contract, request, curtailed)? else {
+        return Ok(());
+    };
+    report
+        .executables
+        .settle(&named)
+        .map_err(|detail| (Decision::InvalidReport, detail))
 }
 fn arguments<'a>(
     request: &Request<'a>,
@@ -611,6 +661,9 @@ fn arguments<'a>(
 struct Qualified {
     display: answers::ReportedAnswers,
     native: Option<answers::native_json::NativeAnswers>,
+    /// What a native run's statistics name as the executable that did its
+    /// work; absent for a reference run, which is not a native run.
+    executed: Option<identity::Named>,
 }
 
 /// One workload's completed answer baselines. Neither a failed reference nor a
@@ -622,13 +675,15 @@ struct Census {
 }
 
 impl Census {
+    /// Check `sample` against this workload's baselines, returning the
+    /// executable a native run named as having done its work.
     fn check(
         &mut self,
         sample: &mut Sample,
         contract: Option<&examples::Contract>,
         request: &Request<'_>,
         curtailed: Curtailed,
-    ) -> Result<(), (Decision, String)> {
+    ) -> Result<Option<identity::Named>, (Decision, String)> {
         let answer = qualify(
             sample,
             contract,
@@ -643,7 +698,7 @@ impl Census {
         {
             self.reference = Some(answer.display);
         }
-        Ok(())
+        Ok(answer.executed)
     }
 }
 
@@ -693,10 +748,13 @@ fn qualify(
         ));
     }
     let exit = solver_exit(sample)?;
-    let (parsed, native) = match sample.slot.producer {
+    let (parsed, native, executed) = match sample.slot.producer {
         Producer::Reference => {
             if !exit.is_some_and(|exit| {
-                exit.signal.is_none() && matches!(exit.code, Some(0 | 10 | 20 | 30))
+                exit.signal.is_none()
+                    && exit.code.is_some_and(|code| {
+                        code == 0 || crate::answers::CLINGO_DECIDED_EXITS.contains(&code)
+                    })
             }) {
                 return Err((
                     Decision::InvocationFailure,
@@ -706,6 +764,7 @@ fn qualify(
             (
                 answers::clingo_json(capture.stdout(), request.limits.answers)
                     .map_err(|error| invalid(&error))?,
+                None,
                 None,
             )
         }
@@ -726,7 +785,8 @@ fn qualify(
                 )
                 .map_err(|e| (Decision::InvalidTelemetry, e))?,
             );
-            (display, Some(native))
+            let executed = Some(identity::named(&document["statistics"]));
+            (display, Some(native), executed)
         }
     };
     sample.selected_models = Some(parsed.model_count());
@@ -763,6 +823,7 @@ fn qualify(
     Ok(Qualified {
         display: parsed,
         native,
+        executed,
     })
 }
 

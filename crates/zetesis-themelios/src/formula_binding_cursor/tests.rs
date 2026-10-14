@@ -18,7 +18,7 @@ fn with_cursor<T>(
     let mut result = None;
     testing::with_completed_source(source, |prepared, support, computation, counters| {
         let rule = prepared
-            .rules
+            .rules_without_facts()
             .iter()
             .find(|rule| rule.bindings.is_some())
             .unwrap();
@@ -44,7 +44,7 @@ fn with_cursor<T>(
             )
             .unwrap();
         let mut cursor = Cursor::new(
-            &rule.body,
+            Ir::Source(rule.body.as_slice()),
             values,
             support,
             rule.bindings.as_ref(),
@@ -95,7 +95,7 @@ fn rows(source: &str, conservative: bool) -> (Rows, u64) {
                         .generators
                         .iter()
                         .map(|generator| {
-                            let variable = target(generator.literal).unwrap();
+                            let variable = target(generator.literal.get()).unwrap();
                             let ValueNodeRef::Number(value) = binding
                                 .read(variable, computation.read(), location)
                                 .unwrap()
@@ -161,7 +161,7 @@ fn unavailable_inputs_discard_dependent_carriers() {
     let preparation = testing::prepare(source);
     let location = preparation
         .program
-        .rules
+        .rules_without_facts()
         .iter()
         .find(|rule| rule.bindings.is_some())
         .unwrap()
@@ -254,7 +254,7 @@ fn unplanned_consumers_are_invalidated() {
         cursor.depth = 0;
         cursor
             .invalidate_dependents(
-                target(cursor.generators[0].literal).unwrap(),
+                target(cursor.generators[0].literal.get()).unwrap(),
                 limits,
                 counters,
                 location,
@@ -271,7 +271,7 @@ fn changed_relational_inputs_refresh_proposals() {
         "d(0;1). {a}. q(X,N) :- d(X), N=#sum{X:a}.",
         |prepared, support, computation, counters| {
             let rule = prepared
-                .rules
+                .rules_without_facts()
                 .iter()
                 .find(|rule| rule.bindings.is_some())
                 .unwrap();

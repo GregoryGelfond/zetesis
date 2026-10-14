@@ -153,6 +153,10 @@ pub(super) fn checked_seal(path: &Path, limit: usize, expected: &str) -> Result<
     Ok(seal)
 }
 
+/// The position of the native executable's seal among a performance report's
+/// sealed inputs: [`seals`] places it first.
+pub(in crate::performance) const NATIVE_SEAL: usize = 0;
+
 /// Seal the native executable, the reference executable when one takes part,
 /// the corpus manifest and license, and the selected sources, in that order:
 /// retained-report readers take the prefix by position.
@@ -394,7 +398,9 @@ fn qualify(
                 && memory.signal.is_none()
                 && match memory.exit_code {
                     Some(0) => true,
-                    Some(10 | 20 | 30) => sample.slot.producer == Producer::Reference,
+                    Some(code) if crate::answers::CLINGO_DECIDED_EXITS.contains(&code) => {
+                        sample.slot.producer == Producer::Reference
+                    }
                     _ => false,
                 }
         })

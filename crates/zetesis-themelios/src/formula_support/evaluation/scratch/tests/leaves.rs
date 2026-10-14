@@ -33,9 +33,7 @@ fn numeric_variable_leaves_cost_only_identity_reads() {
             let before = counters.accounting.work;
             let key = evaluation
                 .expression(
-                    &Expression {
-                        nodes: vec![Operation::Variable(slot)],
-                    },
+                    &Expression::new(vec![Operation::Variable(slot)]),
                     |slot| source.key(slot, location()),
                     computation,
                     &limits,
@@ -70,9 +68,7 @@ fn numeric_constant_leaves_cost_only_identity_reads() {
             let before = counters.accounting.work;
             let key = evaluation
                 .expression(
-                    &Expression {
-                        nodes: vec![Operation::Constant(scalar)],
-                    },
+                    &Expression::new(vec![Operation::Constant(scalar)]),
                     |_| unreachable!("constant expression"),
                     computation,
                     &limits,
@@ -97,9 +93,7 @@ fn variable_leaf_refuses_a_retired_foreign_owner() {
     Fixture::default().with(location(), |_, computation, counters| {
         let mut evaluation = Evaluation::default();
         let result = evaluation.expression(
-            &Expression {
-                nodes: vec![Operation::Variable(0)],
-            },
+            &Expression::new(vec![Operation::Variable(0)]),
             |slot| source.key(slot, location()),
             computation,
             &FormulaLimits::default(),
@@ -122,9 +116,7 @@ fn unavailable_leaf_needs_no_missing_mask() {
     Fixture::default().with(location(), |_, computation, counters| {
         let mut evaluation = Evaluation::default();
         let result = evaluation.source_partial(
-            &Expression {
-                nodes: vec![Operation::Variable(0)],
-            },
+            &Expression::new(vec![Operation::Variable(0)]),
             |_| Ok(None),
             computation,
             &FormulaLimits::default(),
@@ -152,9 +144,7 @@ fn available_leaf_clears_prior_unavailability() {
         evaluation.zero_divisor_failure(location());
         let result = evaluation
             .source_partial(
-                &Expression {
-                    nodes: vec![Operation::Variable(0)],
-                },
+                &Expression::new(vec![Operation::Variable(0)]),
                 |slot| source.key(slot, location()).map(Some),
                 computation,
                 &FormulaLimits::default(),
@@ -172,12 +162,10 @@ fn cancelled_leaf_never_reads_its_variable() {
     Fixture::default().with(location(), |_, computation, counters| {
         let cancellation = zetesis_cpu::Cancellation::default();
         cancellation.cancel();
-        counters.cancellation = Some(cancellation);
+        counters.attach_test_control(&cancellation);
         let mut evaluation = Evaluation::default();
         let result = evaluation.expression(
-            &Expression {
-                nodes: vec![Operation::Variable(0)],
-            },
+            &Expression::new(vec![Operation::Variable(0)]),
             |_| panic!("cancellation must precede the variable read"),
             computation,
             &FormulaLimits::default(),

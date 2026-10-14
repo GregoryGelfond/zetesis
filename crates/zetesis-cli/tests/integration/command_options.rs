@@ -188,9 +188,13 @@ fn short_solve_help_groups_everyday_controls() {
         "--backend",
         "--grounder",
         "--threads",
-        "--memory",
+        "--time-limit",
     ] {
         assert!(text.contains(expected), "missing {expected}");
+    }
+    // The memory allowance and the GPU APIs by name are full-help controls.
+    for advanced in ["--memory", "metal", "vulkan"] {
+        assert!(!text.contains(advanced), "everyday help shows {advanced}");
     }
     assert!(!text.contains("--models"));
     assert!(!text.contains("--device"));
@@ -226,6 +230,7 @@ fn advanced_help_preserves_public_resource_contracts() {
         assert!(!text.contains("--max-"));
         assert!(text.contains("--memory"));
         assert!(text.contains("not a resident-memory limit"));
+        assert!(text.contains("unqualified there"), "Vulkan's limit");
         assert!(text.contains("unproved incumbents"));
     }
 }

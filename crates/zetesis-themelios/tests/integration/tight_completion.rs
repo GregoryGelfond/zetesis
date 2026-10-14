@@ -4,6 +4,7 @@
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, BTreeSet};
 use std::num::NonZeroUsize;
+use zetesis_reference_support::formula;
 
 use zetesis_core::{AtomCatalog, Model};
 use zetesis_cpu::{Cancellation, Stop};
@@ -12,7 +13,6 @@ use zetesis_ferraris::{
 };
 use zetesis_objective::{ObjectiveProgram, Score, evaluate};
 use zetesis_sat::{BatchLimits, BatchVerdict, CompletionExecutor, StableModels};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 type ScoredModels = BTreeMap<Vec<usize>, Score>;
 
@@ -160,13 +160,7 @@ fn complete_models_scores_ties_and_cyclic_fallback_match_with_one_two_four_worke
         ("{a;b}. :- a,b.", 3, 3),
         ("a. :- a.", 0, 0),
     ] {
-        let admitted = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let admitted = formula(source);
         for workers in [1, 2, 4] {
             let (_, actual) = compare(
                 admitted.theory(),

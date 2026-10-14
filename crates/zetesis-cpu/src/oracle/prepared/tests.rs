@@ -37,7 +37,12 @@ fn program() -> Program {
         vec![],
         vec![],
     ));
-    Program::new(templates, AdmissionLimits::default()).unwrap()
+    Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn expected(value: i32) -> Model {
@@ -78,7 +83,12 @@ fn ground_heads_program() -> Program {
             vec![],
         ));
     }
-    Program::new(templates, AdmissionLimits::default()).unwrap()
+    Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -241,7 +251,12 @@ fn changing_layout_program(block_rule: bool) -> (Program, Model) {
         ));
     }
     (
-        Program::new(templates, AdmissionLimits::default()).unwrap(),
+        Program::new(
+            templates,
+            zetesis_core::FactTables::default(),
+            AdmissionLimits::default(),
+        )
+        .unwrap(),
         Model::new(facts).unwrap(),
     )
 }
@@ -682,11 +697,13 @@ fn preparation_refuses_its_own_work_boundary() {
         ),
         Err(Stop::WorkLimit)
     ));
+    // The exact byte ceiling is what preparation retains plus the domain
+    // position table it reads while preparing and then releases.
     let exact = PreparedQueries::new(
         &program,
         PreparationLimits {
             max_work: prepared.statistics().work,
-            max_bytes: prepared.statistics().retained_bytes,
+            max_bytes: prepared.statistics().retained_bytes + table_bytes(&program),
             ..PreparationLimits::default()
         },
         &cancellation,
@@ -716,7 +733,12 @@ fn preparation_refuses_its_own_byte_boundary() {
 
 #[test]
 fn prepared_empty_checks_admit_their_retained_owners() {
-    let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let cancellation = Cancellation::default();
     let prepared =
         PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
@@ -908,4 +930,92 @@ fn recorded_positions_stay_within_the_closure_ceiling() {
         }
     }
     assert!(recorded);
+}
+
+/// The bytes of `program`'s domain position table: four per catalog term.
+fn table_bytes(program: &Program) -> usize {
+    let mut slots = 0;
+    DomainPositions::build(program, |count| {
+        slots = count;
+        Ok::<_, ()>(Vec::with_capacity(count))
+    })
+    .unwrap();
+    slots * size_of::<Option<std::num::NonZeroU32>>()
+}
+
+/// The domain position table of `program`, reserved without accounting.
+fn positions(program: &Program) -> DomainPositions<'_> {
+    DomainPositions::build(program, |slots| Ok::<_, ()>(Vec::with_capacity(slots)))
+        .unwrap()
+        .unwrap()
+}
+
+/// Ground head coordinates over `prepared`'s layouts, through `table` or,
+/// without one, the content search.
+fn heads_through(
+    program: &Program,
+    prepared: &PreparedQueries,
+    table: Option<&DomainPositions<'_>>,
+) -> Vec<Option<(usize, usize)>> {
+    let cancellation = Cancellation::default();
+    let mut work = Work::source(&cancellation, Limits::default().max_work);
+    Heads::prepare(program, &prepared.layouts, table, 0, &mut work)
+        .unwrap()
+        .coordinates()
+}
+
+#[test]
+fn head_coordinates_by_identity_equal_the_content_search() {
+    let program = ground_heads_program();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
+    let by_search = heads_through(&program, &prepared, None);
+    assert_eq!(
+        by_search.iter().flatten().count(),
+        4,
+        "every head is ground and dense"
+    );
+    assert_eq!(
+        heads_through(&program, &prepared, Some(&positions(&program))),
+        by_search
+    );
+}
+
+#[test]
+fn another_programs_table_falls_back_to_the_content_search() {
+    let program = ground_heads_program();
+    let other = ground_heads_program();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
+    assert_eq!(
+        heads_through(&program, &prepared, Some(&positions(&other))),
+        heads_through(&program, &prepared, None)
+    );
+}
+
+#[test]
+fn the_position_table_counts_against_preparation_storage_while_it_is_read() {
+    let program = ground_heads_program();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();
+    let retained = prepared.statistics().retained_bytes;
+    let table = table_bytes(&program);
+    let limited = |max_bytes| {
+        PreparedQueries::new(
+            &program,
+            PreparationLimits {
+                max_bytes,
+                ..PreparationLimits::default()
+            },
+            &cancellation,
+        )
+    };
+    // What preparation retains was enough before the table; with the table
+    // read during preparation it is refused by preparation's storage stop.
+    assert!(matches!(limited(retained), Err(Stop::StorageLimit)));
+    let roomy = limited(retained + table).unwrap();
+    assert_eq!(roomy.statistics().retained_bytes, retained);
 }

@@ -1,5 +1,6 @@
 //! Synchronous reference calls change only guard representation. The scoped
 //! control restores on unwind and is not inherited by newly spawned threads.
+use crate::test_support::interpretation;
 use std::cell::RefCell;
 
 use super::*;
@@ -12,7 +13,7 @@ use crate::{ExpansionLimits, GroundingObserver};
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Span};
 use zetesis_cpu::{Cancellation, Stop};
-use zetesis_ferraris::{Interpretation, Limits, Theory, check, models, models_reduct};
+use zetesis_ferraris::{Limits, Theory, check, models, models_reduct};
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(super) enum Point {
@@ -86,13 +87,6 @@ fn reference_control_stays_on_its_thread() {
     assert!(enabled());
 }
 
-fn interpretation(theory: &Theory, bits: usize) -> Interpretation {
-    Interpretation::new(
-        theory,
-        (0..theory.atom_count()).filter(|atom| bits & (1 << atom) != 0),
-    )
-    .unwrap()
-}
 fn same_truth(left: &Theory, right: &Theory) {
     assert_eq!(left.atom_count(), right.atom_count());
     assert!(left.atom_count() <= 7);

@@ -83,10 +83,11 @@ impl SourceEligibility {
             activity: Vec::new(),
             round: None,
             lease,
+            exact: false,
         })
     }
 
-    fn header_bytes() -> usize {
+    pub(super) fn header_bytes() -> usize {
         size_of::<Self>() - size_of::<SourceSelection>()
     }
 
@@ -113,6 +114,9 @@ impl SourceEligibility {
         temporary: usize,
         context: &mut Context<'_, '_, '_>,
     ) -> Result<(), FormulaFailure> {
+        if self.exact {
+            return self.stage_exact(atom, activity, context);
+        }
         let found =
             self.atoms
                 .position(atom, context.limits, context.counters, context.location)?;
@@ -197,7 +201,7 @@ impl SourceEligibility {
         self.lookup(atom, context)
     }
 
-    fn lookup(
+    pub(super) fn lookup(
         &self,
         atom: &SourceAtom,
         context: &mut Context<'_, '_, '_>,

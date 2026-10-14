@@ -49,6 +49,8 @@
 # Performance and testing
 
 - [Performance results](reference/performance.md)
+  - [Final 0.6.0 CPU check](reference/cpu-corpus-final-20261014.md)
+  - [CPU corpus comparison, 14 October 2026](reference/cpu-corpus-20261014.md)
   - [CPU corpus comparison, 10 October 2026](reference/cpu-corpus-20261010.md)
   - [CPU corpus comparison, 7 October 2026](reference/cpu-corpus-20261007.md)
   - [Reusing grounding and formula preparation](reference/foundation-reuse.md)
@@ -67,7 +69,8 @@
 - [Validating an implementation change](reference/validation.md)
   - [Measurement protocols](reference/measurement-protocols.md)
   - [Source revision identities](reference/source-revisions.md)
-  - [Coverage and Metal qualification](reference/coverage-0.5.0.md)
+  - [Coverage and Metal qualification](reference/coverage-0.6.0.md)
+  - [Version 0.5.0 coverage](reference/coverage-0.5.0.md)
   - [Version 0.4.0 coverage](reference/coverage-0.4.0.md)
   - [Version 0.3.0 coverage](reference/coverage-0.3.0.md)
   - [Version 0.2.0 coverage](reference/coverage-120fadfb.md)

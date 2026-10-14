@@ -24,11 +24,10 @@ pub(crate) struct Input<'a> {
 }
 
 pub(crate) fn certificate_order(
-    analysis: &zetesis_themelios::analysis::Analysis,
+    classes: &zetesis_themelios::analysis::classify::Classes,
     basis: zetesis_themelios::AnalysisBasis,
 ) -> zetesis_sat::CertificateOrder {
     use zetesis_themelios::analysis::classify::{HornKind, Normality, Stratification};
-    let classes = analysis.classes();
     if basis == zetesis_themelios::AnalysisBasis::NormalizedProgram
         && matches!(classes.horn(), HornKind::Horn)
     {
@@ -132,6 +131,9 @@ pub(crate) fn search_limits(options: &SolveConfig) -> zetesis_sat::Limits {
         },
         max_candidates: options.max_candidates,
         max_reduct_bytes: options.max_reduct_bytes,
+        // Candidate-index storage uses the existing candidate memory allowance,
+        // independently of prepared-reduct storage. No additional CLI control.
+        max_native_narrowing_bytes: options.max_candidate_bytes as u64,
         max_verification_work: options.max_work,
     }
 }

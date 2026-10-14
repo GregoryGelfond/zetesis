@@ -6,16 +6,16 @@ use std::collections::BTreeSet;
 use zetesis_ferraris::{Interpretation, Theory};
 use zetesis_sat::{Cancellation, StableModels};
 
-pub use zetesis_theory_support::theories::interpretation;
+pub(crate) use zetesis_theory_support::theories::interpretation;
 
 /// The atoms `model` holds, in order.
-pub fn key(model: &Interpretation) -> Vec<usize> {
+pub(crate) fn key(model: &Interpretation) -> Vec<usize> {
     model.atoms().collect()
 }
 
 /// Every stable model of `theory`: each interpretation the reduct check
 /// accepts, as its atoms.
-pub fn stable_models(theory: &Theory) -> BTreeSet<Vec<usize>> {
+pub(crate) fn stable_models(theory: &Theory) -> BTreeSet<Vec<usize>> {
     (0..1_usize << theory.atom_count())
         .filter_map(|mask| {
             let model = Interpretation::new(
@@ -37,7 +37,7 @@ pub fn stable_models(theory: &Theory) -> BTreeSet<Vec<usize>> {
 }
 
 /// The models `search` returns, each as its atoms, in its order.
-pub fn models(search: &mut StableModels) -> Vec<Vec<usize>> {
+pub(crate) fn models(search: &mut StableModels) -> Vec<Vec<usize>> {
     search
         .by_ref()
         .map(|model| model.unwrap().atoms().collect())

@@ -3,20 +3,15 @@
 use crate::support::upstream;
 use themelios_base::source::{Source, SourceId};
 use themelios_syntax::{dialect::Dialect, parse::parse};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
+use zetesis_themelios::FormulaLimits;
 
 #[test]
 fn every_selected_upstream_program_admits() {
     let cases = upstream::corpus().cases();
     assert_eq!(cases.len(), 24);
     for case in cases {
-        admit_formula(
-            case.source().to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_or_else(|error| panic!("{}: {error}", case.id()));
+        zetesis_reference_support::admit(case.source(), &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{}: {error}", case.id()));
     }
 }
 

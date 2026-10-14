@@ -5,22 +5,9 @@ use std::io::{self, Write};
 use crate::support::options::serial;
 use zetesis_cli::{Options, StatisticsView, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
+use zetesis_test_support::io::Chunks;
 
 const SOURCE: &str = "a :- not b. b :- not a.";
-
-/// Records every `write` call as its own chunk.
-#[derive(Default)]
-struct Chunks(Vec<Vec<u8>>);
-
-impl Write for Chunks {
-    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.0.push(bytes.to_vec());
-        Ok(bytes.len())
-    }
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
 
 fn options(json: bool, view: StatisticsView) -> Options {
     let mut options = serial(if json { &["--json"] } else { &[] });
@@ -32,7 +19,7 @@ fn options(json: bool, view: StatisticsView) -> Options {
 /// The index of the one chunk containing `marker`.
 fn chunk_of(chunks: &Chunks, marker: &str) -> usize {
     let found: Vec<usize> = chunks
-        .0
+        .chunks()
         .iter()
         .enumerate()
         .filter(|(_, chunk)| String::from_utf8_lossy(chunk).contains(marker))
@@ -43,7 +30,7 @@ fn chunk_of(chunks: &Chunks, marker: &str) -> usize {
 }
 
 fn report_chunks(options: &Options, first: &str, last: &str) -> (usize, usize) {
-    let mut diagnostics = Chunks::default();
+    let mut diagnostics = Chunks::new();
     run_with_diagnostics(
         SOURCE.into(),
         options,
@@ -105,7 +92,7 @@ fn a_failing_statistics_write_is_an_output_failure() {
         (StatisticsView::Human, "Statistics\n"),
     ] {
         let options = options(matches!(view, StatisticsView::Records), view);
-        let mut diagnostics = Chunks::default();
+        let mut diagnostics = Chunks::new();
         run_with_diagnostics(
             SOURCE.into(),
             &options,
@@ -114,7 +101,7 @@ fn a_failing_statistics_write_is_an_output_failure() {
             &Cancellation::default(),
         )
         .unwrap();
-        let written = diagnostics.0.concat();
+        let written = diagnostics.chunks().concat();
         let before = String::from_utf8_lossy(&written)
             .find(header)
             .expect("the report has its header")

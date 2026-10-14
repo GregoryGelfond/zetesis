@@ -1,4 +1,6 @@
-use zetesis_ferraris::{Interpretation, NodeView, Theory, Threshold, threshold_lowering};
+use zetesis_ferraris::{
+    ExtremumCut, Interpretation, NodeView, Theory, Threshold, extremum_lowering, threshold_lowering,
+};
 
 use crate::search::{Budget, Quota, storage};
 use crate::{AdmissionLimits, Assignment, Cnf, Incomplete, Literal};
@@ -38,6 +40,10 @@ fn frozen(
                     budget.tick()?;
                     Ok::<_, Incomplete>(values[child])
                 })?,
+                NodeView::ExtremumCut(cut) => cut.rule.holds(cut.row.reduce(|child| {
+                    budget.tick()?;
+                    Ok::<_, Incomplete>(values[child])
+                })?),
                 NodeView::Implies(a, b) => {
                     budget.tick()?;
                     let left = values[a];
@@ -185,7 +191,7 @@ impl Workspace {
     }
 }
 
-/// Count unsimplified physical gates, including checked threshold expansion.
+/// Count unsimplified physical gates, including checked numeric expansion.
 #[cfg(test)]
 pub(crate) fn gate_count(
     theory: &Theory,
@@ -234,6 +240,13 @@ pub(crate) fn node_dimensions(
                 return Err(Incomplete::WorkLimit);
             }
             (shape.gates, shape.scratch)
+        }
+        NodeView::ExtremumCut(cut) => {
+            let shape = extremum_lowering::Shape::new(cut, || budget.tick())?;
+            if shape.gates as u128 > u128::from(budget.remaining_work()) {
+                return Err(Incomplete::WorkLimit);
+            }
+            (shape.gates, 0)
         }
     })
 }
@@ -336,6 +349,7 @@ fn append_nodes<Q: Quota>(
                 NodeView::Threshold(threshold) => {
                     gate_threshold(cnf, gates, threshold, nodes, scratch, budget)?
                 }
+                NodeView::ExtremumCut(cut) => gate_extremum_cut(cnf, gates, cut, nodes, budget)?,
                 NodeView::Implies(a, b) => {
                     budget.tick()?;
                     let left = nodes[a].negated();
@@ -375,7 +389,7 @@ pub(crate) fn gate_threshold(
     threshold_lowering::lower(
         threshold,
         scratch,
-        &mut ThresholdSink {
+        &mut BooleanSink {
             cnf,
             gates,
             nodes,
@@ -384,14 +398,34 @@ pub(crate) fn gate_threshold(
     )
 }
 
-struct ThresholdSink<'a, 'control, Q> {
+/// Share the same clause sink and semantic map without constructing another DAG.
+pub(crate) fn gate_extremum_cut(
+    cnf: &mut Cnf,
+    gates: &mut HashMap<(usize, usize), Literal>,
+    cut: ExtremumCut<'_>,
+    nodes: &[Encoded],
+    budget: &mut Budget<'_, impl Quota>,
+) -> Result<Encoded, Incomplete> {
+    node_dimensions(NodeView::ExtremumCut(cut), budget)?;
+    extremum_lowering::lower(
+        cut,
+        &mut BooleanSink {
+            cnf,
+            gates,
+            nodes,
+            budget,
+        },
+    )
+}
+
+struct BooleanSink<'a, 'control, Q> {
     cnf: &'a mut Cnf,
     gates: &'a mut HashMap<(usize, usize), Literal>,
     nodes: &'a [Encoded],
     budget: &'a mut Budget<'control, Q>,
 }
 
-impl<Q: Quota> threshold_lowering::Sink for ThresholdSink<'_, '_, Q> {
+impl<Q: Quota> threshold_lowering::Sink for BooleanSink<'_, '_, Q> {
     type Value = Encoded;
     type Error = Incomplete;
 
@@ -530,6 +564,10 @@ pub(crate) fn interpretation(
         | zetesis_ferraris::AdmissionError::Arity
         | zetesis_ferraris::AdmissionError::ThresholdShape
         | zetesis_ferraris::AdmissionError::ThresholdMeasure
+        | zetesis_ferraris::AdmissionError::NumericShape
+        | zetesis_ferraris::AdmissionError::NumericDomain
+        | zetesis_ferraris::AdmissionError::OrdinalRank
+        | zetesis_ferraris::AdmissionError::OrdinalCut
         | zetesis_ferraris::AdmissionError::Span
         | zetesis_ferraris::AdmissionError::Edge
         | zetesis_ferraris::AdmissionError::Root

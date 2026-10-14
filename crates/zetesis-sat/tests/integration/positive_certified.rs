@@ -4,11 +4,12 @@ use crate::support::clause_search::by_clauses;
 use std::collections::BTreeSet;
 use std::convert::Infallible;
 use std::num::NonZeroUsize;
+use std::time::Duration;
 use zetesis_ferraris::{Interpretation, Node, PositivePlanLimits, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, CertificateError, CertificateLimits,
-    CertificateOrder, CertificatePlanStatistics, CompletionExecutor, Incomplete, Limits,
-    StableModels,
+    CertificateOrder, CertificatePlanStatistics, CompletionExecutor, Engagement, Incomplete,
+    Limits, RegionWalkEngagement, StableModels,
 };
 use zetesis_theory_support::theories::theory;
 
@@ -132,10 +133,15 @@ fn region_positive_cycles_preserve_the_clause_family() {
     let expected = collect(&mut clauses);
     assert_eq!(expected, BTreeSet::from([Vec::new()]));
     assert!(clauses.exhausted());
-    for workers in [1, 3] {
-        let mut regions = StableModels::with_region_workers(
+    for (workers, engagement) in [
+        (1, Engagement::default()),
+        (3, Engagement::Immediate),
+        (3, Engagement::After(Duration::MAX)),
+    ] {
+        let mut regions = StableModels::with_region_workers_engaging(
             &original,
             NonZeroUsize::new(workers).unwrap(),
+            engagement,
             Limits::default(),
             Cancellation::default(),
         )
@@ -154,6 +160,19 @@ fn region_positive_cycles_preserve_the_clause_family() {
         ));
         assert_eq!(collect(&mut regions), expected);
         assert!(regions.exhausted());
+        if workers > 1 {
+            assert_eq!(
+                regions
+                    .statistics()
+                    .regions
+                    .unwrap()
+                    .workers
+                    .unwrap()
+                    .engagement,
+                RegionWalkEngagement::NotBegun,
+                "the determined candidate bypasses either engagement route"
+            );
+        }
     }
 }
 
@@ -187,10 +206,15 @@ fn region_positive_constraints_exclude_the_answer_family() {
     );
     assert_eq!(collect(&mut clauses), expected);
     assert!(clauses.exhausted());
-    for workers in [1, 3] {
-        let mut regions = StableModels::with_region_workers(
+    for (workers, engagement) in [
+        (1, Engagement::default()),
+        (3, Engagement::Immediate),
+        (3, Engagement::After(Duration::MAX)),
+    ] {
+        let mut regions = StableModels::with_region_workers_engaging(
             &original,
             NonZeroUsize::new(workers).unwrap(),
+            engagement,
             Limits::default(),
             Cancellation::default(),
         )
@@ -209,6 +233,19 @@ fn region_positive_constraints_exclude_the_answer_family() {
         ));
         assert_eq!(collect(&mut regions), expected);
         assert!(regions.exhausted());
+        if workers > 1 {
+            assert_eq!(
+                regions
+                    .statistics()
+                    .regions
+                    .unwrap()
+                    .workers
+                    .unwrap()
+                    .engagement,
+                RegionWalkEngagement::NotBegun,
+                "the determined candidate bypasses either engagement route"
+            );
+        }
         assert_eq!(regions.statistics().certified.unwrap().refuted, 0);
         assert_eq!(regions.statistics().candidates, 0);
         assert_eq!(regions.statistics().countermodel_queries, 0);

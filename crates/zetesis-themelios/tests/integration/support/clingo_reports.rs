@@ -1,8 +1,7 @@
 //! clingo's bounded reports on a source, and the models they and the fixtures
-//! record: every model, every model or the refusal of an unsafe source, and the
-//! optimal models.
+//! record: every model, every model or the refusal of an unsafe source, the
+//! optimal models, and the optimal witnesses of an optN report.
 
-use std::collections::BTreeSet;
 use std::time::Duration;
 
 use serde_json::Value as Json;
@@ -12,7 +11,7 @@ use super::finite_bindings::Models;
 
 /// clingo's report of every model of `source`, from a decided run within 3 s and
 /// 128 KiB of output.
-pub fn enumerated(source: &str) -> Json {
+pub(crate) fn enumerated(source: &str) -> Json {
     oracle::json(&oracle::run(
         source,
         &["--models=0", "--outf=2"],
@@ -25,7 +24,7 @@ pub fn enumerated(source: &str) -> Json {
 
 /// clingo's report of every model of a `valid` source, or of its refusal of an
 /// invalid one, which must name unsafe variables.
-pub fn enumerated_or_refused_unsafe(source: &str, valid: bool) -> Json {
+pub(crate) fn enumerated_or_refused_unsafe(source: &str, valid: bool) -> Json {
     let exits: &[i32] = if valid { &oracle::DECIDED } else { &[65] };
     let run = oracle::run_accepting(
         source,
@@ -52,7 +51,7 @@ pub fn enumerated_or_refused_unsafe(source: &str, valid: bool) -> Json {
 
 /// clingo's report of `source`'s optimal models; an undecided run and a refusal
 /// are reported, not failed.
-pub fn optimal(source: &str) -> Json {
+pub(crate) fn optimal(source: &str) -> Json {
     // An undecided run (0) and a refusal (65) are reported, not failures: the
     // caller reads the report's result.
     oracle::json(&oracle::run_accepting(
@@ -66,23 +65,45 @@ pub fn optimal(source: &str) -> Json {
     ))
 }
 
-/// The distinct atom spellings of one report witness.
-pub fn json_model(values: &Json) -> BTreeSet<String> {
-    let atoms = values.as_array().unwrap();
-    let result: BTreeSet<_> = atoms
+/// The optimal witnesses among an optN report's `records`, each a witness's
+/// display with its costs. Such a report lists incumbents first; its first
+/// witness at the optimum's costs, `summary["Costs"]`, is the final incumbent,
+/// which recurs once more in the complete tie pass, so every witness up to and
+/// including it is dropped. The rest have the optimum's costs, and there are
+/// `summary["Optimal"]` of them.
+///
+/// # Panics
+/// Panics unless the summary names the optimum's costs, a witness has them and
+/// recurs later, and the remaining witnesses are exactly the optimal ones.
+pub(crate) fn optimal_witnesses<T: PartialEq>(
+    summary: &Json,
+    records: Vec<(T, Option<Vec<i64>>)>,
+) -> Vec<(T, Option<Vec<i64>>)> {
+    let best = oracle::costs(&summary["Costs"]).expect("an optimum's costs");
+    let first = records
         .iter()
-        .map(|atom| atom.as_str().unwrap().to_owned())
-        .collect();
-    assert_eq!(result.len(), atoms.len(), "full atom identities are unique");
-    result
+        .position(|(_, costs)| costs.as_ref() == Some(&best))
+        .expect("a witness at the optimum's costs");
+    assert!(
+        records[first + 1..].contains(&records[first]),
+        "optN replays its final incumbent in the complete tie pass"
+    );
+    let optimal: Vec<_> = records.into_iter().skip(first + 1).collect();
+    assert!(
+        optimal
+            .iter()
+            .all(|(_, costs)| costs.as_ref() == Some(&best))
+    );
+    assert_eq!(summary["Optimal"].as_u64(), Some(optimal.len() as u64));
+    optimal
 }
 
 /// The models a fixture row records from clingo.
-pub fn expected(row: &Json) -> Models {
+pub(crate) fn expected(row: &Json) -> Models {
     row["models"]
         .as_array()
         .unwrap()
         .iter()
-        .map(json_model)
+        .map(oracle::atoms)
         .collect()
 }

@@ -5,7 +5,7 @@ use std::mem::size_of;
 use zetesis_cpu::Stop;
 
 use super::{Budget, PositiveError, PositivePlan, propagate, validation};
-use crate::{Interpretation, NodeView, Theory, Threshold};
+use crate::{ExtremumCut, Interpretation, NodeView, Theory, Threshold};
 
 #[derive(Clone, Copy)]
 enum Kind {
@@ -58,9 +58,9 @@ pub(super) struct Graph {
 
 pub(super) fn build(
     theory: &Theory,
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<(Interpretation, Option<usize>), PositiveError> {
-    budget.cancellation.poll()?;
+    budget.meter.poll()?;
     let headers = size_of::<PositivePlan>()
         + size_of::<Graph>()
         + size_of::<Vec<Kind>>()
@@ -139,7 +139,7 @@ pub(super) fn build(
 fn initialized<T: Copy>(
     count: usize,
     value: T,
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Vec<T>, PositiveError> {
     let mut values = budget.reserve(count)?;
     for _ in 0..count {
@@ -149,7 +149,7 @@ fn initialized<T: Copy>(
     Ok(values)
 }
 
-fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, PositiveError> {
+fn classify(theory: &Theory, budget: &mut Budget<'_, '_>) -> Result<Vec<Kind>, PositiveError> {
     let mut kinds: Vec<Kind> = budget.reserve(theory.nodes().len())?;
     let view = theory.view();
     for index in 0..view.len() {
@@ -172,6 +172,7 @@ fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, Posit
                 }
             }
             NodeView::Threshold(threshold) => classify_threshold(threshold, &kinds, budget)?,
+            NodeView::ExtremumCut(cut) => classify_cut(cut, &kinds, budget)?,
             NodeView::Implies(a, b) => {
                 budget.tick()?;
                 let left = view.node(a).map_err(|_| Stop::InvalidProgram)?;
@@ -188,10 +189,32 @@ fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, Posit
     Ok(kinds)
 }
 
+fn classify_cut(
+    cut: ExtremumCut<'_>,
+    kinds: &[Kind],
+    budget: &mut Budget<'_, '_>,
+) -> Result<Kind, PositiveError> {
+    if let Some(truth) = cut.endpoint_truth() {
+        return Ok(if truth { Kind::True } else { Kind::False });
+    }
+    let mut monotone = true;
+    for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+        budget.tick()?;
+        if cut.qualifies(rank) {
+            monotone &= kinds[child].monotone();
+        }
+    }
+    Ok(if monotone {
+        Kind::Or
+    } else {
+        Kind::Unsupported
+    })
+}
+
 fn classify_threshold(
     threshold: Threshold<'_>,
     kinds: &[Kind],
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Kind, PositiveError> {
     let mut total = 0_i128;
     let mut monotone = true;
@@ -218,7 +241,7 @@ fn classify_threshold(
 fn monotone_operands(
     operands: &[usize],
     kinds: &[Kind],
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<bool, PositiveError> {
     let mut monotone = true;
     for &child in operands {
@@ -235,8 +258,8 @@ fn monotone_operands(
 fn edges(
     theory: &Theory,
     kinds: &[Kind],
-    budget: &mut Budget<'_>,
-    mut visit: impl FnMut(usize, Edge, &mut Budget<'_>) -> Result<(), PositiveError>,
+    budget: &mut Budget<'_, '_>,
+    mut visit: impl FnMut(usize, Edge, &mut Budget<'_, '_>) -> Result<(), PositiveError>,
 ) -> Result<(), PositiveError> {
     let atoms = theory.atom_count();
     for (index, &kind) in kinds.iter().enumerate() {
@@ -281,6 +304,21 @@ fn edges(
                             Edge {
                                 target: atoms + index,
                                 weight,
+                            },
+                            budget,
+                        )?;
+                    }
+                }
+            }
+            (Kind::Or, NodeView::ExtremumCut(cut)) => {
+                for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+                    budget.tick()?;
+                    if cut.qualifies(rank) {
+                        visit(
+                            atoms + child,
+                            Edge {
+                                target: atoms + index,
+                                weight: 1,
                             },
                             budget,
                         )?;

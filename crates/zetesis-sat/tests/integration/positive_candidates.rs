@@ -8,17 +8,7 @@ use zetesis_sat::{
 };
 use zetesis_theory_support::theories::theory;
 
-use crate::support::region_filters::{Condition, Filter, ROUTES, Route};
-
-fn search(route: Route, original: &Theory, limits: Limits, control: Cancellation) -> StableModels {
-    let workers = NonZeroUsize::new(3).unwrap();
-    match route {
-        Route::Scalar => StableModels::new(original, limits, control),
-        Route::Producers => StableModels::with_region_producers(original, workers, limits, control),
-        Route::Native => StableModels::with_region_workers(original, workers, limits, control),
-    }
-    .unwrap()
-}
+use crate::support::region_filters::{Condition, Filter, ROUTES, Route, search};
 
 fn enable(stream: &mut StableModels) {
     assert!(

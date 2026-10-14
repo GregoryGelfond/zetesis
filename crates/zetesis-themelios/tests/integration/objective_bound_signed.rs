@@ -1,5 +1,6 @@
 //! Candidate-only signed normalization against independently enumerated keys.
 
+use crate::support::objective_bound_resources;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
@@ -163,13 +164,7 @@ fn permits(bound: &ObjectiveBound, mask: usize) -> bool {
 }
 
 fn no_subsets() -> ObjectiveBoundLimits {
-    ObjectiveBoundLimits {
-        aggregate: AggregateLimits {
-            max_subsets: 0,
-            ..AggregateLimits::default()
-        },
-        ..ObjectiveBoundLimits::default()
-    }
+    objective_bound_resources::aggregate(AggregateErrorKind::SubsetLimit, 0)
 }
 
 #[test]
@@ -484,7 +479,7 @@ fn assert_same_parts(a: &zetesis_ferraris::FormulaParts, b: &zetesis_ferraris::F
     assert_eq!(a.nodes(), b.nodes());
     assert_eq!(a.operands(), b.operands());
     assert_eq!(a.conditions(), b.conditions());
-    assert_eq!(a.weights(), b.weights());
+    assert_eq!(a.numeric_values(), b.numeric_values());
     assert_eq!(a.rows(), b.rows());
     assert_eq!(a.thresholds(), b.thresholds());
 }

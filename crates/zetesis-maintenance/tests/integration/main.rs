@@ -10,6 +10,8 @@ mod documentation_links;
 mod executable_agreement;
 mod ignored_tests;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
+mod installer;
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 mod process_capture;
 #[cfg(any(target_os = "linux", target_os = "macos"))]
 mod proof_capture;

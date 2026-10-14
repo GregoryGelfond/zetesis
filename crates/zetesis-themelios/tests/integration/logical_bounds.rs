@@ -1,13 +1,16 @@
 //! Logical bounds compare finite numeric measures without changing permissions.
 
+use crate::support::admission;
+use zetesis_reference_support::{canonical, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
 mod semantics;
 
 use cases::{BOUNDS, RELATIONS, sources};
-use reference::{Models, exhaustive, expected, external, holds, native, values};
+use reference::{Models, expected, external, holds, native, values};
 use themelios_base::source::SourceId;
-use zetesis_reference_support::canonical;
+use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
@@ -17,10 +20,7 @@ use zetesis_themelios::{
 const SOURCE: SourceId = SourceId::new(229);
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn limited(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
@@ -45,20 +45,17 @@ fn complete_answers_match_declared_contracts() {
 
 #[test]
 fn stability_matches_independent_subset_enumeration() {
-    for (source, _) in sources() {
-        let admitted = input(&source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    let sources = sources();
+    reference::stability_matches_exhaustion(
+        sources.iter().map(|(source, _)| source.as_str()),
+        input,
+    );
 }
 
 #[test]
 fn original_sources_remain_owned() {
-    for (source, _) in sources() {
-        assert_eq!(
-            input(&source).source().expect("source input").text(),
-            source
-        );
-    }
+    let sources = sources();
+    reference::sources_remain_owned(sources.iter().map(|(source, _)| source.as_str()), input);
 }
 
 #[test]
@@ -67,29 +64,9 @@ fn original_sources_match_declared_answers() {
     let cases = sources();
     let mut total = 0;
     for (source, expected) in &cases {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut models = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            for witness in call["Witnesses"].as_array().into_iter().flatten() {
-                assert!(witness["Costs"].is_null());
-                assert!(
-                    models.insert(
-                        witness["Value"]
-                            .as_array()
-                            .unwrap()
-                            .iter()
-                            .map(|atom| atom.as_str().unwrap().to_owned())
-                            .collect()
-                    )
-                );
-                count += 1;
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
+        let models = oracle::objective_free_models(&external(source, true));
         assert_eq!(&models, expected, "{source}");
-        total += count;
+        total += models.len();
     }
     println!("complete_sources={} full_models={total}", cases.len());
 }
@@ -183,8 +160,7 @@ fn logical_bounds_cannot_hide_undefined_arithmetic() {
 
 #[test]
 fn logical_guards_preserve_tuple_element_limits() {
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_elements = 1;
+    let limits = resource_limits::formula(FormulaResource::AggregateElements, 1);
     assert!(limited("#count{1:a;1:b}<=word.", &limits).is_ok());
     let error = limited("#count{1:a;2:b}<=word.", &limits).unwrap_err();
     assert!(matches!(
@@ -207,35 +183,14 @@ fn grounding_limits_are_inclusive() {
         FormulaResource::Substitutions,
         FormulaResource::Work,
     ] {
-        let limits = |ceiling| {
-            let mut limits = FormulaLimits::default();
-            match resource {
-                FormulaResource::AggregateElements => {
-                    limits.aggregate.max_elements = usize::try_from(ceiling).unwrap();
-                }
-                FormulaResource::Substitutions => limits.max_substitutions = ceiling,
-                FormulaResource::Work => limits.max_work = ceiling,
-                _ => unreachable!("selected grounding ceilings"),
-            }
-            limits
-        };
-        let mut lower = 0;
-        let mut upper = 16_384;
-        assert!(limited(source, &limits(upper)).is_ok());
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2;
-            if limited(source, &limits(middle)).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle + 1;
-            }
-        }
-        assert!(lower > 0);
+        let lower = first_success(resource_limits::formula_default(resource), |middle| {
+            limited(source, &resource_limits::formula(resource, middle)).is_ok()
+        });
         assert_eq!(
-            native(&limited(source, &limits(lower)).unwrap()),
+            native(&limited(source, &resource_limits::formula(resource, lower)).unwrap()),
             native(&input(source))
         );
-        let error = limited(source, &limits(lower - 1)).unwrap_err();
+        let error = limited(source, &resource_limits::formula(resource, lower - 1)).unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Limit { resource: actual, limit, observed, .. }
             if actual == resource && limit == u128::from(lower - 1) && observed == u128::from(lower)),
@@ -249,36 +204,24 @@ fn grounding_limits_are_inclusive() {
 #[test]
 fn preparation_payload_limit_is_inclusive() {
     let source = "d(word).{a}f(X):-d(X).";
-    let limits = |ceiling| ExpansionLimits {
-        max_scalar_bytes: ceiling,
-        ..Default::default()
-    };
     let prepare = |ceiling| {
         prepare_formula(
             source.into(),
             options(),
-            limits(ceiling),
+            resource_limits::expansion(ExpansionResource::ScalarBytes, ceiling),
             FormulaLimits::default(),
         )
     };
-    let mut lower = 0;
-    let mut upper = 16_384;
-    assert!(prepare(upper).is_ok());
-    while lower < upper {
-        let middle = lower + (upper - lower) / 2;
-        if prepare(middle).is_ok() {
-            upper = middle;
-        } else {
-            lower = middle + 1;
-        }
-    }
-    assert!(lower > 0);
+    let lower = first_success(
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
+        |middle| prepare(middle).is_ok(),
+    );
     assert!(prepare(lower).is_ok());
     let error = prepare(lower - 1).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit {
         resource: ExpansionResource::ScalarBytes, limit, observed, ..
-    }) if limit == (lower - 1) as u128 && observed == lower as u128),
+    }) if limit == u128::from(lower - 1) && observed == u128::from(lower)),
         "{error}"
     );
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);

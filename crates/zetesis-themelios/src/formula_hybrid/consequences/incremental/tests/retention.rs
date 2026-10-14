@@ -3,7 +3,7 @@
 use super::*;
 
 fn fixture() -> HybridFormula {
-    admit(include_str!(
+    hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/irrelevant-choice.lp"
     ))
 }
@@ -120,7 +120,7 @@ fn default_negated_dependencies_wake_across_closures() {
             true,
         ),
     ] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let mut checker = completed(&owner);
         let mut region = Region::all_open(owner.atom_catalog().atoms().len());
         let q = atom(&owner, "q");
@@ -139,7 +139,7 @@ fn default_negated_dependencies_wake_across_closures() {
 
 #[test]
 fn a_new_first_retires_an_unapplied_batch() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/two-row-units.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();

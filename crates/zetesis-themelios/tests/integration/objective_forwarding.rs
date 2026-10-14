@@ -2,6 +2,8 @@
 
 use crate::support::finite_bindings::holds;
 use crate::support::source_cases;
+use zetesis_reference_support::{admit, canonical, exhaustive, prepared, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 
 use crate::support::finite_bindings::values as truth;
 use crate::support::fixtures::OBJECTIVE_EXTREMA_REFUSALS as EXTREMA_REFUSALS;
@@ -10,12 +12,8 @@ use source_cases::cases;
 use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{admit, canonical, exhaustive};
 use zetesis_test_support::records::Records;
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    prepare_formula,
-};
+use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const FIXTURE: &str = include_str!("../fixtures/objective-forwarding.jsonl");
 const RECURSIVE_COUNT: &str = "n(N):-N=#count{1:p(X)}.p(X):-n(X).#minimize{X:p(X)}.";
@@ -236,51 +234,12 @@ fn recursive_count_forwarding_matches_clingo() {
 fn preparation_defers_carrier_presence_to_grounding() {
     let source =
         "b.{a}.n(N):-N=#max{2:a;foo:b}.p(X):-n(X).m(M):-M=#max{Y:p(Y)}.#minimize{M@7:m(M)}.";
-    let prepared = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared(source);
     let input = prepared.ground().unwrap();
     assert_eq!(input.objectives().priorities(), &[7]);
     let records = exhaustive(&input);
     assert_eq!(records.len(), 2);
     assert!(records.iter().all(|(_, costs)| *costs == Some(vec![0])));
-}
-
-#[derive(Clone, Copy)]
-enum Resource {
-    Work,
-    Substitutions,
-    SupportRounds,
-    AnalysisNodes,
-    AnalysisEdges,
-}
-
-impl Resource {
-    fn limits(self, value: u64) -> FormulaLimits {
-        let mut limits = FormulaLimits::default();
-        match self {
-            Self::Work => limits.max_work = value,
-            Self::Substitutions => limits.max_substitutions = value,
-            Self::SupportRounds => limits.max_support_rounds = value,
-            Self::AnalysisNodes => limits.max_analysis_nodes = usize::try_from(value).unwrap(),
-            Self::AnalysisEdges => limits.max_analysis_edges = usize::try_from(value).unwrap(),
-        }
-        limits
-    }
-
-    fn kind(self) -> FormulaResource {
-        match self {
-            Self::Work => FormulaResource::Work,
-            Self::Substitutions => FormulaResource::Substitutions,
-            Self::SupportRounds => FormulaResource::SupportRounds,
-            Self::AnalysisNodes => FormulaResource::AnalysisNodes,
-            Self::AnalysisEdges => FormulaResource::AnalysisEdges,
-        }
-    }
 }
 
 #[test]
@@ -296,35 +255,26 @@ fn exact_admission_limits_preserve_objective_completion() {
 fn exact_limits(source: &str) {
     let reference = admit(source, &FormulaLimits::default()).unwrap();
     for resource in [
-        Resource::Work,
-        Resource::Substitutions,
-        Resource::SupportRounds,
-        Resource::AnalysisNodes,
-        Resource::AnalysisEdges,
+        FormulaResource::Work,
+        FormulaResource::Substitutions,
+        FormulaResource::SupportRounds,
+        FormulaResource::AnalysisNodes,
+        FormulaResource::AnalysisEdges,
     ] {
-        let mut lower = 0;
-        let mut upper = 10_000;
-        assert!(admit(source, &resource.limits(upper)).is_ok());
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2;
-            if admit(source, &resource.limits(middle)).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle + 1;
-            }
-        }
-        assert!(lower > 0);
-        let exact = admit(source, &resource.limits(lower)).unwrap();
+        let lower = first_success(resource_limits::formula_default(resource), |middle| {
+            admit(source, &resource_limits::formula(resource, middle)).is_ok()
+        });
+        let exact = admit(source, &resource_limits::formula(resource, lower)).unwrap();
         assert_eq!(exhaustive(&exact), exhaustive(&reference));
-        let error = admit(source, &resource.limits(lower - 1)).unwrap_err();
+        let error = admit(source, &resource_limits::formula(resource, lower - 1)).unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Limit { resource: actual, observed, limit, .. }
-                if actual == resource.kind() && observed > limit),
+                if actual == resource && observed > limit),
             "{error}"
         );
         assert!(!error.diagnostics().is_empty());
         assert_eq!(
-            exhaustive(&admit(source, &resource.limits(lower)).unwrap()),
+            exhaustive(&admit(source, &resource_limits::formula(resource, lower)).unwrap()),
             exhaustive(&reference),
             "retry publishes the complete objective contract"
         );

@@ -24,6 +24,7 @@ fn program() -> Program {
     );
     Program::new(
         vec![choice("a"), choice("b"), rule],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap()

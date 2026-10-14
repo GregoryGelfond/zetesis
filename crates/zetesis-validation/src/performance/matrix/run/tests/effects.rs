@@ -241,7 +241,7 @@ fn cancelled_scalability_keeps_every_workload_and_requested_position() {
     assert!(report.accounted());
     assert!(!report.passed());
     assert!(report.metadata().next().is_none());
-    assert_eq!(report.workloads().unwrap().len(), 15);
+    assert_eq!(report.workloads().unwrap().len(), 21);
     assert_eq!(
         report
             .workloads()
@@ -249,9 +249,9 @@ fn cancelled_scalability_keeps_every_workload_and_requested_position() {
             .iter()
             .filter(|workload| workload.is_authored())
             .count(),
-        12
+        18
     );
-    assert_eq!(report.samples().len(), 30);
+    assert_eq!(report.samples().len(), 42);
     assert!(
         report
             .samples()

@@ -22,8 +22,13 @@ pub(super) struct Bound {
 }
 
 impl Bound {
-    pub(super) fn prepare(theory: &Theory, generation: u64) -> Result<Self, Incomplete> {
-        let narrower = Narrower::try_new(theory).map_err(super::regions::stopped)?;
+    pub(super) fn prepare(
+        theory: &Theory,
+        generation: u64,
+        native_byte_limit: u64,
+        cancellation: &crate::Cancellation,
+    ) -> Result<Self, Incomplete> {
+        let narrower = super::original_index::prepare(theory, native_byte_limit, cancellation)?;
         Ok(Self {
             generation,
             index: Arc::new((theory.clone(), narrower)),
@@ -32,6 +37,33 @@ impl Bound {
 
     pub(super) fn work(&self) -> u64 {
         self.index.1.work()
+    }
+
+    /// Prepare the bound `restriction` makes at `generation` and charge its
+    /// preparation to `budget` and to the search's `work` counter, installing
+    /// nothing: a caller installs the bound only once this returns it, so a
+    /// stop after a charge leaves that charge in place and the previous bound
+    /// in force.
+    pub(super) fn tightened(
+        restriction: &Theory,
+        generation: u64,
+        native_byte_limit: u64,
+        budget: &mut crate::search::Budget<'_>,
+        work: &mut u64,
+    ) -> Result<Self, Incomplete> {
+        budget.cancellation.poll()?;
+        let bound = Self::prepare(
+            restriction,
+            generation,
+            native_byte_limit,
+            budget.cancellation,
+        )?;
+        budget.charge(bound.work())?;
+        *work = work
+            .checked_add(bound.work())
+            .ok_or(Incomplete::CounterOverflow)?;
+        budget.cancellation.poll()?;
+        Ok(bound)
     }
 }
 

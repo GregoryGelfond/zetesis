@@ -2,7 +2,7 @@
 
 use crate::ProgramSite;
 use zetesis_ferraris::{
-    AggregateComparison, AggregateElement, ContributionRow, FormulaNodes, Node, NodeView, Theory,
+    AggregateComparison, AggregateElement, FormulaNodes, Node, NodeView, NumericRow, Theory,
     ThresholdDescriptor, append_aggregate,
 };
 
@@ -112,7 +112,7 @@ fn lower(
     work.payload(super::bytes::<i128>(1)?)?;
     work.payload(super::bytes::<usize>(1)?)?;
     work.payload(super::bytes::<Node>(3)?)?;
-    work.payload(super::bytes::<ContributionRow>(1)?)?;
+    work.payload(super::bytes::<NumericRow>(1)?)?;
     work.payload(super::bytes::<ThresholdDescriptor>(1)?)?;
     let build = append_aggregate(
         nodes,
@@ -135,22 +135,28 @@ fn push(nodes: &mut FormulaNodes, node: NodeView<'_>, work: &mut Work) -> Result
     let edges = match node {
         NodeView::And(row) | NodeView::Or(row) => row.len(),
         NodeView::Threshold(row) => row.conditions.len(),
+        NodeView::ExtremumCut(cut) => cut.row.conditions.len(),
         NodeView::Implies(_, _) => 2,
         NodeView::Atom(_) | NodeView::False => 0,
     };
     let wide = matches!(node, NodeView::And(row) | NodeView::Or(row) if row.len() >= 3);
     let copies = match node {
         // The range-returning append copies two columns and two descriptors.
-        NodeView::Threshold(_) => (edges as u128) * 2 + 2,
+        NodeView::Threshold(_) | NodeView::ExtremumCut(_) => (edges as u128) * 2 + 2,
         _ if wide => edges as u128,
         _ => 0,
     };
-    let pending = if matches!(node, NodeView::Threshold(_)) {
+    let pending = if matches!(node, NodeView::Threshold(_) | NodeView::ExtremumCut(_)) {
         nodes.parts().pending_numeric_validation_work()
     } else {
         0
     };
-    work.charge(u64::try_from(1 + edges as u128 + copies + pending).map_err(|_| Fault::Overflow)?)?;
+    // Ordinal publication validates its cut rule separately from the row.
+    let cut_check = u128::from(matches!(node, NodeView::ExtremumCut(_)));
+    work.charge(
+        u64::try_from(1 + edges as u128 + copies + pending + cut_check)
+            .map_err(|_| Fault::Overflow)?,
+    )?;
     if nodes.view().len() >= work.limits.theory.max_nodes
         || nodes.parts().occurrences() as u128 + edges as u128
             > work.limits.theory.max_operands as u128
@@ -162,8 +168,14 @@ fn push(nodes: &mut FormulaNodes, node: NodeView<'_>, work: &mut Work) -> Result
         NodeView::Threshold(_) => {
             work.payload(super::bytes::<usize>(edges)?)?;
             work.payload(super::bytes::<u64>(edges)?)?;
-            work.payload(super::bytes::<ContributionRow>(1)?)?;
+            work.payload(super::bytes::<NumericRow>(1)?)?;
             work.payload(super::bytes::<ThresholdDescriptor>(1)?)?;
+        }
+        NodeView::ExtremumCut(_) => {
+            work.payload(super::bytes::<usize>(edges)?)?;
+            work.payload(super::bytes::<u64>(edges)?)?;
+            work.payload(super::bytes::<NumericRow>(1)?)?;
+            work.payload(super::bytes::<zetesis_ferraris::ExtremumCutDescriptor>(1)?)?;
         }
         _ if wide => work.payload(super::bytes::<usize>(edges)?)?,
         _ => {}

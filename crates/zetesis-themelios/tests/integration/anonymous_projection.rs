@@ -1,22 +1,15 @@
 //! Anonymous default-negated arguments project complete relation identities.
 
 use std::collections::BTreeSet;
+use zetesis_reference_support::{admit, formula};
 
 use zetesis_core::Atom;
 use zetesis_cpu::Cancellation;
 use zetesis_sat::{Limits, StableModels};
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, admit_formula,
-};
+use zetesis_themelios::{FormulaFailure, FormulaLimits};
 
 fn models(source: &str) -> BTreeSet<BTreeSet<Atom>> {
-    let input = admit_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"));
+    let input = formula(source);
     let mut search = StableModels::new(input.theory(), Limits::default(), Cancellation::default())
         .expect("admitted theory");
     let result = search
@@ -73,12 +66,7 @@ fn named_arguments_remain_bound_and_anonymous_positions_are_independent() {
         models("q(\"a b\",1).")
     );
     assert!(matches!(
-        admit_formula(
-            "p(X):-not q(X,_).".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
+        admit("p(X):-not q(X,_).", &FormulaLimits::default()),
         Err(FormulaFailure::UnsafeVariable { .. })
     ));
 }

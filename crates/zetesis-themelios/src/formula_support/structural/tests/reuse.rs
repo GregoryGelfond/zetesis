@@ -7,7 +7,7 @@ fn reuse_rows(source: &str, enabled: bool) -> (Run, usize) {
         // Canonical rule order need not end with the authored producer. Scope
         // both hit counting and work measurement to this exact structured join;
         // support-construction hits cannot satisfy the query's route assertion.
-        let mut producers = program.rules.iter().filter(|rule| {
+        let mut producers = program.rules_without_facts().iter().filter(|rule| {
             rule.body
                 .iter()
                 .any(|literal| matches!(literal, crate::formula_ir::LiteralIr::PatternAtom(_)))
@@ -173,7 +173,7 @@ const DIRECT: &str = "k(1..2).p(f(g(1),1,7)).p(f(g(2),2,7)).r(X):-k(X),p(f(g(X),
 #[test]
 fn binding_transitions_preserve_resolution() {
     testing::with_completed_source(DIRECT, |program, support, computation, counters| {
-        let rule = program.rules.last().unwrap();
+        let rule = program.rules_without_facts().last().unwrap();
         let location = rule.location;
         let limits = FormulaLimits::default();
         let mut join = Join::rule(
@@ -254,7 +254,7 @@ fn binding_transitions_preserve_resolution() {
 fn absent_results_are_reconsidered_after_growth() {
     let source = "k(1).p(other(0)).r(X):-k(X),p(f(X)).";
     testing::with_completed_source(source, |program, support, computation, counters| {
-        let rule = program.rules.last().unwrap();
+        let rule = program.rules_without_facts().last().unwrap();
         let location = rule.location;
         let limits = FormulaLimits::default();
         let mut join = Join::rule(
@@ -345,7 +345,7 @@ fn absent_results_are_reconsidered_after_growth() {
 #[test]
 fn ambiguous_capture_coordinates_decline_reuse() {
     testing::with_completed_source(DIRECT, |program, support, computation, counters| {
-        let rule = program.rules.last().unwrap();
+        let rule = program.rules_without_facts().last().unwrap();
         let location = rule.location;
         let limits = FormulaLimits::default();
         let mut join = Join::rule(
@@ -406,7 +406,7 @@ fn ambiguous_capture_coordinates_decline_reuse() {
 #[test]
 fn interrupted_replacement_cannot_publish_partial_inputs() {
     testing::with_completed_source(DIRECT, |program, support, computation, counters| {
-        let rule = program.rules.last().unwrap();
+        let rule = program.rules_without_facts().last().unwrap();
         let location = rule.location;
         let limits = FormulaLimits::default();
         let mut join = Join::rule(
@@ -507,7 +507,7 @@ enum Refusal {
 
 fn retained_hit_refusal(refusal: Refusal) {
     testing::with_completed_source(DIRECT, |program, support, computation, counters| {
-        let rule = program.rules.last().unwrap();
+        let rule = program.rules_without_facts().last().unwrap();
         let location = rule.location;
         let limits = FormulaLimits::default();
         let mut join = Join::rule(
@@ -543,7 +543,7 @@ fn retained_hit_refusal(refusal: Refusal) {
             Refusal::Cancellation => {
                 let cancelled = zetesis_cpu::Cancellation::default();
                 cancelled.cancel();
-                counters.cancellation = Some(cancelled);
+                counters.attach_test_control(&cancelled);
                 limits
             }
             Refusal::Storage => FormulaLimits {
@@ -572,7 +572,7 @@ fn retained_hit_refusal(refusal: Refusal) {
                 })
             )),
         }
-        counters.cancellation = None;
+        counters.detach_test_control();
         scratch.clear();
         let ((), hits) = reuse_scoped(true, || {
             assert!(
@@ -608,7 +608,7 @@ fn query_attempt(
     bytes: Option<usize>,
     cancelled: bool,
 ) -> (Result<bool, FormulaFailure>, u64, Receipt) {
-    let rule = program.rules.last().unwrap();
+    let rule = program.rules_without_facts().last().unwrap();
     let location = rule.location;
     let mut budget = testing::budget();
     let mut join = Join::rule(
@@ -629,7 +629,7 @@ fn query_attempt(
     if cancelled {
         let token = zetesis_cpu::Cancellation::default();
         token.cancel();
-        counters.cancellation = Some(token);
+        counters.attach_test_control(&token);
     }
     let observer = Observer::default();
     let profile = Profile::new(Some(&observer));
@@ -639,7 +639,7 @@ fn query_attempt(
             .map(|row| row.is_some_and(|row| row.passes))
     });
     counters.observed = previous;
-    counters.cancellation = None;
+    counters.detach_test_control();
     assert_eq!(join.lease.bytes(), join.storage_bytes());
     assert!(join.pattern_captures.is_empty());
     cleared(&join);

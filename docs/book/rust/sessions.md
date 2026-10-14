@@ -20,6 +20,22 @@ broader finite formula profile. These are explicit library choices. The ordinary
 source driver provides automatic profile selection; `Session` receives an
 already prepared representation and does not retry admission itself.
 
+`prepare_formula_execution` and `prepare_bundle_execution` apply the same
+execution policy as the CLI and native API. Under automatic CPU execution, a
+complete acyclic normal source can be evaluated during preparation, without
+constructing formulas. The returned `PreparedExecution` owns either that
+`AcyclicSource` or the selected `GroundedFormula`; `input()` borrows it for a
+session. Explicit grounding and oracle requests retain their ordinary paths.
+The original `ground()` doors still construct theories for arbitrary formula
+and reduct queries.
+
+An `AcyclicSource` is evaluated once. Sessions reuse its checked interpretation
+and original subject, while applying their own cancellation and model-publication
+allowances. `SemanticOutcome::source_evaluation()` reports preparation work;
+it is not search work repeated by each session. Preparation time belongs to the
+grounding phase. A successfully published sole answer establishes exhaustion
+even when the requested model count is one.
+
 `SolveConfig::validate` checks representation-independent policy combinations.
 Prepared input adds its profile constraints; the selected executor then checks
 its own resources. CPU closure setup conservatively requires
@@ -69,8 +85,9 @@ privately constructed `AnswerSet` retains its original `Subject`, complete inter
 fully evaluated score. Hidden atoms remain present even when `#show` would omit
 them from human output. `SessionModel` remains a compatibility alias. These are
 completed membership results under the selected implementation, not Lean proof
-objects. Membership is always decided by zetesis's own reduct check, on the CPU
-or on a qualified GPU route; the library accepts no caller-supplied checker.
+objects. Membership is decided by zetesis's own reduct check or an applicable
+certified class evaluation, on the CPU or a qualified GPU route. The library
+accepts no caller-supplied checker.
 
 `Session::enumerate` streams all answers of the original program, including
 nonoptimal answers. It evaluates objective scores but disables both candidate
@@ -159,11 +176,28 @@ set; it does not necessarily rule out larger classical models. `TightPlan`
 instead establishes its own acyclicity and supportedness conditions. Neither
 plan changes the definition of membership. CPU tight checks retain exclusive
 `TightWorkspace` scratch in each worker; immutable plans can be shared. Every
-call checks its retained capacity against the current allowance. Support uses
-one bit per atom in 32-bit words. Each conjunction or disjunction stops reading
-operands once its value is determined, while every formula node receives fresh
-truth. Interrupted or rejected candidates cannot leave truth or support in the
-next check.
+call checks its retained capacity against the current allowance. A complete
+check gives every formula node fresh truth, and each conjunction or disjunction
+stops reading operands once its value is determined; support uses one bit per
+atom in 32-bit words. When the plan has its readers index
+(`TightPlan::prepare_updates`, which certified checking calls when it prepares
+the certificate for CPU use, before sharing the plan), a worker's
+workspace keeps the complete evaluation of the last candidate it checked and
+updates it for the next one: it re-evaluates, in node order, exactly the nodes
+with an input whose value changed (an atom node's membership, a condition of a
+numeric guard's row, or an operand's truth), and keeps support counts and the
+false-root and unsupported-atom sets, so every verdict and its witness equal a
+complete evaluation's. A candidate that differs in more than an eighth of the
+atoms (at least 64) or another theory evaluates completely. A check refused for
+a foreign theory, stopped at its first observation of control, or refused for
+storage at its start changes nothing. A check that ends later (refused for its
+work or for storage it grows, failing an allocation, or stopped at a later
+observation) leaves nothing the next check reads, so the next check evaluates
+completely. The work a check charges then depends on the candidate checked
+before it;
+`TightPlan::check_work_bound` bounds every check by either route. A certificate
+prepared for an external checker shares its plan without the index; if it is
+later enabled for CPU checking, its checks evaluate every candidate completely.
 
 `StratifiedPlan` extends direct evaluation to the supported stratified normal
 grammar. It completes positive components in signed dependency order and checks
@@ -436,8 +470,8 @@ allowances, not instruction counts or process RSS.
 
 A refused key is not returned, earlier representatives remain valid, and the failure retains
 original verification evidence. Cancellation and history exhaustion never prove
-unsatisfiability. The CLI requests projection when the source declares
-`#project`; its JSON outcome includes the separate projection receipt.
+unsatisfiability. Except with `--count`, the CLI requests projection when the
+source declares `#project`; its JSON outcome includes the separate projection receipt.
 That receipt describes enumeration through the session. External rendering or
 writer delivery can still fail after the session returns a representative.
 

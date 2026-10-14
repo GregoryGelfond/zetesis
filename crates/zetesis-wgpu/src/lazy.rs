@@ -172,19 +172,9 @@ impl GpuLazyOracle {
         )
     }
 
-    /// Check the same seed occurrences with explicit host source selection.
-    /// [`lazy::SourceSelection::Worlds`] removes positive prefixes with no
-    /// current-world witness before transport. The device still checks every
-    /// positive antecedent and frozen gate; its ABI and execution are unchanged.
-    /// Source mask storage/work share the supplied source budgets, and their
-    /// progress is distinct from actual submitted device work. Host join storage
-    /// is reused only within this batch; each round rebuilds membership truth.
-    ///
-    /// # Errors
-    /// Preserves [`Self::check_batch`]'s failure and incomplete-coverage contract.
-    /// This opt-in path requires its own physical-device qualification; portable
-    /// semantic and transport tests do not establish hardware execution.
-    pub fn check_batch_with_source(
+    /// Check owned seed occurrences with explicit host source selection,
+    /// through [`Self::check_batch_with_source_views`], whose contract applies.
+    pub(crate) fn check_batch_with_source(
         &mut self,
         program: &Program,
         seeds: &[Seed],
@@ -230,11 +220,17 @@ impl GpuLazyOracle {
     }
 
     /// Check borrowed candidate occurrences using explicit host source selection.
-    /// The implementation and device protocol are shared with
-    /// [`Self::check_batch_with_source`]; views change input ownership only.
+    /// [`lazy::SourceSelection::Worlds`] removes positive prefixes with no
+    /// current-world witness before transport. The device still checks every
+    /// positive antecedent and frozen gate; its ABI and execution are unchanged.
+    /// Source mask storage/work share the supplied source budgets, and their
+    /// progress is distinct from actual submitted device work. Host join storage
+    /// is reused only within this batch; each round rebuilds membership truth.
     ///
     /// # Errors
-    /// Preserves [`Self::check_batch_with_source`]'s failure and coverage contract.
+    /// Preserves [`Self::check_batch`]'s failure and incomplete-coverage contract.
+    /// This opt-in path requires its own physical-device qualification; portable
+    /// semantic and transport tests do not establish hardware execution.
     pub fn check_batch_with_source_views<'seed>(
         &mut self,
         program: &Program,
@@ -451,6 +447,7 @@ mod tests {
         let a = AtomPattern::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap();
         let program = Program::new(
             vec![Template::new(Some(a), vec![], vec![], vec![], vec![])],
+            zetesis_core::FactTables::default(),
             AdmissionLimits::default(),
         )
         .unwrap();

@@ -5,7 +5,12 @@ use std::path::PathBuf;
 
 use crate::{Backend, Grounder, Oracle, SearchMethod, SourceBatching};
 
+#[cfg(any(target_os = "linux", test))]
+mod cgroup;
 mod values;
+
+#[cfg(test)]
+mod tests;
 
 /// Commands that do not read an answer-set program.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Subcommand)]
@@ -42,11 +47,13 @@ pub struct Options {
     /// cannot be combined with file roots in this source-bundle profile.
     #[arg(value_name = "FILE")]
     pub additional_inputs: Vec<PathBuf>,
-    /// Execution backend: cpu (the default), gpu, metal or vulkan.
-    ///
-    /// `gpu` uses the platform's native API: Metal on macOS, Vulkan elsewhere.
-    /// An unavailable GPU fails; device failure does not silently retry on CPU.
-    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu")]
+    /// Execution backend: cpu (the default) or gpu.
+    // clap lists an argument's possible values in both helps or hides them from
+    // both, and the everyday help must not offer `metal` or `vulkan`; so the
+    // values are hidden and the full help lists them by hand, from the backend
+    // vocabulary. The long help replaces the help, so it restates the summary
+    // line above.
+    #[arg(long, value_parser = zetesis_backend::BackendParser, default_value = "cpu", hide_possible_values = true, long_help = backend_long_help())]
     pub backend: Backend,
     /// Grounding mode, independent of execution backend.
     ///
@@ -95,6 +102,13 @@ pub struct Options {
     /// Stream a versioned JSON document with full models, shown channels and coverage.
     #[arg(long)]
     pub json: bool,
+    /// Print only the complete number of answer sets, or all optimal ties.
+    ///
+    /// Counts full answer identities independently of #show and #project.
+    /// Interrupted or failed searches print no count. Accept the total only on
+    /// successful exit; output can fail after writing bytes. Statistics remain on stderr.
+    #[arg(long, conflicts_with_all = ["json", "models"])]
+    pub count: bool,
     /// Style human headings and solve metadata.
     ///
     /// Auto follows each stream's terminal capability, `NO_COLOR` and `TERM`.
@@ -113,9 +127,11 @@ pub struct Options {
     /// Memory allowance in bytes, or a whole number with KiB, MiB, GiB or TiB.
     ///
     /// Bounds named capacities during input, grounding, solving and publication;
-    /// it is not a resident-memory limit. The default is half of host physical
-    /// memory, at least two gibibytes, or two gibibytes when unavailable.
-    #[arg(long, visible_alias = "memory-budget", value_name = "SIZE", value_parser = zetesis_backend::parse_memory, default_value_t = host_memory_allowance())]
+    /// it is not a resident-memory limit. The default is half of the memory
+    /// available to the process: physical memory, or on Linux the memory limit
+    /// of its control group when that is lower; two gibibytes when the host
+    /// does not report it.
+    #[arg(long, visible_alias = "memory-budget", value_name = "SIZE", value_parser = zetesis_backend::parse_memory, default_value_t = host_memory_allowance(), hide_default_value = true, hide_short_help = true)]
     pub memory: u64,
     /// Maximum models to display; 0 requests all.
     ///
@@ -132,20 +148,57 @@ pub struct Options {
     pub workers: NonZeroUsize,
 }
 
-/// The host's physical memory in bytes, read once per process the first
-/// time it is asked for, when the default allowance is taken or the
-/// statistics header prints it: the header prints the reading the allowance
-/// came from.
+/// The full help's account of `--backend`: every value with its meaning, in the
+/// vocabulary's order, so that each API's scope and limits are stated where the
+/// expert values are offered.
+fn backend_long_help() -> String {
+    let values: Vec<String> = Backend::ALL
+        .into_iter()
+        .map(|backend| format!("  {:<7} {}", backend.label(), backend.help()))
+        .collect();
+    format!(
+        "Execution backend: cpu (the default) or gpu.\n\nValues:\n{}\n\n\
+         An unavailable GPU fails; device failure does not silently retry on CPU.",
+        values.join("\n")
+    )
+}
+
+/// The memory available to the process in bytes, read once per process on
+/// first use. Building the command uses it, since the default allowance
+/// derives from it, so every invocation reads it, even one with an explicit
+/// `--memory`; a caller that builds `Options` itself first reads it when the
+/// statistics header prints it. The header prints this same reading, the one
+/// any default allowance came from.
 pub(crate) fn host_memory() -> Option<u64> {
     static HOST_MEMORY: std::sync::OnceLock<Option<u64>> = std::sync::OnceLock::new();
     *HOST_MEMORY.get_or_init(read_host_memory)
 }
 
-/// The host's physical memory in bytes, from `/proc/meminfo`.
+/// The memory available to the process in bytes, from the files Linux keeps.
 #[cfg(target_os = "linux")]
 fn read_host_memory() -> Option<u64> {
-    let text = std::fs::read_to_string("/proc/meminfo").ok()?;
-    let kibibytes: u64 = text
+    available_memory(|path| std::fs::read_to_string(path).ok())
+}
+
+/// The memory available to the process in bytes, where `read` returns a file's
+/// text: the host's physical memory from `/proc/meminfo`, lowered to the memory
+/// limit of the process's control group when one is set, since inside a
+/// container the host's figure is not the memory the process may use. Without
+/// `/proc/meminfo` there is no reading, whatever a group states: a group's value
+/// alone can be version 1's "unlimited", which only the comparison with
+/// physical memory renders harmless.
+#[cfg(any(target_os = "linux", test))]
+fn available_memory(read: impl Fn(&std::path::Path) -> Option<String>) -> Option<u64> {
+    let physical = memory_total(&read(std::path::Path::new("/proc/meminfo"))?)?;
+    let limit = read(std::path::Path::new("/proc/self/cgroup"))
+        .and_then(|groups| cgroup::memory_limit(&groups, &read));
+    Some(limit.map_or(physical, |limit| limit.min(physical)))
+}
+
+/// Physical memory in bytes from the text of `/proc/meminfo`.
+#[cfg(any(target_os = "linux", test))]
+fn memory_total(meminfo: &str) -> Option<u64> {
+    let kibibytes: u64 = meminfo
         .lines()
         .find_map(|line| line.strip_prefix("MemTotal:"))?
         .split_whitespace()
@@ -155,22 +208,46 @@ fn read_host_memory() -> Option<u64> {
     kibibytes.checked_mul(1024)
 }
 
-/// The host's physical memory in bytes, from the system's `sysctl`: the
-/// crate forbids foreign calls, and the system command is the reading
-/// without one. It runs by its absolute path on the sealed system volume,
-/// never through `PATH`, so the caller's environment cannot substitute
-/// another program or another reading.
+/// The host's physical memory in bytes, from the kernel's `hw.memsize`
+/// through one `sysctlbyname` call. macOS reports physical memory only through
+/// system interfaces (`sysctl`, or Mach's `host_info`), each a foreign call;
+/// this is the one in zetesis's own source, and it starts no process. The
+/// kernel writes at most the eight bytes it is given and stores how many it
+/// wrote; anything but a complete eight-byte reading is no reading.
 #[cfg(target_os = "macos")]
+#[expect(
+    unsafe_code,
+    reason = "macOS reports physical memory only through system interfaces: one sysctlbyname call into a fixed eight-byte buffer"
+)]
 fn read_host_memory() -> Option<u64> {
-    let output = std::process::Command::new("/usr/sbin/sysctl")
-        .args(["-n", "hw.memsize"])
-        .output()
-        .ok()?;
-    std::str::from_utf8(&output.stdout)
-        .ok()?
-        .trim()
-        .parse()
-        .ok()
+    use std::ffi::{c_char, c_int, c_void};
+    unsafe extern "C" {
+        fn sysctlbyname(
+            name: *const c_char,
+            oldp: *mut c_void,
+            oldlenp: *mut usize,
+            newp: *mut c_void,
+            newlen: usize,
+        ) -> c_int;
+    }
+    let mut memory = 0_u64;
+    let mut length = size_of::<u64>();
+    // SAFETY: the declaration matches sysctlbyname(3), `int sysctlbyname(const
+    // char *name, void *oldp, size_t *oldlenp, void *newp, size_t newlen)`, with
+    // `usize` for `size_t`. The name is a NUL-terminated string; `oldp` points
+    // to `memory`, whose size `length` states, so the kernel writes at most
+    // those eight bytes and stores the count it wrote in `length`; with a null
+    // `newp` and a zero `newlen` nothing is set.
+    let status = unsafe {
+        sysctlbyname(
+            c"hw.memsize".as_ptr(),
+            (&raw mut memory).cast(),
+            &raw mut length,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    (status == 0 && length == size_of::<u64>()).then_some(memory)
 }
 
 /// The host does not report its physical memory on this platform.
@@ -179,11 +256,17 @@ fn read_host_memory() -> Option<u64> {
     None
 }
 
-/// The default allowance: half of the host's memory, at least the reference.
+/// The default allowance: half of the memory available to the process, or
+/// the reference when the host does not report it.
 fn host_memory_allowance() -> u64 {
-    host_memory().map_or(crate::SolveConfig::REFERENCE_MEMORY, |memory| {
-        (memory / 2).max(crate::SolveConfig::REFERENCE_MEMORY)
-    })
+    allowance(host_memory())
+}
+
+/// Half of `available` memory whenever there is a reading, so that the
+/// allowance stays within what the process may use, a container's limit
+/// included; the reference without one.
+fn allowance(available: Option<u64>) -> u64 {
+    available.map_or(crate::SolveConfig::REFERENCE_MEMORY, |memory| memory / 2)
 }
 
 impl Options {

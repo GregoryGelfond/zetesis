@@ -15,11 +15,16 @@ pub(in crate::observation) struct Work<'a> {
 }
 
 impl Work<'_> {
-    pub fn error(&self, kind: ErrorKind) -> Error {
+    pub(in crate::observation) fn error(&self, kind: ErrorKind) -> Error {
         Error::new(kind, self.site, self.statistics)
     }
 
-    pub fn check(&self, resource: Resource, observed: u128, limit: u128) -> Result<(), Error> {
+    pub(in crate::observation) fn check(
+        &self,
+        resource: Resource,
+        observed: u128,
+        limit: u128,
+    ) -> Result<(), Error> {
         if observed > limit {
             return Err(self.error(ErrorKind::Limit {
                 resource,
@@ -30,7 +35,7 @@ impl Work<'_> {
         Ok(())
     }
 
-    pub fn step(&mut self, count: u128) -> Result<(), Error> {
+    pub(in crate::observation) fn step(&mut self, count: u128) -> Result<(), Error> {
         self.cancellation
             .poll()
             .map_err(|stop| self.error(ErrorKind::Stopped(stop)))?;
@@ -40,7 +45,7 @@ impl Work<'_> {
         Ok(())
     }
 
-    pub fn reserve<T>(&self, count: usize) -> Result<Vec<T>, Error> {
+    pub(in crate::observation) fn reserve<T>(&self, count: usize) -> Result<Vec<T>, Error> {
         let mut values = Vec::new();
         values
             .try_reserve_exact(count)

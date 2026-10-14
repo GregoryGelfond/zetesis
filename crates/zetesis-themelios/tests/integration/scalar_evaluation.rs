@@ -1,13 +1,11 @@
 //! Scalar data evaluation retains complete original and frozen source semantics.
+use crate::support::admission;
 use crate::support::finite_bindings as reference;
 
 use themelios_base::source::SourceId;
 use themelios_program::term::EvalError;
 use zetesis_reference_support::formula;
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
-    admit_formula,
-};
+use zetesis_themelios::{ExpansionFailure, FormulaFailure};
 
 const CASES: &[(&str, &str)] = &[
     (
@@ -122,16 +120,7 @@ fn arithmetic_refusals_retain_the_source_rule() {
         ("d(f(1)). p(X+1):-d(X).", EvalError::Undefined),
     ] {
         let source_id = SourceId::new(29);
-        let failure = admit_formula(
-            source.into(),
-            AdmissionOptions {
-                source_id,
-                ..Default::default()
-            },
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
+        let failure = admission::admit(source_id, source).unwrap_err();
         let FormulaFailure::Expansion(ExpansionFailure::Evaluation { error, location }) = failure
         else {
             panic!("expected evaluated arithmetic refusal: {failure}");
@@ -163,31 +152,8 @@ fn arithmetic_refusals_retain_the_source_rule() {
 #[test]
 #[ignore = "requires clingo: scalar models match clingo"]
 fn scalar_models_match_clingo() {
-    for &(source, _) in CASES {
-        let output = reference::external(source, true);
-        assert_eq!(output["Models"]["More"], "no");
-        let mut models = reference::Models::new();
-        for witness in output["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-        {
-            assert!(
-                models.insert(
-                    witness["Value"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|atom| atom.as_str().unwrap().to_owned())
-                        .collect()
-                )
-            );
-        }
-        assert_eq!(
-            output["Models"]["Number"].as_u64().unwrap(),
-            models.len() as u64
-        );
-        assert_eq!(reference::native(&formula(source)), models, "{source}");
-    }
+    reference::original_sources_match_clingo_full_models(
+        CASES.iter().map(|&(source, _)| source),
+        formula,
+    );
 }

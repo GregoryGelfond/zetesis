@@ -18,10 +18,10 @@ use themelios_program::program::Program;
 use zetesis_domain::terminal;
 
 use crate::formula::Preparation;
-use crate::formula_ir::{LiteralIr, RuleIr};
+use crate::formula_facts::{Item, Items, SplitRoom};
 use crate::formula_support::{Counters, StorageLease};
 use crate::{AnalysisBasis, FormulaFailure, ProgramSite};
-use workspace::{Context, Scratch};
+use workspace::{Context, Lease, Scratch};
 
 pub(super) struct OriginalAnalysis {
     pub(super) program: Program,
@@ -38,78 +38,82 @@ pub(super) struct Partition {
 
 pub(super) struct Definitions {
     pub(super) original: OriginalAnalysis,
-    pub(super) deferred: Vec<RuleIr>,
+    /// The deferred rules and fact blocks, in item order.
+    pub(super) deferred: Items,
     pub(super) deferred_storage: StorageLease,
 }
 
-/// Named retained capacities of the certified flat rules. The enclosing owner
-/// already contains the vector header. Canonical component payload is shared;
-/// upstream source AST/provenance follows its separate logical copy policy.
-pub(super) fn deferred_bytes(rules: &Vec<RuleIr>) -> u128 {
-    rules.capacity() as u128 * size_of::<RuleIr>() as u128
-        + rules
-            .iter()
-            .map(|rule| {
-                rule.body.capacity() as u128 * size_of::<LiteralIr>() as u128
-                    + rule.origins.capacity() as u128 * size_of::<ProgramSite>() as u128
-            })
-            .sum::<u128>()
+/// Named retained capacities of the certified flat rules and deferred fact
+/// blocks. The enclosing owner already contains the sequence's header.
+/// Canonical component payload is shared; upstream source AST/provenance
+/// follows its separate logical copy policy.
+pub(super) fn deferred_bytes(items: &Items) -> u128 {
+    items.retained_bytes()
 }
 
 struct Selection {
     source: Program,
     analysis: themelios_analysis::Analysis,
+    /// One flag per item: nonzero moves it into the deferred program.
     selected: Scratch<u8>,
-    base: Scratch<RuleIr>,
-    deferred: Scratch<RuleIr>,
+    /// The room the move fills, reserved before it.
+    room: SplitRoom,
+    /// The deferred program's storage: the vectors reserved for what moves,
+    /// and the moving rules' bodies and origins, whose owner the move changes.
+    deferred: Lease,
+    /// The kept rules' and items' replacement vectors, admitted while the
+    /// vectors they replace are live. The base program takes them over at the
+    /// move, and this lease is then released, as the base program's own
+    /// storage is not leased.
+    kept: Lease,
 }
 
 pub(super) fn partition(mut preparation: Preparation) -> Result<Partition, FormulaFailure> {
-    let mut counters = Counters::resume(
-        std::mem::take(&mut preparation.accounting),
+    let mut accounting = std::mem::take(&mut preparation.accounting);
+    let cancellation = preparation.budget.cancellation().cloned();
+    let result = accounting.controlled::<_, FormulaFailure>(
+        cancellation.as_ref(),
         crate::grounding_observer::Work::default(),
-    )
-    .with_cancellation(preparation.budget.cancellation());
-    let selected = prepare(&mut preparation, &mut counters)?;
-    let Some(mut selected) = selected else {
-        preparation.accounting = counters.into_accounting();
-        return Ok(Partition {
-            base: preparation,
-            terminal: None,
-        });
-    };
-    // All allocations, component validation and movement permits precede these
-    // infallible moves. Each original IR occurrence remains present exactly once.
-    for (rule, selected_rule) in std::mem::take(&mut preparation.program.rules)
-        .into_iter()
-        .zip(&selected.selected.values)
-    {
-        if *selected_rule == 0 {
-            selected.base.values.push(rule);
-        } else {
-            selected.deferred.values.push(rule);
-        }
-    }
-    preparation.program.rules = selected.base.into_values();
-    let original = OriginalAnalysis {
-        program: std::mem::replace(&mut preparation.program.analyzed, selected.source),
-        analysis: std::mem::replace(&mut preparation.program.analysis, selected.analysis),
-        basis: preparation.program.analysis_basis,
-    };
-    let (deferred, mut deferred_storage) = selected.deferred.into_leased_values();
-    deferred_storage.observe(
-        usize::try_from(deferred_bytes(&deferred)).expect("admitted deferred capacity"),
         preparation.location,
-    )?;
-    drop(selected.selected);
-    preparation.accounting = counters.into_accounting();
+        |counters| {
+            let Some(selected) = prepare(&mut preparation, counters)? else {
+                return Ok(None);
+            };
+            // Every reservation precedes movement; each occurrence remains once.
+            let deferred = preparation
+                .program
+                .split_items(&selected.selected.values, selected.room);
+            drop(selected.kept);
+            let original = std::mem::replace(
+                &mut preparation.program.analyzed,
+                crate::formula_analysis::Summary::complete(selected.source),
+            )
+            .into_full(std::mem::replace(
+                &mut preparation.program.analysis,
+                selected.analysis,
+            ));
+            let original = OriginalAnalysis {
+                program: original.program,
+                analysis: original.analysis,
+                basis: preparation.program.analysis_basis,
+            };
+            let mut deferred_storage = selected.deferred.into_lease();
+            deferred_storage.observe(
+                usize::try_from(deferred_bytes(&deferred)).expect("admitted deferred capacity"),
+                preparation.location,
+            )?;
+            drop(selected.selected);
+            Ok(Some(Definitions {
+                original,
+                deferred,
+                deferred_storage,
+            }))
+        },
+    );
+    preparation.accounting = accounting;
     Ok(Partition {
         base: preparation,
-        terminal: Some(Definitions {
-            original,
-            deferred,
-            deferred_storage,
-        }),
+        terminal: result?,
     })
 }
 
@@ -129,15 +133,22 @@ fn prepare(
     {
         return Ok(None);
     }
+    // This is the one preparation consumer that requires every normalized
+    // source producer. Materialization is explicit and budgeted, after the
+    // unchanged partition eligibility gate and after constraint replacement.
+    let analyzed = program
+        .analyzed
+        .materialize(&mut preparation.budget, location)?;
     let mut domain_limits = zetesis_domain::Limits::default();
     domain_limits.max_work = domain_limits
         .max_work
         .min(limits.max_work.saturating_sub(counters.accounting.work));
-    let analysis = terminal::analyze(&program.analyzed, domain_limits);
-    counters.charge_work(u128::from(analysis.statistics().work), limits, location)?;
+    counters.poll(location)?;
+    let analysis = terminal::analyze(analyzed, domain_limits);
+    counters.absorb(u128::from(analysis.statistics().work), limits, location)?;
     if analysis.status() != terminal::Status::Complete
         || analysis.definitions().is_empty()
-        || !analysis.belongs_to(&program.analyzed)
+        || !analysis.belongs_to(analyzed)
     {
         return Ok(None);
     }
@@ -168,36 +179,40 @@ fn prepare(
         return Ok(None);
     }
     let (source, source_analysis) = source::base(
-        &program.analyzed,
+        analyzed,
         &definitions.values,
         &mut preparation.budget,
         &mut context,
     )?;
     drop(definitions);
-    let mut base = Scratch::new(&context)?;
-    let mut deferred = Scratch::new(&context)?;
-    let mut count = 0;
+    let mut deferred = Lease::new(&context)?;
+    let mut kept = Lease::new(&context)?;
+    let room = program.items().reserve_split(
+        &selected.values,
+        &mut context,
+        deferred.get_mut(),
+        kept.get_mut(),
+    )?;
+    // The moving rules' bodies and origins are live already; the move only
+    // changes their owner. The moved fact blocks are copies, reserved above.
     let mut nested_bytes = 0_u128;
-    for (selected_rule, rule) in selected.values.iter().zip(&program.rules) {
+    for (selected_item, item) in selected.values.iter().zip(program.items().iter()) {
         context.work()?;
-        if *selected_rule != 0 {
-            count += 1;
-            nested_bytes += rule.body.capacity() as u128 * size_of::<LiteralIr>() as u128
+        if *selected_item != 0
+            && let Item::Rule(_, rule) = item
+        {
+            nested_bytes += rule.body.capacity() as u128
+                * size_of::<crate::formula_ir::LiteralIr>() as u128
                 + rule.origins.capacity() as u128 * size_of::<ProgramSite>() as u128;
         }
     }
-    base.reserve(selected.values.len() - count, &mut context)?;
-    deferred.reserve(count, &mut context)?;
-    let retained = nested_bytes
-        + deferred.values.capacity() as u128 * size_of::<RuleIr>() as u128
-        + size_of::<Scratch<RuleIr>>() as u128;
-    let retained = usize::try_from(retained).map_err(|_| FormulaFailure::Limit {
+    let nested = usize::try_from(nested_bytes).map_err(|_| FormulaFailure::Limit {
         resource: crate::FormulaResource::SupportBytes,
-        observed: retained,
+        observed: nested_bytes,
         limit: limits.max_support_bytes as u128,
         location,
     })?;
-    deferred.retain_existing(retained, &context)?;
+    deferred.retain_existing(nested, &context)?;
     // One permitted read/move per original occurrence; no callbacks during
     // publication can expose a partially partitioned source owner.
     context
@@ -207,7 +222,8 @@ fn prepare(
         source,
         analysis: source_analysis,
         selected,
-        base,
+        room,
         deferred,
+        kept,
     }))
 }

@@ -84,13 +84,13 @@ impl Reading<'_> {
 }
 
 pub(crate) fn specialize(
-    program: &Program,
+    program: &crate::formula_analysis::Summary,
     owners: &Owners,
     facts: &mut FixedFacts<'_>,
     budget: &mut Budget,
     site: ProgramSite,
 ) -> Result<Replacements, FormulaFailure> {
-    with_policy(program, owners, facts, budget, site, POLICY)
+    with_policy(program.program(), owners, facts, budget, site, POLICY)
 }
 
 fn with_policy(
@@ -438,7 +438,12 @@ fn family(
         };
         // Only a flat anchor with two distinct named variables can project.
         // Its fixed rows still come from the same authoritative whole program.
-        let index = facts.read(reading.work).map_err(|_| Failure::Optional)?;
+        let index = facts
+            .read(reading.work, reading.budget, reading.site)
+            .map_err(|failure| match failure {
+                crate::formula_rewrite::FactFailure::Stopped(_) => Failure::Optional,
+                crate::formula_rewrite::FactFailure::Source(error) => Failure::Source(error),
+            })?;
         let Some(block) = block(literals, anchor, &variables, index, reading)? else {
             continue;
         };

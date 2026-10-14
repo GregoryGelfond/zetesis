@@ -1,7 +1,10 @@
-//! Both help views expose the shared public resource controls.
+//! The everyday help shows the everyday solving options, with the CPU or a GPU
+//! as the backend; the full help adds the algorithm choices, the GPU APIs by
+//! name and the memory allowance, whose default it states as a rule rather than
+//! as this host's figure.
 
 use clap::Parser;
-use zetesis_cli::{Options, Oracle};
+use zetesis_cli::{Backend, Options, Oracle};
 
 fn help(flag: &str) -> String {
     let error = Options::try_parse_from(["zetesis", flag]).unwrap_err();
@@ -23,7 +26,6 @@ fn default_help_shows_everyday_solving_options() {
         "--json",
         "--color",
         "--threads",
-        "--memory",
         "--time-limit",
         "--help",
         "--version",
@@ -34,6 +36,47 @@ fn default_help_shows_everyday_solving_options() {
         );
     }
     assert!(!short.contains("--oracle"));
+    assert!(!short.contains("--memory"));
+}
+
+#[test]
+fn everyday_help_offers_the_cpu_or_a_gpu() {
+    let short = help("--help");
+    let backend = short
+        .lines()
+        .find(|line| line.contains("--backend"))
+        .expect("the everyday help lists the backend");
+    assert!(backend.contains("cpu (the default) or gpu"), "{backend}");
+    assert!(!short.contains("metal") && !short.contains("vulkan"));
+}
+
+#[test]
+fn full_help_lists_every_backend_with_its_meaning() {
+    // From the vocabulary, so each API's scope and Vulkan's qualification
+    // limit are stated where the expert values are offered.
+    let full = help("--help-all");
+    for backend in Backend::ALL {
+        assert!(
+            full.lines().any(|line| {
+                line.split_whitespace().next() == Some(backend.label())
+                    && line.contains(backend.help())
+            }),
+            "missing {}",
+            backend.label()
+        );
+    }
+}
+
+#[test]
+fn full_help_states_the_memory_default_as_a_rule() {
+    let full = help("--help-all");
+    let memory = full
+        .split("--memory <SIZE>")
+        .nth(1)
+        .and_then(|rest| rest.split("\n      --").next())
+        .expect("the full help lists the memory allowance");
+    assert!(memory.contains("half of the memory available to the process"));
+    assert!(!memory.contains("[default:"), "{memory}");
 }
 
 #[test]

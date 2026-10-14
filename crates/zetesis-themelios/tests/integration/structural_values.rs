@@ -1,11 +1,12 @@
 //! Closed structures remain complete semantic atom and contribution identities.
 use crate::support::finite_bindings as reference;
+use crate::support::objective_plans;
 use reference::{Models, exhaustive, native};
-use std::collections::BTreeSet;
+use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::formula;
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
+use zetesis_reference_support::{admit, formula, resource_limits};
+use zetesis_themelios::{AdmissionOptions, ExpansionResource, FormulaLimits, admit_formula};
 fn expected(models: &[&[&str]]) -> Models {
     models
         .iter()
@@ -98,14 +99,7 @@ fn closed_sources_match_independent_complete_models() {
 fn full_structural_objective_keys_and_candidate_bounds_agree_for_every_model() {
     let p =
         formula("{p(f(1));p(f(2));q((1,))}.#minimize{2@1,X:p(X);2@1,f(1):p(f(2));-1@0,X:q(X)}.");
-    let plan = zetesis_themelios::objective_bound::ObjectivePlan::new(
-        p.theory(),
-        p.atoms(),
-        p.objectives(),
-        zetesis_themelios::objective_bound::ObjectivePlanLimits::default(),
-        &Cancellation::default(),
-    )
-    .unwrap();
+    let plan = objective_plans::exact(&p);
     let scores: Vec<_> = (0..1usize << p.atoms().len())
         .map(|bits| {
             let model = Model::from_positions(
@@ -180,13 +174,7 @@ fn unsupported_structural_sources_remain_refused() {
         "#const a=f(b).#const b=g(a).p(a).",
     ] {
         assert!(
-            admit_formula(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default()
-            )
-            .is_err(),
+            admit(source, &FormulaLimits::default()).is_err(),
             "{source}"
         );
     }
@@ -195,22 +183,7 @@ fn unsupported_structural_sources_remain_refused() {
 #[ignore = "requires clingo: closed structures match clingo; original structural sources with exact full models"]
 fn closed_structures_match_clingo() {
     for (source, wanted) in cases() {
-        let out = reference::external(source, true);
-        assert_eq!(out["Models"]["More"], "no");
-        let models: Models = out["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|c| c["Witnesses"].as_array().into_iter().flatten())
-            .map(|w| {
-                w["Value"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|a| a.as_str().unwrap().to_owned())
-                    .collect::<BTreeSet<_>>()
-            })
-            .collect();
+        let models = oracle::full_models(&reference::external(source, true));
         assert_eq!(models, wanted, "{source}");
         assert_eq!(native(&formula(source)), wanted);
     }
@@ -324,10 +297,7 @@ fn compound_payload_admission_refuses_with_original_location() {
     let failure = admit_formula(
         source.into(),
         AdmissionOptions::default(),
-        ExpansionLimits {
-            max_scalar_bytes: 1,
-            ..ExpansionLimits::default()
-        },
+        resource_limits::expansion(ExpansionResource::ScalarBytes, 1),
         FormulaLimits::default(),
     )
     .unwrap_err();
@@ -363,6 +333,27 @@ fn formula_values(
         let node = theory.view().node(index).unwrap();
         let truth = match node {
             zetesis_ferraris::NodeView::False => false,
+            zetesis_ferraris::NodeView::ExtremumCut(cut) => {
+                use zetesis_ferraris::ExtremumCutRule::{Prefix, Suffix};
+                match *cut.rule {
+                    Prefix(0) => false,
+                    Prefix(boundary) if boundary == cut.row.rank_count => true,
+                    Suffix(0) => true,
+                    Suffix(boundary) if boundary == cut.row.rank_count => false,
+                    rule => cut
+                        .row
+                        .conditions
+                        .iter()
+                        .zip(cut.row.ranks)
+                        .any(|(&child, &rank)| {
+                            let qualifies = match rule {
+                                Prefix(boundary) => rank < boundary,
+                                Suffix(boundary) => rank >= boundary,
+                            };
+                            qualifies && result[child]
+                        }),
+                }
+            }
             zetesis_ferraris::NodeView::Threshold(row) => {
                 row.conditions
                     .iter()

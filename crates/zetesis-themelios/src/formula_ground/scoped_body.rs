@@ -3,7 +3,8 @@
 //! A transient builder borrows complete Support and selects the shared source
 //! authority while owning its node table and aggregate cache. Objective rows use their explicit scratch
 //! ceilings even when filters or numeric selection later discard them. Rejected
-//! rule rows use the theory ceilings for their discarded validation scratch.
+//! rule rows with nested scopes or generators use the theory ceilings for
+//! their discarded validation scratch; flat rejected rows validate atom keys.
 //! Both share cumulative source work. Only final reachable objective Condition
 //! nodes consume the retained query ceiling. No roots, producers, coherence or
 //! support-guard completion from scratch reach the original program.
@@ -26,37 +27,37 @@ pub(super) struct ValidatedBody {
     root: usize,
 }
 
-pub(super) fn validate(
+pub(super) fn validate<'source>(
     literals: &[LiteralIr],
     binding: &Binding,
-    support: &Support<'_>,
-    context: &mut Context<'_, '_, '_>,
+    support: &Support<'source>,
+    context: &mut Context<'_, '_, 'source>,
 ) -> Result<ValidatedBody, FormulaFailure> {
     validate_with_purpose(literals, binding, support, context, Purpose::Objective)
 }
 
 /// Source activity uses the same complete scoped lowering as original-model
 /// queries, with theory scratch ceilings and no retained query publication.
-pub(crate) fn source_activity(
+pub(crate) fn source_activity<'source>(
     literals: &[LiteralIr],
     binding: &Binding,
-    support: &Support<'_>,
+    support: &Support<'source>,
     eligibility: &SourceEligibility,
-    context: &mut Context<'_, '_, '_>,
+    context: &mut Context<'_, '_, 'source>,
 ) -> Result<Activity, FormulaFailure> {
     validate_with_purpose(literals, binding, support, context, Purpose::Validation)?
         .source_activity(eligibility, context)
 }
 
-pub(super) fn validate_with_purpose(
+pub(super) fn validate_with_purpose<'source>(
     literals: &[LiteralIr],
     binding: &Binding,
-    support: &Support<'_>,
-    context: &mut Context<'_, '_, '_>,
+    support: &Support<'source>,
+    context: &mut Context<'_, '_, 'source>,
     purpose: Purpose,
 ) -> Result<ValidatedBody, FormulaFailure> {
-    // Empty validates its catalog before transferring the cumulative counters;
-    // every later Result path returns those counters to the caller unchanged.
+    // The builder borrows the cumulative account through every outcome,
+    // including an unwind during scoped lowering.
     let mut builder = Builder::empty(
         context.computation,
         context.limits,
@@ -70,7 +71,6 @@ pub(super) fn validate_with_purpose(
         builder.initialize(context.location)?;
         builder.body(literals, binding, context.location, support)
     })();
-    *context.counters = builder.counters;
     let root = result?;
     Ok(ValidatedBody {
         atoms: builder.catalog,
@@ -155,6 +155,21 @@ impl ValidatedBody {
                         Activity::Optional
                     }
                 }
+                Node::ExtremumCut(cut) => {
+                    let mut activity = match cut.endpoint_truth() {
+                        Some(true) => Activity::Required,
+                        Some(false) | None => Activity::Absent,
+                    };
+                    if cut.endpoint_truth().is_none() {
+                        for (&condition, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+                            context.counters.work(context.limits, context.location)?;
+                            if cut.qualifies(rank) {
+                                activity = activity.max(values.slice()[condition]);
+                            }
+                        }
+                    }
+                    activity
+                }
                 Node::Implies(left, right) => {
                     context
                         .counters
@@ -173,10 +188,12 @@ impl ValidatedBody {
     }
     /// Boolean implication is translated only for a complete original model.
     /// The same rewrite is invalid for frozen Ferraris reducts.
-    pub(super) fn condition(
-        self,
+    /// Select the complete backward-closed formula slice before translating it.
+    /// Physical numeric children remain selected even when a guard is constant.
+    fn ancestor_mask(
+        &self,
         context: &mut Context<'_, '_, '_>,
-    ) -> Result<PendingCondition, FormulaFailure> {
+    ) -> Result<Buffer<bool>, FormulaFailure> {
         let mut needed = Buffer::new(
             context.computation,
             context.limits,
@@ -201,6 +218,7 @@ impl ValidatedBody {
                 let row = match self.nodes.view().node(index).expect("owned formula node") {
                     Node::And(row) | Node::Or(row) => row,
                     Node::Threshold(row) => row.conditions,
+                    Node::ExtremumCut(cut) => cut.row.conditions,
                     Node::Implies(a, b) => {
                         pair = [a, b];
                         &pair
@@ -213,6 +231,14 @@ impl ValidatedBody {
                 }
             }
         }
+        Ok(needed)
+    }
+
+    pub(super) fn condition(
+        self,
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<PendingCondition, FormulaFailure> {
+        let needed = self.ancestor_mask(context)?;
         let mut mapping = Buffer::new(
             context.computation,
             context.limits,
@@ -262,6 +288,11 @@ impl ValidatedBody {
                 Node::Threshold(row) => {
                     mapping.slice_mut()[index] =
                         threshold::lower(row, mapping.slice(), &mut query, context)?;
+                    continue;
+                }
+                Node::ExtremumCut(cut) => {
+                    mapping.slice_mut()[index] =
+                        threshold::lower_extremum(cut, mapping.slice(), &mut query, context)?;
                     continue;
                 }
                 Node::Implies(left, right) => {

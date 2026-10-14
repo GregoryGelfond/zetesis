@@ -99,7 +99,7 @@ impl<'a> TerminalSession<'a> {
                     keyed_constraints: owner.keyed_constraints(),
                     key_analysis: owner.key_analysis(),
                     certificate_order: crate::countermodel::certificate_order(
-                        owner.base_analysis(),
+                        owner.base_analysis().classes(),
                         owner.base_analysis_basis(),
                     ),
                 };

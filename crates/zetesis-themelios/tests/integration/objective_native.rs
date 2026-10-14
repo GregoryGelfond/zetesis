@@ -4,6 +4,7 @@ use zetesis_core::{AtomCatalog, AtomPattern, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AdmissionLimits, FormulaParts, Interpretation, Node, NodeView, Theory};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score};
+use zetesis_reference_support::resource_limits;
 use zetesis_test_support::programs::nullary;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
@@ -127,10 +128,7 @@ fn copied_native_eligibility_preserves_candidate_bounds() {
 fn native_eligibility_obeys_the_operand_ceiling() {
     let fixture = Fixture::new();
     // Truth contributes two occurrences; the three-atom condition contributes three.
-    let limits = ObjectivePlanLimits {
-        max_operands: 5,
-        ..ObjectivePlanLimits::default()
-    };
+    let limits = resource_limits::objective_plan(ObjectiveBoundResource::Operands, 5);
     fixture.plan(limits).unwrap();
     let error = fixture
         .plan(ObjectivePlanLimits {

@@ -131,8 +131,12 @@ fn invalidates_shared_primitive(backend: GpuApi) {
     let mut lazy = crate::GpuLazyOracle::from_context(&context).unwrap();
     assert!(formula.context().same_instance(aggregate.context()));
     assert!(lazy.context().same_instance(aggregate.context()));
-    let empty =
-        zetesis_core::Program::new(vec![], zetesis_core::AdmissionLimits::default()).unwrap();
+    let empty = zetesis_core::Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        zetesis_core::AdmissionLimits::default(),
+    )
+    .unwrap();
     let empty_batch = lazy
         .check_batch(
             &empty,

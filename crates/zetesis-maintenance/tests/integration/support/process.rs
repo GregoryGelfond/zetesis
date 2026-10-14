@@ -19,7 +19,7 @@ const CAPTURE_BYTES: usize = 4 * 1024 * 1024;
 const CLEANUP_DEADLINE: Duration = Duration::from_secs(1);
 
 /// Bytes and exit evidence from an uninterrupted, completely captured child.
-pub struct Output {
+pub(crate) struct Output {
     /// Reaped direct-child exit status.
     pub status: Status,
     /// Complete standard output within the combined capture ceiling.
@@ -29,25 +29,25 @@ pub struct Output {
 }
 
 /// A direct-child exit; capture completion does not imply exit success.
-pub struct Status(Exit);
+pub(crate) struct Status(Exit);
 
 impl Status {
     /// Whether the child exited normally with code zero.
     #[must_use]
-    pub fn success(&self) -> bool {
+    pub(crate) fn success(&self) -> bool {
         self.code() == Some(0) && self.0.signal.is_none()
     }
 
     /// Normal exit code, absent for termination by a signal.
     #[must_use]
-    pub fn code(&self) -> Option<i32> {
+    pub(crate) fn code(&self) -> Option<i32> {
         self.0.code
     }
 }
 
 /// Restricted process builder whose settings are all transferred by this adapter.
 #[derive(Debug)]
-pub struct Command(std::process::Command);
+pub(crate) struct Command(std::process::Command);
 
 impl Command {
     /// Select an executable; an unqualified name is resolved by `env` using PATH.
@@ -56,20 +56,20 @@ impl Command {
     /// Refuses empty names and `=` in executable names, which `env` would parse
     /// as another environment assignment instead of an executable.
     #[must_use]
-    pub fn new(program: impl AsRef<OsStr>) -> Self {
+    pub(crate) fn new(program: impl AsRef<OsStr>) -> Self {
         let program = program.as_ref();
         assert!(!program.is_empty() && !program.as_bytes().contains(&b'='));
         Self(std::process::Command::new(program))
     }
 
     /// Append one literal argument without shell interpolation.
-    pub fn arg(&mut self, argument: impl AsRef<OsStr>) -> &mut Self {
+    pub(crate) fn arg(&mut self, argument: impl AsRef<OsStr>) -> &mut Self {
         self.0.arg(argument);
         self
     }
 
     /// Append literal arguments without shell interpolation.
-    pub fn args<I, S>(&mut self, arguments: I) -> &mut Self
+    pub(crate) fn args<I, S>(&mut self, arguments: I) -> &mut Self
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
@@ -79,7 +79,7 @@ impl Command {
     }
 
     /// Set the absolute working directory used by the capture library.
-    pub fn current_dir(&mut self, directory: impl AsRef<Path>) -> &mut Self {
+    pub(crate) fn current_dir(&mut self, directory: impl AsRef<Path>) -> &mut Self {
         self.0.current_dir(directory);
         self
     }
@@ -88,7 +88,7 @@ impl Command {
     ///
     /// # Panics
     /// Refuses empty keys or keys containing `=` or NUL.
-    pub fn env(&mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) -> &mut Self {
+    pub(crate) fn env(&mut self, key: impl AsRef<OsStr>, value: impl AsRef<OsStr>) -> &mut Self {
         check_key(key.as_ref());
         self.0.env(key, value);
         self
@@ -98,7 +98,7 @@ impl Command {
     ///
     /// # Panics
     /// Refuses empty keys or keys containing `=` or NUL.
-    pub fn env_remove(&mut self, key: impl AsRef<OsStr>) -> &mut Self {
+    pub(crate) fn env_remove(&mut self, key: impl AsRef<OsStr>) -> &mut Self {
         check_key(key.as_ref());
         self.0.env_remove(key);
         self
@@ -108,7 +108,7 @@ impl Command {
     ///
     /// # Panics
     /// Fails the test on start refusal, interrupted capture or unresolved cleanup.
-    pub fn bounded_output(&mut self) -> Output {
+    pub(crate) fn bounded_output(&mut self) -> Output {
         let capture = capture(
             self,
             Limits {
@@ -138,7 +138,7 @@ impl Command {
 /// cleanup failures remain in the returned capture. Any abandoned direct-child
 /// ownership is explicitly identified in the failure message.
 #[must_use]
-pub fn capture(command: &Command, limits: Limits) -> Capture {
+pub(crate) fn capture(command: &Command, limits: Limits) -> Capture {
     let mut arguments = Vec::new();
     for (key, value) in command.0.get_envs() {
         if value.is_none() {

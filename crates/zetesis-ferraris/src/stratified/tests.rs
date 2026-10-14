@@ -1,17 +1,8 @@
 //! Independent reduct agreement and complete-certificate boundaries.
 
 use super::*;
+use crate::test_support::theory;
 use crate::{AdmissionLimits, FormulaParts, Limits, Node, OperandSpan};
-
-fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(
-        atoms,
-        FormulaParts::new(nodes, vec![]).unwrap(),
-        roots,
-        AdmissionLimits::default(),
-    )
-    .unwrap()
-}
 
 fn plan(theory: &Theory) -> StratifiedPlan {
     StratifiedPlan::compile(
@@ -509,17 +500,25 @@ fn final_evaluation_cannot_certify_an_invalid_closure() {
     let owner = theory(1, vec![Node::atom(0)], vec![0]);
     let wrong = Interpretation::new(&owner, []).unwrap();
     let cancellation = Cancellation::default();
-    let mut budget = Budget {
-        limits: StratifiedPlanLimits::default(),
-        cancellation: &cancellation,
-        statistics: StratifiedPlanStatistics::default(),
-        current_bytes: 0,
-    };
+    let limits = StratifiedPlanLimits::default();
+    let mut statistics = StratifiedPlanStatistics::default();
+    let metered = cancellation.metered(limits.max_work, |meter| {
+        evaluate::validate(
+            &wrong,
+            &mut Budget {
+                limits,
+                cancellation: &cancellation,
+                meter,
+                statistics: &mut statistics,
+                current_bytes: 0,
+            },
+        )
+    });
     assert_eq!(
-        evaluate::validate(&wrong, &mut budget),
+        metered.result,
         Err(StratifiedError::InvalidClosure { root: 0 })
     );
-    assert_eq!(budget.statistics.retained_bytes, 0);
+    assert_eq!(statistics.retained_bytes, 0);
 }
 
 #[test]
@@ -539,4 +538,100 @@ fn deep_shared_bodies_do_not_require_recursive_walks() {
     let complete = plan(&owner);
     assert_eq!(complete.consequences().atoms().collect::<Vec<_>>(), [1]);
     assert!(complete.statistics().work < 100 * owner.nodes().len() as u64);
+}
+
+#[test]
+fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
+    // Seven charged operations is not a metered boundary. The tick's own
+    // report is returned as a value so the exit leaves it alone.
+    let tick = |stop: bool| {
+        let cancellation = Cancellation::default();
+        let limits = StratifiedPlanLimits {
+            max_work: 7,
+            ..StratifiedPlanLimits::default()
+        };
+        let mut statistics = StratifiedPlanStatistics::default();
+        cancellation
+            .metered(limits.max_work, |meter| {
+                for _ in 0..7 {
+                    meter.charge().unwrap();
+                }
+                if stop {
+                    cancellation.cancel();
+                }
+                Ok::<_, StratifiedError>(
+                    Budget {
+                        limits,
+                        cancellation: &cancellation,
+                        meter,
+                        statistics: &mut statistics,
+                        current_bytes: 0,
+                    }
+                    .tick(),
+                )
+            })
+            .result
+            .unwrap()
+    };
+    assert_eq!(
+        tick(false),
+        Err(StratifiedError::Limit {
+            resource: StratifiedResource::Work,
+            observed: 8,
+            limit: 7,
+        })
+    );
+    assert_eq!(tick(true), Err(StratifiedError::Stopped(Stop::Cancelled)));
+}
+
+#[test]
+fn a_ceiling_refusal_settles_to_a_requested_stop() {
+    let refused = |stop: bool| {
+        let cancellation = Cancellation::default();
+        cancellation
+            .metered(u64::MAX, |_| {
+                if stop {
+                    cancellation.cancel();
+                }
+                Budget::ceiling(StratifiedResource::Dependencies, 2, 1)
+            })
+            .result
+    };
+    assert_eq!(
+        refused(false),
+        Err(StratifiedError::Limit {
+            resource: StratifiedResource::Dependencies,
+            observed: 2,
+            limit: 1,
+        })
+    );
+    assert_eq!(
+        refused(true),
+        Err(StratifiedError::Stopped(Stop::Cancelled))
+    );
+}
+
+#[test]
+fn plan_errors_classify_resource_refusals() {
+    use zetesis_cpu::Refusal;
+    for refusal in [
+        StratifiedError::Limit {
+            resource: StratifiedResource::Bytes,
+            observed: 2,
+            limit: 1,
+        },
+        StratifiedError::Overflow,
+        StratifiedError::Stopped(Stop::Allocation),
+    ] {
+        assert!(refusal.is_resource_refusal(), "{refusal:?}");
+    }
+    for shape in [
+        StratifiedError::UnsupportedRoot { root: 0 },
+        StratifiedError::UnsupportedBody { root: 0, body: 1 },
+        StratifiedError::NegativeCycle { atom: 0, body: 1 },
+        StratifiedError::InvalidClosure { root: 0 },
+        StratifiedError::Stopped(Stop::Cancelled),
+    ] {
+        assert!(!shape.is_resource_refusal(), "{shape:?}");
+    }
 }

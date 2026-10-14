@@ -11,6 +11,245 @@ mod slot;
 
 pub use slot::{CancellationRun, CancellationSlot, CancellationSlotError};
 
+/// The most operations a metered computation charges between two observations
+/// of its cancellation and deadline flags. A poll reads up to three shared
+/// flags; reading them once per this many operations instead of at every
+/// operation takes that read out of per-node loops, while at most
+/// `POLL_INTERVAL - 1` further operations can follow a requested stop.
+pub const POLL_INTERVAL: u64 = 256;
+
+/// Whether admitting `amount` operations after `charged` contains an
+/// observation boundary. Operation numbers are zero-based multiples of
+/// [`POLL_INTERVAL`]. A zero amount admits nothing and is never due.
+/// Computes no counter sum, so the decision cannot overflow. This is a count
+/// boundary; it makes no promise about wall-clock latency or unmetered work.
+#[must_use]
+pub const fn poll_due(charged: u64, amount: u64) -> bool {
+    let offset = charged % POLL_INTERVAL;
+    amount != 0 && (offset == 0 || POLL_INTERVAL - offset < amount)
+}
+
+/// Why a metered computation could not charge another operation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ChargeError {
+    /// Control requested a stop or the deadline expired. A stop takes
+    /// precedence over the work limit.
+    Stopped(Stop),
+    /// The computation has charged every operation its work limit admits.
+    WorkLimit,
+}
+
+/// An error a metered operation reports, classified so that a requested stop
+/// takes precedence over every resource refusal at the operation's exit
+/// ([`Cancellation::metered`]).
+pub trait Refusal: Sized {
+    /// Whether this error refuses a resource: work, storage, a named ceiling,
+    /// a size the host cannot represent, or an allocation. Errors about the
+    /// program's shape, identity or invariants are not resource refusals.
+    fn is_resource_refusal(&self) -> bool;
+
+    /// This error type's report of a requested stop.
+    fn from_stop(stop: Stop) -> Self;
+}
+
+impl Refusal for Stop {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::WorkLimit
+            | Self::RoundLimit
+            | Self::StorageLimit
+            | Self::DerivedAtomLimit
+            | Self::CandidateLimit
+            | Self::CarrierLimit
+            | Self::Allocation => true,
+            Self::Cancelled | Self::Deadline | Self::WrongProgram | Self::InvalidProgram => false,
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        stop
+    }
+}
+
+impl ChargeError {
+    /// The stop reporting this refusal: the requested stop, or
+    /// [`Stop::WorkLimit`] for an exhausted work limit.
+    #[must_use]
+    pub const fn into_stop(self) -> Stop {
+        match self {
+            Self::Stopped(stop) => stop,
+            Self::WorkLimit => Stop::WorkLimit,
+        }
+    }
+}
+
+/// The error a settled operation reports: a requested stop when `error` refuses
+/// a resource and the flags hold one, otherwise `error` itself.
+#[cold]
+#[inline(never)]
+fn settled<E: Refusal>(poll: CancellationPoll<'_>, error: E) -> E {
+    if error.is_resource_refusal()
+        && let Err(stop) = poll.poll()
+    {
+        return E::from_stop(stop);
+    }
+    error
+}
+
+/// The metered charge behind [`Meter::charge`]: observe control at a boundary of
+/// `charged`, observe it again before refusing the limit, and count an admitted
+/// charge.
+#[inline]
+fn metered_charge(
+    charged: &mut u64,
+    limit: u64,
+    poll: impl Fn() -> Result<(), Stop>,
+) -> Result<(), ChargeError> {
+    if poll_due(*charged, 1) {
+        poll().map_err(ChargeError::Stopped)?;
+    }
+    if *charged >= limit {
+        // A requested stop takes precedence over the work limit.
+        poll().map_err(ChargeError::Stopped)?;
+        return Err(ChargeError::WorkLimit);
+    }
+    *charged += 1;
+    Ok(())
+}
+
+/// One metered operation's charged work, its local work limit and its view of
+/// control.
+///
+/// A meter exists only inside [`Cancellation::metered`], which settles the
+/// operation's outcome where it returns, so an operation that charges through
+/// a meter always gives a requested stop precedence over its resource
+/// refusals. A charge costs a boundary test and a limit test. The view of
+/// control is borrowed in place and read only at a boundary. The count sits
+/// between two padding words that are never read, so no paired load can
+/// combine it with another value: on aarch64 such a load cannot be forwarded
+/// from the previous charge's pending store, and every charge in a per-node
+/// loop would wait for that store to retire.
+///
+/// A metered operation that runs another metered operation's body passes it
+/// this meter. The nested work then counts toward this operation's limit, the
+/// cadence of observations continues across the boundary, and this
+/// operation's exit settles both. An operation of another arrangement, which
+/// observes control by its own rule and reports the work it charged, runs
+/// under [`Self::remaining`] and is counted by [`Self::absorb`].
+#[derive(Debug)]
+pub struct Meter<'a> {
+    count: Isolated,
+    limit: u64,
+    poll: CancellationPoll<'a>,
+}
+
+/// A count whose neighbouring words are its own padding.
+#[derive(Debug)]
+#[repr(C)]
+struct Isolated {
+    _before: u64,
+    value: u64,
+    _after: u64,
+}
+
+impl<'a> Meter<'a> {
+    const fn new(poll: CancellationPoll<'a>, limit: u64) -> Self {
+        Self {
+            count: Isolated {
+                _before: 0,
+                value: 0,
+                _after: 0,
+            },
+            limit,
+            poll,
+        }
+    }
+
+    /// Charge one operation. Control is observed first when the operations
+    /// charged so far complete a run of [`POLL_INTERVAL`], so an operation that
+    /// charges each of its steps observes it before its first step and at least
+    /// once every [`POLL_INTERVAL`] steps. At the limit control is observed again
+    /// before refusing, so a requested stop takes precedence over the work
+    /// limit. An admitted charge counts the operation; a refused one does not.
+    ///
+    /// # Errors
+    /// [`ChargeError::Stopped`] when an observation finds a requested stop or an
+    /// expired deadline; otherwise [`ChargeError::WorkLimit`] at the limit.
+    #[inline]
+    pub fn charge(&mut self) -> Result<(), ChargeError> {
+        // The closure borrows the view in place; it is read only at a boundary.
+        metered_charge(&mut self.count.value, self.limit, || self.poll.poll())
+    }
+
+    /// Operations admitted so far.
+    #[must_use]
+    #[inline]
+    pub const fn charged(&self) -> u64 {
+        self.count.value
+    }
+
+    /// The operation's work limit.
+    #[must_use]
+    #[inline]
+    pub const fn limit(&self) -> u64 {
+        self.limit
+    }
+
+    /// Operations the limit still admits: the work limit to give a nested
+    /// operation of another arrangement, whose reported work [`Self::absorb`]
+    /// then counts. The count never exceeds the limit (an admitted charge stops
+    /// at it, and an absorb counts at most up to it), so this never underflows.
+    #[must_use]
+    #[inline]
+    pub const fn remaining(&self) -> u64 {
+        self.limit - self.count.value
+    }
+
+    /// Count the operations a nested operation of another arrangement reports
+    /// having charged under the allowance [`Self::remaining`] gave it. That
+    /// operation observed control by its own rule; this meter's cadence resumes
+    /// from the new count, so its next observation follows within
+    /// [`POLL_INTERVAL`] charges.
+    ///
+    /// # Errors
+    /// When `nested` exceeds the remaining allowance, the nested operation
+    /// overran the limit it was given. Its work was done, so the count reaches
+    /// the limit and the operation can charge nothing more; then control is
+    /// observed, as for a refused charge, and [`ChargeError::WorkLimit`] is
+    /// reported otherwise.
+    pub fn absorb(&mut self, nested: u64) -> Result<(), ChargeError> {
+        if nested > self.remaining() {
+            self.count.value = self.limit;
+            // A requested stop takes precedence over the work limit.
+            self.poll.poll().map_err(ChargeError::Stopped)?;
+            return Err(ChargeError::WorkLimit);
+        }
+        self.count.value += nested;
+        Ok(())
+    }
+
+    /// Observe control now, as [`Cancellation::poll`] does, for example before
+    /// a fallible reservation.
+    ///
+    /// # Errors
+    /// Returns cancellation first, otherwise an expired deadline.
+    #[inline]
+    pub fn poll(&self) -> Result<(), Stop> {
+        self.poll.poll()
+    }
+}
+
+/// A metered operation's settled outcome and the work it charged.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use]
+pub struct Metered<T, E> {
+    /// The operation's outcome, with a resource refusal replaced by a stop
+    /// requested before the operation returned.
+    pub result: Result<T, E>,
+    /// Operations the meter admitted, on every outcome.
+    pub charged: u64,
+}
+
 /// Shared cancellation and an optional immutable deadline. Clones observe the
 /// same flags. A deadline is observed the way cancellation is: a timer thread
 /// sets an expiry flag when the deadline passes, and a poll reads flags only,
@@ -51,6 +290,28 @@ impl Cancellation {
     #[inline]
     pub fn poll(&self) -> Result<(), Stop> {
         self.polling().poll()
+    }
+
+    /// Run one metered operation under a work `limit` and settle its outcome
+    /// where it returns: when the operation refuses a resource
+    /// ([`Refusal::is_resource_refusal`]), control is observed and a requested
+    /// stop is reported instead. Results and other errors pass through unread.
+    /// The operation receives the only meter it can charge, so every charge is
+    /// settled at this one exit.
+    pub fn metered<'a, T, E: Refusal>(
+        &'a self,
+        limit: u64,
+        operation: impl FnOnce(&mut Meter<'a>) -> Result<T, E>,
+    ) -> Metered<T, E> {
+        let poll = self.polling();
+        let mut meter = Meter::new(poll, limit);
+        let outcome = operation(&mut meter);
+        Metered {
+            // Only an error leaves the inlined path, so a hot operation's
+            // success costs one discriminant test.
+            result: outcome.map_err(|error| settled(poll, error)),
+            charged: meter.charged(),
+        }
     }
 
     /// Borrow the immutable handle shape once for repeated boundary polls.
@@ -269,6 +530,36 @@ mod tests {
     use std::sync::mpsc;
     use std::time::Duration;
 
+    #[test]
+    fn charge_ranges_observe_exactly_the_contained_boundaries() {
+        for charged in 0..1024 {
+            for amount in 0..=1024 {
+                let boundary = u128::from(charged).div_ceil(u128::from(POLL_INTERVAL))
+                    * u128::from(POLL_INTERVAL);
+                assert_eq!(
+                    poll_due(charged, amount),
+                    boundary < u128::from(charged) + u128::from(amount),
+                    "charged={charged}, amount={amount}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn boundary_decisions_do_not_overflow_at_the_counter_limit() {
+        for charged in [0, 1, u64::MAX - 256, u64::MAX - 1, u64::MAX] {
+            for amount in [0, 1, 255, 256, 257, u64::MAX] {
+                let boundary = u128::from(charged).div_ceil(u128::from(POLL_INTERVAL))
+                    * u128::from(POLL_INTERVAL);
+                assert_eq!(
+                    poll_due(charged, amount),
+                    boundary < u128::from(charged) + u128::from(amount),
+                    "charged={charged}, amount={amount}"
+                );
+            }
+        }
+    }
+
     fn wait_for_expiry(cancellation: &Cancellation) {
         let deadline = &cancellation.deadline.as_ref().unwrap().deadline;
         let timeout = Instant::now() + Duration::from_secs(5);
@@ -277,6 +568,191 @@ mod tests {
         while !deadline.expired.load(Ordering::Relaxed) {
             assert!(Instant::now() < timeout, "deadline timer did not expire");
             thread::sleep(Duration::from_millis(1));
+        }
+    }
+
+    /// Charge once through a meter that has admitted `charged` operations under
+    /// `limit`; returns the result and the count after it.
+    fn charge_from(
+        cancellation: &Cancellation,
+        charged: u64,
+        limit: u64,
+    ) -> (Result<(), ChargeError>, u64) {
+        let mut meter = Meter {
+            count: Isolated {
+                _before: 0,
+                value: charged,
+                _after: 0,
+            },
+            limit,
+            poll: cancellation.polling(),
+        };
+        let result = meter.charge();
+        (result, meter.charged())
+    }
+
+    #[test]
+    fn charges_observe_a_stop_only_at_metered_boundaries() {
+        let cancellation = Cancellation::default();
+        cancellation.cancel();
+        for charged in 0..=3 * POLL_INTERVAL {
+            let expected = if charged.is_multiple_of(POLL_INTERVAL) {
+                (Err(ChargeError::Stopped(Stop::Cancelled)), charged)
+            } else {
+                (Ok(()), charged + 1)
+            };
+            assert_eq!(
+                charge_from(&cancellation, charged, u64::MAX),
+                expected,
+                "{charged}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
+        let cancellation = Cancellation::default();
+        cancellation.cancel();
+        // Seven is not a boundary, so only the precedence observation sees the stop.
+        assert_eq!(
+            charge_from(&cancellation, 7, 7),
+            (Err(ChargeError::Stopped(Stop::Cancelled)), 7)
+        );
+    }
+
+    #[test]
+    fn the_work_limit_refuses_without_counting() {
+        let cancellation = Cancellation::default();
+        assert_eq!(
+            charge_from(&cancellation, 7, 7),
+            (Err(ChargeError::WorkLimit), 7)
+        );
+        assert_eq!(
+            charge_from(&cancellation, 0, 0),
+            (Err(ChargeError::WorkLimit), 0)
+        );
+    }
+
+    #[test]
+    fn an_admitted_charge_counts_its_operation() {
+        let cancellation = Cancellation::default();
+        assert_eq!(charge_from(&cancellation, 6, 7), (Ok(()), 7));
+    }
+
+    #[test]
+    fn nested_work_counts_within_the_remaining_allowance() {
+        let cancellation = Cancellation::default();
+        let metered = cancellation.metered(10, |meter| {
+            for _ in 0..3 {
+                meter.charge().unwrap();
+            }
+            assert_eq!(meter.remaining(), 7);
+            meter.absorb(7).map_err(ChargeError::into_stop)
+        });
+        assert_eq!(metered.result, Ok(()));
+        assert_eq!(metered.charged, 10);
+    }
+
+    #[test]
+    fn an_overrun_absorb_counts_up_to_the_limit() {
+        // The refusal is returned as a value, so the exit leaves it alone.
+        let cancellation = Cancellation::default();
+        let metered = cancellation.metered(10, |meter| {
+            for _ in 0..3 {
+                meter.charge().unwrap();
+            }
+            Ok::<_, Stop>((meter.absorb(8), meter.remaining()))
+        });
+        assert_eq!(metered.result, Ok((Err(ChargeError::WorkLimit), 0)));
+        assert_eq!(metered.charged, 10);
+    }
+
+    #[test]
+    fn an_overrun_absorb_reports_a_requested_stop() {
+        // The refusal is returned as a value, so the exit leaves it alone.
+        let cancellation = Cancellation::default();
+        let metered = cancellation.metered(10, |meter| {
+            cancellation.cancel();
+            Ok::<_, Stop>(meter.absorb(11))
+        });
+        assert_eq!(
+            metered.result,
+            Ok(Err(ChargeError::Stopped(Stop::Cancelled)))
+        );
+        assert_eq!(metered.charged, 10);
+    }
+
+    /// The settled outcome of an operation that returns `outcome`, with a stop
+    /// requested inside it when `stop` holds.
+    fn metered_outcome(stop: bool, outcome: Result<u8, Stop>) -> Result<u8, Stop> {
+        let cancellation = Cancellation::default();
+        cancellation
+            .metered(u64::MAX, |_| {
+                if stop {
+                    cancellation.cancel();
+                }
+                outcome
+            })
+            .result
+    }
+
+    #[test]
+    fn a_requested_stop_settles_a_resource_refusal() {
+        assert_eq!(
+            metered_outcome(false, Err(Stop::StorageLimit)),
+            Err(Stop::StorageLimit)
+        );
+        assert_eq!(
+            metered_outcome(true, Err(Stop::StorageLimit)),
+            Err(Stop::Cancelled)
+        );
+    }
+
+    #[test]
+    fn settling_leaves_results_and_shape_errors_alone() {
+        assert_eq!(metered_outcome(true, Ok(3)), Ok(3));
+        for shape in [Stop::WrongProgram, Stop::InvalidProgram] {
+            assert_eq!(metered_outcome(true, Err(shape)), Err(shape));
+        }
+    }
+
+    #[test]
+    fn a_metered_operation_reports_its_work_on_every_outcome() {
+        let cancellation = Cancellation::default();
+        let metered = cancellation.metered(5, |meter| {
+            while meter.charge().is_ok() {}
+            Err::<(), _>(Stop::WorkLimit)
+        });
+        assert_eq!(metered.result, Err(Stop::WorkLimit));
+        assert_eq!(metered.charged, 5);
+    }
+
+    #[test]
+    fn the_count_has_padding_on_both_sides() {
+        assert_eq!(std::mem::offset_of!(Isolated, value), size_of::<u64>());
+        assert_eq!(size_of::<Isolated>(), 3 * size_of::<u64>());
+    }
+
+    #[test]
+    fn stops_classify_resource_refusals() {
+        for stop in [
+            Stop::WorkLimit,
+            Stop::RoundLimit,
+            Stop::StorageLimit,
+            Stop::DerivedAtomLimit,
+            Stop::CandidateLimit,
+            Stop::CarrierLimit,
+            Stop::Allocation,
+        ] {
+            assert!(stop.is_resource_refusal(), "{stop:?}");
+        }
+        for stop in [
+            Stop::Cancelled,
+            Stop::Deadline,
+            Stop::WrongProgram,
+            Stop::InvalidProgram,
+        ] {
+            assert!(!stop.is_resource_refusal(), "{stop:?}");
         }
     }
 

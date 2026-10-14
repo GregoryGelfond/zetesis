@@ -1,3 +1,6 @@
+mod preparation;
+mod variable;
+
 use super::*;
 
 fn check(source: &str, certified: bool, passing: usize) {
@@ -14,7 +17,7 @@ fn check(source: &str, certified: bool, passing: usize) {
         )
         .unwrap();
         assert_eq!(
-            join.select_total_constraint(rule, computation, &limits, counters)
+            join.select_total_body(rule, computation, &limits, counters)
                 .unwrap(),
             certified
         );
@@ -202,7 +205,7 @@ fn reached_intermediate_overflow_remains_fatal() {
             .unwrap();
             assert!(
                 !join
-                    .select_total_constraint(rule, computation, &limits, counters)
+                    .select_total_body(rule, computation, &limits, counters)
                     .unwrap()
             );
             assert!(matches!(
@@ -234,7 +237,7 @@ fn a_total_domain_preserves_incomplete_prefix_errors() {
         let mut join =
             Join::rule(rule, support, computation, &limits, &mut budget, counters).unwrap();
         assert!(
-            join.select_total_constraint(rule, computation, &limits, counters)
+            join.select_total_body(rule, computation, &limits, counters)
                 .unwrap()
         );
         assert_eq!(

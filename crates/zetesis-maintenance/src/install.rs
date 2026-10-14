@@ -56,6 +56,67 @@ pub fn check(installer: &str, guide: &str, metadata: &[u8]) -> Result<(), Error>
     )
 }
 
+/// The constant through which the CLI names the directory of its GPU sibling.
+const LIBEXEC_CONSTANT: &str = "LIBEXEC";
+
+/// Check that the installer places the GPU sibling in the directory the CLI's
+/// front looks in, and that each document names that directory.
+///
+/// `installer` is the text of `scripts/install.sh`, `front` the text of the
+/// CLI's `sibling.rs`, whose `LIBEXEC` constant is read as a parsed item, and
+/// `documents` the (path, text) of each document that must name the directory
+/// in a code span, alone or as the start of a path.
+///
+/// # Errors
+/// Returns [`Error::Invalid`] naming the first disagreement, an unreadable
+/// name or a document that does not name the directory.
+pub fn check_sibling_directory(
+    installer: &str,
+    front: &str,
+    documents: &[(&str, &str)],
+) -> Result<(), Error> {
+    let placed = list(installer, "libexec")?;
+    let looked_in = libexec(front)?;
+    require(
+        placed.len() == 1 && placed.contains(&looked_in),
+        format!(
+            "the installer places the GPU sibling in {placed:?}, but the front looks in {looked_in:?}"
+        ),
+    )?;
+    for (path, text) in documents {
+        require(
+            text.contains(&format!("`{looked_in}`")) || text.contains(&format!("`{looked_in}/")),
+            format!("{path} does not name the {looked_in} directory"),
+        )?;
+    }
+    Ok(())
+}
+
+/// The string value of the CLI's `LIBEXEC` constant in `front`.
+fn libexec(front: &str) -> Result<String, Error> {
+    let file = syn::parse_file(front)
+        .map_err(|error| Error::Invalid(format!("the CLI's sibling.rs does not parse: {error}")))?;
+    file.items
+        .iter()
+        .find_map(|item| match item {
+            syn::Item::Const(constant) if constant.ident == LIBEXEC_CONSTANT => {
+                match constant.expr.as_ref() {
+                    syn::Expr::Lit(syn::ExprLit {
+                        lit: syn::Lit::Str(value),
+                        ..
+                    }) => Some(value.value()),
+                    _ => None,
+                }
+            }
+            _ => None,
+        })
+        .ok_or_else(|| {
+            Error::Invalid(format!(
+                "the CLI's sibling.rs declares no {LIBEXEC_CONSTANT} string constant"
+            ))
+        })
+}
+
 /// The words of the installer's one `NAME='…'` assignment.
 fn list(installer: &str, name: &str) -> Result<BTreeSet<String>, Error> {
     let prefix = format!("{name}='");

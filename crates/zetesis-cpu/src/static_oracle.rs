@@ -4,7 +4,7 @@ use zetesis_core::{
     AtomId, GroundProgram, GroundRule, Interpretation, Program, Seed, SeedView, WordError,
 };
 
-use crate::{Cancellation, Limits, Stop};
+use crate::{Cancellation, ChargeError, Limits, Meter, Stop};
 
 #[cfg(test)]
 mod tests;
@@ -131,20 +131,15 @@ fn decoding_stop(error: &WordError) -> Stop {
     }
 }
 
-struct Work<'a> {
+struct Work<'m, 'c> {
     limits: Limits,
-    cancellation: &'a Cancellation,
+    meter: &'m mut Meter<'c>,
     statistics: StaticStatistics,
 }
 
-impl Work<'_> {
+impl Work<'_, '_> {
     fn tick(&mut self) -> Result<(), Stop> {
-        self.cancellation.poll()?;
-        if self.statistics.work >= self.limits.max_work {
-            return Err(Stop::WorkLimit);
-        }
-        self.statistics.work += 1;
-        Ok(())
+        self.meter.charge().map_err(ChargeError::into_stop)
     }
 
     fn words(&mut self, count: usize) -> Result<Vec<u32>, Stop> {
@@ -168,7 +163,7 @@ fn insert(words: &mut [u32], atom: AtomId) {
     words[(atom / u32::BITS) as usize] |= 1 << (atom % u32::BITS);
 }
 
-fn all_present(words: &[u32], atoms: &[AtomId], work: &mut Work<'_>) -> Result<bool, Stop> {
+fn all_present(words: &[u32], atoms: &[AtomId], work: &mut Work<'_, '_>) -> Result<bool, Stop> {
     for &atom in atoms {
         work.tick()?;
         if !contains(words, atom) {
@@ -178,7 +173,7 @@ fn all_present(words: &[u32], atoms: &[AtomId], work: &mut Work<'_>) -> Result<b
     Ok(true)
 }
 
-fn enabled(rule: &GroundRule, frozen: &[u32], work: &mut Work<'_>) -> Result<bool, Stop> {
+fn enabled(rule: &GroundRule, frozen: &[u32], work: &mut Work<'_, '_>) -> Result<bool, Stop> {
     if !all_present(frozen, rule.gate_true(), work)? {
         return Ok(false);
     }
@@ -198,9 +193,12 @@ fn enabled(rule: &GroundRule, frozen: &[u32], work: &mut Work<'_>) -> Result<boo
 /// occurs here; this is the explicit static CPU profile.
 ///
 /// [`Limits::max_work`] bounds the operations listed in [`StaticStatistics::work`].
-/// Cancellation and deadlines are polled before each charged operation, before
-/// invocation validation, and before returning a completed result. The atom
-/// limit bounds distinct consequences, not the graph's already compiled carrier.
+/// Cancellation and deadlines are polled before invocation validation, at
+/// metered boundaries of the charged operations (at most
+/// [`POLL_INTERVAL`](crate::POLL_INTERVAL) apart), before reporting any
+/// resource refusal (work, consequence limit or allocation), and before
+/// returning a completed result. The atom limit
+/// bounds distinct consequences, not the graph's already compiled carrier.
 ///
 /// # Errors
 /// Returns [`Stop`] for foreign program identity, cancellation, deadline, work or
@@ -218,8 +216,8 @@ pub fn check_static(
 /// Check an owned or shared selection through the same static reduct checker.
 /// The view borrows its true atoms; no seed payload or tree is materialized.
 /// Core-minted entries resolve by checked gate position; manual atoms use
-/// canonical lookup. Both retain the same per-entry work/poll charge and program
-/// identity check as [`check_static`].
+/// canonical lookup. Both retain the same per-entry work charge, metered polling
+/// and program identity check as [`check_static`].
 ///
 /// # Errors
 /// Returns the same typed stops as [`check_static`], without partial results.
@@ -229,13 +227,27 @@ pub fn check_static_view(
     limits: Limits,
     cancellation: &Cancellation,
 ) -> Result<StaticCheck, Stop> {
-    cancellation.poll()?;
+    cancellation
+        .metered(limits.max_work, |meter| {
+            check_view(graph, seed, limits, meter)
+        })
+        .result
+}
+
+/// The static check itself, charged to `meter`.
+fn check_view(
+    graph: &GroundProgram,
+    seed: SeedView<'_>,
+    limits: Limits,
+    meter: &mut Meter<'_>,
+) -> Result<StaticCheck, Stop> {
+    meter.poll()?;
     if !graph.program().same_instance(seed.program()) {
         return Err(Stop::WrongProgram);
     }
     let mut work = Work {
         limits,
-        cancellation,
+        meter,
         statistics: StaticStatistics::default(),
     };
     let mut frozen = work.words(graph.word_count())?;
@@ -281,17 +293,20 @@ pub fn check_static_view(
             break;
         }
     }
-    cancellation.poll()?;
+    work.meter.poll()?;
     Ok(StaticCheck {
         program: graph.program().clone(),
         closure_words: closure,
         constraint_violated,
         seed_mismatch,
-        statistics: work.statistics,
+        statistics: StaticStatistics {
+            work: work.meter.charged(),
+            ..work.statistics
+        },
     })
 }
 
-fn close(rules: &[&GroundRule], closure: &mut [u32], work: &mut Work<'_>) -> Result<(), Stop> {
+fn close(rules: &[&GroundRule], closure: &mut [u32], work: &mut Work<'_, '_>) -> Result<(), Stop> {
     loop {
         work.tick()?;
         let mut changed = false;

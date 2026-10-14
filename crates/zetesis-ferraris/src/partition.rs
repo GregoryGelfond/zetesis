@@ -9,9 +9,11 @@
 
 use std::fmt;
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
 
 mod restriction;
+#[cfg(test)]
+mod tests;
 pub use restriction::{Restriction, RestrictionError, RestrictionErrorKind, RestrictionLimits};
 
 /// A stated upper cardinality bound on one group of distinct semantic atoms.
@@ -98,6 +100,24 @@ pub enum ErrorKind {
     Overflow,
     /// Cancellation or fallible allocation stopped construction.
     Stopped(Stop),
+}
+
+impl Refusal for ErrorKind {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Limit(_) | Self::Overflow => true,
+            Self::Stopped(stop) => stop.is_resource_refusal(),
+            Self::Atom(_)
+            | Self::DuplicateMember(_)
+            | Self::ForeignMember(_)
+            | Self::RepeatedMember(_)
+            | Self::MissingMember(_) => false,
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
 }
 
 /// Construction accounting; byte fields describe requested logical payloads.
@@ -199,8 +219,10 @@ impl Plan {
     /// Group/member order is retained. Empty groups and inconsistent logical
     /// bounds are legal: [`Self::inconsistent`] reports the latter. Validation
     /// takes `O(atom_count + declared members + membership occurrences + groups)`
-    /// work and initializes one coverage cell per semantic atom. All loops poll
-    /// control and charge work. No theory is read, searched or transformed.
+    /// work and initializes one coverage cell per semantic atom. All loops charge
+    /// work and observe control at metered boundaries, and a requested stop
+    /// takes precedence over every resource refusal. No theory is read, searched
+    /// or transformed.
     ///
     /// # Errors
     /// Refuses malformed partitions, dimensions, storage, work or control.
@@ -209,16 +231,19 @@ impl Plan {
         limits: Limits,
         cancellation: &Cancellation,
     ) -> Result<Self, Error> {
-        let mut budget = Budget {
-            limits,
-            cancellation,
-            statistics: Statistics::default(),
-        };
-        let result = build(premises, &mut budget);
-        result.map_err(|kind| Error {
-            kind,
-            statistics: budget.statistics,
-        })
+        let mut statistics = Statistics::default();
+        let metered = cancellation.metered(limits.max_work, |meter| {
+            build(
+                premises,
+                &mut Budget {
+                    limits,
+                    meter,
+                    statistics: &mut statistics,
+                },
+            )
+        });
+        statistics.work = metered.charged;
+        metered.result.map_err(|kind| Error { kind, statistics })
     }
 
     /// Declared semantic universe; index correspondence remains a caller premise.
@@ -270,24 +295,24 @@ enum Coverage {
     Assigned,
 }
 
-struct Budget<'a> {
+/// One construction's limits, meter and statistics. The statistics' work is
+/// the meter's, filled in where construction returns.
+struct Budget<'a, 'c> {
     limits: Limits,
-    cancellation: &'a Cancellation,
-    statistics: Statistics,
+    meter: &'a mut Meter<'c>,
+    statistics: &'a mut Statistics,
 }
 
-impl Budget<'_> {
+impl Budget<'_, '_> {
     fn poll(&self) -> Result<(), ErrorKind> {
-        self.cancellation.poll().map_err(ErrorKind::Stopped)
+        self.meter.poll().map_err(ErrorKind::Stopped)
     }
 
     fn tick(&mut self) -> Result<(), ErrorKind> {
-        self.poll()?;
-        if self.statistics.work == self.limits.max_work {
-            return Err(ErrorKind::Limit(Resource::Work));
-        }
-        self.statistics.work += 1;
-        Ok(())
+        self.meter.charge().map_err(|error| match error {
+            ChargeError::Stopped(stop) => ErrorKind::Stopped(stop),
+            ChargeError::WorkLimit => ErrorKind::Limit(Resource::Work),
+        })
     }
 
     fn storage<T>(&self, count: usize) -> Result<Vec<T>, ErrorKind> {
@@ -300,7 +325,7 @@ impl Budget<'_> {
     }
 }
 
-fn build(premises: Premises<'_>, budget: &mut Budget<'_>) -> Result<Plan, ErrorKind> {
+fn build(premises: Premises<'_>, budget: &mut Budget<'_, '_>) -> Result<Plan, ErrorKind> {
     budget.poll()?;
     limit(
         premises.atom_count,
@@ -361,11 +386,17 @@ fn build(premises: Premises<'_>, budget: &mut Budget<'_>) -> Result<Plan, ErrorK
         capacity,
         members,
         groups,
-        statistics: budget.statistics,
+        statistics: Statistics {
+            work: budget.meter.charged(),
+            ..*budget.statistics
+        },
     })
 }
 
-fn dimensions(groups: &[Group<'_>], budget: &mut Budget<'_>) -> Result<(usize, usize), ErrorKind> {
+fn dimensions(
+    groups: &[Group<'_>],
+    budget: &mut Budget<'_, '_>,
+) -> Result<(usize, usize), ErrorKind> {
     let (mut occurrences, mut capacity) = (0_usize, 0_usize);
     for group in groups {
         budget.tick()?;
@@ -383,7 +414,7 @@ fn dimensions(groups: &[Group<'_>], budget: &mut Budget<'_>) -> Result<(usize, u
 fn declare(
     members: &[usize],
     coverage: &mut [Coverage],
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<(), ErrorKind> {
     for &atom in members {
         budget.tick()?;
@@ -400,7 +431,7 @@ fn assign(
     input: &[usize],
     coverage: &mut [Coverage],
     members: &mut Vec<usize>,
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<(), ErrorKind> {
     for &atom in input {
         budget.tick()?;

@@ -5,15 +5,9 @@ use crate::hybrid_session::accept;
 use zetesis_core::Model;
 
 fn owner() -> HybridFormula {
-    prepare_formula(
-        include_str!("../../../tests/fixtures/hybrid-objectives/stopped-incumbent.lp").into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_hybrid()
-    .unwrap()
+    zetesis_reference_support::hybrid(include_str!(
+        "../../../tests/fixtures/hybrid-objectives/stopped-incumbent.lp"
+    ))
 }
 
 fn config() -> SolveConfig {

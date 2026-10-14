@@ -1,8 +1,9 @@
 //! Implication dispatch preserves ordered consequences and charged visits.
 
+use crate::test_support::SinglePermits;
 use zetesis_cpu::Stop;
 
-use crate::{AdmissionLimits, FormulaParts, Knowledge, Narrower, NarrowingQuota, Node, Theory};
+use crate::{AdmissionLimits, FormulaParts, Knowledge, Narrower, Node, Theory};
 
 use super::super::{Closure, NarrowingScratch, Step, Subject, Work};
 use super::{compact_mut, counters::same_knowledge};
@@ -180,28 +181,6 @@ fn implication_events_follow_the_three_valued_rules() {
 fn implication_parents_learn_before_teaching() {
     compare_transitions(true);
 }
-
-struct Quota {
-    remaining: u64,
-    calls: u64,
-    failure: Stop,
-}
-
-impl NarrowingQuota for Quota {
-    fn reserve(&mut self, _wanted: u64) -> Result<u64, Stop> {
-        self.calls += 1;
-        if self.remaining == 0 {
-            return Err(self.failure);
-        }
-        self.remaining -= 1;
-        Ok(1)
-    }
-
-    fn refund(&mut self, unspent: u64) {
-        self.remaining += unspent;
-    }
-}
-
 #[test]
 fn implication_parent_keeps_two_charged_visits() {
     let theory = implication(1);
@@ -217,11 +196,7 @@ fn implication_parent_keeps_two_charged_visits() {
             let mut lists = NarrowingScratch::default();
             lists.prepare(2);
             lists.nodes.push((2, true));
-            let mut quota = Quota {
-                remaining: limit,
-                calls: 0,
-                failure,
-            };
+            let mut quota = SinglePermits::new(limit, failure);
             let mut work = Work::reserved(&mut quota);
             let result = Closure {
                 known: compact_mut(&mut actual),
@@ -229,7 +204,7 @@ fn implication_parent_keeps_two_charged_visits() {
             }
             .revisit(subject, &index, 0, true, &mut work);
             assert_eq!(work.spent, limit);
-            work.settle();
+            work.refund();
             if limit < 2 {
                 assert!(result == Err(failure));
             } else {

@@ -226,52 +226,54 @@ fn failed_scalars_never_lend_positive_evidence() {
         for divisor in [0, 1] {
             let mut fixture = Fixture::from_atoms([atom("p", &[divisor])], location());
             let one = fixture.scalar(&Value::Number(1), location());
-            let expression = Expression {
-                nodes: vec![
+            // The comparison's form declines at the zero divisor, and the
+            // general evaluator then decides the row.
+            let comparison = fixture.comparison(
+                vec![
                     Operation::Constant(one),
                     Operation::Variable(0),
                     Operation::Binary(BinaryOp::Div, 0, 1),
                 ],
-            };
+                Relation::Lt,
+                vec![Operation::Constant(one)],
+                location(),
+            );
             let rule = rule(
                 vec![
                     pattern(&mut fixture, "p", &[0]),
-                    LiteralIr::Compare(
-                        expression,
-                        Relation::Lt,
-                        Expression {
-                            nodes: vec![Operation::Constant(one)],
-                        },
-                    ),
+                    LiteralIr::Compare(comparison),
                 ],
                 1,
             );
             let selection = Evidence(|_: zetesis_core::relation::Row<'_, '_>| selected);
-            with_fixture(fixture, |support, computation, budget, counters| {
-                let limits = FormulaLimits::default();
-                let mut rows = Join::filtered_rule(
-                    &rule,
-                    support,
-                    Some(&selection),
-                    None,
-                    budget,
-                    Context::new(computation, &limits, counters, location()),
-                )
-                .unwrap();
-                loop {
-                    match rows.next_row(computation, &limits, budget, counters, location()) {
-                        Ok(Some(row)) => {
-                            assert!(!row.passes);
-                            assert!(row.positives.is_none());
+            let ((), work) =
+                with_observed_fixture(fixture, |support, computation, budget, counters| {
+                    let limits = FormulaLimits::default();
+                    let mut rows = Join::filtered_rule(
+                        &rule,
+                        support,
+                        Some(&selection),
+                        None,
+                        budget,
+                        Context::new(computation, &limits, counters, location()),
+                    )
+                    .unwrap();
+                    loop {
+                        match rows.next_row(computation, &limits, budget, counters, location()) {
+                            Ok(Some(row)) => {
+                                assert!(!row.passes);
+                                assert!(row.positives.is_none());
+                            }
+                            Ok(None) => break,
+                            Err(error) => panic!("unexpected failure: {error:?}"),
                         }
-                        Ok(None) => break,
-                        Err(error) => panic!("unexpected failure: {error:?}"),
                     }
-                }
-                // Division by zero remains the join's original family diagnostic;
-                // the selected-row loan does not turn it into scalar success.
-                assert_eq!(rows.join.family.zero.is_some(), divisor == 0);
-            });
+                    // Division by zero remains the join's original family diagnostic;
+                    // the selected-row loan does not turn it into scalar success.
+                    assert_eq!(rows.join.family.zero.is_some(), divisor == 0);
+                });
+            assert_eq!(work.integer_comparison_declines.unwrap() > 0, divisor == 0);
+            assert_eq!(work.integer_comparisons.unwrap() > 0, divisor != 0);
         }
     }
 }
@@ -286,12 +288,8 @@ fn generated_rows_keep_the_ordinary_truth_path() {
                 pattern(&mut fixture, "p", &[0]),
                 LiteralIr::Range {
                     target: 1,
-                    lower: Expression {
-                        nodes: vec![Operation::Constant(one)],
-                    },
-                    upper: Expression {
-                        nodes: vec![Operation::Variable(0)],
-                    },
+                    lower: Expression::new(vec![Operation::Constant(one)]),
+                    upper: Expression::new(vec![Operation::Variable(0)]),
                     binder: true,
                 },
             ],
@@ -627,15 +625,12 @@ fn an_unmapped_gap_retains_the_open_restriction() {
             pattern(&mut fixture, "b", &[2]),
         ];
         if compare {
-            body.push(LiteralIr::Compare(
-                Expression {
-                    nodes: vec![Operation::Variable(1)],
-                },
+            body.push(LiteralIr::Compare(fixture.comparison(
+                vec![Operation::Variable(1)],
                 Relation::Neq,
-                Expression {
-                    nodes: vec![Operation::Variable(2)],
-                },
-            ));
+                vec![Operation::Variable(2)],
+                location(),
+            )));
         }
         let rule = rule(body, 3);
         with_fixture(fixture, |support, computation, budget, counters| {

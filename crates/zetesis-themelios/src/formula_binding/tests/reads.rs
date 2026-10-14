@@ -1,7 +1,7 @@
-use super::location;
 use crate::FormulaFailure;
 use crate::formula_binding::Binding;
 use crate::formula_support::testing::{Fixture, binding};
+use crate::test_support::given_site;
 use zetesis_core::atom_interner::{AtomInterner, Limits as InternerLimits};
 use zetesis_core::catalog::{
     AssignmentError, AtomCatalog, Limits as TermLimits, ReadError, TermAssignment,
@@ -10,27 +10,32 @@ use zetesis_core::{Value, ValueNodeRef};
 
 #[test]
 fn bound_read_rejects_equal_foreign_terms() {
-    Fixture::default().with(location(), |_, computation, counters| {
-        let frame = binding(&[Some(Value::Number(4))], computation, counters, location());
-        Fixture::default().with(location(), |_, foreign, foreign_counters| {
+    Fixture::default().with(given_site(), |_, computation, counters| {
+        let frame = binding(
+            &[Some(Value::Number(4))],
+            computation,
+            counters,
+            given_site(),
+        );
+        Fixture::default().with(given_site(), |_, foreign, foreign_counters| {
             let other = binding(
                 &[Some(Value::Number(4))],
                 foreign,
                 foreign_counters,
-                location(),
+                given_site(),
             );
             assert_eq!(
-                frame.read(0, computation.read(), location()).unwrap(),
-                other.read(0, foreign.read(), location()).unwrap()
+                frame.read(0, computation.read(), given_site()).unwrap(),
+                other.read(0, foreign.read(), given_site()).unwrap()
             );
             let borrowed = frame.prefix(frame.len());
             for selected in [&frame, &borrowed] {
                 assert!(matches!(
-                    selected.read(0, foreign.read(), location()),
+                    selected.read(0, foreign.read(), given_site()),
                     Err(FormulaFailure::TermAssignment {
                         error: AssignmentError::Read(ReadError::ForeignCatalog),
                         location: actual,
-                    }) if actual == location()
+                    }) if actual == given_site()
                 ));
             }
         });
@@ -39,17 +44,17 @@ fn bound_read_rejects_equal_foreign_terms() {
 
 #[test]
 fn absent_read_precedes_foreign_scope() {
-    Fixture::default().with(location(), |_, computation, counters| {
-        let frame = binding(&[None], computation, counters, location());
-        Fixture::default().with(location(), |_, foreign, _| {
+    Fixture::default().with(given_site(), |_, computation, counters| {
+        let frame = binding(&[None], computation, counters, given_site());
+        Fixture::default().with(given_site(), |_, foreign, _| {
             let borrowed = frame.prefix(frame.len());
             for selected in [&frame, &borrowed] {
                 assert!(matches!(
-                    selected.read(0, foreign.read(), location()),
+                    selected.read(0, foreign.read(), given_site()),
                     Err(FormulaFailure::UnsafeVariable {
                         variable: 0,
                         location: actual,
-                    }) if actual == location()
+                    }) if actual == given_site()
                 ));
             }
         });
@@ -58,18 +63,18 @@ fn absent_read_precedes_foreign_scope() {
 
 #[test]
 fn invalid_read_precedes_foreign_scope() {
-    Fixture::default().with(location(), |_, computation, counters| {
-        let frame = binding(&[], computation, counters, location());
-        Fixture::default().with(location(), |_, foreign, _| {
+    Fixture::default().with(given_site(), |_, computation, counters| {
+        let frame = binding(&[], computation, counters, given_site());
+        Fixture::default().with(given_site(), |_, foreign, _| {
             let borrowed = frame.prefix(frame.len());
             for selected in [&frame, &borrowed] {
                 for variable in [0, usize::MAX] {
                     assert!(matches!(
-                        selected.read(variable, foreign.read(), location()),
+                        selected.read(variable, foreign.read(), given_site()),
                         Err(FormulaFailure::UnsafeVariable {
                             variable: actual_variable,
                             location: actual,
-                        }) if actual_variable == variable && actual == location()
+                        }) if actual_variable == variable && actual == given_site()
                     ));
                 }
             }
@@ -119,17 +124,17 @@ fn newer_term_read_refuses_older_prefix() {
     let frame = Binding::borrowed(values.as_slice());
     assert_eq!(
         frame
-            .read(1, complete.read(), location())
+            .read(1, complete.read(), given_site())
             .unwrap()
             .descriptor(),
         ValueNodeRef::Number(9)
     );
     assert!(matches!(
-        frame.read(1, prefix.read(), location()),
+        frame.read(1, prefix.read(), given_site()),
         Err(FormulaFailure::TermAssignment {
             error: AssignmentError::Read(ReadError::OutsidePrefix),
             location: actual,
-        }) if actual == location()
+        }) if actual == given_site()
     ));
 }
 
@@ -139,7 +144,7 @@ fn read_ignores_unrelated_newer_slots() {
     let frame = Binding::borrowed(values.as_slice());
     assert_eq!(
         frame
-            .read(0, prefix.read(), location())
+            .read(0, prefix.read(), given_site())
             .unwrap()
             .descriptor(),
         ValueNodeRef::Number(4)
@@ -151,11 +156,11 @@ fn absent_read_ignores_unrelated_newer_slots() {
     let (prefix, _, values) = published_prefixes();
     let frame = Binding::borrowed(values.as_slice());
     assert!(matches!(
-        frame.read(2, prefix.read(), location()),
+        frame.read(2, prefix.read(), given_site()),
         Err(FormulaFailure::UnsafeVariable {
             variable: 2,
             location: actual,
-        }) if actual == location()
+        }) if actual == given_site()
     ));
 }
 
@@ -168,20 +173,20 @@ fn charged_reads_preserve_owned_failure_order() {
             for stop in [false, true] {
                 let refuse = || FormulaFailure::UnsafeVariable {
                     variable: 17,
-                    location: location(),
+                    location: given_site(),
                 };
                 let mut expected_calls = 0;
-                let expected = frame.key(variable, location()).and_then(|key| {
+                let expected = frame.key(variable, given_site()).and_then(|key| {
                     expected_calls += 1;
                     if stop {
                         return Err(refuse());
                     }
                     read.term(&key).map_err(|error| {
-                        crate::formula_binding::assignment(error.into(), location())
+                        crate::formula_binding::assignment(error.into(), given_site())
                     })
                 });
                 let mut actual_calls = 0;
-                let actual = frame.read_with(variable, read, location(), || {
+                let actual = frame.read_with(variable, read, given_site(), || {
                     actual_calls += 1;
                     if stop { Err(refuse()) } else { Ok(()) }
                 });

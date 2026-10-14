@@ -1,5 +1,8 @@
 //! Weighted head permissions remain independent of numeric contributions.
 
+use crate::support::admission;
+use zetesis_reference_support::{canonical, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
 mod alias_semantics;
@@ -8,10 +11,9 @@ use std::collections::BTreeSet;
 
 use crate::support::objective_boundaries;
 use cases::CASES;
-use reference::{Models, exhaustive, external, holds, native, values};
+use reference::{Models, holds, native, values};
 use themelios_base::source::SourceId;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionFailure,
     ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
@@ -21,113 +23,35 @@ use zetesis_themelios::{
 const SOURCE: SourceId = SourceId::new(167);
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admission::admitted(SOURCE, source)
 }
 
 #[test]
 fn models_match_finite_substitutions() {
-    for &(source, expanded) in CASES {
-        assert_eq!(native(&input(source)), native(&input(expanded)), "{source}");
-    }
+    reference::models_match_substitutions(CASES.iter().copied(), input);
 }
 
 #[test]
 fn stability_matches_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = input(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), input);
 }
 
 #[test]
 fn frozen_truth_matches_finite_substitutions() {
-    let mut pairs = 0;
-    for &(source, expanded) in CASES {
-        let left = input(source);
-        let right = input(expanded);
-        let names: Vec<_> = left.atoms().iter().map(canonical).collect();
-        let other: Vec<_> = right.atoms().iter().map(canonical).collect();
-        assert_eq!(
-            names.iter().collect::<BTreeSet<_>>(),
-            other.iter().collect(),
-            "{source}"
-        );
-        assert!(names.len() <= 7, "bounded exhaustive interpretation pairs");
-        let remap = |mask: usize| {
-            names.iter().enumerate().fold(0, |result, (index, name)| {
-                result
-                    | (usize::from(mask & (1 << index) != 0)
-                        << other.iter().position(|other| other == name).unwrap())
-            })
-        };
-        for outer in 0..1 << names.len() {
-            let a = values(left.theory(), outer, None);
-            let b = values(right.theory(), remap(outer), None);
-            assert_eq!(
-                holds(left.theory(), &a),
-                holds(right.theory(), &b),
-                "{source}"
-            );
-            for inner in 0..1 << names.len() {
-                assert_eq!(
-                    holds(left.theory(), &values(left.theory(), inner, Some(&a))),
-                    holds(
-                        right.theory(),
-                        &values(right.theory(), remap(inner), Some(&b))
-                    ),
-                    "{source}: M={outer} J={inner}"
-                );
-                pairs += 1;
-            }
-        }
-    }
-    println!("source_pairs={} frozen_pairs={pairs}", CASES.len());
+    reference::frozen_truth_matches(CASES.iter().copied(), input);
 }
 
 #[test]
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
-    let mut total = 0;
-    for &(source, _) in CASES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    assert!(
-                        expected.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&input(source)), expected, "{source}");
-        total += count;
-    }
-    println!("complete_sources={} full_models={total}", CASES.len());
+    reference::original_sources_match_clingo_full_models(
+        CASES.iter().map(|&(source, _)| source),
+        input,
+    );
 }
 
 #[test]
@@ -260,9 +184,7 @@ fn signed_neutral_weights_supply_no_support() {
 
 #[test]
 fn original_sources_remain_owned() {
-    for &(source, _) in CASES {
-        assert_eq!(input(source).source().expect("source input").text(), source);
-    }
+    reference::sources_remain_owned(CASES.iter().map(|&(source, _)| source), input);
 }
 
 #[test]
@@ -278,52 +200,22 @@ fn grounding_limits_are_inclusive() {
             FormulaResource::Substitutions,
             FormulaResource::Work,
         ] {
-            let limits = |ceiling| {
-                let mut limits = FormulaLimits::default();
-                match resource {
-                    FormulaResource::AggregateElements => {
-                        limits.aggregate.max_elements = usize::try_from(ceiling).unwrap();
-                    }
-                    FormulaResource::Substitutions => limits.max_substitutions = ceiling,
-                    FormulaResource::Work => limits.max_work = ceiling,
-                    _ => unreachable!(),
-                }
-                limits
-            };
-            let mut lower = 0;
-            let mut upper = 16_384;
-            assert!(
+            let lower = first_success(resource_limits::formula_default(resource), |middle| {
                 admit_formula(
                     source.into(),
                     options(),
                     ExpansionLimits::default(),
-                    limits(upper)
+                    resource_limits::formula(resource, middle),
                 )
                 .is_ok()
-            );
-            while lower < upper {
-                let middle = lower + (upper - lower) / 2;
-                if admit_formula(
-                    source.into(),
-                    options(),
-                    ExpansionLimits::default(),
-                    limits(middle),
-                )
-                .is_ok()
-                {
-                    upper = middle;
-                } else {
-                    lower = middle + 1;
-                }
-            }
-            assert!(lower > 0);
+            });
             assert_eq!(
                 native(
                     &admit_formula(
                         source.into(),
                         options(),
                         ExpansionLimits::default(),
-                        limits(lower)
+                        resource_limits::formula(resource, lower)
                     )
                     .unwrap()
                 ),
@@ -333,7 +225,7 @@ fn grounding_limits_are_inclusive() {
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits(lower - 1),
+                resource_limits::formula(resource, lower - 1),
             )
             .unwrap_err();
             assert!(
@@ -589,8 +481,7 @@ fn weighted_aliases_preserve_other_count_certificates() {
 
 #[test]
 fn tuple_limits_count_complete_weighted_keys() {
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_elements = 1;
+    let limits = resource_limits::formula(FormulaResource::AggregateElements, 1);
     assert!(
         admit_formula(
             "1#sum{1:a;1:b}1.".into(),
@@ -626,30 +517,20 @@ fn alias_storage_limits_are_inclusive() {
             admit_formula(
                 source.into(),
                 options(),
-                ExpansionLimits {
-                    max_scalar_bytes: maximum,
-                    ..Default::default()
-                },
+                resource_limits::expansion(ExpansionResource::ScalarBytes, maximum),
                 FormulaLimits::default(),
             )
         };
-        let mut lower = 0;
-        let mut upper = 65_536;
-        assert!(attempt(upper).is_ok());
-        while lower + 1 < upper {
-            let middle = lower + (upper - lower) / 2;
-            if attempt(middle).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle;
-            }
-        }
+        let upper = first_success(
+            resource_limits::expansion_default(ExpansionResource::ScalarBytes),
+            |middle| attempt(middle).is_ok(),
+        );
         let error = attempt(upper - 1).unwrap_err();
         assert!(matches!(
             error,
             FormulaFailure::Expansion(ExpansionFailure::Limit {
                 resource: ExpansionResource::ScalarBytes, limit, observed, ..
-            }) if limit == (upper - 1) as u128 && observed == upper as u128
+            }) if limit == u128::from(upper - 1) && observed == u128::from(upper)
         ));
         assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
         assert_eq!(native(&attempt(upper).unwrap()), native(&input(source)));

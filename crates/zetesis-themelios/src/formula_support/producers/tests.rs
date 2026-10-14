@@ -14,7 +14,7 @@ fn prepare(source: &str) -> Preparation {
 }
 
 fn location(prepared: &Prepared) -> ProgramSite {
-    prepared.rules.first().unwrap().location
+    prepared.rules_without_facts().first().unwrap().location
 }
 
 fn plan<'a>(prepared: &'a Prepared, catalog: &SupportCatalog) -> ProducerPlan<'a> {
@@ -39,7 +39,18 @@ fn atoms(prepared: Preparation, scheduled: bool) -> Vec<Atom> {
     } = prepared;
     let limits = FormulaLimits::default();
     let mut counters = Counters::resume(accounting, crate::grounding_observer::Work::default());
-    let selected = scheduled.then(|| plan(&prepared, &catalog));
+    let selected = if scheduled {
+        Producers::Planned(plan(&prepared, &catalog))
+    } else {
+        Producers::registered(
+            &prepared,
+            &catalog,
+            &limits,
+            &mut counters,
+            location(&prepared),
+        )
+        .unwrap()
+    };
     let catalog = complete(
         catalog,
         &prepared,
@@ -71,13 +82,15 @@ fn pool_alternatives_keep_distinct_plan_occurrences() {
     // Admitted head pool alternatives instead create two distinct IR occurrences
     // before the separate analyzed program coalesces their equal rules. Body
     // atom pools are outside the current source pool profile.
+    // The fact d(0) is a fact block, which has no plan slot.
     let owner = prepare("d(0).p(1;1):-d(0).");
     let prepared = &owner.program;
     let plan = plan(prepared, &owner.catalog);
-    assert_eq!(prepared.rules.len(), 3);
-    assert_eq!(prepared.analyzed.statements().count(), 2);
-    assert_eq!(plan.rules.len(), 3);
-    for (index, rule) in prepared.rules.iter().enumerate() {
+    let rules = prepared.rules_without_facts();
+    assert_eq!(rules.len(), 2);
+    assert_eq!(prepared.analyzed.full_program().statements().count(), 2);
+    assert_eq!(plan.rules.len(), 2);
+    for (index, rule) in rules.iter().enumerate() {
         assert!(plan.source.contains(index, rule));
         let occurrences = plan.rules[index].as_ref().unwrap();
         assert_eq!(
@@ -85,11 +98,11 @@ fn pool_alternatives_keep_distinct_plan_occurrences() {
             &(0..rule.body.len()).collect::<Vec<_>>()
         );
     }
-    assert_eq!(plan.rules[1], Some(0..1));
-    assert_eq!(plan.rules[2], Some(1..2));
-    assert!(!prepared.rules[1].origins.is_empty());
-    assert_eq!(prepared.rules[1].origins, prepared.rules[2].origins);
-    assert_eq!(prepared.rules[1].location, prepared.rules[2].location);
+    assert_eq!(plan.rules[0], Some(0..1));
+    assert_eq!(plan.rules[1], Some(1..2));
+    assert!(!rules[0].origins.is_empty());
+    assert_eq!(rules[0].origins, rules[1].origins);
+    assert_eq!(rules[0].location, rules[1].location);
 }
 
 #[test]
@@ -147,23 +160,36 @@ fn repeated_schedules_reuse_original_positive_occurrences() {
         .snapshot(&limits, &mut counters, location(&prepared))
         .unwrap();
     let support = Support::indexed(&snapshot, &limits, &counters, location(&prepared)).unwrap();
-    let index = prepared.rules.len() - 1;
-    let rule = &prepared.rules[index];
+    let index = prepared.rules_without_facts().len() - 1;
+    let rule = &prepared.rules_without_facts()[index];
     let storage = plan.inputs.as_ptr();
+    let registration = Registration::prepare(
+        prepared.rules_without_facts(),
+        support.components(),
+        0,
+        &limits,
+        &mut Counters::default(),
+        location(&prepared),
+    )
+    .unwrap();
     let mut planned = Counters::default();
-    let mut reference = Counters::default();
+    let mut registered = Counters::default();
     for _ in 0..8 {
         let cached = plan
             .variants(index, rule, &support, false, &limits, &mut planned)
             .unwrap();
-        let full = delta::variants(rule, &support, false, &limits, &mut reference).unwrap();
+        let recorded = registration
+            .variants(index, rule, &support, false, &limits, &mut registered)
+            .unwrap();
         assert_eq!(pivots(cached, &mut planned), vec![Some(0), Some(1)]);
-        assert_eq!(pivots(full, &mut reference), vec![Some(0), Some(1)]);
+        assert_eq!(pivots(recorded, &mut registered), vec![Some(0), Some(1)]);
         assert_eq!(plan.inputs.as_ptr(), storage);
     }
-    // Construction was separate. Each repeated call replaces the two-literal
-    // applicability scan with one checked original-owner lookup.
-    assert_eq!(reference.accounting.work - planned.accounting.work, 8);
+    // Construction was separate. Each repeated call takes the same recorded
+    // occurrences; the plan charges its checked original-owner lookup, while
+    // the registration's owner check is a pointer comparison covered by the
+    // visit's own unit.
+    assert_eq!(planned.accounting.work - registered.accounting.work, 8);
 }
 
 #[test]
@@ -181,8 +207,8 @@ fn foreign_rule_owners_cannot_use_cached_occurrences() {
         .snapshot(&limits, &mut counters, location(prepared))
         .unwrap();
     let support = Support::indexed(&snapshot, &limits, &counters, location(prepared)).unwrap();
-    let index = foreign.rules.len() - 1;
-    let rule = &foreign.rules[index];
+    let index = foreign.rules_without_facts().len() - 1;
+    let rule = &foreign.rules_without_facts()[index];
     let Err(failure) = plan.variants(index, rule, &support, true, &limits, &mut counters) else {
         panic!("an equal rule from another preparation is not this occurrence");
     };
@@ -237,7 +263,8 @@ fn a_body_comparison_is_no_producer_input() {
         let owner = prepare(source);
         let prepared = &owner.program;
         let planned = plan(prepared, &owner.catalog);
-        assert_eq!(planned.rules[1], Some(0..1), "{source}");
+        // The fact p(1) has no slot; the rule's one input is its atom.
+        assert_eq!(planned.rules[0], Some(0..1), "{source}");
         assert_eq!(atoms(prepare(source), true), expected, "{source}");
         assert_eq!(atoms(prepare(source), false), expected, "{source}");
     }

@@ -5,7 +5,8 @@ use zetesis_cli::{
     Completion, Options, RunError, run_bundle_with_diagnostics, run_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
-use zetesis_themelios::{AdmissionFailure, BundleLimits, ExpansionFailure, SourceBundle};
+use zetesis_reference_support::BundleFixture;
+use zetesis_themelios::{AdmissionFailure, ExpansionFailure};
 use zetesis_validation::answers::native_json;
 
 const SPELLING_BYTES: usize = 8 * 1024;
@@ -44,10 +45,9 @@ fn automatic_formula_routing_preserves_complete_answers() {
             let mut diagnostics = Vec::new();
             let options = options();
             let report = if bundled {
-                let directory = tempfile::tempdir().unwrap();
-                let path = directory.path().join("projection.lp");
-                std::fs::write(&path, source).unwrap();
-                let bundle = SourceBundle::load(&path, BundleLimits::default()).unwrap();
+                let fixture = BundleFixture::new();
+                fixture.write("entry.lp", source);
+                let bundle = fixture.bundle();
                 run_bundle_with_diagnostics(
                     bundle,
                     &options,
@@ -91,4 +91,73 @@ fn automatic_admission_retains_named_variable_safety() {
         error,
         RunError::Expansion(ExpansionFailure::Admission(AdmissionFailure::Core { .. }))
     ));
+}
+
+/// Shared batching admits the relational route but forbids formula execution.
+/// Evaluate its policy early without letting it replace an earlier source
+/// refusal or cancellation, on either original-input door.
+#[test]
+fn automatic_policy_keeps_refusal_and_control_order_on_both_doors() {
+    for grounder in ["lazy", "auto"] {
+        let configured = Options::try_parse_from([
+            "zetesis",
+            "--backend",
+            "cpu",
+            "--models",
+            "0",
+            "--json",
+            "--grounder",
+            grounder,
+            "--source-batching",
+            "worlds",
+        ])
+        .unwrap();
+        for bundled in [false, true] {
+            let run = |text: &str, cancellation: &Cancellation| {
+                let mut output = Vec::new();
+                let mut diagnostics = Vec::new();
+                if bundled {
+                    let fixture = BundleFixture::new();
+                    fixture.write("entry.lp", text);
+                    run_bundle_with_diagnostics(
+                        fixture.bundle(),
+                        &configured,
+                        &mut output,
+                        &mut diagnostics,
+                        cancellation,
+                    )
+                } else {
+                    run_with_diagnostics(
+                        text.into(),
+                        &configured,
+                        &mut output,
+                        &mut diagnostics,
+                        cancellation,
+                    )
+                }
+            };
+            let ordinary = run("a.", &Cancellation::default()).unwrap();
+            assert_eq!(ordinary.completion, Completion::Exhausted);
+            assert!(
+                ordinary.shared_execution.is_some(),
+                "relational route {grounder}, bundle={bundled}"
+            );
+            // If formula admission ran, undefined arithmetic would refuse. The
+            // saved execution-policy refusal must precede that preparation.
+            let error = run("1{a;b}1. p(1/0).", &Cancellation::default()).unwrap_err();
+            assert!(matches!(error, RunError::UnsupportedSourceBatching));
+            let error = run("p(1/0).", &Cancellation::default()).unwrap_err();
+            if bundled {
+                assert!(matches!(error, RunError::BundleAdmission(_)));
+            } else {
+                assert!(matches!(error, RunError::Expansion(_)));
+            }
+            let cancellation = Cancellation::default();
+            cancellation.cancel();
+            let stopped = run("1{a;b}1. p(1/0).", &cancellation).unwrap();
+            assert_eq!(stopped.completion, Completion::Interrupted);
+            assert!(stopped.shared_execution.is_none());
+            assert!(stopped.countermodel_statistics.is_none());
+        }
+    }
 }

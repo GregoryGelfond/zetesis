@@ -11,6 +11,7 @@ use zetesis_core::{
     Term,
 };
 
+use crate::compile::{Compiled, CompiledRule, Item, Occurrence};
 use crate::{AdmissionFailure, ExpansionResource, ProgramSite};
 
 fn patterns(template: &Template) -> impl Iterator<Item = &AtomPattern> {
@@ -37,16 +38,14 @@ pub(crate) fn source_sign(sign: Sign) -> themelios_program::symbol::Sign {
 }
 
 pub(crate) fn append<E: From<AdmissionFailure>>(
-    templates: &mut Vec<Template>,
-    origins: &mut Vec<Vec<Location>>,
+    compiled: &mut Compiled<Location>,
     limits: AdmissionLimits,
     fallback: impl Into<ProgramSite>,
     mut charge: impl FnMut(ExpansionResource, u128, ProgramSite) -> Result<(), E>,
 ) -> Result<(), E> {
     let fallback = fallback.into();
     append_with(
-        templates,
-        origins,
+        compiled,
         limits,
         |resource, count, evidence| {
             charge(
@@ -74,36 +73,31 @@ pub(crate) fn append<E: From<AdmissionFailure>>(
 /// The coherence operation is independent of whether evidence is a source span
 /// or a borrowed logical statement. Each generated constraint keeps both origins.
 pub(crate) fn append_with<P: Clone + Ord, E>(
-    templates: &mut Vec<Template>,
-    origins: &mut Vec<Vec<P>>,
+    compiled: &mut Compiled<P>,
     limits: AdmissionLimits,
     mut charge: impl FnMut(ExpansionResource, u128, &[P]) -> Result<(), E>,
     failure: impl Fn(AdmissionError, &[P]) -> E,
 ) -> Result<(), E> {
-    // Preserve existing unsigned budgets and avoid a registry allocation on
-    // the common unsigned route. Traversal is bounded by the source templates.
-    if !templates
+    // A block contributes one signature inspection, not one per fact row.
+    if !compiled
+        .templates
         .iter()
         .flat_map(patterns)
         .any(|pattern| pattern.predicate().sign() == Sign::Negative)
+        && !compiled
+            .facts
+            .predicates()
+            .any(|(predicate, _)| predicate.sign() == Sign::Negative)
     {
         return Ok(());
     }
-    let mut signatures = BTreeMap::new();
-    for (index, template) in templates.iter().enumerate() {
-        let origin = &origins[index];
-        for pattern in patterns(template) {
-            charge(ExpansionResource::TermWork, 1, origin)?;
-            signatures.entry(pattern.predicate()).or_insert(index);
-        }
-    }
+    let signatures = signatures(compiled, &mut charge)?;
     let mut generated = Vec::new();
-    let mut evidence = Vec::new();
-    for (&negative, &index) in &signatures {
+    for (&negative, &occurrence) in &signatures {
         if negative.sign() != Sign::Negative {
             continue;
         }
-        let origin = &origins[index];
+        let origin = compiled.origins(occurrence);
         charge(
             ExpansionResource::ScalarBytes,
             negative.name().len() as u128,
@@ -115,9 +109,9 @@ pub(crate) fn append_with<P: Clone + Ord, E>(
             continue;
         };
         check_core_limits(
-            index,
+            occurrence,
             negative.arity(),
-            templates.len() + generated.len() + 1,
+            compiled.len() + generated.len() + 1,
             limits,
         )
         .map_err(|error| failure(error, origin))?;
@@ -132,9 +126,10 @@ pub(crate) fn append_with<P: Clone + Ord, E>(
             negative.name().len() as u128,
             origin,
         )?;
+        let opposite = compiled.origins(opposite);
         charge(
             ExpansionResource::Origins,
-            origins[index].len() as u128 + origins[opposite].len() as u128,
+            origin.len() as u128 + opposite.len() as u128,
             origin,
         )?;
         let pattern = |predicate: Predicate| {
@@ -144,26 +139,63 @@ pub(crate) fn append_with<P: Clone + Ord, E>(
             )
             .expect("one shared dense slot per argument")
         };
-        generated.push(Template::new(
+        let template = Template::new(
             None,
             vec![pattern(positive), pattern(negative.clone())],
             Vec::new(),
             Vec::new(),
             Vec::new(),
-        ));
-        let mut locations = origins[index].clone();
-        locations.extend_from_slice(&origins[opposite]);
+        );
+        let mut locations = origin.to_vec();
+        locations.extend_from_slice(opposite);
         locations.sort_unstable();
         locations.dedup();
-        evidence.push(locations);
+        generated.push((template, locations));
     }
-    templates.extend(generated);
-    origins.extend(evidence);
+    for (template, origins) in generated {
+        compiled
+            .push(CompiledRule::Template(template), origins.clone())
+            .map_err(|error| failure(error, &origins))?;
+    }
     Ok(())
 }
 
+/// First signature evidence follows source order even when the same signed
+/// predicate occurs in both streams. Fact runs can cross adjacent families;
+/// their first occurrence retains the first family's evidence.
+fn signatures<'a, P: Clone, E>(
+    compiled: &'a Compiled<P>,
+    charge: &mut impl FnMut(ExpansionResource, u128, &[P]) -> Result<(), E>,
+) -> Result<BTreeMap<&'a Predicate, Occurrence>, E> {
+    let mut signatures = BTreeMap::new();
+    let mut facts = compiled.facts.predicates().peekable();
+    for item in &compiled.order {
+        match *item {
+            Item::Template(index) => {
+                for pattern in patterns(&compiled.templates[index]) {
+                    let occurrence = Occurrence::Template(index);
+                    charge(ExpansionResource::TermWork, 1, compiled.origins(occurrence))?;
+                    signatures.entry(pattern.predicate()).or_insert(occurrence);
+                }
+            }
+            Item::Facts { end } => {
+                while let Some(&(predicate, index)) = facts.peek() {
+                    if index >= end {
+                        break;
+                    }
+                    facts.next();
+                    let occurrence = Occurrence::Fact(index);
+                    charge(ExpansionResource::TermWork, 1, compiled.origins(occurrence))?;
+                    signatures.entry(predicate).or_insert(occurrence);
+                }
+            }
+        }
+    }
+    Ok(signatures)
+}
+
 fn check_core_limits(
-    index: usize,
+    occurrence: Occurrence,
     arity: usize,
     count: usize,
     limits: AdmissionLimits,
@@ -183,11 +215,19 @@ fn check_core_limits(
         (AdmissionResource::PositiveBody, 2, limits.max_positive_body),
     ] {
         if actual > limit {
-            return Err(AdmissionError::LimitExceeded {
-                resource,
-                limit,
-                actual,
-                template: Some(index),
+            return Err(match occurrence {
+                Occurrence::Template(index) => AdmissionError::LimitExceeded {
+                    resource,
+                    limit,
+                    actual,
+                    template: Some(index),
+                },
+                Occurrence::Fact(fact) => AdmissionError::FactLimitExceeded {
+                    resource,
+                    limit,
+                    actual,
+                    fact,
+                },
             });
         }
     }

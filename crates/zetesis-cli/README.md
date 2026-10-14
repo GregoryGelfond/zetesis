@@ -17,6 +17,7 @@ zetesis solve input.lp
 zetesis solve encoding.lp instance.lp --all
 zetesis solve input.lp --all --stats
 zetesis solve input.lp --all --json
+zetesis solve input.lp --count
 printf 'a :- not b. b :- not a.\n' | zetesis solve - --all
 zetesis devices
 zetesis help solve
@@ -25,7 +26,8 @@ zetesis help solve --advanced
 
 Bare `zetesis` shows the task list. Compact solve help lists everyday inputs,
 answers, execution, resources and output options. Advanced help additionally
-describes reduct selection, joins and source batching. Both views describe the
+describes the memory allowance, the GPU APIs by name, reduct selection, search,
+joins and source batching. Both views describe the
 same solver. File-first syntax and numeric `--models` remain compatibility
 adapters, as do `--workers` for `--threads` and `--memory-budget` for `--memory`.
 
@@ -47,6 +49,13 @@ retained incumbents are displayed. Exhaustion establishes optimality; an
 interrupted search can return incumbents whose optimality remains unproved.
 The `--answers N` limit bounds displayed ties. Equal displays can represent distinct
 full answer sets.
+
+`--count` prints one integer only after complete enumeration: all full answer
+sets, or all optimal ties when objectives are present. It bypasses `#show`
+evaluation and `#project` deduplication. Interrupted search publishes no partial
+total; stops and failures are reported on stderr. It conflicts with `--answers`, `--all`,
+`--models` and `--json`; `--stats` remains available on stderr. See the
+[counting contract](../../docs/book/reference/commands.md#select-answers).
 
 `--time-limit DURATION` requests a cooperative deadline after input loading.
 Whole nonnegative seconds, or a whole number with `s`, `m` or `h`, are accepted;
@@ -189,8 +198,8 @@ See the [finite-table contract](../../docs/book/rust/finite-tables.md).
 
 ```sh
 zetesis solve input.lp --backend cpu
-zetesis solve input.lp --backend metal --grounder eager
-zetesis solve input.lp --backend metal --grounder lazy
+zetesis solve input.lp --backend gpu --grounder eager
+zetesis solve input.lp --backend gpu --grounder lazy
 zetesis solve input.lp --oracle countermodel --threads 4 --all
 ```
 
@@ -200,9 +209,9 @@ a proper subset satisfies its frozen Ferraris reduct. The latter uses native
 Boolean search internally; semantic atoms alone define minimality and model
 blocking. See [semantic foundations](../../docs/book/architecture/semantics.md).
 
-GPU support is in the default build. `--backend metal` or `vulkan` requires
-that API; `gpu` uses the platform's native API, Metal on macOS and Vulkan
-elsewhere.
+GPU support is in the default build. `--backend gpu` uses the platform's native
+API, Metal on macOS and Vulkan elsewhere. The full help (`--help-all`) also
+names the APIs: `--backend metal` or `vulkan` requires that API.
 Software, virtual and unknown adapter categories are refused. The CLI discovers
 and initializes its device during invocation; solving needs no qualification
 script or stored pass marker. `zetesis devices` lists visible capabilities,
@@ -222,18 +231,19 @@ to CPU. Static GPU closure admits at most 4,096 atoms.
 
 Automatic finite formula admission can defer eligible terminal positive definitions
 and reconstruct them from verified base answers; it grounds the remaining rules
-eagerly. Explicit lazy CPU execution
+eagerly. Explicit lazy execution
 can stream ordinary constraints after complete support and arithmetic admission,
 while retaining producers and ineligible constraints. Objectives are scored only
 after complete original constraint checks; their presence disables terminal
-deferral. This hybrid profile requires indexed joins and the CPU backend; see the
+deferral. This hybrid profile requires indexed joins. The selected CPU or GPU
+backend checks its formula core; streamed constraints are checked on the host. See the
 [grounding contract](../../docs/book/architecture/grounding.md#eager-and-lazy-execution).
 With `--oracle auto`, complete-theory checks can select ranked support
 on CPU or a device. Device tight checking evaluates original truth and complete
 positive support without CPU residual queries. When no tight certificate is
 selected, explicit GPU execution uses general propagation and completes
 unresolved reduct queries exactly on CPU. Outer candidate search and objective
-scoring remain on the host. Formula device execution requires an eager theory.
+scoring remain on the host.
 
 CPU automatic membership can also select positive least consequences, including
 positive recursion and checks of all original constraints after closure. The
@@ -260,12 +270,18 @@ scheduling are internal defaults. Typed `SolveConfig` consumers can configure
 these operations directly.
 
 `--memory SIZE` accepts bytes or a whole number with `KiB`, `MiB`, `GiB` or `TiB`.
-The default is half of reported host physical memory, at least two gibibytes,
-or two gibibytes when the host does not report its memory. The shared policy
+The default is half of the memory available to the process: its physical
+memory, or on Linux the memory limit of its control group when that is lower,
+as inside a container. When the host does not report its memory the default is
+two gibibytes. On macOS the reading is one `sysctlbyname` call for `hw.memsize`,
+the one foreign call in zetesis's own source; on Linux it reads `/proc/meminfo`
+and the cgroup filesystem. The shared policy
 derives source, expansion-family, support, formula, session and output capacities
 from that allowance, including population limits for retained values and nodes.
-Checked depth and representation limits remain. `--stats` reports the allowance,
-reported host memory and actual configured named capacities.
+Checked depth and representation limits remain. The record view of `--stats`
+(with `--json`, or from a legacy invocation) reports the allowance, the memory
+available to the process and the configured named capacities; the human tables
+do not show them. `--memory` is listed under `--help-all`.
 
 The capacities are independent shares for named owners, which can overlap.
 Their sum is not the allowance, and neither the allowance nor the population

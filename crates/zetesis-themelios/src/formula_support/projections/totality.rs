@@ -1,10 +1,13 @@
 //! Optional totality over complete positive source-column domains.
 //!
-//! Final emission, hybrid capture and admitted hybrid checks share this gate
-//! over the same completed source carrier. Each expression in a flat constraint
-//! is either a leaf, reads one source variable covered by an ordinary positive
-//! atom column, or has checked arithmetic over several numeric column bounds.
-//! Literal multiplication factors and divisors extend sums and differences;
+//! Original-family admission, final emission, hybrid capture and admitted hybrid
+//! checks use this gate over completed support. Possible-head production uses it
+//! only for snapshot-local multiples selection; the proof then covers the full
+//! current columns, not later rounds or completed-family evidence. Each expression
+//! in an eligible flat normal body is either a leaf, reads one source variable
+//! covered by an ordinary positive atom column, or has checked arithmetic over
+//! several numeric column bounds.
+//! Products, quotients and remainders extend sums and differences;
 //! the bounds establish every intermediate and exclude zero divisors.
 //! Successful evaluation on that entire
 //! column domain covers every complete rule binding, including rows a scalar
@@ -26,20 +29,18 @@ use crate::formula_support::{Computation, Context, Counters, Evaluation, Support
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits};
 
 mod numeric;
+pub(in crate::formula_support) use numeric::positive_bounds;
 
 /// Preparation serves either partial scalar families or total arithmetic whose
 /// certificate admits incremental source checking. This does not redefine which
 /// source families require a defined witness: that remains `family::partial`.
 pub(in crate::formula_support) fn needed(literals: &[LiteralIr]) -> bool {
-    let arithmetic = |expression: &Expression| {
-        expression
-            .nodes
-            .iter()
-            .any(|operation| numeric::arithmetic(expression, operation))
-    };
+    let arithmetic = |expression: &Expression| expression.nodes.iter().any(numeric::arithmetic);
     crate::formula_support::family::partial(literals)
         || literals.iter().any(|literal| match literal {
-            LiteralIr::Compare(left, _, right) => arithmetic(left) || arithmetic(right),
+            LiteralIr::Compare(comparison) => {
+                arithmetic(comparison.left()) || arithmetic(comparison.right())
+            }
             LiteralIr::TupleCompare(left, _, right) => left.iter().chain(right).any(arithmetic),
             _ => false,
         })
@@ -57,16 +58,16 @@ pub(crate) fn supports_column_totality(
         counters.work(limits, rule.location)?;
         let expressions = match literal {
             LiteralIr::Atom(..) => continue,
-            LiteralIr::Compare(left, _, right) => std::slice::from_ref(left)
+            LiteralIr::Compare(comparison) => std::slice::from_ref(comparison.left())
                 .iter()
-                .chain(std::slice::from_ref(right)),
+                .chain(std::slice::from_ref(comparison.right())),
             LiteralIr::TupleCompare(left, _, right) => left.iter().chain(right),
             _ => return Ok(false),
         };
         for expression in expressions {
             for node in &expression.nodes {
                 counters.work(limits, rule.location)?;
-                if !numeric::supports(expression, node) {
+                if !numeric::supports(node) {
                     return Ok(false);
                 }
             }
@@ -81,11 +82,13 @@ struct Domain<'source> {
 }
 
 impl<'a> Projections<'a> {
-    /// Use completed, candidate-independent source columns. Success establishes
-    /// scalar totality for complete positive bindings and permits post-admission
-    /// selection. Source-family evidence cursors must still traverse their
-    /// complete families.
-    pub(in crate::formula_support) fn total_constraint(
+    /// Use full, candidate-independent columns of one immutable source snapshot.
+    /// Success establishes scalar totality for complete positive bindings within
+    /// that snapshot. Completed support permits post-admission selection; a
+    /// growing round permits only its separately bounded multiples selector.
+    /// A flat original family may omit its scan only when all normalized siblings
+    /// succeed on completed support. This proof supplies no defined witness.
+    pub(in crate::formula_support) fn total_body(
         &mut self,
         rule: &'a RuleIr,
         support: &Support<'_>,
@@ -121,15 +124,16 @@ impl<'a> Projections<'a> {
             context.work.counters,
             context.work.location,
         )?;
+        let mut numeric = numeric::Preparation::new(rule, support);
         for (index, literal) in rule.body.iter().enumerate() {
             tick(&mut context)?;
             match literal {
-                LiteralIr::Compare(left, _, right) => {
+                LiteralIr::Compare(comparison) => {
+                    let ([left, right], _) = comparison.operands();
                     for (side, expression) in [left, right].into_iter().enumerate() {
                         if !self.total_expression(
                             (Some((index, side)), expression),
-                            &rule.body,
-                            support,
+                            &mut numeric,
                             &mut binding,
                             evaluation,
                             &mut context,
@@ -142,8 +146,7 @@ impl<'a> Projections<'a> {
                     for expression in left.iter().chain(right) {
                         if !self.total_expression(
                             (None, expression),
-                            &rule.body,
-                            support,
+                            &mut numeric,
                             &mut binding,
                             evaluation,
                             &mut context,
@@ -156,8 +159,7 @@ impl<'a> Projections<'a> {
                     for expression in guard.expressions() {
                         if !self.total_expression(
                             (None, expression),
-                            &rule.body,
-                            support,
+                            &mut numeric,
                             &mut binding,
                             evaluation,
                             &mut context,
@@ -167,7 +169,7 @@ impl<'a> Projections<'a> {
                     }
                 }
                 LiteralIr::Atom(..) => {}
-                _ => unreachable!("eligible flat constraint checked above"),
+                _ => unreachable!("eligible flat normal body checked above"),
             }
         }
         let Self::Local(values) = self else {
@@ -183,8 +185,7 @@ impl<'a> Projections<'a> {
     fn total_expression(
         &mut self,
         (source, expression): (Option<(usize, usize)>, &Expression),
-        literals: &[LiteralIr],
-        support: &Support<'_>,
+        numeric: &mut numeric::Preparation<'_, '_>,
         binding: &mut Binding<'static>,
         evaluation: &mut Evaluation,
         context: &mut Context<'_, &mut Computation<'_, '_>>,
@@ -218,9 +219,9 @@ impl<'a> Projections<'a> {
             return Ok(false);
         };
         if !inputs.all(|input| input == slot) {
-            return numeric::total(expression, literals, support, context);
+            return numeric.total(expression, context);
         }
-        let Some(domain) = domain(slot, literals, support, context)? else {
+        let Some(domain) = numeric.domain(slot, context)? else {
             return Ok(false);
         };
         if matches!(expression.nodes.as_slice(), [Operation::Variable(_)]) {
@@ -273,14 +274,14 @@ impl<'a> Projections<'a> {
     }
 }
 
-/// The finite column argument covers only a flat constraint over ordinary
+/// The finite column argument covers only a flat normal body over ordinary
 /// positive source rows. Empty relations need no speculative arithmetic.
 fn eligible(
     rule: &RuleIr,
     support: &Support<'_>,
     context: &mut Context<'_, &mut Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
-    if !matches!(rule.head, HeadIr::Normal(None)) || rule.variables != rule.body_variables {
+    if !matches!(rule.head, HeadIr::Normal(_)) || rule.variables != rule.body_variables {
         return Ok(false);
     }
     for literal in &rule.body {
@@ -379,6 +380,43 @@ fn domain<'source>(
         }
     }
     Ok(selected)
+}
+
+/// Prove scalar intermediates on the original range and full positive columns.
+/// The caller authenticates the one generated slot and flat positive profile.
+/// Unlike complete-column projection preparation, this populates no expression
+/// map and grants neither table coverage nor original-family admission.
+pub(in crate::formula_support) fn range_body(
+    rule: &RuleIr,
+    support: &Support<'_>,
+    target: usize,
+    bounds: (i32, i32),
+    divisor: Option<usize>,
+    mut context: Context<'_, &mut Computation<'_, '_>>,
+) -> Result<bool, FormulaFailure> {
+    let mut numeric = numeric::Preparation::new(rule, support);
+    numeric.seed_range(target, bounds, &mut context)?;
+    if let Some(slot) = divisor
+        && !numeric.positive_domain(slot, &mut context)?
+    {
+        return Ok(false);
+    }
+    for literal in &rule.body {
+        tick(&mut context)?;
+        if let LiteralIr::Compare(comparison) = literal {
+            for expression in [comparison.left(), comparison.right()] {
+                context.work.counters.charge_work(
+                    expression.nodes.len() as u128,
+                    context.work.limits,
+                    context.work.location,
+                )?;
+                if !numeric.total(expression, &mut context)? {
+                    return Ok(false);
+                }
+            }
+        }
+    }
+    Ok(true)
 }
 
 #[cfg(test)]

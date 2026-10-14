@@ -262,7 +262,7 @@ impl Encoded {
     }
     /// Consume the record without copying its text.
     #[must_use]
-    pub fn into_text(self) -> String {
+    pub(crate) fn into_text(self) -> String {
         self.text
     }
     /// Charged work for this encoding alone.

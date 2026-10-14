@@ -53,7 +53,11 @@ reuses the same rule witness through the mapped program in both directions.
 This does not preserve the programs' answer sets. The eager Rust delta scheduler
 uses this distinction for ordinary flat `not` and `not not` body atoms: they do
 not generate bindings or restrict possible support. Argument evaluation and all
-authored formulas remain intact; richer source producers still use full rounds.
+authored formulas remain intact. Richer source producers register every
+predicate read by their nested conditions. After a full first round, only
+producers with changed registered inputs are traversed. The
+[scheduling guide](producer-scheduling.md) separates the general selection law
+from the remaining read-set and head-pruning correspondences.
 The rule-instance/compiler and delta-history correspondences are separate
 obligations, including source occurrence identity and failed-prefix behavior.
 
@@ -81,7 +85,7 @@ the normalized-rule semantics; they do not replace the general formula reduct.
 | Normalized atomic heads and constraints | `NormalSupport` proves projection compatibility, including producers with extra proposals | Rust must supply every relevant typed ground instance and preserve checked filters, atom identity and completion |
 | Source normal rules with joins and generated values | The normalized-rule result applies after faithful instantiation | Prove complete whole bindings and generated head values; source classification or a completed loop alone does not establish this |
 | Disjunctive and choice heads | Existing head/support laws describe necessary producers and head permissions | Connect local eligibility, every positive head occurrence and the original formula reduct to possible-support projection |
-| Aggregate assignments and measured heads | `AggregateAssignment`, `ValueExtrema` and `SourceMeasures` supply key/value coverage laws | Preserve correlated keys/values, checked arithmetic and independent head permissions through concrete joins and lowering |
+| Aggregate assignments and measured heads | `AggregateAssignment` and `SourceMeasures` supply key/value coverage and closed forms for count, sum and ordered extrema with required keys | Preserve correlated keys/values, required-key classification, checked arithmetic, ASP term ordering and independent head permissions through concrete joins and lowering; relate stopped and completed Rust construction to the mathematical carriers |
 
 The first row is a theorem over the mathematical representation. The other rows
 identify the source-to-representation work still needed. In particular, a

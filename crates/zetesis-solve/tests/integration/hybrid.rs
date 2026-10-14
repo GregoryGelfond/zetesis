@@ -51,10 +51,10 @@ fn limits() -> FormulaLimits {
 }
 
 fn expansion() -> ExpansionLimits {
-    ExpansionLimits {
-        max_scalar_bytes: 1_048_576,
-        ..Default::default()
-    }
+    zetesis_reference_support::resource_limits::expansion(
+        zetesis_themelios::ExpansionResource::ScalarBytes,
+        1_048_576,
+    )
 }
 
 fn eager(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {

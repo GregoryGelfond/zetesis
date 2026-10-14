@@ -9,7 +9,6 @@
 
 mod contract;
 mod document;
-pub(crate) mod files;
 mod originals;
 
 use std::fmt;
@@ -114,9 +113,45 @@ pub enum Error {
     },
     /// An input path is not confined to its selected root.
     Path(String),
+    /// A file inside its selected root, named by its resolved path, is not a
+    /// regular file.
+    Irregular(PathBuf),
     /// Provenance, dependencies, or a typed contract is inconsistent.
     Contract(String),
 }
+/// This corpus's confined, bounded file reads, failing in its own error type.
+pub(crate) type Files = crate::corpus_files::Files<Error>;
+
+impl crate::corpus_files::Failure for Error {
+    type Resource = Resource;
+    fn io(path: &Path, source: std::io::Error) -> Self {
+        Self::Io {
+            path: path.to_owned(),
+            source,
+        }
+    }
+    fn unconfined(text: String) -> Self {
+        Self::Path(text)
+    }
+    fn irregular(path: &Path) -> Self {
+        Self::Irregular(path.to_owned())
+    }
+    fn limit(resource: Resource, observed: u128, limit: usize) -> Self {
+        Self::Limit {
+            resource,
+            observed,
+            limit,
+        }
+    }
+    fn digest(path: String, expected: String, actual: String) -> Self {
+        Self::Digest {
+            path,
+            expected,
+            actual,
+        }
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -139,6 +174,9 @@ impl fmt::Display for Error {
                 write!(f, "{path}: SHA-256 {actual} differs from {expected}")
             }
             Self::Path(path) => write!(f, "examples path is not confined: {path}"),
+            Self::Irregular(path) => {
+                write!(f, "examples file is not a regular file: {}", path.display())
+            }
             Self::Contract(detail) => write!(f, "examples contract: {detail}"),
         }
     }
@@ -155,23 +193,13 @@ impl std::error::Error for Error {
     }
 }
 
-fn ceiling(resource: Resource, observed: u128, limit: usize) -> Result<(), Error> {
-    if observed > limit as u128 {
-        Err(Error::Limit {
-            resource,
-            observed,
-            limit,
-        })
-    } else {
-        Ok(())
-    }
-}
-
 /// Load and seal the self-contained examples, license, dependencies and contracts.
 /// No upstream checkout, original corpus, external tool, or solver is consulted.
 ///
 /// # Errors
-/// Refuses changed bytes, unconfined paths, invalid metadata or exceeded limits.
+/// Refuses changed bytes, unconfined paths ([`Error::Path`]), files inside
+/// `root` that are not regular files ([`Error::Irregular`]), invalid metadata
+/// or exceeded limits.
 pub fn load(root: &Path, limits: Limits) -> Result<Corpus, Error> {
     document::load(root, limits)
 }

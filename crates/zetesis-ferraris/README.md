@@ -5,7 +5,7 @@ oracle in `zetesis-cpu` computes a least closure. A general reduct may have
 incomparable minimal models; this kernel checks proper subsets instead.
 
 The input is a bounded, immutable DAG of atoms, falsum, conjunction, disjunction,
-implication and nonnegative weighted thresholds, plus asserted roots.
+implication, nonnegative weighted thresholds and ordinal min/max cuts, plus asserted roots.
 `FormulaParts` owns raw nodes and their Boolean and numeric arenas together. Conjunction/disjunction pairs are inline; wider groups
 retain one arena row. `NodeView` exposes every logical child independently of
 that storage. `Theory::new` validates the complete graph and asserted roots.
@@ -58,12 +58,39 @@ Boolean expansion with explicit physical capacity and work bounds. That expansio
 does not replace the original semantic theory.
 
 The common source compiler uses native thresholds for nonnegative count and sum
-guards, including choice bounds. Signed sums retain the full subset translation;
-minimum and maximum retain their exact filtered-connective translation.
+guards, including choice bounds. Signed sums retain the full subset translation.
+Typed minimum and maximum use the ordinal representation below.
 Application performance and physical backend qualification are separate from
 representation support. The retained extracted Lean evaluator describes the
 preceding Boolean representation. `ThresholdReduct` proves the general semantic bridge, but does
 not yet refine this Rust storage, propagation or transport.
+
+## Native ordinal extrema
+
+`append_value_extremum_family_refs` orders typed values once and appends one
+condition/rank row shared by the requested comparisons. The dictionary includes
+`#inf` and `#sup`; ranks express ASP value order, not canonical term identity.
+Every tuple occurrence keeps its eligibility condition. Ordinary source guards
+and assignment families share this mechanism when its preparation fits.
+
+CPU evaluation reduces min and max once per row and interpretation. Each cut
+retains its own original-truth gate when read in the reduct. Candidate propagation
+uses sorted witness columns and the existing connective counters. Exact
+associative witness equality is checked once in the propagation index; each
+formula keeps its own truth and frozen gate. Required-witness checks stream
+distinct leaves and stop at an absorbing witness or two open leaves. Resumable
+frames also serve structural coverage, skipping covered subtrees and unread
+siblings. Enqueue sites share one eligibility predicate to omit settled
+obligations; later root events seed any new demand. Local anchor roles keep
+unrelated shared formulas off the dynamic bridge route, and a per-chain bit
+records whether any row anchor lies in a chain's same-kind cone, so discovery
+from a chain without one returns at once. Expanded discovery
+retains only proposals that can tighten a row's bounds, then authenticates their
+exact witness relationship before transport.
+GPU and clause
+transport still lower cuts to Boolean formulas; native CPU reduction does not
+establish native device reduction. The [manual's aggregate account](../../docs/book/architecture/alignment.md)
+describes the storage, propagation and proof boundaries.
 
 ## Reusing original satisfaction work
 
@@ -75,13 +102,30 @@ view from unverified bits or retain it while overwriting the workspace. A
 successful evaluation can report a nonmodel. It does not establish an answer set.
 
 The workspace retains capacity across candidates and independently admitted
-theories, recomputing all values on every call. Work counts nodes, every logical
-child occurrence and root visits; bytes include its header and actual Boolean-vector capacity. A lowered byte
+theories, recomputing all values on every call. Work counts node and operand
+visits, root tests, and numeric scratch initialization and resets. Each shared
+weighted or ordinal row is reduced once per pass. One 16-byte measure slot holds
+either its checked sum or its minimum and maximum ranks, with packed validity
+bits; the admitted row domain determines the reading. Bytes include the header
+and actual truth and numeric-cache capacities. `work_bound` gives a conservative complete-evaluation
+allowance; `requested_payload_bytes` supplies fresh storage requirements, which
+callers must replace with observed capacities after reservation. A lowered byte
 ceiling includes capacity retained by earlier calls. Cancellation, deadlines,
 allocation and resource failures expose no truth view and retain their consumed
 work and storage receipt. Borrowed inputs and allocator bookkeeping are excluded.
 The `models` convenience operation uses this evaluator with a fresh workspace;
-its theory-identity check and original work-limit behavior are preserved.
+its theory-identity check and stop semantics are preserved.
+
+An admitted theory records whether any node uses a numeric operator. If none do,
+unused raw numeric rows and descriptors request no scratch or reset work. Otherwise
+scratch uses every authoritative row ID, including unused rows: R rows request
+16R measure bytes plus 8 ceil(R/64) validity bytes, initialize R cells on first use,
+and reset ceil(R/64) words per pass. A weighted family with one guard therefore
+adds one 16-byte slot and one validity word; sharing saves reads when several guards
+reference that row. Public `Threshold::evaluate` and `ExtremumRow::reduce` keep
+reading every input occurrence in order on each call, including repeated conditions
+and zero weights. Whole-theory evaluation shares only completed measures within
+its one original or frozen pass; every frozen node retains its own truth gate.
 
 ## Reusing a candidate's reduct
 
@@ -94,10 +138,10 @@ No candidate words or original DAG are copied; `candidate()` and `theory()`
 expose the bound subject. A frozen value is neither a model certificate nor an
 answer set. Use the checked membership API for that conclusion.
 
-Construction charges one visit per DAG node and per logical child occurrence,
-including repeated children, and retains one Boolean per node. Each query
-allocates its own temporary Boolean workspace and charges the same node and
-operand visits, followed by root tests through the first failure. The value
+Construction charges node and operand visits plus numeric scratch initialization,
+reducing shared weighted and ordinal rows once per pass, and retains one Boolean per node.
+Each query allocates temporary truth and numeric workspace and charges the same
+operations, followed by root tests through the first failure. The value
 is immutable and can be shared between independent callers. Construction and
 each query have separate work budgets; these operations perform no subset search.
 Cancellation, deadlines, foreign identity, allocation failure and exhausted
@@ -177,8 +221,12 @@ the region survives the narrowing, and a refuted region holds none.
 
 The result is `Refuted`, or `Fixed` with whether any atom was decided; the
 statistics count charged node visits and producer checks, the propagation
-events, and the atoms held and cut. Every event follows a newly learned bit,
-so the events are bounded by the bits. A `Narrower` indexes the theory once
+events, and the atoms held and cut. Ordinary node events follow newly learned truth bits.
+Threshold-row events follow stricter bounds; coalesced witness notices track
+changes in unresolved possibilities. Original-only residual-sum checks use their
+own dirty queue after mandatory propagation settles, so arithmetic notifications
+neither reorder bound transport nor rescan a row during intermediate waves.
+A `Narrower` indexes the theory once
 and narrows any region of it, the root from knowledge of nothing and a child
 from its parent's knowledge. The index
 reads each maximal tree of one connective, a clause or a body, as one node
@@ -209,9 +257,11 @@ proper-subset query's narrowing; `FormulaEvaluation::truth` is that mask.
 `RegionLimits` bounds charged work, and through it propagation events;
 exhausting that ceiling, or a control stop, returns the stop, and the region and
 the knowledge then hold what the closure had learned before it, sound but
-not closed, which the proposers abandon. A narrowing that does not refute also prefers the open atom with
-the most parents still unknown as the region's next split, which the
-traversal honours; without a preference it splits the highest open atom. The traversal that splits regions and
+not closed, which the proposers abandon. A narrowing that does not refute also prefers a
+region's next split, which the traversal honours: an open atom heading one of the
+subject's atomic choice roots (`ChoiceHeads`, when the subject carries them) before
+any other, then the open atom with the most parents still unknown, ties to the
+lowest; without a preference the traversal splits the highest open atom. The traversal that splits regions and
 covers the tree is `zetesis_cpu::regions::Traversal`, shared with the closure
 route; `zetesis-sat` uses it with this narrowing to propose candidates.
 
@@ -422,10 +472,31 @@ query. A false root remains an original-model failure; missing support returns
 immutable theory identity and has separate producer, dependency, logical-byte
 and work limits. An incomplete scan never supplies a successful certificate.
 
+`TightPlan::prepare_updates` adds a reverse index to the plan: for every node,
+the connectives, numeric rows, producer bodies and root positions that read it;
+for every atom, its atom nodes; for every row, its guards. A `TightWorkspace`
+that completed a check under such a plan keeps that evaluation and updates it for
+the next candidate of the same theory: it re-evaluates, in ascending node order,
+exactly the nodes with an input whose value changed, withdraws the measures of
+rows whose conditions changed, and maintains support counts and the
+unsupported-atom and false-root sets. Readers have larger indices than what they
+read, so every re-evaluation reads final inputs and each node is re-evaluated at
+most once; each summary is a count over its inputs and moves with each changed
+input. A completed check's verdict and witness therefore equal a complete
+evaluation's. A large change, another theory, or a check after one refused or
+stopped during its evaluation evaluates completely; a check refused or stopped
+before its evaluation begins changes nothing. `TightPlan::check_work_bound`
+bounds a check by either route. The mechanism comments in
+[the workspace](src/tight/evaluate.rs) carry the full argument.
+
 `proofs/Zetesis/TightPlans.lean` proves the formula-level satisfaction/support
 characterization for this grammar, including original choices in both branch
 orders. It does not prove the Rust extractor, rank implementation or missing
-lazy source coverage. Tests compare finite trees and their materialized reducts,
+lazy source coverage. `proofs/Zetesis/TightEvaluation.lean` proves that
+re-evaluating exactly the nodes whose inputs changed yields the new candidate's
+node truth (`updated_values_exact`); the worklist, the index, row re-reduction
+and the maintained summaries are Rust obligations, checked by a differential
+property against complete evaluation. Tests compare finite trees and their materialized reducts,
 validate rank/root/identity/resource boundaries, and exercise the ordinary
 candidate batch protocol.
 

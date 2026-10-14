@@ -11,6 +11,7 @@ use std::{
     iter::FusedIterator,
 };
 
+use crate::structured::ceiling;
 use crate::{
     Atom, Predicate, Sign, Value, ValueError, ValueLimits, ValueNode, ValueNodeRef, ValueResource,
 };
@@ -261,7 +262,7 @@ impl<'a> TermRef<'a> {
         while remaining != 0 {
             before()?;
             let node = nodes[end].view();
-            remaining = remaining - 1 + compare::arity(node);
+            remaining = remaining - 1 + node.arity();
             end += 1;
         }
         Ok(Some(Self(TermSource::Nodes(&nodes[position..end]))))
@@ -327,7 +328,7 @@ impl<'a> TermRef<'a> {
             return Self::new(snapshot, child);
         }
         let nodes = self.flat_nodes()?;
-        if index >= compare::arity(nodes[0].view()) {
+        if index >= nodes[0].view().arity() {
             return None;
         }
         let mut start = 1;
@@ -347,7 +348,7 @@ impl<'a> TermRef<'a> {
             return stored.child_end(index);
         }
         let nodes = self.flat_nodes()?;
-        if index >= compare::arity(nodes[0].view()) {
+        if index >= nodes[0].view().arity() {
             return None;
         }
         let mut end = 1;
@@ -1111,7 +1112,7 @@ impl<'a> AtomRef<'a> {
     ///
     /// # Errors
     /// Returns the first callback refusal before its operation.
-    pub fn compare_key_with<E>(
+    pub(crate) fn compare_key_with<E>(
         self,
         other: &crate::AtomKey<'_>,
         mut before: impl FnMut() -> Result<(), E>,
@@ -1402,7 +1403,7 @@ fn subtree_end(nodes: &[ValueNode], start: usize) -> usize {
     let mut pending = 1;
     let mut end = start;
     while pending != 0 {
-        pending = pending - 1 + compare::arity(nodes[end].view());
+        pending = pending - 1 + nodes[end].view().arity();
         end += 1;
     }
     end
@@ -1425,7 +1426,7 @@ fn flat_depth_with<E>(
             let mut siblings = 0;
             for candidate in (0..ancestor).rev() {
                 before()?;
-                let children = compare::arity(nodes[candidate].view());
+                let children = nodes[candidate].view().arity();
                 if children > siblings {
                     ancestor = candidate;
                     depth += 1;
@@ -1437,18 +1438,6 @@ fn flat_depth_with<E>(
         maximum = maximum.max(depth);
     }
     Ok(maximum)
-}
-
-fn ceiling(resource: ValueResource, observed: u128, limit: usize) -> Result<(), ValueError> {
-    if observed > limit as u128 {
-        Err(ValueError::Limit {
-            resource,
-            observed,
-            limit,
-        })
-    } else {
-        Ok(())
-    }
 }
 
 fn copy_text(text: &str, bytes: &mut u128, limit: usize) -> Result<String, ValueError> {

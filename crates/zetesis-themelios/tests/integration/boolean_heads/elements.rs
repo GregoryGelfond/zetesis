@@ -1,29 +1,22 @@
 //! Boolean elements retain activity without introducing producer atoms.
 
+use crate::support::admission;
 use std::collections::BTreeSet;
+use zetesis_reference_support::{prepared, resource_limits};
 
 use super::{Models, native};
 use crate::support::finite_bindings::expected;
 use themelios_base::source::SourceId;
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, AnalysisBasis, CountPlanLimits, CountPlanStatus,
-    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
-    prepare_formula,
+    AdmittedFormula, AnalysisBasis, CountPlanLimits, CountPlanStatus, ExpansionLimits,
+    FormulaFailure, FormulaLimits, FormulaResource,
 };
 
 const SOURCE: SourceId = SourceId::new(191);
 
 fn limited(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions {
-            source_id: SOURCE,
-            ..Default::default()
-        },
-        ExpansionLimits::default(),
-        *limits,
-    )
+    admission::admit_with(SOURCE, source, ExpansionLimits::default(), limits)
 }
 
 fn models(source: &str) -> Models {
@@ -182,11 +175,9 @@ fn false_boolean_heads_preserve_empty_contributions() {
 
 #[test]
 fn boolean_occurrence_limits_are_inclusive() {
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_elements = 2;
-    assert!(limited("2{#true;#true}2.", &limits).is_ok());
-    limits.aggregate.max_elements = 1;
-    let error = limited("2{#true;#true}2.", &limits).unwrap_err();
+    let limits = |maximum| resource_limits::formula(FormulaResource::AggregateElements, maximum);
+    assert!(limited("2{#true;#true}2.", &limits(2)).is_ok());
+    let error = limited("2{#true;#true}2.", &limits(1)).unwrap_err();
     assert!(
         matches!(
             error,
@@ -198,22 +189,16 @@ fn boolean_occurrence_limits_are_inclusive() {
         "{error}"
     );
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-    assert!(limited("d(1..2).1{#true:d(X)}1.", &limits).is_ok());
+    assert!(limited("d(1..2).1{#true:d(X)}1.", &limits(1)).is_ok());
 }
 
 #[test]
 fn boolean_elements_preserve_other_count_certificates() {
     let source = "2{a;b;c;d}2.{a;b}1.{c;d}1.1{#true;e}1.";
     let ordinary = limited(source, &FormulaLimits::default()).unwrap();
-    let planned = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
-    .unwrap();
+    let planned = prepared(source)
+        .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
+        .unwrap();
     let CountPlanStatus::Ready(plan) = planned.count_plan() else {
         panic!("the independent atom partition remains applicable");
     };

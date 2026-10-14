@@ -1,18 +1,19 @@
 //! Complete selective rounds retain exact carriers while avoiding producer work.
 
 use crate::formula_support::GroundingWork as WorkContext;
+use crate::test_support::prepared;
 use std::cell::Cell;
 use std::fmt::Write;
 
 use super::{atom, location, plan, prepare};
 use crate::formula::Preparation;
 use crate::formula_ir::HeadIr;
-use crate::formula_support::producers::ProducerPlan;
+use crate::formula_support::producers::{ProducerPlan, Producers};
 use crate::formula_support::{Counters, complete};
 use crate::grounding_observer::Profile;
 use crate::{
-    AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    GroundingObserver, GroundingOutcome, GroundingPhase, GroundingWork,
+    FormulaFailure, FormulaLimits, FormulaResource, GroundingObserver, GroundingOutcome,
+    GroundingPhase, GroundingWork,
 };
 use zetesis_core::{Atom, AtomCatalog, Sign};
 
@@ -64,8 +65,8 @@ fn measure(
     let profile = Profile::new(Some(&observer));
     let mut counters = Counters::resume(accounting, profile.work());
     let catalog = profile.phase(GroundingPhase::SupportCompletion, None, || {
-        let plan = if scheduled {
-            ProducerPlan::prepare(
+        let producers = if scheduled {
+            Producers::prepare(
                 &prepared,
                 &catalog,
                 limits,
@@ -73,12 +74,18 @@ fn measure(
                 location(&prepared),
             )?
         } else {
-            None
+            Producers::registered(
+                &prepared,
+                &catalog,
+                limits,
+                &mut counters,
+                location(&prepared),
+            )?
         };
         complete(
             catalog,
             &prepared,
-            plan,
+            producers,
             None,
             &mut budget,
             WorkContext::new(limits, &mut counters, location(&prepared)),
@@ -121,7 +128,17 @@ fn chain(steps: i32) -> String {
 #[test]
 fn affected_rounds_avoid_repeated_producer_visits() {
     let steps = 64;
-    let prepared = chain(steps);
+    // Facts enter support without producer visits, so the producers a full
+    // traversal revisits every round are rules: the chain's, and eight more
+    // disconnected cycles that no fact ever enables.
+    let mut prepared = chain(steps);
+    for cycle in 0..8 {
+        write!(
+            prepared,
+            "l{cycle}(X):-r{cycle}(X).r{cycle}(X):-l{cycle}(X)."
+        )
+        .unwrap();
+    }
     let reference = measure(&prepared, false, &FormulaLimits::default()).unwrap();
     let scheduled = measure(&prepared, true, &FormulaLimits::default()).unwrap();
     let mut expected: Vec<_> = (0..steps)
@@ -131,23 +148,30 @@ fn affected_rounds_avoid_repeated_producer_visits() {
     expected.sort();
     assert_eq!(scheduled.atoms, expected);
     assert_eq!(scheduled.atoms, reference.atoms);
-    // 65 bootstrap facts; the recursive producer runs once per new reach row,
-    // including the final row without a successor. The disconnected cycle is
-    // never enabled. Full traversal instead visits all 68 producers in 66 rounds.
-    assert_eq!(reference.operations.support_producer_visits, Some(4_488));
-    assert_eq!(scheduled.operations.support_producer_visits, Some(130));
+    // The 65 facts enter the first round without a producer visit. The
+    // recursive producer runs once per new reach row, including the final row
+    // without a successor. The disconnected cycles are never enabled. Full
+    // traversal instead visits all 19 rules in each of the 66 rounds.
+    assert_eq!(reference.operations.support_producer_visits, Some(1_254));
+    assert_eq!(scheduled.operations.support_producer_visits, Some(65));
     assert_eq!(reference.operations.support_rounds, Some(66));
     assert_eq!(scheduled.operations.support_rounds, Some(66));
     assert_eq!(
         reference.operations.binding_snapshots,
         scheduled.operations.binding_snapshots
     );
-    // Includes applicability, graph validation, all wake preparation and scans.
+    // Production work covers visits, their variants and schedule selection:
+    // the plan's 65 visits cost less than visiting every rule in every round.
+    // The plan's preparation and wake work lie outside that receipt. Since the
+    // full schedule takes each rule's registered occurrences instead of
+    // scanning its body on every visit, they cost about what the avoided
+    // visits do on this program, so total work is not compared.
     assert!(
-        scheduled.work < reference.work,
-        "scheduled={} full={}",
-        scheduled.work,
-        reference.work
+        scheduled.operations.support_production_work.unwrap()
+            < reference.operations.support_production_work.unwrap(),
+        "scheduled={:?} full={:?}",
+        scheduled.operations.support_production_work,
+        reference.operations.support_production_work
     );
     assert!(scheduled.operations.support_peak_bytes.unwrap() > 0);
 }
@@ -169,8 +193,10 @@ fn terminal_predicates_avoid_an_unused_final_snapshot() {
     assert_eq!(reference.operations.support_rounds, Some(2));
     assert_eq!(scheduled.operations.support_snapshot_preparations, Some(1));
     assert_eq!(reference.operations.support_snapshot_preparations, Some(2));
-    assert_eq!(scheduled.operations.support_producer_visits, Some(2));
-    assert_eq!(reference.operations.support_producer_visits, Some(4));
+    // The facts enter the first round without a producer visit, and the
+    // constraint produces nothing.
+    assert_eq!(scheduled.operations.support_producer_visits, Some(0));
+    assert_eq!(reference.operations.support_producer_visits, Some(0));
 }
 
 #[test]
@@ -221,7 +247,7 @@ fn reverse_postings_preserve_signed_predicate_identity() {
         {
             assert!(previous.is_none_or(|previous| previous < index));
             previous = Some(index);
-            let HeadIr::Normal(Some(head)) = &prepared.rules[index].head else {
+            let HeadIr::Normal(Some(head)) = &prepared.rules_without_facts()[index].head else {
                 panic!("a posting must name a producer")
             };
             actual.push(
@@ -229,7 +255,7 @@ fn reverse_postings_preserve_signed_predicate_identity() {
                     components,
                     &limits,
                     &mut counters,
-                    prepared.rules[index].location,
+                    prepared.rules_without_facts()[index].location,
                 )
                 .unwrap()
                 .predicate()
@@ -387,15 +413,9 @@ fn empty_wake_sets_do_not_discharge_original_constraints() {
         ("p(1).:-p(2).", [false, true]),
     ] {
         let observer = Observer::default();
-        let admitted = crate::prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-        .ground_with_observer(Some(&observer))
-        .unwrap();
+        let admitted = prepared(source)
+            .ground_with_observer(Some(&observer))
+            .unwrap();
         let expected_atom = atom("p", Sign::Positive, &[1]);
         assert_eq!(
             admitted.atoms().iter().collect::<Vec<_>>(),

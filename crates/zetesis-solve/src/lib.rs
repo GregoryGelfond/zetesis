@@ -74,7 +74,10 @@ mod execution_resources;
 mod batch_executor;
 mod policy;
 mod grounding;
-pub use grounding::{GroundedFormula, ground_bundle, ground_formula};
+pub use grounding::{
+    GroundedFormula, PreparedExecution, ground_bundle, ground_formula, prepare_bundle_execution,
+    prepare_formula_execution,
+};
 mod engine;
 mod optimization;
 mod objective_bounds;
@@ -98,6 +101,7 @@ mod model_construction;
 mod hybrid_regions;
 mod hybrid_session;
 mod terminal_session;
+mod source_session;
 mod session;
 mod world_view;
 mod projection;

@@ -1,6 +1,6 @@
 //! Original programs shared by source execution and physical qualification.
 
-pub const SOURCES: [&str; 21] = [
+pub(super) const SOURCES: [&str; 21] = [
     "1#min{1:a;1:b}1.",
     "1#max{0:a;1:a}1.",
     "1#min{1:#true;1:a}1.",

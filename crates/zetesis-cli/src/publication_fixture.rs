@@ -3,7 +3,6 @@
 use std::io::{self, Write};
 
 use zetesis_cpu::Cancellation;
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 use crate::{PublicationConfig, PublicationFailure, PublicationOutcome};
 
@@ -27,13 +26,7 @@ impl FormulaCase {
         diagnostics: &mut impl Write,
         cancellation: &Cancellation,
     ) -> Result<PublicationOutcome, PublicationFailure> {
-        let admitted = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let admitted = zetesis_reference_support::formula(source);
         let mut config = self.config.clone();
         config.solve.stats = self.presentation.stats;
         with_diagnostics(
@@ -84,13 +77,7 @@ pub(crate) fn formula(
     renderer: &mut impl crate::AnswerRenderer,
     cancellation: &Cancellation,
 ) -> Result<PublicationOutcome, PublicationFailure> {
-    let admitted = admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = zetesis_reference_support::formula(source);
     crate::publish_prepared(
         crate::PreparedInput::formula(&admitted),
         config,

@@ -1,24 +1,25 @@
 //! Canonical relational preparation preserves the existing compiler's semantics.
 
+use crate::support::unevaluable_directives::{objective, projection};
 use std::{collections::BTreeSet, sync::Arc, time::Instant};
+use zetesis_reference_support::{normal_answer_sets, resource_limits};
 
 use zetesis_core::{GroundProgram, Model, Seed, StaticLimits};
 use zetesis_cpu::{
-    Cancellation, CandidateLimits, CandidateTermination, Candidates, Limits, Stop, check,
-    check_static,
+    Cancellation, CandidateLimits, CandidateTermination, Candidates, Limits, Stop, check_static,
 };
 use zetesis_themelios::logical::{
     Name, Symbol, Term,
     program::{
-        Atom, Body, BodyElement, Choice, ChoiceElement, Condition, Const, Direction, Guard,
-        Optimize, OptimizeElement, Program, Project, Relation, Rule, Show, Statement, weight,
+        Atom, Body, BodyElement, Choice, ChoiceElement, Condition, Const, Guard, Program, Relation,
+        Rule, Show, Statement,
     },
     symbol::{Sign, VarName},
 };
 use zetesis_themelios::{
     AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
-    FormulaPurpose, ProgramFailureKind, ProgramRelationalOptions, ProgramSubject, admit_extended,
-    prepare_program_relational, symbols,
+    FormulaPurpose, ProgramFailureKind, ProgramRelationalOptions, ProgramResource, ProgramSubject,
+    admit_extended, prepare_program_relational, symbols,
 };
 
 fn atom(name: &str, terms: impl IntoIterator<Item = Term>) -> Atom {
@@ -97,13 +98,6 @@ fn models(
     result
 }
 
-fn lazy_models(program: &zetesis_core::Program) -> Vec<Model> {
-    models(program, |seed| {
-        let checked = check(program, seed, Limits::default(), &Cancellation::default()).unwrap();
-        checked.accepted().then(|| checked.closure().clone())
-    })
-}
-
 fn family(models: &[Model]) -> BTreeSet<BTreeSet<Symbol>> {
     let family = models.iter().map(full).collect::<BTreeSet<_>>();
     assert_eq!(family.len(), models.len());
@@ -128,26 +122,6 @@ fn answers() -> ProgramRelationalOptions {
     }
 }
 
-fn objective() -> Statement {
-    Optimize::new(
-        Direction::Minimize,
-        [OptimizeElement::new(
-            weight(Term::from(1) / Term::from(0)),
-            [],
-            Condition::empty(),
-        )],
-    )
-    .into()
-}
-
-fn projection() -> Statement {
-    Project::atom_body(
-        atom("selected", [Term::from(1) / Term::from(0)]),
-        Body::empty(),
-    )
-    .into()
-}
-
 #[test]
 fn relational_execution_preserves_the_answer_family() {
     let input = prepare_program_relational(Arc::new(Program::of(rules())), answers()).unwrap();
@@ -161,7 +135,7 @@ fn relational_execution_preserves_the_answer_family() {
     });
     // These invoke the source-join and static-graph membership implementations,
     // respectively; agreement alone would not detect a shared incomplete family.
-    assert_eq!(family(&lazy_models(input.program())), expected());
+    assert_eq!(family(&normal_answer_sets(input.program())), expected());
     assert_eq!(family(&eager), expected());
 }
 
@@ -179,8 +153,8 @@ fn extended_source_charges_are_preserved() {
     )
     .unwrap();
     assert_eq!(typed.expansion_usage(), source.expansion_usage());
-    assert_eq!(family(&lazy_models(source.program())), expected());
-    assert_eq!(family(&lazy_models(typed.program())), expected());
+    assert_eq!(family(&normal_answer_sets(source.program())), expected());
+    assert_eq!(family(&normal_answer_sets(typed.program())), expected());
 }
 
 #[test]
@@ -189,11 +163,11 @@ fn excluded_directives_do_not_consume_semantic_budgets() {
         rules().into_iter().chain([objective(), projection()]),
     ));
     let mut options = answers();
-    options.expansion.max_metadata_statements = 0;
+    options.expansion = resource_limits::expansion(ExpansionResource::MetadataStatements, 0);
     let input = prepare_program_relational(Arc::clone(&program), options).unwrap();
     assert!(std::ptr::eq(input.original_program(), program.as_ref()));
     assert!(!input.metadata().project_selection().is_explicit());
-    assert_eq!(family(&lazy_models(input.program())), expected());
+    assert_eq!(family(&normal_answer_sets(input.program())), expected());
 }
 
 #[test]
@@ -224,7 +198,7 @@ fn show_metadata_preserves_full_interpretations() {
         projection(),
     ]));
     let input = prepare_program_relational(Arc::new(program), answers()).unwrap();
-    let models = lazy_models(input.program());
+    let models = normal_answer_sets(input.program());
     assert_eq!(family(&models), expected());
     let observations = models
         .iter()
@@ -287,7 +261,7 @@ fn show_failure_keeps_its_unfiltered_statement_identity() {
 }
 
 #[test]
-fn expanded_templates_retain_original_evidence() {
+fn expanded_rules_retain_original_evidence() {
     let positive = Statement::from(Rule::fact(atom("p", [interval()])));
     let mut negative = atom("p", [1.into()]);
     negative.sign = Sign::Negative;
@@ -300,13 +274,21 @@ fn expanded_templates_retain_original_evidence() {
     let input = prepare_program_relational(Arc::clone(&program), answers()).unwrap();
     let originals = program.statements().collect::<Vec<_>>();
     assert!(std::ptr::eq(input.original_program(), program.as_ref()));
-    let mut positive_templates = 0;
+    let mut positive_facts = 0;
     let mut coherence = 0;
     for (template, sites) in input
         .program()
         .templates()
         .iter()
         .zip(input.template_sites())
+        .chain(
+            input
+                .program()
+                .facts()
+                .iter()
+                .map(zetesis_core::FactRef::as_template)
+                .zip(input.fact_sites()),
+        )
     {
         let subjects = sites
             .iter()
@@ -319,7 +301,7 @@ fn expanded_templates_retain_original_evidence() {
             assert_eq!(subjects, [&positive, &negative].into());
             coherence += 1;
         } else if subjects == [&positive].into() {
-            positive_templates += 1;
+            positive_facts += 1;
         } else {
             assert_eq!(subjects, [&negative].into());
         }
@@ -328,15 +310,18 @@ fn expanded_templates_retain_original_evidence() {
         input.template_sites().len(),
         input.program().templates().len()
     );
-    assert_eq!(positive_templates, 2);
+    assert_eq!(input.fact_sites().len(), input.program().facts().len());
+    assert_eq!(positive_facts, 2);
     assert_eq!(coherence, 1);
 }
 
 #[test]
 fn excluded_input_remains_structurally_bounded() {
     let program = Arc::new(Program::of([objective()]));
-    let mut options = answers();
-    options.admission.max_nodes = 1;
+    let options = ProgramRelationalOptions {
+        admission: resource_limits::program(ProgramResource::Nodes, 1),
+        ..answers()
+    };
     let error = prepare_program_relational(program, options).unwrap_err();
     assert!(matches!(
         error.cause(),
@@ -367,7 +352,7 @@ fn preparation_preserves_control_reasons() {
         assert!(Arc::ptr_eq(&retained, &program));
     }
     let retry = prepare_program_relational(Arc::clone(&program), answers()).unwrap();
-    assert_eq!(family(&lazy_models(retry.program())), expected());
+    assert_eq!(family(&normal_answer_sets(retry.program())), expected());
 }
 
 #[test]
@@ -420,7 +405,8 @@ fn observation_work_shares_the_expansion_allowance() {
     let limit = complete.expansion_usage().term_work - 1;
     assert!(limit >= plain.expansion_usage().term_work);
     let mut options = answers();
-    options.expansion.max_term_work = limit;
+    options.expansion =
+        resource_limits::expansion(ExpansionResource::TermWork, u64::try_from(limit).unwrap());
     let error = prepare_program_relational(program, options).unwrap_err();
     assert!(
         matches!(error.cause(), FormulaFailure::Expansion(ExpansionFailure::Limit {

@@ -1,13 +1,12 @@
 //! Preparation preserves source evidence and budgets before materialization.
 
-use std::fs;
+use zetesis_reference_support::{BundleFixture, formula, prepared, resource_limits};
 
 use crate::support::grounding_observers::Observer;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, ExpansionResource, FormulaBundleFailure, FormulaFailure, FormulaLimits,
-    FormulaResource, InputLimit, SourceBundle, admit_bundle_formula, admit_formula,
-    prepare_bundle_formula, prepare_formula,
+    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
+    ExpansionResource, FormulaBundleFailure, FormulaFailure, FormulaLimits, FormulaResource,
+    InputLimit, admit_bundle_formula, admit_formula, prepare_bundle_formula, prepare_formula,
 };
 
 #[test]
@@ -17,10 +16,7 @@ fn preparation_exposes_analysis_without_support_completion() {
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_support_rounds: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::SupportRounds, 0),
     )
     .unwrap();
     assert_eq!(input.source().expect("source input").text(), source);
@@ -49,10 +45,7 @@ fn send_analysis_precedes_grounding() {
         source.into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_support_rounds: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::SupportRounds, 0),
     )
     .unwrap();
     let analysis = prepared.source_analysis();
@@ -74,13 +67,7 @@ fn send_analysis_precedes_grounding() {
 
 #[test]
 fn materialization_checks_dynamic_arithmetic() {
-    let prepared = prepare_formula(
-        "p(0). q(1/X) :- p(X).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared("p(0). q(1/X) :- p(X).");
     assert!(matches!(
         prepared.ground(),
         Err(FormulaFailure::Expansion(
@@ -94,22 +81,13 @@ fn grounding_resumes_the_expansion_budget() {
     // Preparation charges source metadata; structural matching then reserves
     // capture-delta cells. Canonical term lookups do not copy scalar payloads.
     let source = "p(f(\"x\")). q(X) :- p(f(X)).";
-    let baseline = admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
-    let exact_bytes = baseline.expansion_usage().scalar_bytes;
+    let baseline = formula(source);
+    let exact_bytes = u64::try_from(baseline.expansion_usage().scalar_bytes).unwrap();
     assert!(matches!(
         prepare_formula(
             source.into(),
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_scalar_bytes: 0,
-                ..ExpansionLimits::default()
-            },
+            resource_limits::expansion(ExpansionResource::ScalarBytes, 0),
             FormulaLimits::default(),
         ),
         Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
@@ -122,10 +100,7 @@ fn grounding_resumes_the_expansion_budget() {
     // Preparation succeeds below the complete charge. Both entry points must
     // agree at this inclusive boundary; the private handoff regression anchors
     // an accepted preparation charge independently of this shared baseline.
-    let expansion = ExpansionLimits {
-        max_scalar_bytes: exact_bytes - 1,
-        ..ExpansionLimits::default()
-    };
+    let expansion = resource_limits::expansion(ExpansionResource::ScalarBytes, exact_bytes - 1);
     let prepared = prepare_formula(
         source.into(),
         AdmissionOptions::default(),
@@ -152,8 +127,8 @@ fn grounding_resumes_the_expansion_budget() {
         panic!("expected cumulative expansion refusal");
     };
     assert_eq!(resource, ExpansionResource::ScalarBytes);
-    assert_eq!(limit, (exact_bytes - 1) as u128);
-    assert_eq!(observed, exact_bytes as u128);
+    assert_eq!(limit, u128::from(exact_bytes - 1));
+    assert_eq!(observed, u128::from(exact_bytes));
     assert_eq!(
         location.location().expect("parsed source").source,
         AdmissionOptions::default().source_id
@@ -161,10 +136,7 @@ fn grounding_resumes_the_expansion_budget() {
     let exact = prepare_formula(
         source.into(),
         AdmissionOptions::default(),
-        ExpansionLimits {
-            max_scalar_bytes: exact_bytes,
-            ..expansion
-        },
+        resource_limits::expansion(ExpansionResource::ScalarBytes, exact_bytes),
         FormulaLimits::default(),
     )
     .unwrap()
@@ -185,10 +157,7 @@ fn preparation_enforces_the_analysis_budget() {
         "p.".into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_analysis_nodes: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::AnalysisNodes, 0),
     )
     .unwrap_err();
     assert!(matches!(
@@ -204,10 +173,7 @@ fn preparation_enforces_the_analysis_budget() {
 fn preparation_enforces_the_source_budget() {
     let error = prepare_formula(
         "p.".into(),
-        AdmissionOptions {
-            max_source_bytes: 1,
-            ..AdmissionOptions::default()
-        },
+        resource_limits::admission(InputLimit::SourceBytes, 1),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     )
@@ -225,13 +191,7 @@ fn preparation_enforces_the_source_budget() {
 
 #[test]
 fn preparation_retains_the_pinned_safety_verdict() {
-    let input = prepare_formula(
-        "n(N) :- N=#sum{}.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let input = prepared("n(N) :- N=#sum{}.");
     // zetesis separately checks this aggregate binding extension.
     assert!(!input.source_analysis().safety().is_safe());
     input.ground().unwrap();
@@ -247,20 +207,8 @@ fn explicit_preparation_preserves_the_admitted_theory() {
         "n(N) :- N=#sum{}.",
         "{p}. #minimize{1@2:p}.",
     ] {
-        let expected = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
-        let prepared = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let expected = formula(source);
+        let prepared = prepared(source);
         let analysis = prepared.source_analysis().clone();
         let metadata = prepared.metadata().clone();
         let actual = prepared.ground().unwrap();
@@ -293,13 +241,7 @@ fn explicit_preparation_preserves_the_admitted_theory() {
 #[test]
 fn grounding_observation_begins_at_materialization() {
     let observer = Observer::default();
-    let input = prepare_formula(
-        "p.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let input = prepared("p.");
     assert!(observer.0.borrow().is_empty());
     input.ground_with_observer(Some(&observer)).unwrap();
     assert_eq!(*observer.0.borrow(), [true, false]);
@@ -312,36 +254,22 @@ fn grounding_observation_closes_after_a_refusal() {
         "p.".into(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_support_rounds: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::SupportRounds, 0),
     )
     .unwrap();
     assert!(input.ground_with_observer(Some(&observer)).is_err());
     assert_eq!(*observer.0.borrow(), [true, false]);
 }
 
-fn bundle_fixture() -> tempfile::TempDir {
-    let directory = tempfile::tempdir().unwrap();
-    fs::write(
-        directory.path().join("entry.lp"),
-        "#include \"child.lp\". #show q/1. q(X):-p(X).",
-    )
-    .unwrap();
-    fs::write(directory.path().join("child.lp"), "p(1..2).").unwrap();
-    directory
-}
-
-fn load(directory: &tempfile::TempDir) -> SourceBundle {
-    SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap()
+fn bundle_fixture() -> BundleFixture {
+    preparation_fixture("#include \"child.lp\". #show q/1. q(X):-p(X).", "p(1..2).")
 }
 
 #[test]
 fn bundle_preparation_preserves_all_original_sources() {
     let fixture = bundle_fixture();
     let prepared = prepare_bundle_formula(
-        load(&fixture),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),
@@ -355,7 +283,7 @@ fn bundle_preparation_preserves_all_original_sources() {
     let metadata = prepared.metadata().clone();
     let actual = prepared.ground().unwrap();
     let expected = admit_bundle_formula(
-        load(&fixture),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),
@@ -386,13 +314,10 @@ fn bundle_preparation_preserves_all_original_sources() {
 fn bundle_grounding_refusals_retain_source_evidence() {
     let fixture = bundle_fixture();
     let prepared = prepare_bundle_formula(
-        load(&fixture),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_support_rounds: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::SupportRounds, 0),
     )
     .unwrap();
     let error = prepared.ground().unwrap_err();
@@ -418,15 +343,12 @@ fn bundle_grounding_refusals_retain_source_evidence() {
 
 #[test]
 fn explicit_base_preserves_prepared_bundle_semantics() {
-    let fixture = bundle_fixture();
-    fs::write(
-        fixture.path().join("entry.lp"),
+    let fixture = preparation_fixture(
         "#program base. #include \"child.lp\". #show q/1. q(X):-p(X). #program base.",
-    )
-    .unwrap();
-    fs::write(fixture.path().join("child.lp"), "#program base. p(1..2).").unwrap();
+        "#program base. p(1..2).",
+    );
     let prepared = prepare_bundle_formula(
-        load(&fixture),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),
@@ -434,13 +356,7 @@ fn explicit_base_preserves_prepared_bundle_semantics() {
     .unwrap();
     assert_eq!(prepared.bundle().sources().len(), 2);
     let actual = prepared.ground().unwrap();
-    let expected = admit_formula(
-        "p(1..2). #show q/1. q(X):-p(X).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let expected = formula("p(1..2). #show q/1. q(X):-p(X).");
     assert_eq!(actual.atoms(), expected.atoms());
     assert_eq!(
         (actual.theory().nodes(), actual.theory().operands()),
@@ -454,13 +370,10 @@ fn explicit_base_preserves_prepared_bundle_semantics() {
 fn bundle_preparation_refusals_retain_source_evidence() {
     let fixture = bundle_fixture();
     let error = prepare_bundle_formula(
-        load(&fixture),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_analysis_nodes: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::AnalysisNodes, 0),
     )
     .unwrap_err();
     assert_eq!(error.bundle().sources().len(), 2);
@@ -473,10 +386,10 @@ fn bundle_preparation_refusals_retain_source_evidence() {
     ));
 }
 
-fn preparation_fixture(entry: &str, child: &str) -> tempfile::TempDir {
-    let fixture = tempfile::tempdir().unwrap();
-    fs::write(fixture.path().join("entry.lp"), entry).unwrap();
-    fs::write(fixture.path().join("child.lp"), child).unwrap();
+fn preparation_fixture(entry: &str, child: &str) -> BundleFixture {
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", entry);
+    fixture.write("child.lp", child);
     fixture
 }
 
@@ -514,12 +427,9 @@ fn bundle_definitions_share_one_preparation_budget() {
     let fixture = preparation_fixture(entry, child);
     let limited = |max_constants| {
         prepare_bundle_formula(
-            load(&fixture),
+            fixture.bundle(),
             BundleAdmissionOptions::default(),
-            ExpansionLimits {
-                max_constants,
-                ..ExpansionLimits::default()
-            },
+            resource_limits::expansion(ExpansionResource::Constants, max_constants),
             FormulaLimits::default(),
         )
     };
@@ -535,17 +445,7 @@ fn bundle_definitions_share_one_preparation_budget() {
     ));
     retained_preparation_failure(&error, entry, child);
     let admitted = limited(2).unwrap().ground().unwrap();
-    assert_eq!(
-        admitted.atoms(),
-        admit_formula(
-            "p(1,2).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-        .atoms()
-    );
+    assert_eq!(admitted.atoms(), formula("p(1,2).").atoms());
 }
 
 #[test]
@@ -555,12 +455,12 @@ fn bundle_metadata_counts_original_occurrences() {
     let fixture = preparation_fixture(entry, child);
     let limited = |max_metadata_statements| {
         prepare_bundle_formula(
-            load(&fixture),
+            fixture.bundle(),
             BundleAdmissionOptions::default(),
-            ExpansionLimits {
+            resource_limits::expansion(
+                ExpansionResource::MetadataStatements,
                 max_metadata_statements,
-                ..ExpansionLimits::default()
-            },
+            ),
             FormulaLimits::default(),
         )
     };
@@ -587,16 +487,10 @@ fn bundle_objectives_share_one_preparation_budget() {
     let fixture = preparation_fixture(entry, child);
     let limited = |max_templates| {
         prepare_bundle_formula(
-            load(&fixture),
+            fixture.bundle(),
             BundleAdmissionOptions::default(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                objective: zetesis_objective::AdmissionLimits {
-                    max_templates,
-                    ..zetesis_objective::AdmissionLimits::default()
-                },
-                ..FormulaLimits::default()
-            },
+            resource_limits::formula(FormulaResource::ObjectiveElements, max_templates),
         )
     };
     let error = limited(1).unwrap_err();
@@ -628,12 +522,9 @@ fn duplicate_definitions_precede_later_metadata_refusal() {
     let child = "#const same=1. #show p/0.";
     let fixture = preparation_fixture(entry, child);
     let error = prepare_bundle_formula(
-        load(&fixture),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
-        ExpansionLimits {
-            max_metadata_statements: 0,
-            ..ExpansionLimits::default()
-        },
+        resource_limits::expansion(ExpansionResource::MetadataStatements, 0),
         FormulaLimits::default(),
     )
     .unwrap_err();
@@ -668,7 +559,7 @@ fn bundle_raise_failure_retains_the_loaded_catalog() {
     let child = "q(2147483648).";
     let fixture = preparation_fixture(entry, child);
     let error = prepare_bundle_formula(
-        load(&fixture),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),
@@ -691,13 +582,7 @@ fn a_formula_admission_reports_the_charges_its_preparation_made() {
     // their argument plus three for their sizes; the rule is charged one
     // template. The receipt is the one the extended profile reports, from
     // the one budget.
-    let admitted = admit_formula(
-        "p(1..3). q :- p(X).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("p(1..3). q :- p(X).");
     let usage = admitted.expansion_usage();
     assert_eq!(usage.templates, 4);
     assert_eq!(usage.values, 6);
@@ -706,27 +591,18 @@ fn a_formula_admission_reports_the_charges_its_preparation_made() {
 #[test]
 fn native_source_groups_obey_operand_ceiling() {
     let source = "a;b;c;d.";
-    let admit = |limits| {
-        admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        )
-    };
+    let admit = |limits| zetesis_reference_support::admit(source, &limits);
     let full = admit(FormulaLimits::default()).unwrap();
     assert!((0..full.theory().view().len()).any(|index| matches!(full.theory().view().node(index).unwrap(), zetesis_ferraris::NodeView::Or(row) if row.len() == 4)));
-    let count = full.theory().parts().occurrences();
-    let mut limits = FormulaLimits::default();
-    limits.theory.max_operands = count;
-    let exact = admit(limits).unwrap();
+    let count = u64::try_from(full.theory().parts().occurrences()).unwrap();
+    let limits = |maximum| resource_limits::formula(FormulaResource::Operands, maximum);
+    let exact = admit(limits(count)).unwrap();
     assert_eq!(
         (exact.theory().nodes(), exact.theory().operands()),
         (full.theory().nodes(), full.theory().operands())
     );
-    limits.theory.max_operands = count - 1;
     assert!(
-        matches!(admit(limits), Err(FormulaFailure::Limit {resource: FormulaResource::Operands, limit, observed, ..}) if limit == (count - 1) as u128 && observed == count as u128)
+        matches!(admit(limits(count - 1)), Err(FormulaFailure::Limit {resource: FormulaResource::Operands, limit, observed, ..}) if limit == u128::from(count - 1) && observed == u128::from(count))
     );
     assert_eq!(
         crate::support::finite_bindings::native(&full),

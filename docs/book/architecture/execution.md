@@ -88,7 +88,7 @@ one producer left demands that producer's body. The `zetesis-ferraris` crate nar
 these rules to a fixed point over the theory's own DAG, without a clause
 form (`FormulaBounds.read_sound`, `never_root_refutes`, `known_sound`,
 `unsupported_cut`). A region no reading refutes is split
-on the open atom the narrowing found most constrained, cut branch first;
+on the open atom the split ranking below prefers, cut branch first;
 a region with every atom decided is a leaf, and a leaf is a classical model, since at a full decision every
 root is sure or never (`FormulaBounds.decided_leaf_models`). The leaf
 is the candidate the reduct decides.
@@ -103,6 +103,35 @@ and pending rows in worker scratch; existing per-region threshold state holds
 the requirements, adding no state to child copies. This transfer is disabled
 for frozen-reduct narrowing. Recognition is limited to exact prefixes in
 prepared order; other subset relations can remain undiscovered.
+
+For a required finite sum interval, original-candidate narrowing also checks
+divisibility of the remaining coefficients. If `B` is already known true and
+`d` divides every undecided coefficient, every completion has sum `B + d*k`.
+An interval containing none of those values refutes the region, even when its
+ordinary lower and upper readings overlap. Coefficients sharing one condition
+are grouped first. Unit rows cannot gain from this test and skip it. The
+coalesced check reads coefficients from the small end. If the first undecided
+coefficient fits within the required interval’s width, every divisor of that
+coefficient has a progression point in the interval, and the check ends before
+computing a remainder. Deciding conditions or tightening the interval reconsiders
+the row; this witness is not retained as a permanent property.
+
+This check reads processed sums after node, bound-transfer, witness and support
+queues reach a fixed point. Arithmetic notifications use a separate coalesced
+queue, preserving bound-transfer order and checking each dirty row at most once
+per closure. They do not repeat Boolean or prefix transport. The check publishes
+no new bounds and adds no state to child copies. Both queues and their membership
+masks belong to worker scratch, with their actual capacities accounted.
+
+Work includes visited coefficients, Euclidean remainder steps and interval tests.
+The scan visits smaller coefficients first and stops if the current progression
+intersects the interval: further gcd reductions preserve that intersection, so
+they cannot refute the region. Deferring the scan can spend more mandatory work
+before an arithmetic refutation, but cannot restore an impossible completion:
+new decisions and stricter bounds only restrict the earlier possibilities.
+Frozen-reduct narrowing is unchanged. The
+[residual-sum laws](../lean/correspondence.md#nonnegative-aggregate-thresholds)
+state the necessary condition and the remaining implementation obligations.
 
 Once a step proves a region contradictory, narrowing discards it without
 visiting the remaining operands, parents or support wakeups. Work accounting
@@ -138,14 +167,21 @@ without a restart, and no exclusion index is kept, because a leaf is visited
 once. Propagation under the original theory, permanent restrictions and current
 bound repeats to a shared fixed point before one split ranking. That ranking
 uses the active bound when present, otherwise the latest permanent restriction,
-otherwise the original theory. Its open atom with the most unknown parents is
-preferred, with ties going to the lowest atom. The packed region masks enumerate
+otherwise the original theory. Open atoms that head an atomic choice root of the
+original theory rank first, whether or not the theory lies in the producer
+fragment: deciding the choices leaves the atoms they derive to propagation and,
+where it applies, the support cut. Among atoms of the same kind, the one with the
+most unknown parents in the ranking subject is preferred, with ties going to the
+lowest atom. Any open
+atom is a sound split (the `CoverageTree.split` node of `Search.lean`), so this
+order changes the regions visited, never the answers. The packed region masks enumerate
 open atoms in ascending order, excluding decided atoms and unused final bits;
 each inspected parent count spends one work permit.
 The traversal itself is one operation in `zetesis-cpu`, shared by both
 routes when one worker walks; with several workers the formula route walks
-the same tree in `zetesis-sat`'s parallel regions, each worker owning a stack
-of regions and a shared pool offering regions to idle workers. The closure
+the same tree in `zetesis-sat`'s parallel regions: the walk begins on the
+calling thread, and the workers it then starts each own a deque of regions,
+from which idle workers steal. The closure
 route narrows by its two closures, the formula route by
 the readings.
 
@@ -161,11 +197,13 @@ are then the same operation over the same index of the theory, and no
 clause form is built anywhere on the route.
 
 Because the regions share nothing, several workers can walk the tree at
-once (`--threads`, the host's available parallelism by default), each deciding
-the leaves it reaches, over a pool of regions still to visit. The family is exact at any worker count, each
-answer arriving once, by the partition law; the order in which answers
-arrive is the schedule's, is not promised to repeat between runs, and is
-not a property of the result. Verification rests on the laws and on the
+once (`--threads`, the host's available parallelism by default), started once
+the walk has run on one thread, in wall time since it began, for longer than
+their start costs, each deciding the leaves it reaches. The family is exact at
+any worker count, each answer arriving once, by the partition law; the order in
+which answers arrive is the scalar walk's until the workers start and the
+schedule's after, is not promised to repeat between runs, and is not a property
+of the result. Verification rests on the laws and on the
 oracle comparison of answer sets as sets, not on order or determinism.
 
 Candidate production and membership need not run on the same executor.
@@ -555,6 +593,32 @@ An explicit device failure is returned without a hidden CPU retry. A source
 limit or cancellation remains an incomplete result. Device statistics count
 actual device attempts and never include seeds checked only by the CPU. This
 policy leaves device scheduling separate from the reduct membership contract.
+
+### One install, two executables
+
+Linking the GPU stack starts the platform's graphics frameworks with every
+process, so an executable that can use a GPU pays that start on every run,
+including the CPU runs that are nearly all of them. The default install
+therefore holds two builds of the same source. The `zetesis` a user runs is
+built without the GPU stack (the CLI's `front` feature) and runs every CPU
+invocation itself. An invocation that opens a GPU device, a solve on a GPU
+backend or `zetesis devices`, it hands to the full build installed beside it in
+`zetesis-libexec/<identity>/zetesis`, before any input is read or output
+written, by replacing its own process; the arguments, standard streams,
+environment, process ID and exit status carry over, and the name the operating
+system reports stays `zetesis`. Test commands are not handed off: their GPU
+work runs in child processes, and each decides for itself.
+
+The identity is the full build's content, which the installer compiles into the
+front, so a front can find only the build installed with it; a front built
+without one does not compile. The command-line grammar is the same in every
+build profile, which a test checks against one recorded rendering of the
+command tree, so the two executables read an invocation identically. A front
+that cannot run its full build reports `gpu_executable_unavailable`, and never
+serves the request on the CPU instead. The JSON statistics and the record view
+name the executable that did the work. A CPU-only install has no full build and refuses GPU requests with
+`backend_unavailable`; a single build with GPU support, as Cargo installs it,
+never hands off.
 
 ## Immutable rounds and commit boundaries
 

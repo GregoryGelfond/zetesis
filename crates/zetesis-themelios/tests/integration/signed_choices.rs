@@ -3,9 +3,8 @@
 use crate::support::finite_bindings as reference;
 use crate::support::finite_bindings::expected;
 
-use std::collections::BTreeSet;
-
-use reference::{Models, exhaustive, external, native};
+use reference::{external, native};
+use zetesis_clingo_support as oracle;
 use zetesis_reference_support::formula;
 
 const CASES: &[(&str, &[&[&str]])] = &[
@@ -49,32 +48,14 @@ fn complete_answers_preserve_signed_choice_contracts() {
 
 #[test]
 fn signed_choices_match_exhaustive_reduct_checking() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]
 #[ignore = "requires clingo: original signed sources match clingo"]
 fn original_signed_sources_match_clingo() {
     for &(source, records) in CASES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut actual = Models::new();
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    let names: BTreeSet<String> = witness["Value"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|atom| atom.as_str().unwrap().to_owned())
-                        .collect();
-                    assert!(actual.insert(names), "duplicate full answer: {source}");
-                }
-            }
-        }
+        let actual = oracle::full_models(&external(source, true));
         assert_eq!(actual, expected(records), "{source}");
         assert_eq!(native(&formula(source)), actual, "{source}");
     }

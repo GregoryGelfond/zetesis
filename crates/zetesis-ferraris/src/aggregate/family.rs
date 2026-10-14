@@ -41,6 +41,18 @@ pub struct AggregateFamilyBuild {
     statistics: AggregateStatistics,
 }
 impl AggregateFamilyBuild {
+    pub(super) fn new(
+        roots: Vec<usize>,
+        profile: AggregateProfile,
+        statistics: AggregateStatistics,
+    ) -> Self {
+        Self {
+            roots,
+            profile,
+            statistics,
+        }
+    }
+
     /// Absolute roots in input guard order; repeated guards retain entries.
     #[must_use]
     pub fn roots(&self) -> &[usize] {

@@ -7,7 +7,7 @@ use zetesis_ferraris::{Interpretation, Theory};
 use zetesis_sat::{BatchLimits, BatchVerdict};
 
 /// A batch oracle that decides nothing: every candidate stays residual.
-pub fn residual(
+pub(crate) fn residual(
     _: &Theory,
     candidates: &[Interpretation],
 ) -> Result<Vec<BatchVerdict>, std::collections::TryReserveError> {
@@ -18,7 +18,7 @@ pub fn residual(
 }
 
 /// Batches of at most `count` candidates and 1 MiB of pending bytes.
-pub fn batch(count: usize) -> BatchLimits {
+pub(crate) fn batch(count: usize) -> BatchLimits {
     BatchLimits {
         max_candidates: NonZeroUsize::new(count).unwrap(),
         max_pending_bytes: 1024 * 1024,

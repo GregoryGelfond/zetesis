@@ -1,12 +1,13 @@
 //! Family sharing preserves the original theory and every frozen reduct.
 use super::*;
 use crate::formula_support::testing;
+use crate::test_support::interpretation;
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{Interpretation, Limits, models, models_reduct};
+use zetesis_ferraris::{Limits, models, models_reduct};
 
 /// Reproduce the prior cache boundary without changing the source or its joins.
 fn full_binding_keys(preparation: &mut crate::formula::Preparation) {
-    for rule in &mut preparation.program.rules {
+    for rule in preparation.program.rules_without_facts_mut() {
         if let Some(plan) = &mut rule.bindings {
             plan.retain_required_for_test(&rule.body);
         }
@@ -58,14 +59,6 @@ fn unrelated_bindings_share_bounded_assignment_families() {
             })
         ));
     }
-}
-
-fn interpretation(theory: &Theory, bits: usize) -> Interpretation {
-    Interpretation::new(
-        theory,
-        (0..theory.atom_count()).filter(|atom| bits & (1 << atom) != 0),
-    )
-    .unwrap()
 }
 
 fn same_truth(source: &str) {
@@ -150,11 +143,11 @@ fn projected_families_keep_outer_arithmetic_diagnostics() {
     assert_eq!(shared.to_string(), prior.to_string());
 }
 
-fn family_population(
+fn family_population<'source>(
     aggregate: &AggregateIr,
-    support: &Support<'_>,
+    support: &Support<'source>,
     budget: &mut Budget,
-    context: Context<'_, &mut Computation<'_, '_>>,
+    context: Context<'_, &mut Computation<'_, 'source>>,
 ) -> (usize, usize) {
     let Context {
         computation,
@@ -186,11 +179,9 @@ fn family_population(
     .unwrap();
     builder.initialize(location).unwrap();
     builder
-        .assignment_aggregate(aggregate, target, &binding, support, location)
+        .assignment_aggregate(aggregate.into(), target, &binding, support, location)
         .unwrap();
-    let result = (builder.cached_elements, builder.cached_roots);
-    *counters = builder.counters;
-    result
+    (builder.cached_elements, builder.cached_roots)
 }
 
 #[test]
@@ -198,7 +189,7 @@ fn aggregate_families_do_not_cross_support_snapshots() {
     let mut preparation = testing::prepare("p(1). n(N) :- N=#count{X:p(X)}.");
     let aggregate = preparation
         .program
-        .rules
+        .rules_without_facts()
         .iter()
         .flat_map(|rule| &rule.body)
         .find_map(|literal| match literal {

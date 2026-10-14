@@ -1,14 +1,17 @@
 //! Finite affine chains preserve the complete correlated source guard.
 
+use crate::support::admission;
 use crate::support::finite_bindings as reference;
+use zetesis_reference_support::{admit, canonical, formula, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 
 use proptest::prelude::*;
 use reference::{Models, exhaustive, holds, native, values};
 use themelios_base::source::SourceId;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionResource, FormulaFailure,
+    FormulaLimits, FormulaResource, admit_formula,
 };
 
 // Expected assignments are obtained by integer arithmetic, before source
@@ -202,12 +205,7 @@ const UNSAFE: &[&str] = &[
 #[test]
 fn absent_finite_domains_remain_unsafe() {
     for source in UNSAFE {
-        let result = admit_formula(
-            (*source).into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        );
+        let result = admit(source, &FormulaLimits::default());
         assert!(
             matches!(result, Err(FormulaFailure::UnsafeVariable { .. })),
             "{source}: {result:?}"
@@ -236,11 +234,9 @@ fn finite_chains_defer_irrelevant_coefficient_capacity() {
 
 #[test]
 fn deferred_coefficient_capacity_preserves_reached_arithmetic_errors() {
-    let result = admit_formula(
-        "p(X,Y):-0<X<Y<3,0=2147483647*(2147483647*(2147483647*X)).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
+    let result = admit(
+        "p(X,Y):-0<X<Y<3,0=2147483647*(2147483647*(2147483647*X)).",
+        &FormulaLimits::default(),
     );
     assert!(matches!(
         result,
@@ -252,14 +248,9 @@ fn deferred_coefficient_capacity_preserves_reached_arithmetic_errors() {
 
 #[test]
 fn coefficient_capacity_is_a_located_analysis_limit() {
-    let result = admit_formula(
-        "p(X):-0<2147483647*(2147483647*(2147483647*X))<2.".into(),
-        AdmissionOptions {
-            source_id: SourceId::new(101),
-            ..Default::default()
-        },
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
+    let result = admission::admit(
+        SourceId::new(101),
+        "p(X):-0<2147483647*(2147483647*(2147483647*X))<2.",
     );
     assert!(
         matches!(result, Err(FormulaFailure::Limit {
@@ -275,12 +266,7 @@ fn reached_chain_arithmetic_remains_an_error() {
         "p(X,Y):-0<X<Y<3,0=1,1/0=1.",
         "p(X,Y):-0<X<Y<3,2147483647+X>0.",
     ] {
-        let result = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        );
+        let result = admit(source, &FormulaLimits::default());
         assert!(
             matches!(
                 result,
@@ -306,30 +292,16 @@ fn mixed_chain_bindings_preserve_defined_solutions() {
 fn envelope_storage_and_work_limits_are_inclusive() {
     for resource in [ExpansionResource::TermWork, ExpansionResource::ScalarBytes] {
         let run = |limit| {
-            let mut expansion = ExpansionLimits::default();
-            match resource {
-                ExpansionResource::TermWork => expansion.max_term_work = limit,
-                ExpansionResource::ScalarBytes => expansion.max_scalar_bytes = limit,
-                _ => unreachable!("selected envelope resources"),
-            }
             admit_formula(
                 "p(X,Y):-0<2*X<3*Y<7.".into(),
                 AdmissionOptions::default(),
-                expansion,
+                resource_limits::expansion(resource, limit),
                 FormulaLimits::default(),
             )
         };
-        let mut lower = 0;
-        let mut upper = 1_048_576;
-        assert!(run(upper).is_ok());
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2;
-            if run(middle).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle + 1;
-            }
-        }
+        let lower = first_success(resource_limits::expansion_default(resource), |middle| {
+            run(middle).is_ok()
+        });
         assert!(run(lower).is_ok());
         assert!(
             matches!(run(lower - 1), Err(FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, .. })) if actual == resource)
@@ -395,44 +367,17 @@ proptest! {
 #[ignore = "requires clingo: original chains match complete clingo answers"]
 fn original_chains_match_complete_clingo_answers() {
     for &(source, atoms) in CASES {
-        let record = reference::external(source, true);
-        let models: Models = record["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .map(|witness| {
-                witness["Value"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|atom| atom.as_str().unwrap().to_owned())
-                    .collect()
-            })
-            .collect();
+        let models = oracle::full_models(&reference::external(source, true));
         assert_eq!(models, expected(atoms), "{source}");
         assert_eq!(native(&formula(source)), models, "{source}");
     }
     for &(source, expanded) in LOCAL_CASES {
-        let record = reference::external(source, true);
-        let native_record = reference::external(expanded, true);
-        let answers = |record: &serde_json::Value| -> Models {
-            record["Call"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-                .map(|witness| {
-                    witness["Value"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|atom| atom.as_str().unwrap().to_owned())
-                        .collect()
-                })
-                .collect()
-        };
-        assert_eq!(answers(&record), answers(&native_record), "{source}");
-        assert_eq!(native(&formula(source)), answers(&record), "{source}");
+        let models = oracle::full_models(&reference::external(source, true));
+        assert_eq!(
+            oracle::full_models(&reference::external(expanded, true)),
+            models,
+            "{source}"
+        );
+        assert_eq!(native(&formula(source)), models, "{source}");
     }
 }

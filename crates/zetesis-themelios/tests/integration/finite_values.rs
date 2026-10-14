@@ -5,7 +5,8 @@ use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::{canonical, formula, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
@@ -118,13 +119,11 @@ fn construction_admissions(resource: ExpansionResource) {
     // Follow the next required cumulative amount. This exercises each actual
     // admission boundary without assuming allocation capacities or charge sizes.
     for _ in 0..2_048 {
-        let mut expansion = ExpansionLimits::default();
-        match resource {
-            ExpansionResource::ScalarBytes => expansion.max_scalar_bytes = limit,
-            ExpansionResource::TermWork => expansion.max_term_work = limit,
-            _ => panic!("not a construction admission resource"),
-        }
-        match limited(source, expansion, &FormulaLimits::default()) {
+        match limited(
+            source,
+            resource_limits::expansion(resource, limit),
+            &FormulaLimits::default(),
+        ) {
             Ok(actual) => {
                 assert!(limit > 0);
                 assert_eq!(actual.atoms(), expected.atoms());
@@ -147,8 +146,8 @@ fn construction_admissions(resource: ExpansionResource) {
                     unreachable!()
                 };
                 assert_eq!(*actual, resource);
-                assert_eq!(*reported_limit, limit as u128);
-                assert!(*observed > limit as u128);
+                assert_eq!(*reported_limit, u128::from(limit));
+                assert!(*observed > u128::from(limit));
                 assert!(*observed <= 1_048_576, "fixture must remain small");
                 assert_eq!(
                     error.diagnostics()[0].primary().location,
@@ -161,7 +160,7 @@ fn construction_admissions(resource: ExpansionResource) {
                         .slice(location.location().expect("parsed source").span)
                         .is_ok()
                 );
-                limit = usize::try_from(*observed).unwrap();
+                limit = u64::try_from(*observed).unwrap();
             }
             Err(error) => panic!("{resource:?}/{limit}: {error}"),
         }
@@ -358,10 +357,7 @@ fn scalar_failures_remain_admission_errors() {
 #[test]
 fn recursive_construction_cannot_finish_truncated() {
     let source = "p(0).p(f(X)):-p(X).";
-    let limits = FormulaLimits {
-        max_support_rounds: 3,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::SupportRounds, 3);
     assert!(matches!(
         limited(source, ExpansionLimits::default(), &limits),
         Err(FormulaFailure::Limit {
@@ -389,32 +385,19 @@ fn construction_preserves_statement_origins() {
 #[test]
 fn construction_scalar_bytes_have_an_inclusive_limit() {
     let source = "d(1).p(long_constructor_name(X)):-d(X).";
-    let mut lower = 0;
-    let mut upper = 1 << 20;
-    while lower < upper {
-        let middle = lower + (upper - lower) / 2;
-        let expansion = ExpansionLimits {
-            max_scalar_bytes: middle,
-            ..ExpansionLimits::default()
-        };
-        if limited(source, expansion, &FormulaLimits::default()).is_ok() {
-            upper = middle;
-        } else {
-            lower = middle + 1;
-        }
-    }
-    let expansion = ExpansionLimits {
-        max_scalar_bytes: lower,
-        ..ExpansionLimits::default()
-    };
+    let lower = first_success(
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
+        |middle| {
+            let expansion = resource_limits::expansion(ExpansionResource::ScalarBytes, middle);
+            limited(source, expansion, &FormulaLimits::default()).is_ok()
+        },
+    );
+    let expansion = resource_limits::expansion(ExpansionResource::ScalarBytes, lower);
     assert_eq!(
         native(&limited(source, expansion, &FormulaLimits::default()).unwrap()),
         native(&formula(source))
     );
-    let expansion = ExpansionLimits {
-        max_scalar_bytes: lower - 1,
-        ..ExpansionLimits::default()
-    };
+    let expansion = resource_limits::expansion(ExpansionResource::ScalarBytes, lower - 1);
     assert!(matches!(
         limited(source, expansion, &FormulaLimits::default()),
         Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
@@ -428,28 +411,13 @@ fn construction_scalar_bytes_have_an_inclusive_limit() {
 #[ignore = "requires clingo: complete models match clingo"]
 fn complete_models_match_clingo() {
     let competition = competition();
-    for source in CASES
-        .iter()
-        .map(|(source, _)| *source)
-        .chain([competition.as_str()])
-    {
-        let result = reference::external(source, true);
-        let models: Models = result["Call"]
-            .as_array()
-            .unwrap()
+    reference::original_sources_match_clingo_full_models(
+        CASES
             .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .map(|witness| {
-                witness["Value"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|atom| atom.as_str().unwrap().to_owned())
-                    .collect()
-            })
-            .collect();
-        assert_eq!(native(&formula(source)), models, "{source}");
-    }
+            .map(|(source, _)| *source)
+            .chain([competition.as_str()]),
+        formula,
+    );
 }
 
 proptest::proptest! {
@@ -564,18 +532,12 @@ fn constructed_keys_retain_objective_contributions() {
 #[test]
 fn generated_head_value_limit_is_inclusive() {
     let source = "d(1..2).p(f(X)):-d(X).";
-    let limits = FormulaLimits {
-        max_generated_values: 2,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::GeneratedValues, 2);
     assert_eq!(
         native(&limited(source, ExpansionLimits::default(), &limits).unwrap()),
         native(&formula(source))
     );
-    let limits = FormulaLimits {
-        max_generated_values: 1,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::GeneratedValues, 1);
     assert!(matches!(
         limited(source, ExpansionLimits::default(), &limits),
         Err(FormulaFailure::Limit {
@@ -591,11 +553,9 @@ fn generated_head_value_limit_is_inclusive() {
 fn constructor_inputs_count_toward_slot_limit() {
     let source = "d(1).p(f(X)):-d(X).";
     for (slots, succeeds) in [(2, true), (1, false)] {
-        let mut options = AdmissionOptions::default();
-        options.core_limits.max_variables_per_template = slots;
         let result = admit_formula(
             source.into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, slots),
             ExpansionLimits::default(),
             FormulaLimits::default(),
         );
@@ -617,10 +577,7 @@ fn constructor_inputs_count_toward_slot_limit() {
 
 #[test]
 fn incomplete_constructor_work_returns_no_admission() {
-    let limits = FormulaLimits {
-        max_work: 0,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::Work, 0);
     assert!(matches!(
         limited("d(1).p(f(X)):-d(X).", ExpansionLimits::default(), &limits),
         Err(FormulaFailure::Limit {

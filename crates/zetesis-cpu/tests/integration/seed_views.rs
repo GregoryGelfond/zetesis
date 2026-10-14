@@ -43,6 +43,7 @@ fn program() -> Program {
             Template::new(Some(c), vec![a.clone()], vec![], vec![], vec![]),
             Template::new(None, vec![a, b], vec![], vec![], vec![]),
         ],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap()

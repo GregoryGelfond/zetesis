@@ -1,4 +1,4 @@
-//! Aggregate-formula truth only; no source admission or stable-model solving.
+//! Aggregate preparation, formula truth and fixed-candidate checking; no search.
 //!
 //! Separate populations measure preacquired-mask reduction, acquisition plus
 //! reduction, and existing public compiled-formula calls. The last route invokes
@@ -6,9 +6,24 @@
 //! Group/lowering construction, worlds, masks and parity checks are outside timers.
 //! `ordinary_thresholds` separately compares the ordinary native representation
 //! with the previous shared Boolean DP on fixed inputs and interpretations.
+//! `extremum_families` measures scalar Boolean witnesses versus ordinary native
+//! ordinal families, with separate preparation and fixed-world evaluation.
+//! `tight_numeric` isolates reused tight checking over one fixed large Boolean
+//! DAG with zero or one live numeric operator; preparation is outside timers.
+//! `residual_sums` isolates original-region weighted-row narrowing, including
+//! missing residues and dense/unit controls; it does not measure enumeration.
+
+#[path = "native_aggregates/extremum_families.rs"]
+mod extremum_families;
 
 #[path = "native_aggregates/ordinary_thresholds.rs"]
 mod ordinary_thresholds;
+
+#[path = "native_aggregates/tight_numeric.rs"]
+mod tight_numeric;
+
+#[path = "native_aggregates/residual_sums.rs"]
+mod residual_sums;
 
 use std::{hint::black_box, time::Duration};
 
@@ -361,5 +376,8 @@ fn main() {
     let mut criterion = Criterion::default().configure_from_args();
     native_aggregates(&mut criterion);
     ordinary_thresholds::bench(&mut criterion);
+    extremum_families::bench(&mut criterion);
+    tight_numeric::bench(&mut criterion);
+    residual_sums::bench(&mut criterion);
     criterion.final_summary();
 }

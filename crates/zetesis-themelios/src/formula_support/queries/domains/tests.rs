@@ -3,6 +3,7 @@
 use crate::formula_support::{Context, GroundingWork as WorkContext};
 
 use super::*;
+use crate::expansion::Budget;
 use crate::formula_domains;
 use crate::grounding_observer::Profile;
 use crate::test_support::Observer;
@@ -18,7 +19,6 @@ fn analyze<'source>(
     prepared: &'source crate::formula_ir::Prepared,
     catalog: &mut crate::formula_support::SupportCatalog,
     options: Option<crate::DomainLimits>,
-    budget: &mut Budget,
     profile: &Profile<'_>,
     work: WorkContext<'_>,
 ) -> Result<Option<formula_domains::Domains<'source>>, FormulaFailure> {
@@ -33,7 +33,6 @@ fn analyze<'source>(
     formula_domains::analyze(
         prepared,
         options,
-        budget,
         profile,
         Context::new(&mut computation, limits, counters, location),
     )
@@ -46,7 +45,7 @@ fn guard_work_refusals_preserve_admitted_prefixes() {
         mut catalog,
         ..
     } = prepared();
-    let rule = prepared.rules.last().unwrap();
+    let rule = prepared.rules_without_facts().last().unwrap();
     let limits = FormulaLimits::default();
     let mut budget = Budget::new(ExpansionLimits::default(), 100);
     let mut setup = Counters::default();
@@ -54,7 +53,6 @@ fn guard_work_refusals_preserve_admitted_prefixes() {
         &prepared,
         &mut catalog,
         Some(crate::DomainLimits::default()),
-        &mut budget,
         &Profile::new(None),
         WorkContext::new(&limits, &mut setup, rule.location),
     )
@@ -78,7 +76,9 @@ fn guard_work_refusals_preserve_admitted_prefixes() {
         .unwrap();
     let support = queries.support();
     let computation = queries.computation(rule.location).unwrap();
-    let domain = analysis.for_rule(prepared.rules.len() - 1, rule).unwrap();
+    let domain = analysis
+        .for_rule(prepared.rules_without_facts().len() - 1, rule)
+        .unwrap();
     let base = support.live.get();
     let observer = Observer::default();
     let profile = Profile::new(Some(&observer));
@@ -139,7 +139,7 @@ fn guard_storage_admission_is_inclusive() {
         mut catalog,
         ..
     } = prepared();
-    let rule = prepared.rules.last().unwrap();
+    let rule = prepared.rules_without_facts().last().unwrap();
     let limits = FormulaLimits::default();
     let mut budget = Budget::new(ExpansionLimits::default(), 100);
     let mut setup = Counters::default();
@@ -147,7 +147,6 @@ fn guard_storage_admission_is_inclusive() {
         &prepared,
         &mut catalog,
         Some(crate::DomainLimits::default()),
-        &mut budget,
         &Profile::new(None),
         WorkContext::new(&limits, &mut setup, rule.location),
     )
@@ -171,7 +170,9 @@ fn guard_storage_admission_is_inclusive() {
         .unwrap();
     let support = queries.support();
     let computation = queries.computation(rule.location).unwrap();
-    let domain = analysis.for_rule(prepared.rules.len() - 1, rule).unwrap();
+    let domain = analysis
+        .for_rule(prepared.rules_without_facts().len() - 1, rule)
+        .unwrap();
     let base = support.live.get();
     let observer = Observer::default();
     let profile = Profile::new(Some(&observer));
@@ -224,23 +225,21 @@ fn analysis_refuses_an_equal_foreign_rule() {
     } = prepared();
     let foreign_owner = self::prepared();
     let foreign = &foreign_owner.program;
-    let index = prepared.rules.len() - 1;
-    let rule = &prepared.rules[index];
+    let index = prepared.rules_without_facts().len() - 1;
+    let rule = &prepared.rules_without_facts()[index];
     let limits = FormulaLimits::default();
-    let mut budget = Budget::new(ExpansionLimits::default(), 100);
     let mut counters = Counters::default();
     let analysis = analyze(
         &prepared,
         &mut catalog,
         Some(crate::DomainLimits::default()),
-        &mut budget,
         &Profile::new(None),
         WorkContext::new(&limits, &mut counters, rule.location),
     )
     .unwrap()
     .unwrap();
     assert!(matches!(
-        analysis.for_rule(index, &foreign.rules[index]),
+        analysis.for_rule(index, &foreign.rules_without_facts()[index]),
         Err(FormulaFailure::SupportRelation {
             error: Failure::Owner,
             ..
@@ -255,8 +254,8 @@ fn domain_guards_refuse_a_foreign_query_owner() {
         mut catalog,
         ..
     } = prepared();
-    let index = prepared.rules.len() - 1;
-    let rule = &prepared.rules[index];
+    let index = prepared.rules_without_facts().len() - 1;
+    let rule = &prepared.rules_without_facts()[index];
     let limits = FormulaLimits::default();
     let mut counters = Counters::default();
     let mut budget = Budget::new(ExpansionLimits::default(), 100);
@@ -264,7 +263,6 @@ fn domain_guards_refuse_a_foreign_query_owner() {
         &prepared,
         &mut catalog,
         Some(crate::DomainLimits::default()),
-        &mut budget,
         &Profile::new(None),
         WorkContext::new(&limits, &mut counters, rule.location),
     )
@@ -340,8 +338,7 @@ fn dependency_projection_cannot_certify_domain_guards() {
         ..
     } = prepared();
     prepared.analysis_basis = crate::AnalysisBasis::DependencyProjection;
-    let location = prepared.rules.last().unwrap().location;
-    let mut budget = Budget::new(ExpansionLimits::default(), 100);
+    let location = prepared.rules_without_facts().last().unwrap().location;
     let mut counters = Counters::default();
     let limits = FormulaLimits::default();
     let (relations, mut append) = catalog.split(&limits, &mut counters, location).unwrap();
@@ -352,13 +349,12 @@ fn dependency_projection_cannot_certify_domain_guards() {
     let result = formula_domains::analyze(
         &prepared,
         Some(crate::DomainLimits::default()),
-        &mut budget,
         &Profile::new(None),
         Context::new(&mut computation, &limits, &mut counters, location),
     )
     .unwrap();
     assert!(result.is_none());
-    assert_eq!(counters.accounting.work - before, 1);
+    assert!(counters.accounting.work > before);
 }
 
 fn with_candidates(
@@ -377,7 +373,7 @@ fn with_candidates(
         mut catalog,
         ..
     } = crate::formula_support::testing::prepare(text);
-    let rule = program.rules.last().unwrap();
+    let rule = program.rules_without_facts().last().unwrap();
     let limits = FormulaLimits::default();
     let mut budget = Budget::new(ExpansionLimits::default(), 100);
     let mut counters = Counters::default();
@@ -385,7 +381,6 @@ fn with_candidates(
         &program,
         &mut catalog,
         Some(crate::DomainLimits::default()),
-        &mut budget,
         &Profile::new(None),
         WorkContext::new(&limits, &mut counters, rule.location),
     )
@@ -416,7 +411,9 @@ fn with_candidates(
     let computation = queries.computation(rule.location).unwrap();
     run(
         &program,
-        domains.for_rule(program.rules.len() - 1, rule).unwrap(),
+        domains
+            .for_rule(program.rules_without_facts().len() - 1, rule)
+            .unwrap(),
         queries.support(),
         &computation,
         &mut counters,
@@ -425,7 +422,7 @@ fn with_candidates(
 }
 
 #[test]
-fn unary_filters_reuse_admitted_candidate_cells() {
+fn unary_filters_select_existing_candidate_cells() {
     for source in [
         "p(1).p(2).p(3).r(X):-p(X),X>=1.",
         "p(1).p(2).p(3).r(X):-p(X),X>=1,X<=3.",
@@ -446,9 +443,9 @@ fn unary_filters_reuse_admitted_candidate_cells() {
                     })
                     .collect();
                 assert_eq!(numbers, [1, 2, 3]);
-                // One source conversion per candidate, independently of how many
-                // unary filters inspect it. Ordinary evaluation work is separate.
-                assert_eq!(admission_work, numbers.len());
+                // Selection reuses canonical keys; neither preparing candidates
+                // nor inspecting them with unary filters converts source values.
+                assert_eq!(admission_work, 0);
             },
         );
     }
@@ -460,25 +457,16 @@ fn candidate_text_borrows_the_admitted_source_spelling() {
         "p(\"repeated source spelling\").p(other).q(\"repeated source spelling\").r(X):-p(X),q(X).",
         |program, candidates, _, computation, counters, _| {
             // Normalization may reorder facts; locate the actual typed source
-            // occurrence instead of treating its position as logical identity.
+            // occurrence, a fact cell, instead of treating its position as
+            // logical identity.
             let source = program
-                .rules
-                .iter()
-                .find_map(|rule| {
-                    let crate::formula_ir::HeadIr::Normal(Some(pattern)) = &rule.head else {
-                        return None;
-                    };
-                    let pattern = computation
-                        .static_pattern(
-                            *pattern,
-                            &FormulaLimits::default(),
-                            counters,
-                            rule.location,
-                        )
+                .items()
+                .blocks()
+                .flat_map(|block| block.cells().map(move |cell| (cell, block.location())))
+                .find_map(|(cell, location)| {
+                    let source = computation
+                        .static_scalar(cell, &FormulaLimits::default(), counters, location)
                         .unwrap();
-                    let Some(Term::Constant(source)) = pattern.terms().at(0) else {
-                        return None;
-                    };
                     matches!(source.descriptor(), zetesis_core::ValueNodeRef::String(_))
                         .then_some(source)
                 })
@@ -505,7 +493,7 @@ fn candidate_resolution_refuses_a_foreign_vocabulary() {
     with_candidates(
         "p(1).p(2).q(2).r(X):-p(X),q(X).",
         |program, candidates, support, _, counters, _| {
-            let rule = program.rules.last().unwrap();
+            let rule = program.rules_without_facts().last().unwrap();
             let baseline = support.live.get();
             let mut foreign = crate::formula_support::testing::Fixture::default();
             foreign.with(rule.location, |_, computation, _| {

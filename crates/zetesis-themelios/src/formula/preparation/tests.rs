@@ -3,6 +3,7 @@
 use super::PreparedFormula;
 use crate::formula_support::{Computation, Counters, Support};
 use crate::grounding_observer::Work;
+use crate::test_support::prepared;
 use crate::{
     AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
     FormulaLimits, FormulaResource, PreparedFormulaBundle, prepare_formula,
@@ -13,13 +14,7 @@ const SOURCE: &str = "p(1). q(X) :- p(X). :- q(2).";
 const RETAINED: &str = "identity admitted before materialization";
 
 fn prepared_with_identity() -> (PreparedFormula, TermKey) {
-    let mut prepared = prepare_formula(
-        SOURCE.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let mut prepared = prepared(SOURCE);
     let preparation = &mut prepared.preparation;
     let mut counters =
         Counters::resume(std::mem::take(&mut preparation.accounting), Work::default());
@@ -177,13 +172,7 @@ fn grounding_retains_an_independent_scalar_budget_charge() {
 
 #[test]
 fn prepared_einstein_retains_a_terminal_flat_definition() {
-    let prepared = prepare_formula(
-        include_str!("../../../../../examples/einstein-riddle.lp").into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared(include_str!("../../../../../examples/einstein-riddle.lp"));
     assert_eq!(
         prepared.analysis_basis(),
         crate::AnalysisBasis::NormalizedProgram
@@ -221,7 +210,7 @@ fn prepared_einstein_retains_a_terminal_flat_definition() {
         .unwrap();
     let rules: Vec<_> = preparation
         .program
-        .rules
+        .rules_without_facts()
         .iter()
         .filter(|rule| {
             let crate::formula_ir::HeadIr::Normal(Some(head)) = rule.head else {
@@ -249,4 +238,136 @@ fn prepared_einstein_retains_a_terminal_flat_definition() {
         literal,
         crate::formula_ir::LiteralIr::Atom(themelios_program::program::DefaultNegation::None, _)
     )));
+}
+
+#[test]
+fn exact_source_admission_keeps_accepted_work_and_cancellation() {
+    let (mut prepared, _key) = prepared_with_identity();
+    let accepted = prepared.preparation.accounting.work;
+    prepared.preparation.limits.max_work = accepted;
+    let error = prepared.try_source().unwrap_err();
+    assert!(matches!(error, FormulaFailure::Limit {
+        resource: FormulaResource::Work, observed, limit, ..
+    } if observed == u128::from(accepted) + 1 && limit == u128::from(accepted)));
+
+    let (mut prepared, _key) = prepared_with_identity();
+    let cancellation = zetesis_cpu::Cancellation::default();
+    prepared
+        .preparation
+        .budget
+        .set_cancellation(Some(cancellation.clone()));
+    cancellation.cancel();
+    assert_eq!(
+        prepared.try_source().unwrap_err().interruption(),
+        Some(zetesis_cpu::Stop::Cancelled)
+    );
+}
+
+#[test]
+fn declined_source_class_retains_its_charges_for_the_original_ground_door() {
+    let mut prepared = prepared("{a}.");
+    let accepted = prepared.preparation.accounting.work;
+    let source = std::ptr::from_ref(prepared.original_program());
+    let crate::SourceAdmission::NotApplicable(declined) = prepared.try_source().unwrap() else {
+        panic!()
+    };
+    prepared = declined;
+    assert_eq!(std::ptr::from_ref(prepared.original_program()), source);
+    assert!(prepared.preparation.accounting.work > accepted);
+    prepared.preparation.limits.max_work = prepared.preparation.accounting.work;
+    assert!(matches!(
+        prepared.ground().unwrap_err(),
+        FormulaFailure::Limit {
+            resource: FormulaResource::Work,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn exact_source_receipt_bounds_its_complete_preparation() {
+    let make = || prepared(SOURCE);
+    let crate::SourceAdmission::Admitted(owner) = make().try_source().unwrap() else {
+        panic!()
+    };
+    let total = owner.statistics().work;
+    assert!(total > make().preparation.accounting.work);
+    let mut exact = make();
+    exact.preparation.limits.max_work = total;
+    let crate::SourceAdmission::Admitted(repeated) = exact.try_source().unwrap() else {
+        panic!()
+    };
+    assert_eq!(repeated.statistics().work, total);
+    let mut short = make();
+    short.preparation.limits.max_work = total - 1;
+    assert!(
+        matches!(short.try_source().unwrap_err(), FormulaFailure::Limit {
+        resource: FormulaResource::Work, limit, ..
+    } if limit == u128::from(total - 1))
+    );
+}
+
+#[test]
+fn exact_source_selection_and_plan_keep_named_storage_limits() {
+    for resource in [FormulaResource::Atoms, FormulaResource::SupportBytes] {
+        let mut prepared = prepared("a.");
+        match resource {
+            FormulaResource::Atoms => prepared.preparation.limits.theory.max_atoms = 0,
+            FormulaResource::SupportBytes => prepared.preparation.limits.max_support_bytes = 0,
+            _ => unreachable!(),
+        }
+        assert!(
+            matches!(prepared.try_source().unwrap_err(), FormulaFailure::Limit {
+            resource: actual, ..
+        } if actual == resource)
+        );
+    }
+}
+
+#[test]
+fn acyclic_order_cannot_cross_an_independently_prepared_source_owner() {
+    let make = || prepared(SOURCE);
+    let mut first = make();
+    let order = crate::formula_source::classify(&mut first.preparation)
+        .unwrap()
+        .unwrap();
+    let second = make();
+    assert!(matches!(
+        crate::formula_source::evaluate(second.preparation, order, None),
+        Err(FormulaFailure::SupportRelation {
+            error: zetesis_core::relation::Failure::Owner,
+            ..
+        })
+    ));
+}
+
+#[test]
+fn stopped_key_analysis_charges_exact_preparation_work() {
+    let source = "letter(a;b;c). digit(0..9). carry_value(0;1). idx(1). \
+        1 { assign(L,D) : digit(D) } 1 :- letter(L). \
+        1 { carry(I,V) : carry_value(V) } 1 :- idx(I). \
+        :- assign(a,X), assign(b,Y), X != Y + 1.";
+    let under = |max_key_work| {
+        prepare_formula(
+            source.into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits {
+                max_key_work,
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    };
+    let (unstarted, stopped) = (under(0), under(3));
+    for (prepared, limit) in [(&unstarted, 0), (&stopped, 3)] {
+        assert_eq!(prepared.preparation.program.keyed_constraints, 0);
+        assert!(matches!(prepared.preparation.program.key_analysis,
+            crate::KeyAnalysis::Stopped(stop) if stop.limit == limit));
+    }
+    assert_eq!(
+        stopped.preparation.budget.usage().term_work,
+        unstarted.preparation.budget.usage().term_work + 3,
+    );
+    assert_eq!(stopped.analyzed_program(), unstarted.analyzed_program());
 }

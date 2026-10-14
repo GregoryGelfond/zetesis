@@ -5,6 +5,7 @@ use serde_json::Value;
 use zetesis_backend::GpuApi;
 
 mod hybrid;
+mod source;
 mod terminal;
 
 pub(super) fn observe(
@@ -13,6 +14,11 @@ pub(super) fn observe(
     request: NativeExecution,
 ) -> Result<Observation, String> {
     let timing = super::super::timing::parse_any(stderr)?;
+    let statistics = &document["statistics"];
+    measured_statistics(statistics, &timing)?;
+    if let Some(receipt) = source::read(statistics, stderr, request, &timing)? {
+        return Ok(source::observation(receipt, timing));
+    }
     let hybrid = hybrid::read(document)?;
     let terminal = terminal::read(document)?;
     let hybrid_terminal = terminal_route(terminal.as_ref(), hybrid.is_some(), request)?;
@@ -31,13 +37,6 @@ pub(super) fn observe(
     if request.grounder != Grounder::Auto && taken != request.grounder {
         return Err("reported grounding differs from requested matrix cell".into());
     }
-    let statistics = &document["statistics"];
-    if !statistics.is_object()
-        || statistics["stage_timings"]["grounding_mode"] != timing.grounding_mode.as_str()
-    {
-        return Err("typed statistics and authored stage view disagree".into());
-    }
-    consistent_timings(statistics, &timing)?;
     let text = std::str::from_utf8(stderr).map_err(|e| e.to_string())?;
     let routes: Vec<_> = text
         .lines()
@@ -111,6 +110,7 @@ pub(super) fn observe(
         timing,
         hybrid,
         terminal,
+        source_evaluation: None,
         execution: Execution {
             backend,
             procedure,
@@ -118,6 +118,18 @@ pub(super) fn observe(
             device,
         },
     })
+}
+
+fn measured_statistics(
+    statistics: &Value,
+    timing: &super::super::Diagnostics,
+) -> Result<(), String> {
+    if !statistics.is_object()
+        || statistics["stage_timings"]["grounding_mode"] != timing.grounding_mode.as_str()
+    {
+        return Err("typed statistics and authored stage view disagree".into());
+    }
+    consistent_timings(statistics, timing)
 }
 
 fn procedure(effective: &str, request: Oracle) -> Result<Procedure, String> {

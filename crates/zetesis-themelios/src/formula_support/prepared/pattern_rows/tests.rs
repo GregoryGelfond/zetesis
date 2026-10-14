@@ -27,7 +27,7 @@ fn fixture(source: &str) -> (CompletedCatalog, Prepared) {
 
 fn constraint(program: &Prepared) -> &crate::formula_ir::RuleIr {
     program
-        .rules
+        .rules_without_facts()
         .iter()
         .find(|rule| matches!(rule.head, HeadIr::Normal(None)))
         .unwrap()
@@ -39,9 +39,9 @@ struct Run {
     work: u64,
 }
 
-fn run(
-    prepared: &PreparedRule<'_>,
-    queries: &CompletedQueries<'_>,
+fn run<'source>(
+    prepared: &PreparedRule<'source>,
+    queries: &CompletedQueries<'source>,
     counters: &mut Counters,
 ) -> Run {
     let limits = FormulaLimits::default();

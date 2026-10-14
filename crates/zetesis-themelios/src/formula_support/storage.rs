@@ -301,6 +301,58 @@ pub(crate) fn reserve_exact<T>(
     )
 }
 
+/// The capacity that gives a vector of `len` entries and `capacity` room for
+/// `additional` more, under a lease allowed `maximum` bytes of which its other
+/// buffers hold `header_and_other_bytes`: `None` when it already has the room;
+/// otherwise geometric spare capacity when `geometric` and its whole
+/// replacement (the old and the new capacity together) fits, and the exact
+/// requirement when only that fits. It decides; it neither allocates nor
+/// charges.
+///
+/// # Errors
+/// The requirement's overflow, or the exact replacement exceeding `maximum`.
+pub(crate) fn growth_target<T>(
+    len: usize,
+    capacity: usize,
+    additional: usize,
+    header_and_other_bytes: usize,
+    maximum: usize,
+    geometric: bool,
+) -> Result<Option<usize>, AssignmentFailure<FormulaFailure>> {
+    let count = len
+        .checked_add(additional)
+        .ok_or(AssignmentFailure::Assignment(AssignmentError::Storage(
+            Error::Overflow,
+        )))?;
+    if count <= capacity {
+        return Ok(None);
+    }
+    let peak = |target: usize| {
+        header_and_other_bytes as u128
+            + capacity as u128 * size_of::<T>() as u128
+            + target as u128 * size_of::<T>() as u128
+    };
+    let required = peak(count);
+    if required > maximum as u128 {
+        return Err(AssignmentFailure::Assignment(AssignmentError::Storage(
+            Error::Storage {
+                required,
+                limit: maximum,
+            },
+        )));
+    }
+    let preferred = if geometric {
+        growth_capacity(capacity, count)
+    } else {
+        count
+    };
+    Ok(Some(if peak(preferred) <= maximum as u128 {
+        preferred
+    } else {
+        count
+    }))
+}
+
 /// Existing spare capacity is retained. Overflow in the optional doubling does
 /// not refuse an otherwise representable exact requirement.
 pub(crate) fn growth_capacity(current: usize, required: usize) -> usize {
@@ -397,38 +449,16 @@ fn reserve_with_growth<T>(
         .allowance(limits, location)?;
     let previous = lease.bytes();
     let result = (|| {
-        let count = values
-            .len()
-            .checked_add(additional)
-            .ok_or(AssignmentFailure::Assignment(AssignmentError::Storage(
-                Error::Overflow,
-            )))?;
-        if count <= values.capacity() {
+        let Some(target) = growth_target::<T>(
+            values.len(),
+            values.capacity(),
+            additional,
+            header_and_other_bytes,
+            maximum,
+            geometric,
+        )?
+        else {
             return Ok(());
-        }
-        let required = header_and_other_bytes as u128
-            + values.capacity() as u128 * size_of::<T>() as u128
-            + count as u128 * size_of::<T>() as u128;
-        if required > maximum as u128 {
-            return Err(AssignmentFailure::Assignment(AssignmentError::Storage(
-                Error::Storage {
-                    required,
-                    limit: maximum,
-                },
-            )));
-        }
-        let preferred = if geometric {
-            growth_capacity(values.capacity(), count)
-        } else {
-            count
-        };
-        let preferred_peak = header_and_other_bytes as u128
-            + values.capacity() as u128 * size_of::<T>() as u128
-            + preferred as u128 * size_of::<T>() as u128;
-        let target = if preferred_peak <= maximum as u128 {
-            preferred
-        } else {
-            count
         };
         for _ in 0..values.len() {
             counters

@@ -24,7 +24,7 @@ pub const RECORD: &str =
 /// the contributor guide does in prose, or shows it in a code block, is not a
 /// record.
 #[must_use]
-pub fn is_record(text: &str) -> bool {
+pub(crate) fn is_record(text: &str) -> bool {
     markdown::lines(text)
         .any(|(_, line)| matches!(line, Line::Prose(prose) if prose.trim() == RECORD))
 }

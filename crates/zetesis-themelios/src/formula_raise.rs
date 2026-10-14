@@ -13,6 +13,8 @@ pub(crate) fn raise(
     parsed: &Parse<ast::Program>,
     metadata: &mut metadata::Builder,
 ) -> Result<Program, FormulaFailure> {
+    #[cfg(test)]
+    crate::automatic::testing::note_raise();
     let occurrences = raise_occurrences(parsed);
     if !occurrences.diagnostics().is_empty() {
         return Err(AdmissionFailure::Raise(occurrences.diagnostics().to_vec()).into());

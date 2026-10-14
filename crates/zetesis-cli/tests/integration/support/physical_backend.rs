@@ -3,7 +3,7 @@
 use zetesis_backend::GpuApi;
 
 /// The backend request and argument that name a physical device's API.
-pub trait Physical: Copy {
+pub(crate) trait Physical: Copy {
     fn requested(self) -> zetesis_cli::Backend;
     fn argument(self) -> &'static str;
 }

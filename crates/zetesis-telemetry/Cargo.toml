@@ -1,6 +1,7 @@
 [package]
 name = "zetesis-telemetry"
 version.workspace = true
+description = "Optional exclusive host stages, independent of solver semantics and rendering."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

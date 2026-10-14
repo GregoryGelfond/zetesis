@@ -1,24 +1,15 @@
 //! Failed bodies wake support from their node events, before support quiescence.
 
+use crate::test_support::theory;
 use zetesis_cpu::{Cancellation, Stop};
 
 use crate::{
-    AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaParts, FrozenSubject,
-    Interpretation, Knowledge, Narrower, Narrowing, NarrowingQuota, NarrowingScratch, Node,
-    OriginalSubject, Producers, Region, RegionLimits, Theory,
+    EvaluationLimits, EvaluationWorkspace, FrozenSubject, Interpretation, Knowledge, Narrower,
+    Narrowing, NarrowingQuota, NarrowingScratch, Node, OriginalSubject, Producers, Region,
+    RegionLimits, Theory,
 };
 
 use super::super::{Closure, Step, Subject, Work};
-
-fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(
-        atoms,
-        FormulaParts::new(nodes, vec![]).unwrap(),
-        roots,
-        AdmissionLimits::default(),
-    )
-    .unwrap()
-}
 
 fn prepare(theory: &Theory) -> (Narrower, Producers) {
     let producers =

@@ -2,12 +2,86 @@
 
 Notable changes by release. Versions follow Semantic Versioning.
 
-## Unreleased
+## 0.6.0 — 2026-10-14
+
+### Added
+
+- `zetesis solve --count` prints the complete answer-set count, or the number of
+  optimal ties. It ignores `#show` and `#project` and prints no total if the
+  search is interrupted. See [answer selection](docs/book/reference/commands.md#select-answers).
+- The default installer supplies a CPU executable and a separate GPU executable.
+  GPU requests transfer to the latter; statistics identify the executable that
+  ran. See [installation](INSTALL.md#what-gets-installed).
+- Benchmark campaigns can use declared external source bundles, preserving their
+  original files and include graph and checking complete results against clingo.
+  See [external bundles](docs/book/reference/benchmarking.md#declared-external-bundles).
 
 ### Changed
 
-- Reuse aggregate bounds when one native contribution row extends another,
-  preserving answer sets while narrowing candidates before reduct checking.
+- Everyday help presents the common CPU/GPU choices; `--help-all` retains the full
+  reference, including Metal and Vulkan. The default memory allowance is half the
+  memory available to the process, including a lower Linux container limit;
+  two gibibytes remains the fallback when that information is unavailable.
+- Aggregate assignments use the values their required and possible tuples can
+  produce when checking arithmetic admission. This admits programs such as
+  `p(M+1) :- M = #min{1; 5}.` and refuses families whose arithmetic is undefined
+  for every proposed value. See [numeric boundaries](docs/book/reference/language.md#numeric-boundaries-and-refusal-meaning).
+- Ordinary CPU solving uses shared native operations for `#count`, nonnegative
+  `#sum`, `#min` and `#max` comparisons, reusing contributions and deductions
+  across eligible shared Boolean conditions. See [aggregate representation](docs/book/architecture/alignment.md#ordered-comparisons-and-objective-reductions).
+- Grounding reuses fact tables, join plans, body atoms and aggregate bounds, skips
+  unchanged producer traversals, and uses checked integer comparisons and indexed
+  arithmetic filters. Source identities and arithmetic failures are preserved.
+  See [grounding](docs/book/architecture/grounding.md).
+- Numeric analysis shares one engine across source and prepared input, with
+  argument bounds and an optional diagnostic census. The census does not enable
+  further pruning. See [numeric analysis and domain guards](docs/book/rust/source.md#optional-numeric-analysis-and-domain-guards).
+- CPU candidate checks reuse prior evaluations, candidate search prefers atoms
+  from choice heads, and parallel region walks delay starting their workers.
+  Eligible acyclic normal programs can be evaluated during preparation.
+  Answer sets and optima are unchanged; search order and bounded work can differ.
+  See [membership plans](docs/book/rust/sessions.md#formula-membership-plans) and
+  [parallel walks](crates/zetesis-sat/README.md#walking-the-tree-with-several-workers).
+- Metered operations check cancellation at entry, exit, resource refusals and
+  256-unit work boundaries. Work and storage receipts reflect the new execution
+  routes, so resource ceilings can be reached at different points. See
+  [resource contracts](docs/book/rust/outcomes.md#resource-contracts).
+- The final 94-program CPU check records 521 ms in summed command time at
+  fourteen threads, against clingo’s 804 ms. This is about 33% below the earlier
+  recorded 0.5.0 result. See the [measurements and method](docs/book/reference/cpu-corpus-final-20261014.md).
+
+### Fixed
+
+- Closed region walks remain closed on later pulls without starting workers.
+- Parallel region statistics report retained countermodel workspace peaks.
+- The macOS installer preserves the previous installation if inspection of a new
+  executable fails.
+
+### Compatibility
+
+- `Program::new` now takes `FactTables`; `rules()` includes facts, while
+  `templates()` contains only explicit templates. `AdmissionError::Canonical`
+  replaces `template` with `origin: AdmissionOrigin`, and matches must handle
+  `FactLimitExceeded`. See [explicit facts](docs/book/rust/parallel.md#construct-templates-and-explicit-facts).
+- `DomainObservation::Analyzed` carries `NumericAnalysis`; `Inapplicable` is
+  removed. Use `analysis()`, `catalog()` and `arguments()` to read the new view.
+  Observers can decline census work with `domain_diagnostics_enabled()`, whose
+  default preserves existing callbacks. See [domain observation](docs/book/rust/source.md#optional-numeric-analysis-and-domain-guards).
+- `Knowledge::preferred_atom_reserved` takes `ChoiceHeads`; pass an empty value
+  for the previous ranking. `RegionSearchStatistics` gains `workers` and is
+  non-exhaustive; construct it through `Default`. New worker and engagement
+  records are also non-exhaustive.
+- Exhaustive matches must handle `RunError::GpuExecutableUnavailable`, the
+  corresponding benchmark `Decision`, and `curated::Error::Irregular` and
+  `examples::Error::Irregular` in `zetesis-validation`.
+- Removed the GPU `new_metal` constructors and
+  `GpuFormulaOracle::new_metal_with_projection`. Use `new_selected` or
+  `new_selected_with_projection` with `GpuSelection { api: GpuApi::Metal }`.
+  Other removed/private helpers and the new numeric `NodeView` and admission
+  error variants are listed in the [library migration guide](docs/book/rust/libraries.md#migrating-from-050).
+- Diagnostic bytes are unchanged, but injected writers now receive complete
+  records and styled diagnostic lines through `write_all`. A record or statistics
+  report whose formatting fails returns an I/O error instead of panicking.
 
 ## 0.5.0 — 2026-10-10
 

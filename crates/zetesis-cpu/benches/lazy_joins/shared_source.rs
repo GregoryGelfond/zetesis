@@ -61,7 +61,12 @@ impl Case {
             vec![],
             vec![],
         ));
-        let program = Program::new(rules, AdmissionLimits::default()).unwrap();
+        let program = Program::new(
+            rules,
+            zetesis_core::FactTables::default(),
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let mut seeds = Vec::new();
         let mut expected = Vec::new();
         for omitted in 0..width {

@@ -1,39 +1,36 @@
 //! Ordered roots share original identities, source budgets and global constants.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use themelios_base::source::SourceId;
+use zetesis_reference_support::{BundleFixture, resource_limits};
 use zetesis_test_support::harness;
 use zetesis_themelios::{
     BundleAdmissionError, BundleAdmissionOptions, BundleError, BundleLimits, BundleResource,
     ExpansionLimits, IncludeResolution, SourceBundle, admit_bundle_extended,
 };
 
-struct Fixture(tempfile::TempDir);
+/// Bundle sources loaded from several roots at once.
+struct Fixture(BundleFixture);
 impl Fixture {
     fn new() -> Self {
-        Self(tempfile::tempdir().expect("fixture directory"))
+        Self(BundleFixture::new())
     }
     fn write(&self, name: &str, source: &str) -> PathBuf {
-        let path = self.0.path().join(name);
-        fs::create_dir_all(path.parent().unwrap()).unwrap();
-        fs::write(&path, source).unwrap();
-        path
+        self.0.write(name, source);
+        self.0.path(name)
     }
     fn load(&self, roots: &[&str]) -> SourceBundle {
         SourceBundle::load_many(
-            roots.iter().map(|root| self.0.path().join(root)),
+            roots.iter().map(|root| self.0.path(root)),
             BundleLimits::default(),
         )
         .unwrap()
     }
     /// Remove the directory, failing the test if it cannot be removed.
     fn close(self) {
-        self.0
-            .close()
-            .expect("only this fixture's original sources");
+        self.0.close();
     }
 }
 
@@ -54,7 +51,7 @@ fn ordered_occurrences_and_shared_includes_keep_unique_original_sources() {
     assert_eq!(bundle.sources().len(), 3);
     assert_eq!(
         bundle.roots()[1].requested_path(),
-        fixture.0.path().join("second.lp")
+        fixture.0.path("second.lp")
     );
     let expected_bytes: usize = bundle
         .sources()
@@ -68,9 +65,9 @@ fn ordered_occurrences_and_shared_includes_keep_unique_original_sources() {
         ExpansionLimits::default(),
     )
     .expect("exact root and include spellings are included once");
-    assert_eq!(admitted.program().templates().len(), 2);
+    assert_eq!(admitted.program().facts().len(), 2);
     let owners: Vec<_> = admitted
-        .template_origins()
+        .fact_origins()
         .iter()
         .flatten()
         .map(|location| location.source)
@@ -91,10 +88,10 @@ fn later_roots_supply_global_constants_without_flattening_evidence() {
         ExpansionLimits::default(),
     )
     .unwrap();
-    assert_eq!(admitted.program().templates().len(), 2);
+    assert_eq!(admitted.program().facts().len(), 2);
     assert!(
         admitted
-            .template_origins()
+            .fact_origins()
             .iter()
             .flatten()
             .all(|origin| origin.source == SourceId::new(0))
@@ -122,10 +119,7 @@ fn root_occurrences_have_an_independent_inclusive_bound() {
     for maximum in [0, 1, 2] {
         let loaded = SourceBundle::load_many(
             [&path, &path],
-            BundleLimits {
-                max_roots: maximum,
-                ..BundleLimits::default()
-            },
+            resource_limits::bundle_loading(BundleResource::Roots, maximum),
         );
         if maximum == 2 {
             let bundle = loaded.unwrap();
@@ -135,7 +129,7 @@ fn root_occurrences_have_an_independent_inclusive_bound() {
         } else {
             assert!(matches!(loaded, Err(BundleError::Limit {
                 resource: BundleResource::Roots, observed, limit, ..
-            }) if limit == maximum as u128 && observed == limit + 1));
+            }) if limit == u128::from(maximum) && observed == limit + 1));
         }
     }
     fixture.close();
@@ -148,17 +142,11 @@ fn file_and_byte_allowances_apply_across_all_roots_before_parsing() {
     let second = fixture.write("second.lp", "broken");
     for (limits, resource) in [
         (
-            BundleLimits {
-                max_files: 1,
-                ..BundleLimits::default()
-            },
+            resource_limits::bundle_loading(BundleResource::Files, 1),
             BundleResource::Files,
         ),
         (
-            BundleLimits {
-                max_total_bytes: 7,
-                ..BundleLimits::default()
-            },
+            resource_limits::bundle_loading(BundleResource::TotalBytes, 7),
             BundleResource::TotalBytes,
         ),
     ] {
@@ -177,10 +165,7 @@ fn later_root_parse_and_semantic_refusals_keep_original_source_ids() {
     fixture.write("first.lp", "p.");
     fixture.write("second.lp", "broken(.");
     let error = SourceBundle::load_many(
-        [
-            fixture.0.path().join("first.lp"),
-            fixture.0.path().join("second.lp"),
-        ],
+        [fixture.0.path("first.lp"), fixture.0.path("second.lp")],
         BundleLimits::default(),
     )
     .unwrap_err();
@@ -273,7 +258,7 @@ fn cwd_resolution_is_captured_before_loading_and_retained_for_admission() {
             ExpansionLimits::default(),
         )
         .unwrap();
-        assert_eq!(admitted.program().templates().len(), 4);
+        assert_eq!(admitted.program().facts().len(), 4);
         return;
     }
     let fixture = Fixture::new();
@@ -294,7 +279,7 @@ fn cwd_resolution_is_captured_before_loading_and_retained_for_admission() {
     let result = Command::new(std::env::current_exe().unwrap())
         .args(["--exact", name.as_str(), "--test-threads=1"])
         .env(CHILD, "1")
-        .current_dir(fixture.0.path())
+        .current_dir(fixture.0.directory())
         .stdin(Stdio::null())
         .output()
         .unwrap();

@@ -4,13 +4,13 @@
 use zetesis_ferraris::{FormulaView, Interpretation, NodeView, Theory};
 
 /// The interpretation of `theory`'s two atoms holding those whose bits `world` sets.
-pub fn interpretation(theory: &Theory, world: u8) -> Interpretation {
+pub(crate) fn interpretation(theory: &Theory, world: u8) -> Interpretation {
     Interpretation::new(theory, (0..2).filter(|atom| world & (1 << atom) != 0)).unwrap()
 }
 
 /// Whether node `root` holds in `world`: in the reduct by `frozen` when one is
 /// given, where every subformula false in `frozen` is false.
-pub fn eval(nodes: FormulaView<'_>, root: usize, world: u8, frozen: Option<u8>) -> bool {
+pub(crate) fn eval(nodes: FormulaView<'_>, root: usize, world: u8, frozen: Option<u8>) -> bool {
     if frozen.is_some_and(|candidate| !eval(nodes, root, candidate, None)) {
         return false;
     }
@@ -23,6 +23,27 @@ pub fn eval(nodes: FormulaView<'_>, root: usize, world: u8, frozen: Option<u8>) 
         NodeView::Or(operands) => operands
             .iter()
             .any(|&child| eval(nodes, child, world, frozen)),
+        NodeView::ExtremumCut(cut) => {
+            use zetesis_ferraris::ExtremumCutRule::{Prefix, Suffix};
+            match *cut.rule {
+                Prefix(0) => false,
+                Prefix(boundary) if boundary == cut.row.rank_count => true,
+                Suffix(0) => true,
+                Suffix(boundary) if boundary == cut.row.rank_count => false,
+                rule => cut
+                    .row
+                    .conditions
+                    .iter()
+                    .zip(cut.row.ranks)
+                    .any(|(&child, &rank)| {
+                        let qualifies = match rule {
+                            Prefix(boundary) => rank < boundary,
+                            Suffix(boundary) => rank >= boundary,
+                        };
+                        qualifies && eval(nodes, child, world, frozen)
+                    }),
+            }
+        }
         NodeView::Threshold(row) => {
             row.conditions
                 .iter()

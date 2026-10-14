@@ -115,6 +115,8 @@ impl SolveMeasurements {
     /// grounding succeeded.
     /// A stages-only observer requests no detailed counters and ignores phase
     /// callbacks, but still records the coarse grounding interval and route.
+    /// These timing observers decline numeric diagnostic certificates and census
+    /// reports; requested numeric analysis and finite-domain guards still run.
     /// A disabled scope returns `None` without reading a clock.
     #[must_use]
     pub fn grounding_observer(&self) -> Option<impl zetesis_themelios::GroundingObserver + '_> {

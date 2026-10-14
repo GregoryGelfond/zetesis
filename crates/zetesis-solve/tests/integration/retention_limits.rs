@@ -1,6 +1,7 @@
 //! Actual collection and optimum consumers share canonical catalog accounting.
 
 use std::{collections::BTreeSet, num::NonZeroUsize};
+use zetesis_reference_support::formula;
 
 use zetesis_core::{Atom, Model, Predicate};
 use zetesis_cpu::Cancellation;
@@ -8,10 +9,7 @@ use zetesis_solve::{
     AnswerSet, Backend, Completion, Grounder, Interruption, OptimizationStop, Oracle,
     PreparedInput, Session, SolveConfig, WorldView, WorldViewError, WorldViewLimits,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_extended,
-    admit_formula,
-};
+use zetesis_themelios::{AdmissionOptions, AdmittedFormula, ExpansionLimits, admit_extended};
 
 fn config() -> SolveConfig {
     SolveConfig {
@@ -25,13 +23,7 @@ fn config() -> SolveConfig {
 }
 
 fn fixture() -> AdmittedFormula {
-    admit_formula(
-        "{a;b}. #minimize {0@3,k:a}. #show.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
+    formula("{a;b}. #minimize {0@3,k:a}. #show.")
 }
 
 fn expected() -> BTreeSet<Model> {

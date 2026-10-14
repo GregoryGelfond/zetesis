@@ -28,13 +28,17 @@ extraction and adaptations. [native-verification.json](native-verification.json)
 complete native axiom audit separately from source identity.
 
 The current Rust formula representation additionally admits native nonnegative
-weighted thresholds. The retained `Native` extraction predates that constructor;
-its source hashes and replay guard must remain tied to the Boolean generation.
-Its theorems therefore do not yet certify the threshold-aware Rust entrypoints,
-even on Boolean input. Migrating admission, numeric rows, evaluation and their
+weighted thresholds and ordinal min/max cuts. The retained `Native` extraction
+predates those constructors; its source hashes and replay guard must remain tied
+to the Boolean generation. Its theorems therefore do not yet certify the current
+numeric-row Rust entrypoints, even on Boolean input. Migrating admission, numeric rows, evaluation and their
 composition requires new extracted operations and proofs. The general
-`ThresholdReduct` laws supply the semantic bridge; they are not that executable
-refinement.
+`ThresholdReduct` and ordinal-extrema laws supply semantic bridges; they are not
+that executable refinement. The current admission-derived numeric shape flag
+also changes `Theory` data, and the shared sum/extrema workspace changes the
+original and frozen evaluator call graph. Its row-domain interpretation,
+completed-only publication, reset and resource receipts need new correspondence;
+refreshing historical source hashes would not establish it.
 
 ## Native operand-row getters
 
@@ -177,8 +181,13 @@ completion. These are fixed-observation library-model results; changing runtime
 observations and their source-checked context projection remain separate.
 
 The native control path uses a borrowed `CancellationPoll` view. The owning
-`Cancellation::poll` prepares this view and delegates to its poll; tight work
-retains the view between operation boundaries. Conversion retains the flag
+`Cancellation::poll` prepares this view and delegates to its poll; a metered
+operation's meter retains the view between operation boundaries. Every extracted tick predates
+metered polling: the extracted `tight::Work::tick` and `oracle::Work::tick` poll
+before every charged operation, as their recorded source did, while the current
+Rust ticks observe control at `POLL_INTERVAL` boundaries and before a limit
+refusal. `NativeTightWork`, the tick laws of `NativeControl` and the typed-stop
+receipt of `NativeLoop` describe the recorded generation only. Conversion retains the flag
 references and immutable slot identity under the same fixed per-invocation
 observation model. Cancellation, slot membership and expiry keep their read
 order. This representation adds no proof of concurrent atomic behavior, Rust

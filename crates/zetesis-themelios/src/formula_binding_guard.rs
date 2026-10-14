@@ -213,8 +213,15 @@ impl Compiler<'_> {
                 self.budget
                     .charge(ExpansionResource::TermWork, 1, self.location)?;
                 match literal {
-                    LiteralIr::Compare(left, relation, right) => {
-                        bounds.include(target, self.numeric_parts(left, *relation, right)?);
+                    LiteralIr::Compare(comparison) => {
+                        bounds.include(
+                            target,
+                            self.numeric_parts(
+                                comparison.left(),
+                                comparison.relation(),
+                                comparison.right(),
+                            )?,
+                        );
                     }
                     LiteralIr::Guard(
                         guard @ Guard::Comparisons {
@@ -266,7 +273,7 @@ impl Compiler<'_> {
                 Operation::Absolute(operand) => Operation::Absolute(operand),
             });
         }
-        Ok(Expression { nodes })
+        Ok(Expression::new(nodes))
     }
 
     fn only_missing(

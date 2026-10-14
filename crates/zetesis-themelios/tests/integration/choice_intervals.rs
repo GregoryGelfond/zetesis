@@ -1,24 +1,23 @@
 //! Closed choice ranges preserve one group, local products and every reduct.
 
 use crate::support::answer_records::Record;
-use crate::support::clingo_reports::optimal;
+use crate::support::clingo_reports::{optimal, optimal_witnesses};
 use crate::support::finite_bindings::{holds, remap, values};
 use crate::support::objective_dependency_records as objective_dependencies;
-use crate::support::thresholds::first_success;
+use zetesis_reference_support::{BundleFixture, admit, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
-use std::fs::{self};
 
 use serde_json::Value as Json;
 use themelios_program::term::EvalError;
+use zetesis_clingo_support as oracle;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::admit;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
-    FormulaResource, ProfileFeature, SourceBundle, admit_bundle_formula, admit_extended,
-    admit_formula,
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
+    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
+    ProfileFeature, admit_bundle_formula, admit_extended, admit_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -116,17 +115,8 @@ fn reference(raw: &Json) -> Vec<Record> {
         .iter()
         .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
         .map(|witness| {
-            let mut atoms: Vec<_> = witness["Value"]
-                .as_array()
-                .unwrap()
-                .iter()
-                .map(|atom| atom.as_str().unwrap().to_owned())
-                .collect();
-            atoms.sort();
-            let costs = witness["Costs"]
-                .as_array()
-                .map(|costs| costs.iter().map(|cost| cost.as_i64().unwrap()).collect());
-            (atoms, costs)
+            let atoms = oracle::atoms(&witness["Value"]).into_iter().collect();
+            (atoms, oracle::costs(&witness["Costs"]))
         })
         .collect();
     assert_eq!(
@@ -134,26 +124,7 @@ fn reference(raw: &Json) -> Vec<Record> {
         records.len() as u64
     );
     if raw["Result"] == "OPTIMUM FOUND" {
-        let best: Vec<_> = raw["Models"]["Costs"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .map(|cost| cost.as_i64().unwrap())
-            .collect();
-        let first = records
-            .iter()
-            .position(|(_, cost)| cost.as_ref() == Some(&best))
-            .unwrap();
-        assert!(
-            records[first + 1..].contains(&records[first]),
-            "optN incumbent recurrence"
-        );
-        records = records.into_iter().skip(first + 1).collect();
-        assert!(records.iter().all(|(_, cost)| cost.as_ref() == Some(&best)));
-        assert_eq!(
-            raw["Models"]["Optimal"].as_u64().unwrap(),
-            records.len() as u64
-        );
+        records = optimal_witnesses(&raw["Models"], records);
     }
     records.sort();
     records
@@ -416,8 +387,7 @@ fn excluded_endpoints_syntax_and_unsafe_scopes_remain_typed_refusals() {
 
 #[test]
 fn interval_slots_obey_the_variable_limit() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 2;
+    let options = resource_limits::admission_formula(FormulaResource::Variables, 2);
     let admit = |source: &str| {
         admit_formula(
             source.into(),
@@ -440,18 +410,12 @@ fn interval_slots_obey_the_variable_limit() {
 #[test]
 fn generated_choice_values_obey_the_cumulative_limit() {
     let source = "{p(1..2)}.{q(3..4)}.";
-    let limits = FormulaLimits {
-        max_generated_values: 4,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::GeneratedValues, 4);
     assert!(admit(source, &limits).is_ok());
     assert!(matches!(
         admit(
             source,
-            &FormulaLimits {
-                max_generated_values: 3,
-                ..limits
-            }
+            &resource_limits::formula(FormulaResource::GeneratedValues, 3)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::GeneratedValues,
@@ -463,15 +427,11 @@ fn generated_choice_values_obey_the_cumulative_limit() {
 
 #[test]
 fn oversized_choice_range_is_refused_before_generation() {
-    let limits = FormulaLimits::default();
     assert!(
         matches!(
             admit(
                 "{p((-2147483647-1)..2147483647)}.",
-                &FormulaLimits {
-                    max_assignment_values: 3,
-                    ..limits
-                }
+                &resource_limits::formula(FormulaResource::AssignmentValues, 3)
             ),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::AssignmentValues,
@@ -488,10 +448,7 @@ fn empty_joins_do_not_enumerate_choice_ranges() {
     assert!(
         admit(
             "{p((-2147483647-1)..2147483647)}:-missing.",
-            &FormulaLimits {
-                max_assignment_values: 0,
-                ..FormulaLimits::default()
-            }
+            &resource_limits::formula(FormulaResource::AssignmentValues, 0)
         )
         .is_ok(),
         "a closed empty relational join never enumerates the range"
@@ -502,16 +459,10 @@ fn empty_joins_do_not_enumerate_choice_ranges() {
 fn construction_and_streamed_substitution_work_refuse_before_partial_admission() {
     let source = "1{p(1..2,1..2)}1.";
     for resource in [FormulaResource::Substitutions, FormulaResource::Work] {
-        let attempt = |limit| {
-            let mut limits = FormulaLimits::default();
-            if resource == FormulaResource::Work {
-                limits.max_work = limit;
-            } else {
-                limits.max_substitutions = limit;
-            }
-            admit(source, &limits)
-        };
-        let threshold = first_success(|limit| attempt(limit).is_ok());
+        let attempt = |limit| admit(source, &resource_limits::formula(resource, limit));
+        let threshold = first_success(resource_limits::formula_default(resource), |limit| {
+            attempt(limit).is_ok()
+        });
         assert!(matches!(attempt(threshold - 1), Err(FormulaFailure::Limit {
             resource: actual, observed, .. }) if actual == resource && observed == u128::from(threshold)));
         assert_eq!(complete(&attempt(threshold).unwrap()).len(), 4);
@@ -520,14 +471,14 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
         admit_formula(
             source.into(),
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_term_work: usize::try_from(limit).unwrap(),
-                ..ExpansionLimits::default()
-            },
+            resource_limits::expansion(ExpansionResource::TermWork, limit),
             FormulaLimits::default(),
         )
     };
-    let threshold = first_success(|limit| attempt(limit).is_ok());
+    let threshold = first_success(
+        resource_limits::expansion_default(ExpansionResource::TermWork),
+        |limit| attempt(limit).is_ok(),
+    );
     assert!(matches!(
         attempt(threshold - 1),
         Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
@@ -540,12 +491,7 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
         (FormulaResource::Atoms, admitted.atoms().len()),
         (FormulaResource::Nodes, admitted.theory().nodes().len()),
     ] {
-        let mut limits = FormulaLimits::default();
-        if resource == FormulaResource::Atoms {
-            limits.theory.max_atoms = limit - 1;
-        } else {
-            limits.theory.max_nodes = limit - 1;
-        }
+        let limits = resource_limits::formula(resource, u64::try_from(limit - 1).unwrap());
         assert!(matches!(admit(source, &limits), Err(FormulaFailure::Limit {
             resource: actual, .. }) if actual == resource));
     }
@@ -553,20 +499,11 @@ fn construction_and_streamed_substitution_work_refuse_before_partial_admission()
 
 #[test]
 fn normalized_bundle_constants_and_duplicate_rules_keep_original_origins() {
-    let directory = tempfile::tempdir().unwrap();
+    let fixture = BundleFixture::new();
     let rule = "1{p(l..u)}1.";
-    fs::write(
-        directory.path().join("entry.lp"),
-        format!("#include \"data.lp\".\n{rule}"),
-    )
-    .unwrap();
-    fs::write(
-        directory.path().join("data.lp"),
-        format!("#const l=1.#const u=2.\n{rule}"),
-    )
-    .unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    fixture.write("entry.lp", &format!("#include \"data.lp\".\n{rule}"));
+    fixture.write("data.lp", &format!("#const l=1.#const u=2.\n{rule}"));
+    let bundle = fixture.bundle();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

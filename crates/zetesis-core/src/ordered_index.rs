@@ -57,7 +57,7 @@ pub(crate) enum Rotation {
 impl Index {
     /// Plan against an unpublished root whose nodes were supplied in `path`.
     /// This supports several leaves in one bounded metadata transaction.
-    pub fn plan_from<E>(
+    pub(crate) fn plan_from<E>(
         &mut self,
         root: Link,
         id: usize,
@@ -71,7 +71,7 @@ impl Index {
     /// published link. The path ends at the absent child's new leaf. Propagation
     /// stops once subtree height is unchanged. A consumer reusing an all-right
     /// path must establish that property separately before invoking the planner.
-    pub fn plan_changes_from<E>(
+    pub(crate) fn plan_changes_from<E>(
         &mut self,
         root: Link,
         id: usize,
@@ -165,7 +165,7 @@ impl Index {
     /// Publish a suffix established by `plan_changes_from`; nodes before this
     /// boundary were not mutated. The owner pre-admits every write and publishes
     /// its root in the same indivisible transaction, without callbacks.
-    pub fn publish_nodes_from(&mut self, changed_from: usize) {
+    pub(crate) fn publish_nodes_from(&mut self, changed_from: usize) {
         let leaf = self.path.last().expect("planned leaf");
         self.nodes.push(leaf.node);
         for step in &self.path[changed_from..self.path.len() - 1] {

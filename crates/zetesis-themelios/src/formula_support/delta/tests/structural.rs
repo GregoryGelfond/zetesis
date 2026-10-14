@@ -81,7 +81,10 @@ fn structural_occurrences_partition_new_bindings() {
         let predicate = Predicate::new("p", 1).unwrap();
         assert_eq!(support.old_rows(&predicate), 2);
         assert_eq!(support.row_count(&predicate), 3);
-        let mut schedule = variants(&rule, support, false, &limits, counters).unwrap();
+        let registration = registered(&rule, support, &limits, counters);
+        let mut schedule = registration
+            .variants(0, &rule, support, false, &limits, counters)
+            .unwrap();
         let mut actual = Vec::new();
         let mut pivots = Vec::new();
         while let Some(variant) = schedule.next(&limits, counters).unwrap() {
@@ -191,12 +194,26 @@ struct Run {
     receipt: Receipt,
 }
 
+/// Run `action` as the structural reference when `enabled` is false: without
+/// structural deltas, and with every rich producer traversed in every round,
+/// so the reference is the full-round traversal whatever the registration
+/// would skip.
+fn reference<T>(enabled: bool, action: impl FnOnce() -> T) -> (T, usize) {
+    scoped(enabled, || {
+        if enabled {
+            action()
+        } else {
+            crate::formula_support::producers::testing::with_every_round_traversed(action)
+        }
+    })
+}
+
 fn completed(
     source: &str,
     enabled: bool,
     max_work: Option<u64>,
 ) -> (Result<Run, FormulaFailure>, usize) {
-    scoped(enabled, || {
+    reference(enabled, || {
         let preparation = testing::prepare(source);
         let mut counters = Counters::resume(
             preparation.accounting,
@@ -307,7 +324,7 @@ fn unchanged_structural_joins_fit_the_saved_work() {
 }
 
 fn compiled(source: &str, enabled: bool) -> (Result<Compiled, FormulaFailure>, usize) {
-    scoped(enabled, || {
+    reference(enabled, || {
         crate::formula_ground::ground(testing::prepare(source), None, None)
     })
 }
@@ -423,7 +440,10 @@ fn unchanged_structural_inputs_have_no_variant() {
         let predicate = Predicate::new("p", 1).unwrap();
         assert_eq!(support.old_rows(&predicate), 1);
         assert_eq!(support.row_count(&predicate), 1);
-        let mut schedule = variants(&rule, support, false, &limits, counters).unwrap();
+        let registration = registered(&rule, support, &limits, counters);
+        let mut schedule = registration
+            .variants(0, &rule, support, false, &limits, counters)
+            .unwrap();
         assert!(schedule.next(&limits, counters).unwrap().is_none());
     });
 }
@@ -438,20 +458,23 @@ fn structural_variant_scans_observe_cancellation() {
     let rule = rule(&mut fixture, body, 4);
     let limits = FormulaLimits::default();
     fixture.with(location(), |support, _, counters| {
-        let mut variants = variants(&rule, support, false, &limits, counters).unwrap();
+        let registration = registered(&rule, support, &limits, counters);
+        let mut variants = registration
+            .variants(0, &rule, support, false, &limits, counters)
+            .unwrap();
         assert!(matches!(
             variants.next(&limits, counters).unwrap(),
             Some(Variant::Delta(0))
         ));
         let cancellation = Cancellation::default();
         cancellation.cancel();
-        counters.cancellation = Some(cancellation);
+        counters.attach_test_control(&cancellation);
         let error = variants
             .next(&limits, counters)
             .err()
             .expect("charged scan must stop");
         assert_eq!(error.interruption(), Some(Stop::Cancelled));
-        counters.cancellation = None;
+        counters.detach_test_control();
     });
 }
 

@@ -58,10 +58,10 @@ impl PendingProjection {
     }
 }
 
-pub(super) fn prepare(
-    prepared: &Prepared,
-    completed: &CompletedQueries<'_>,
-    computation: &mut Computation<'_, '_>,
+pub(super) fn prepare<'source>(
+    prepared: &'source Prepared,
+    completed: &CompletedQueries<'source>,
+    computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
     budget: &mut Budget,
     counters: &mut Counters,
@@ -106,17 +106,17 @@ pub(super) fn prepare(
     Ok(PendingProjection { atoms: Some(atoms) })
 }
 
-fn instances(
-    declaration: &RuleIr,
-    completed: &CompletedQueries<'_>,
+fn instances<'source>(
+    declaration: &'source RuleIr,
+    completed: &CompletedQueries<'source>,
     eligibility: &SourceEligibility,
     domain: &mut SourceSelection,
-    context: &mut Context<'_, '_, '_>,
+    context: &mut Context<'_, '_, 'source>,
 ) -> Result<(), FormulaFailure> {
     context.location = declaration.location;
     let support = completed.support();
     let mut rows = Join::rule(
-        declaration,
+        crate::formula_support::Ir::Source(declaration),
         support,
         context.computation,
         context.limits,

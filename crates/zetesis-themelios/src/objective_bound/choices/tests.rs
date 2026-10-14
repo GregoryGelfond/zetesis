@@ -1,5 +1,7 @@
 //! Weighted sufficient evidence and shared activation-copy boundaries.
 
+mod extrema;
+
 use std::collections::BTreeMap;
 
 use super::*;

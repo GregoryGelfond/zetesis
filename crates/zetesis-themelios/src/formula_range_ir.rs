@@ -47,9 +47,7 @@ impl Compiler<'_> {
                         upper,
                         binder: false,
                     });
-                    return Ok(Expression {
-                        nodes: vec![Operation::Variable(target)],
-                    });
+                    return Ok(Expression::new(vec![Operation::Variable(target)]));
                 }
                 TermParts::UnaryOperation {
                     operator,
@@ -181,7 +179,7 @@ impl Compiler<'_> {
                 }))
             }
         });
-        Ok(Expression { nodes })
+        Ok(Expression::new(nodes))
     }
 }
 

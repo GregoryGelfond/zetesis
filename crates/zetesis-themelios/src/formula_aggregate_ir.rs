@@ -10,8 +10,8 @@ use themelios_program::term::Term;
 
 use crate::diagnostic::unsupported;
 use crate::formula_ir::{
-    AggregateElementIr, AggregateGuard, AggregateIr, AggregateKey, Compiler, Expression, LiteralIr,
-    LocalFamily, Operation, Variables,
+    AggregateElementIr, AggregateGuard, AggregateIr, AggregateKey, ComparisonParts, Compiler,
+    Expression, LiteralIr, LocalFamily, Operation, Variables,
 };
 use crate::formula_support::components::Term as CoreTerm;
 use crate::{AdmissionFailure, FormulaFailure, InputLimit, ProfileFeature};
@@ -38,26 +38,29 @@ impl Compiler<'_> {
         }
         Ok(result)
     }
+    /// The compiled operands of one written comparison step: a scalar or a
+    /// tuple comparison's parts, which body placement builds into a literal
+    /// and the guard path into a guard's test.
     pub(super) fn comparison(
         &mut self,
         left: &Term,
         relation: Relation,
         right: &Term,
         variables: &mut Variables,
-    ) -> Result<LiteralIr, FormulaFailure> {
+    ) -> Result<ComparisonParts, FormulaFailure> {
         // Closed tuples are ordinary complete values. Tuple destructuring is
         // retained only when a syntactic tuple still contains local variables.
         if matches!(left, Term::Tuple(_)) || matches!(right, Term::Tuple(_)) {
             if !matches!(relation, Relation::Eq | Relation::Neq) {
                 return Err(unsupported(ProfileFeature::Term, self.location).into());
             }
-            Ok(LiteralIr::TupleCompare(
+            Ok(ComparisonParts::Tuple(
                 self.tuple_expressions(left, variables)?,
                 relation,
                 self.tuple_expressions(right, variables)?,
             ))
         } else {
-            Ok(LiteralIr::Compare(
+            Ok(ComparisonParts::Scalar(
                 self.expression(left, variables)?,
                 relation,
                 self.expression(right, variables)?,
@@ -124,14 +127,10 @@ impl Compiler<'_> {
     ) -> Result<Expression, FormulaFailure> {
         if let Some(value) = sentinel(term) {
             let key = self.value(&value)?;
-            return Ok(Expression {
-                nodes: vec![Operation::Constant(self.source.scalar_key(
-                    &key,
-                    self.limits,
-                    self.counters,
-                    self.location,
-                )?)],
-            });
+            return Ok(Expression::new(vec![Operation::Constant(
+                self.source
+                    .scalar_key(&key, self.limits, self.counters, self.location)?,
+            )]));
         }
         self.ranged_expression(term, variables, values)
     }
@@ -287,9 +286,11 @@ impl Compiler<'_> {
                                 self.positive_atom_key(atom.get(), &mut local, &mut condition)?;
                             self.bindings(&mut condition, &mut local)?;
                             local.safety(self.location)?;
+                            let key = AggregateKey::Atom(atom);
                             elements.push(AggregateElementIr {
                                 family,
-                                key: AggregateKey::Atom(atom),
+                                required: crate::formula_ir::required(&key, &condition),
+                                key,
                                 condition,
                                 variables: local.count,
                             });
@@ -337,9 +338,11 @@ impl Compiler<'_> {
         }
         self.bindings(&mut condition, &mut local)?;
         local.safety(self.location)?;
+        let key = AggregateKey::Tuple(tuple);
         Ok(AggregateElementIr {
             family,
-            key: AggregateKey::Tuple(tuple),
+            required: crate::formula_ir::required(&key, &condition),
+            key,
             condition,
             variables: local.count,
         })

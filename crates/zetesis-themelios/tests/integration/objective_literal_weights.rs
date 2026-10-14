@@ -1,6 +1,7 @@
 //! Closed nonnumeric weights supply neither a numeric key nor a priority slot.
 
 use crate::support::source_cases;
+use zetesis_test_support::thresholds::first_success;
 mod sources;
 
 use sources::{DIRECTIONS, PROGRAM, WEIGHTS, cases, directive};
@@ -8,12 +9,12 @@ use std::collections::BTreeSet;
 use zetesis_clingo_support as oracle;
 use zetesis_core::{Model, Value};
 use zetesis_cpu::Cancellation;
-use zetesis_objective::{AdmissionError, AdmissionLimits, AdmissionResource};
-use zetesis_reference_support::{admit, exhaustive};
+use zetesis_objective::{AdmissionError, AdmissionResource};
+use zetesis_reference_support::{admit, exhaustive, resource_limits};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
-    FormulaLimits, FormulaResource, admit_formula,
+    AdmissionOptions, ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits,
+    FormulaResource, admit_formula,
 };
 
 const CONDITION_CASES: &str = r##"{"name":"absent_condition","source":"#minimize{foo:a}.","records":[[[],null]]}
@@ -125,8 +126,7 @@ fn ignored_weights_do_not_hide_invalid_siblings() {
 
 #[test]
 fn ignored_templates_retain_source_limits() {
-    let mut limits = FormulaLimits::default();
-    limits.objective.max_templates = 0;
+    let limits = resource_limits::formula(FormulaResource::ObjectiveElements, 0);
     assert!(matches!(
         admit("#minimize{foo}.", &limits),
         Err(FormulaFailure::Limit {
@@ -140,14 +140,12 @@ fn ignored_templates_retain_source_limits() {
 
 const IGNORED_SHAPE: &str = "p(1).q(2).#minimize{#inf@7,x,y:p(X),q(Y),X!=0,Y!=0}.";
 
-fn ignored_shape_limit(
-    resource: AdmissionResource,
-    configure: impl Fn(&mut AdmissionLimits, usize),
-) {
+fn ignored_shape_limit(resource: AdmissionResource) {
     let attempt = |maximum| {
-        let mut limits = FormulaLimits::default();
-        configure(&mut limits.objective, maximum);
-        admit(IGNORED_SHAPE, &limits)
+        admit(
+            IGNORED_SHAPE,
+            &resource_limits::formula_objective(resource, maximum),
+        )
     };
     let exact = attempt(2).unwrap();
     assert!(!exact.objectives().is_present());
@@ -167,30 +165,22 @@ fn ignored_shape_limit(
 
 #[test]
 fn ignored_objectives_retain_tuple_limits() {
-    ignored_shape_limit(AdmissionResource::TupleWidth, |limits, maximum| {
-        limits.max_tuple_width = maximum;
-    });
+    ignored_shape_limit(AdmissionResource::TupleWidth);
 }
 
 #[test]
 fn ignored_objectives_retain_positive_body_limits() {
-    ignored_shape_limit(AdmissionResource::PositiveBody, |limits, maximum| {
-        limits.max_positive_body = maximum;
-    });
+    ignored_shape_limit(AdmissionResource::PositiveBody);
 }
 
 #[test]
 fn ignored_objectives_retain_filter_limits() {
-    ignored_shape_limit(AdmissionResource::Filters, |limits, maximum| {
-        limits.max_filters = maximum;
-    });
+    ignored_shape_limit(AdmissionResource::Filters);
 }
 
 #[test]
 fn ignored_objectives_retain_variable_limits() {
-    ignored_shape_limit(AdmissionResource::Variables, |limits, maximum| {
-        limits.max_variables_per_template = maximum;
-    });
+    ignored_shape_limit(AdmissionResource::Variables);
 }
 
 #[test]
@@ -241,16 +231,10 @@ fn literal_admission_limits_are_inclusive() {
     let source = "{a;b}.#minimize{f(1,\"text\")@7,k:a;0@3,k:b}.";
     let reference = exhaustive(&admit(source, &FormulaLimits::default()).unwrap());
     for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
-        let attempt = |maximum| {
-            let mut limits = FormulaLimits::default();
-            if resource == FormulaResource::Work {
-                limits.max_work = maximum;
-            } else {
-                limits.max_substitutions = maximum;
-            }
-            admit(source, &limits)
-        };
-        let exact = threshold(|maximum| attempt(maximum).is_ok());
+        let attempt = |maximum| admit(source, &resource_limits::formula(resource, maximum));
+        let exact = first_success(resource_limits::formula_default(resource), |maximum| {
+            attempt(maximum).is_ok()
+        });
         assert_eq!(exhaustive(&attempt(exact).unwrap()), reference);
         assert!(matches!(attempt(exact - 1), Err(FormulaFailure::Limit {
             resource: actual, observed, limit, ..
@@ -261,34 +245,20 @@ fn literal_admission_limits_are_inclusive() {
         admit_formula(
             source.into(),
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_scalar_bytes: usize::try_from(maximum).unwrap(),
-                ..Default::default()
-            },
+            resource_limits::expansion(ExpansionResource::ScalarBytes, maximum),
             FormulaLimits::default(),
         )
     };
-    let exact = threshold(|maximum| attempt(maximum).is_ok());
+    let exact = first_success(
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
+        |maximum| attempt(maximum).is_ok(),
+    );
     assert_eq!(exhaustive(&attempt(exact).unwrap()), reference);
     assert!(matches!(attempt(exact - 1), Err(FormulaFailure::Expansion(
         ExpansionFailure::Limit {
             resource: ExpansionResource::ScalarBytes, observed, limit, ..
         }
     )) if observed == u128::from(exact) && limit == u128::from(exact - 1)));
-}
-
-fn threshold(mut succeeds: impl FnMut(u64) -> bool) -> u64 {
-    let (mut lower, mut upper) = (0, 65_536);
-    assert!(succeeds(upper));
-    while lower + 1 < upper {
-        let middle = lower + (upper - lower) / 2;
-        if succeeds(middle) {
-            upper = middle;
-        } else {
-            lower = middle;
-        }
-    }
-    upper
 }
 
 proptest::proptest! {

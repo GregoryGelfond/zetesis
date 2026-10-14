@@ -21,8 +21,8 @@ mod tests;
 use std::ops::Range;
 use zetesis_ferraris::NodeView;
 
-use super::Builder;
 use super::cache::CoordinateMap;
+use super::{Builder, MatchedNodes};
 use crate::FormulaFailure;
 use crate::formula_ir::RuleIr;
 use crate::formula_support::{Buffer, Context, Join, RowHead, witnesses};
@@ -71,7 +71,7 @@ impl Group {
 }
 
 struct Body {
-    atoms: Buffer<Option<usize>>,
+    atoms: MatchedNodes,
     groups: Buffer<Group>,
 }
 
@@ -81,24 +81,11 @@ impl Body {
         builder: &mut Builder<'_, '_, '_>,
         rule: &RuleIr,
     ) -> Result<Self, FormulaFailure> {
-        let mut atoms = Buffer::new(
-            builder.computation,
-            builder.limits,
-            &mut builder.counters,
-            rule.location,
-        )?;
-        atoms.resize(
-            width,
-            None,
-            builder.computation,
-            builder.limits,
-            &mut builder.counters,
-            rule.location,
-        )?;
+        let atoms = MatchedNodes::new(width, builder, rule.location)?;
         let mut groups = Buffer::new(
             builder.computation,
             builder.limits,
-            &mut builder.counters,
+            builder.counters,
             rule.location,
         )?;
         branch(0..width, &mut groups, builder, rule)?;
@@ -120,7 +107,7 @@ impl Body {
                 CoordinateMap::new(
                     builder.computation,
                     builder.limits,
-                    &mut builder.counters,
+                    builder.counters,
                     rule.location,
                 )?
                 .into_embedded(rule.location)?,
@@ -180,7 +167,7 @@ impl Body {
                 &key,
                 builder.computation,
                 builder.limits,
-                &mut builder.counters,
+                builder.counters,
                 rule.location,
             )? {
                 #[cfg(test)]
@@ -196,17 +183,15 @@ impl Body {
             builder.work(rule.location)?;
             values[slot] = match input {
                 Input::Atom(at) => {
+                    #[cfg(test)]
                     if compiled || at >= row.unchanged {
-                        #[cfg(test)]
                         testing::record(testing::Point::Atom);
-                        let node = builder.atom_ref(row.rows[at].atom(), rule.location)?;
-                        if !compiled {
-                            builder.work(rule.location)?;
-                            self.atoms.slice_mut()[at] = Some(node);
-                        }
-                        node
+                    }
+                    if compiled {
+                        // A compiled group never seeds per-atom prefix state.
+                        builder.matched_atom(row.rows[at], rule.location)?
                     } else {
-                        self.atoms.slice()[at].expect("unchanged selected positive atom")
+                        self.atoms.dispatched(at, row, builder, rule.location)?
                     }
                 }
                 Input::Group(child) => self.group(child, row, builder, rule)?,
@@ -228,7 +213,7 @@ impl Body {
                 Context::new(
                     &*builder.computation,
                     builder.limits,
-                    &mut builder.counters,
+                    builder.counters,
                     rule.location,
                 ),
             )?;
@@ -239,7 +224,7 @@ impl Body {
 
     fn prefix_node(&self, input: Input) -> usize {
         match input {
-            Input::Atom(index) => self.atoms.slice()[index].expect("selected positive atom"),
+            Input::Atom(index) => self.atoms.cached(index),
             Input::Group(index) => self.groups.slice()[index]
                 .node
                 .expect("completed child group"),
@@ -252,12 +237,10 @@ impl Body {
         builder: &mut Builder<'_, '_, '_>,
         rule: &RuleIr,
     ) -> Result<usize, FormulaFailure> {
-        for (index, witness) in row.rows.iter().enumerate().skip(row.unchanged) {
+        for index in row.unchanged..row.rows.len() {
             #[cfg(test)]
             testing::record(testing::Point::Atom);
-            let node = builder.atom_ref(witness.atom(), rule.location)?;
-            builder.work(rule.location)?;
-            self.atoms.slice_mut()[index] = Some(node);
+            self.atoms.refresh(index, row, builder, rule.location)?;
         }
         // Locate the changed suffix without rescanning every group. Every
         // inspected boundary remains a charged operation.
@@ -339,7 +322,7 @@ fn branch(
         },
         builder.computation,
         builder.limits,
-        &mut builder.counters,
+        builder.counters,
         rule.location,
     )?;
     Ok(Input::Group(index))
@@ -355,15 +338,16 @@ pub(super) fn rule(
     if !testing::enabled() {
         return Ok(false);
     }
-    let Some(pattern) = witnesses::eligible(rule, builder.limits, &mut builder.counters)? else {
+    let Some(pattern) = witnesses::eligible(rule, builder.limits, builder.counters)? else {
         return Ok(false);
     };
+    debug_assert_eq!(rule.body_variables, rule.variables);
     #[cfg(test)]
     testing::record(testing::Point::Run);
     outer.retain_witnesses(Context::new(
         builder.computation,
         builder.limits,
-        &mut builder.counters,
+        builder.counters,
         rule.location,
     ))?;
     let mut prepared = None;
@@ -373,10 +357,11 @@ pub(super) fn rule(
         Context::new(
             builder.computation,
             builder.limits,
-            &mut builder.counters,
+            builder.counters,
             rule.location,
         ),
     )? {
+        debug_assert_eq!(row.rows.len(), rule.body.len());
         #[cfg(test)]
         testing::record(testing::Point::Witness);
         if prepared.is_none() {
@@ -385,7 +370,7 @@ pub(super) fn rule(
                 &row,
                 builder.computation,
                 builder.limits,
-                &mut builder.counters,
+                builder.counters,
                 rule.location,
             )?;
             prepared = Some((head, Body::new(row.rows.len(), builder, rule)?));
@@ -396,7 +381,7 @@ pub(super) fn rule(
             &row,
             builder.computation,
             builder.limits,
-            &mut builder.counters,
+            builder.counters,
             rule.location,
         )?;
         let head = builder.atom_identity(&atom, rule.location)?;

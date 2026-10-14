@@ -227,21 +227,10 @@ fn producer_origins_preserve_atom_associations() {
                 span: Span::empty(ByteOffset::new(offset)),
             })
         };
-        let rule = |origins| RuleIr {
-            head: HeadIr::Normal(None),
-            body: vec![],
-            body_variables: 0,
-            bindings: None,
-            variables: 0,
-            location: location(),
-            origins,
-        };
         builder
-            .record_head_origins(0, &rule(vec![origin(8), origin(2), origin(8)]))
+            .record_origins(0, &[origin(8), origin(2), origin(8)])
             .unwrap();
-        builder
-            .record_head_origins(1, &rule(vec![origin(3)]))
-            .unwrap();
+        builder.record_origins(1, &[origin(3)]).unwrap();
         assert_eq!(
             builder.metadata.origins(0).collect::<Vec<_>>(),
             [location(), origin(2), origin(8)]
@@ -276,24 +265,15 @@ fn origin_insertion_obeys_the_work_ceiling() {
         source: SourceId::new(20),
         span: Span::empty(ByteOffset::new(0)),
     });
-    let rule = RuleIr {
-        head: HeadIr::Normal(None),
-        body: vec![],
-        body_variables: 0,
-        bindings: None,
-        variables: 0,
-        location: next,
-        origins: vec![next],
-    };
     for allowance in [1, 2] {
         Fixture::default().with(location(), |_, computation, counters| {
             let limits = FormulaLimits { max_work: counters.accounting.work + allowance, ..FormulaLimits::default() };
             let mut budget = Budget::new(ExpansionLimits::default(), 0);
             let mut builder = Builder::empty(computation, &limits, &mut budget, counters,
                 Purpose::Theory, None, location()).unwrap();
-            builder.metadata.atom(location(), &mut builder.counters, builder.limits).unwrap();
+            builder.metadata.atom(location(), builder.counters, builder.limits).unwrap();
             let before = builder.counters.accounting.work;
-            let result = builder.record_head_origins(0, &rule);
+            let result = builder.record_origins(0, &[next]);
             if allowance == 2 {
                 result.unwrap();
                 assert_eq!(builder.counters.accounting.work - before, 2);
@@ -651,10 +631,10 @@ fn final_admission(
         if cancel_at_finish {
             let cancellation = Cancellation::default();
             cancellation.cancel();
-            builder.counters = builder.counters.with_cancellation(Some(&cancellation));
+            builder.counters.attach_test_control(&cancellation);
         }
         let before = builder.counters.accounting.work;
-        let (emission, counters) = builder.finish(&Profile::new(None), location())?;
+        let emission = builder.finish(&Profile::new(None), location())?;
         let work = emission.admission.work();
         assert_eq!(u128::from(counters.accounting.work - before), work);
         let theory = emission.admission.admit().unwrap();
@@ -697,4 +677,35 @@ fn final_admission_keeps_cancellation_typed() {
             Err(FormulaFailure::Interrupted { reason: zetesis_cpu::Stop::Cancelled, location: origin })
                 if origin == location()));
     }
+}
+
+#[test]
+fn builder_unwind_retains_the_borrowed_account() {
+    Fixture::default().with(location(), |_, computation, counters| {
+        let limits = FormulaLimits::default();
+        let mut budget = Budget::new(ExpansionLimits::default(), 0);
+        let accepted = std::cell::Cell::new(0);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut builder = Builder::empty(
+                computation,
+                &limits,
+                &mut budget,
+                counters,
+                Purpose::Theory,
+                None,
+                location(),
+            )
+            .unwrap();
+            builder.initialize(location()).unwrap();
+            builder
+                .counters
+                .charge_work(17, &limits, location())
+                .unwrap();
+            accepted.set(builder.counters.accounting.work);
+            panic!("after builder charges");
+        }));
+        assert!(result.is_err());
+        assert!(accepted.get() >= 17);
+        assert_eq!(counters.accounting.work, accepted.get());
+    });
 }

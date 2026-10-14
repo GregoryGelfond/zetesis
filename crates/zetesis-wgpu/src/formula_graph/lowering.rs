@@ -3,7 +3,7 @@
 use super::{address, capacity};
 use crate::GpuError;
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{NodeView, Theory, threshold_lowering};
+use zetesis_ferraris::{NodeView, Theory, extremum_lowering, threshold_lowering};
 
 pub(crate) fn translated(map: &[u32], index: usize) -> Result<u32, GpuError> {
     if map.is_empty() {
@@ -39,28 +39,8 @@ pub(crate) fn pack(
     for index in 0..theory.view().len() {
         cancellation.poll().map_err(GpuError::interrupted)?;
         let node = theory.view().node(index).expect("admitted formula node");
-        let output = if let NodeView::Threshold(threshold) = node {
-            let shape = threshold_lowering::Shape::new(threshold, || {
-                cancellation.poll().map_err(GpuError::interrupted)
-            })?;
-            if shape.scratch > scratch.capacity() {
-                return Err(capacity("threshold scratch exceeds admitted capacity"));
-            }
-            while scratch.len() < shape.scratch {
-                cancellation.poll().map_err(GpuError::interrupted)?;
-                scratch.push(0);
-            }
-            threshold_lowering::lower(
-                threshold,
-                scratch,
-                &mut Sink {
-                    words,
-                    map,
-                    cancellation,
-                    falsum: None,
-                    truth: None,
-                },
-            )?
+        let output = if let Some(output) = lower_numeric(node, words, map, scratch, cancellation)? {
+            output
         } else {
             let output = address(words.len() / 4)?;
             let header = match node {
@@ -87,7 +67,9 @@ pub(crate) fn pack(
                         [if conjunction { 5 } else { 6 }, start, length, 0]
                     }
                 }
-                NodeView::Threshold(_) => unreachable!("threshold handled above"),
+                NodeView::Threshold(_) | NodeView::ExtremumCut(_) => {
+                    unreachable!("numeric node handled above")
+                }
             };
             push(words, header)?;
             output
@@ -113,6 +95,41 @@ pub(crate) fn pack(
         }
     }
     Ok(())
+}
+
+/// Both native domains publish through the same physical sink and address map.
+fn lower_numeric(
+    node: NodeView<'_>,
+    words: &mut Vec<u32>,
+    map: &[u32],
+    scratch: &mut Vec<u32>,
+    cancellation: &Cancellation,
+) -> Result<Option<u32>, GpuError> {
+    let mut sink = Sink {
+        words,
+        map,
+        cancellation,
+        falsum: None,
+        truth: None,
+    };
+    let output = match node {
+        NodeView::Threshold(threshold) => {
+            let shape = threshold_lowering::Shape::new(threshold, || {
+                cancellation.poll().map_err(GpuError::interrupted)
+            })?;
+            if shape.scratch > scratch.capacity() {
+                return Err(capacity("threshold scratch exceeds admitted capacity"));
+            }
+            while scratch.len() < shape.scratch {
+                cancellation.poll().map_err(GpuError::interrupted)?;
+                scratch.push(0);
+            }
+            threshold_lowering::lower(threshold, scratch, &mut sink)?
+        }
+        NodeView::ExtremumCut(cut) => extremum_lowering::lower(cut, &mut sink)?,
+        _ => return Ok(None),
+    };
+    Ok(Some(output))
 }
 
 fn push(words: &mut Vec<u32>, header: [u32; 4]) -> Result<(), GpuError> {

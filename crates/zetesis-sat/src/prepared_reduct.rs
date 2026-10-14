@@ -30,7 +30,7 @@ pub struct ReductPreparationLimits {
 
 impl ReductPreparationLimits {
     /// Default ceiling for named preparation or standalone worker capacity.
-    pub const DEFAULT_BYTES: u64 = 64 * 1024 * 1024;
+    pub(crate) const DEFAULT_BYTES: u64 = 64 * 1024 * 1024;
 }
 
 impl Default for ReductPreparationLimits {
@@ -74,7 +74,7 @@ pub struct ReductPreparationAttempt {
 /// One candidate-parametric CNF bound to an exact immutable original theory.
 ///
 /// The original semantic atoms are the prospective subset N. Separate inputs
-/// represent candidate membership M and original implication and threshold truth. The latter
+/// represent candidate membership M and original implication and numeric-node truth. The latter
 /// are supplied only by a successful, subject-bound formula evaluation. No
 /// arbitrary external mask is accepted. Clones share this owner and its theory.
 /// Each concurrent query requires its own [`ReductWorkspace`].
@@ -84,8 +84,8 @@ pub struct ReductPreparationAttempt {
 /// reducts. This is different from keeping the original classical equivalences
 /// and adding units for false original nodes. All roots and N⊂M are asserted.
 ///
-/// Thresholds use original truth AND their expanded child-reduct threshold.
-/// Construction includes checked physical threshold expansion, DAG/atom/root
+/// Numeric nodes use original truth AND their expanded child-reduct operation.
+/// Construction includes checked physical numeric expansion, DAG/atom/root
 /// visits, plus expected hash lookup
 /// and clause canonicalization work. It retains a larger fixed query than some
 /// individually simplified reducts; reuse does not guarantee faster search.
@@ -106,7 +106,7 @@ struct Data {
 impl PreparedReduct {
     /// Compile a fixed proper-subset query without evaluating any candidate.
     ///
-    /// For A atoms, G physical gates, I guarded implication/threshold nodes and
+    /// For A atoms, G physical gates, I guarded implication/numeric nodes and
     /// R roots, construction reserves at most 3A+G+2I variables,
     /// 3G+3I+4A+R+1 clauses and 7G+7I+10A+R literals. Threshold DP scratch
     /// is admitted alongside the semantic-to-physical map. CNF reservations are clipped to declared admission
@@ -176,7 +176,10 @@ impl PreparedReduct {
                 .view()
                 .node(index)
                 .map_err(|_| Incomplete::InvalidWitness)?;
-            if matches!(node, NodeView::Implies(..) | NodeView::Threshold(_)) {
+            if matches!(
+                node,
+                NodeView::Implies(..) | NodeView::Threshold(_) | NodeView::ExtremumCut(_)
+            ) {
                 guarded += 1;
             }
             let (gates, slots) = encoding::node_dimensions(node, budget)?;
@@ -464,6 +467,18 @@ impl Builder {
                         threshold,
                         &self.nodes,
                         &mut self.scratch,
+                        budget,
+                    )?;
+                    self.gate(false, Encoded::Literal(parameter), value, budget)?
+                }
+                NodeView::ExtremumCut(cut) => {
+                    let parameter = Literal::new(2 * atoms + self.data.guarded.len(), true);
+                    self.data.guarded.push(index);
+                    let value = encoding::gate_extremum_cut(
+                        &mut self.data.cnf,
+                        &mut self.gates,
+                        cut,
+                        &self.nodes,
                         budget,
                     )?;
                     self.gate(false, Encoded::Literal(parameter), value, budget)?

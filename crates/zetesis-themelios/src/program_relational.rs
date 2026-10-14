@@ -42,7 +42,7 @@ pub struct ProgramRelationalOptions {
 /// can therefore enter native lazy or eager execution. Metadata affects display,
 /// never membership or the identity of complete interpretations.
 ///
-/// Template sites index [`Self::original_program`], including after excluded
+/// Template and fact sites index [`Self::original_program`], including after excluded
 /// declarations or one-to-many fact expansion. No source text is synthesized.
 #[derive(Debug)]
 pub struct PreparedRelational {
@@ -50,6 +50,7 @@ pub struct PreparedRelational {
     owner: Owner,
     metadata: SourceMetadata,
     template_sites: Vec<Vec<ProgramSite>>,
+    fact_sites: Vec<Vec<ProgramSite>>,
     expansion: ExpansionUsage,
 }
 
@@ -77,6 +78,13 @@ impl PreparedRelational {
     #[must_use]
     pub fn template_sites(&self) -> &[Vec<ProgramSite>] {
         &self.template_sites
+    }
+
+    /// Original evidence parallel to native fact occurrences, including rows of
+    /// one expanded family. Sites retain their original statement identities.
+    #[must_use]
+    pub fn fact_sites(&self) -> &[Vec<ProgramSite>] {
+        &self.fact_sites
     }
 
     /// Accepted cumulative charges for this preparation, without resetting at the
@@ -142,7 +150,7 @@ pub fn prepare_program_relational(
             &mut budget,
             site,
         )?;
-        let (program, template_sites) = extended::compile_relational(
+        let compiled = extended::compile_relational(
             owner.program(),
             options.admission.core_limits,
             &mut budget,
@@ -153,14 +161,15 @@ pub fn prepare_program_relational(
         )?;
         let metadata = metadata.finish(site)?;
         budget.poll(site)?;
-        Ok((program, template_sites, metadata, budget.usage()))
+        Ok((compiled, metadata, budget.usage()))
     };
     match prepare() {
-        Ok((program, template_sites, metadata, expansion)) => Ok(PreparedRelational {
-            program,
+        Ok((compiled, metadata, expansion)) => Ok(PreparedRelational {
+            program: compiled.program,
             owner,
             metadata,
-            template_sites,
+            template_sites: compiled.template_origins,
+            fact_sites: compiled.fact_origins,
             expansion,
         }),
         Err(error) => Err(owner.retain_failure(error)),

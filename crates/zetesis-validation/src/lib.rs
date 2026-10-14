@@ -5,6 +5,8 @@ pub mod answers;
 pub mod backend_check;
 pub mod curated;
 pub mod corpus_comparison;
+mod corpus_files;
+mod digest;
 mod phase;
 mod stage;
 pub mod examples;

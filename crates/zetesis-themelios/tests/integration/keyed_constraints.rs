@@ -16,6 +16,16 @@ const CHOICES: &str = "letter(a;b;c). digit(0..9). carry_value(0;1). idx(1). \
     1 { assign(L,D) : digit(D) } 1 :- letter(L). \
     1 { carry(I,V) : carry_value(V) } 1 :- idx(I). ";
 
+/// The default formula limits, with `max_key_work` steps for the key analysis.
+/// The analysis stops rather than refusing, so no typed resource reports
+/// this limit and `resource_limits` does not name it.
+fn key_work(max_key_work: u64) -> FormulaLimits {
+    FormulaLimits {
+        max_key_work,
+        ..FormulaLimits::default()
+    }
+}
+
 /// The two programs ground to theories of the same shape and the same family.
 fn same_shape(left: &str, right: &str) {
     let (left, right) = (formula(left), formula(right));
@@ -256,19 +266,10 @@ fn a_digit_produced_by_a_rule_keeps_the_written_column() {
 fn a_stopped_key_analysis_leaves_every_constraint_written_and_is_reported() {
     // Three steps read three statements and no key: the analysis stops, the
     // constraint is grounded as written, the admission succeeds and the
-    // answer sets are those of the asked form. The three steps are charged
-    // to the term work: against no step at all the receipt differs by three.
+    // answer sets are those of the asked form. The exact three-step charge is
+    // checked on preparation receipts before local-frame lookup begins.
     let written = format!("{CHOICES} :- assign(a,X), assign(b,Y), X != Y + 1.");
-    let under = |max_key_work| {
-        admit(
-            &written,
-            &FormulaLimits {
-                max_key_work,
-                ..FormulaLimits::default()
-            },
-        )
-        .unwrap()
-    };
+    let under = |max_key_work| admit(&written, &key_work(max_key_work)).unwrap();
     let stopped = under(3);
     assert_eq!(stopped.keyed_constraints(), 0);
     assert!(matches!(stopped.key_analysis(), KeyAnalysis::Stopped(stop) if stop.limit == 3));
@@ -276,10 +277,10 @@ fn a_stopped_key_analysis_leaves_every_constraint_written_and_is_reported() {
     assert_eq!(complete.keyed_constraints(), 1);
     assert_eq!(complete.key_analysis(), KeyAnalysis::Complete);
     assert_eq!(stable(&stopped), stable(&complete));
-    assert_eq!(
-        stopped.expansion_usage().term_work,
-        under(0).expansion_usage().term_work + 3
-    );
+    let unstarted = under(0);
+    assert_eq!(unstarted.keyed_constraints(), 0);
+    assert!(matches!(unstarted.key_analysis(), KeyAnalysis::Stopped(stop) if stop.limit == 0));
+    assert_eq!(stable(&unstarted), stable(&complete));
 }
 
 #[test]
@@ -319,13 +320,7 @@ fn a_keyed_column_preserves_checked_overflow() {
         1 { p(Y) : digit(Y) } 1. 1 { q(C) : carry_value(C) } 1. \
         :- p(Y), q(C), 0 != Y + 2*C.";
     for max_key_work in [0, FormulaLimits::default().max_key_work] {
-        let Err(failure) = admit(
-            source,
-            &FormulaLimits {
-                max_key_work,
-                ..FormulaLimits::default()
-            },
-        ) else {
+        let Err(failure) = admit(source, &key_work(max_key_work)) else {
             panic!("key work {max_key_work}: admission succeeded; expected arithmetic overflow");
         };
         assert!(
@@ -349,14 +344,7 @@ fn a_keyed_column_keeps_nonnumeric_comparisons_defined() {
     // A symbol differs from every numeric sum; no arithmetic operation is
     // applied to the symbol in the source.
     for max_key_work in [0, FormulaLimits::default().max_key_work] {
-        let input = admit(
-            source,
-            &FormulaLimits {
-                max_key_work,
-                ..FormulaLimits::default()
-            },
-        )
-        .unwrap();
+        let input = admit(source, &key_work(max_key_work)).unwrap();
         assert!(stable(&input).is_empty());
     }
 }
@@ -365,14 +353,7 @@ fn a_keyed_column_keeps_nonnumeric_comparisons_defined() {
 fn a_keyed_comparison_keeps_its_excluded_substitutions_unreached() {
     let source = "val(1). 1 { p(Y) : val(Y) } 1. d(0). \
         :- d(X), p(Y), Y != 1, 1/X=1.";
-    let written = admit(
-        source,
-        &FormulaLimits {
-            max_key_work: 0,
-            ..FormulaLimits::default()
-        },
-    )
-    .unwrap();
+    let written = admit(source, &key_work(0)).unwrap();
     assert_eq!(
         exhaustive(&written),
         BTreeSet::from([(["val(1)", "p(1)", "d(0)"].map(str::to_owned).into(), None,)]),
@@ -382,13 +363,7 @@ fn a_keyed_comparison_keeps_its_excluded_substitutions_unreached() {
 
 fn same_evaluation_failure(source: &str, expected: &EvaluationError) {
     for max_key_work in [0, FormulaLimits::default().max_key_work] {
-        let Err(failure) = admit(
-            source,
-            &FormulaLimits {
-                max_key_work,
-                ..FormulaLimits::default()
-            },
-        ) else {
+        let Err(failure) = admit(source, &key_work(max_key_work)) else {
             panic!("key work {max_key_work}: {source}: expected {expected}");
         };
         assert!(
@@ -439,14 +414,7 @@ fn a_safe_column_at_the_integer_boundary_is_asked() {
     let source = "digit(1). carry_value(1073741823). \
         1 { p(Y) : digit(Y) } 1. 1 { q(C) : carry_value(C) } 1. \
         :- p(Y), q(C), 2147483647 != Y + 2*C.";
-    let written = admit(
-        source,
-        &FormulaLimits {
-            max_key_work: 0,
-            ..FormulaLimits::default()
-        },
-    )
-    .unwrap();
+    let written = admit(source, &key_work(0)).unwrap();
     let asked = formula(source);
     assert_eq!(asked.keyed_constraints(), 1);
     assert_eq!(stable(&asked), stable(&written));
@@ -457,14 +425,7 @@ fn a_safe_column_at_the_integer_boundary_is_asked() {
 fn independently_safe_arithmetic_guards_allow_asking() {
     let source = "value(0;1). input(1;2). 1 { p(Y) : value(Y) } 1. \
         :- p(Y), input(X), Y != 1, 1/X=1.";
-    let written = admit(
-        source,
-        &FormulaLimits {
-            max_key_work: 0,
-            ..FormulaLimits::default()
-        },
-    )
-    .unwrap();
+    let written = admit(source, &key_work(0)).unwrap();
     let asked = formula(source);
     assert_eq!(asked.keyed_constraints(), 1);
     assert_eq!(stable(&asked), stable(&written));
@@ -474,14 +435,7 @@ fn independently_safe_arithmetic_guards_allow_asking() {
 fn an_arithmetic_bound_from_a_comparison_is_not_assumed() {
     let source = "value(0;1). input(0;1). 1 { p(Y) : value(Y) } 1. \
         :- p(Y), input(X), X>0, Y != 1, 1/X=1.";
-    let written = admit(
-        source,
-        &FormulaLimits {
-            max_key_work: 0,
-            ..FormulaLimits::default()
-        },
-    )
-    .unwrap();
+    let written = admit(source, &key_work(0)).unwrap();
     let input = formula(source);
     assert_eq!(input.keyed_constraints(), 0);
     assert_eq!(stable(&input), stable(&written));

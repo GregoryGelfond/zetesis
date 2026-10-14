@@ -1,3 +1,5 @@
+mod leaves;
+
 use super::*;
 use crate::ProgramSite;
 use crate::formula_ir::Operation;
@@ -30,15 +32,13 @@ fn with_expression(
     ),
 ) {
     let mut fixture = Fixture::default();
-    let literals = [LiteralIr::Compare(
-        Expression {
-            nodes: nodes(&mut fixture),
-        },
+    let left = nodes(&mut fixture);
+    let literals = [LiteralIr::Compare(fixture.comparison(
+        left,
         Relation::Eq,
-        Expression {
-            nodes: vec![Operation::Variable(1)],
-        },
-    )];
+        vec![Operation::Variable(1)],
+        location(),
+    ))];
     fixture.with(location(), |_, computation, counters| {
         let limits = FormulaLimits::default();
         let mut projections =
@@ -74,8 +74,8 @@ fn evaluate(
     evaluation: &mut Evaluation,
     context: Context<'_, &mut Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
-    let (left, relation, right) = comparison(&literals[0]).unwrap();
-    projections.compare(0, ([left, right], relation), values, evaluation, context)
+    let comparison = comparison(&literals[0]).unwrap();
+    projections.compare(0, comparison.operands(), values, evaluation, context)
 }
 
 #[test]
@@ -492,7 +492,7 @@ fn cancelled_hits_never_return_a_value() {
             .unwrap();
             let cancellation = zetesis_cpu::Cancellation::default();
             cancellation.cancel();
-            counters.cancellation = Some(cancellation);
+            counters.attach_test_control(&cancellation);
             assert!(matches!(
                 evaluate(
                     projections,
@@ -515,15 +515,13 @@ fn descriptor_growth_releases_nested_leases() {
     let mut fixture = Fixture::default();
     let literals: Vec<_> = (0..6)
         .map(|_| {
-            LiteralIr::Compare(
-                Expression {
-                    nodes: quotient(&mut fixture),
-                },
+            let left = quotient(&mut fixture);
+            LiteralIr::Compare(fixture.comparison(
+                left,
                 Relation::Eq,
-                Expression {
-                    nodes: vec![Operation::Variable(1)],
-                },
-            )
+                vec![Operation::Variable(1)],
+                location(),
+            ))
         })
         .collect();
     fixture.with(location(), |_, computation, counters| {

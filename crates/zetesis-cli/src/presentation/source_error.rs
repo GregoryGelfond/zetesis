@@ -54,7 +54,7 @@ pub(super) fn write(
 }
 
 fn format_failure(failure: Option<io::Error>) -> io::Error {
-    failure.unwrap_or_else(|| io::Error::other("diagnostic formatting failed"))
+    failure.unwrap_or_else(super::formatting_failure)
 }
 
 struct Plain<'a, W> {

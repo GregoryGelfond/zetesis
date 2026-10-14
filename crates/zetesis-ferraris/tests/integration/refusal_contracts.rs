@@ -176,6 +176,7 @@ fn invalid_indices_and_guard_capacity_have_actionable_local_evidence() {
             vec![],
             vec![],
             vec![],
+            vec![],
             vec![]
         )
     );

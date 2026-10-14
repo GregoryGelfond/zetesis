@@ -1,13 +1,12 @@
 //! Finite bindings and evaluated heads compose without changing frozen theories.
 
 use std::collections::BTreeSet;
+use zetesis_reference_support::formula;
 
 use crate::support::finite_bindings::values;
 use crate::support::finite_bindings::{holds, remap};
 use zetesis_core::Sign;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_themelios::AdmittedFormula;
 
 type Model = BTreeSet<String>;
 type Models = BTreeSet<Model>;
@@ -75,13 +74,7 @@ const CASES: [Case; 6] = [
 ];
 
 fn input(source: &str) -> AdmittedFormula {
-    let admitted = admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"));
+    let admitted = formula(source);
     assert_eq!(admitted.source().expect("source input").text(), source);
     admitted
 }

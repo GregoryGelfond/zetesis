@@ -34,7 +34,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         vec![],
         vec![],
     );
-    let program = Program::new(vec![fact], AdmissionLimits::default())?;
+    let program = Program::new(
+        vec![fact],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )?;
     let config = SolveConfig {
         backend: Backend::Cpu,
         grounder: Grounder::Lazy,

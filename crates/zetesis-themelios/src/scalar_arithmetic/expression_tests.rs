@@ -39,7 +39,7 @@ fn evaluate(
         // this assertion boundary, after evaluation in the canonical authority.
         let result = Evaluation::default()
             .expression(
-                &Expression { nodes },
+                &Expression::new(nodes),
                 |variable| binding.key(variable, location()),
                 computation,
                 &limits,

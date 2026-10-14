@@ -116,17 +116,7 @@ fn external(source: &str) -> Models {
     for call in json["Call"].as_array().expect("oracle calls") {
         if let Some(witnesses) = call["Witnesses"].as_array() {
             for witness in witnesses {
-                let atoms = witness["Value"]
-                    .as_array()
-                    .expect("oracle atom array")
-                    .iter()
-                    .map(|atom| {
-                        atom.as_str()
-                            .expect("one whole atom per JSON string")
-                            .to_owned()
-                    })
-                    .collect();
-                *models.entry(atoms).or_default() += 1;
+                *models.entry(oracle::atoms(&witness["Value"])).or_default() += 1;
             }
         }
     }

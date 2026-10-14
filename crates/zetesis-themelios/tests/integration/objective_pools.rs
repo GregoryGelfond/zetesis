@@ -2,6 +2,8 @@
 
 use crate::support::priority_contracts;
 use crate::support::source_cases;
+use zetesis_reference_support::resource_limits;
+use zetesis_test_support::thresholds::first_success;
 
 use themelios_program::program::{Arguments, BodyElement, LiteralInner, Statement};
 use zetesis_reference_support as reference;
@@ -183,8 +185,8 @@ fn mixed_pooled_rows_preserve_complete_costs_and_warnings() {
 #[test]
 fn retained_pooled_conditions_still_obey_their_node_limit() {
     let source = "d(0).p(0).:~p(X;1/X):d(X).[1]";
-    let mut limits = FormulaLimits::default();
-    limits.objective.max_condition_nodes = 0;
+    let limits =
+        resource_limits::formula_objective(zetesis_objective::AdmissionResource::ConditionNodes, 0);
     let error = reference::admit(source, &limits).unwrap_err();
     assert!(
         matches!(
@@ -210,22 +212,13 @@ fn projected_analysis_has_an_inclusive_node_limit() {
     let attempt = |maximum| {
         reference::admit(
             source,
-            &FormulaLimits {
-                max_analysis_nodes: maximum,
-                ..FormulaLimits::default()
-            },
+            &resource_limits::formula(FormulaResource::AnalysisNodes, maximum),
         )
     };
-    let (mut lower, mut upper) = (0, 65536);
-    assert!(attempt(upper).is_ok());
-    while lower + 1 < upper {
-        let middle = lower + (upper - lower) / 2;
-        if attempt(middle).is_ok() {
-            upper = middle;
-        } else {
-            lower = middle;
-        }
-    }
+    let upper = first_success(
+        resource_limits::formula_default(FormulaResource::AnalysisNodes),
+        |middle| attempt(middle).is_ok(),
+    );
     assert_eq!(
         reference::exhaustive(&attempt(upper).unwrap()),
         source_cases::cases(CASES)[0].records
@@ -234,7 +227,7 @@ fn projected_analysis_has_an_inclusive_node_limit() {
     assert!(
         matches!(failure, FormulaFailure::Limit {
         resource: FormulaResource::AnalysisNodes, observed, limit, ..
-    } if observed == upper as u128 && limit == (upper - 1) as u128),
+    } if observed == u128::from(upper) && limit == u128::from(upper - 1)),
         "{failure}"
     );
     assert!(!failure.diagnostics().is_empty());
@@ -308,9 +301,7 @@ fn local_pool_alternatives_do_not_borrow_another_alternatives_binder() {
 
 #[test]
 fn projected_source_payload_has_independent_limits() {
-    use zetesis_themelios::{
-        AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, admit_formula,
-    };
+    use zetesis_themelios::{AdmissionOptions, ExpansionFailure, ExpansionResource, admit_formula};
     let source = "d(1;2).p(1).p(3).:~p(X;X+1):d(X).[1]";
     for resource in [
         ExpansionResource::TermWork,
@@ -319,31 +310,23 @@ fn projected_source_payload_has_independent_limits() {
         ExpansionResource::Origins,
     ] {
         let attempt = |maximum| {
-            let mut limits = ExpansionLimits::default();
-            match resource {
-                ExpansionResource::TermWork => limits.max_term_work = maximum,
-                ExpansionResource::ScalarBytes => limits.max_scalar_bytes = maximum,
-                ExpansionResource::Values => limits.max_values = maximum,
-                ExpansionResource::Origins => limits.max_origin_locations = maximum,
-                _ => unreachable!("selected source resources"),
-            }
             admit_formula(
                 source.into(),
                 AdmissionOptions::default(),
-                limits,
+                resource_limits::expansion(resource, maximum),
                 FormulaLimits::default(),
             )
         };
-        let (mut lower, mut upper) = (0, 65536);
-        assert!(attempt(upper).is_ok());
-        while lower + 1 < upper {
-            let middle = lower + (upper - lower) / 2;
-            if attempt(middle).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle;
-            }
+        if resource == ExpansionResource::TermWork {
+            let expected = source_cases::cases(CASES)[0].records.clone();
+            crate::support::thresholds::bounded_term_work(attempt, |actual| {
+                assert_eq!(reference::exhaustive(actual), expected);
+            });
+            continue;
         }
+        let upper = first_success(resource_limits::expansion_default(resource), |middle| {
+            attempt(middle).is_ok()
+        });
         assert_eq!(
             reference::exhaustive(&attempt(upper).unwrap()),
             source_cases::cases(CASES)[0].records

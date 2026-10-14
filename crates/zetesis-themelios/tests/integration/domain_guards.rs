@@ -2,21 +2,21 @@
 
 use std::cell::{Cell, RefCell};
 use std::fmt::Write;
+use zetesis_reference_support::{prepare, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 
-use zetesis_domain::Status;
+use zetesis_domain::numeric::Status;
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, DomainLimits, DomainObservation, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, GroundingObserver,
-    GroundingOptions, GroundingOutcome, GroundingPhase, GroundingWork, JoinStrategy,
-    prepare_formula,
+    ExpansionLimits, FormulaFailure, FormulaResource, GroundingObserver, GroundingOptions,
+    GroundingOutcome, GroundingPhase, GroundingWork, JoinStrategy, prepare_formula,
 };
 
 #[derive(Default)]
 struct Observation {
     status: Cell<Option<Status>>,
     disabled: Cell<bool>,
-    declined: Cell<bool>,
     work: Cell<GroundingWork>,
     support: Cell<GroundingWork>,
     rules: RefCell<Vec<GroundingWork>>,
@@ -30,10 +30,19 @@ impl GroundingObserver for Observation {
     fn domain_analysis(&self, observation: DomainObservation<'_, '_>) {
         match observation {
             DomainObservation::Disabled => self.disabled.set(true),
-            DomainObservation::Inapplicable => self.declined.set(true),
             DomainObservation::Analyzed(analysis) => {
-                assert!(analysis.belongs_to(analysis.program()));
-                self.status.set(Some(analysis.status()));
+                for argument in analysis.arguments() {
+                    let (_, _, argument) = argument.expect("prepared predicate belongs to reader");
+                    if let Some(values) = analysis.analysis().values(argument) {
+                        for value in values {
+                            analysis
+                                .catalog()
+                                .term(value)
+                                .expect("analysis retains canonical owner");
+                        }
+                    }
+                }
+                self.status.set(Some(analysis.analysis().status()));
             }
         }
     }
@@ -60,15 +69,10 @@ fn ground(
     domains: Option<DomainLimits>,
     observation: &Observation,
 ) -> Result<AdmittedFormula, FormulaFailure> {
-    prepare_formula(
-        source.to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )?
-    .with_grounding_options(GroundingOptions { joins: strategy })
-    .with_domain_analysis(domains)
-    .ground_with_observer(Some(observation))
+    prepare(source)?
+        .with_grounding_options(GroundingOptions { joins: strategy })
+        .with_domain_analysis(domains)
+        .ground_with_observer(Some(observation))
 }
 
 fn equal(left: &AdmittedFormula, right: &AdmittedFormula) {
@@ -267,9 +271,9 @@ fn producer_meets_prune_downstream_empty_joins() {
 
 #[test]
 fn completion_reads_the_narrowed_rows() {
-    // The candidates are prepared once, with the analysis; the first
-    // completion round rejects the 198 rows X < 3 excludes, and the delta
-    // round offers d/1 no new row.
+    // The numeric index selects the two eligible d rows before the domain
+    // guard. Both routes retain that selection; the analysis still records
+    // the 198 excluded candidates, without rejecting already-filtered rows.
     let source = "d(1..200). p(X) :- d(X), X < 3. q(X) :- p(X).";
     let off = Observation::default();
     let on = Observation::default();
@@ -284,12 +288,18 @@ fn completion_reads_the_narrowed_rows() {
         .unwrap(),
     );
     let (before, after) = (off.support.get(), on.support.get());
-    assert_eq!(after.domain_rejected_rows, Some(198));
+    assert_eq!(after.domain_rejected_rows, Some(0));
+    assert_eq!(after.domain_guard_rows, Some(2));
+    assert_eq!(before.range_probes, Some(1));
+    assert_eq!(after.range_probes, before.range_probes);
+    assert_eq!(before.range_probe_rows, Some(2));
+    assert_eq!(after.range_probe_rows, before.range_probe_rows);
+    assert_eq!(before.join_rows, Some(4));
     assert_eq!(after.join_rows, before.join_rows);
-    // Without the analysis X < 3 is evaluated on both sides of every offered
-    // row; with it, on the two rows the guard admits.
-    assert_eq!(before.expression_evaluations, Some(400));
-    assert_eq!(after.expression_evaluations, Some(4));
+    // One expression per index row, one bound, then both sides of the two
+    // surviving comparisons. Optional domain analysis adds no reevaluation.
+    assert_eq!(before.expression_evaluations, Some(200 + 1 + 2 * 2));
+    assert_eq!(after.expression_evaluations, before.expression_evaluations);
     assert_eq!(on.work.get().domain_excluded_values, Some(198));
 }
 
@@ -369,7 +379,7 @@ fn richer_source_keeps_the_complete_join() {
             )
             .unwrap(),
         );
-        assert!(on.declined.get(), "{source}");
+        assert_eq!(on.status.get(), Some(Status::FixedPoint), "{source}");
         assert_eq!(on.work.get().domain_guard_rows, Some(0));
     }
 }
@@ -410,8 +420,8 @@ fn optional_analysis_changes_no_arithmetic_verdict() {
 #[test]
 fn a_comparison_over_one_variable_narrows_its_candidates() {
     // X < 3 is defined and false at 198 of the 200 candidates the domain of
-    // d/1 offers, so those rows are rejected before binding; the theory is
-    // the one the complete join grounds.
+    // d/1 offers. The numeric index excludes them before the guard reads
+    // the remaining two rows; the complete grounded theories still agree.
     let source = "d(1..200). p(X) :- d(X), X < 3.";
     let off = Observation::default();
     let on = Observation::default();
@@ -434,7 +444,10 @@ fn a_comparison_over_one_variable_narrows_its_candidates() {
     );
     assert_eq!(on.work.get().domain_excluded_values, Some(198));
     let rules = *on.rules.borrow().last().unwrap();
-    assert_eq!(rules.domain_rejected_rows, Some(198));
+    assert_eq!(rules.domain_rejected_rows, Some(0));
+    assert_eq!(rules.domain_guard_rows, Some(2));
+    assert_eq!(rules.range_probes, Some(1));
+    assert_eq!(rules.range_probe_rows, Some(2));
     assert_eq!(rules.binding_snapshots, Some(0));
     assert_eq!(rules.roots, Some(2));
 }
@@ -528,10 +541,7 @@ fn fact(max_work: u64, domains: Option<DomainLimits>) -> Result<AdmittedFormula,
         "p(1).".to_owned(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_work,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::Work, max_work),
     )?
     .with_domain_analysis(domains)
     .ground()
@@ -546,25 +556,23 @@ fn exceeds_work(failure: &FormulaFailure, ceiling: u64) -> bool {
 
 // Domain analysis is charged as formula work: at the least work that admits
 // the fact without it, admission with it is refused by the typed work limit.
-// The boundary is found by bisection; only typed work refusals move its lower
-// end, so no fixed implementation cost is assumed.
+// The boundary is found by the shared threshold search, and every refusal it
+// meets must be the typed work refusal, so no fixed implementation cost is
+// assumed.
 #[test]
 fn domain_analysis_is_charged_beyond_the_plain_admission_boundary() {
-    let mut upper = FormulaLimits::default().max_work;
-    assert!(fact(upper, None).is_ok());
-    let mut lower = 0;
-    while lower + 1 < upper {
-        let middle = lower + (upper - lower) / 2;
-        match fact(middle, None) {
-            Ok(_) => upper = middle,
+    let least = first_success(
+        resource_limits::formula_default(FormulaResource::Work),
+        |max_work| match fact(max_work, None) {
+            Ok(_) => true,
             Err(failure) => {
-                assert!(exceeds_work(&failure, middle), "{failure:?}");
-                lower = middle;
+                assert!(exceeds_work(&failure, max_work), "{failure:?}");
+                false
             }
-        }
-    }
-    let failure = fact(upper, Some(DomainLimits::default())).unwrap_err();
-    assert!(exceeds_work(&failure, upper), "{failure:?}");
+        },
+    );
+    let failure = fact(least, Some(DomainLimits::default())).unwrap_err();
+    assert!(exceeds_work(&failure, least), "{failure:?}");
 }
 
 #[test]
@@ -610,7 +618,8 @@ fn objective_observations_preserve_scored_answers() {
             let narrowed = ground(&source, strategy, Some(DomainLimits::default()), &on).unwrap();
             equal(&complete, &narrowed);
             assert_eq!(on.status.get(), Some(Status::FixedPoint), "{source}");
-            assert!(on.support.get().domain_rejected_rows.unwrap() > 0);
+            assert_eq!(on.work.get().domain_excluded_values, Some(2));
+            assert_eq!(on.support.get().domain_guard_rows, Some(2));
             let expected = std::collections::BTreeSet::from([(
                 ["d(0)", "d(1)", "d(2)", "d(3)", "p(0)", "p(1)"]
                     .map(str::to_owned)
@@ -664,7 +673,8 @@ fn objective_warnings_survive_domain_guards() {
             let narrowed = ground(&source, strategy, Some(DomainLimits::default()), &on).unwrap();
             equal(&complete, &narrowed);
             assert_eq!(on.status.get(), Some(Status::FixedPoint));
-            assert!(on.support.get().domain_rejected_rows.unwrap() > 0);
+            assert_eq!(on.work.get().domain_excluded_values, Some(1));
+            assert_eq!(on.support.get().domain_guard_rows, Some(2));
             assert_eq!(narrowed.warnings().len(), 1);
             assert_eq!(
                 zetesis_reference_support::exhaustive(&complete),

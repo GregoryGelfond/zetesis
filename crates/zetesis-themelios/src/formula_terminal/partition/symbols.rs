@@ -26,20 +26,20 @@ impl From<FormulaFailure> for Failure {
     }
 }
 
-struct Comparison<'a, 'b, 'source> {
+struct EqualitySink<'a, 'b, 'source> {
     context: &'a mut Context<'b, 'source>,
     actual: TermNodes<'b>,
     equal: bool,
     lease: StorageLease,
 }
 
-impl Comparison<'_, '_, '_> {
+impl EqualitySink<'_, '_, '_> {
     fn header() -> usize {
         size_of::<Self>() + size_of::<Vec<(&Symbol, usize)>>()
     }
 }
 
-impl Sink for Comparison<'_, '_, '_> {
+impl Sink for EqualitySink<'_, '_, '_> {
     type Output = bool;
     type Error = Failure;
 
@@ -96,7 +96,7 @@ pub(super) fn matches<'a>(
 ) -> Result<bool, FormulaFailure> {
     let location = context.location;
     let mut lease = context.admission.lease();
-    let header = Comparison::header();
+    let header = EqualitySink::header();
     lease.observe(header, location)?;
     context.admission.storage_observed(
         &lease,
@@ -106,7 +106,7 @@ pub(super) fn matches<'a>(
         context.counters,
         location,
     )?;
-    let sink = Comparison {
+    let sink = EqualitySink {
         context,
         actual: actual.nodes(),
         equal: true,

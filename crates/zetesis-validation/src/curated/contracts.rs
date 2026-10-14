@@ -1,7 +1,8 @@
 //! Integrity of identities and full-model versus selected-display contracts.
 
 use super::document::{CaseRecord, Document};
-use super::{Error, Limits, Resource, UPSTREAM_REVISION, assertion, ceiling, files};
+use super::{Error, Files, Limits, Resource, UPSTREAM_REVISION, assertion};
+use crate::corpus_files::Failure as _;
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) const ORIGINALS: &[(&str, &str)] = &[
@@ -59,10 +60,10 @@ pub(super) fn validate(document: &Document, limits: Limits) -> Result<(), Error>
         }
         identity(case, &origins)?;
         models += case.contract.full_models.len() as u128;
-        ceiling(Resource::Models, models, limits.models)?;
+        Error::ceiling(Resource::Models, models, limits.models)?;
         for model in &case.contract.full_models {
             atoms += model.len() as u128;
-            ceiling(Resource::Atoms, atoms, limits.atoms)?;
+            Error::ceiling(Resource::Atoms, atoms, limits.atoms)?;
             let unique: BTreeSet<_> = model.iter().collect();
             if unique.len() != model.len() || model.iter().any(String::is_empty) {
                 return Err(Error::Contract(format!(
@@ -105,9 +106,9 @@ fn identity(
     origins: &BTreeMap<&str, &super::document::OriginRecord>,
 ) -> Result<(), Error> {
     let origin = &case.provenance;
-    files::relative(&case.id)?;
-    files::relative(&case.path)?;
-    let file = files::relative(&origin.source_file)?;
+    Files::relative(&case.id)?;
+    Files::relative(&case.path)?;
+    let file = Files::relative(&origin.source_file)?;
     let stem = file
         .file_stem()
         .and_then(|stem| stem.to_str())

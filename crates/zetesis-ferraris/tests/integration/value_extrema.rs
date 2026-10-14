@@ -1,4 +1,6 @@
 //! Ordered values are checked against independent complete failing-subset formulas.
+mod families;
+
 use crate::support::aggregate_theories::{COMPARISONS, EXTREMA, copy, prefix, push, snapshot};
 use crate::support::worlds::eval;
 use zetesis_core::{Sign, Value, ValueLimits, ValueNode};

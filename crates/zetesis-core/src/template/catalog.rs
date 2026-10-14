@@ -310,7 +310,7 @@ impl TemplateCatalogBuilder {
     pub(crate) fn read(&self) -> Read<'_> {
         Read::from(&self.store)
     }
-    fn term(&mut self, term: TemplateTerm<'_>) -> Result<TermData, Error> {
+    pub(crate) fn term(&mut self, term: TemplateTerm<'_>) -> Result<TermData, Error> {
         match term {
             TemplateTerm::Variable(variable) => Ok(TermData::Variable(variable)),
             TemplateTerm::Constant(value) => {
@@ -328,7 +328,7 @@ impl TemplateCatalogBuilder {
             }
         }
     }
-    fn predicate(&mut self, predicate: PredicateRef<'_>) -> Result<PredicateId, Error> {
+    pub(crate) fn predicate(&mut self, predicate: PredicateRef<'_>) -> Result<PredicateId, Error> {
         self.store
             .import_predicate_with(predicate, || Ok::<(), Infallible>(()))
             .map_err(|failure| failure_error(failure, self.metadata + self.external, self.limit))

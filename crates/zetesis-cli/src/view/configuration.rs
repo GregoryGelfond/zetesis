@@ -10,6 +10,8 @@ mod tests;
 /// Materialization selected for the admitted program, independently of backend.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum GroundingDisplay {
+    /// Certified dependency-ordered source evaluation without formula construction.
+    SourceEvaluation,
     /// The complete ground program is materialized before membership checking.
     Eager,
     /// Source joins supply consequences while candidates are checked.
@@ -69,6 +71,10 @@ impl Configuration {
     fn observe<'a>(&mut self, event: &ExecutionObservation<'a>) -> Option<ConfigurationView<'a>> {
         use ExecutionObservation as Event;
         let backend = match event {
+            Event::SourceEvaluation => {
+                self.grounding = GroundingDisplay::SourceEvaluation;
+                BackendView::Cpu
+            }
             Event::TerminalDefinitions { .. } => {
                 self.grounding = GroundingDisplay::TerminalDefinitions;
                 return None;

@@ -86,15 +86,33 @@ answers appear before a finite display limit; it preserves the complete family
 when enumeration finishes. Use one thread or sort complete results when order
 matters. The reduct remains the criterion for accepting an answer.
 
+To publish only the total, use `--count`. It prints one decimal integer and a
+newline after complete search: the number of full answer sets, or all tied
+optimal answer sets when an objective is present. `#show` and `#project` do not
+merge these identities. An inconsistent program prints `0`; the empty program
+has one empty answer set and prints `1`.
+
+```sh
+zetesis solve program.lp --count
+```
+
+Counting skips display-term evaluation and projection history. It streams
+ordinary answers and retains at most one optimal representative while counting
+all optimal ties. Resource limits still apply. An interrupted or failed search
+prints no count and reports the reason on stderr with a nonzero exit status.
+An output failure can occur after bytes have been written; consumers must check
+the exit status before accepting the total. `--count` cannot be combined with `--answers`, `--all`,
+`--models` or `--json`. `--stats` remains available on stderr.
+
 ## Choose execution and limits
 
 | Option | Default and meaning |
 | --- | --- |
-| `--backend cpu` | CPU execution. `gpu` uses the platform's native API (Metal on macOS, Vulkan elsewhere); `metal` and `vulkan` name one. A GPU request is honored or refused. |
+| `--backend cpu` | CPU execution, or `gpu`, which uses the platform's native API (Metal on macOS, Vulkan elsewhere). The full help also lists `metal` and `vulkan`, which name the API. A GPU request is honored or refused. |
 | `--threads auto` | The host's available parallelism; one if availability is unknown. |
 | `--grounder auto` | Prefer lazy source joins where admitted; formula admission can defer eligible terminal definitions and ground the remaining rules eagerly. |
 | `--time-limit DURATION` | No deadline when omitted; accepts whole seconds or `s`, `m`, `h`. |
-| `--memory SIZE` | Host-based allowance for named storage; accepts bytes or `B`, `KiB`, `MiB`, `GiB`, `TiB`. |
+| `--memory SIZE` | Allowance for named storage, derived from the host by default; accepts bytes or `B`, `KiB`, `MiB`, `GiB`, `TiB`. Listed under `--help-all`. |
 
 For formula inputs, automatic admission can reconstruct terminal positive
 definitions from each verified base answer. It returns full original answers;
@@ -126,7 +144,7 @@ A stopped check is incomplete, never an accepted answer or an UNSAT result.
 
 ```sh
 zetesis solve program.lp --backend cpu --threads 4
-zetesis solve program.lp --backend metal --grounder eager --all
+zetesis solve program.lp --backend gpu --grounder eager --all
 zetesis solve program.lp --time-limit 30s --memory 4GiB
 ```
 
@@ -147,8 +165,10 @@ cannot be preempted. Bare numeric durations retain their historical meaning in
 seconds. Fractional values and overflowing unit conversions are rejected.
 
 The public resource controls are `--threads`, `--memory` and the optional
-`--time-limit`. The memory allowance defaults to half of reported physical
-memory, with a minimum of two GiB; an unavailable reading falls back to two GiB.
+`--time-limit`. The memory allowance defaults to half of the memory available to
+the process: its physical memory, or on Linux the memory limit of its control
+group when that is lower, as inside a container. When the host does not report
+its memory, the allowance is two GiB.
 It determines named capacities for source loading, grounding, solving and
 output. These capacities do not cover every allocation and can overlap;
 the allowance is not a process RSS cap. Closure workers share a collective
@@ -203,7 +223,12 @@ Eager rule/table rows cover rule instantiation, rather than every grounding phas
 Different work units and search subtotals must not be added together. Unavailable
 receipts remain unavailable, even when hardware or instrumentation was requested.
 The full counter catalog remains in JSON statistics, the compatibility record
-view and the typed library values.
+view and the typed library values. The JSON statistics and the record view also
+name the executable that did the work, resolved through links (`executable`),
+and the record view's `GPU compiled` describes that executable; the human tables
+and the typed library values name no executable. In a default install, CPU runs name the `zetesis` you
+run, built without GPU support, and GPU runs name the GPU-capable build in
+`zetesis-libexec` that it hands them to.
 
 Detailed grounding attribution reports accepted formula work for support
 construction. `support_construction_work` includes the complete fixed-point
@@ -287,19 +312,21 @@ Corpus and backend checks accept every backend: `--backend cpu` (the default),
 route. Decoding a Vulkan route awaits qualification on a Vulkan host. An
 unavailable GPU remains a nonpass; it does not trigger CPU fallback.
 
-`test scalability` uses the same fourteen workloads as `zetesis-bench run --suite
+`test scalability` uses the same twenty workloads as `zetesis-bench run --suite
 scalability`: authored queens at n=8/9/10, authored pigeonhole at h=5/6/7,
 authored Mastermind at colors=5/6/8, nested Mastermind at colors=8,
 unchanged queens variant 02, SEND+MORE=MONEY, task allocation and the authored
-Sudoku grid. It checks one
-complete clingo family and one native family per requested thread count, with
+Sudoku grid, followed by prime sieve at n=30/100/300 and subset sum at n=12/20/30.
+The arithmetic cases retain complete output: prime sieve has one answer set at
+each size, and subset sum has 15/64/296. It checks one complete clingo family and
+one native family per requested thread count, with
 no warmup, timed or RSS rounds. Native profiles request CPU eager grounding,
 indexed formula joins, region search and one exact completion worker. Thread
 counts default to `1,2,4,8,14`; one through eight profiles, each at most 256
 threads, are admitted. The positional corpus root defaults to
 `examples/correctness`, and `--examples` defaults to `examples`. Both must come
 from the maintained checkout. `--include-einstein` adds the unchanged Einstein
-riddle as a fifteenth workload. `--memory` applies one native memory allowance
+riddle as a twenty-first workload. `--memory` applies one native memory allowance
 to each requested thread profile.
 All workload contracts, original/derived source digests, executable identities,
 observations and failed or unlaunched positions remain in `--report NEW.json`.

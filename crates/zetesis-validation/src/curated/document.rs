@@ -1,9 +1,9 @@
 //! Validated owned corpus and borrowed views of exact contracts.
 
 use super::{
-    CASE_COUNT, Error, LICENSE_SHA256, Limits, Resource, UPSTREAM_REVISION, ceiling, contracts,
-    files,
+    CASE_COUNT, Error, Files, LICENSE_SHA256, Limits, Resource, UPSTREAM_REVISION, contracts,
 };
+use crate::corpus_files::Failure as _;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -225,7 +225,7 @@ impl<'a> Contract<'a> {
 }
 
 pub(super) fn validate(document: &Document, limits: Limits) -> Result<(), Error> {
-    ceiling(Resource::Cases, document.cases.len() as u128, limits.cases)?;
+    Error::ceiling(Resource::Cases, document.cases.len() as u128, limits.cases)?;
     if document.schema != 1
         || document.upstream_revision != UPSTREAM_REVISION
         || document.cases.len() != CASE_COUNT
@@ -240,23 +240,23 @@ pub(super) fn validate(document: &Document, limits: Limits) -> Result<(), Error>
 }
 pub(super) fn load(root: PathBuf, document: Document, limits: Limits) -> Result<Corpus, Error> {
     validate(&document, limits)?;
-    let license = files::read(
-        &files::confined(&root, &document.license_path)?,
+    let license = Files::read(
+        &Files::confined(&root, &document.license_path)?,
         limits.license_bytes,
         Resource::LicenseBytes,
     )?;
-    files::digest(&document.license_path, &license, &document.license_sha256)?;
+    Files::digest(&document.license_path, &license, &document.license_sha256)?;
     let mut cases = Vec::new();
     let mut total = 0_u128;
     for record in document.cases {
-        let bytes = files::read(
-            &files::confined(&root, &record.path)?,
+        let bytes = Files::read(
+            &Files::confined(&root, &record.path)?,
             limits.source_bytes,
             Resource::SourceBytes,
         )?;
         total += bytes.len() as u128;
-        ceiling(Resource::TotalSourceBytes, total, limits.total_source_bytes)?;
-        files::digest(&record.path, &bytes, &record.source_sha256)?;
+        Error::ceiling(Resource::TotalSourceBytes, total, limits.total_source_bytes)?;
+        Files::digest(&record.path, &bytes, &record.source_sha256)?;
         let source = String::from_utf8(bytes)
             .map_err(|_| Error::Contract(format!("{}: source must be UTF-8", record.id)))?;
         contracts::source(&record, &source)?;

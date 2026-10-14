@@ -12,7 +12,7 @@ use crate::formula_conditional_ir::{
 };
 use crate::formula_ground::{Builder, FALSUM, VERUM, boolean};
 use crate::formula_support::family::Evidence;
-use crate::formula_support::{Context, Join, Support};
+use crate::formula_support::{Context, Ir, Join, Support};
 
 /// Arithmetic omission removes the whole local implication. A defined false
 /// consequent, including an empty witness disjunction, remains a formula value.
@@ -31,27 +31,22 @@ impl ConsequentInstance {
     }
 }
 
-impl Builder<'_, '_, '_> {
+impl<'source> Builder<'_, '_, 'source> {
     pub(super) fn conditional(
         &mut self,
-        conditional: &ConditionalIr,
+        conditional: Ir<'_, 'source, ConditionalIr>,
         assignment: &Binding,
-        support: &Support,
+        support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         let mut result = VERUM;
-        let mut bindings = Join::new(
-            &conditional.condition,
+        let mut bindings = Join::local(
+            conditional.map(|conditional| conditional.condition.as_slice()),
             assignment,
             conditional.variables,
             support,
             self.budget,
-            Context::new(
-                &*self.computation,
-                self.limits,
-                &mut self.counters,
-                location,
-            ),
+            Context::new(&*self.computation, self.limits, self.counters, location),
         )?;
         if let Consequent::Guard(guard) = &conditional.consequent {
             bindings.check_guard(guard);
@@ -60,23 +55,47 @@ impl Builder<'_, '_, '_> {
             self.computation,
             self.limits,
             self.budget,
-            &mut self.counters,
+            self.counters,
             location,
         )? {
             self.work(location)?;
-            let condition = self.body(&conditional.condition, &binding, location, support)?;
+            let condition = self.body_ir(
+                conditional
+                    .map(|conditional| conditional.condition.as_slice())
+                    .iter(),
+                &binding,
+                location,
+                support,
+            )?;
             let consequent = match &conditional.consequent {
-                Consequent::Atoms(negation, alternatives) => {
-                    self.atom_consequent(*negation, alternatives, &binding, support, location)?
-                }
-                Consequent::Guards(alternatives) => {
-                    self.guard_consequent(alternatives, &binding, support, location)?
-                }
+                Consequent::Atoms(negation, _) => self.atom_consequent(
+                    *negation,
+                    conditional.map(|conditional| {
+                        let Consequent::Atoms(_, alternatives) = &conditional.consequent else {
+                            unreachable!("atom consequent")
+                        };
+                        alternatives.as_slice()
+                    }),
+                    &binding,
+                    support,
+                    location,
+                )?,
+                Consequent::Guards(_) => self.guard_consequent(
+                    conditional.map(|conditional| {
+                        let Consequent::Guards(alternatives) = &conditional.consequent else {
+                            unreachable!("guard consequent")
+                        };
+                        alternatives.as_slice()
+                    }),
+                    &binding,
+                    support,
+                    location,
+                )?,
                 Consequent::Guard(guard) => ConsequentInstance::Defined(boolean(guard.evaluate(
                     &binding,
                     self.computation,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     location,
                 )?)),
             };
@@ -94,40 +113,44 @@ impl Builder<'_, '_, '_> {
     fn atom_consequent(
         &mut self,
         negation: DefaultNegation,
-        alternatives: &[Alternative],
+        alternatives: Ir<'_, 'source, [Alternative]>,
         binding: &Binding,
-        support: &Support,
+        support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<ConsequentInstance, FormulaFailure> {
         let mut disjunction = FALSUM;
         let mut evidence = Evidence::default();
-        for alternative in alternatives {
-            let mut rows = Join::new(
-                &alternative.bindings,
+        for alternative in alternatives.iter() {
+            let mut rows = Join::local(
+                alternative.map(|alternative| alternative.bindings.as_slice()),
                 binding,
                 alternative.variables,
                 support,
                 self.budget,
-                Context::new(
-                    &*self.computation,
-                    self.limits,
-                    &mut self.counters,
-                    location,
-                ),
+                Context::new(&*self.computation, self.limits, self.counters, location),
             )?;
             while let Some(row) = rows.next(
                 self.computation,
                 self.limits,
                 self.budget,
-                &mut self.counters,
+                self.counters,
                 location,
             )? {
                 self.work(location)?;
                 let mut value = match &alternative.operand {
                     ConsequentOperand::Atom(atom) => self.atom(*atom, &row, location)?,
-                    ConsequentOperand::Projection(projection) => {
-                        self.project(projection, &row, support, location)?
-                    }
+                    ConsequentOperand::Projection(_) => self.project(
+                        alternative.map(|alternative| {
+                            let ConsequentOperand::Projection(projection) = &alternative.operand
+                            else {
+                                unreachable!("projection operand")
+                            };
+                            projection
+                        }),
+                        &row,
+                        support,
+                        location,
+                    )?,
                 };
                 if negation != DefaultNegation::None {
                     value = self.neg(value, location)?;
@@ -144,33 +167,28 @@ impl Builder<'_, '_, '_> {
 
     fn guard_consequent(
         &mut self,
-        alternatives: &[GuardAlternative],
+        alternatives: Ir<'_, 'source, [GuardAlternative]>,
         binding: &Binding,
-        support: &Support,
+        support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<ConsequentInstance, FormulaFailure> {
         let mut value = false;
         let mut evidence = Evidence::default();
-        for alternative in alternatives {
-            let mut rows = Join::new(
-                &alternative.bindings,
+        for alternative in alternatives.iter() {
+            let mut rows = Join::local(
+                alternative.map(|alternative| alternative.bindings.as_slice()),
                 binding,
                 alternative.variables,
                 support,
                 self.budget,
-                Context::new(
-                    &*self.computation,
-                    self.limits,
-                    &mut self.counters,
-                    location,
-                ),
+                Context::new(&*self.computation, self.limits, self.counters, location),
             )?;
             rows.check_guard(&alternative.guard);
             while let Some(row) = rows.next(
                 self.computation,
                 self.limits,
                 self.budget,
-                &mut self.counters,
+                self.counters,
                 location,
             )? {
                 // Every value alternative is evaluated, including those after
@@ -180,7 +198,7 @@ impl Builder<'_, '_, '_> {
                     &row,
                     self.computation,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     location,
                 )?;
             }

@@ -4,6 +4,8 @@
 //! conditions are grouped with checked addition; weights retain tuple
 //! multiplicity. Immutable term/guard orders let each propagation cursor advance
 //! only once along a region branch, independently of pending truth bits.
+//! Residual divisibility has a separate coalesced original-row event: each scan
+//! reads closed condition knowledge and may refute without adding any bound.
 
 use std::collections::HashMap;
 
@@ -19,6 +21,7 @@ mod frozen_tests;
 mod incremental_tests;
 mod prefixes;
 mod propagate;
+mod residual;
 
 #[derive(Clone, Debug)]
 pub(super) struct Thresholds {
@@ -30,6 +33,8 @@ pub(super) struct Thresholds {
     relations: Option<Adjacency>,
     /// Whether unit rows may exchange requirements with live Boolean chains.
     connectives: Option<connectives::Connectives>,
+    /// A non-unit grouped coefficient can expose residual divisibility.
+    residuals: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -98,6 +103,10 @@ impl Row {
         })
     }
 
+    fn has_nonunit_coefficient(&self) -> bool {
+        self.terms.first().is_some_and(|&(_, weight)| weight > 1)
+    }
+
     fn state(&self) -> State {
         State {
             known: 0,
@@ -113,7 +122,20 @@ impl Row {
 }
 
 impl Thresholds {
-    pub(super) fn prepare(theory: &Theory, chains: &[super::Chain]) -> Result<Self, Stop> {
+    /// Shared anchor projection capacity, including any ordinal-chain postings.
+    pub(super) fn connective_storage_bytes(&self) -> u128 {
+        self.connectives
+            .as_ref()
+            .map_or(0, connectives::Connectives::retained_bytes)
+    }
+
+    pub(super) fn prepare(
+        theory: &Theory,
+        chains: &[super::Chain],
+        chain_of: &[Option<std::num::NonZeroUsize>],
+        extrema: &super::extrema::Extrema,
+        shared_connectives: bool,
+    ) -> Result<Self, Stop> {
         let nodes = theory.view();
         let mut rows: Vec<Row> = Vec::new();
         let mut shared = HashMap::new();
@@ -156,7 +178,9 @@ impl Thresholds {
             by_descriptor[descriptor] = Some(row);
         }
         let mut incidences = Vec::new();
+        let mut residuals = false;
         for (row, data) in rows.iter_mut().enumerate() {
+            residuals |= data.has_nonunit_coefficient();
             data.guards
                 .sort_unstable_by_key(|&(node, bound)| (bound, node));
             incidences
@@ -180,7 +204,13 @@ impl Thresholds {
             )?)
         };
         let relations = prefixes::prepare(&rows)?;
-        let connectives = connectives::Connectives::prepare(&rows, chains)?;
+        let connectives = connectives::Connectives::prepare(
+            &rows,
+            chains,
+            chain_of,
+            extrema,
+            shared_connectives,
+        )?;
         Ok(Self {
             rows,
             by_descriptor,
@@ -188,6 +218,7 @@ impl Thresholds {
             incidences,
             relations,
             connectives,
+            residuals,
         })
     }
 
@@ -204,6 +235,10 @@ impl Thresholds {
 
     pub(super) fn has_relations(&self) -> bool {
         self.relations.is_some() || self.connectives.is_some()
+    }
+
+    pub(super) fn has_residuals(&self) -> bool {
+        self.residuals
     }
 
     fn related(&self, row: usize) -> &[usize] {

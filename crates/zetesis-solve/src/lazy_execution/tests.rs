@@ -452,6 +452,7 @@ mod classification {
                     vec![],
                 ),
             ],
+            zetesis_core::FactTables::default(),
             AdmissionLimits::default(),
         )
         .unwrap()
@@ -522,6 +523,7 @@ mod classification {
         .unwrap();
         let program = Program::new(
             vec![Template::new(Some(head), vec![], vec![], vec![], vec![])],
+            zetesis_core::FactTables::default(),
             AdmissionLimits::default(),
         )
         .unwrap();

@@ -2,7 +2,7 @@
 
 /// These are original aggregate heads, preserving their independent atom
 /// permissions. CPU tests specify full answers; physical tests reuse the inputs.
-pub const SOURCES: [&str; 6] = [
+pub(crate) const SOURCES: [&str; 6] = [
     include_str!("../../fixtures/logical-extrema/min-symbols.lp"),
     include_str!("../../fixtures/logical-extrema/max-symbols.lp"),
     include_str!("../../fixtures/logical-extrema/value-classes.lp"),

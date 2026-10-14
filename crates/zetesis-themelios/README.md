@@ -141,10 +141,11 @@ lookup consume grounding work; the byte ceiling is not a process-memory measurem
 
 Prepared formula and bundle values can additionally request
 `with_domain_analysis(Some(DomainLimits { .. }))`, disabled by default. The
-analysis retains the exact normalized program and requires its logical rules to
-be positive and flat. Objectives may accompany those rules: they produce no
-argument values, and their grounding, arithmetic and scoring remain separate.
-Unsupported rule profiles, Unknown and Stopped retain complete fallback. Where it
+shared analysis reads canonical terms, compact fact columns and every compiled
+producer. It computes conservative finite sets and numeric bounds without
+materializing an expanded source program. The guard consumer separately requires
+positive flat rules; objectives do not disable otherwise eligible guards.
+Unsupported guard profiles and stopped analysis retain complete grounding. Where it
 prepares candidates, a rule's variable is narrowed to the meet of its
 argument domains less the values a comparison over that variable alone
 excludes, decided before any row is read, and the guards apply in every
@@ -156,10 +157,10 @@ excludes its substitution, the join criterion places bound occurrences and
 decided comparisons before generators, and a constraint over a keyed value
 is asked as the one atom its key admits, counted by `keyed_constraints` on
 the admitted value; a key with an anonymous position is left as written.
-Analyzer logical populations and bounded standard allocations are separate from
-named support/guard byte accounting; actual analysis and guard work consume the
-original cumulative formula budget. No new cancellation, allocator or RSS cap
-is implied. `DomainObservation` and grounding counters report the actual attempt.
+The neutral engine reports allocation and owner failures explicitly. Its logical
+populations remain separate from support/guard byte accounting; actual analysis
+and guard work consume the cumulative formula budget. Control is observed before
+and after analysis, without an internal polling or RSS-bound claim. `DomainObservation` and grounding counters report the actual attempt.
 See [optional domain guards](../../docs/book/rust/finite-tables.md#optional-argument-domain-guards)
 for applicability, accounting, observation and proof boundaries.
 
@@ -221,10 +222,14 @@ Closed-term preparation and post-solve observations retain strict checks. See
 for the binding and phase boundaries.
 
 Final formula materialization and hybrid capture can certify total arithmetic
-for a flat constraint from completed positive argument columns. Every checked expression
-must be a leaf or depend on one variable covered by a whole column domain;
-generated scopes, nested scopes and constructors remain outside this gate.
-Successful preparation permits ordinary comparison selection. An arithmetic
+for eligible flat normal-rule bodies, including constraints, from completed
+positive argument columns. Expressions reading one variable are checked over a
+whole column; expressions with several variables can use checked numeric intervals for
+addition, subtraction, negation, multiplication, division and remainder.
+Every intermediate must be defined and representable. Generated bindings,
+nested scopes, constructors and additional head variables remain outside this
+gate. Successful preparation permits ordinary comparison selection without
+certifying heads or changing mixed-type ASP comparison order. An arithmetic
 failure in that possibly larger domain declines the optimization without
 creating a source diagnostic; resource and owner failures remain typed refusals.
 Source-family evidence always retains complete traversal. Each reached hybrid
@@ -235,6 +240,11 @@ optional attempt. Errors publish no prepared rule. Capture has already admitted
 the speculative successful values, so frozen checking needs no new term
 admission. Retained maps authenticate their completed carrier and accounting
 workspace; they establish no candidate truth.
+
+After complete join and source-family checks, rejected flat bodies share atom-key
+validation with streamed constraints instead of constructing temporary formulas.
+Binding errors and source locations remain intact; generated bindings and nested
+scopes retain complete scoped validation. Rejected bodies do not evaluate heads.
 
 Descending or nonnumeric interval endpoints yield no rows in facts and generated
 bindings.

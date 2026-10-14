@@ -7,7 +7,6 @@
 //! original span correspondence requires retrieving the linked upstream files.
 
 mod document;
-mod files;
 mod contracts;
 mod assertion;
 
@@ -111,11 +110,47 @@ pub enum Error {
     },
     /// A relative path is not confined to the chosen root.
     Path(String),
+    /// A file inside the chosen root, named by its resolved path, is not a
+    /// regular file.
+    Irregular(PathBuf),
     /// A case, provenance, or model contract is inconsistent.
     Contract(String),
     /// A preserved assertion uses spelling outside the declared literal subset.
     Literal(String),
 }
+/// This corpus's confined, bounded file reads, failing in its own error type.
+type Files = crate::corpus_files::Files<Error>;
+
+impl crate::corpus_files::Failure for Error {
+    type Resource = Resource;
+    fn io(path: &Path, source: std::io::Error) -> Self {
+        Self::Io {
+            path: path.to_owned(),
+            source,
+        }
+    }
+    fn unconfined(text: String) -> Self {
+        Self::Path(text)
+    }
+    fn irregular(path: &Path) -> Self {
+        Self::Irregular(path.to_owned())
+    }
+    fn limit(resource: Resource, observed: u128, limit: usize) -> Self {
+        Self::Limit {
+            resource,
+            observed,
+            limit,
+        }
+    }
+    fn digest(path: String, expected: String, actual: String) -> Self {
+        Self::Digest {
+            path,
+            expected,
+            actual,
+        }
+    }
+}
+
 impl fmt::Display for Error {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -135,6 +170,11 @@ impl fmt::Display for Error {
                 "{path}: SHA-256 {actual} differs from {expected}"
             ),
             Self::Path(path) => write!(formatter, "corpus path is not confined: {path}"),
+            Self::Irregular(path) => write!(
+                formatter,
+                "corpus file is not a regular file: {}",
+                path.display()
+            ),
             Self::Contract(reason) => write!(formatter, "corpus contract: {reason}"),
             Self::Literal(reason) => {
                 write!(formatter, "unsupported C++ literal contract: {reason}")
@@ -156,17 +196,6 @@ impl From<serde_json::Error> for Error {
         Self::Json(error)
     }
 }
-pub(super) fn ceiling(resource: Resource, observed: u128, limit: usize) -> Result<(), Error> {
-    if observed > limit as u128 {
-        Err(Error::Limit {
-            resource,
-            observed,
-            limit,
-        })
-    } else {
-        Ok(())
-    }
-}
 
 /// Verify the pinned curated target and retain its exact UTF-8 source bytes.
 /// Returned paths describe verified inputs; later filesystem changes do not
@@ -175,16 +204,18 @@ pub(super) fn ceiling(resource: Resource, observed: u128, limit: usize) -> Resul
 /// operation. Retained assertion excerpts are decoded and checked against sources.
 ///
 /// # Errors
-/// Refuses changed seals, malformed/duplicate contracts, unconfined paths,
-/// invalid UTF-8, missing files, or exceeded inclusive ceilings.
+/// Refuses changed seals, malformed/duplicate contracts, unconfined paths
+/// ([`Error::Path`]), files inside `root` that are not regular files
+/// ([`Error::Irregular`]), invalid UTF-8, missing files, or exceeded inclusive
+/// ceilings.
 pub fn open(root: &Path, limits: Limits) -> Result<Corpus, Error> {
-    let root = files::canonical(root)?;
-    let bytes = files::read(
-        &files::confined(&root, "manifest.json")?,
+    let root = Files::canonical(root)?;
+    let bytes = Files::read(
+        &Files::confined(&root, "manifest.json")?,
         limits.manifest_bytes,
         Resource::ManifestBytes,
     )?;
-    files::digest("manifest.json", &bytes, MANIFEST_SHA256)?;
+    Files::digest("manifest.json", &bytes, MANIFEST_SHA256)?;
     let document: document::Document = serde_json::from_slice(&bytes)?;
     document::load(root, document, limits)
 }

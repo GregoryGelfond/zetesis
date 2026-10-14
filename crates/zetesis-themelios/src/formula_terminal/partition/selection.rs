@@ -17,8 +17,10 @@ use super::{
     matching, reads,
     workspace::{Context, Scratch},
 };
-use crate::FormulaFailure;
+use crate::formula_facts::{FactBlock, Item, Row};
 use crate::formula_ir::{HeadIr, Prepared, RuleIr};
+use crate::{FormulaFailure, ProgramSite};
+use zetesis_core::catalog::PredicateRef;
 
 pub(super) fn select(
     prepared: &Prepared,
@@ -42,11 +44,31 @@ pub(super) fn select(
     // One reservation each: pushing into exact scratch one cell at a time
     // would copy and charge every earlier cell again.
     let mut producers = Scratch::new(context)?;
-    producers.reserve(prepared.rules.len(), context)?;
+    producers.reserve(prepared.items().len(), context)?;
     let mut selected = Scratch::new(context)?;
-    selected.reserve(prepared.rules.len(), context)?;
-    for rule in &prepared.rules {
+    selected.reserve(prepared.items().len(), context)?;
+    for item in prepared.items().iter() {
         context.work()?;
+        let rule = match item {
+            Item::Rule(_, rule) => rule,
+            Item::Facts(block) => {
+                let Some(selected_head) = block_head(
+                    block,
+                    &defined,
+                    &mut covered.values,
+                    &mut cursors.values,
+                    context,
+                )?
+                else {
+                    return Ok(None);
+                };
+                if selected_head {
+                    producers.push(item, context)?;
+                }
+                selected.push(u8::from(selected_head), context)?;
+                continue;
+            }
+        };
         if reads::rule(rule, &defined, context)? {
             return Ok(None);
         }
@@ -78,7 +100,7 @@ pub(super) fn select(
         };
         if selected_head {
             if !correspond(
-                rule,
+                Occurrence::Rule(rule),
                 &defined,
                 &mut covered.values,
                 &mut cursors.values,
@@ -86,7 +108,7 @@ pub(super) fn select(
             )? {
                 return Ok(None);
             }
-            producers.push(rule, context)?;
+            producers.push(item, context)?;
         }
         selected.push(u8::from(selected_head), context)?;
     }
@@ -96,9 +118,9 @@ pub(super) fn select(
             continue;
         }
         let mut matched = false;
-        for rule in &producers.values {
+        for producer in &producers.values {
             context.work()?;
-            if matching::rule(reads::source(definition), rule, context)? {
+            if matches(reads::source(definition), *producer, context)? {
                 matched = true;
                 break;
             }
@@ -110,15 +132,97 @@ pub(super) fn select(
     Ok(Some(selected))
 }
 
-/// Whether some definition matches `rule`, marking what it finds covered.
+/// Whether a fact block's head is selected, or `None` when one of its rows
+/// corresponds to no definition. A fact reads nothing; each row of a selected
+/// block must correspond to its analyzed fact statement, as its fact rule did.
+fn block_head(
+    block: FactBlock<'_>,
+    defined: &Defined<'_>,
+    covered: &mut [u8],
+    cursors: &mut [usize],
+    context: &mut Context<'_, '_>,
+) -> Result<Option<bool>, FormulaFailure> {
+    let predicate = context.predicate(block.predicate())?;
+    if !reads::selected(predicate, defined, context)? {
+        return Ok(Some(false));
+    }
+    for row in block.rows() {
+        if !correspond(
+            Occurrence::Row(row, predicate),
+            defined,
+            covered,
+            cursors,
+            context,
+        )? {
+            return Ok(None);
+        }
+    }
+    Ok(Some(true))
+}
+
+/// Whether `definition` matches the producer: a rule, or some row of a block.
+fn matches(
+    definition: &themelios_program::program::Rule,
+    producer: Item<'_>,
+    context: &mut Context<'_, '_>,
+) -> Result<bool, FormulaFailure> {
+    match producer {
+        Item::Rule(_, rule) => Occurrence::Rule(rule).matches(definition, context),
+        Item::Facts(block) => {
+            let predicate = context.predicate(block.predicate())?;
+            for row in block.rows() {
+                context.work()?;
+                if Occurrence::Row(row, predicate).matches(definition, context)? {
+                    return Ok(true);
+                }
+            }
+            Ok(false)
+        }
+    }
+}
+
+/// One producer occurrence: a rule, or one row of a fact block with the
+/// block's predicate, read once for the block.
+#[derive(Clone, Copy)]
+enum Occurrence<'a, 'p> {
+    Rule(&'a RuleIr),
+    Row(Row<'a>, PredicateRef<'p>),
+}
+
+impl<'a> Occurrence<'a, '_> {
+    /// The occurrence's statement evidence: a rule's origins, or the evidence
+    /// of the row's statement.
+    fn evidence(self) -> &'a [ProgramSite] {
+        match self {
+            Self::Rule(rule) => &rule.origins,
+            Self::Row(row, _) => row.evidence(),
+        }
+    }
+
+    /// Whether `definition` matches the occurrence, by whole-rule matching.
+    fn matches(
+        self,
+        definition: &themelios_program::program::Rule,
+        context: &mut Context<'_, '_>,
+    ) -> Result<bool, FormulaFailure> {
+        match self {
+            Self::Rule(rule) => matching::rule(definition, rule, context),
+            Self::Row(row, predicate) => matching::fact(definition, predicate, row, context),
+        }
+    }
+}
+
+/// Whether some definition matches `occurrence`, marking what it finds
+/// covered: positionally first, by the occurrence's statement evidence, and
+/// otherwise against every definition.
 fn correspond(
-    rule: &RuleIr,
+    occurrence: Occurrence<'_, '_>,
     defined: &Defined<'_>,
     covered: &mut [u8],
     cursors: &mut [usize],
     context: &mut Context<'_, '_>,
 ) -> Result<bool, FormulaFailure> {
-    for &origin in &rule.origins {
+    for &origin in occurrence.evidence() {
         context.work()?;
         let range = defined.origin(origin, context)?;
         if range.is_empty() {
@@ -128,19 +232,43 @@ fn correspond(
         if hint < range.end {
             cursors[range.start] += 1;
             let position = defined.position(hint);
-            if matching::rule(reads::source(defined.all[position]), rule, context)? {
+            if occurrence.matches(reads::source(defined.all[position]), context)? {
                 covered[position] = 1;
                 return Ok(true);
             }
         }
     }
+    #[cfg(test)]
+    if matches!(occurrence, Occurrence::Row(..)) {
+        ROW_FALLBACKS.with(|count| count.set(count.get() + 1));
+    }
     let mut matched = false;
     for (position, definition) in defined.all.iter().enumerate() {
         context.work()?;
-        if matching::rule(reads::source(definition), rule, context)? {
+        if occurrence.matches(reads::source(definition), context)? {
             covered[position] = 1;
             matched = true;
         }
     }
     Ok(matched)
+}
+
+#[cfg(test)]
+thread_local! {
+    static ROW_FALLBACKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Count fact rows that reach the exhaustive correspondence search, restoring
+/// the previous thread-local count on return or unwind.
+#[cfg(test)]
+pub(super) fn count_row_fallbacks<T>(body: impl FnOnce() -> T) -> (T, usize) {
+    struct Restore(usize);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            ROW_FALLBACKS.with(|count| count.set(self.0));
+        }
+    }
+    let _restore = Restore(ROW_FALLBACKS.with(|count| count.replace(0)));
+    let result = body();
+    (result, ROW_FALLBACKS.with(std::cell::Cell::get))
 }

@@ -7,7 +7,7 @@ use crate::phase_timing::Recorder;
 use crate::{AnswerSelection, Backend, ExecutionObservation, SolveConfig, SolveError};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AdmissionLimits, FormulaParts, Node, OperandSpan, Theory};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
+use zetesis_reference_support::formula;
 
 #[derive(Default)]
 struct Population(Option<(usize, usize, usize, usize)>);
@@ -30,13 +30,7 @@ impl ExecutionSink for Population {
 
 #[test]
 fn formula_observation_counts_logical_operands() {
-    let owner = admit_formula(
-        "{a;b;c}.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let owner = formula("{a;b;c}.");
     // Four wide occurrences include a repeated child; the pair and implication
     // add two each without occupying arena cells. The complete graph has E = 8.
     let theory = Theory::new(

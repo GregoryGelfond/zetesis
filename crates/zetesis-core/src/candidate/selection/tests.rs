@@ -6,7 +6,12 @@ fn program() -> Program {
         let atom = AtomPattern::new(Predicate::new(name, 0).unwrap(), vec![]).unwrap();
         Template::new(Some(atom.clone()), vec![], vec![atom], vec![], vec![])
     });
-    Program::new(rules.into(), AdmissionLimits::default()).unwrap()
+    Program::new(
+        rules.into(),
+        crate::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -109,6 +114,7 @@ fn full_carrier_nongate_token_is_refused() {
     let pattern = AtomPattern::new(Predicate::new("fact", 0).unwrap(), vec![]).unwrap();
     let program = Program::new(
         vec![Template::new(Some(pattern), vec![], vec![], vec![], vec![])],
+        crate::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();

@@ -6,10 +6,11 @@ use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::{BundleFixture, canonical, formula, prepared, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, AnalysisBasis, ExpansionLimits, FormulaFailure,
-    FormulaLimits, admit_formula, prepare_formula,
+    AdmittedFormula, AnalysisBasis, ExpansionLimits, ExpansionResource, FormulaFailure,
+    FormulaLimits, FormulaResource, admit_formula,
 };
 
 fn corpus_case() -> &'static zetesis_validation::curated::Case {
@@ -547,13 +548,7 @@ fn entered_conditions_retain_value_errors() {
 #[test]
 fn preparation_identifies_dependency_projection() {
     let source = "{p(1..2)}.q:-not p(1;2):#true.";
-    let prepared = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared(source);
     assert_eq!(
         prepared.analysis_basis(),
         AnalysisBasis::DependencyProjection
@@ -572,77 +567,36 @@ fn preparation_identifies_dependency_projection() {
 #[ignore = "requires clingo: complete sources match clingo"]
 fn complete_sources_match_clingo() {
     let case = corpus_case();
-    let mut sources: Vec<_> = CASES.iter().map(|(source, _)| *source).collect();
-    sources.push(case.source());
-    let mut total = 0;
-    for source in sources {
-        let output = reference::external(source, true);
-        assert_eq!(output["Models"]["More"], "no");
-        let expected: Models = output["Call"]
-            .as_array()
-            .unwrap()
+    reference::original_sources_match_clingo_full_models(
+        CASES
             .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .map(|witness| {
-                witness["Value"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|atom| atom.as_str().unwrap().to_owned())
-                    .collect()
-            })
-            .collect();
-        assert_eq!(
-            usize::try_from(output["Models"]["Number"].as_u64().unwrap()).unwrap(),
-            expected.len()
-        );
-        assert_eq!(native(&formula(source)), expected, "{source}");
-        total += expected.len();
-    }
-    println!("complete_models={total}");
+            .map(|(source, _)| *source)
+            .chain([case.source()]),
+        formula,
+    );
 }
 
-fn first_cap(mut admit: impl FnMut(usize) -> Result<AdmittedFormula, FormulaFailure>) -> usize {
-    let mut low = 0;
-    let mut high = 1_000_000;
-    assert!(admit(high).is_ok());
-    while low < high {
-        let middle = low + (high - low) / 2;
-        if admit(middle).is_ok() {
-            high = middle;
-        } else {
-            low = middle + 1;
-        }
-    }
-    assert!(low > 0);
-    assert!(admit(low).is_ok());
-    assert!(admit(low - 1).is_err());
-    low
-}
 const BOUNDED: &str = "{p(1..3)}.q:-p(X-1;2*(X..X+1)-3):X=2.";
 const PROJECTED: &str = "{p(f(1,1));p(f(2,1));p(g(1,1))}.q:-not p(f(_,X..X+1)):X=1.";
 
 #[test]
 fn witness_projection_obeys_the_work_ceiling() {
-    let cap = first_cap(|cap| {
-        limited(
-            PROJECTED,
-            ExpansionLimits::default(),
-            &FormulaLimits {
-                max_work: u64::try_from(cap).unwrap(),
-                ..FormulaLimits::default()
-            },
-        )
-    });
-    assert!(cap > 0);
+    let cap = first_success(
+        resource_limits::formula_default(FormulaResource::Work),
+        |cap| {
+            limited(
+                PROJECTED,
+                ExpansionLimits::default(),
+                &resource_limits::formula(FormulaResource::Work, cap),
+            )
+            .is_ok()
+        },
+    );
     assert!(matches!(
         limited(
             PROJECTED,
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_work: u64::try_from(cap - 1).unwrap(),
-                ..FormulaLimits::default()
-            }
+            &resource_limits::formula(FormulaResource::Work, cap - 1)
         ),
         Err(FormulaFailure::Limit {
             resource: zetesis_themelios::FormulaResource::Work,
@@ -654,10 +608,7 @@ fn witness_projection_obeys_the_work_ceiling() {
             &limited(
                 PROJECTED,
                 ExpansionLimits::default(),
-                &FormulaLimits {
-                    max_work: u64::try_from(cap).unwrap(),
-                    ..FormulaLimits::default()
-                }
+                &resource_limits::formula(FormulaResource::Work, cap)
             )
             .unwrap()
         ),
@@ -667,25 +618,22 @@ fn witness_projection_obeys_the_work_ceiling() {
 
 #[test]
 fn witness_projection_obeys_the_substitution_ceiling() {
-    let cap = first_cap(|cap| {
-        limited(
-            PROJECTED,
-            ExpansionLimits::default(),
-            &FormulaLimits {
-                max_substitutions: u64::try_from(cap).unwrap(),
-                ..FormulaLimits::default()
-            },
-        )
-    });
-    assert!(cap > 0);
+    let cap = first_success(
+        resource_limits::formula_default(FormulaResource::Substitutions),
+        |cap| {
+            limited(
+                PROJECTED,
+                ExpansionLimits::default(),
+                &resource_limits::formula(FormulaResource::Substitutions, cap),
+            )
+            .is_ok()
+        },
+    );
     assert!(matches!(
         limited(
             PROJECTED,
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_substitutions: u64::try_from(cap - 1).unwrap(),
-                ..FormulaLimits::default()
-            }
+            &resource_limits::formula(FormulaResource::Substitutions, cap - 1)
         ),
         Err(FormulaFailure::Limit {
             resource: zetesis_themelios::FormulaResource::Substitutions,
@@ -697,10 +645,7 @@ fn witness_projection_obeys_the_substitution_ceiling() {
             &limited(
                 PROJECTED,
                 ExpansionLimits::default(),
-                &FormulaLimits {
-                    max_substitutions: u64::try_from(cap).unwrap(),
-                    ..FormulaLimits::default()
-                }
+                &resource_limits::formula(FormulaResource::Substitutions, cap)
             )
             .unwrap()
         ),
@@ -710,24 +655,21 @@ fn witness_projection_obeys_the_substitution_ceiling() {
 
 #[test]
 fn witness_projection_obeys_the_byte_ceiling() {
-    let cap = first_cap(|cap| {
-        limited(
-            PROJECTED,
-            ExpansionLimits {
-                max_scalar_bytes: cap,
-                ..ExpansionLimits::default()
-            },
-            &FormulaLimits::default(),
-        )
-    });
-    assert!(cap > 0);
+    let cap = first_success(
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
+        |cap| {
+            limited(
+                PROJECTED,
+                resource_limits::expansion(ExpansionResource::ScalarBytes, cap),
+                &FormulaLimits::default(),
+            )
+            .is_ok()
+        },
+    );
     assert!(matches!(
         limited(
             PROJECTED,
-            ExpansionLimits {
-                max_scalar_bytes: cap - 1,
-                ..ExpansionLimits::default()
-            },
+            resource_limits::expansion(ExpansionResource::ScalarBytes, cap - 1),
             &FormulaLimits::default()
         ),
         Err(FormulaFailure::Expansion(
@@ -741,10 +683,7 @@ fn witness_projection_obeys_the_byte_ceiling() {
         native(
             &limited(
                 PROJECTED,
-                ExpansionLimits {
-                    max_scalar_bytes: cap,
-                    ..ExpansionLimits::default()
-                },
+                resource_limits::expansion(ExpansionResource::ScalarBytes, cap),
                 &FormulaLimits::default()
             )
             .unwrap()
@@ -756,73 +695,40 @@ fn witness_projection_obeys_the_byte_ceiling() {
 #[test]
 fn anonymous_inspections_obey_the_term_work_ceiling() {
     let source = format!("q:-not p({}_{}):#true.", "f(".repeat(16), ")".repeat(16));
-    let cap = first_cap(|cap| {
-        limited(
-            &source,
-            ExpansionLimits {
-                max_term_work: cap,
-                ..ExpansionLimits::default()
-            },
-            &FormulaLimits::default(),
-        )
-    });
-    assert!(cap > 0);
-    assert!(matches!(
-        limited(
-            &source,
-            ExpansionLimits {
-                max_term_work: cap - 1,
-                ..ExpansionLimits::default()
-            },
-            &FormulaLimits::default()
-        ),
-        Err(FormulaFailure::Expansion(
-            zetesis_themelios::ExpansionFailure::Limit {
-                resource: zetesis_themelios::ExpansionResource::TermWork,
-                ..
-            }
-        ))
-    ));
-    assert_eq!(
-        native(
-            &limited(
+    let expected = native(&formula("q."));
+    crate::support::thresholds::bounded_term_work(
+        |cap| {
+            limited(
                 &source,
-                ExpansionLimits {
-                    max_term_work: cap,
-                    ..ExpansionLimits::default()
-                },
-                &FormulaLimits::default()
+                resource_limits::expansion(ExpansionResource::TermWork, cap),
+                &FormulaLimits::default(),
             )
-            .unwrap()
-        ),
-        native(&formula("q."))
+        },
+        |actual| assert_eq!(native(actual), expected),
     );
 }
 
 #[test]
 fn private_witness_slots_obey_the_variable_ceiling() {
     let source = "q:-not p(f(_)):#true.";
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 0;
     assert!(matches!(
         admit_formula(
             source.into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 0),
             ExpansionLimits::default(),
             FormulaLimits::default()
         ),
         Err(FormulaFailure::Limit {
-            resource: zetesis_themelios::FormulaResource::Variables,
+            resource: FormulaResource::Variables,
             observed: 1,
             ..
         })
     ));
-    options.core_limits.max_variables_per_template = 1;
     assert_eq!(
         native(
             &admit_formula(
                 source.into(),
-                options,
+                resource_limits::admission_formula(FormulaResource::Variables, 1),
                 ExpansionLimits::default(),
                 FormulaLimits::default()
             )
@@ -838,13 +744,13 @@ fn local_substitution_limit_is_inclusive() {
         limited(
             BOUNDED,
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_substitutions: cap as u64,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::Substitutions, cap),
         )
     };
-    let cap = first_cap(run);
+    let cap = first_success(
+        resource_limits::formula_default(FormulaResource::Substitutions),
+        |cap| run(cap).is_ok(),
+    );
     assert!(
         matches!(run(cap - 1), Err(FormulaFailure::Limit { resource: zetesis_themelios::FormulaResource::Substitutions, observed, limit, .. }) if observed == limit + 1)
     );
@@ -856,14 +762,14 @@ fn consequent_value_limit_is_inclusive() {
     let run = |cap| {
         limited(
             BOUNDED,
-            ExpansionLimits {
-                max_values: cap,
-                ..Default::default()
-            },
+            resource_limits::expansion(ExpansionResource::Values, cap),
             &FormulaLimits::default(),
         )
     };
-    let cap = first_cap(run);
+    let cap = first_success(
+        resource_limits::expansion_default(ExpansionResource::Values),
+        |cap| run(cap).is_ok(),
+    );
     assert!(matches!(
         run(cap - 1),
         Err(FormulaFailure::Expansion(
@@ -880,14 +786,14 @@ fn consequent_byte_limit_is_inclusive() {
     let run = |cap| {
         limited(
             BOUNDED,
-            ExpansionLimits {
-                max_scalar_bytes: cap,
-                ..Default::default()
-            },
+            resource_limits::expansion(ExpansionResource::ScalarBytes, cap),
             &FormulaLimits::default(),
         )
     };
-    let cap = first_cap(run);
+    let cap = first_success(
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
+        |cap| run(cap).is_ok(),
+    );
     assert!(matches!(
         run(cap - 1),
         Err(FormulaFailure::Expansion(
@@ -900,27 +806,18 @@ fn consequent_byte_limit_is_inclusive() {
 }
 
 #[test]
-fn consequent_term_work_limit_is_inclusive() {
-    let run = |cap| {
-        limited(
-            BOUNDED,
-            ExpansionLimits {
-                max_term_work: cap,
-                ..Default::default()
-            },
-            &FormulaLimits::default(),
-        )
-    };
-    let cap = first_cap(run);
-    assert!(matches!(
-        run(cap - 1),
-        Err(FormulaFailure::Expansion(
-            zetesis_themelios::ExpansionFailure::Limit {
-                resource: zetesis_themelios::ExpansionResource::TermWork,
-                ..
-            }
-        ))
-    ));
+fn consequent_term_work_admissions_obey_their_limits() {
+    let expected = native(&formula(BOUNDED));
+    crate::support::thresholds::bounded_term_work(
+        |cap| {
+            limited(
+                BOUNDED,
+                resource_limits::expansion(ExpansionResource::TermWork, cap),
+                &FormulaLimits::default(),
+            )
+        },
+        |actual| assert_eq!(native(actual), expected),
+    );
 }
 
 #[test]
@@ -929,13 +826,13 @@ fn projection_node_limit_is_inclusive() {
         limited(
             BOUNDED,
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_analysis_nodes: cap,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::AnalysisNodes, cap),
         )
     };
-    let cap = first_cap(run);
+    let cap = first_success(
+        resource_limits::formula_default(FormulaResource::AnalysisNodes),
+        |cap| run(cap).is_ok(),
+    );
     assert!(matches!(
         run(cap - 1),
         Err(FormulaFailure::Limit {
@@ -950,7 +847,7 @@ fn consequent_products_are_preflighted() {
     let arguments = ["(1;2)"; 20].join(",");
     let source = format!("q:-p({arguments}):#true.");
     assert!(
-        matches!(limited(&source, ExpansionLimits { max_values: 1_000, ..Default::default() }, &FormulaLimits::default()),
+        matches!(limited(&source, resource_limits::expansion(ExpansionResource::Values, 1_000), &FormulaLimits::default()),
         Err(FormulaFailure::Expansion(zetesis_themelios::ExpansionFailure::Limit { resource: zetesis_themelios::ExpansionResource::Values, observed, .. })) if observed >= 1 << 20)
     );
 }
@@ -1047,13 +944,10 @@ fn projected_alternatives_retain_parsed_atom_origins() {
 
 #[test]
 fn prepared_bundle_retains_analysis_basis() {
-    use zetesis_themelios::{
-        BundleAdmissionOptions, BundleLimits, SourceBundle, prepare_bundle_formula,
-    };
-    let directory = tempfile::tempdir().unwrap();
-    let path = directory.path().join("input.lp");
-    std::fs::write(&path, "{p(1..2)}.q:-p(1;2):#true.").unwrap();
-    let bundle = SourceBundle::load(&path, BundleLimits::default()).unwrap();
+    use zetesis_themelios::{BundleAdmissionOptions, prepare_bundle_formula};
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", "{p(1..2)}.q:-p(1;2):#true.");
+    let bundle = fixture.bundle();
     let prepared = prepare_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),
@@ -1084,18 +978,16 @@ fn outer_pools_preserve_local_alternatives() {
 
 #[test]
 fn private_interval_slots_obey_variable_limit() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 1;
     let result = admit_formula(
         "q:-p(2*(X..X+1)):X=1.".into(),
-        options,
+        resource_limits::admission_formula(FormulaResource::Variables, 1),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     );
     assert!(matches!(
         result,
         Err(FormulaFailure::Limit {
-            resource: zetesis_themelios::FormulaResource::Variables,
+            resource: FormulaResource::Variables,
             limit: 1,
             observed: 2,
             ..
@@ -1170,16 +1062,17 @@ fn conjunction_matches_bounded_completion() {
 #[test]
 fn projected_copies_share_the_node_allowance() {
     let cap_for = |source: &str| {
-        first_cap(|cap| {
-            limited(
-                source,
-                ExpansionLimits::default(),
-                &FormulaLimits {
-                    max_analysis_nodes: cap,
-                    ..Default::default()
-                },
-            )
-        })
+        first_success(
+            resource_limits::formula_default(FormulaResource::AnalysisNodes),
+            |cap| {
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &resource_limits::formula(FormulaResource::AnalysisNodes, cap),
+                )
+                .is_ok()
+            },
+        )
     };
     let one = "q:-p(1;2):#true.";
     let two = "q:-p(1;2):#true.r:-p(1;2):#true.";
@@ -1189,10 +1082,7 @@ fn projected_copies_share_the_node_allowance() {
         limited(
             two,
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_analysis_nodes: cap,
-                ..Default::default()
-            }
+            &resource_limits::formula(FormulaResource::AnalysisNodes, cap)
         ),
         Err(FormulaFailure::Limit {
             resource: zetesis_themelios::FormulaResource::AnalysisNodes,

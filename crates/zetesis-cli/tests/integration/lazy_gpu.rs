@@ -81,27 +81,6 @@ mod physical {
     use crate::support::prepared;
     use zetesis_backend::GpuApi;
 
-    fn typed(
-        source: &str,
-        config: &zetesis_cli::PublicationConfig,
-    ) -> (zetesis_cli::Report, serde_json::Value) {
-        let mut output = Vec::new();
-        let resources = zetesis_solve::Resources::default();
-        let report = prepared::relational(
-            source,
-            config,
-            &mut zetesis_cli::JsonRenderer::new(
-                &mut output,
-                resources.json_record_bytes(),
-                resources.formula_limits().theory.max_atoms,
-            ),
-            &mut Vec::new(),
-            &Cancellation::default(),
-        )
-        .unwrap();
-        (report, serde_json::from_slice(&output).unwrap())
-    }
-
     use zetesis_cli::{Interruption, RunError};
     use zetesis_cpu::Stop;
 
@@ -153,7 +132,7 @@ mod physical {
             let mut bounded = zetesis_cli::PublicationConfig::from(&selected);
             bounded.solve.max_ground_rules = 0;
             bounded.solve.max_substitutions = 0;
-            let (bounded_report, bounded_models) = typed(source, &bounded);
+            let (bounded_report, bounded_models) = prepared::relational_json(source, &bounded);
             assert_eq!(bounded_report.completion, Completion::Exhausted);
             assert_eq!(bounded_models["models"], expected["models"]);
             assert!(bounded_report.lazy_execution.unwrap().dispatches > 0);
@@ -209,7 +188,7 @@ mod physical {
                 let (report, actual, diagnostics) = if let Some(batch) = batch {
                     let mut config = zetesis_cli::PublicationConfig::from(&options(&arguments));
                     config.solve.batch_size = std::num::NonZeroUsize::new(batch).unwrap();
-                    let (report, actual) = typed(source, &config);
+                    let (report, actual) = prepared::relational_json(source, &config);
                     (report, actual, String::new())
                 } else {
                     solve(source, &arguments)
@@ -348,7 +327,7 @@ mod physical {
             "--json",
         ]));
         config.solve.max_work = 0;
-        let (report, value) = typed(WORLDS, &config);
+        let (report, value) = prepared::relational_json(WORLDS, &config);
         assert_eq!(report.completion, Completion::Interrupted);
         assert_eq!(
             report.interruption,

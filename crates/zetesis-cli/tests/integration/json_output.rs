@@ -351,6 +351,51 @@ fn region_statistics_identify_the_support_cut() {
 }
 
 #[test]
+fn region_statistics_record_the_parallel_walks_engagement() {
+    let arguments = ["--stats", "--oracle", "countermodel", "--search", "regions"];
+    // One worker is the scalar walk, which starts none.
+    let (_, value) = solve("{a;b}.", &options(&arguments));
+    assert!(value["statistics"]["search"]["candidate_regions"]["workers"].is_null());
+    // Under the default delay the host's clock decides whether so small a
+    // walk engages; each state's keys are null outside it.
+    let mut parallel = options(&arguments);
+    parallel.workers = std::num::NonZeroUsize::new(2).unwrap();
+    let (report, value) = solve("{a;b}.", &parallel);
+    let measured = report
+        .unwrap()
+        .countermodel_statistics
+        .unwrap()
+        .regions
+        .unwrap()
+        .workers
+        .unwrap();
+    let nanos = |duration: std::time::Duration| u64::try_from(duration.as_nanos()).unwrap();
+    let delay = nanos(measured.engagement_delay.unwrap());
+    let expected = match measured.engagement {
+        zetesis_sat::RegionWalkEngagement::Unengaged { elapsed, walking } => json!({
+            "configured": 2, "engagement_delay_ns": delay, "engagement": "unengaged",
+            "elapsed_ns": nanos(elapsed), "walking_ns": nanos(walking),
+            "engaged_after_ns": null, "launched": null, "spawn_ns": null,
+        }),
+        zetesis_sat::RegionWalkEngagement::Engaged {
+            after,
+            walking,
+            launched,
+            spawn,
+        } => json!({
+            "configured": 2, "engagement_delay_ns": delay, "engagement": "engaged",
+            "elapsed_ns": null, "walking_ns": nanos(walking),
+            "engaged_after_ns": nanos(after), "launched": launched, "spawn_ns": nanos(spawn),
+        }),
+        other => panic!("a walk that returned models has begun: {other:?}"),
+    };
+    assert_eq!(
+        value["statistics"]["search"]["candidate_regions"]["workers"],
+        expected
+    );
+}
+
+#[test]
 fn completion_statistics_distinguish_requested_storage() {
     let (report, value) = bounded(
         "{a;b}.",

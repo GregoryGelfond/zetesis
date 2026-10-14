@@ -11,15 +11,24 @@ use super::{
 };
 use crate::{curated, process};
 
-/// Result of a case's process, enumeration and immutable model contracts.
+/// Result of a case's process, enumeration and immutable model contracts, and
+/// of the campaign's settlement of the executable its native report names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Decision {
-    /// Both complete producer reports agree with every recorded model occurrence.
+    /// Both complete producer reports agree with every recorded model
+    /// occurrence, and the native report's statistics are accepted as evidence
+    /// of the executable that did its work ([`InvalidReport`](Decision::InvalidReport)
+    /// names the reports refused).
     Pass,
     /// A child did not start, complete capture, or exit with an accepted code.
     InvocationFailure,
-    /// A producer report is malformed, incomplete or exceeds normalization limits.
+    /// A producer report is malformed, incomplete or exceeds normalization
+    /// limits; or an otherwise passing native report carries no statistics
+    /// object, or the executable its statistics name was refused: none (`null`,
+    /// or a value that is not a path), a third one, beside the invoked
+    /// executable and the one an earlier run named, or one that could not be
+    /// sealed.
     InvalidReport,
     /// A complete report differs from the full-model or helper contract.
     ModelMismatch,
@@ -151,7 +160,9 @@ impl InvocationRecord {
                 exit.signal.is_none()
                     && match exit.code {
                         Some(0) => true,
-                        Some(10 | 20 | 30) => reference,
+                        Some(code) if crate::answers::CLINGO_DECIDED_EXITS.contains(&code) => {
+                            reference
+                        }
                         _ => false,
                     }
             })
@@ -202,6 +213,8 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
     }
     let corpus = curated::open(request.corpus, request.limits.corpus).map_err(Error::Corpus)?;
     let before = seals(&corpus, request)?;
+    let mut executables =
+        identity::Executables::new(&before[NATIVE_SEAL], request.limits.max_executable_bytes);
     let destination = publication::prepare(request.report, corpus.root(), &before)?;
     let directory = tempfile::tempdir()
         .map_err(|source| identity::io(Path::new("temporary campaign directory"), source))?;
@@ -215,6 +228,8 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
         physical_execution_qualified: false,
         before,
         after: Vec::new(),
+        executed: None,
+        executed_after: None,
         cases: Vec::new(),
         total_capture_bytes: 0,
         unresolved_children: Vec::new(),
@@ -251,7 +266,11 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
                 &mut report,
             )
         });
-        let (decision, detail) = compare::case(case, &reference, native.as_ref(), request.limits);
+        let (decision, detail) = settled(
+            compare::case(case, &reference, native.as_ref(), request.limits),
+            native.as_ref(),
+            &mut executables,
+        );
         report.cases.push(CaseResult {
             id: case.id().into(),
             source_sha256: case.source_sha256().into(),
@@ -265,12 +284,40 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
         }
     }
     report.after = report.before.iter().map(identity::recheck).collect();
+    (report.executed, report.executed_after) = executables.close();
     if let Err(error) = directory.close() {
         report
             .faults
             .push(CampaignFault::InputCleanup(error.to_string()));
     }
     Ok(report)
+}
+
+/// The position of the native executable's seal among the campaign's sealed
+/// inputs: [`seals`] places the reference first and the native second.
+const NATIVE_SEAL: usize = 1;
+
+/// An otherwise passing case's decision once the executable its native report
+/// names is settled by `executables`; a report that is not JSON, or a refused
+/// settlement, makes the case an invalid report.
+fn settled(
+    (decision, detail): (Decision, Option<String>),
+    native: Option<&InvocationRecord>,
+    executables: &mut identity::Executables,
+) -> (Decision, Option<String>) {
+    let Some(native) = native.filter(|_| decision == Decision::Pass) else {
+        return (decision, detail);
+    };
+    let Ok(document) = serde_json::from_slice::<serde_json::Value>(native.stdout()) else {
+        return (
+            Decision::InvalidReport,
+            Some("the native report is not a JSON document".to_owned()),
+        );
+    };
+    match executables.settle(&identity::named(&document["statistics"])) {
+        Ok(()) => (decision, detail),
+        Err(refusal) => (Decision::InvalidReport, Some(refusal)),
+    }
 }
 
 fn seals(corpus: &curated::Corpus, request: &Request<'_>) -> Result<Vec<FileSeal>, Error> {

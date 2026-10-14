@@ -255,7 +255,7 @@ impl Capture {
     ///
     /// # Errors
     /// Returns the first invalid UTF-8 sequence.
-    pub fn stderr_text(&self) -> Result<&str, std::str::Utf8Error> {
+    pub(crate) fn stderr_text(&self) -> Result<&str, std::str::Utf8Error> {
         std::str::from_utf8(&self.stderr)
     }
     /// Primary capture fault, without replacing a preceding limit/deadline stop.
@@ -409,7 +409,7 @@ pub fn invoke_supervised(
 ///
 /// # Errors
 /// Returns the same pre-spawn refusals as [`invoke_with_cancellation`].
-pub fn invoke_supervised_with_cancellation(
+pub(crate) fn invoke_supervised_with_cancellation(
     invocation: Invocation<'_>,
     limits: Limits,
     cancelled: &AtomicBool,

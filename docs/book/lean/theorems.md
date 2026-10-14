@@ -199,6 +199,11 @@ and frozen eligibility under complete masks. `ThresholdReduct.reference_original
 and `reference_frozen` give the corresponding equivalence for a nonnegative
 weighted threshold recurrence, including repeated conditions at distinct tuple
 positions. They do not yet establish a native runtime replacement.
+`ThresholdResidues` separates the known and undecided contributions and proves
+that every compatible remainder is divisible by a common divisor of the
+undecided weights. An interval missed by that progression has no compatible
+reading. Runtime grouping, divisor computation and event scheduling remain
+separate obligations; the law does not claim every progression point is possible.
 `AggregateRanges` establishes bounds
 on mathematical signed partial sums. `AggregateDependencies` composes complete
 predecessor-indexed value families. Its `Reuse.restart_exact` proves full reset
@@ -254,13 +259,33 @@ defines the finite measures of key selections between required and possible
 keys. `carrier_membership` characterizes that enumeration;
 `actual_value_covered` includes every actual active selection.
 `invariant_carrier` gives the singleton case. `source_priority_presence`
-retains complete binding and numeric-field requirements.
+retains complete binding and numeric-field requirements. Required count and
+sum laws describe intervals and seeded subset sums. The required-extremum
+law describes the required result together with strictly preceding optional
+values, under explicit order and empty-endpoint laws.
 
 [`IntegerEnvelopes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/IntegerEnvelopes.lean)
 proves bounds along directed comparisons and through affine expressions.
 Endpoint rounding is mathematical integer division. `filtered_bindings_exact`
 states that complete envelope enumeration followed by the original guard gives
 exact bindings. Source recognition and machine arithmetic remain separate.
+
+[`RemainderIntervals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RemainderIntervals.lean)
+bounds signed truncating remainder for an interval of possible divisors. Its
+checked law preserves the zero-divisor and minimum-integer/-1 exclusions.
+The laws do not establish source-domain coverage or Rust correspondence.
+
+[`BoundedMultiples`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/BoundedMultiples.lean)
+identifies bounded values with zero truncating remainder as products of a positive
+divisor and factors from the exact ceiling-to-floor interval.
+`multiple_membership` connects this identity to finite interval enumeration,
+including divisor one and empty intervals. Source totality, checked arithmetic
+and executable posting selection remain separate obligations.
+
+[`ChargeCadence`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ChargeCadence.lean)
+proves when a charged range crosses a periodic observation boundary and bounds
+the number of charged operations until the next boundary. It does not model
+wall-clock latency or concurrent cancellation flags.
 
 These are useful mathematical components. Their coverage or arithmetic premises
 do not prove that a particular Rust source cursor enumerates the required

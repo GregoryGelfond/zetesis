@@ -10,7 +10,13 @@ use crate::{AtomIter, Template, TemplateCatalog};
 use std::ops::Range;
 
 mod admission;
+mod facts;
+pub use facts::{
+    FactIter, FactOccurrences, FactRef, FactRelation, FactSegment, FactTables, RuleRef, Rules,
+};
+mod positions;
 mod views;
+pub use positions::DomainPositions;
 pub use views::{
     Domain, FilterRef, Filters, PatternRef, PatternTerms, Patterns, Predicates, TemplateRef,
     TemplateTerm, Templates,
@@ -27,7 +33,7 @@ const DEFAULT_MAX_BYTES: usize = 128 * 1024 * 1024;
 /// Template-level admission budgets. Zero is a real limit, never unlimited.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AdmissionLimits {
-    /// Maximum number of source-normalized templates.
+    /// Maximum number of source-normalized rules: templates and fact occurrences.
     pub max_templates: usize,
     /// Maximum predicate arity.
     pub max_predicate_arity: usize,
@@ -60,7 +66,7 @@ impl Default for AdmissionLimits {
 /// A resource counted by source admission, before any carrier expansion.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum AdmissionResource {
-    /// Program template count.
+    /// Total template and table-fact occurrences.
     Templates,
     /// Predicate argument count.
     PredicateArity,
@@ -72,16 +78,41 @@ pub enum AdmissionResource {
     DomainValues,
 }
 
-/// A typed admission refusal. Template indices refer to the original input order.
+/// The native input associated with a canonical admission failure.
+/// Template and fact indices refer to their separate original input sequences;
+/// this is an input identity, not a parsed source coordinate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum AdmissionOrigin {
+    /// A whole-program operation with no individual occurrence.
+    Program,
+    /// An original template occurrence.
+    Template(usize),
+    /// An original table-fact occurrence.
+    Fact(usize),
+}
+
+/// A typed admission refusal. Template and fact indices retain original input identity.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum AdmissionError {
+    /// A configured count bound failed at an original fact occurrence.
+    FactLimitExceeded {
+        /// Count whose inclusive bound was exceeded.
+        resource: AdmissionResource,
+        /// Configured maximum.
+        limit: usize,
+        /// Requested count.
+        actual: usize,
+        /// Original table-fact occurrence index.
+        fact: usize,
+    },
     /// Canonical storage or admitted metadata could not be constructed.
     Canonical {
         /// Typed storage, allocation or representation cause. Storage byte
         /// counts include the simultaneously live admitted metadata.
         error: crate::catalog::Error,
-        /// Original input template, when construction was within that template.
-        template: Option<usize>,
+        /// Original input occurrence, or a whole-program operation. One shared
+        /// cause representation reports allocation failures without allocating.
+        origin: AdmissionOrigin,
     },
     /// A configured bound was exceeded.
     LimitExceeded {
@@ -112,11 +143,33 @@ pub enum AdmissionError {
     },
 }
 impl AdmissionError {
+    /// Original fact-occurrence position for parallel source evidence. Template
+    /// positions and fact positions are distinct; neither is the whole rule order.
+    #[must_use]
+    pub const fn fact_index(&self) -> Option<usize> {
+        match self {
+            Self::Canonical {
+                origin: AdmissionOrigin::Fact(fact),
+                ..
+            }
+            | Self::FactLimitExceeded { fact, .. } => Some(*fact),
+            _ => None,
+        }
+    }
     /// Locate a template-level refusal without parsing a message.
     #[must_use]
     pub fn template_index(&self) -> Option<usize> {
         match self {
-            Self::Canonical { template, .. } | Self::LimitExceeded { template, .. } => *template,
+            Self::Canonical {
+                origin: AdmissionOrigin::Template(template),
+                ..
+            } => Some(*template),
+            Self::Canonical {
+                origin: AdmissionOrigin::Program | AdmissionOrigin::Fact(_),
+                ..
+            }
+            | Self::FactLimitExceeded { .. } => None,
+            Self::LimitExceeded { template, .. } => *template,
             Self::UnsafeVariable { template, .. } | Self::NonDenseVariable { template, .. } => {
                 Some(*template)
             }
@@ -126,12 +179,27 @@ impl AdmissionError {
 impl fmt::Display for AdmissionError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Canonical { error, template } => {
-                write!(
+            Self::FactLimitExceeded {
+                resource,
+                limit,
+                actual,
+                fact,
+            } => write!(
+                f,
+                "{resource:?} count {actual} exceeds {limit} (fact {fact})"
+            ),
+            Self::Canonical { error, origin } => match origin {
+                AdmissionOrigin::Fact(fact) => {
+                    write!(f, "program admission failed (fact {fact}): {error}")
+                }
+                AdmissionOrigin::Template(template) => write!(
                     f,
-                    "program admission failed (template {template:?}): {error}"
-                )
-            }
+                    "program admission failed (template Some({template})): {error}"
+                ),
+                AdmissionOrigin::Program => {
+                    write!(f, "program admission failed (template None): {error}")
+                }
+            },
             Self::LimitExceeded {
                 resource,
                 limit,
@@ -169,6 +237,7 @@ impl std::error::Error for AdmissionError {
 struct ProgramData {
     catalog: TemplateCatalog,
     templates: Vec<TemplateData>,
+    facts: Option<facts::Data>,
     domain: Vec<TermId>,
     predicates: Vec<PredicateId>,
     gate_predicates: Vec<PredicateId>,
@@ -211,25 +280,82 @@ impl ProgramData {
 pub struct Program(Arc<ProgramData>);
 
 impl Program {
-    /// Consume construction templates without enumerating atoms or substitutions.
+    /// Consume templates and explicit fact tables without enumerating variable
+    /// substitutions. Fact admission interns their distinct atoms once and keeps
+    /// original occurrences beside predicate-local relation columns.
     /// Variables must be dense and occur in at least one positive pattern;
     /// comparisons and candidate gates do not establish safety. Closed values
     /// already passed their constructors, so no implicit depth-128 limit is
     /// imposed again. The named storage allowance still bounds canonical import.
     ///
-    /// Original template/body occurrences survive as metadata. Owned construction
-    /// payloads are discarded; borrowed execution views use the frozen base.
+    /// Original template/body and fact occurrences survive as metadata. Facts
+    /// supplied as templates remain templates; this constructor never reclassifies.
+    /// Owned construction payloads are discarded; borrowed execution views use
+    /// the frozen base.
     /// Buffer reservations are fallible. Arc envelopes retain stable Rust's
     /// infallible allocation boundary, not universal allocation recovery.
     ///
+    /// # Cost and storage
+    /// Imports each explicit scalar alternative into the shared vocabulary,
+    /// then visits every fact occurrence and its argument columns once. Exact
+    /// atom interning and relation indexing additionally perform their checked
+    /// key lookups and reservations. Intervals avoid an expanded owned input
+    /// vector, but this admission still enumerates their scalar values and rows.
+    /// For `f` original occurrences and `u` distinct atoms, retained occurrence
+    /// metadata is O(f); canonical atom payload and relation columns are O(u)
+    /// at fixed arity. Template topology, explicit-domain entries and canonical
+    /// vocabulary have their own retained capacities. Temporary imported-column
+    /// IDs and old/replacement/publication overlap share the byte allowance.
+    ///
     /// # Errors
     /// Refuses unsafe/non-dense variables, exceeded counts, unavailable named
-    /// storage or canonical representation limits. No partial Program escapes.
-    pub fn new(templates: Vec<Template>, limits: AdmissionLimits) -> Result<Self, AdmissionError> {
-        admission::admit(templates, limits).map(|data| Self(Arc::new(data)))
+    /// storage or canonical representation limits. No partial `Program` escapes.
+    pub fn new(
+        templates: Vec<Template>,
+        facts: FactTables,
+        limits: AdmissionLimits,
+    ) -> Result<Self, AdmissionError> {
+        admission::admit(templates, facts, limits).map(|data| Self(Arc::new(data)))
     }
 
-    /// Templates in original admitted order, including duplicates.
+    /// All template and fact occurrences in original admitted order. Facts retain
+    /// duplicate occurrences while sharing each distinct atom's canonical payload.
+    #[must_use]
+    pub fn rules(&self) -> Rules<'_> {
+        Rules::new(&self.0)
+    }
+
+    /// Whether neither templates nor facts occur in this program.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.0.templates.is_empty() && self.facts().is_empty()
+    }
+
+    /// Original fact occurrences, for traversal and parallel source evidence.
+    #[must_use]
+    pub fn facts(&self) -> FactOccurrences<'_> {
+        FactOccurrences {
+            data: self.0.facts.as_ref(),
+        }
+    }
+
+    /// Distinct fact relations in signed predicate order, borrowing their closed
+    /// authority, column dictionaries and prepared canonical runs.
+    pub fn fact_relations(&self) -> impl Iterator<Item = FactRelation<'_>> {
+        facts::relations(self.0.facts.as_ref())
+    }
+
+    /// One immutable fact authority for oracle descendants. Its storage presence
+    /// is not discovery or truth; each descendant starts with empty discovery.
+    /// A program with no table facts has no closed fact authority.
+    #[must_use]
+    pub fn fact_catalog(&self) -> Option<&crate::atom_interner::ClosedCatalog> {
+        self.0.facts.as_ref().map(|facts| &facts.store)
+    }
+
+    /// Non-fact templates in original admitted order, including duplicates.
+    /// Body-free templates explicitly supplied to `new` remain templates; only
+    /// the separate `FactTables` input becomes table facts.
     #[must_use]
     pub fn templates(&self) -> Templates<'_> {
         Templates { program: &self.0 }
@@ -272,7 +398,13 @@ impl Program {
     /// This excludes caller input, allocator overhead and future tuple storage.
     #[must_use]
     pub fn storage_bytes(&self) -> u128 {
-        self.0.catalog.storage_bytes() + self.0.metadata_bytes
+        self.0.catalog.storage_bytes()
+            + self.0.metadata_bytes
+            + self
+                .0
+                .facts
+                .as_ref()
+                .map_or(0, |facts| facts.bytes(self.shared_vocabulary_bytes()))
     }
 
     /// Immutable vocabulary payload and lookup indexes shared by tuple owners

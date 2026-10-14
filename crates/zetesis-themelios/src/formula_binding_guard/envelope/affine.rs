@@ -33,7 +33,7 @@ pub(super) struct Reader<'a, 'source> {
 }
 
 impl Reader<'_, '_> {
-    pub fn variable(&mut self, target: usize) -> Result<Affine, FormulaFailure> {
+    pub(super) fn variable(&mut self, target: usize) -> Result<Affine, FormulaFailure> {
         self.budget.charge(
             ExpansionResource::ScalarBytes,
             std::mem::size_of::<Affine>() as u128
@@ -47,7 +47,7 @@ impl Reader<'_, '_> {
         Ok(form)
     }
 
-    pub fn expression(
+    pub(super) fn expression(
         &mut self,
         expression: &Expression,
     ) -> Result<Option<Affine>, FormulaFailure> {
@@ -122,7 +122,7 @@ impl Reader<'_, '_> {
         Ok(Some(result))
     }
 
-    pub fn combine(
+    pub(super) fn combine(
         &self,
         left: &Affine,
         right: &Affine,
@@ -146,7 +146,7 @@ impl Reader<'_, '_> {
         })
     }
 
-    pub fn scale(&self, form: &Affine, factor: i64) -> Result<Affine, FormulaFailure> {
+    pub(super) fn scale(&self, form: &Affine, factor: i64) -> Result<Affine, FormulaFailure> {
         Ok(Affine {
             coefficients: form
                 .coefficients
@@ -161,7 +161,7 @@ impl Reader<'_, '_> {
         })
     }
 
-    pub fn work(&mut self, amount: u128) -> Result<(), FormulaFailure> {
+    pub(super) fn work(&mut self, amount: u128) -> Result<(), FormulaFailure> {
         self.budget
             .charge(ExpansionResource::TermWork, amount, self.location)
             .map_err(Into::into)

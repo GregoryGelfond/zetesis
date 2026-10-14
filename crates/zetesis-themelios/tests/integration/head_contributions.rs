@@ -1,18 +1,20 @@
 //! Complete source contracts for neutral aggregate-head elements.
 
 mod cases;
+use crate::support::admission;
 use crate::support::finite_bindings as reference;
+use zetesis_reference_support::{canonical, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 
 use cases::{CASES, CLINGO_DIFFERENCES};
 use reference::{Models, exhaustive, external, holds, native, values};
 use themelios_base::source::SourceId;
-use zetesis_reference_support::canonical;
+use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
-    admit_formula,
+    AdmissionFailure, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
 };
 
 const SOURCE: SourceId = SourceId::new(317);
@@ -22,39 +24,21 @@ fn limited(
     expansion: ExpansionLimits,
     formula: &FormulaLimits,
 ) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions {
-            source_id: SOURCE,
-            ..Default::default()
-        },
-        expansion,
-        *formula,
-    )
+    admission::admit_with(SOURCE, source, expansion, formula)
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    limited(
-        source,
-        ExpansionLimits::default(),
-        &FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admission::admitted(SOURCE, source)
 }
 
 #[test]
 fn source_models_match_explicit_permissions() {
-    for &(source, expanded) in CASES {
-        assert_eq!(native(&input(source)), native(&input(expanded)), "{source}");
-    }
+    reference::models_match_substitutions(CASES.iter().copied(), input);
 }
 
 #[test]
 fn source_stability_matches_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = input(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), input);
 }
 
 #[test]
@@ -136,8 +120,7 @@ fn original_sources_retain_their_identity() {
 
 #[test]
 fn neutral_tuples_retain_complete_key_limits() {
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_elements = 1;
+    let limits = resource_limits::formula(FormulaResource::AggregateElements, 1);
     let duplicate = limited(
         "#sum{word:a;word:b}=0.",
         ExpansionLimits::default(),
@@ -166,13 +149,12 @@ fn neutral_tuples_retain_complete_key_limits() {
 #[test]
 fn missing_extrema_retain_complete_key_limits() {
     for (function, empty) in [("#min", "#sup"), ("#max", "#inf")] {
-        let mut limits = FormulaLimits::default();
-        limits.aggregate.max_elements = 1;
+        let limits =
+            |maximum| resource_limits::formula(FormulaResource::AggregateElements, maximum);
         let source = format!("{function}{{:a;:b}}={empty}.");
-        let admitted = limited(&source, ExpansionLimits::default(), &limits).unwrap();
+        let admitted = limited(&source, ExpansionLimits::default(), &limits(1)).unwrap();
         assert_eq!(native(&admitted), native(&input("{a;b}.")));
-        limits.aggregate.max_elements = 0;
-        let error = limited(&source, ExpansionLimits::default(), &limits).unwrap_err();
+        let error = limited(&source, ExpansionLimits::default(), &limits(0)).unwrap_err();
         assert!(matches!(
             error,
             FormulaFailure::Limit {
@@ -183,9 +165,8 @@ fn missing_extrema_retain_complete_key_limits() {
             }
         ));
         assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-        limits.aggregate.max_elements = 1;
         let mixed = format!("{function}{{:a;{empty}:b}}={empty}.");
-        let error = limited(&mixed, ExpansionLimits::default(), &limits).unwrap_err();
+        let error = limited(&mixed, ExpansionLimits::default(), &limits(1)).unwrap_err();
         assert!(matches!(
             error,
             FormulaFailure::Limit {
@@ -196,9 +177,8 @@ fn missing_extrema_retain_complete_key_limits() {
             }
         ));
         assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-        limits.aggregate.max_elements = 2;
         assert_eq!(
-            native(&limited(&mixed, ExpansionLimits::default(), &limits).unwrap()),
+            native(&limited(&mixed, ExpansionLimits::default(), &limits(2)).unwrap()),
             native(&input("{a;b}."))
         );
     }
@@ -265,9 +245,8 @@ fn bound_neutral_tuple_fields_preserve_source_permissions() {
 #[test]
 fn evaluated_neutral_tuple_fields_keep_distinct_key_limits() {
     let source = "d(1;2).#sum{word,1/X:a:d(X)}=0.";
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_elements = 1;
-    let error = limited(source, ExpansionLimits::default(), &limits).unwrap_err();
+    let limits = |maximum| resource_limits::formula(FormulaResource::AggregateElements, maximum);
+    let error = limited(source, ExpansionLimits::default(), &limits(1)).unwrap_err();
     assert!(
         matches!(
             error,
@@ -281,9 +260,8 @@ fn evaluated_neutral_tuple_fields_keep_distinct_key_limits() {
         "{error}"
     );
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-    limits.aggregate.max_elements = 2;
     assert_eq!(
-        native(&limited(source, ExpansionLimits::default(), &limits).unwrap()),
+        native(&limited(source, ExpansionLimits::default(), &limits(2)).unwrap()),
         native(&input("d(1;2).{a}."))
     );
 }
@@ -363,25 +341,6 @@ fn neutral_rows_cannot_repair_unsafe_variables() {
     }
 }
 
-fn first_success(mut accepts: impl FnMut(u64) -> bool) -> u64 {
-    let mut lower = 0;
-    let mut upper = 1;
-    assert!(!accepts(lower), "the operation must charge this resource");
-    while !accepts(upper) {
-        upper *= 2;
-        assert!(upper <= 1 << 20, "bounded reference fixture");
-    }
-    while lower + 1 < upper {
-        let middle = lower + (upper - lower) / 2;
-        if accepts(middle) {
-            upper = middle;
-        } else {
-            lower = middle;
-        }
-    }
-    upper
-}
-
 #[test]
 fn selected_rows_obey_inclusive_work_limits() {
     for source in [
@@ -392,15 +351,15 @@ fn selected_rows_obey_inclusive_work_limits() {
     ] {
         for resource in [FormulaResource::Substitutions, FormulaResource::Work] {
             let attempt = |maximum| {
-                let mut limits = FormulaLimits::default();
-                match resource {
-                    FormulaResource::Substitutions => limits.max_substitutions = maximum,
-                    FormulaResource::Work => limits.max_work = maximum,
-                    _ => unreachable!(),
-                }
-                limited(source, ExpansionLimits::default(), &limits)
+                limited(
+                    source,
+                    ExpansionLimits::default(),
+                    &resource_limits::formula(resource, maximum),
+                )
             };
-            let exact = first_success(|maximum| attempt(maximum).is_ok());
+            let exact = first_success(resource_limits::formula_default(resource), |maximum| {
+                attempt(maximum).is_ok()
+            });
             let error = attempt(exact - 1).expect_err("inclusive boundary");
             assert!(
                 matches!(error, FormulaFailure::Limit { resource: actual, limit, observed, .. } if actual == resource && limit == u128::from(exact - 1) && observed == u128::from(exact)),
@@ -421,19 +380,15 @@ fn neutral_rows_obey_inclusive_expansion_limits() {
     ] {
         for resource in [ExpansionResource::TermWork, ExpansionResource::ScalarBytes] {
             let attempt = |maximum| {
-                let mut limits = ExpansionLimits::default();
-                match resource {
-                    ExpansionResource::TermWork => {
-                        limits.max_term_work = usize::try_from(maximum).unwrap();
-                    }
-                    ExpansionResource::ScalarBytes => {
-                        limits.max_scalar_bytes = usize::try_from(maximum).unwrap();
-                    }
-                    _ => unreachable!(),
-                }
-                limited(source, limits, &FormulaLimits::default())
+                limited(
+                    source,
+                    resource_limits::expansion(resource, maximum),
+                    &FormulaLimits::default(),
+                )
             };
-            let exact = first_success(|maximum| attempt(maximum).is_ok());
+            let exact = first_success(resource_limits::expansion_default(resource), |maximum| {
+                attempt(maximum).is_ok()
+            });
             let error = attempt(exact - 1).expect_err("inclusive source boundary");
             assert!(
                 matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, limit, observed, .. }) if actual == resource && limit == u128::from(exact - 1) && observed == u128::from(exact)),
@@ -451,28 +406,7 @@ fn source_comparisons_preserve_complete_records() {
     for &(source, _) in CASES {
         let result = external(source, true);
         assert_eq!(result["Solver"], "clingo version 5.8.2");
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    assert!(witness.get("Costs").is_none());
-                    assert!(
-                        expected.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
+        let expected = oracle::objective_free_models(&result);
         let actual = native(&input(source));
         if let Some((_, records)) = CLINGO_DIFFERENCES.iter().find(|(case, _)| *case == source) {
             let recorded: Models = records

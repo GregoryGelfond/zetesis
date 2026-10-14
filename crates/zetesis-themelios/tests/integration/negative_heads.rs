@@ -1,18 +1,18 @@
 //! Default-negated heads preserve original formulas and only positive support.
 
 use std::collections::BTreeSet;
-use std::fs::{self};
 
 use crate::support::finite_bindings::{Models, holds, values};
-use crate::support::head_models::{Names, clingo, expected, limited, names};
+use crate::support::head_models::{
+    Names, clingo, complete, expected, limited, manual_holds, selected, truth,
+};
 use crate::support::objective_boundaries;
 use serde_json::Value as Json;
-use zetesis_core::Sign;
-use zetesis_reference_support::admit;
+use zetesis_clingo_support as oracle;
+use zetesis_reference_support::{BundleFixture, admit, canonical, resource_limits};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource,
-    SourceBundle, admit_bundle_formula,
+    AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -21,90 +21,9 @@ fn cases() -> Vec<Json> {
 fn singleton_cases() -> Vec<Json> {
     serde_json::from_str(zetesis_test_support::fixtures::SINGLETON_HEADS).unwrap()
 }
-fn name<'a>(atom: impl Into<zetesis_core::catalog::AtomRef<'a>>) -> String {
-    let atom = atom.into();
-    let sign = if atom.predicate().sign() == Sign::Negative {
-        "-"
-    } else {
-        ""
-    };
-    let base = format!("{sign}{}", atom.predicate().name());
-    match (
-        atom.values().len(),
-        atom.values()
-            .at(0)
-            .map(zetesis_core::catalog::TermRef::descriptor),
-    ) {
-        (0, _) => base,
-        (1, Some(zetesis_core::ValueNodeRef::Number(number))) => format!("{base}({number})"),
-        _ => panic!("fixture has nullary or numeric unary atoms: {atom:?}"),
-    }
-}
-// Independent topological evaluation: every subtree false in M is falsum in
-// F^M. No production evaluator, reduct mask, SAT search or subset enumeration
-// helper is used to decide these finite stable models.
-fn selected(admitted: &AdmittedFormula, mask: usize) -> Names {
-    admitted
-        .atoms()
-        .iter()
-        .enumerate()
-        .filter(|(i, _)| mask & (1 << i) != 0)
-        .map(|(_, atom)| name(atom))
-        .collect()
-}
-fn complete(admitted: &AdmittedFormula) -> Models {
-    assert!(admitted.atoms().len() <= 6, "tiny exhaustive carrier");
-    let mut result = Models::new();
-    for mask in 0..1_usize << admitted.atoms().len() {
-        let outer = values(admitted.theory(), mask, None);
-        if !holds(admitted.theory(), &outer) {
-            continue;
-        }
-        let mut subset = mask;
-        let mut countermodel = false;
-        while subset != 0 {
-            subset = (subset - 1) & mask;
-            if holds(
-                admitted.theory(),
-                &values(admitted.theory(), subset, Some(&outer)),
-            ) {
-                countermodel = true;
-                break;
-            }
-        }
-        if !countermodel {
-            assert!(result.insert(selected(admitted, mask)));
-        }
-    }
-    result
-}
-
-fn truth(formula: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
-    if frozen.is_some_and(|outer| !truth(formula, outer, None)) {
-        return false;
-    }
-    if let Some(atom) = formula.as_str() {
-        return tested.contains(atom);
-    }
-    if let Json::Bool(value) = formula {
-        return *value;
-    }
-    let left = truth(&formula[1], tested, frozen);
-    let right = truth(&formula[2], tested, frozen);
-    match formula[0].as_str().unwrap() {
-        "and" => left && right,
-        "or" => left || right,
-        "imp" => !left || right,
-        other => panic!("unknown manual formula {other}"),
-    }
-}
-fn manual_holds(theory: &Json, tested: &Names, frozen: Option<&Names>) -> bool {
-    theory["roots"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|root| truth(root, tested, frozen))
-}
+// Independent topological evaluation (support::head_models): every subtree
+// false in M is falsum in F^M. No production evaluator, reduct mask, SAT search
+// or subset enumeration helper is used to decide these finite stable models.
 
 fn supported(case: &Json, model: &Names) -> bool {
     model.iter().all(|atom| {
@@ -121,14 +40,18 @@ fn original_support_augmentation_and_frozen_formulas_are_distinct_contracts() {
         let source = case["source"].as_str().unwrap();
         let admitted = admit(source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{source}: {error}"));
-        let actual_atoms: Names = admitted.atoms().iter().map(name).collect();
+        let actual_atoms: Names = admitted.atoms().iter().map(canonical).collect();
         // A positive join with no possible rows may erase a vacuous source rule;
         // compare it separately through full models, not a fabricated DAG carrier.
         if case["name"] == "recursive-body" {
             assert_eq!(complete(&admitted), expected(&case["models"]));
             continue;
         }
-        assert_eq!(actual_atoms, names(&case["atoms"]), "{source}: carrier");
+        assert_eq!(
+            actual_atoms,
+            oracle::atoms(&case["atoms"]),
+            "{source}: carrier"
+        );
         for mask in 0..1_usize << admitted.atoms().len() {
             let model = selected(&admitted, mask);
             let outer = values(admitted.theory(), mask, None);
@@ -206,8 +129,8 @@ fn singleton_heads_preserve_original_formulas() {
         let admitted = admit(source, &FormulaLimits::default())
             .unwrap_or_else(|error| panic!("{source}: {error}"));
         assert_eq!(
-            admitted.atoms().iter().map(name).collect::<Names>(),
-            names(&case["atoms"])
+            admitted.atoms().iter().map(canonical).collect::<Names>(),
+            oracle::atoms(&case["atoms"])
         );
         for mask in 0..1_usize << admitted.atoms().len() {
             let model = selected(&admitted, mask);
@@ -326,42 +249,35 @@ fn negation_nodes_and_occurrences_obey_exact_resource_boundaries() {
         "not not p(1..2).",
     ] {
         let admitted = admit(source, &FormulaLimits::default()).unwrap();
-        let mut limits = FormulaLimits::default();
-        limits.theory.max_nodes = admitted.theory().nodes().len();
+        let nodes = u64::try_from(admitted.theory().nodes().len()).unwrap();
+        let limits = |maximum| resource_limits::formula(FormulaResource::Nodes, maximum);
         assert_eq!(
             complete(
                 &limited(
                     source,
                     AdmissionOptions::default(),
                     ExpansionLimits::default(),
-                    &limits
+                    &limits(nodes)
                 )
                 .unwrap()
             ),
             complete(&admitted)
         );
-        limits.theory.max_nodes -= 1;
         assert!(matches!(
             limited(
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                &limits
+                &limits(nodes - 1)
             ),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::Nodes,
                 ..
             })
         ));
-        for (work, expansion_work) in [(0, usize::MAX), (u64::MAX, 0)] {
-            let limits = FormulaLimits {
-                max_work: work,
-                ..FormulaLimits::default()
-            };
-            let expansion = ExpansionLimits {
-                max_term_work: expansion_work,
-                ..ExpansionLimits::default()
-            };
+        for (work, expansion_work) in [(0, u64::MAX), (u64::MAX, 0)] {
+            let limits = resource_limits::formula(FormulaResource::Work, work);
+            let expansion = resource_limits::expansion(ExpansionResource::TermWork, expansion_work);
             assert!(matches!(
                 limited(source, AdmissionOptions::default(), expansion, &limits),
                 Err(FormulaFailure::Limit {
@@ -374,10 +290,7 @@ fn negation_nodes_and_occurrences_obey_exact_resource_boundaries() {
             ));
         }
     }
-    let limits = FormulaLimits {
-        max_disjunction_elements: 2,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::DisjunctionElements, 2);
     assert!(
         limited(
             "a|not a.",
@@ -405,10 +318,7 @@ fn negation_nodes_and_occurrences_obey_exact_resource_boundaries() {
 #[test]
 fn singleton_head_limit_counts_one_literal() {
     for source in ["not a.", "not not a."] {
-        let limits = FormulaLimits {
-            max_disjunction_elements: 1,
-            ..FormulaLimits::default()
-        };
+        let limits = resource_limits::formula(FormulaResource::DisjunctionElements, 1);
         assert!(
             limited(
                 source,
@@ -418,10 +328,7 @@ fn singleton_head_limit_counts_one_literal() {
             )
             .is_ok()
         );
-        let limits = FormulaLimits {
-            max_disjunction_elements: 0,
-            ..limits
-        };
+        let limits = resource_limits::formula(FormulaResource::DisjunctionElements, 0);
         assert!(matches!(
             limited(
                 source,
@@ -440,16 +347,11 @@ fn singleton_head_limit_counts_one_literal() {
 
 #[test]
 fn negative_heads_keep_original_duplicate_bundle_origins() {
-    let directory = tempfile::tempdir().unwrap();
+    let fixture = BundleFixture::new();
     let rule = "not not a(1..2)|b.";
-    fs::write(
-        directory.path().join("entry.lp"),
-        format!("#include \"other.lp\".\n{rule}"),
-    )
-    .unwrap();
-    fs::write(directory.path().join("other.lp"), rule).unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    fixture.write("entry.lp", &format!("#include \"other.lp\".\n{rule}"));
+    fixture.write("other.lp", rule);
+    let bundle = fixture.bundle();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

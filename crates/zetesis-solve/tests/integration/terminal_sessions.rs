@@ -1,6 +1,7 @@
 //! Base membership becomes original membership only after full reconstruction.
 
 use std::{collections::BTreeSet, convert::Infallible, num::NonZeroUsize};
+use zetesis_reference_support::{formula, prepared, resource_limits};
 
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::{Cancellation, Stop};
@@ -12,7 +13,7 @@ use zetesis_solve::{
 use zetesis_test_support::programs::unary as atom;
 use zetesis_themelios::{
     AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaMaterialization,
-    FormulaResource, TerminalFormula, admit_formula, prepare_formula,
+    FormulaResource, TerminalFormula, prepare_formula,
 };
 
 const OPTIONAL: &str = "{seed(1);seed(2)}. receipt(X):-seed(X).";
@@ -113,24 +114,11 @@ fn ground_only_definitions_preserve_complete_families() {
             ]),
         ),
     ] {
-        let FormulaMaterialization::Complete(owner) = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-        .ground_adaptive()
-        .unwrap() else {
+        let FormulaMaterialization::Complete(owner) = prepared(source).ground_adaptive().unwrap()
+        else {
             panic!("ground-only definitions require complete materialization");
         };
-        let original = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let original = formula(source);
         for input in [
             PreparedInput::formula(&owner),
             PreparedInput::formula(&original),
@@ -156,13 +144,7 @@ fn retained_ground_facts_preserve_terminal_families() {
         possible_base,
         Model::new([atom("closed", 7), atom("seed", 1)]).unwrap()
     );
-    let original = admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let original = formula(source);
     let expected = BTreeSet::from([
         Model::new([atom("closed", 7)]).unwrap(),
         Model::new([atom("closed", 7), atom("seed", 1), atom("receipt", 1)]).unwrap(),
@@ -181,13 +163,7 @@ fn retained_ground_facts_preserve_terminal_families() {
 #[test]
 fn reconstruction_uses_answer_truth_not_possible_support() {
     let owner = terminal(OPTIONAL);
-    let original = admit_formula(
-        OPTIONAL.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let original = formula(OPTIONAL);
     let reference = Session::builder(
         PreparedInput::formula(&original),
         config(),
@@ -252,13 +228,7 @@ fn facts_and_multiple_producers_preserve_the_full_family() {
         "seed(1). :-seed(1). receipt(X):-seed(X).",
     ] {
         let owner = terminal(source);
-        let original = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let original = formula(source);
         let mut families = Vec::new();
         for input in [
             PreparedInput::formula(&original),
@@ -489,10 +459,7 @@ fn reconstruction_work_refusal_preserves_the_checked_prefix() {
     assert!(costliest > 0);
     let exact = terminal_with_limits(
         OPTIONAL,
-        &FormulaLimits {
-            max_work: admission + costliest,
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::Work, admission + costliest),
     );
     let complete = collect(PreparedInput::terminal(&exact));
     assert_eq!(family(&complete), expected());
@@ -507,10 +474,7 @@ fn reconstruction_work_refusal_preserves_the_checked_prefix() {
     assert_eq!(exact_receipt.work, completed_work);
     let limited = terminal_with_limits(
         OPTIONAL,
-        &FormulaLimits {
-            max_work: admission + costliest - 1,
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::Work, admission + costliest - 1),
     );
     let mut session = Session::new(
         PreparedInput::terminal(&limited),
@@ -616,10 +580,7 @@ fn refused_terminal_base_grounding_keeps_its_composite_route() {
             OPTIONAL.into(),
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                max_support_rounds: 0,
-                ..FormulaLimits::default()
-            },
+            resource_limits::formula(FormulaResource::SupportRounds, 0),
         )
         .unwrap();
         let failure = prepared

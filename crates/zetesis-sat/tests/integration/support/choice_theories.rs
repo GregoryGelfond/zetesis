@@ -6,7 +6,7 @@ use zetesis_ferraris::{Node, Theory};
 use zetesis_theory_support::theories::theory;
 
 /// Independent choices: a | not a, for each atom.
-pub fn choices(atoms: usize) -> Theory {
+pub(crate) fn choices(atoms: usize) -> Theory {
     let mut nodes = vec![Node::falsum()];
     let mut roots = Vec::new();
     for atom in 0..atoms {
@@ -20,13 +20,13 @@ pub fn choices(atoms: usize) -> Theory {
 }
 
 /// A theory over the atoms of `original`: a restriction of it.
-pub fn theory_over(original: &Theory, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
+pub(crate) fn theory_over(original: &Theory, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
     theory(original.atom_count(), nodes, roots)
 }
 
 /// Three independent choices, a | not a for atoms 0 to 2, laid out with the
 /// atoms as the theory's first nodes (unlike `choices(3)`).
-pub fn three_choices() -> Theory {
+pub(crate) fn three_choices() -> Theory {
     theory(
         3,
         vec![
@@ -40,6 +40,27 @@ pub fn three_choices() -> Theory {
             Node::or_pair([1, 6]),
             Node::implies(2, 3),
             Node::or_pair([2, 8]),
+        ],
+        vec![5, 7, 9],
+    )
+}
+
+/// Three independent choices, a | not a for atoms 0 to 2, laid out with falsum
+/// first, then the atoms, then each choice's implication and disjunction.
+pub(crate) fn three_choices_falsum_first() -> Theory {
+    theory(
+        3,
+        vec![
+            Node::falsum(),
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::implies(1, 0),
+            Node::or_pair([1, 4]),
+            Node::implies(2, 0),
+            Node::or_pair([2, 6]),
+            Node::implies(3, 0),
+            Node::or_pair([3, 8]),
         ],
         vec![5, 7, 9],
     )

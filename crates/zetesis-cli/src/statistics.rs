@@ -19,6 +19,14 @@ fn header(
     )?;
     writeln!(
         sink,
+        "  executable: {}",
+        running_executable().map_or_else(
+            || "unreported".to_owned(),
+            |path| path.display().to_string()
+        )
+    )?;
+    writeln!(
+        sink,
         "  requested: backend={}; oracle={}; grounder={}; search={}",
         options.backend.label(),
         options.oracle.label(),
@@ -32,7 +40,7 @@ fn header(
     )?;
     writeln!(
         sink,
-        "  memory allowance: {} bytes (host physical memory {}); shared policy for named input, grounding, solving and output capacities; not resident memory",
+        "  memory allowance: {} bytes (memory available to the process {}); shared policy for named input, grounding, solving and output capacities; not resident memory",
         options.memory,
         crate::options::host_memory()
             .map_or_else(|| "unreported".to_owned(), |bytes| bytes.to_string())
@@ -102,6 +110,7 @@ pub(crate) fn write_progress(
             formula_execution: semantic.formula_execution(),
             hybrid_execution: semantic.hybrid_execution(),
             terminal_execution: semantic.terminal_execution(),
+            source_evaluation: semantic.source_evaluation(),
             model_construction: semantic.model_construction(),
             lazy_execution: semantic.lazy_execution(),
             shared_execution: semantic.shared_execution(),
@@ -218,6 +227,7 @@ struct Details<'a> {
     formula_execution: Option<&'a crate::FormulaExecutionStatistics>,
     hybrid_execution: Option<&'a zetesis_solve::HybridExecutionStatistics>,
     terminal_execution: Option<&'a zetesis_solve::TerminalExecutionStatistics>,
+    source_evaluation: Option<&'a zetesis_themelios::SourceEvaluationStatistics>,
     model_construction: Option<&'a zetesis_solve::ModelConstructionStatistics>,
     lazy_execution: Option<&'a crate::LazyExecutionStatistics>,
     shared_execution: Option<&'a crate::SharedExecutionStatistics>,
@@ -240,6 +250,7 @@ impl<'a> From<&'a Report> for Details<'a> {
             formula_execution: report.formula_execution.as_ref(),
             hybrid_execution: report.hybrid_execution.as_ref(),
             terminal_execution: report.terminal_execution.as_ref(),
+            source_evaluation: report.source_evaluation.as_ref(),
             model_construction: report.model_construction.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
@@ -264,6 +275,7 @@ impl<'a> From<&'a crate::PartialReport> for Details<'a> {
             formula_execution: report.formula_execution.as_ref(),
             hybrid_execution: report.hybrid_execution.as_ref(),
             terminal_execution: report.terminal_execution.as_ref(),
+            source_evaluation: report.source_evaluation.as_ref(),
             model_construction: report.model_construction.as_ref(),
             lazy_execution: report.lazy_execution.as_ref(),
             shared_execution: report.shared_execution.as_ref(),
@@ -281,21 +293,7 @@ fn details(
     report: &Details<'_>,
 ) -> io::Result<()> {
     if let Some(usage) = report.expansion {
-        let limits = crate::admission::expansion_limits(options);
-        writeln!(
-            sink,
-            "  expansion used: term work={} of {}; templates={} of {}; values={} of {}; scalar bytes={} of {}; origins={} of {}",
-            usage.term_work,
-            limits.max_term_work,
-            usage.templates,
-            limits.max_templates,
-            usage.values,
-            limits.max_values,
-            usage.scalar_bytes,
-            limits.max_scalar_bytes,
-            usage.origin_locations,
-            limits.max_origin_locations
-        )?;
+        expansion(sink, options, usage)?;
     }
     if let Some(stats) = report.candidate_statistics {
         candidates(sink, stats)?;
@@ -322,7 +320,9 @@ fn details(
             stats.work, stats.prepared_bytes, stats.peak_bytes, stats.constructed
         )?;
     }
-    let examined = if report.shared_execution.is_some() {
+    let examined = if report.source_evaluation.is_some() {
+        "completed source evaluations"
+    } else if report.shared_execution.is_some() {
         "closure result/control records examined"
     } else {
         "candidates examined"
@@ -335,7 +335,17 @@ fn details(
     if let Some(reason) = report.interruption {
         writeln!(sink, "  interruption: {reason}")?;
     }
-    if let Some(stats) = report.countermodel_statistics {
+    if let Some(stats) = report.source_evaluation {
+        writeln!(
+            sink,
+            "  effective execution: backend=cpu; operation=direct source evaluation"
+        )?;
+        writeln!(
+            sink,
+            "  source evaluation: work={}; substitutions={}; scope=source_admission; includes support, arithmetic and exact activity",
+            stats.work, stats.substitutions
+        )?;
+    } else if let Some(stats) = report.countermodel_statistics {
         formula(sink, config, report)?;
         countermodel(
             sink,
@@ -380,6 +390,28 @@ fn details(
         )?;
     }
     objective(sink, report)
+}
+
+fn expansion(
+    sink: &mut impl Write,
+    options: &Options,
+    usage: zetesis_themelios::ExpansionUsage,
+) -> io::Result<()> {
+    let limits = crate::admission::expansion_limits(options);
+    writeln!(
+        sink,
+        "  expansion used: term work={} of {}; templates={} of {}; values={} of {}; scalar bytes={} of {}; origins={} of {}",
+        usage.term_work,
+        limits.max_term_work,
+        usage.templates,
+        limits.max_templates,
+        usage.values,
+        limits.max_values,
+        usage.scalar_bytes,
+        limits.max_scalar_bytes,
+        usage.origin_locations,
+        limits.max_origin_locations
+    )
 }
 
 fn objective(sink: &mut impl Write, report: &Details<'_>) -> io::Result<()> {
@@ -692,6 +724,9 @@ fn countermodel(
             },
             counts.work,
         )?;
+        if let Some(workers) = regions.workers {
+            region_workers(sink, workers)?;
+        }
     }
     writeln!(
         sink,
@@ -745,6 +780,84 @@ fn countermodel(
         certificate(sink, &certified, config.max_completion_scratch_bytes)?;
     }
     Ok(())
+}
+
+/// The parallel walk's engagement record, one optional value per key: each
+/// state's values are absent outside that state.
+#[derive(Default)]
+pub(crate) struct WorkerRecord {
+    pub(crate) elapsed: Option<Duration>,
+    pub(crate) walking: Option<Duration>,
+    pub(crate) after: Option<Duration>,
+    pub(crate) launched: Option<usize>,
+    pub(crate) spawn: Option<Duration>,
+}
+
+impl From<zetesis_sat::RegionWalkEngagement> for WorkerRecord {
+    fn from(engagement: zetesis_sat::RegionWalkEngagement) -> Self {
+        use zetesis_sat::RegionWalkEngagement as State;
+        match engagement {
+            State::Unengaged { elapsed, walking } => Self {
+                elapsed: Some(elapsed),
+                walking: Some(walking),
+                ..Self::default()
+            },
+            State::Engaged {
+                after,
+                walking,
+                launched,
+                spawn,
+            } => Self {
+                walking: Some(walking),
+                after: Some(after),
+                launched: Some(launched),
+                spawn: Some(spawn),
+                ..Self::default()
+            },
+            // A walk not begun has no values, nor has a state this build
+            // does not name.
+            _ => Self::default(),
+        }
+    }
+}
+
+/// The parallel walk's workers, under its candidate regions, with the JSON's
+/// keys: `engagement_delay_ns=never` for a delay whose deadline overflows.
+fn region_workers(
+    sink: &mut impl Write,
+    workers: zetesis_sat::RegionWorkerStatistics,
+) -> io::Result<()> {
+    let record = WorkerRecord::from(workers.engagement);
+    write!(
+        sink,
+        "    workers: configured={}; engagement_delay_ns=",
+        workers.configured
+    )?;
+    match workers.engagement_delay {
+        Some(delay) => write!(sink, "{}", delay.as_nanos())?,
+        None => write!(sink, "never")?,
+    }
+    write!(
+        sink,
+        "; engagement={}",
+        workers.engagement.label().replace('_', " ")
+    )?;
+    if let Some(elapsed) = record.elapsed {
+        write!(sink, "; elapsed_ns={}", elapsed.as_nanos())?;
+    }
+    if let Some(after) = record.after {
+        write!(sink, "; engaged_after_ns={}", after.as_nanos())?;
+    }
+    if let Some(walking) = record.walking {
+        write!(sink, "; walking_ns={}", walking.as_nanos())?;
+    }
+    if let Some(launched) = record.launched {
+        write!(sink, "; launched={launched}")?;
+    }
+    if let Some(spawn) = record.spawn {
+        write!(sink, "; spawn_ns={}", spawn.as_nanos())?;
+    }
+    writeln!(sink)
 }
 
 fn certificate(
@@ -1071,6 +1184,18 @@ fn independent_closure(
         )?;
     }
     Ok(())
+}
+
+/// The executable doing this run's work, resolved through links, for evidence
+/// that names the binary behind a measurement: after the default install's
+/// front hands a GPU request to its sibling, the sibling. None when the host
+/// does not report it. The run resolves it once, at its first use, so every
+/// statistics view of the run names the same executable.
+pub(crate) fn running_executable() -> Option<&'static std::path::Path> {
+    static EXECUTABLE: std::sync::OnceLock<Option<std::path::PathBuf>> = std::sync::OnceLock::new();
+    EXECUTABLE
+        .get_or_init(|| crate::process::this_executable().ok())
+        .as_deref()
 }
 
 #[cfg(test)]

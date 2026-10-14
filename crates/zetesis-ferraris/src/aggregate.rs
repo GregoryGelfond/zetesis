@@ -1,12 +1,12 @@
 //! Finite aggregate compilation with reduct-preserving connectives.
 
-mod lower;
-mod monotone;
-mod nodes;
 mod extremum;
 mod family;
-mod value_extremum;
+mod lower;
+mod monotone;
 pub mod native;
+mod nodes;
+mod value_extremum;
 
 use std::fmt;
 
@@ -16,7 +16,10 @@ pub use family::{
 };
 pub use lower::append_aggregate;
 pub use nodes::FormulaNodes;
-pub use value_extremum::{ValueExtremumElement, append_value_extremum, append_value_extremum_refs};
+pub use value_extremum::{
+    ValueExtremumElement, ValueExtremumFamilyAttempt, ValueExtremumFamilySpace, ValueExtremumGuard,
+    append_value_extremum, append_value_extremum_family_refs, append_value_extremum_refs,
+};
 
 /// One distinct, already coalesced tuple's weight and eligibility formula.
 /// Callers OR every alternative eligibility condition for an equal whole tuple.
@@ -74,10 +77,10 @@ pub struct AggregateLimits {
     /// [`FormulaNodes`] reuses completed prefix checks while retaining the
     /// per-call control poll and total-node ceiling check.
     pub max_work: u64,
-    /// Maximum simultaneously retained threshold or subset-state cells.
+    /// Maximum simultaneously retained threshold, typed-family or subset-state cells.
     /// DAG storage and temporary connective operands obey their own ceilings.
     /// Native threshold compilation uses contribution columns and guard bounds;
-    /// general compilation uses subset bits.
+    /// typed extremum families use rank/bucket cells; general compilation uses subset bits.
     pub max_states: usize,
     /// Maximum subsets for exact general compilation, including the empty set.
     /// Threshold and extremum compilation do not consume this budget.
@@ -185,6 +188,27 @@ pub enum AggregateErrorKind {
     Allocation,
     /// Exact arithmetic cannot be represented on this host.
     ArithmeticOverflow,
+}
+
+impl AggregateErrorKind {
+    /// Whether translation refused a finite resource or allocation. An existing
+    /// control cause uses the CPU owner’s resource classification.
+    #[must_use]
+    pub fn is_resource_refusal(self) -> bool {
+        match self {
+            Self::Control(stop) => zetesis_cpu::Refusal::is_resource_refusal(&stop),
+            Self::ElementLimit
+            | Self::GuardLimit
+            | Self::NodeLimit
+            | Self::OperandLimit
+            | Self::WorkLimit
+            | Self::StateLimit
+            | Self::SubsetLimit
+            | Self::Allocation
+            | Self::ArithmeticOverflow => true,
+            Self::InvalidPrefix { .. } | Self::InvalidCondition { .. } => false,
+        }
+    }
 }
 
 /// A refusal with partial accounting; both input formula buffers remain intact.

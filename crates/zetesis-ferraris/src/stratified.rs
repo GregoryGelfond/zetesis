@@ -14,7 +14,7 @@ mod tests;
 use std::{fmt, mem::size_of};
 
 use crate::{Interpretation, Theory};
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
 
 /// Bounds for checked classification, stratification and direct evaluation.
 #[derive(Clone, Copy, Debug)]
@@ -125,6 +125,23 @@ impl fmt::Display for StratifiedError {
     }
 }
 impl std::error::Error for StratifiedError {}
+impl Refusal for StratifiedError {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Limit { .. } | Self::Overflow => true,
+            Self::Stopped(stop) => stop.is_resource_refusal(),
+            Self::UnsupportedRoot { .. }
+            | Self::UnsupportedBody { .. }
+            | Self::NegativeCycle { .. }
+            | Self::InvalidClosure { .. } => false,
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
+}
+
 impl From<Stop> for StratifiedError {
     fn from(stop: Stop) -> Self {
         Self::Stopped(stop)
@@ -157,6 +174,9 @@ pub struct StratifiedPlanStatistics {
 /// Each original producer has one atomic head and a conjunction of atoms,
 /// single default-negated atoms, falsum or canonical truth. Positive recursion
 /// is permitted; recursion through default negation and choice heads are not.
+/// Ordinal cuts fit this grammar only as endpoint constants, an empty witness
+/// set, or repetitions of one qualifying normal child. Distinct disjunctive
+/// witnesses remain outside the certificate.
 /// Arbitrary original constraints filter the result after all strata complete.
 /// With no failed constraint, the result is the unique answer set of this
 /// grammar. This certificate does not establish source grounding completeness
@@ -193,26 +213,30 @@ impl StratifiedPlan {
         limits: StratifiedPlanLimits,
         cancellation: &Cancellation,
     ) -> StratifiedAttempt {
-        let mut budget = Budget {
-            limits,
-            cancellation,
-            statistics: StratifiedPlanStatistics::default(),
-            current_bytes: 0,
-        };
-        let result =
-            compile::build(theory, &mut budget).map(|(consequences, failed_constraint)| {
-                budget.statistics.retained_bytes = size_of::<Self>() as u128
-                    + consequences.words.capacity() as u128 * size_of::<u64>() as u128;
-                Self {
-                    consequences,
-                    failed_constraint,
-                    statistics: budget.statistics,
-                }
-            });
-        StratifiedAttempt {
-            result,
-            statistics: budget.statistics,
-        }
+        let mut statistics = StratifiedPlanStatistics::default();
+        let metered = cancellation.metered(limits.max_work, |meter| {
+            compile::build(
+                theory,
+                &mut Budget {
+                    limits,
+                    cancellation,
+                    meter,
+                    statistics: &mut statistics,
+                    current_bytes: 0,
+                },
+            )
+        });
+        statistics.work = metered.charged;
+        let result = metered.result.map(|(consequences, failed_constraint)| {
+            statistics.retained_bytes = size_of::<Self>() as u128
+                + consequences.words.capacity() as u128 * size_of::<u64>() as u128;
+            Self {
+                consequences,
+                failed_constraint,
+                statistics,
+            }
+        });
+        StratifiedAttempt { result, statistics }
     }
 
     /// Exact original owner. Independently equal theories have different atom IDs.
@@ -250,23 +274,27 @@ pub struct StratifiedAttempt {
     pub statistics: StratifiedPlanStatistics,
 }
 
-struct Budget<'a> {
+/// One compilation's limits, meter, statistics and simultaneous bytes. The
+/// statistics' work is the meter's, filled in where the compilation returns.
+struct Budget<'a, 'c> {
     limits: StratifiedPlanLimits,
-    cancellation: &'a Cancellation,
-    statistics: StratifiedPlanStatistics,
+    cancellation: &'c Cancellation,
+    meter: &'a mut Meter<'c>,
+    statistics: &'a mut StratifiedPlanStatistics,
     current_bytes: u128,
 }
 
-impl Budget<'_> {
+impl Budget<'_, '_> {
     fn tick(&mut self) -> Result<(), StratifiedError> {
-        self.cancellation.poll()?;
-        Self::ceiling(
-            StratifiedResource::Work,
-            u128::from(self.statistics.work) + 1,
-            u128::from(self.limits.max_work),
-        )?;
-        self.statistics.work += 1;
-        Ok(())
+        match self.meter.charge() {
+            Ok(()) => Ok(()),
+            Err(ChargeError::Stopped(stop)) => Err(stop.into()),
+            Err(ChargeError::WorkLimit) => Err(StratifiedError::Limit {
+                resource: StratifiedResource::Work,
+                observed: u128::from(self.meter.charged()) + 1,
+                limit: u128::from(self.meter.limit()),
+            }),
+        }
     }
 
     fn dependency(&mut self) -> Result<(), StratifiedError> {
@@ -299,7 +327,7 @@ impl Budget<'_> {
     }
 
     fn reserve<T>(&mut self, count: usize) -> Result<Vec<T>, StratifiedError> {
-        self.cancellation.poll()?;
+        self.meter.poll()?;
         let requested = self
             .current_bytes
             .checked_add(count as u128 * size_of::<T>() as u128)

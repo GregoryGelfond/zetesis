@@ -5,11 +5,13 @@ use crate::{
     process, selected,
 };
 
+/// A passing run's family, its route evidence and what its statistics name as
+/// the executable that did its work.
 pub(super) fn capture(
     capture: &process::Capture,
     backend: Backend,
     fixture: &Fixture,
-) -> Result<(Family, Observation), (Decision, String)> {
+) -> Result<(Family, Observation, selected::identity::Named), (Decision, String)> {
     match capture.stop() {
         process::Stop::Cancelled => {
             return Err((Decision::Cancelled, "backend check cancelled".into()));
@@ -76,7 +78,11 @@ pub(super) fn capture(
     )
     .map_err(|error| (Decision::InvalidExecution, error))?;
     execution(&observation, fixture.oracle).map_err(|error| (Decision::InvalidExecution, error))?;
-    Ok((family, observation))
+    Ok((
+        family,
+        observation,
+        selected::identity::named(&document["statistics"]),
+    ))
 }
 
 fn family(bytes: &[u8]) -> Result<Family, answers::Error> {

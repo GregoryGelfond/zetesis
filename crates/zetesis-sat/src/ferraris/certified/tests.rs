@@ -1,5 +1,7 @@
 //! Exact least-model units are one transaction over the candidate CNF owner.
 
+mod extrema_allowance;
+
 use crate::search::{Budget, LocalQuota};
 use crate::{
     AdmissionError, AdmissionLimits, Cancellation, Cnf, Incomplete, Literal, Resource,

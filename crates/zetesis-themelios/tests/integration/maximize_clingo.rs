@@ -5,14 +5,14 @@ use std::collections::BTreeSet;
 use themelios_base::source::SourceId;
 use themelios_program::program::{Direction, Statement};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_formula,
+    AdmissionFailure, AdmittedFormula, ExpansionFailure, FormulaFailure, FormulaLimits,
+    FormulaResource, ProfileFeature,
 };
 
+use crate::support::admission;
 use crate::support::source_cases;
-use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{formula, resource_limits};
 
 fn cases() -> Vec<source_cases::Case> {
     source_cases::cases(include_str!("../fixtures/maximize.jsonl"))
@@ -66,16 +66,7 @@ fn objective_directions_leave_the_original_atom_catalog_and_reduct_dag_unchanged
 #[test]
 fn maximizing_source_direction_and_original_provenance_are_retained() {
     let source = "v(-2). v(2). {s(W):v(W)}. #maximize{W@7,k:s(W),W!=0}.";
-    let input = admit_formula(
-        source.into(),
-        AdmissionOptions {
-            source_id: SourceId::new(77),
-            ..AdmissionOptions::default()
-        },
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let input = admission::admit(SourceId::new(77), source).unwrap();
     assert_eq!(input.source().expect("source input").text(), source);
     assert_eq!(input.objective_declarations().len(), 1);
     assert!(input.analyzed_program().statements().any(|statement| {
@@ -166,13 +157,7 @@ fn maximizing_occurrences_obey_the_original_objective_element_ceiling() {
     ] {
         let result = reference::admit(
             source,
-            &FormulaLimits {
-                objective: zetesis_objective::AdmissionLimits {
-                    max_templates: 1,
-                    ..zetesis_objective::AdmissionLimits::default()
-                },
-                ..FormulaLimits::default()
-            },
+            &resource_limits::formula(FormulaResource::ObjectiveElements, 1),
         );
         assert!(
             matches!(
@@ -191,7 +176,5 @@ fn maximizing_occurrences_obey_the_original_objective_element_ceiling() {
 #[test]
 #[ignore = "requires clingo: fresh clingo confirms every recorded mixed direction contract; 242 bounded complete model/cost cases"]
 fn fresh_clingo_confirms_every_recorded_mixed_direction_contract() {
-    for case in cases() {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    source_cases::clingo_matches_every_case(&cases());
 }

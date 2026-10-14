@@ -4,6 +4,9 @@ use std::collections::BTreeMap;
 use super::{Decision, InvocationRecord};
 use crate::{answers, curated, selected::Limits};
 
+/// The comparison's verdict on `case`. Its [`Decision::Pass`] is the
+/// comparison's alone: `settled` completes it by settling the executable the
+/// native report names before the case is recorded.
 pub(super) fn case(
     case: &curated::Case,
     reference: &InvocationRecord,

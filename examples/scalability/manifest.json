@@ -77,6 +77,126 @@
         ]
       },
       "source_sha256": "808861994f9c2ffa16c61a0f37175ebe403dcf805c7c81fb6f07814713cfa627"
+    },
+    {
+      "path": "prime-sieve.lp",
+      "scaling_constant": "n",
+      "default_value": 30,
+      "contract": {
+        "family": "all",
+        "satisfiability": "sat",
+        "model_count": 1,
+        "cost": null,
+        "witnesses": [
+          [
+            "prime(11)",
+            "prime(13)",
+            "prime(17)",
+            "prime(19)",
+            "prime(2)",
+            "prime(23)",
+            "prime(29)",
+            "prime(3)",
+            "prime(5)",
+            "prime(7)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Declarative divisibility sieve with one answer set: n=30 -> 10 primes, n=100 -> 25, n=300 -> 62.",
+          "The default witness is the complete prime display; larger sizes exercise positive variable-divisor arithmetic joins."
+        ]
+      },
+      "source_sha256": "d81a15be490292c4a67bb0b437f82c3222f40dce950de1d6da5422f8514ba23b"
+    },
+    {
+      "path": "subset-sum.lp",
+      "scaling_constant": "n",
+      "default_value": 12,
+      "contract": {
+        "family": "all",
+        "satisfiability": "sat",
+        "model_count": 15,
+        "cost": null,
+        "witnesses": [
+          [
+            "selected(1)",
+            "selected(11)"
+          ],
+          [
+            "selected(1)",
+            "selected(2)",
+            "selected(3)",
+            "selected(6)"
+          ],
+          [
+            "selected(1)",
+            "selected(2)",
+            "selected(4)",
+            "selected(5)"
+          ],
+          [
+            "selected(1)",
+            "selected(2)",
+            "selected(9)"
+          ],
+          [
+            "selected(1)",
+            "selected(3)",
+            "selected(8)"
+          ],
+          [
+            "selected(1)",
+            "selected(4)",
+            "selected(7)"
+          ],
+          [
+            "selected(1)",
+            "selected(5)",
+            "selected(6)"
+          ],
+          [
+            "selected(10)",
+            "selected(2)"
+          ],
+          [
+            "selected(12)"
+          ],
+          [
+            "selected(2)",
+            "selected(3)",
+            "selected(7)"
+          ],
+          [
+            "selected(2)",
+            "selected(4)",
+            "selected(6)"
+          ],
+          [
+            "selected(3)",
+            "selected(4)",
+            "selected(5)"
+          ],
+          [
+            "selected(3)",
+            "selected(9)"
+          ],
+          [
+            "selected(4)",
+            "selected(8)"
+          ],
+          [
+            "selected(5)",
+            "selected(7)"
+          ]
+        ],
+        "required_symbols": [],
+        "notes": [
+          "Distinct positive weights 1..n summing to n: n=12 -> 15 answer sets, n=20 -> 64, n=30 -> 296.",
+          "All default selected subsets are recorded; maintained sizes bound output while retaining complete weighted-choice enumeration."
+        ]
+      },
+      "source_sha256": "4c8fcab13d969944470e85fdab221c2c9323bccd42b8b56dcb20a3afcb4f31dc"
     }
   ]
 }

@@ -1,18 +1,17 @@
 //! Explicitly true/empty conditions retain signed whole-rule expansion semantics.
 
 use std::collections::BTreeSet;
-use std::fs::{self};
 
-use crate::support::finite_bindings::{holds, remap, values};
-use crate::support::head_models::{clingo, complete, expected, limited, manual_holds, selected};
+use crate::support::finite_bindings::{holds, values};
+use crate::support::head_models::{self, complete, expected, limited, manual_holds, selected};
 use crate::support::objective_boundaries;
-use crate::support::thresholds::first_success;
 use serde_json::{Value as Json, json};
-use zetesis_reference_support::admit;
+use zetesis_reference_support::{BundleFixture, admit, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, InputLimit,
-    SourceBundle, admit_bundle_formula, admit_extended,
+    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
+    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, InputLimit,
+    admit_bundle_formula, admit_extended,
 };
 
 fn cases() -> Vec<Json> {
@@ -41,54 +40,7 @@ fn complete_models_match_explicit_families_and_recorded_reference_expectations()
 
 #[test]
 fn source_expansions_preserve_every_original_and_frozen_pair() {
-    let mut pairs = 0;
-    for case in cases() {
-        let source = admit(case["source"].as_str().unwrap(), &FormulaLimits::default()).unwrap();
-        let expanded = admit(
-            case["expanded"].as_str().unwrap(),
-            &FormulaLimits::default(),
-        )
-        .unwrap();
-        assert_eq!(
-            source.atoms().iter().collect::<BTreeSet<_>>(),
-            expanded.atoms().iter().collect::<BTreeSet<_>>(),
-            "{}: exact carrier",
-            case["name"]
-        );
-        assert!(source.atoms().len() <= 6);
-        for mask in 0..1_usize << source.atoms().len() {
-            let outer = values(source.theory(), mask, None);
-            let other = values(
-                expanded.theory(),
-                remap(mask, source.atoms(), expanded.atoms()),
-                None,
-            );
-            assert_eq!(
-                holds(source.theory(), &outer),
-                holds(expanded.theory(), &other)
-            );
-            for inner in 0..1_usize << source.atoms().len() {
-                assert_eq!(
-                    holds(
-                        source.theory(),
-                        &values(source.theory(), inner, Some(&outer))
-                    ),
-                    holds(
-                        expanded.theory(),
-                        &values(
-                            expanded.theory(),
-                            remap(inner, source.atoms(), expanded.atoms()),
-                            Some(&other)
-                        )
-                    ),
-                    "{}: M={mask}, J={inner}",
-                    case["name"]
-                );
-                pairs += 1;
-            }
-        }
-    }
-    assert!(pairs > 1_000);
+    head_models::expansions_preserve_every_original_and_frozen_pair(&cases());
 }
 // Every M-false subtree becomes falsum, including non-atomic implications.
 // This evaluates JSON trees directly, without a production DAG or compiler.
@@ -187,24 +139,19 @@ fn erased_conditions_do_not_bind_or_hide_unsafe_head_arguments() {
 #[test]
 fn condition_and_head_counts_have_inclusive_limits() {
     let source = "p:#true,#true;q:#true.";
-    let mut options = AdmissionOptions {
-        max_body_elements: 2,
-        ..AdmissionOptions::default()
-    };
     assert!(
         limited(
             source,
-            options,
+            resource_limits::admission(InputLimit::BodyElements, 2),
             ExpansionLimits::default(),
             &FormulaLimits::default()
         )
         .is_ok()
     );
-    options.max_body_elements = 1;
     assert!(matches!(
         limited(
             source,
-            options,
+            resource_limits::admission(InputLimit::BodyElements, 1),
             ExpansionLimits::default(),
             &FormulaLimits::default()
         ),
@@ -217,10 +164,7 @@ fn condition_and_head_counts_have_inclusive_limits() {
             }
         )))
     ));
-    let limits = FormulaLimits {
-        max_disjunction_elements: 2,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::DisjunctionElements, 2);
     assert!(
         limited(
             source,
@@ -235,10 +179,7 @@ fn condition_and_head_counts_have_inclusive_limits() {
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_disjunction_elements: 1,
-                ..limits
-            }
+            &resource_limits::formula(FormulaResource::DisjunctionElements, 1)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::DisjunctionElements,
@@ -252,22 +193,19 @@ fn condition_and_head_counts_have_inclusive_limits() {
 #[test]
 fn erased_conditions_do_not_consume_synthetic_variable_slots() {
     let source = "d(1).p(X+1):#true;q:#true:-d(X).";
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 2;
     assert!(
         limited(
             source,
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 2),
             ExpansionLimits::default(),
             &FormulaLimits::default()
         )
         .is_ok()
     );
-    options.core_limits.max_variables_per_template = 1;
     assert!(matches!(
         limited(
             source,
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 1),
             ExpansionLimits::default(),
             &FormulaLimits::default()
         ),
@@ -285,20 +223,16 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
     let source = "d(1).p(X+1):#true;q:#true:-d(X).";
     for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
         let attempt = |limit| {
-            let mut limits = FormulaLimits::default();
-            if resource == FormulaResource::Work {
-                limits.max_work = limit;
-            } else {
-                limits.max_substitutions = limit;
-            }
             limited(
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                &limits,
+                &resource_limits::formula(resource, limit),
             )
         };
-        let threshold = first_success(|limit| attempt(limit).is_ok());
+        let threshold = first_success(resource_limits::formula_default(resource), |limit| {
+            attempt(limit).is_ok()
+        });
         assert!(
             matches!(attempt(threshold-1), Err(FormulaFailure::Limit { resource: actual, observed, .. })
             if actual == resource && observed == u128::from(threshold))
@@ -312,40 +246,32 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
         limited(
             source,
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_term_work: usize::try_from(limit).unwrap(),
-                ..ExpansionLimits::default()
-            },
+            resource_limits::expansion(ExpansionResource::TermWork, limit),
             &FormulaLimits::default(),
         )
     };
-    let threshold = first_success(|limit| attempt(limit).is_ok());
-    assert!(matches!(
-        attempt(threshold - 1),
-        Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
-            resource: ExpansionResource::TermWork,
-            ..
-        }))
-    ));
+    let expected = complete(&admit(source, &FormulaLimits::default()).unwrap());
+    crate::support::thresholds::bounded_term_work(attempt, |actual| {
+        assert_eq!(complete(actual), expected);
+    });
     let admitted = admit(source, &FormulaLimits::default()).unwrap();
-    let mut limits = FormulaLimits::default();
-    limits.theory.max_nodes = admitted.theory().nodes().len();
+    let nodes = u64::try_from(admitted.theory().nodes().len()).unwrap();
+    let limits = |maximum| resource_limits::formula(FormulaResource::Nodes, maximum);
     assert!(
         limited(
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            &limits
+            &limits(nodes)
         )
         .is_ok()
     );
-    limits.theory.max_nodes -= 1;
     assert!(matches!(
         limited(
             source,
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            &limits
+            &limits(nodes - 1)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::Nodes,
@@ -356,16 +282,11 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
 
 #[test]
 fn duplicate_included_true_heads_retain_each_source_origin() {
-    let directory = tempfile::tempdir().unwrap();
+    let fixture = BundleFixture::new();
     let rule = "p(1..2):#true;q:#true.";
-    fs::write(
-        directory.path().join("entry.lp"),
-        format!("#include \"other.lp\".\n{rule}"),
-    )
-    .unwrap();
-    fs::write(directory.path().join("other.lp"), rule).unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    fixture.write("entry.lp", &format!("#include \"other.lp\".\n{rule}"));
+    fixture.write("other.lp", rule);
+    let bundle = fixture.bundle();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),
@@ -401,15 +322,5 @@ fn duplicate_included_true_heads_retain_each_source_origin() {
 #[test]
 #[ignore = "requires clingo: fresh clingo original and expanded sources match complete models; each original and expansion has a bounded complete capture"]
 fn fresh_clingo_original_and_expanded_sources_match_complete_models() {
-    for case in cases() {
-        let predicted = expected(&case["models"]);
-        for field in ["source", "expanded"] {
-            assert_eq!(
-                clingo(case[field].as_str().unwrap()),
-                predicted,
-                "{}: {field}",
-                case["name"]
-            );
-        }
-    }
+    head_models::clingo_matches_every_source_and_expansion(&cases());
 }

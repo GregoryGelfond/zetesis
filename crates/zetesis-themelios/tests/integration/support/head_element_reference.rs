@@ -10,6 +10,7 @@ use crate::support::finite_bindings as formula;
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
+use zetesis_clingo_support as oracle;
 use zetesis_reference_support::{canonical, formula};
 
 pub(crate) fn models(source: &str) -> formula::Models {
@@ -20,39 +21,15 @@ pub(crate) fn models(source: &str) -> formula::Models {
     result
 }
 
-pub(crate) fn expected(records: &[&[&str]]) -> formula::Models {
-    records
-        .iter()
-        .map(|record| record.iter().map(|name| (*name).to_owned()).collect())
-        .collect()
-}
+pub(crate) use formula::expected;
 
 pub(crate) fn external(source: &str) {
     let result = formula::external(source, true);
-    assert_eq!(result["Models"]["More"], "no");
-    let mut records = BTreeSet::new();
-    let mut count = 0;
-    for call in result["Call"].as_array().unwrap() {
-        for witness in call["Witnesses"].as_array().into_iter().flatten() {
-            let costs: Option<Vec<i64>> = witness["Costs"]
-                .as_array()
-                .map(|values| values.iter().map(|value| value.as_i64().unwrap()).collect());
-            assert!(
-                records.insert((
-                    witness["Value"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|value| value.as_str().unwrap().to_owned())
-                        .collect(),
-                    costs,
-                ))
-            );
-            count += 1;
-        }
-    }
-    assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-    assert_eq!(cost_records(source), records, "{source}");
+    assert_eq!(
+        cost_records(source),
+        oracle::model_records(&result),
+        "{source}"
+    );
 }
 
 pub(crate) fn cost_records(source: &str) -> BTreeSet<(BTreeSet<String>, Option<Vec<i64>>)> {
@@ -217,7 +194,7 @@ impl Selection {
             && permissions
     }
 
-    pub fn source(&self) -> String {
+    pub(crate) fn source(&self) -> String {
         let function = ["#min", "#max", "#count", "#sum", "#sum+", ""][usize::from(self.measure)];
         let mut source = format!("{{g;o}}.a:-g.c:-g.{}{function}{{", self.lower);
         for (index, &(value, key, head, condition)) in self.rows.iter().enumerate() {
@@ -249,7 +226,7 @@ impl Selection {
         source
     }
 
-    pub fn check_frozen(&self) {
+    pub(crate) fn check_frozen(&self) {
         let source = self.source();
         let admitted = formula(&source);
         let names: Vec<_> = admitted.atoms().iter().map(canonical).collect();

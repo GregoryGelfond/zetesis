@@ -1,4 +1,4 @@
-//! Shared finite source activity for objectives and projection declarations.
+//! Shared finite source activity for declarations and certified evaluation.
 //!
 //! Required/possible activity is a source grounding abstraction, not answer-set
 //! realization. Optional means retained as a grounding possibility; it does not
@@ -9,6 +9,9 @@
 //! Completed support and whole-producer refinement establish source coverage;
 //! the separate `model_query` module constructs original-model objective queries
 //! only after row eligibility. Its retained-node limit does not bound activity.
+//! A private strict dependency-order certificate permits an exact producer scan
+//! through the same activity operations. Only that complete class, followed by
+//! constraint and coherence checks, can establish an original answer.
 
 use std::collections::BTreeSet;
 
@@ -22,14 +25,17 @@ mod cyclic;
 mod possible;
 mod roots;
 mod authority;
+mod acyclic;
+pub(crate) use acyclic::{Exact, evaluate_acyclic};
 
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_binding::Binding;
+use crate::formula_facts::{FactBlock, Item};
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::formula_support::{
-    self, CompletedQueries, Computation, Counters, Join, SourceAtom, SourceSelection, StorageLease,
-    Support,
+    self, CompletedQueries, Computation, Counters, Ir, Join, SourceAtom, SourceSelection,
+    StorageLease, Support,
 };
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
@@ -72,13 +78,15 @@ impl Activity {
 }
 
 /// Finite source-atom truth coverage built from completed possible Support.
-/// Optional rows need not be simultaneously realizable. This certificate never
-/// determines answer-set membership or replaces original-model query truth.
+/// Optional rows need not be simultaneously realizable. Ordinary coverage does
+/// not determine membership or replace original-model query truth. The private
+/// acyclic evaluator uses the same cells under its stronger class certificate.
 pub(crate) struct SourceEligibility {
     atoms: SourceSelection,
     activity: Vec<Activity>,
     round: Option<authority::Round>,
     lease: StorageLease,
+    exact: bool,
 }
 
 pub(crate) struct Context<'a, 'terms, 'source> {
@@ -136,6 +144,21 @@ impl Context<'_, '_, '_> {
         Ok(actual == expected.name.as_str())
     }
 
+    /// Whether a fact block's predicate is `expected`, read once for its rows.
+    fn produces_facts(
+        &mut self,
+        block: FactBlock<'_>,
+        expected: &Signature,
+    ) -> Result<bool, FormulaFailure> {
+        let predicate = self.computation.static_predicate(
+            block.predicate(),
+            self.limits,
+            self.counters,
+            self.location,
+        )?;
+        self.matches_signature(predicate, expected)
+    }
+
     fn produces(&mut self, rule: &RuleIr, expected: &Signature) -> Result<bool, FormulaFailure> {
         match &rule.head {
             HeadIr::Normal(Some(head)) => self.pattern_matches(*head, expected),
@@ -176,7 +199,8 @@ impl Context<'_, '_, '_> {
 
     fn scalar(&mut self, literal: &LiteralIr, binding: &Binding) -> Result<bool, FormulaFailure> {
         match literal {
-            LiteralIr::Compare(left, relation, right) => {
+            LiteralIr::Compare(comparison) => {
+                let ([left, right], relation) = comparison.operands();
                 let left = formula_support::expression(
                     left,
                     binding,
@@ -210,7 +234,7 @@ impl Context<'_, '_, '_> {
                 })?;
                 formula_support::compare(
                     left,
-                    *relation,
+                    relation,
                     right,
                     self.limits,
                     self.counters,
@@ -285,12 +309,12 @@ impl Context<'_, '_, '_> {
 impl SourceEligibility {
     /// Discover all scoped atom dependencies and complete their shared activity.
     /// This never adds the observing conditions to logical producers.
-    pub(crate) fn build_from_conditions<'a>(
-        prepared: &Prepared,
-        completed_support: &CompletedQueries<'_>,
+    pub(crate) fn build_from_conditions<'a, 'source>(
+        prepared: &'source Prepared,
+        completed_support: &CompletedQueries<'source>,
         retained: usize,
         conditions: impl IntoIterator<Item = &'a [LiteralIr]>,
-        context: &mut Context<'_, '_, '_>,
+        context: &mut Context<'_, '_, 'source>,
     ) -> Result<Self, FormulaFailure> {
         let support = completed_support.support();
         let graph = prepared.analysis.dependencies();
@@ -327,13 +351,13 @@ impl SourceEligibility {
         Ok(result)
     }
 
-    fn predicate(
+    fn predicate<'source>(
         &mut self,
-        prepared: &Prepared,
+        prepared: &'source Prepared,
         predicate: &Signature,
-        support: &Support<'_>,
+        support: &Support<'source>,
         temporary: usize,
-        context: &mut Context<'_, '_, '_>,
+        context: &mut Context<'_, '_, 'source>,
     ) -> Result<(), FormulaFailure> {
         self.round = Some(authority::Round::new(context));
         let result = self
@@ -349,16 +373,17 @@ impl SourceEligibility {
         result
     }
 
-    fn derive_predicate(
+    fn derive_predicate<'source>(
         &mut self,
-        prepared: &Prepared,
+        prepared: &'source Prepared,
         predicate: &Signature,
-        support: &Support<'_>,
+        support: &Support<'source>,
         temporary: usize,
-        context: &mut Context<'_, '_, '_>,
+        context: &mut Context<'_, '_, 'source>,
     ) -> Result<(), FormulaFailure> {
+        // A fact block is a precise producer: a normal head over an empty body.
         let mut precise = true;
-        for rule in &prepared.rules {
+        for rule in prepared.rules_without_facts() {
             context.work()?;
             if !context.produces(rule, predicate)? {
                 continue;
@@ -373,12 +398,23 @@ impl SourceEligibility {
             };
         }
         if precise {
-            for rule in &prepared.rules {
+            for item in prepared.items().iter() {
                 context.work()?;
-                if !context.produces(rule, predicate)? {
-                    continue;
+                match item {
+                    Item::Rule(_, rule) => {
+                        if !context.produces(rule, predicate)? {
+                            continue;
+                        }
+                        self.rule(rule, predicate, support, temporary, context)?;
+                    }
+                    Item::Facts(block) => {
+                        context.location = block.location();
+                        if !context.produces_facts(block, predicate)? {
+                            continue;
+                        }
+                        self.facts(block, temporary, context)?;
+                    }
                 }
-                self.rule(rule, predicate, support, temporary, context)?;
             }
         } else {
             // Unsupported head classification retains completed Support as an
@@ -395,17 +431,17 @@ impl SourceEligibility {
         Ok(())
     }
 
-    fn rule(
+    fn rule<'source>(
         &mut self,
-        rule: &RuleIr,
+        rule: &'source RuleIr,
         predicate: &Signature,
-        support: &Support<'_>,
+        support: &Support<'source>,
         temporary: usize,
-        context: &mut Context<'_, '_, '_>,
+        context: &mut Context<'_, '_, 'source>,
     ) -> Result<(), FormulaFailure> {
         context.location = rule.location;
         let mut outer = Join::rule(
-            rule,
+            Ir::Source(rule),
             support,
             context.computation,
             context.limits,
@@ -455,7 +491,7 @@ impl SourceEligibility {
                             continue;
                         }
                         let mut local = Join::element(
-                            element,
+                            Ir::Source(element),
                             &binding,
                             support,
                             context.budget,
@@ -495,6 +531,30 @@ impl SourceEligibility {
         Ok(())
     }
 
+    /// Retain each fact row with activity `Required`, which is what [`Self::rule`]
+    /// retains for a fact rule's one empty binding: the producer activity of an
+    /// empty body.
+    fn facts(
+        &mut self,
+        block: FactBlock<'_>,
+        temporary: usize,
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<(), FormulaFailure> {
+        let mut head = crate::formula_support::facts::FactHead::new(
+            block,
+            context.computation,
+            context.limits,
+            context.counters,
+            context.location,
+        )?;
+        for row in block.rows() {
+            context.location = row.location();
+            let atom = head.atom(row, context.computation, context.limits, context.counters)?;
+            self.stage(&atom, Activity::Required, temporary, context)?;
+        }
+        Ok(())
+    }
+
     fn retain(
         &mut self,
         pattern: AtomPattern,
@@ -506,18 +566,18 @@ impl SourceEligibility {
         // Validate the complete assigned atom even when its producer is absent.
         // Identity admission changes neither activity nor support membership.
         let atom = context.atom(pattern, binding)?;
-        if activity == Activity::Absent {
+        if activity == Activity::Absent && !self.exact {
             return Ok(());
         }
         self.stage(&atom, activity, temporary, context)
     }
 
-    fn producer_activity(
+    fn producer_activity<'source>(
         &self,
         literals: &[LiteralIr],
         binding: &Binding,
-        support: &Support<'_>,
-        context: &mut Context<'_, '_, '_>,
+        support: &Support<'source>,
+        context: &mut Context<'_, '_, 'source>,
     ) -> Result<Activity, FormulaFailure> {
         if ordinary(literals) {
             self.activity(literals, binding, context)
@@ -532,6 +592,16 @@ impl SourceEligibility {
         &self,
         literals: &[LiteralIr],
         binding: &Binding,
+        context: &mut Context<'_, '_, '_>,
+    ) -> Result<Activity, FormulaFailure> {
+        self.fold_activity(literals, binding, false, context)
+    }
+
+    fn fold_activity(
+        &self,
+        literals: &[LiteralIr],
+        binding: &Binding,
+        selected: bool,
         context: &mut Context<'_, '_, '_>,
     ) -> Result<Activity, FormulaFailure> {
         let mut result = Activity::Required;
@@ -552,6 +622,7 @@ impl SourceEligibility {
                 LiteralIr::PatternAtom(pattern) => {
                     self.pattern_activity(pattern.atom, binding, context)?
                 }
+                LiteralIr::Compare(..) if selected => Activity::Required,
                 // The complete Join already checked these ordinary data filters.
                 LiteralIr::ArgumentCheck { .. } | LiteralIr::TupleCompare(..) => Activity::Required,
                 _ => {

@@ -66,21 +66,43 @@ impl Cache {
                 * size_of::<ClosureWorkspace>() as u128
     }
 
+    /// Every cached workspace belongs to this exact prepared Program. Its
+    /// closed fact allocations are retained once here; each workspace's own
+    /// ledger still includes the full base for its independent ceiling.
+    fn shared_facts(&self) -> u128 {
+        self.prepared
+            .as_ref()
+            .and_then(|prepared| prepared.program().fact_catalog())
+            .map_or(0, |base| {
+                base.storage_bytes()
+                    - size_of::<zetesis_core::atom_interner::ClosedCatalog>() as u128
+                    - self
+                        .prepared
+                        .as_ref()
+                        .expect("closed fact base has preparation")
+                        .program()
+                        .shared_vocabulary_bytes()
+            })
+    }
+
     fn retained(&self) -> Result<u128, BatchError> {
         if self.prepared.is_none() && self.workspaces.capacity() == 0 {
             return Ok(0);
         }
-        self.workspaces
-            .iter()
-            .try_fold(self.overhead(), |bytes, workspace| {
-                bytes
-                    .checked_add(
-                        workspace
-                            .retained_bytes()
-                            .map_err(BatchError::Preparation)?,
-                    )
-                    .ok_or(BatchError::Preparation(Stop::StorageLimit))
-            })
+        let base = self
+            .overhead()
+            .checked_add(self.shared_facts())
+            .ok_or(BatchError::Preparation(Stop::StorageLimit))?;
+        self.workspaces.iter().try_fold(base, |bytes, workspace| {
+            let owned = workspace
+                .retained_bytes()
+                .map_err(BatchError::Preparation)?
+                .checked_sub(workspace.shared_fact_bytes())
+                .ok_or(BatchError::Preparation(Stop::StorageLimit))?;
+            bytes
+                .checked_add(owned)
+                .ok_or(BatchError::Preparation(Stop::StorageLimit))
+        })
     }
 
     pub(super) fn admit(
@@ -95,16 +117,21 @@ impl Cache {
                 .prepared
                 .as_ref()
                 .map_or(0, |prepared| prepared.statistics().retained_bytes);
-            let Some(candidate) = limit.max_closure_bytes.checked_sub(shared) else {
+            let Some(candidate) = (limit.max_closure_bytes as u128)
+                .checked_sub(shared as u128)
+                .and_then(|bytes| bytes.checked_sub(self.shared_facts()))
+            else {
                 self.retire();
                 return Err(BatchError::Preparation(Stop::StorageLimit));
             };
             for workspace in self.workspaces.iter().take(active) {
                 let retained = workspace
                     .retained_bytes()
-                    .map_err(BatchError::Preparation)?;
+                    .map_err(BatchError::Preparation)?
+                    .checked_sub(workspace.shared_fact_bytes())
+                    .ok_or(BatchError::Preparation(Stop::StorageLimit))?;
                 required = required
-                    .checked_add((candidate as u128).saturating_sub(retained))
+                    .checked_add(candidate.saturating_sub(retained))
                     .ok_or(BatchError::Preparation(Stop::StorageLimit))?;
             }
         }
@@ -321,3 +348,6 @@ impl Execution<'_> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod fact_tests;

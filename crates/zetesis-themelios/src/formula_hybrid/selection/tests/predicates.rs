@@ -5,7 +5,7 @@ use crate::formula_support::Context;
 use crate::formula_support::testing::budget;
 
 fn prepared_owner() -> HybridFormula {
-    owner_of(include_str!(
+    hybrid(include_str!(
         "../../../../tests/fixtures/hybrid-constraints/prepared-predicates.lp"
     ))
 }

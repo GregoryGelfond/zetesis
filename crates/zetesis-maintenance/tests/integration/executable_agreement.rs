@@ -54,6 +54,125 @@ fn the_installer_the_guide_and_the_packages_agree() {
     .unwrap();
 }
 
+/// The documents that state where the default install keeps its sibling.
+const LAYOUT_DOCUMENTS: [&str; 3] = [
+    "INSTALL.md",
+    "README.md",
+    "docs/book/architecture/execution.md",
+];
+
+/// Check the layout with `installer` and `front` against the documents, with
+/// `document` replacing the one at its path.
+fn layout(installer: &str, front: &str, document: Option<(&str, &str)>) -> Result<(), String> {
+    let texts: Vec<(&str, String)> = LAYOUT_DOCUMENTS
+        .iter()
+        .map(|&path| match document {
+            Some((replaced, text)) if replaced == path => (path, text.to_owned()),
+            _ => (path, read(path)),
+        })
+        .collect();
+    let documents: Vec<(&str, &str)> = texts
+        .iter()
+        .map(|(path, text)| (*path, text.as_str()))
+        .collect();
+    install::check_sibling_directory(installer, front, &documents)
+        .map_err(|error| error.to_string())
+}
+
+#[test]
+fn the_installer_places_the_sibling_where_the_front_looks() {
+    layout(
+        &read("scripts/install.sh"),
+        &read("crates/zetesis-cli/src/sibling.rs"),
+        None,
+    )
+    .unwrap();
+}
+
+#[test]
+fn a_sibling_directory_the_front_does_not_look_in_is_refused() {
+    let installer = altered(
+        &read("scripts/install.sh"),
+        "libexec='zetesis-libexec'",
+        "libexec='zetesis-helpers'",
+    );
+    let refusal = layout(&installer, &read("crates/zetesis-cli/src/sibling.rs"), None).unwrap_err();
+    assert!(refusal.contains("but the front looks in"), "{refusal}");
+}
+
+#[test]
+fn a_front_looking_in_another_directory_is_refused() {
+    let front = altered(
+        &read("crates/zetesis-cli/src/sibling.rs"),
+        "const LIBEXEC: &str = \"zetesis-libexec\";",
+        "const LIBEXEC: &str = \"zetesis-helpers\";",
+    );
+    let refusal = layout(&read("scripts/install.sh"), &front, None).unwrap_err();
+    assert!(refusal.contains("but the front looks in"), "{refusal}");
+}
+
+#[test]
+fn a_layout_document_that_does_not_name_the_directory_is_refused() {
+    for path in LAYOUT_DOCUMENTS {
+        let document = read(path).replace("`zetesis-libexec", "`zetesis-helpers");
+        let refusal = layout(
+            &read("scripts/install.sh"),
+            &read("crates/zetesis-cli/src/sibling.rs"),
+            Some((path, &document)),
+        )
+        .unwrap_err();
+        assert!(
+            refusal.contains(&format!("{path} does not name")),
+            "{refusal}"
+        );
+    }
+}
+
+/// The packages the CLI's front profile resolves to, as `cargo tree` reports
+/// its normal dependencies, for the installer's selection and features.
+fn front_packages() -> Vec<String> {
+    let output = Command::new(env!("CARGO"))
+        .args([
+            "tree",
+            "--edges",
+            "normal",
+            "--package",
+            "zetesis-cli",
+            "--no-default-features",
+            "--features",
+            "front",
+            "--prefix",
+            "none",
+            "--offline",
+        ])
+        .arg("--manifest-path")
+        .arg(repository().join("Cargo.toml"))
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout)
+        .unwrap()
+        .lines()
+        .filter_map(|line| line.split_whitespace().next())
+        .map(str::to_owned)
+        .collect()
+}
+
+#[test]
+fn the_front_profile_builds_without_the_gpu_stack() {
+    // The front exists so that CPU runs start without the GPU stack; a feature
+    // that brought it back would give up that start without failing a build.
+    let packages = front_packages();
+    assert!(packages.iter().any(|name| name == "zetesis-cli"));
+    for gpu in ["zetesis-wgpu", "wgpu"] {
+        assert!(!packages.iter().any(|name| name == gpu), "{gpu}");
+    }
+}
+
 #[test]
 fn a_tool_the_guide_does_not_describe_is_refused() {
     let guide = altered(

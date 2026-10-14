@@ -35,7 +35,9 @@ pub(crate) struct Owners {
 
 /// Record the analyzed family just emitted by one original statement. Every
 /// original is recorded once; a repeated count of one must not be used to hide
-/// multiple emissions from the same source compilation.
+/// multiple emissions from the same source compilation. The owners grow
+/// geometrically, so recording a program's statements one by one reallocates
+/// them a logarithmic number of times.
 pub(crate) fn record(
     owners: &mut Vec<Option<StatementId>>,
     owner: StatementId,
@@ -43,7 +45,7 @@ pub(crate) fn record(
     budget: &mut Budget,
     site: ProgramSite,
 ) -> Result<(), FormulaFailure> {
-    crate::formula_pattern::reserve(owners, count, budget, site)?;
+    crate::formula_pattern::reserve_amortized(owners, count, budget, site)?;
     let identity = (count == 1).then_some(owner);
     owners.extend(std::iter::repeat_n(identity, count));
     Ok(())
@@ -53,43 +55,83 @@ impl Owners {
     /// Collect these already-canonical carriers and their parallel ownership
     /// vector together, so the sidecar cannot be paired with another collection.
     /// Two equal carriers clear ownership even if their original ID agrees.
+    pub(crate) fn collect_summary(
+        statements: Vec<WithProvenance<Statement>>,
+        owners: Vec<Option<StatementId>>,
+        representatives: Vec<WithProvenance<Statement>>,
+        sources: Vec<StatementId>,
+        budget: &mut Budget,
+        site: ProgramSite,
+    ) -> Result<(Program, Self, Vec<Option<StatementId>>), FormulaFailure> {
+        assert_eq!(
+            statements.len(),
+            owners.len(),
+            "every analyzed carrier has an owner slot"
+        );
+        assert_eq!(
+            statements.len(),
+            sources.len(),
+            "source identity for every non-fact emission"
+        );
+        let mut content = BTreeMap::new();
+        for ((statement, owner), source) in statements.iter().zip(&owners).zip(sources) {
+            budget.charge(ExpansionResource::TermWork, 1, site)?;
+            // Named key/value payload; BTreeMap allocator overhead is outside
+            // the expansion allowance, as for the neighboring compiler maps.
+            budget.charge(
+                ExpansionResource::ScalarBytes,
+                size_of::<(&Statement, (Option<StatementId>, Option<StatementId>))>() as u128,
+                site,
+            )?;
+            content
+                .entry(statement.get())
+                .and_modify(|entry: &mut (Option<StatementId>, Option<StatementId>)| {
+                    entry.0 = None;
+                    entry.1 = Some(source);
+                })
+                .or_insert((*owner, Some(source)));
+        }
+        for statement in &representatives {
+            budget.charge(ExpansionResource::TermWork, 1, site)?;
+            budget.charge(
+                ExpansionResource::ScalarBytes,
+                size_of::<(&Statement, (Option<StatementId>, Option<StatementId>))>() as u128,
+                site,
+            )?;
+            content
+                .entry(statement.get())
+                .and_modify(|entry| entry.0 = None)
+                .or_insert((None, None));
+        }
+        let mut entries = Vec::new();
+        crate::formula_pattern::reserve(&mut entries, content.len(), budget, site)?;
+        let mut nonfacts = Vec::new();
+        crate::formula_pattern::reserve(&mut nonfacts, content.len(), budget, site)?;
+        for (owner, nonfact) in content.into_values() {
+            entries.push(owner);
+            nonfacts.push(nonfact);
+        }
+        drop(owners);
+        // A representative must never replace a real carrier's nested evidence.
+        let program = Program::of_nodes(representatives.into_iter().chain(statements));
+        assert_eq!(
+            program.statements().count(),
+            entries.len(),
+            "canonical analyzed collection preserves sidecar positions",
+        );
+        Ok((program, Self { entries }, nonfacts))
+    }
+
+    #[cfg(test)]
     pub(crate) fn collect(
         statements: Vec<WithProvenance<Statement>>,
         owners: Vec<Option<StatementId>>,
         budget: &mut Budget,
         site: ProgramSite,
     ) -> Result<(Program, Self), FormulaFailure> {
-        assert_eq!(
-            statements.len(),
-            owners.len(),
-            "every analyzed carrier has an owner slot"
-        );
-        let mut content = BTreeMap::new();
-        for (statement, owner) in statements.iter().zip(&owners) {
-            budget.charge(ExpansionResource::TermWork, 1, site)?;
-            // Named key/value payload; BTreeMap allocator overhead is outside
-            // the expansion allowance, as for the neighboring compiler maps.
-            budget.charge(
-                ExpansionResource::ScalarBytes,
-                size_of::<(&Statement, Option<StatementId>)>() as u128,
-                site,
-            )?;
-            content
-                .entry(statement.get())
-                .and_modify(|owner| *owner = None)
-                .or_insert(*owner);
-        }
-        let mut entries = Vec::new();
-        crate::formula_pattern::reserve(&mut entries, content.len(), budget, site)?;
-        entries.extend(content.into_values());
-        drop(owners);
-        let program = Program::of_nodes(statements);
-        assert_eq!(
-            program.statements().count(),
-            entries.len(),
-            "canonical analyzed collection preserves sidecar positions",
-        );
-        Ok((program, Self { entries }))
+        let sources = (0..statements.len()).map(StatementId::new).collect();
+        Self::collect_summary(statements, owners, Vec::new(), sources, budget, site)
+            .map(|(program, owners, _)| (program, owners))
     }
 
     /// An owner may be asked only for this canonical analyzed position.
@@ -160,6 +202,43 @@ mod tests {
                 assert_eq!(owners.at(index), None);
             }
         }
+    }
+
+    /// Record `statements` one-statement families, returning the owners, the
+    /// number of reallocations and the budget charged.
+    fn record_one_by_one(statements: usize) -> (Vec<Option<StatementId>>, usize, Budget) {
+        let site = ProgramSite::program();
+        let mut budget = Budget::new(ExpansionLimits::default(), 100);
+        let mut owners = Vec::new();
+        let mut reallocations = 0;
+        for index in 1..=statements {
+            let capacity = owners.capacity();
+            record(&mut owners, StatementId::new(index), 1, &mut budget, site).unwrap();
+            reallocations += usize::from(owners.capacity() != capacity);
+        }
+        (owners, reallocations, budget)
+    }
+
+    #[test]
+    fn recording_reallocates_owners_logarithmically() {
+        // One exact reservation per statement would reallocate, and copy, the
+        // owners once for every statement recorded.
+        let statements = 1024_usize;
+        let (_, reallocations, _) = record_one_by_one(statements);
+        assert!(
+            reallocations <= 1 + statements.ilog2() as usize,
+            "{reallocations} reallocations for {statements} statements",
+        );
+    }
+
+    #[test]
+    fn every_reserved_owner_slot_is_charged() {
+        let (owners, _, budget) = record_one_by_one(100);
+        assert!(owners.capacity() > owners.len());
+        assert_eq!(
+            budget.usage().scalar_bytes,
+            owners.capacity() * size_of::<Option<StatementId>>(),
+        );
     }
 
     fn compiled(text: &str, max_key_work: u64) -> crate::AdmittedFormula {

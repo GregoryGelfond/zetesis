@@ -7,64 +7,75 @@
 
 use std::mem::size_of;
 
-use zetesis_core::{Program, TemplateTerm};
+use zetesis_core::{DomainPositions, PatternRef, Program, RuleRef, TemplateTerm};
 
 use super::{Layouts, Stop, Work, reserve};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Coordinate {
     slot: usize,
     position: usize,
 }
 
-/// One optional coordinate per template. Nonground or tree heads keep the
+/// One optional coordinate per template and per original table-fact occurrence. Nonground or tree heads keep the
 /// ordinary key-to-position operation. Retained storage is linear in source
 /// templates; ranking work is the sum of the ground arguments' bound lookups.
 #[derive(Default)]
-pub(in crate::oracle) struct Heads(Vec<Option<Coordinate>>);
+pub(in crate::oracle) struct Heads {
+    templates: Vec<Option<Coordinate>>,
+    facts: Vec<Option<Coordinate>>,
+}
 
 impl Heads {
+    /// Rank each ground head on its predicate's dense layout, by identity when
+    /// preparation holds the domain position table. `base` is the live
+    /// storage already admitted, the table's included while it is read.
     pub(super) fn prepare(
         program: &Program,
         layouts: &Layouts,
+        positions: Option<&DomainPositions<'_>>,
         base: u128,
         work: &mut Work<'_>,
     ) -> Result<Self, Stop> {
-        let mut coordinates = Vec::new();
+        let mut result = Self::default();
         let mut live = base;
-        reserve(&mut coordinates, program.templates().len(), &mut live, work)?;
-        for template in program.templates() {
+        reserve(
+            &mut result.templates,
+            program.templates().len(),
+            &mut live,
+            work,
+        )?;
+        reserve(&mut result.facts, program.facts().len(), &mut live, work)?;
+        for rule in program.rules() {
             work.tick()?;
-            let coordinate = if let Some(head) = template.head() {
-                work.charge(head.terms().len())?;
-                match layouts.slot(head.predicate()) {
-                    Some(slot)
-                        if head
-                            .terms()
-                            .iter()
-                            .all(|term| matches!(term, TemplateTerm::Constant(_))) =>
-                    {
-                        let layout = layouts.get(head.predicate()).ok_or(Stop::InvalidProgram)?;
-                        let values = head.terms().iter().filter_map(|term| match term {
-                            TemplateTerm::Constant(value) => Some(value),
-                            TemplateTerm::Variable(_) => None,
-                        });
-                        layout
-                            .position_of(values, work)?
-                            .map(|position| Coordinate { slot, position })
-                    }
-                    _ => None,
+            match rule {
+                RuleRef::Template { template, .. } => {
+                    result
+                        .templates
+                        .push(coordinate(template.head(), layouts, positions, work)?);
                 }
-            } else {
-                None
-            };
-            coordinates.push(coordinate);
+                RuleRef::Fact(fact) => {
+                    result
+                        .facts
+                        .push(coordinate(Some(fact.pattern()), layouts, positions, work)?);
+                }
+            }
         }
-        Ok(Self(coordinates))
+        Ok(result)
     }
 
     pub(super) fn bytes(&self) -> u128 {
-        self.0.capacity() as u128 * size_of::<Option<Coordinate>>() as u128
+        (self.templates.capacity() + self.facts.capacity()) as u128
+            * size_of::<Option<Coordinate>>() as u128
+    }
+
+    /// Each template's coordinate as its slot and position, for comparison.
+    #[cfg(test)]
+    pub(super) fn coordinates(&self) -> Vec<Option<(usize, usize)>> {
+        self.templates
+            .iter()
+            .map(|coordinate| coordinate.map(|Coordinate { slot, position }| (slot, position)))
+            .collect()
     }
 
     /// A prepared position belongs only to the template's own dense slot.
@@ -75,17 +86,65 @@ impl Heads {
         template: usize,
         slot: usize,
     ) -> Result<Option<usize>, Stop> {
-        self.0
-            .get(template)
-            .copied()
-            .flatten()
-            .map(|coordinate| {
-                if coordinate.slot == slot {
-                    Ok(coordinate.position)
-                } else {
-                    Err(Stop::InvalidProgram)
-                }
-            })
-            .transpose()
+        position(&self.templates, template, slot)
     }
+
+    pub(in crate::oracle) fn fact_position(
+        &self,
+        fact: usize,
+        slot: usize,
+    ) -> Result<Option<usize>, Stop> {
+        position(&self.facts, fact, slot)
+    }
+}
+
+fn position(
+    coordinates: &[Option<Coordinate>],
+    index: usize,
+    slot: usize,
+) -> Result<Option<usize>, Stop> {
+    coordinates
+        .get(index)
+        .copied()
+        .flatten()
+        .map(|coordinate| {
+            if coordinate.slot == slot {
+                Ok(coordinate.position)
+            } else {
+                Err(Stop::InvalidProgram)
+            }
+        })
+        .transpose()
+}
+
+fn coordinate(
+    head: Option<PatternRef<'_>>,
+    layouts: &Layouts,
+    positions: Option<&DomainPositions<'_>>,
+    work: &mut Work<'_>,
+) -> Result<Option<Coordinate>, Stop> {
+    let Some(head) = head else {
+        return Ok(None);
+    };
+    work.charge(head.terms().len())?;
+    let Some(slot) = layouts.slot(head.predicate()) else {
+        return Ok(None);
+    };
+    if !head
+        .terms()
+        .iter()
+        .all(|term| matches!(term, TemplateTerm::Constant(_)))
+    {
+        return Ok(None);
+    }
+    let layout = layouts.get(head.predicate()).ok_or(Stop::InvalidProgram)?;
+    let values = head.terms().iter().filter_map(|term| match term {
+        TemplateTerm::Constant(value) => Some(value),
+        TemplateTerm::Variable(_) => None,
+    });
+    let position = match positions {
+        Some(positions) => layout.position_by_identity(values, positions, work)?,
+        None => layout.position_of(values, work)?,
+    };
+    Ok(position.map(|position| Coordinate { slot, position }))
 }

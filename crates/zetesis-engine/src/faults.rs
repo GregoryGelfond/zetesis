@@ -211,6 +211,7 @@ fn sat_class(error: zetesis_sat::Incomplete) -> Class {
         | E::PendingBytes
         | E::CompletionScratch
         | E::ReductStorage { .. }
+        | E::NativeNarrowingStorage { .. }
         | E::BatchCandidateLimit
         | E::Allocation
         | E::ProjectionLimit { .. }
@@ -290,31 +291,18 @@ fn static_class(error: &zetesis_core::StaticError) -> Class {
 }
 
 fn model_class(error: &zetesis_core::ModelError) -> Class {
-    match error {
-        zetesis_core::ModelError::Bytes { .. } | zetesis_core::ModelError::Allocation => {
-            Class::Resource
-        }
-        zetesis_core::ModelError::Catalog(error) => catalog_class(error),
-        zetesis_core::ModelError::Order { .. } | zetesis_core::ModelError::Position { .. } => {
-            Class::Engine
-        }
+    if error.is_resource_refusal() {
+        Class::Resource
+    } else {
+        Class::Engine
     }
 }
 
 fn catalog_class(error: &zetesis_core::catalog::Error) -> Class {
-    use zetesis_core::{ValueError, catalog::Error};
-    match error {
-        Error::Value(ValueError::Limit { .. } | ValueError::Allocation)
-        | Error::Allocation
-        | Error::Storage { .. }
-        | Error::IdExhausted
-        | Error::Overflow => Class::Resource,
-        Error::Value(ValueError::Shape)
-        | Error::Shape
-        | Error::FrozenVocabulary
-        | Error::VocabularyHasAtoms
-        | Error::UnindexedVocabulary
-        | Error::CatalogHasBase => Class::Engine,
+    if error.is_resource_refusal() {
+        Class::Resource
+    } else {
+        Class::Engine
     }
 }
 
@@ -423,7 +411,7 @@ fn expansion_class(error: &zetesis_themelios::ExpansionFailure) -> Class {
     use zetesis_themelios::ExpansionFailure as E;
     match error {
         E::Interrupted { reason, .. } => stop_class(*reason),
-        E::Limit { .. } => Class::Resource,
+        E::Limit { .. } | E::Allocation { .. } => Class::Resource,
         E::Admission(error) => admission_class(error),
         E::DuplicateConstant { .. }
         | E::ConstantPolicy { .. }
@@ -456,7 +444,8 @@ fn construction_class(error: &zetesis_core::ConstructionError) -> Class {
 fn core_admission_class(error: &zetesis_core::AdmissionError) -> Class {
     match error {
         zetesis_core::AdmissionError::Canonical { error, .. } => catalog_class(error),
-        zetesis_core::AdmissionError::LimitExceeded { .. } => Class::Resource,
+        zetesis_core::AdmissionError::LimitExceeded { .. }
+        | zetesis_core::AdmissionError::FactLimitExceeded { .. } => Class::Resource,
         zetesis_core::AdmissionError::UnsafeVariable { .. } => Class::Program,
         zetesis_core::AdmissionError::NonDenseVariable { .. } => Class::Engine,
     }
@@ -489,6 +478,10 @@ fn theory_class(error: zetesis_ferraris::AdmissionError) -> Class {
         | zetesis_ferraris::AdmissionError::Root
         | zetesis_ferraris::AdmissionError::Arity
         | zetesis_ferraris::AdmissionError::Span
+        | zetesis_ferraris::AdmissionError::NumericShape
+        | zetesis_ferraris::AdmissionError::NumericDomain
+        | zetesis_ferraris::AdmissionError::OrdinalRank
+        | zetesis_ferraris::AdmissionError::OrdinalCut
         | zetesis_ferraris::AdmissionError::ThresholdShape
         | zetesis_ferraris::AdmissionError::ThresholdMeasure => Class::Engine,
     }

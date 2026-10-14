@@ -268,6 +268,26 @@ fn exhaustive_parity(control: &Cancellation) {
     }
 }
 
+fn assert_native_work(theory: &Theory, row: &Row, original: &[(bool, u64); WORLDS]) {
+    // One admitted row, regardless of guard count. Keep
+    // Boolean prefix operands (including the compiler's
+    // truth constant); root checks stop at failure.
+    let row_length = theory.parts().rows()[0].length;
+    let boolean_reads =
+        theory.parts().occurrences() - row_length * theory.parts().thresholds().len();
+    for (index, (_, work)) in original.iter().enumerate() {
+        let sum = row.sum(|atom| pattern(index, atom));
+        let roots = row
+            .guards
+            .iter()
+            .position(|guard| sum < i128::from(guard.bound))
+            .map_or(row.guards.len(), |n| n + 1);
+        let expected =
+            theory.nodes().len() + boolean_reads + row_length + roots + 1 + usize::from(index == 0);
+        assert_eq!(*work, u64::try_from(expected).unwrap());
+    }
+}
+
 pub(super) fn bench(criterion: &mut Criterion) {
     propagation_probe::run();
     eprintln!(
@@ -307,6 +327,9 @@ pub(super) fn bench(criterion: &mut Criterion) {
                     });
                     let original = original_batch(&mut workspace, &worlds, &control);
                     assert_eq!(original.map(|(truth, _)| truth), expected_original);
+                    if matches!(representation, Representation::Native) {
+                        assert_native_work(&theory, &row, &original);
+                    }
                     let frozen = freeze_batch(&worlds, &control);
                     let expected_frozen: [bool; PAIRS] = std::array::from_fn(|pair| {
                         let m = pair / WORLDS;

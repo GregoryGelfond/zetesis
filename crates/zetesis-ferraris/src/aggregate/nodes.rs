@@ -5,7 +5,8 @@ use super::lower::Destination;
 use super::{
     AggregateBuild, AggregateComparison, AggregateElement, AggregateError, AggregateExtremum,
     AggregateFamilyBuild, AggregateFamilyLimits, AggregateGuard, AggregateLimits, ExtremumBound,
-    ValueExtremumElement, extremum, family, lower, value_extremum,
+    ValueExtremumElement, ValueExtremumFamilyAttempt, ValueExtremumGuard, extremum, family, lower,
+    value_extremum,
 };
 use crate::{AdmissionLimits, FormulaParts, FormulaTransaction, FormulaView, TheoryAdmission};
 
@@ -141,6 +142,28 @@ impl FormulaNodes {
         Ok(build)
     }
 
+    /// Compile a typed guard family with shared preparation and exact witnesses.
+    ///
+    /// # Errors
+    /// Preserves the family compiler's typed failure and cumulative work receipt.
+    pub fn append_value_extremum_family_refs(
+        &mut self,
+        elements: &[ValueExtremumElement<TermRef<'_>>],
+        extremum: AggregateExtremum,
+        guards: &[ValueExtremumGuard<TermRef<'_>>],
+        limits: AggregateFamilyLimits,
+        cancellation: &Cancellation,
+    ) -> ValueExtremumFamilyAttempt {
+        value_extremum::append_value_extremum_family_refs(
+            self,
+            elements,
+            extremum,
+            guards,
+            limits,
+            cancellation,
+        )
+    }
+
     /// Compile one numeric extremum and commit both buffers only on success.
     ///
     /// # Errors
@@ -258,6 +281,28 @@ impl FormulaTransaction<'_> {
         cancellation: &Cancellation,
     ) -> Result<AggregateFamilyBuild, AggregateError> {
         family::append(self.destination(), elements, guards, limits, cancellation)
+    }
+
+    /// Append [`super::append_value_extremum_family_refs`] under this owner.
+    ///
+    /// # Errors
+    /// Preserves all family limits, rollback and cumulative work accounting.
+    pub fn append_value_extremum_family_refs(
+        &mut self,
+        elements: &[ValueExtremumElement<TermRef<'_>>],
+        extremum: AggregateExtremum,
+        guards: &[ValueExtremumGuard<TermRef<'_>>],
+        limits: AggregateFamilyLimits,
+        cancellation: &Cancellation,
+    ) -> ValueExtremumFamilyAttempt {
+        value_extremum::append_family(
+            self.destination(),
+            elements,
+            extremum,
+            guards,
+            limits,
+            cancellation,
+        )
     }
 
     /// Append the numeric extremum of [`super::append_extremum`], reusing

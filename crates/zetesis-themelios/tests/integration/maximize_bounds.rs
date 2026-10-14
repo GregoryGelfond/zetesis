@@ -1,4 +1,5 @@
 //! Every signed candidate guard uses the same normalized keys as exact scoring.
+use crate::support::objective_plans::exact as plan;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
@@ -6,15 +7,13 @@ use zetesis_core::{Model, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, WeightPolarity, evaluate};
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_sat::StableModels;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
     ObjectivePlanLimits,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_themelios::{AdmittedFormula, FormulaLimits};
 
 fn score(input: &AdmittedFormula, selected: impl IntoIterator<Item = usize>) -> Score {
     let model = Model::from_positions(input.atom_catalog(), selected).unwrap();
@@ -28,17 +27,6 @@ fn score(input: &AdmittedFormula, selected: impl IntoIterator<Item = usize>) -> 
     .score()
     .clone()
 }
-fn plan(input: &AdmittedFormula) -> ObjectivePlan {
-    ObjectivePlan::new(
-        input.theory(),
-        input.atoms(),
-        input.objectives(),
-        ObjectivePlanLimits::default(),
-        &Cancellation::default(),
-    )
-    .unwrap()
-}
-
 #[test]
 fn every_candidate_guard_matches_full_normalized_scores_and_keeps_ties() {
     for source in [
@@ -158,10 +146,8 @@ fn verified_incumbent_pruning_preserves_every_optimal_model_and_original_reduct(
 fn optional_plan_refusal_is_typed_and_preserves_work_and_original_theory() {
     let input = formula("{a}. #maximize{2@7,k:a}.");
     let plan = plan(&input);
-    let limits = ObjectivePlanLimits {
-        max_work: plan.statistics().work - 1,
-        ..ObjectivePlanLimits::default()
-    };
+    let limits =
+        resource_limits::objective_plan(ObjectiveBoundResource::Work, plan.statistics().work - 1);
     let error = ObjectivePlan::new(
         input.theory(),
         input.atoms(),
@@ -227,13 +213,7 @@ fn checked_source_arithmetic_reaches_only_eligible_negation_endpoints() {
         "#maximize{(-2147483647-1)@1,k}.",
         "v(-2147483647-1).v(1). #maximize{W@1,k:v(W)}.",
     ] {
-        let error = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
+        let error = admit(source, &FormulaLimits::default()).unwrap_err();
         assert!(
             matches!(
                 error,

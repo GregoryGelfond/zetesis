@@ -1,20 +1,20 @@
 //! Finite source-to-Ferraris admission preserves support, scopes, and evidence.
 
-use crate::support::atom_models::Models;
+use crate::support::atom_models::answer_sets;
+use crate::support::atom_models::{self, Models};
 use crate::support::objective_boundaries;
+use zetesis_reference_support::{BundleFixture, admit, formula, resource_limits};
 
 use std::collections::BTreeSet;
-use std::fs;
 
 use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Theory;
-use zetesis_reference_support::formula;
 use zetesis_sat::{Limits, StableModels};
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure,
-    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, SourceBundle,
-    admit_bundle_formula, admit_extended, admit_formula,
+    AdmissionFailure, AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits,
+    FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, admit_bundle_formula,
+    admit_extended,
 };
 
 fn models(theory: &Theory, atoms: zetesis_core::catalog::Atoms<'_>) -> Models {
@@ -105,13 +105,7 @@ fn unsafe_scopes_and_unsupported_body_or_choice_expressions_are_refused() {
         "a :- d(X+1).",
     ] {
         assert!(
-            admit_formula(
-                source.to_owned(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default()
-            )
-            .is_err(),
+            admit(source, &FormulaLimits::default()).is_err(),
             "{source}"
         );
     }
@@ -128,12 +122,7 @@ fn bound_arithmetic_comparisons_are_tests_and_unbound_inequalities_remain_unsafe
         expected(&["d(-2..2). p(-2). p(2)."])
     );
     assert!(matches!(
-        admit_formula(
-            "p(X) :- X<1.".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
+        admit("p(X) :- X<1.", &FormulaLimits::default()),
         Err(FormulaFailure::UnsafeVariable { .. })
     ));
 }
@@ -155,31 +144,7 @@ fn existing_scalar_fact_and_normal_rule_profile_keeps_its_models() {
             ExpansionLimits::default(),
         )
         .expect("existing extended profile");
-        let cancellation = Cancellation::default();
-        let expected: Models = zetesis_cpu::Candidates::new(
-            plain.program(),
-            zetesis_cpu::CandidateLimits::default(),
-            cancellation.clone(),
-        )
-        .filter_map(|seed| {
-            let checked = zetesis_cpu::check(
-                plain.program(),
-                &seed.expect("candidate"),
-                zetesis_cpu::Limits::default(),
-                &cancellation,
-            )
-            .expect("closure");
-            checked.accepted().then(|| {
-                checked
-                    .closure()
-                    .atoms()
-                    .iter()
-                    .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
-                    .collect::<BTreeSet<_>>()
-            })
-        })
-        .collect();
-        assert_eq!(native(source), expected, "{source}");
+        assert_eq!(native(source), answer_sets(plain.program()), "{source}");
     }
 }
 
@@ -240,13 +205,7 @@ fn conditional_disjuncts_preserve_the_complete_source_family() {
 
 #[test]
 fn parameterized_program_parts_remain_located_refusals() {
-    let error = admit_formula(
-        "#program base(x). a.".to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
+    let error = admit("#program base(x). a.", &FormulaLimits::default()).unwrap_err();
     assert!(matches!(
         error,
         FormulaFailure::Expansion(ExpansionFailure::Admission(AdmissionFailure::Profile {
@@ -259,17 +218,9 @@ fn parameterized_program_parts_remain_located_refusals() {
 
 #[test]
 fn limit_diagnostics_report_required_counts() {
-    let error = admit_formula(
-        "a. b.".to_owned(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits {
-            theory: zetesis_ferraris::AdmissionLimits {
-                max_atoms: 1,
-                ..zetesis_ferraris::AdmissionLimits::default()
-            },
-            ..FormulaLimits::default()
-        },
+    let error = admit(
+        "a. b.",
+        &resource_limits::formula(FormulaResource::Atoms, 1),
     )
     .unwrap_err();
     assert_eq!(
@@ -280,74 +231,17 @@ fn limit_diagnostics_report_required_counts() {
 
 #[test]
 fn each_formula_resource_refuses_without_returning_a_partial_theory() {
-    let cases = [
-        (
-            FormulaLimits {
-                max_domain_values: 1,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::DomainValues,
-        ),
-        (
-            FormulaLimits {
-                max_substitutions: 1,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::Substitutions,
-        ),
-        (
-            FormulaLimits {
-                max_work: 1,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::Work,
-        ),
-        (
-            FormulaLimits {
-                max_origin_locations: 1,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::Origins,
-        ),
-        (
-            FormulaLimits {
-                theory: zetesis_ferraris::AdmissionLimits {
-                    max_atoms: 1,
-                    ..zetesis_ferraris::AdmissionLimits::default()
-                },
-                ..FormulaLimits::default()
-            },
-            FormulaResource::Atoms,
-        ),
-        (
-            FormulaLimits {
-                theory: zetesis_ferraris::AdmissionLimits {
-                    max_nodes: 1,
-                    ..zetesis_ferraris::AdmissionLimits::default()
-                },
-                ..FormulaLimits::default()
-            },
-            FormulaResource::Nodes,
-        ),
-        (
-            FormulaLimits {
-                theory: zetesis_ferraris::AdmissionLimits {
-                    max_roots: 1,
-                    ..zetesis_ferraris::AdmissionLimits::default()
-                },
-                ..FormulaLimits::default()
-            },
-            FormulaResource::Roots,
-        ),
-    ];
-    for (limits, expected) in cases {
-        let error = admit_formula(
-            "d(1..2). 1{a(X):d(X)}1.".to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        )
-        .expect_err("bounded refusal");
+    for expected in [
+        FormulaResource::DomainValues,
+        FormulaResource::Substitutions,
+        FormulaResource::Work,
+        FormulaResource::Origins,
+        FormulaResource::Atoms,
+        FormulaResource::Nodes,
+        FormulaResource::Roots,
+    ] {
+        let limits = resource_limits::formula(expected, 1);
+        let error = admit("d(1..2). 1{a(X):d(X)}1.", &limits).expect_err("bounded refusal");
         assert!(
             matches!(error, FormulaFailure::Limit { resource, .. } if resource == expected),
             "{error}"
@@ -383,30 +277,14 @@ fn queens_source_admits_eighty_original_atoms_with_output_metadata() {
     );
 }
 
-struct Fixture(tempfile::TempDir);
-impl Fixture {
-    fn new() -> Self {
-        Self(tempfile::tempdir().expect("fixture"))
-    }
-    fn bundle(&self) -> SourceBundle {
-        SourceBundle::load(self.0.path().join("entry.lp"), BundleLimits::default())
-            .expect("original include graph")
-    }
-}
-
 #[test]
 fn bundle_constants_scopes_metadata_and_failures_keep_original_files() {
-    let fixture = Fixture::new();
-    fs::write(
-        fixture.0.path().join("entry.lp"),
+    let fixture = BundleFixture::new();
+    fixture.write(
+        "entry.lp",
         "#include \"data.lp\". 1{a(X):d(X)}1. #show a/1.",
-    )
-    .expect("entry");
-    fs::write(
-        fixture.0.path().join("data.lp"),
-        "#const n=2. d(1..n). #defined a/1.",
-    )
-    .expect("included data");
+    );
+    fixture.write("data.lp", "#const n=2. d(1..n). #defined a/1.");
     let admitted = admit_bundle_formula(
         fixture.bundle(),
         BundleAdmissionOptions::default(),
@@ -434,8 +312,7 @@ fn bundle_constants_scopes_metadata_and_failures_keep_original_files() {
                 .is_ok()
         );
     }
-    fs::write(fixture.0.path().join("data.lp"), "d(1). 1{b(X):not d(X)}1.")
-        .expect("unsafe included source");
+    fixture.write("data.lp", "d(1). 1{b(X):not d(X)}1.");
     let error = admit_bundle_formula(
         fixture.bundle(),
         BundleAdmissionOptions::default(),
@@ -463,42 +340,7 @@ fn clingo(source: &str) -> Models {
         &[0, 10, 20, 30],
         oracle::Limits::default(),
     );
-    let json = oracle::json(&run);
-    assert_eq!(json["Models"]["More"], "no", "oracle exhausted");
-    let mut models = BTreeSet::new();
-    for call in json["Call"].as_array().expect("calls") {
-        if let Some(witnesses) = call["Witnesses"].as_array() {
-            for witness in witnesses {
-                let mut facts = String::new();
-                for atom in witness["Value"].as_array().expect("atoms") {
-                    facts.push_str(atom.as_str().expect("atom identity"));
-                    facts.push_str(".\n");
-                }
-                let admitted = admit_extended(
-                    facts,
-                    AdmissionOptions::default(),
-                    ExpansionLimits::default(),
-                )
-                .expect("original scalar atom identities");
-                let model = admitted
-                    .program()
-                    .templates()
-                    .iter()
-                    .map(|template| {
-                        template
-                            .head()
-                            .expect("fact")
-                            .key(&[] as &[zetesis_core::Value])
-                            .expect("ground source pattern")
-                            .to_atom(zetesis_core::ValueLimits::default())
-                            .expect("ground")
-                    })
-                    .collect();
-                assert!(models.insert(model));
-            }
-        }
-    }
-    models
+    atom_models::clingo_models(&oracle::json(&run))
 }
 
 #[test]

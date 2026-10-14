@@ -1,17 +1,19 @@
 //! Completed nonbinding guards preserve comparison and default-negation semantics.
 
+use crate::support::admission;
+use zetesis_reference_support::{canonical, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 mod cases;
 use crate::support::finite_bindings as reference;
 mod truth;
 
 use std::collections::BTreeSet;
 
+use crate::support::frozen_truth::Truth;
 use crate::support::objective_boundaries;
 use cases::sources;
-use reference::{Models, exhaustive, external, holds, native, values};
+use reference::{Models, exhaustive, holds, native, values};
 use themelios_base::source::SourceId;
-use truth::Truth;
-use zetesis_reference_support::canonical;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
     FormulaResource, FormulaWarning, admit_formula, prepare_formula,
@@ -20,117 +22,52 @@ use zetesis_themelios::{
 const SOURCE: SourceId = SourceId::new(173);
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn input(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_or_else(|error| panic!("{source}: {error}"))
+    admission::admitted(SOURCE, source)
 }
 
 #[test]
 fn models_match_finite_substitutions() {
-    for (source, expanded) in sources() {
-        assert_eq!(
-            native(&input(&source)),
-            native(&input(&expanded)),
-            "{source}"
-        );
-    }
+    let sources = sources();
+    reference::models_match_substitutions(
+        sources
+            .iter()
+            .map(|(source, expanded)| (source.as_str(), expanded.as_str())),
+        input,
+    );
 }
 
 #[test]
 fn stability_matches_subset_enumeration() {
-    for (source, _) in sources() {
-        let admitted = input(&source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    let sources = sources();
+    reference::stability_matches_exhaustion(
+        sources.iter().map(|(source, _)| source.as_str()),
+        input,
+    );
 }
 
 #[test]
 fn frozen_truth_matches_finite_substitutions() {
-    let mut pairs = 0;
-    for (source, expanded) in sources() {
-        let left = input(&source);
-        let right = input(&expanded);
-        let names: Vec<_> = left.atoms().iter().map(canonical).collect();
-        let other: Vec<_> = right.atoms().iter().map(canonical).collect();
-        assert_eq!(
-            names.iter().collect::<BTreeSet<_>>(),
-            other.iter().collect(),
-            "{source}"
-        );
-        assert!(names.len() <= 7, "bounded exhaustive interpretation pairs");
-        let remap = |mask: usize| {
-            names.iter().enumerate().fold(0, |result, (index, name)| {
-                result
-                    | (usize::from(mask & (1 << index) != 0)
-                        << other.iter().position(|other| other == name).unwrap())
-            })
-        };
-        for outer in 0..1 << names.len() {
-            let a = values(left.theory(), outer, None);
-            let b = values(right.theory(), remap(outer), None);
-            assert_eq!(
-                holds(left.theory(), &a),
-                holds(right.theory(), &b),
-                "{source}"
-            );
-            for inner in 0..1 << names.len() {
-                assert_eq!(
-                    holds(left.theory(), &values(left.theory(), inner, Some(&a))),
-                    holds(
-                        right.theory(),
-                        &values(right.theory(), remap(inner), Some(&b))
-                    ),
-                    "{source}: M={outer} J={inner}"
-                );
-                pairs += 1;
-            }
-        }
-    }
-    println!("source_pairs={} frozen_pairs={pairs}", sources().len());
+    let sources = sources();
+    reference::frozen_truth_matches(
+        sources
+            .iter()
+            .map(|(source, expanded)| (source.as_str(), expanded.as_str())),
+        input,
+    );
 }
 
 #[test]
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
-    let mut total = 0;
-    for (source, _) in sources() {
-        let result = external(&source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    assert!(
-                        expected.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&input(&source)), expected, "{source}");
-        total += count;
-    }
-    println!("complete_sources={} full_models={total}", sources().len());
+    let sources = sources();
+    reference::original_sources_match_clingo_full_models(
+        sources.iter().map(|(source, _)| source.as_str()),
+        input,
+    );
 }
 
 #[test]
@@ -224,7 +161,7 @@ fn nonbinding_guards_cannot_supply_missing_inputs() {
 
 #[test]
 fn defined_false_guards_complete_the_mixed_family() {
-    let source = "q:-N=#count{1},1/N<=#count{}.";
+    let source = "{p}.q:-N=#count{1:p},1/N<=#count{}.";
     let admitted = input(source);
     // N=1 gives a defined false guard, which witnesses definedness, not truth.
     let [FormulaWarning::ZeroDivisor { location }] = admitted.warnings() else {
@@ -237,8 +174,19 @@ fn defined_false_guards_complete_the_mixed_family() {
             .expect("source input")
             .slice(location.location().expect("parsed source").span)
             .unwrap(),
-        source
+        "q:-N=#count{1:p},1/N<=#count{}."
     );
+    let expected = Models::from([BTreeSet::new(), BTreeSet::from(["p".into()])]);
+    assert_eq!(native(&admitted), expected);
+    assert_eq!(exhaustive(&admitted), expected);
+}
+
+#[test]
+fn a_required_count_leaves_only_the_defined_guard() {
+    // The element holds for every binding, so the count proposes one alone;
+    // the guard 1/1 <= 0 is defined and false, with no warning retained.
+    let admitted = input("q:-N=#count{1},1/N<=#count{}.");
+    assert!(admitted.warnings().is_empty(), "{:?}", admitted.warnings());
     let expected = Models::from([BTreeSet::new()]);
     assert_eq!(native(&admitted), expected);
     assert_eq!(exhaustive(&admitted), expected);
@@ -252,12 +200,8 @@ fn empty_extremum_bounds_keep_their_logical_order() {
 
 #[test]
 fn original_sources_remain_owned() {
-    for (source, _) in sources() {
-        assert_eq!(
-            input(&source).source().expect("source input").text(),
-            source
-        );
-    }
+    let sources = sources();
+    reference::sources_remain_owned(sources.iter().map(|(source, _)| source.as_str()), input);
 }
 
 #[test]
@@ -270,44 +214,17 @@ fn grounding_limits_are_inclusive() {
         FormulaResource::AggregateCacheRows,
         FormulaResource::AggregateCacheRoots,
     ] {
-        let limits = |ceiling| {
-            let mut limits = FormulaLimits::default();
-            match resource {
-                FormulaResource::AssignmentValues => {
-                    limits.max_assignment_values = usize::try_from(ceiling).unwrap();
-                }
-                FormulaResource::Substitutions => limits.max_substitutions = ceiling,
-                FormulaResource::Work => limits.max_work = ceiling,
-                FormulaResource::AggregateCacheRows => {
-                    limits.max_aggregate_cache_rows = usize::try_from(ceiling).unwrap();
-                }
-                FormulaResource::AggregateCacheRoots => {
-                    limits.max_aggregate_cache_roots = usize::try_from(ceiling).unwrap();
-                }
-                _ => unreachable!(),
-            }
-            limits
-        };
         let admit = |ceiling| {
             admit_formula(
                 source.into(),
                 options(),
                 ExpansionLimits::default(),
-                limits(ceiling),
+                resource_limits::formula(resource, ceiling),
             )
         };
-        let mut lower = 0;
-        let mut upper = 16_384;
-        assert!(admit(upper).is_ok());
-        while lower < upper {
-            let middle = lower + (upper - lower) / 2;
-            if admit(middle).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle + 1;
-            }
-        }
-        assert!(lower > 0);
+        let lower = first_success(resource_limits::formula_default(resource), |middle| {
+            admit(middle).is_ok()
+        });
         assert_eq!(native(&admit(lower).unwrap()), native(&input(source)));
         let error = admit(lower - 1).unwrap_err();
         assert!(

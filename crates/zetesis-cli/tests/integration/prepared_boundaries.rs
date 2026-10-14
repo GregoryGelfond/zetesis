@@ -1,6 +1,6 @@
 //! Prepared owners retain semantics independently of source files and execution limits.
 
-use std::{collections::BTreeSet, error::Error, fs};
+use std::{collections::BTreeSet, error::Error};
 
 use crate::support::options::serial_config as config;
 use clap::Parser;
@@ -11,29 +11,18 @@ use zetesis_cli::{
 use zetesis_core::{Model, StaticError};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{PositiveError, PositiveResource};
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{BundleFixture, formula};
 use zetesis_themelios::{
-    AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionLimits, FormulaLimits,
-    SourceBundle, admit_bundle_extended, admit_bundle_formula, admit_extended,
+    AdmissionOptions, BundleAdmissionOptions, ExpansionLimits, FormulaLimits,
+    admit_bundle_extended, admit_bundle_formula, admit_extended,
 };
 
-struct Sources(tempfile::TempDir);
-
-impl Sources {
-    fn new(body: &str) -> Self {
-        let directory = Self(tempfile::tempdir().expect("temporary source directory"));
-        fs::write(
-            directory.0.path().join("entry.lp"),
-            "#include \"body.lp\". #show.",
-        )
-        .unwrap();
-        fs::write(directory.0.path().join("body.lp"), body).unwrap();
-        directory
-    }
-
-    fn load(&self) -> SourceBundle {
-        SourceBundle::load(self.0.path().join("entry.lp"), BundleLimits::default()).unwrap()
-    }
+/// Sources whose entry includes `body` and shows nothing.
+fn included_body(body: &str) -> BundleFixture {
+    let sources = BundleFixture::new();
+    sources.write("entry.lp", "#include \"body.lp\". #show.");
+    sources.write("body.lp", body);
+    sources
 }
 
 fn atoms(model: &Model) -> Vec<String> {
@@ -46,10 +35,10 @@ fn atoms(model: &Model) -> Vec<String> {
 
 #[test]
 fn relational_bundles_outlive_their_source_files() {
-    let sources = Sources::new("a. {b}.");
-    let path = sources.0.path().to_path_buf();
+    let sources = included_body("a. {b}.");
+    let path = sources.directory().to_path_buf();
     let owner = admit_bundle_extended(
-        sources.load(),
+        sources.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
     )
@@ -82,10 +71,10 @@ fn relational_bundles_outlive_their_source_files() {
 
 #[test]
 fn formula_bundles_outlive_their_source_files() {
-    let sources = Sources::new("hidden. {a}. #minimize{1@2,k:hidden}.");
-    let path = sources.0.path().to_path_buf();
+    let sources = included_body("hidden. {a}. #minimize{1@2,k:hidden}.");
+    let path = sources.directory().to_path_buf();
     let owner = admit_bundle_formula(
-        sources.load(),
+        sources.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),

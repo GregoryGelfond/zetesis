@@ -6,15 +6,14 @@
 //! a physical lowering. Clingo agreement is separate empirical corroboration.
 
 use crate::support::objective_dependency_records as objective_dependencies;
+use zetesis_reference_support::{BundleFixture, admit, formula, prepared, resource_limits};
 
 use crate::support::head_element_reference as reference;
 
 use reference::{Selection, cost_records, expected, external, models};
-use zetesis_reference_support::formula;
 use zetesis_themelios::{
-    AdmissionOptions, AnalysisBasis, BundleAdmissionOptions, BundleLimits, CountPlanLimits,
-    CountPlanStatus, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, SourceBundle, admit_bundle_formula, admit_formula, prepare_formula,
+    AnalysisBasis, BundleAdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionFailure,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula,
 };
 
 const CASES: &[(&str, &[&[&str]])] = &[
@@ -134,13 +133,7 @@ fn boolean_eligibility_preserves_optimum_ties() {
 #[test]
 fn boolean_choice_analysis_reports_its_basis() {
     for source in ["2{#true;#true}2.", "1{#true}1.1{#true;#true}1."] {
-        let prepared = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let prepared = prepared(source);
         assert_eq!(
             prepared.analysis_basis(),
             AnalysisBasis::DependencyProjection
@@ -217,13 +210,7 @@ proptest::proptest! {
 fn false_constants_cannot_hide_undefined_weights() {
     for function in ["#sum", "#sum+"] {
         let source = format!("0{function}{{1/0:#false}}0:-#false.");
-        let error = admit_formula(
-            source,
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_err();
+        let error = admit(&source, &FormulaLimits::default()).unwrap_err();
         assert!(
             matches!(
                 error,
@@ -236,13 +223,7 @@ fn false_constants_cannot_hide_undefined_weights() {
 
 #[test]
 fn local_constant_witnesses_require_safe_bindings() {
-    let error = admit_formula(
-        "1{#true:not p(X)}1.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
+    let error = admit("1{#true:not p(X)}1.", &FormulaLimits::default()).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::UnsafeVariable { .. }),
         "{error}"
@@ -251,17 +232,9 @@ fn local_constant_witnesses_require_safe_bindings() {
 
 #[test]
 fn constant_activity_observes_element_refusal() {
-    let error = admit_formula(
-        "1#count{0:#true;1:#false}1.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits {
-            aggregate: zetesis_ferraris::AggregateLimits {
-                max_elements: 0,
-                ..Default::default()
-            },
-            ..Default::default()
-        },
+    let error = admit(
+        "1#count{0:#true;1:#false}1.",
+        &resource_limits::formula(FormulaResource::AggregateElements, 0),
     )
     .unwrap_err();
     assert!(
@@ -280,27 +253,9 @@ fn constant_activity_observes_element_refusal() {
 
 #[test]
 fn occurrence_keys_own_the_choice_element_budget() {
-    let limits = FormulaLimits {
-        aggregate: zetesis_ferraris::AggregateLimits {
-            max_elements: 1,
-            ..Default::default()
-        },
-        ..Default::default()
-    };
-    admit_formula(
-        "d(1..2).1{#true:d(X)}1.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        limits,
-    )
-    .unwrap();
-    let error = admit_formula(
-        "2{#true;#true}2.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        limits,
-    )
-    .unwrap_err();
+    let limits = resource_limits::formula(FormulaResource::AggregateElements, 1);
+    admit("d(1..2).1{#true:d(X)}1.", &limits).unwrap();
+    let error = admit("2{#true;#true}2.", &limits).unwrap_err();
     assert!(
         matches!(
             error,
@@ -322,19 +277,13 @@ fn constants_do_not_certify_atom_count_plans() {
         "2#count{0:#true;1:a;2:b;3:c;4:d}2.{a;b}1.{c;d}1.",
     ] {
         let ordinary = formula(source);
-        let planned = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-        .ground_with_count_plan(
-            CountPlanLimits::default(),
-            &zetesis_cpu::Cancellation::default(),
-            None,
-        )
-        .unwrap();
+        let planned = prepared(source)
+            .ground_with_count_plan(
+                CountPlanLimits::default(),
+                &zetesis_cpu::Cancellation::default(),
+                None,
+            )
+            .unwrap();
         assert!(
             matches!(planned.count_plan(), CountPlanStatus::NoPlan(_)),
             "{source}"
@@ -372,15 +321,10 @@ fn bundle_origins_do_not_multiply_activity() {
         ("2{not not #true;not not #true;a}2.", 1, true),
         ("2{not #false}2.", 0, false),
     ] {
-        let directory = tempfile::tempdir().unwrap();
-        std::fs::write(
-            directory.path().join("first.lp"),
-            format!("#include \"second.lp\".\n{rule}"),
-        )
-        .unwrap();
-        std::fs::write(directory.path().join("second.lp"), rule).unwrap();
-        let bundle =
-            SourceBundle::load(directory.path().join("first.lp"), BundleLimits::default()).unwrap();
+        let fixture = BundleFixture::new();
+        fixture.write("entry.lp", &format!("#include \"second.lp\".\n{rule}"));
+        fixture.write("second.lp", rule);
+        let bundle = fixture.bundle();
         let admitted = admit_bundle_formula(
             bundle,
             BundleAdmissionOptions::default(),
@@ -438,19 +382,13 @@ fn bundle_origins_do_not_multiply_activity() {
 #[test]
 fn reordered_bundle_rules_preserve_occurrences() {
     let rules = ["1{#true;a}1.", "2{#true;#true;b}2."];
-    let directory = tempfile::tempdir().unwrap();
-    std::fs::write(
-        directory.path().join("first.lp"),
-        format!("#include \"second.lp\".\n{}{}", rules[0], rules[1]),
-    )
-    .unwrap();
-    std::fs::write(
-        directory.path().join("second.lp"),
-        format!("{}{}", rules[1], rules[0]),
-    )
-    .unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("first.lp"), BundleLimits::default()).unwrap();
+    let fixture = BundleFixture::new();
+    fixture.write(
+        "entry.lp",
+        &format!("#include \"second.lp\".\n{}{}", rules[0], rules[1]),
+    );
+    fixture.write("second.lp", &format!("{}{}", rules[1], rules[0]));
+    let bundle = fixture.bundle();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),
@@ -504,15 +442,13 @@ fn merged_bundle_rules_keep_original_multiplicity() {
         ["1{not #false}1.", "1{not #false;not #false}1."],
         ["1{not not #true;not not #true}1.", "1{not not #true}1."],
     ] {
-        let directory = tempfile::tempdir().unwrap();
-        std::fs::write(
-            directory.path().join("first.lp"),
-            format!("#include \"second.lp\".\n{}", rules[0]),
-        )
-        .unwrap();
-        std::fs::write(directory.path().join("second.lp"), rules[1]).unwrap();
-        let bundle =
-            SourceBundle::load(directory.path().join("first.lp"), BundleLimits::default()).unwrap();
+        let fixture = BundleFixture::new();
+        fixture.write(
+            "entry.lp",
+            &format!("#include \"second.lp\".\n{}", rules[0]),
+        );
+        fixture.write("second.lp", rules[1]);
+        let bundle = fixture.bundle();
         let admitted = admit_bundle_formula(
             bundle,
             BundleAdmissionOptions::default(),

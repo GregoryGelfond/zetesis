@@ -150,10 +150,18 @@ fn validation_keeps_typed_constructor_boundaries() {
     ];
     for symbol in &symbols {
         validate_symbol(symbol).unwrap();
-        let Value::Structured(value) = from_symbol(symbol).unwrap() else {
-            panic!("structural fixture")
-        };
-        assert_eq!(to_symbol(&value).unwrap(), *symbol);
+        let value = from_symbol(symbol).unwrap();
+        assert!(matches!(value, Value::Structured(_)));
+        let catalog = zetesis_core::AtomCatalog::new(vec![
+            zetesis_core::Atom::new(zetesis_core::Predicate::new("p", 1).unwrap(), vec![value])
+                .unwrap(),
+        ])
+        .unwrap();
+        let value = catalog.atoms().at(0).unwrap().values().get(0).unwrap();
+        assert_eq!(
+            term_symbol_with(value, u128::MAX, || Ok::<_, ()>(())).unwrap(),
+            *symbol
+        );
     }
 }
 

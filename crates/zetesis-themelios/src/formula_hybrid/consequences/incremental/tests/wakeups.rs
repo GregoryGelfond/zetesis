@@ -63,7 +63,7 @@ fn changed_group(
 #[test]
 fn nonmatching_changes_skip_the_source_scan() {
     for (source, irrelevant) in [(CONSTRUCTOR, 1), (CONSTRUCTOR, 2), (NESTED, 1), (NESTED, 2)] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let mut retained = completed(&owner);
         let mut rescanned = completed(&owner);
         let mut region = Region::all_open(owner.atom_catalog().atoms().len());
@@ -95,7 +95,7 @@ fn nonmatching_changes_skip_the_source_scan() {
 #[test]
 fn matching_nested_changes_wake_the_source_scan() {
     for (source, matching) in [(CONSTRUCTOR, 0), (CONSTRUCTOR, 3), (NESTED, 0)] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let mut checker = completed(&owner);
         let mut region = Region::all_open(owner.atom_catalog().atoms().len());
         assert!(region.hold(numbered(&owner, "h", 1, matching)));
@@ -109,7 +109,7 @@ fn matching_nested_changes_wake_the_source_scan() {
 
 #[test]
 fn repeated_variables_conservatively_wake() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/wakeups/repeated.lp"
     ));
     let mut checker = completed(&owner);
@@ -131,7 +131,7 @@ fn repeated_variables_conservatively_wake() {
 
 #[test]
 fn lowered_constructor_slots_conservatively_wake() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/wakeups/unknown.lp"
     ));
     let checker = completed(&owner);
@@ -152,7 +152,7 @@ fn lowered_constructor_slots_conservatively_wake() {
 
 #[test]
 fn several_nonmatching_changes_keep_completed_evidence() {
-    let owner = admit(CONSTRUCTOR);
+    let owner = hybrid(CONSTRUCTOR);
     let checker = completed(&owner);
     let first = numbered(&owner, "h", 1, 1);
     let second = numbered(&owner, "h", 1, 2);
@@ -176,7 +176,7 @@ fn default_polarities_retain_relevant_dependencies() {
             true,
         ),
     ] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let mut checker = completed(&owner);
         let irrelevant = numbered(&owner, "p", 0, 2);
         assert!(!changed_group(&checker, &[irrelevant], &mut Counters::default()).unwrap());
@@ -196,7 +196,7 @@ fn default_polarities_retain_relevant_dependencies() {
 
 #[test]
 fn strong_negation_retains_its_separate_dependency() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/wakeups/signed.lp"
     ));
     let mut checker = completed(&owner);
@@ -229,7 +229,7 @@ fn strong_negation_retains_its_separate_dependency() {
 
 #[test]
 fn a_refinement_refusal_retains_only_accepted_reads() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/wakeups/negative.lp"
     ));
     let mut checker = completed(&owner);
@@ -254,7 +254,7 @@ fn a_refinement_refusal_retains_only_accepted_reads() {
 
 #[test]
 fn cancelled_refinement_accepts_no_reads() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/wakeups/negative.lp"
     ));
     let checker = completed(&owner);
@@ -268,7 +268,7 @@ fn cancelled_refinement_accepts_no_reads() {
 
 #[test]
 fn a_failed_wakeup_pass_discards_completed_evidence() {
-    let owner = admit(CONSTRUCTOR);
+    let owner = hybrid(CONSTRUCTOR);
     let mut checker = completed(&owner);
     let mut region = Region::all_open(owner.atom_catalog().atoms().len());
     assert!(region.hold(numbered(&owner, "h", 1, 2)));

@@ -1,17 +1,20 @@
 //! Public phase observation describes work without changing admitted formulas.
 
 mod constant_divisors;
+mod integer_comparisons;
 mod lending_rows;
 mod support_demand;
+mod unchanged_visits;
 
 use std::cell::{Cell, RefCell};
+use zetesis_reference_support::resource_limits;
 
 use zetesis_test_support::repository;
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, DomainLimits, ExpansionLimits, FormulaFailure,
     FormulaLimits, FormulaResource, GroundingObserver, GroundingOutcome, GroundingPhase,
-    GroundingWork, admit_formula_with_grounding_observer, prepare_formula,
+    GroundingWork, admit_formula_with_grounding_observer,
 };
 
 #[derive(Clone, Copy, Debug)]
@@ -213,10 +216,7 @@ fn recursive_support_appends_each_posting_once() {
         let observer = Observer::default();
         let admitted = compile(
             &format!("p(0). p(X+1):-p(X),X<{bound}."),
-            &FormulaLimits {
-                max_work: 1_048_576,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::Work, 1_048_576),
             Some(&observer),
         )
         .unwrap();
@@ -239,10 +239,7 @@ fn recursive_support_visits_only_new_positive_rows() {
         let observer = Observer::default();
         compile(
             &format!("p(0). p(X+1):-p(X),X<{bound}."),
-            &FormulaLimits {
-                max_work: 1_048_576,
-                ..Default::default()
-            },
+            &resource_limits::formula(FormulaResource::Work, 1_048_576),
             Some(&observer),
         )
         .unwrap();
@@ -276,10 +273,14 @@ fn arithmetic_counts_describe_the_joined_rule() {
         })
         .expect("the original constraint has its own phase record");
     assert_eq!(arithmetic.phase, GroundingPhase::RuleInstantiation);
-    // Totality prepares X+1 and 3 (four nodes). The join reuses X+1's
-    // canonical result and reads 3 again (one node), in this same rule phase.
-    assert_eq!(arithmetic.work.expression_nodes, Some(5));
-    assert_eq!(arithmetic.work.expression_evaluations, Some(3));
+    // Totality prepares X+1 and 3 (four nodes, two evaluations). The join
+    // then decides X+1<3 with its integer comparison form, evaluating both
+    // operands again in machine integers (four nodes, two evaluations), in
+    // this same rule phase.
+    assert_eq!(arithmetic.work.expression_nodes, Some(8));
+    assert_eq!(arithmetic.work.expression_evaluations, Some(4));
+    assert_eq!(arithmetic.work.integer_comparisons, Some(1));
+    assert_eq!(arithmetic.work.integer_comparison_declines, Some(0));
     assert_eq!(arithmetic.work.join_probes, Some(1));
     assert_eq!(arithmetic.work.join_rows, Some(1));
     assert_eq!(arithmetic.work.binding_snapshots, Some(0));
@@ -327,10 +328,7 @@ fn undefined_family_validation_retains_its_failed_phase() {
 #[test]
 fn profiling_preserves_inclusive_support_limits() {
     for (rounds, succeeds) in [(1, false), (2, true)] {
-        let limits = FormulaLimits {
-            max_support_rounds: rounds,
-            ..FormulaLimits::default()
-        };
+        let limits = resource_limits::formula(FormulaResource::SupportRounds, rounds);
         let observer = Observer::default();
         let measured = compile("p(1).", &limits, Some(&observer));
         let plain = compile("p(1).", &limits, None);
@@ -349,13 +347,7 @@ fn profiling_preserves_inclusive_support_limits() {
 
 #[test]
 fn node_refusal_retains_attempted_interning() {
-    let limits = FormulaLimits {
-        theory: zetesis_ferraris::AdmissionLimits {
-            max_nodes: 1,
-            ..zetesis_ferraris::AdmissionLimits::default()
-        },
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::Nodes, 1);
     let observer = Observer::default();
     let error = compile("p(1).", &limits, Some(&observer)).unwrap_err();
     assert_eq!(
@@ -370,14 +362,8 @@ fn node_refusal_retains_attempted_interning() {
     assert_eq!(last.work.nodes_inserted, Some(1));
 }
 
-fn root_refusal(source: &str, roots: usize, phase: GroundingPhase) {
-    let limits = FormulaLimits {
-        theory: zetesis_ferraris::AdmissionLimits {
-            max_roots: roots,
-            ..zetesis_ferraris::AdmissionLimits::default()
-        },
-        ..FormulaLimits::default()
-    };
+fn root_refusal(source: &str, roots: u64, phase: GroundingPhase) {
+    let limits = resource_limits::formula(FormulaResource::Roots, roots);
     let observer = Observer::default();
     let error = compile(source, &limits, Some(&observer)).unwrap_err();
     assert!(matches!(
@@ -387,7 +373,7 @@ fn root_refusal(source: &str, roots: usize, phase: GroundingPhase) {
             observed,
             limit,
             ..
-        } if observed == roots as u128 + 1 && limit == roots as u128
+        } if observed == u128::from(roots) + 1 && limit == u128::from(roots)
     ));
     let records = observer.records.borrow();
     let last = records.last().unwrap();
@@ -446,7 +432,9 @@ fn bundle_rule_locations_identify_retained_sources() {
         .iter()
         .filter_map(|record| record.location)
         .collect();
-    assert_eq!(locations.len(), 4);
+    // One instantiation phase per item: the two edge facts, stored as one
+    // run, and the two rules.
+    assert_eq!(locations.len(), 3);
     for location in locations {
         assert!(
             admitted
@@ -529,16 +517,10 @@ fn phases_are_entered_in_the_order_the_catalog_lists() {
     // phase as it exits, so the first exit of every phase, the domain analysis
     // included when it runs, must follow the catalog's order.
     let observer = Observer::default();
-    prepare_formula(
-        "p(1..3). q(X) :- p(X), X < 3.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .with_domain_analysis(Some(DomainLimits::default()))
-    .ground_with_observer(Some(&observer))
-    .unwrap();
+    zetesis_reference_support::prepared("p(1..3). q(X) :- p(X), X < 3.")
+        .with_domain_analysis(Some(DomainLimits::default()))
+        .ground_with_observer(Some(&observer))
+        .unwrap();
     let records = observer.records.borrow();
     let mut entered: Vec<GroundingPhase> = Vec::new();
     for record in records.iter() {

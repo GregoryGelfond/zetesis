@@ -4,6 +4,7 @@
 
 use super::*;
 use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Template, Term, Value};
+use zetesis_test_support::thresholds::first_success;
 
 /// node(1..n). in(X) :- node(X), not out(X). out(X) :- node(X), not in(X).
 fn independent(nodes: i32) -> Program {
@@ -31,7 +32,12 @@ fn independent(nodes: i32) -> Program {
             vec![],
         ));
     }
-    Program::new(templates, AdmissionLimits::default()).unwrap()
+    Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -81,18 +87,11 @@ fn a_stopped_preparation_is_the_narrowings_stop() {
 /// The fixture's default allowance is a checked finite upper bound, not a
 /// guessed unit count. Every probe reconstructs the same workspace history.
 fn least_work(mut completes: impl FnMut(u64) -> Result<(), Stop>) -> u64 {
-    let mut upper = Limits::default().max_work;
-    completes(upper).expect("the finite fixture completes within default work");
-    let mut lower = 0;
-    while lower < upper {
-        let middle = lower + (upper - lower) / 2;
-        match completes(middle) {
-            Ok(()) => upper = middle,
-            Err(Stop::WorkLimit) => lower = middle + 1,
-            Err(other) => panic!("unexpected phase refusal: {other:?}"),
-        }
-    }
-    lower
+    first_success(Limits::default().max_work, |work| match completes(work) {
+        Ok(()) => true,
+        Err(Stop::WorkLimit) => false,
+        Err(other) => panic!("unexpected phase refusal: {other:?}"),
+    })
 }
 
 /// Measure root transfer with both completed closures retained by the caller.
@@ -259,7 +258,12 @@ fn preparation_is_borrowed_only_after_narrowing() {
 
 #[test]
 fn an_empty_gate_carrier_retains_no_queries() {
-    let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let mut candidates = Candidates::new(
         &program,
         CandidateLimits::default(),

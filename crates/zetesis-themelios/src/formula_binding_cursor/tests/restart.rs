@@ -151,7 +151,7 @@ fn relational_restart_preserves_arithmetic_refusals() {
     let preparation = testing::prepare(source);
     let rule = preparation
         .program
-        .rules
+        .rules_without_facts()
         .iter()
         .find(|rule| rule.bindings.is_some())
         .unwrap();

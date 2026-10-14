@@ -4,8 +4,12 @@ use super::*;
 
 /// The original index the enumeration would build and hand the workers.
 fn original(theory: &Theory) -> Arc<IndexedTheory> {
-    let mut owner = super::super::OriginalIndex::new(theory);
-    Arc::clone(owner.ensure(|_| Ok(())).unwrap())
+    let mut owner = super::super::OriginalIndex::new(theory, u64::MAX);
+    Arc::clone(
+        owner
+            .ensure(&crate::Cancellation::default(), |_| Ok(()))
+            .unwrap(),
+    )
 }
 
 #[test]
@@ -48,7 +52,10 @@ fn shared_narrowing_never_executes_an_unleased_read() {
     let mut knowledge = CandidateKnowledge::default();
     let mut counts = RegionCounts::default();
     let result = super::super::regions::narrow(
-        (&theory, &narrower, None),
+        (
+            zetesis_ferraris::OriginalSubject::new(&theory, None),
+            &narrower,
+        ),
         &Conditions::<(Theory, Narrower)>::default(),
         (&mut region, &mut knowledge),
         &mut zetesis_ferraris::NarrowingScratch::default(),
@@ -89,6 +96,7 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
     let mut search = ParallelRegions::new(
         &theory,
         NonZeroUsize::new(2).unwrap(),
+        Engagement::Immediate,
         limits,
         cancellation.clone(),
         &mut budget,
@@ -97,7 +105,7 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
     // Another worker waits for stealable work that never comes (the root is
     // held here, outside the queues). The panic closes the run, and the
     // waiter exits rather than hanging.
-    search.started = true;
+    search.record = engaged(2);
     let _root = search.shared.take_local(0).unwrap();
     let idle_shared = Arc::clone(&search.shared);
     let index = original(&theory);
@@ -123,8 +131,27 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
     assert_eq!(budget.statistics.work, 4);
 }
 
+/// A walk that has engaged its workers, as the in-crate tests build one by
+/// hand: an engaged walk never begins again.
+fn engaged(launched: usize) -> WalkRecord {
+    WalkRecord::Engaged {
+        after: Duration::ZERO,
+        walking: Duration::ZERO,
+        launched,
+        spawn: Duration::ZERO,
+    }
+}
+
 #[test]
 fn a_refused_certificate_refunds_its_reserved_work() {
+    // Under `After(Duration::MAX)` the failing pull is the coordinator's,
+    // whose receipts are merged when its pull ends.
+    for engagement in [Engagement::Immediate, Engagement::After(Duration::MAX)] {
+        refused_certificate_refunds_its_reserved_work(engagement);
+    }
+}
+
+fn refused_certificate_refunds_its_reserved_work(engagement: Engagement) {
     let cancellation =
         Cancellation::with_deadline(std::time::Instant::now() + Duration::from_secs(2)).unwrap();
     let theory = Theory::new(
@@ -156,6 +183,7 @@ fn a_refused_certificate_refunds_its_reserved_work() {
     let mut search = ParallelRegions::new(
         &theory,
         NonZeroUsize::new(2).unwrap(),
+        engagement,
         limits,
         cancellation.clone(),
         &mut budget,
@@ -174,8 +202,19 @@ fn a_refused_certificate_refunds_its_reserved_work() {
     );
     assert_eq!(budget.statistics.work, search.statistics().counts.work);
     assert!(!search.exhausted);
+    // The route the claim was made on.
+    match engagement {
+        Engagement::Immediate => {
+            assert!(matches!(
+                search.record,
+                WalkRecord::Engaged { launched: 2, .. }
+            ));
+        }
+        _ => assert!(matches!(search.record, WalkRecord::Unengaged { .. })),
+    }
 }
 
+mod cancellation_tests;
+mod engagement_tests;
 mod coordination_tests;
 mod timing_tests;
-mod cancellation_tests;

@@ -9,7 +9,6 @@ use super::{
 };
 use crate::runtime::{DeviceProfile, ErrorScopes, Runtime};
 use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
-use zetesis_backend::GpuApi;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, TightPlan};
 
@@ -43,14 +42,6 @@ pub struct GpuTightOracle {
     activity: TightGpuActivity,
 }
 impl GpuTightOracle {
-    /// Create a Metal device/pipeline without API or CPU fallback.
-    ///
-    /// # Errors
-    /// Refuses unavailable or policy-incompatible adapters, capabilities,
-    /// allocation, shader validation or device creation.
-    pub fn new_metal(options: GpuOptions) -> Result<Self, GpuError> {
-        Self::new_selected(options, GpuSelection { api: GpuApi::Metal })
-    }
     /// Create an independently owned device/pipeline using hard adapter filters.
     /// Construction and compilation costs are outside per-batch limits.
     ///
@@ -96,7 +87,7 @@ impl GpuTightOracle {
     /// # Errors
     /// Reports the same context, capability and compilation failures as
     /// [`Self::from_context`].
-    pub fn from_context_with_support(
+    pub(crate) fn from_context_with_support(
         context: &crate::GpuContext,
         support: TightSupport,
     ) -> Result<Self, GpuError> {

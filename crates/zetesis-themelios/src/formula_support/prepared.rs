@@ -21,6 +21,7 @@ pub(crate) struct PreparedRule<'source> {
     completion: &'source Completion,
     pub(super) plan: order::Plan<'source>,
     pub(super) total: Option<ProjectionValues<'source>>,
+    pub(super) multiples: Option<super::multiples::Prepared<'source>>,
     pub(super) pattern_rows: Option<PatternRows<'source>>,
 }
 
@@ -130,7 +131,7 @@ impl<'source> PreparedRule<'source> {
         let total = if needs_totality(&rule.body) {
             let mut projections =
                 Projections::new(&Context::new(&computation, limits, counters, rule.location))?;
-            if projections.total_constraint(
+            if projections.total_body(
                 rule,
                 queries.support(),
                 &mut Evaluation::default(),
@@ -143,6 +144,16 @@ impl<'source> PreparedRule<'source> {
             } else {
                 None
             }
+        } else {
+            None
+        };
+        let multiples = if total.is_some() {
+            super::multiples::Prepared::new(
+                rule,
+                &plan,
+                &completed.relations,
+                Context::new(&computation, limits, counters, rule.location),
+            )?
         } else {
             None
         };
@@ -163,6 +174,7 @@ impl<'source> PreparedRule<'source> {
             completion: completed.completion,
             plan,
             total,
+            multiples,
             pattern_rows,
         })
     }
@@ -180,7 +192,10 @@ impl<'source> PreparedRule<'source> {
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
-    ) -> Result<FilteredRows<'a, 'queries>, FormulaFailure> {
+    ) -> Result<FilteredRows<'a, 'queries>, FormulaFailure>
+    where
+        'source: 'queries,
+    {
         if !self.completion.same(queries.completion) {
             return Err(FormulaFailure::SupportRelation {
                 error: zetesis_core::relation::Failure::Owner,
@@ -188,7 +203,7 @@ impl<'source> PreparedRule<'source> {
             });
         }
         Join::filtered_rule(
-            self.rule,
+            super::Ir::Source(self.rule),
             queries.support(),
             filter,
             Some(self),

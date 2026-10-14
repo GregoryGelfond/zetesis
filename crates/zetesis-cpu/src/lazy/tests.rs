@@ -17,6 +17,7 @@ fn completed_scans_retain_the_join_reservation() {
             vec![],
             vec![],
         )],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();
@@ -84,7 +85,12 @@ fn failed_scans_retain_the_join_reservation() {
         .into_iter()
         .map(|name| Template::new(Some(pattern(name)), vec![], vec![], vec![], vec![]))
         .collect();
-    let program = Program::new(templates, AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let limits = Limits {
         max_chunk_rules: 1,
         ..Default::default()
@@ -121,6 +127,7 @@ fn growing_transport_reserves_live_identity_and_source_storage() {
                 )
             })
             .collect(),
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();
@@ -195,6 +202,7 @@ fn interrupted_commit_retains_discovered_identity_progress() {
             vec![],
             vec![],
         )],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();
@@ -252,6 +260,7 @@ fn new_predicate_keys_share_canonical_term_storage() {
                 vec![],
             ),
         ],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();
@@ -306,6 +315,7 @@ fn the_initial_host_ceiling_charges_new_metadata_not_the_shared_input_base() {
             vec![],
             vec![],
         )],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();
@@ -362,6 +372,7 @@ fn batches_share_the_vocabulary_but_keep_independent_discovery_and_truth() {
             .into_iter()
             .map(|name| Template::new(Some(pattern(name)), vec![], vec![], vec![], vec![]))
             .collect(),
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();
@@ -393,7 +404,12 @@ fn batches_share_the_vocabulary_but_keep_independent_discovery_and_truth() {
 
 #[test]
 fn empty_catalog_preparation_has_an_inclusive_host_cap() {
-    let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let limits = Limits {
         max_atoms: 1,
         max_chunk_rules: 1,

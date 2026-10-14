@@ -158,3 +158,71 @@ fn native_threshold_requires_its_original_truth_parameter() {
         assert!(!matches!(result, crate::Solve::Inconclusive(_)));
     }
 }
+
+#[test]
+fn ordinal_cut_requires_its_original_truth_parameter() {
+    use zetesis_ferraris::{ExtremumCut, ExtremumCutRule, ExtremumRow, FormulaNodes, NodeView};
+    let mut nodes = FormulaNodes::default();
+    let mut transaction = nodes.transaction();
+    transaction.push(NodeView::Atom(0), 10, 10).unwrap();
+    let root = transaction
+        .push(
+            NodeView::ExtremumCut(ExtremumCut {
+                row: ExtremumRow {
+                    conditions: &[0],
+                    ranks: &[1],
+                    rank_count: 3,
+                },
+                rule: &ExtremumCutRule::Prefix(2),
+            }),
+            10,
+            10,
+        )
+        .unwrap();
+    transaction.commit();
+    let theory = Theory::new(
+        2,
+        nodes.into_parts(),
+        vec![root],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    let cancellation = Cancellation::default();
+    let prepared =
+        PreparedReduct::prepare(&theory, ReductPreparationLimits::default(), &cancellation)
+            .result
+            .unwrap();
+    assert_eq!(prepared.0.guarded, [root]);
+    assert_eq!(prepared.parameter_count(), 3);
+    let mut search = crate::search::PreparedWorkspace::default();
+    for original in [false, true, false] {
+        let mut budget = Budget {
+            quota: LocalQuota,
+            limits: SearchLimits::default(),
+            cancellation: &cancellation,
+            statistics: SearchStatistics::default(),
+        };
+        // Deliberately bypass the public authenticated mask boundary to inspect
+        // the physical gate: N={p}, M={p,q}, and the ordinal-cut guard supplied
+        // independently. Public queries never accept this forged parameter.
+        let result = search.query(
+            &prepared.0.cnf,
+            &prepared.0.units,
+            prepared.0.has_empty_clause,
+            &[
+                Literal::new(0, true),
+                Literal::new(1, false),
+                Literal::new(2, true),
+                Literal::new(3, true),
+                Literal::new(4, original),
+            ],
+            &mut budget,
+        );
+        assert_eq!(
+            matches!(result, crate::Solve::Sat(_)),
+            original,
+            "{result:?}"
+        );
+        assert!(!matches!(result, crate::Solve::Inconclusive(_)));
+    }
+}

@@ -51,7 +51,10 @@ fn model_count(source: &Program) -> usize {
         catalog: &mut catalog,
         work: GroundingWork::new(&limits, &mut counters, location),
     }
-    .prepare(source, crate::ProjectSelection::default())
+    .prepare(
+        &std::sync::Arc::new(source.clone()),
+        crate::ProjectSelection::default(),
+    )
     .unwrap();
     let compiled = crate::formula_ground::ground(
         crate::formula::Preparation {

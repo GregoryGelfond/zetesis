@@ -10,10 +10,16 @@ mod refusal;
 #[test]
 fn ground_only_policy_preserves_the_preparation_owner() {
     let mut prepared = prepare("{seed}. d:-seed. hidden(7).");
-    let rules = prepared.program.rules.as_ptr();
+    prepared
+        .program
+        .analyzed
+        .materialize(&mut prepared.budget, prepared.location)
+        .unwrap();
+    let rules = prepared.program.rules_without_facts().as_ptr();
     let carriers: Vec<_> = prepared
         .program
         .analyzed
+        .full_program()
         .statements()
         .map(std::ptr::from_ref)
         .collect();
@@ -32,10 +38,11 @@ fn ground_only_policy_preserves_the_preparation_owner() {
     else {
         panic!("ground-only definitions remain ordinary rules")
     };
-    assert_eq!(base.program.rules.as_ptr(), rules);
+    assert_eq!(base.program.rules_without_facts().as_ptr(), rules);
     assert_eq!(
         base.program
             .analyzed
+            .full_program()
             .statements()
             .map(std::ptr::from_ref)
             .collect::<Vec<_>>(),
@@ -57,19 +64,28 @@ fn variable_producers_defer_all_facts_of_their_signature() {
     else {
         panic!("variable-bearing signature")
     };
-    assert_eq!(definitions.deferred.len(), 4);
+    // The two d rules, and d(2;3)'s two argument alternatives, one fact
+    // product each.
+    assert_eq!(definitions.deferred.occurrences(), 4);
+    assert_eq!(definitions.deferred.rules().len(), 2);
     assert_eq!(
         definitions
             .deferred
-            .iter()
-            .filter(|rule| rule.variables == 0)
-            .count(),
-        2
+            .blocks()
+            .map(crate::formula_facts::FactBlock::len)
+            .collect::<Vec<_>>(),
+        [1, 1]
     );
-    assert_eq!(base.program.rules.len(), 2);
+    // The facts p(1) and q(2) stay: two fact blocks and no rule. The
+    // deferred products are no longer the base's items.
+    assert_eq!(base.program.items().len(), 2);
+    assert_eq!(base.program.items().blocks().count(), 2);
+    assert_eq!(base.program.items().occurrences(), 2);
+    assert!(base.program.rules_without_facts().is_empty());
     let names: Vec<_> = base
         .program
         .analyzed
+        .full_program()
         .statements()
         .map(|source| {
             super::super::matching::head(super::super::reads::source(source))
@@ -91,17 +107,18 @@ fn different_arities_keep_independent_materialization_policies() {
     else {
         panic!("only d/1 has a variable-bearing producer")
     };
-    assert_eq!(definitions.deferred.len(), 2);
-    assert_eq!(base.program.rules.len(), 2);
+    assert_eq!(definitions.deferred.occurrences(), 2);
+    assert_eq!(base.program.items().len(), 2);
+    assert!(base.program.rules_without_facts().is_empty());
     let expected = prepare("p(1). d(7,8).");
     assert_eq!(base.program.analysis, expected.program.analysis);
     assert_eq!(
         base.program.analysis,
-        themelios_analysis::Analysis::of(&base.program.analyzed)
+        themelios_analysis::Analysis::of(base.program.analyzed.full_program())
     );
     assert_ne!(base.program.analysis, definitions.original.analysis);
     let terminal = zetesis_domain::terminal::analyze(
-        &base.program.analyzed,
+        base.program.analyzed.full_program(),
         zetesis_domain::Limits::default(),
     );
     // Both remaining facts are still mathematically terminal. Reanalysis must
@@ -120,7 +137,7 @@ fn body_only_bindings_are_deferred() {
             panic!("{source}")
         };
         assert_eq!(definitions.deferred.len(), 1);
-        assert_eq!(definitions.deferred[0].variables, 1);
+        assert_eq!(definitions.deferred.rules()[0].variables, 1);
     }
 }
 
@@ -129,7 +146,7 @@ fn policy_refusals_preserve_the_resource_boundary() {
     for resource in [FormulaResource::Work, FormulaResource::SupportBytes] {
         let mut prepared = prepare("p(1). d(2). d(X):-p(X).");
         let analysis = zetesis_domain::terminal::analyze(
-            &prepared.program.analyzed,
+            prepared.program.analyzed.full_program(),
             zetesis_domain::Limits::default(),
         );
         let mut counters = Counters::resume(

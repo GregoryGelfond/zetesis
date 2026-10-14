@@ -42,6 +42,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 vec![],
             ),
         ],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )?;
     let assignment = [Value::Number(1)];

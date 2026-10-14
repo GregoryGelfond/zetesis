@@ -40,7 +40,7 @@ fn literal_remainders_enable_batched_consequences() {
 }
 
 fn batched_units(source: &str, expected: &[[i32; 2]]) {
-    let owner = admit(source);
+    let owner = hybrid(source);
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let region = Region::all_open(owner.atom_catalog().atoms().len());
     assert!(matches!(
@@ -76,7 +76,7 @@ fn batched_units(source: &str, expected: &[[i32; 2]]) {
 
 #[test]
 fn correlated_products_keep_the_original_scan() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/arithmetic/correlated-product.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -91,25 +91,18 @@ fn correlated_products_keep_the_original_scan() {
 }
 
 #[test]
-fn variable_products_keep_the_original_scan() {
-    let owner = admit(include_str!(
-        "../../../../../tests/fixtures/streamed-consequences/arithmetic/variable-product.lp"
-    ));
-    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
-    let region = Region::all_open(owner.atom_catalog().atoms().len());
-    assert!(matches!(
-        pass(&mut checker, &region, ConstraintRegionPass::First),
-        ConstraintConsequence::Cut { .. }
-    ));
-    assert_eq!(
-        checker.prepared.as_ref().unwrap().incremental_eligible,
-        Some(false)
+fn variable_products_enable_batched_consequences() {
+    batched_units(
+        include_str!(
+            "../../../../../tests/fixtures/streamed-consequences/arithmetic/variable-product.lp"
+        ),
+        &[[1, 2]],
     );
 }
 
 #[test]
 fn one_partial_rule_keeps_partition_order() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/arithmetic/mixed-partition.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -131,7 +124,7 @@ fn one_partial_rule_keeps_partition_order() {
 
 #[test]
 fn correlated_overflow_declines_batching() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/arithmetic/correlated-difference.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -150,7 +143,7 @@ fn queens_arithmetic_uses_incremental_scanning() {
     let corpus = zetesis_test_support::repository::correctness().join("standalone/n-queens");
     for name in ["variant-01.lp", "variant-02.lp", "variant-03.lp"] {
         let source = std::fs::read_to_string(corpus.join(name)).unwrap();
-        let owner = admit(&source);
+        let owner = hybrid(&source);
         let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
         let region = Region::all_open(owner.atom_catalog().atoms().len());
         let _ = pass(&mut checker, &region, ConstraintRegionPass::First);
@@ -180,7 +173,7 @@ fn keyed_send_keeps_generated_binding_scans() {
     let path =
         zetesis_test_support::repository::correctness().join("standalone/send-money/send-money.lp");
     let source = std::fs::read_to_string(path).unwrap();
-    let owner = admit(&source);
+    let owner = hybrid(&source);
     assert!(owner.keyed_constraints() > 0);
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let region = Region::all_open(owner.atom_catalog().atoms().len());
@@ -248,4 +241,43 @@ fn unrewritten_send_arithmetic_enables_batching() {
             >= 4,
         "the four written carry equations retain their numeric certificates"
     );
+}
+
+#[test]
+fn variable_quotients_enable_batched_consequences() {
+    batched_units(
+        include_str!("../../../../../tests/fixtures/column-totality/positive-quotient.lp"),
+        &[[4, 2], [5, 2]],
+    );
+    batched_units(
+        include_str!("../../../../../tests/fixtures/column-totality/negative-quotient.lp"),
+        &[[-4, -2], [-5, -2]],
+    );
+}
+
+#[test]
+fn variable_remainders_enable_batched_consequences() {
+    batched_units(
+        include_str!("../../../../../tests/fixtures/column-totality/negative-remainder.lp"),
+        &[[-5, -2], [-7, -3]],
+    );
+}
+
+#[test]
+fn zero_containing_hulls_keep_the_original_scan() {
+    for source in [
+        include_str!("../../../../../tests/fixtures/column-totality/zero-hull-quotient.lp"),
+        include_str!("../../../../../tests/fixtures/column-totality/zero-hull-remainder.lp"),
+    ] {
+        let owner = hybrid(source);
+        let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+        let region = Region::all_open(owner.atom_catalog().atoms().len());
+        assert!(matches!(
+            pass(&mut checker, &region, ConstraintRegionPass::First),
+            ConstraintConsequence::Cut { .. }
+        ));
+        let prepared = checker.prepared.as_ref().unwrap();
+        assert_eq!(prepared.incremental_eligible, Some(false));
+        assert!(prepared.incremental.is_none());
+    }
 }

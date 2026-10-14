@@ -20,6 +20,7 @@ fn fixture() -> GroundProgram {
             Template::new(Some(b.clone()), vec![a], vec![], vec![], vec![]),
             Template::new(None, vec![b], vec![], vec![], vec![]),
         ],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();

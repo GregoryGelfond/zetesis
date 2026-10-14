@@ -2,9 +2,9 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::choice_theories::choices;
 use crate::support::clause_search::by_clauses;
 use crate::support::interpretations::key;
-use crate::support::region_filters::choices;
 use proptest::prelude::*;
 use zetesis_ferraris::{Interpretation, Node};
 use zetesis_sat::{Cancellation, Incomplete, Limits, StableModels};

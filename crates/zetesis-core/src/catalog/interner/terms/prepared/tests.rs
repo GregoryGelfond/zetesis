@@ -9,7 +9,8 @@ use std::convert::Infallible;
 
 mod locations;
 
-fn limits() -> Limits {
+/// Prepared-interner limits ample for every fixture here.
+pub(super) fn limits() -> Limits {
     Limits {
         max_atoms: 128,
         max_bytes: 1 << 22,
@@ -220,6 +221,7 @@ fn prepared_owner_is_stricter_than_shared_vocabulary() {
             vec![],
             vec![],
         )],
+        crate::FactTables::default(),
         crate::AdmissionLimits::default(),
     )
     .unwrap();
@@ -493,6 +495,7 @@ fn prepared_empty_patterns_authenticate_assignments() {
             vec![],
             vec![],
         )],
+        crate::FactTables::default(),
         crate::AdmissionLimits::default(),
     )
     .unwrap();

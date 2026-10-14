@@ -1,7 +1,7 @@
 //! Synchronous scalar delta rounds and complete ordered source traversal.
 
 use zetesis_core::{
-    AtomKey, Model, ModelAtoms, PatternRef, Program, Seed, SeedView, TemplateRef,
+    AtomKey, Model, ModelAtoms, PatternRef, Program, RuleRef, Seed, SeedView, TemplateRef,
     atom_interner::AtomAppender, catalog::TermRef,
 };
 
@@ -239,7 +239,7 @@ impl Work<'_> {
 }
 
 /// Compute the exact least positive closure selected by a sparse frozen seed.
-/// Bootstrap checks every template against empty truth, including zero-positive
+/// Bootstrap checks every rule occurrence against empty truth, including table facts and zero-positive
 /// rules and constraints. Later rounds visit each binding at its first newly
 /// derived source occurrence. Completed earlier scans account for old bindings;
 /// the final no-change round completes source coverage before the full
@@ -273,7 +273,7 @@ pub fn check_view(
     if !program.same_instance(seed.program()) {
         return Err(Stop::WrongProgram);
     }
-    if program.templates().is_empty() {
+    if program.is_empty() {
         return Ok(Check {
             program: program.clone(),
             closure: Model::default(),
@@ -702,6 +702,37 @@ struct RoundPlan<'a> {
 }
 
 impl RoundPlan<'_> {
+    /// Resolve the head's dense relation once per source occurrence. Table
+    /// facts and templates retain their separate prepared-coordinate indices.
+    fn dense_head<'source>(
+        self,
+        rule: RuleRef<'_>,
+        closure: &'source RoundRead<'source>,
+        work: &mut Work<'_>,
+    ) -> Result<Option<DenseHead<'source>>, Stop> {
+        let head = match rule {
+            RuleRef::Template { template, .. } => template.head(),
+            RuleRef::Fact(fact) => Some(fact.pattern()),
+        };
+        let Some(head) = head else {
+            return Ok(None);
+        };
+        let Some(slot) = self.layouts.slot(head.predicate()) else {
+            return Ok(None);
+        };
+        let position = match rule {
+            RuleRef::Template { index, .. } => self.heads.position(index, slot)?,
+            RuleRef::Fact(fact) => self.heads.fact_position(fact.index(), slot)?,
+        };
+        Ok(Some(DenseHead {
+            slot,
+            relation: closure
+                .dense(head.predicate(), work)?
+                .ok_or(Stop::InvalidProgram)?,
+            position,
+        }))
+    }
+
     /// Prepare the exact template sequence before visiting bindings. Bootstrap
     /// visits source order; incremental rounds sort and coalesce rule indices
     /// named by new predicates, retaining the existing checked work sequence.
@@ -713,7 +744,7 @@ impl RoundPlan<'_> {
         work: &mut Work<'_>,
     ) -> Result<usize, Stop> {
         if !self.incremental {
-            return Ok(program.templates().len());
+            return Ok(program.rules().len());
         }
         selected.clear();
         for predicate in closure.predicates_with_new() {
@@ -886,7 +917,7 @@ impl<'source> Sink<'source, Stop> for RoundSink<'_, 'source, '_> {
 
 // Complete the disjoint source family before publishing either its history or
 // its consequences. A constraint latch never skips another source occurrence.
-/// Visit every template in the bootstrap round, or, given the rule index of
+/// Visit every rule occurrence in the bootstrap round, or, given the template index of
 /// an incremental round, only the templates whose body names a predicate
 /// with new rows: no other template can bind anew.
 fn visit_round<'source>(
@@ -911,39 +942,32 @@ fn visit_round<'source>(
     relations::storage::admit(work, live)?;
     relations::storage::record(work, live)?;
     let visited = plan.select_rules(program, closure, &mut buffers.rules, work)?;
+    let mut original = program.rules();
     for position in 0..visited {
-        let index = if plan.incremental {
-            buffers.rules[position]
+        let rule = if plan.incremental {
+            let index = buffers.rules[position];
+            RuleRef::Template {
+                index,
+                template: program.templates().at(index).ok_or(Stop::InvalidProgram)?,
+            }
         } else {
-            position
+            original.next().ok_or(Stop::InvalidProgram)?
         };
-        let template = program.templates().at(index).ok_or(Stop::InvalidProgram)?;
+        let (template, index) = match rule {
+            RuleRef::Template { index, template } => (template, Some(index)),
+            RuleRef::Fact(fact) => (fact.as_template(), None),
+        };
         work.tick()?;
         if !gates.admits(template) {
             continue;
         }
-        // A laid-out head has its relation from the start of the closure, so
-        // both are resolved once for the template, not once per binding.
-        let dense_head = match template.head().and_then(|head| {
-            plan.layouts
-                .slot(head.predicate())
-                .zip(Some(head.predicate()))
-        }) {
-            Some((slot, predicate)) => Some(DenseHead {
-                slot,
-                relation: closure
-                    .dense(predicate, work)?
-                    .ok_or(Stop::InvalidProgram)?,
-                position: plan.heads.position(index, slot)?,
-            }),
-            None => None,
-        };
+        let dense_head = plan.dense_head(rule, closure, work)?;
         let mut emit = RoundSink {
             template,
             closure,
             appender: &mut *appender,
             dense_head,
-            block_steps: plan.block_steps.of(index),
+            block_steps: index.map_or(&[] as &[bool], |index| plan.block_steps.of(index)),
             result: &mut result,
             pending: &mut *pending,
         };

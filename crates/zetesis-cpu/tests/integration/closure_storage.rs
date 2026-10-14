@@ -9,6 +9,7 @@ fn program() -> Program {
     let head = AtomPattern::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap();
     Program::new(
         vec![Template::new(Some(head), vec![], vec![], vec![], vec![])],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap()

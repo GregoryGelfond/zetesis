@@ -53,6 +53,15 @@ pub enum ValueNodeRef<'a> {
 }
 
 impl ValueNodeRef<'_> {
+    /// The number of children this node has: a function's or tuple's arity,
+    /// zero for every other node.
+    pub(crate) const fn arity(self) -> usize {
+        match self {
+            Self::Function { arity, .. } | Self::Tuple { arity } => arity,
+            _ => 0,
+        }
+    }
+
     /// Own this node, copying its text once. Time and additional space are O(text
     /// bytes); no child traversal or value admission occurs. Apply construction
     /// limits before using this operation to build an owned tree.

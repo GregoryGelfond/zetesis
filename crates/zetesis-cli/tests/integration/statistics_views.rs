@@ -124,7 +124,7 @@ fn disabled_measurements_keep_mandatory_work_receipts() {
     let text = render(&SolveConfig::from(&options), Some(outcome.semantic()));
     assert_eq!(value(&text, "Requested detailed measurements"), "disabled");
     assert!(!value(&text, "Formula search work").starts_with("unavailable"));
-    assert!(value(&text, "Eager rule work").starts_with("unavailable"));
+    assert!(value(&text, "Rule work").starts_with("unavailable"));
 }
 
 #[test]
@@ -310,7 +310,7 @@ fn grounding_rows_preserve_the_measured_rule_scope() {
             row.split_whitespace().next().unwrap(),
             recorded.map_or_else(|| "unavailable".into(), |count| count.to_string())
         );
-        assert!(row.contains("eager formula rule instantiation only"));
+        assert!(row.contains("formula instantiation or certified source evaluation"));
     }
 }
 

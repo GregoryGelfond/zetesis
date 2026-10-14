@@ -13,9 +13,7 @@ use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
 use zetesis_sat::{Limits as SearchLimits, StableModels};
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit_formula,
-};
+use zetesis_themelios::{AdmittedFormula, FormulaLimits};
 
 type Record = (BTreeSet<String>, Option<Vec<i64>>);
 type Records = BTreeSet<Record>;
@@ -24,22 +22,6 @@ struct Case {
     name: String,
     source: String,
     records: Records,
-}
-
-fn names(value: &Json) -> BTreeSet<String> {
-    let raw = value.as_array().expect("complete canonical atom list");
-    let names: BTreeSet<_> = raw
-        .iter()
-        .map(|value| value.as_str().unwrap().to_owned())
-        .collect();
-    assert_eq!(names.len(), raw.len(), "no duplicate full-model atoms");
-    names
-}
-
-fn costs(value: &Json) -> Option<Vec<i64>> {
-    value
-        .as_array()
-        .map(|costs| costs.iter().map(|cost| cost.as_i64().unwrap()).collect())
 }
 
 fn cases() -> Vec<Case> {
@@ -52,7 +34,7 @@ fn cases() -> Vec<Case> {
             let raw = value["models"].as_array().unwrap();
             let records: Records = raw
                 .iter()
-                .map(|row| (names(&row[0]), costs(&row[1])))
+                .map(|row| (oracle::atoms(&row[0]), oracle::costs(&row[1])))
                 .collect();
             assert_eq!(records.len(), raw.len(), "raw full-model multiplicity");
             Case {
@@ -138,13 +120,8 @@ fn complete_factorization_sources_match_independent_reduct_and_recorded_model_co
     assert_eq!(cases.len(), 36);
     let mut total = 0;
     for case in cases {
-        let input = admit_formula(
-            case.source.clone(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap_or_else(|error| panic!("{}: explicit admission required: {error}", case.name));
+        let input = zetesis_reference_support::admit(&case.source, &FormulaLimits::default())
+            .unwrap_or_else(|error| panic!("{}: explicit admission required: {error}", case.name));
         let reference = exhaustive(&input);
         assert_eq!(reference, case.records, "{}: {}", case.name, case.source);
         assert_eq!(
@@ -170,23 +147,7 @@ fn clingo(source: &str) -> Records {
     );
     let value = oracle::json(&run);
     assert_eq!(value["Result"], "SATISFIABLE");
-    assert_eq!(value["Models"]["More"], "no");
-    let mut records = Records::new();
-    let mut count = 0_u64;
-    for witness in value["Call"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-    {
-        assert!(
-            records.insert((names(&witness["Value"]), costs(&witness["Costs"]))),
-            "raw complete model count cannot hide duplicates"
-        );
-        count += 1;
-    }
-    assert_eq!(value["Models"]["Number"].as_u64(), Some(count));
-    records
+    oracle::model_records(&value)
 }
 
 #[test]

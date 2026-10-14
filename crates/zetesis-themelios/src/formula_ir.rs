@@ -6,9 +6,20 @@ mod assignment_plan_tests;
 #[cfg(test)]
 mod shared_names_tests;
 
+#[cfg(test)]
+pub(crate) mod testing;
+
 mod objective_scope;
 
 mod domain;
+
+mod comparison;
+pub(crate) use comparison::Comparison;
+mod comparison_forms;
+pub use comparison_forms::ComparisonForms;
+mod integer;
+
+mod facts;
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -20,7 +31,7 @@ use themelios_program::program::{
     Arguments, Body, BodyElement, Choice, DefaultNegation, Direction, HasGuards, Head, Literal,
     LiteralInner, Optimize, OptimizeElement, Program as SourceProgram, Relation, Rule, Statement,
 };
-use themelios_program::provenance::{Origin, TransformTag, WithProvenance};
+use themelios_program::provenance::{Origin, Provenance, TransformTag, WithProvenance};
 use themelios_program::symbol::Symbol;
 use themelios_program::term::{BinaryOp, Term, TermParts, UnaryOp, Variable};
 use themelios_program::transform::{Rewrite, rewrite};
@@ -43,8 +54,10 @@ use zetesis_core::catalog::TermKey;
 pub(crate) struct Prepared {
     pub analysis: themelios_analysis::Analysis,
     pub analysis_basis: crate::AnalysisBasis,
-    pub analyzed: SourceProgram,
-    pub rules: Vec<RuleIr>,
+    pub analyzed: crate::formula_analysis::Summary,
+    /// The rules and fact blocks, reached through [`Self::items`] or, by a
+    /// reader that never sees facts, [`Self::rules_without_facts`].
+    items: crate::formula_facts::Items,
     pub projection: Vec<RuleIr>,
     pub project_selection: crate::ProjectSelection,
     pub objectives: Vec<ObjectiveIr>,
@@ -57,7 +70,51 @@ pub(crate) struct Prepared {
     pub keyed_constraints: usize,
     /// How the key analysis that asked them ended.
     pub key_analysis: crate::KeyAnalysis,
+    /// How this program's comparison literals were compiled.
+    pub comparison_forms: ComparisonForms,
 }
+impl Prepared {
+    /// The prepared program in item order: each rule, and each fact block
+    /// where its fact rules stood.
+    pub(crate) fn items(&self) -> &crate::formula_facts::Items {
+        &self.items
+    }
+
+    /// The rules alone, for a reader that never sees facts; each use states
+    /// why facts cannot reach it.
+    pub(crate) fn rules_without_facts(&self) -> &[RuleIr] {
+        self.items.rules()
+    }
+
+    /// The rules alone, for a refinement of rules that facts cannot reach.
+    #[cfg(test)]
+    pub(crate) fn rules_without_facts_mut(&mut self) -> &mut [RuleIr] {
+        self.items.rules_mut()
+    }
+
+    /// Move the rules out once the item sequence is no longer read: a
+    /// consumer of constraints alone, which facts never are.
+    pub(crate) fn take_rules_without_facts(&mut self) -> Vec<RuleIr> {
+        self.items.take_rules()
+    }
+
+    /// Move the items `selected` marks into their own sequence, in the `room`
+    /// reserved for them by [`crate::formula_facts::Items::reserve_split`].
+    pub(crate) fn split_items(
+        &mut self,
+        selected: &[u8],
+        room: crate::formula_facts::SplitRoom,
+    ) -> crate::formula_facts::Items {
+        self.items.split_off(selected, room)
+    }
+
+    /// The item sequence, for tests that edit the compiled program.
+    #[cfg(test)]
+    pub(crate) fn items_mut(&mut self) -> &mut crate::formula_facts::Items {
+        &mut self.items
+    }
+}
+
 /// One original objective element, before its pooled or weak-body alternatives.
 /// Its first lowered position is unique within the prepared objective vector;
 /// all alternatives remain contiguous. Diagnostic spans do not define identity.
@@ -255,17 +312,22 @@ impl HeadElementKey {
         }
     }
 }
+/// The compiled operands of one written comparison step, before body
+/// placement makes them a comparison literal or the guard path a guard's
+/// test.
+pub(super) enum ComparisonParts {
+    Scalar(Expression, Relation, Expression),
+    Tuple(Vec<Expression>, Relation, Vec<Expression>),
+}
 pub(crate) enum LiteralIr {
     Atom(DefaultNegation, AtomPattern),
     PatternAtom(crate::formula_pattern::PatternAtom),
     ProjectedAtom(DefaultNegation, Projection),
-    Compare(Expression, Relation, Expression),
-    /// Equality between a captured positive subterm and its source expression.
-    /// This is always a consumer; neither side supplies a binding instruction.
-    ArgumentCheck {
-        captured: Expression,
-        value: Expression,
-    },
+    Compare(Comparison),
+    /// Equality between a captured positive subterm and its source expression:
+    /// the comparison `captured = value`, captured on the left. This is
+    /// always a consumer; neither side supplies a binding instruction.
+    ArgumentCheck(Comparison),
     TupleCompare(Vec<Expression>, Relation, Vec<Expression>),
     Guard(crate::formula_guard::Guard),
     /// The complement of an ordinary singleton comparison head. Its truth
@@ -337,15 +399,91 @@ pub(crate) struct AggregateElementIr {
     pub key: AggregateKey,
     pub condition: Vec<LiteralIr>,
     pub variables: usize,
+    /// Whether the element is required ([`required`]): its tuple is present
+    /// for every binding its local join yields, whatever the interpretation.
+    /// An assignment proposes its values from the tuples with such an element.
+    pub required: bool,
+}
+
+/// Whether an element with `key` and `condition` is required: a tuple key
+/// whose condition the local join decides ([`decided_by_join`]). An atom key
+/// is itself an atom whose truth depends on the interpretation, so its
+/// element is never required.
+pub(crate) fn required(key: &AggregateKey, condition: &[LiteralIr]) -> bool {
+    matches!(key, AggregateKey::Tuple(_)) && decided_by_join(condition)
+}
+
+/// Whether the element's local join decides every literal of `condition` for
+/// each binding it yields, so the condition holds in every interpretation for
+/// that binding. Comparisons, argument checks, guards (comparison chains,
+/// negated comparisons, `#true` and `#false`), binders and intervals are
+/// decided before a row is yielded. An atom of either sign depends on the
+/// interpretation; a nested conditional or aggregate would hold atoms; and a
+/// head guard selects emitted constraints rather than rows, so source-evidence
+/// traversals do not decide it.
+fn decided_by_join(condition: &[LiteralIr]) -> bool {
+    condition.iter().all(|literal| match literal {
+        LiteralIr::Compare(..)
+        | LiteralIr::ArgumentCheck { .. }
+        | LiteralIr::TupleCompare(..)
+        | LiteralIr::Guard(_)
+        | LiteralIr::Bind { .. }
+        | LiteralIr::Range { .. } => true,
+        LiteralIr::Atom(..)
+        | LiteralIr::PatternAtom(_)
+        | LiteralIr::ProjectedAtom(..)
+        | LiteralIr::HeadGuard(_)
+        | LiteralIr::Conditional(_)
+        | LiteralIr::Aggregate(_) => false,
+    })
 }
 pub(crate) enum AggregateKey {
     Tuple(Vec<CoreTerm>),
     Atom(AtomPattern),
 }
+/// An expression's nodes in evaluation order: each operation's arguments name
+/// earlier nodes. An expression carries no derived state, so its nodes may be
+/// read or rewritten freely; a comparison's integer form belongs to the
+/// comparison literal ([`Comparison`]).
 pub(crate) struct Expression {
     pub nodes: Vec<Operation>,
 }
 impl Expression {
+    pub(crate) fn new(nodes: Vec<Operation>) -> Self {
+        Self { nodes }
+    }
+
+    /// A copy, node for node: `work` is charged before each node, and a
+    /// constructor node is copied through its own copy, which charges its
+    /// bytes as `ScalarBytes`.
+    ///
+    /// # Errors
+    /// `work`'s refusal, or the expansion budget's.
+    pub(crate) fn copy(
+        &self,
+        mut work: impl FnMut() -> Result<(), FormulaFailure>,
+        budget: &mut Budget,
+        location: ProgramSite,
+    ) -> Result<Self, FormulaFailure> {
+        let mut nodes = Vec::with_capacity(self.nodes.len());
+        for operation in &self.nodes {
+            work()?;
+            nodes.push(match *operation {
+                Operation::Constant(value) => Operation::Constant(value),
+                Operation::Constructor(ref constructor) => {
+                    Operation::Constructor(constructor.copy(budget, location)?)
+                }
+                Operation::Variable(variable) => Operation::Variable(variable),
+                Operation::Unary(operator, value) => Operation::Unary(operator, value),
+                Operation::Binary(operator, left, right) => {
+                    Operation::Binary(operator, left, right)
+                }
+                Operation::Absolute(value) => Operation::Absolute(value),
+            });
+        }
+        Ok(Self { nodes })
+    }
+
     /// Complete declared input occurrences; unrelated environment slots are never read.
     pub(crate) fn inputs(&self) -> impl Iterator<Item = usize> + '_ {
         self.nodes.iter().filter_map(|node| match node {
@@ -414,7 +552,7 @@ pub(crate) struct PreparationContext<'a> {
 impl PreparationContext<'_> {
     pub(crate) fn prepare(
         self,
-        source: &SourceProgram,
+        source: &std::sync::Arc<SourceProgram>,
         project_selection: crate::ProjectSelection,
     ) -> Result<Prepared, FormulaFailure> {
         let Self {
@@ -444,32 +582,34 @@ impl PreparationContext<'_> {
             location: fallback,
         };
         let emitted_owners = compiler.compile_program(source, &constants, &mut parts, fallback)?;
-        let (mut analyzed, owners) = crate::formula_keys::owners::Owners::collect(
+        let (mut analyzed, owners) = crate::formula_analysis::Summary::collect(
+            std::sync::Arc::clone(source),
             std::mem::take(&mut parts.analyzed),
             emitted_owners,
+            std::mem::take(&mut parts.analysis_sources),
+            std::mem::take(&mut parts.fact_families),
             compiler.budget,
             fallback,
         )?;
         let (replacements, keyed_constraints, key_analysis) =
             plan_constraint_replacements(&mut compiler, &analyzed, &owners, fallback)?;
         if !replacements.is_empty() {
-            analyzed = replace_constraints(
+            replace_constraints(
                 &mut compiler,
                 &constants,
                 &mut parts,
-                &analyzed,
+                &mut analyzed,
                 &owners,
                 replacements,
                 fallback,
             )?;
         }
-        let analysis =
-            crate::formula_analysis::analyze(&analyzed, limits, compiler.budget, fallback)?;
+        let analysis = analyzed.analyze(limits, compiler.budget, fallback)?;
         let components = compiler
             .source
             .components(limits, compiler.counters, fallback)?;
         let objective_extrema = crate::formula_objective_dependencies::check(
-            &parts.rules,
+            &parts.items,
             &mut parts.objectives,
             &analysis,
             components,
@@ -492,11 +632,15 @@ impl PreparationContext<'_> {
         compiler
             .source
             .finish(limits, compiler.counters, fallback)?;
+        // Fact blocks hold values, not literals, so no comparison is among
+        // them.
+        let comparison_forms =
+            ComparisonForms::of(parts.items.rules(), &parts.projection, &parts.objectives);
         Ok(Prepared {
             analysis,
             analysis_basis,
             analyzed,
-            rules: parts.rules,
+            items: parts.items,
             projection: parts.projection,
             project_selection,
             objectives: parts.objectives,
@@ -504,6 +648,7 @@ impl PreparationContext<'_> {
             objective_extrema,
             keyed_constraints,
             key_analysis,
+            comparison_forms,
         })
     }
 }
@@ -512,7 +657,7 @@ impl PreparationContext<'_> {
 /// analyzed program, sharing its lazy all-producer fact certificate.
 fn plan_constraint_replacements(
     compiler: &mut Compiler<'_>,
-    analyzed: &SourceProgram,
+    analyzed: &crate::formula_analysis::Summary,
     owners: &crate::formula_keys::owners::Owners,
     site: ProgramSite,
 ) -> Result<
@@ -523,7 +668,8 @@ fn plan_constraint_replacements(
     ),
     FormulaFailure,
 > {
-    let mut facts = crate::formula_rewrite::FixedFacts::new(analyzed);
+    let reader = crate::formula_analysis::summary::PreparationFacts::new(analyzed);
+    let mut facts = crate::formula_rewrite::FixedFacts::summary(&reader);
     let asked = crate::formula_keys::ask_all(
         analyzed,
         owners,
@@ -564,9 +710,12 @@ fn plan_constraint_replacements(
 /// declarations, and the projection nodes charged so far.
 #[derive(Default)]
 struct Parts {
-    rules: Vec<RuleIr>,
+    items: crate::formula_facts::Items,
+    fact_scratch: facts::Scratch,
+    fact_families: crate::formula_analysis::Families,
     projection: Vec<RuleIr>,
     analyzed: Vec<WithProvenance<Statement>>,
+    analysis_sources: Vec<StatementId>,
     pool_projection_nodes: u128,
     objectives: Vec<ObjectiveIr>,
     objective_declarations: Vec<ProgramSite>,
@@ -582,17 +731,27 @@ fn replace_constraints(
     compiler: &mut Compiler<'_>,
     constants: &BTreeMap<String, Symbol>,
     parts: &mut Parts,
-    analyzed: &SourceProgram,
+    analyzed: &mut crate::formula_analysis::Summary,
     owners: &crate::formula_keys::owners::Owners,
     asked: crate::formula_rewrite::Replacements,
     fallback: ProgramSite,
-) -> Result<SourceProgram, FormulaFailure> {
-    parts.rules.retain(|rule| {
+) -> Result<(), FormulaFailure> {
+    // Replacements are constraints, so no fact block is owned by an asked
+    // statement: the fact blocks stay, and the replacements' rules follow.
+    parts.items.retain_rules(|rule| {
         rule.location
             .statement_id()
             .is_none_or(|owner| !asked.contains_key(&owner))
     });
+    let mut retained_flags = Vec::new();
+    crate::formula_pattern::reserve(
+        &mut retained_flags,
+        analyzed.program().statements().count(),
+        compiler.budget,
+        fallback,
+    )?;
     parts.analyzed = analyzed
+        .program()
         .statements()
         .enumerate()
         .filter(|(index, _)| {
@@ -600,7 +759,10 @@ fn replace_constraints(
                 .at(*index)
                 .is_none_or(|owner| !asked.contains_key(&owner))
         })
-        .map(|(_, carrier)| carrier.clone())
+        .map(|(index, carrier)| {
+            retained_flags.push(analyzed.source_at(index));
+            carrier.clone()
+        })
         .collect();
     for (owner, replacement) in asked {
         let crate::formula_rewrite::Replacement {
@@ -614,10 +776,27 @@ fn replace_constraints(
         for rule in rules {
             let carrier =
                 WithProvenance::new(Statement::Rule(rule), provenance.clone().merge(tag.clone()));
+            let start = parts.analyzed.len();
             compiler.compile(&carrier, constants, parts, fallback.with_statement(owner))?;
+            crate::formula_pattern::reserve_amortized(
+                &mut retained_flags,
+                parts.analyzed.len() - start,
+                compiler.budget,
+                fallback,
+            )?;
+            retained_flags.extend(std::iter::repeat_n(
+                Some(owner),
+                parts.analyzed.len() - start,
+            ));
         }
     }
-    Ok(SourceProgram::of_nodes(std::mem::take(&mut parts.analyzed)))
+    analyzed.replace(
+        std::mem::take(&mut parts.analyzed),
+        retained_flags,
+        compiler.budget,
+        fallback,
+    )?;
+    Ok(())
 }
 
 fn validate_objectives(
@@ -733,9 +912,13 @@ impl Normalizer<'_> {
         })()
     }
 }
+/// The transformation tag the formula route's rewrite stamps on what it
+/// rebuilds.
+const FORMULA_TRANSFORM: &str = "zetesis-finite-formula";
+
 impl Rewrite for Normalizer<'_> {
     fn tag(&self) -> TransformTag {
-        TransformTag::new("zetesis-finite-formula")
+        TransformTag::new(FORMULA_TRANSFORM)
     }
     fn rewrite_term(&mut self, term: Term) -> Term {
         if self.failure.is_some() {
@@ -839,6 +1022,16 @@ impl Compiler<'_> {
             let site = fallback.with_statement(owner);
             let start = parts.analyzed.len();
             self.compile(carrier, constants, parts, site)?;
+            let emitted = parts.analyzed.len() - start;
+            crate::formula_pattern::reserve_amortized(
+                &mut parts.analysis_sources,
+                emitted,
+                self.budget,
+                site,
+            )?;
+            parts
+                .analysis_sources
+                .extend(std::iter::repeat_n(owner, emitted));
             crate::formula_keys::owners::record(
                 &mut emitted_owners,
                 owner,
@@ -860,8 +1053,25 @@ impl Compiler<'_> {
         fallback: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.location = extended::origin(carrier, fallback);
-        let rewritten = self.normalize_statement(carrier, constants)?;
-        let statement = rewritten.statements().next().expect("rewrite keeps a rule");
+        let kept = self.keeps_fact(carrier, constants)?;
+        let rewritten = if kept {
+            None
+        } else {
+            Some(self.normalize_statement(carrier, constants)?)
+        };
+        let stamped;
+        let (statement, provenance) = if let Some(rewritten) = &rewritten {
+            let statement = rewritten.statements().next().expect("rewrite keeps a rule");
+            (statement, statement.provenance())
+        } else {
+            stamped = carrier
+                .provenance()
+                .clone()
+                .merge(Provenance::from(Origin::Transformed(TransformTag::new(
+                    FORMULA_TRANSFORM,
+                ))));
+            (carrier, &stamped)
+        };
         let origins = extended::program_sites(carrier, self.location);
         if self.project_statement(
             statement,
@@ -891,25 +1101,71 @@ impl Compiler<'_> {
                 (facts.len() as u128).saturating_mul(origins.len() as u128),
                 self.location,
             )?;
-            for fact in facts {
-                let head = fact.head().expect("expanded facts have a head").clone();
-                parts.analyzed.push(crate::formula_analysis::fact(
-                    &head,
-                    statement,
-                    self.location,
-                )?);
-                parts.rules.push(self.fact_rule(&head, &origins)?);
+            #[cfg(test)]
+            if facts::testing::facts_as_rules() {
+                let mut facts = facts.into_rows();
+                while let Some(head) = facts.next(self.budget, self.location)? {
+                    parts.analyzed.push(crate::formula_analysis::fact(
+                        &head,
+                        provenance,
+                        self.location,
+                    )?);
+                    let rule = self.fact_rule(&head, &origins)?;
+                    parts.items.push_rule(rule);
+                }
+                return Ok(());
+            }
+            self.facts(&facts, &origins, &mut parts.items, &mut parts.fact_scratch)?;
+            if facts.len() != 0 {
+                let family = parts.fact_families.record(
+                    fact_expansion::fact_atom(statement.get()).expect("accepted fact family"),
+                    provenance,
+                    fallback
+                        .statement_id()
+                        .expect("source compilation assigns statement identity"),
+                    facts.len(),
+                    &mut crate::formula_analysis::Checked {
+                        budget: self.budget,
+                        site: self.location,
+                    },
+                )?;
+                if let Some(rewritten) = rewritten {
+                    parts.fact_families.normalized(family, rewritten);
+                }
             }
         } else {
             self.source_rules(
                 statement,
                 &origins,
                 &mut parts.pool_projection_nodes,
-                &mut parts.rules,
+                &mut parts.items,
                 &mut parts.analyzed,
             )?;
         }
         Ok(())
+    }
+
+    /// Whether `carrier` is a fact statement normalization would return as it
+    /// is, its terms charged as normalization charges them. Only fact
+    /// statements are kept: their analyzed facts are rebuilt from the expanded
+    /// heads with the statement's provenance, so the content and the stamp are
+    /// all the rewrite would contribute. A kept head has no constructor or
+    /// operator term, so it is never a generated fact.
+    fn keeps_fact(
+        &mut self,
+        carrier: &WithProvenance<Statement>,
+        constants: &BTreeMap<String, Symbol>,
+    ) -> Result<bool, ExpansionFailure> {
+        if fact_expansion::fact_atom(carrier.get()).is_none() {
+            return Ok(false);
+        }
+        extended::kept_as_is(
+            carrier.get(),
+            constants,
+            extended::Normalization::Formula,
+            self.budget,
+            self.location,
+        )
     }
 
     /// Keep the rewritten owner private until every normalization step has succeeded.
@@ -934,6 +1190,9 @@ impl Compiler<'_> {
         }
     }
 
+    /// The rule form of one expanded fact, kept for the reference path that
+    /// differential tests compare the fact arena against.
+    #[cfg(test)]
     fn fact_rule(
         &mut self,
         head: &zetesis_core::AtomPattern,
@@ -1074,11 +1333,12 @@ impl Compiler<'_> {
                     }
                     let left = self.objective_term(comparison.get().first(), &mut variables)?;
                     let right = self.objective_term(right, &mut variables)?;
-                    condition.push(LiteralIr::Compare(
+                    let comparison = self.compare(
                         Self::scalar_expression(&left),
                         relation,
                         Self::scalar_expression(&right),
-                    ));
+                    )?;
+                    condition.push(comparison);
                     filters.push(self.source.filter(
                         relation == Relation::Eq,
                         left,
@@ -1474,8 +1734,9 @@ impl Compiler<'_> {
                 nodes.push(node);
                 Ok(index)
             })?;
-        Ok(Expression { nodes })
+        Ok(Expression::new(nodes))
     }
+    #[cfg(test)]
     fn admit_fact_pattern(
         &mut self,
         pattern: &zetesis_core::AtomPattern,
@@ -1582,7 +1843,7 @@ impl Compiler<'_> {
             CoreTerm::Variable(variable) => Operation::Variable(*variable),
             CoreTerm::Constant(value) => Operation::Constant(*value),
         };
-        Expression { nodes: vec![node] }
+        Expression::new(vec![node])
     }
 
     pub(super) fn constant_expression(&mut self, value: i32) -> Result<Expression, FormulaFailure> {
@@ -1590,17 +1851,68 @@ impl Compiler<'_> {
         Ok(Self::scalar_expression(&CoreTerm::Constant(scalar)))
     }
 
+    /// The value of `scalar` when it is a number ([`components::Admission::scalar_number`]).
     pub(super) fn scalar_number(
         &mut self,
         scalar: components::Scalar,
     ) -> Result<Option<i32>, FormulaFailure> {
-        let value = self
-            .source
-            .scalar_ref(scalar, self.limits, self.counters, self.location)?;
-        Ok(match value.descriptor() {
-            zetesis_core::ValueNodeRef::Number(number) => Some(number),
-            _ => None,
-        })
+        self.source
+            .scalar_number(scalar, self.limits, self.counters, self.location)
+    }
+
+    /// The comparison `left relation right`, compiled with its integer
+    /// comparison form ([`comparison::compile`]).
+    fn compiled(
+        &mut self,
+        parts: (Expression, Relation, Expression),
+    ) -> Result<Comparison, FormulaFailure> {
+        comparison::compile(
+            parts,
+            &self.source,
+            self.limits,
+            self.counters,
+            self.budget,
+            self.location,
+        )
+    }
+
+    /// The comparison literal `left relation right`, with its integer
+    /// comparison form.
+    pub(super) fn compare(
+        &mut self,
+        left: Expression,
+        relation: Relation,
+        right: Expression,
+    ) -> Result<LiteralIr, FormulaFailure> {
+        Ok(LiteralIr::Compare(self.compiled((left, relation, right))?))
+    }
+
+    /// The equality that gives the data slot `target` its value, a
+    /// comparison literal like any other.
+    pub(super) fn generated_equality(
+        &mut self,
+        target: usize,
+        value: Expression,
+    ) -> Result<LiteralIr, FormulaFailure> {
+        self.compare(
+            Expression::new(vec![Operation::Variable(target)]),
+            Relation::Eq,
+            value,
+        )
+    }
+
+    /// The argument check that the positive subterm captured in slot
+    /// `captured` equals its source expression `value`.
+    pub(super) fn captured_equality(
+        &mut self,
+        captured: usize,
+        value: Expression,
+    ) -> Result<LiteralIr, FormulaFailure> {
+        Ok(LiteralIr::ArgumentCheck(self.compiled((
+            Expression::new(vec![Operation::Variable(captured)]),
+            Relation::Eq,
+            value,
+        ))?))
     }
 }
 

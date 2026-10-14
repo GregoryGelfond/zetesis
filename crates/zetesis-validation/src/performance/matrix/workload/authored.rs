@@ -8,6 +8,7 @@ use sha2::{Digest, Sha256};
 use super::{
     Budget, ConstantAmendment, Error, Source, Workload, WorkloadLimits, constants, examples, field,
 };
+use crate::digest;
 use crate::selected::FileSeal;
 
 /// A reviewed source and display contract, independent of the correctness corpus.
@@ -44,8 +45,9 @@ impl Workload {
     /// No-op edits retain their provenance but keep the unchanged contract.
     ///
     /// # Errors
-    /// Refuses unconfined paths, changed sources, includes, invalid contracts,
-    /// unsupported amendments, and source or metadata limits.
+    /// Refuses unconfined paths, files that are not regular files, changed
+    /// sources, includes, invalid contracts, unsupported amendments, and source
+    /// or metadata limits.
     pub fn authored(
         program: AuthoredProgram<'_>,
         amendments: &[ConstantAmendment<'_>],
@@ -64,8 +66,8 @@ impl Workload {
                 "authored amendments are outside the source or repeated",
             ));
         }
-        let root = examples::files::canonical(program.root).map_err(Error::Corpus)?;
-        let path = examples::files::confined(&root, program.entry).map_err(Error::Corpus)?;
+        let root = examples::Files::canonical(program.root).map_err(Error::Corpus)?;
+        let path = examples::Files::confined(&root, program.entry).map_err(Error::Corpus)?;
         let seal =
             super::super::super::run::checked_seal(&path, limits.source_bytes, program.sha256)?;
         let text = read(&seal, limits.source_bytes)?;
@@ -95,7 +97,7 @@ impl Workload {
         let derived = examples::derive_source(&text, &edits, limits.source_bytes.min(remaining))
             .map_err(Error::Corpus)?;
         budget.source(derived.len())?;
-        let derived_sha256 = format!("{:x}", Sha256::digest(derived.as_bytes()));
+        let derived_sha256 = digest::sha256(derived.as_bytes());
         let mut hash = Sha256::new();
         hash.update(b"zetesis-authored-workload-v1\0");
         for part in [
@@ -117,13 +119,14 @@ impl Workload {
         let amended = source.base_sha256 != source.derived_sha256;
         Ok(Self {
             entry,
-            identity: budget.text(&format!("{:x}", hash.finalize()))?,
+            identity: budget.text(&digest::spelled(&hash.finalize()))?,
             manifest_sha256: None,
             sources: vec![source],
             default_contract: program.contract.clone(),
             amended,
             generated: None,
             authored: Some(Authored { source: seal }),
+            bundle: None,
             metadata_bytes: budget.metadata,
             source_bytes: budget.sources,
         })
@@ -168,7 +171,7 @@ impl Workload {
         let source = &self.sources[0];
         let derived =
             examples::derive_source(&original, &source.edits, limit).map_err(Error::Corpus)?;
-        examples::files::digest(&source.path, derived.as_bytes(), &source.derived_sha256)
+        examples::Files::digest(&source.path, derived.as_bytes(), &source.derived_sha256)
             .map_err(Error::Corpus)?;
         let path = directory.join(&source.path);
         let parent = path
@@ -184,16 +187,19 @@ impl Workload {
     }
 }
 
-fn read(seal: &FileSeal, limit: usize) -> Result<String, Error> {
-    let bytes = examples::files::read(seal.requested(), limit, examples::Resource::SourceBytes)
+pub(super) fn read(seal: &FileSeal, limit: usize) -> Result<String, Error> {
+    let bytes = examples::Files::read(seal.requested(), limit, examples::Resource::SourceBytes)
         .map_err(Error::Corpus)?;
-    examples::files::digest("authored source", &bytes, seal.sha256()).map_err(Error::Corpus)?;
+    examples::Files::digest("authored source", &bytes, seal.sha256()).map_err(Error::Corpus)?;
     String::from_utf8(bytes).map_err(|error| Error::Corpus(examples::Error::Utf8(error)))
 }
 
 // A fixed-capacity slice writer refuses excess bytes before extending storage.
 // The same shared Contract serialization supplies both identity and retention bounds.
-fn contract_bytes(contract: &examples::Contract, limit: usize) -> Result<Vec<u8>, Error> {
+pub(super) fn contract_bytes(
+    contract: &examples::Contract,
+    limit: usize,
+) -> Result<Vec<u8>, Error> {
     let mut bytes = super::reserve(limit)?;
     bytes.resize(limit, 0);
     let mut remaining = bytes.as_mut_slice();
@@ -213,7 +219,7 @@ mod tests {
         let root = tempfile::tempdir().unwrap();
         let source = "p.";
         std::fs::write(root.path().join("case.lp"), source).unwrap();
-        let hash = format!("{:x}", Sha256::digest(source));
+        let hash = digest::sha256(source.as_bytes());
         let contract = examples::Contract::complete_family(std::num::NonZeroU64::MIN);
         let workload = Workload::authored(
             AuthoredProgram {
@@ -243,7 +249,7 @@ mod tests {
         let source = "#const n=8. p(n).";
         let path = root.path().join("case.lp");
         std::fs::write(&path, source).unwrap();
-        let hash = format!("{:x}", Sha256::digest(source));
+        let hash = digest::sha256(source.as_bytes());
         let contract = examples::Contract::complete_family(std::num::NonZeroU64::MIN);
         let workload = Workload::authored(
             AuthoredProgram {
@@ -266,7 +272,7 @@ mod tests {
         let bytes = std::fs::read(derived.path().join("case.lp")).unwrap();
         assert_eq!(bytes, b"#const n=9. p(n).");
         assert_eq!(seals.len(), 1);
-        assert_eq!(seals[0].sha256(), format!("{:x}", Sha256::digest(&bytes)));
+        assert_eq!(seals[0].sha256(), digest::sha256(&bytes));
         assert_eq!(std::fs::read_to_string(&path).unwrap(), source);
         std::fs::write(&path, "#const n=7. p(n).").unwrap();
         assert!(

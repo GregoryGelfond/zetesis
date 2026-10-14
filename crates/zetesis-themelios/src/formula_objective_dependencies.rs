@@ -53,6 +53,18 @@ impl<'source> Context<'_, 'source> {
             .charge_work(predicate.name().len() as u128, self.limits, self.location)?;
         Ok(signature(predicate))
     }
+    /// A fact block's predicate, read as a head pattern's predicate is.
+    fn block_signature(
+        &mut self,
+        predicate: crate::formula_support::components::Predicate,
+    ) -> Result<Signature, FormulaFailure> {
+        let predicate =
+            predicate.get(self.components, self.limits, self.counters, self.location)?;
+        self.work()?;
+        self.counters
+            .charge_work(predicate.name().len() as u128, self.limits, self.location)?;
+        Ok(signature(predicate))
+    }
     fn literal_signature(
         &mut self,
         literal: &LiteralIr,
@@ -80,13 +92,17 @@ impl<'source> Context<'_, 'source> {
 }
 
 pub(crate) fn check(
-    rules: &[RuleIr],
+    items: &crate::formula_facts::Items,
     objectives: &mut [ObjectiveIr],
     analysis: &Analysis,
     components: TemplateComponentsRef<'_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
 ) -> Result<BTreeSet<usize>, FormulaFailure> {
+    // Facts have empty bodies and normal heads: they add nothing to the query or
+    // precision readings below, which read rules; forwarding counts them as
+    // competing producers of their predicates.
+    let rules = items.rules();
     let mut extrema = BTreeSet::new();
     for objective in objectives {
         let mut context = Context {
@@ -120,7 +136,7 @@ pub(crate) fn check(
             None
         } else {
             positive_precision(
-                rules,
+                items,
                 std::slice::from_mut(objective),
                 graph,
                 &relevant,
@@ -137,12 +153,13 @@ pub(crate) fn check(
 }
 
 fn positive_precision(
-    rules: &[RuleIr],
+    items: &crate::formula_facts::Items,
     objectives: &mut [ObjectiveIr],
     graph: &DependencyGraph,
     relevant: &BTreeSet<Signature>,
     context: &mut Context<'_, '_>,
 ) -> Result<Option<BTreeSet<usize>>, FormulaFailure> {
+    let rules = items.rules();
     let mut generated = BTreeMap::<Signature, BTreeSet<usize>>::new();
     for rule in rules {
         context.location = rule.location;
@@ -186,7 +203,7 @@ fn positive_precision(
             .or_default()
             .extend(positions);
     }
-    let forwarded = forwarding::certify(rules, graph, relevant, &mut generated, context)?;
+    let forwarded = forwarding::certify(items, graph, relevant, &mut generated, context)?;
     for producer in graph.predicates() {
         if !relevant.contains(producer) {
             continue;

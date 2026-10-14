@@ -1,6 +1,7 @@
 [package]
 name = "zetesis-solve"
 version.workspace = true
+description = "Composed answer-set solving through the reduct."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -19,7 +20,7 @@ zetesis-wgpu = { workspace = true, optional = true }
 rayon.workspace = true
 
 [dev-dependencies]
-zetesis-validation = { path = "../zetesis-validation" }
+zetesis-validation.workspace = true
 zetesis-clingo-support.workspace = true
 zetesis-reference-support.workspace = true
 zetesis-test-support.workspace = true

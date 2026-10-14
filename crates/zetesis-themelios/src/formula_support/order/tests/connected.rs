@@ -1,14 +1,15 @@
 //! Scheduling changes are checked against complete joins under every finite
 //! permutation, while receipts distinguish the selected production order.
 
-use std::{borrow::Cow, cell::Cell};
+use std::cell::Cell;
 
-use super::{atom, less, location, order};
+use super::{atom, less, order};
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
-use crate::formula_ir::{Expression, LiteralIr, Operation};
+use crate::formula_ir::{LiteralIr, Operation};
 use crate::formula_support::{Computation, Context, Counters, Join, testing::Fixture};
 use crate::grounding_observer::{GroundingOutcome, GroundingPhase, GroundingWork, Profile};
+use crate::test_support::given_site;
 use crate::{ExpansionLimits, FormulaFailure, FormulaLimits, GroundingObserver, ProgramSite};
 use themelios_program::{program::Relation, term::BinaryOp};
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueNodeRef};
@@ -37,6 +38,8 @@ struct Run {
     order: Vec<usize>,
     rows: u64,
     work: u64,
+    /// Rows an integer comparison form attempted and declined.
+    declines: u64,
 }
 
 fn execute(
@@ -45,63 +48,69 @@ fn execute(
     variables: usize,
     permutation: Option<&[usize]>,
 ) -> Run {
-    fixture.with(location(), |support, computation, counters| {
+    fixture.with(given_site(), |support, computation, counters| {
         let observer = Observer::default();
         let profile = Profile::new(Some(&observer));
         let previous = std::mem::replace(&mut counters.observed, profile.work());
         let before = counters.accounting.work;
         let mut actual_order = Vec::new();
-        let result = profile.phase(GroundingPhase::RuleInstantiation, Some(location()), || {
-            let limits = FormulaLimits::default();
-            let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
-            let prefix = Binding::new(computation, &limits, counters, location())?;
-            let mut plan = super::super::Plan::new(
-                literals,
-                &prefix,
-                variables,
-                super::super::SourceRows {
-                    relations: support,
-                    pivot: None,
-                },
-                &mut budget,
-                location(),
-                None,
-            )?;
-            if let Some(permutation) = permutation {
-                assert_eq!(permutation.len(), plan.patterns.len());
-                plan.patterns.sort_by_key(|pattern| {
-                    permutation
-                        .iter()
-                        .position(|&source| source == pattern.source)
-                        .unwrap()
-                });
-                plan.decisions = super::super::Decisions::checked(
+        let result = profile.phase(
+            GroundingPhase::RuleInstantiation,
+            Some(given_site()),
+            || {
+                let limits = FormulaLimits::default();
+                let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
+                let prefix = Binding::new(computation, &limits, counters, given_site())?;
+                let mut plan = super::super::Plan::new(
                     literals,
-                    &plan.patterns,
-                    &vec![false; variables],
+                    &prefix,
+                    variables,
+                    super::super::SourceRows {
+                        relations: support,
+                        pivot: None,
+                    },
                     &mut budget,
-                    location(),
-                    &mut |_| Ok(()),
+                    given_site(),
+                    None,
                 )?;
-            }
-            actual_order = plan.patterns.iter().map(|pattern| pattern.source).collect();
-            let mut join = Join::with_plan(
-                literals,
-                &prefix,
-                variables,
-                support,
-                Cow::Owned(plan),
-                None,
-                Context::new(computation, &limits, counters, location()),
-            )?;
-            complete(&mut join, computation, &mut budget, counters, variables)
-        });
+                if let Some(permutation) = permutation {
+                    assert_eq!(permutation.len(), plan.patterns.len());
+                    plan.patterns.sort_by_key(|pattern| {
+                        permutation
+                            .iter()
+                            .position(|&source| source == pattern.source)
+                            .unwrap()
+                    });
+                    plan.decisions = super::super::Decisions::checked(
+                        literals,
+                        &plan.patterns,
+                        &vec![false; variables],
+                        &mut budget,
+                        given_site(),
+                        &mut |_| Ok(()),
+                    )?;
+                }
+                actual_order = plan.patterns.iter().map(|pattern| pattern.source).collect();
+                let mut join = Join::with_plan(
+                    literals,
+                    &prefix,
+                    variables,
+                    support,
+                    crate::formula_support::JoinPlan::Owned(plan),
+                    None,
+                    Context::new(computation, &limits, counters, given_site()),
+                )?;
+                complete(&mut join, computation, &mut budget, counters, variables)
+            },
+        );
         counters.observed = previous;
+        let receipt = observer.0.get().unwrap();
         Run {
             result,
             order: actual_order,
-            rows: observer.0.get().unwrap().join_rows.unwrap(),
+            rows: receipt.join_rows.unwrap(),
             work: counters.accounting.work - before,
+            declines: receipt.integer_comparison_declines.unwrap(),
         }
     })
 }
@@ -119,7 +128,7 @@ fn complete(
         &FormulaLimits::default(),
         budget,
         counters,
-        location(),
+        given_site(),
     )? {
         if row.passes {
             found.push(
@@ -127,7 +136,7 @@ fn complete(
                     .map(|slot| {
                         match row
                             .values
-                            .read(slot, computation.read(), location())
+                            .read(slot, computation.read(), given_site())
                             .unwrap()
                             .descriptor()
                         {
@@ -167,7 +176,7 @@ fn graph(width: i32) -> (Fixture, Vec<LiteralIr>, Vec<Vec<i32>>) {
         }
     }
     expected.sort();
-    let mut fixture = Fixture::from_atoms(atoms, location());
+    let mut fixture = Fixture::from_atoms(atoms, given_site());
     let literals = vec![
         atom(&mut fixture, "p", &[0]),
         atom(&mut fixture, "q", &[1]),
@@ -226,14 +235,14 @@ fn intervals() -> (Fixture, Vec<LiteralIr>, Vec<Vec<i32>>) {
             }
         }
     }
-    let mut fixture = Fixture::from_atoms(atoms, location());
+    let mut fixture = Fixture::from_atoms(atoms, given_site());
     let literals = vec![
         atom(&mut fixture, "start", &[0, 1]),
         atom(&mut fixture, "end", &[0, 2]),
         atom(&mut fixture, "start", &[3, 4]),
         atom(&mut fixture, "end", &[3, 5]),
-        less(1, 5),
-        less(4, 2),
+        less(&mut fixture, 1, 5),
+        less(&mut fixture, 4, 2),
     ];
     let mut expected = Vec::new();
     for first in 0..2 {
@@ -320,7 +329,7 @@ fn constant_arguments_enable_posting_preference() {
             vec![Term::Constant(Value::Number(7)), Term::Variable(0)],
         )
         .unwrap(),
-        location(),
+        given_site(),
     );
     let literals = [
         atom(&mut fixture, "independent", &[1]),
@@ -343,9 +352,9 @@ fn nested_bindings_do_not_claim_a_flat_posting() {
             vec![Term::Variable(1)],
         )
         .unwrap(),
-        location(),
+        given_site(),
     );
-    let shape = fixture.constructor(ValueNodeRef::Tuple { arity: 1 }, location());
+    let shape = fixture.constructor(ValueNodeRef::Tuple { arity: 1 }, given_site());
     let pattern = PatternAtom {
         atom: whole,
         arguments: vec![ArgumentPattern {
@@ -353,9 +362,9 @@ fn nested_bindings_do_not_claim_a_flat_posting() {
             nodes: vec![PatternNode::Constructor(shape), PatternNode::Slot(0)],
         }],
     };
-    fixture.with(location(), |_, computation, counters| {
+    fixture.with(given_site(), |_, computation, counters| {
         let flat = computation
-            .static_pattern(whole, &FormulaLimits::default(), counters, location())
+            .static_pattern(whole, &FormulaLimits::default(), counters, given_site())
             .unwrap();
         let occurrence = PatternOccurrence {
             source: 0,
@@ -363,11 +372,16 @@ fn nested_bindings_do_not_claim_a_flat_posting() {
         };
         let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
         assert!(
-            !super::super::has_bound_argument(&occurrence, &[true, false], &mut budget, location())
-                .unwrap()
+            !super::super::has_bound_argument(
+                &occurrence,
+                &[true, false],
+                &mut budget,
+                given_site()
+            )
+            .unwrap()
         );
         assert!(
-            super::super::has_bound_argument(&occurrence, &[true, true], &mut budget, location())
+            super::super::has_bound_argument(&occurrence, &[true, true], &mut budget, given_site())
                 .unwrap()
         );
     });
@@ -379,7 +393,7 @@ fn skewed_postings_preserve_complete_bindings() {
     // preference, not a promise of smaller fanout than the independent domain.
     let mut atoms = vec![row("p", &[0]), row("q", &[0]), row("q", &[1])];
     atoms.extend((0..8).map(|value| row("edge", &[0, value])));
-    let mut fixture = Fixture::from_atoms(atoms, location());
+    let mut fixture = Fixture::from_atoms(atoms, given_site());
     let literals = [
         atom(&mut fixture, "p", &[0]),
         atom(&mut fixture, "q", &[1]),
@@ -409,35 +423,36 @@ fn arithmetic_fixture(operator: BinaryOp, left: i32, right: i32) -> (Fixture, Ve
             row("q", &[1]),
             row("edge", &[left, right]),
         ],
-        location(),
+        given_site(),
     );
     let literals = vec![
         atom(&mut fixture, "p", &[0]),
         atom(&mut fixture, "q", &[1]),
         atom(&mut fixture, "edge", &[0, 2]),
-        LiteralIr::Compare(
-            Expression {
-                nodes: vec![
-                    Operation::Variable(0),
-                    Operation::Variable(2),
-                    Operation::Binary(operator, 0, 1),
-                ],
-            },
+        LiteralIr::Compare(fixture.comparison(
+            vec![
+                Operation::Variable(0),
+                Operation::Variable(2),
+                Operation::Binary(operator, 0, 1),
+            ],
             Relation::Eq,
-            Expression {
-                nodes: vec![Operation::Variable(1)],
-            },
-        ),
+            vec![Operation::Variable(1)],
+            given_site(),
+        )),
     ];
     (fixture, literals)
 }
 
 #[test]
 fn connected_order_preserves_integer_overflow() {
+    // The comparison's form attempts the sum, declines at the overflow, and
+    // the general evaluator reports the failure.
     let (mut fixture, literals) = arithmetic_fixture(BinaryOp::Add, i32::MAX, 1);
     for permutation in [None, Some(&[0, 1, 2][..])] {
+        let run = execute(&mut fixture, &literals, 3, permutation);
+        assert!(run.declines > 0);
         assert!(matches!(
-            execute(&mut fixture, &literals, 3, permutation).result,
+            run.result,
             Err(FormulaFailure::Expansion(
                 crate::ExpansionFailure::Evaluation {
                     error: themelios_program::term::EvalError::Overflow,
@@ -450,10 +465,14 @@ fn connected_order_preserves_integer_overflow() {
 
 #[test]
 fn connected_order_preserves_undefined_division() {
+    // The comparison's form attempts the division, declines at the zero
+    // divisor, and the general evaluator reports the failure.
     let (mut fixture, literals) = arithmetic_fixture(BinaryOp::Div, 1, 0);
     for permutation in [None, Some(&[0, 1, 2][..])] {
+        let run = execute(&mut fixture, &literals, 3, permutation);
+        assert!(run.declines > 0);
         assert!(matches!(
-            execute(&mut fixture, &literals, 3, permutation).result,
+            run.result,
             Err(FormulaFailure::Expansion(
                 crate::ExpansionFailure::Evaluation {
                     error: themelios_program::term::EvalError::Undefined,

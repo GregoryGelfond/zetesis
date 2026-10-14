@@ -1,17 +1,20 @@
 //! Subject-bound original truth with reusable, bounded workspace.
 
-use std::fmt;
+use std::{fmt, mem::size_of_val};
 
+use crate::numeric_evaluation::NumericRowScratch;
 use crate::oracle::{Work, evaluate, failed_root};
-use crate::{Interpretation, Limits, Statistics, Theory};
-use zetesis_cpu::{Cancellation, Stop};
+use crate::{Interpretation, Limits, Theory};
+use zetesis_cpu::{Cancellation, Meter, Refusal, Stop};
 
 /// Per-evaluation bounds, including storage retained from earlier evaluations.
 #[derive(Clone, Copy, Debug)]
 pub struct EvaluationLimits {
-    /// One unit per formula node, operand occurrence and tested asserted root.
+    /// One unit per formula node, read operand and tested asserted root, plus
+    /// numeric-cache initialization and validity-word resets. Each authoritative
+    /// numeric row is read once per pass, even when several cuts share it.
     pub max_work: u64,
-    /// Workspace header plus actual truth-vector capacity, in bytes.
+    /// Workspace header plus actual truth and numeric-cache capacities, in bytes.
     /// The borrowed interpretation and theory are excluded.
     pub max_bytes: usize,
 }
@@ -29,25 +32,66 @@ impl Default for EvaluationLimits {
 ///
 /// Each evaluation visits every node in topological order, then asserted roots
 /// through the first false root. Work is linear in those visits; retained space
-/// is linear in the largest admitted node count. Reuse preserves capacity, not
-/// truth: every node is recomputed for the supplied interpretation. A returned
+/// is linear in the largest admitted node and numeric-row counts. Reuse preserves
+/// capacity, not truth: every node is recomputed for the supplied interpretation. Numeric
+/// measures are reused only within that pass, indexed by authoritative row IDs.
+/// Scratch includes dense measures and packed validity for all numeric rows
+/// when live numeric nodes exist, including unused rows of either domain. A returned
 /// [`FormulaEvaluation`] borrows both inputs and prevents workspace mutation
 /// while its truth values remain observable.
 #[derive(Debug, Default)]
 pub struct EvaluationWorkspace {
     values: Vec<bool>,
+    numeric: NumericRowScratch,
 }
 
 impl EvaluationWorkspace {
-    /// Header and actual truth capacity, excluding allocator bookkeeping.
+    /// Conservative work allowance for one complete original evaluation.
+    ///
+    /// This allocation-free, constant-time bound covers every node, every logical
+    /// operand occurrence and every asserted root, plus fresh numeric-cache cell
+    /// initialization and validity-word resets. Shared numeric rows can consume
+    /// less than their repeated logical occurrences, and reused cells require no
+    /// initialization. The bound therefore covers either a fresh or reused
+    /// workspace, independently of the interpretation and earlier subjects.
+    ///
+    /// Numeric rows contribute cache work only when the owner has live numeric
+    /// nodes; then all rows count, including unused rows of either domain.
+    /// A theory without numeric nodes retains the node/occurrence/root bound.
+    /// This is a work allowance, not a storage, cancellation or membership guarantee.
+    #[must_use]
+    pub fn work_bound(theory: &Theory) -> u128 {
+        theory.nodes().len() as u128
+            + theory.parts().occurrences() as u128
+            + theory.roots().len() as u128
+            + NumericRowScratch::reset_work_bound(theory)
+    }
+
+    /// Requested vector payload for a fresh evaluation workspace.
+    ///
+    /// This allocation-free, constant-time count includes one truth cell per node
+    /// and the dense shared measure and validity columns whenever numeric nodes
+    /// exist. Then all authoritative numeric rows count, including unused rows of
+    /// either domain. With no numeric nodes this is the truth column alone.
+    ///
+    /// Workspace headers, retained capacity from earlier subjects and allocator
+    /// excess are excluded. Reservations may return larger capacities; consumers
+    /// must observe [`Self::retained_bytes`] before admitting actual workspace use.
+    #[must_use]
+    pub fn requested_payload_bytes(theory: &Theory) -> u128 {
+        theory.nodes().len() as u128 * size_of::<bool>() as u128
+            + NumericRowScratch::requested_bytes(theory)
+    }
+
+    /// Header and actual truth/cache capacities, excluding allocator bookkeeping.
     #[must_use]
     pub fn retained_bytes(&self) -> u128 {
-        Self::bytes(self.values.capacity())
+        self.bytes(self.values.capacity(), self.numeric.retained_bytes())
     }
 
     /// Reserve workspace for a theory without evaluating an interpretation.
-    /// Clears previous scratch values, keeps existing capacity and establishes
-    /// no subject or truth capability. A batch coordinator can use this to
+    /// Clears previous truth values, reserves numeric columns without initializing
+    /// them, keeps existing capacity and establishes no subject or truth capability. A batch coordinator can use this to
     /// inspect actual worker capacity before admitting candidate work.
     ///
     /// # Errors
@@ -61,12 +105,26 @@ impl EvaluationWorkspace {
         cancellation: &Cancellation,
     ) -> Result<(), EvaluationError> {
         cancellation.poll()?;
-        Self::check_storage(theory.nodes().len().max(self.values.capacity()), max_bytes)?;
+        self.check_storage(
+            theory.nodes().len().max(self.values.capacity()),
+            self.numeric.required_bytes(theory),
+            max_bytes,
+        )?;
         self.values.clear();
-        self.values
+        let reservation = self
+            .values
             .try_reserve_exact(theory.nodes().len())
-            .map_err(|_| Stop::Allocation)?;
-        Self::check_storage(self.values.capacity(), max_bytes)
+            .map_err(|_| EvaluationError::Stopped(Stop::Allocation));
+        let observed = self.check_storage(
+            self.values.capacity(),
+            self.numeric.retained_bytes(),
+            max_bytes,
+        );
+        reservation?;
+        observed?;
+        let base = self.bytes(self.values.capacity(), 0);
+        self.numeric
+            .reserve_observed(theory, |actual| Self::check_bytes(base + actual, max_bytes))
     }
 
     /// Evaluate original satisfaction and retain the truth of every node.
@@ -84,17 +142,48 @@ impl EvaluationWorkspace {
         limits: EvaluationLimits,
         cancellation: &Cancellation,
     ) -> EvaluationAttempt<'a> {
-        let mut work = Work {
-            limits: Limits {
-                max_work: limits.max_work,
-                max_subsets: 0,
-            },
+        let metered = cancellation.metered(limits.max_work, |meter| {
+            self.evaluate_into(
+                interpretation,
+                limits.max_bytes,
+                cancellation,
+                &mut Work::new(0, meter),
+            )
+        });
+        self.attempt(interpretation, metered.result, metered.charged)
+    }
+
+    /// Evaluate as [`Self::evaluate`] does, as part of an enclosing metered
+    /// operation: the evaluation charges that operation's meter, so its work
+    /// counts toward that operation's limit, the meter's cadence continues
+    /// through it, and the enclosing operation's exit settles its outcome.
+    /// The attempt reports the work charged here.
+    pub(crate) fn evaluate_within<'a>(
+        &'a mut self,
+        interpretation: &'a Interpretation,
+        max_bytes: usize,
+        cancellation: &Cancellation,
+        meter: &mut Meter<'_>,
+    ) -> EvaluationAttempt<'a> {
+        let before = meter.charged();
+        let result = self.evaluate_into(
+            interpretation,
+            max_bytes,
             cancellation,
-            statistics: Statistics::default(),
-        };
-        let result = self.evaluate_into(interpretation, limits.max_bytes, &mut work);
+            &mut Work::new(0, meter),
+        );
+        let work = meter.charged() - before;
+        self.attempt(interpretation, result, work)
+    }
+
+    fn attempt<'a>(
+        &'a self,
+        interpretation: &'a Interpretation,
+        result: Result<Option<usize>, EvaluationError>,
+        work: u64,
+    ) -> EvaluationAttempt<'a> {
         EvaluationAttempt {
-            work: work.statistics.work,
+            work,
             retained_bytes: self.retained_bytes(),
             result: result.map(|failed_root| FormulaEvaluation {
                 interpretation,
@@ -108,16 +197,32 @@ impl EvaluationWorkspace {
         &mut self,
         interpretation: &Interpretation,
         max_bytes: usize,
-        work: &mut Work<'_>,
+        cancellation: &Cancellation,
+        work: &mut Work<'_, '_>,
     ) -> Result<Option<usize>, EvaluationError> {
         let theory = interpretation.theory();
-        self.reserve(theory, max_bytes, work.cancellation)?;
-        evaluate(theory, interpretation, None, &mut self.values, work)?;
+        self.reserve(theory, max_bytes, cancellation)?;
+        evaluate(
+            theory,
+            interpretation,
+            None,
+            &mut self.values,
+            &mut self.numeric,
+            work,
+        )?;
         Ok(failed_root(theory, &self.values, work)?)
     }
 
-    fn check_storage(capacity: usize, limit: usize) -> Result<(), EvaluationError> {
-        let required = Self::bytes(capacity);
+    fn check_storage(
+        &self,
+        capacity: usize,
+        numeric_bytes: u128,
+        limit: usize,
+    ) -> Result<(), EvaluationError> {
+        Self::check_bytes(self.bytes(capacity, numeric_bytes), limit)
+    }
+
+    fn check_bytes(required: u128, limit: usize) -> Result<(), EvaluationError> {
         if required > limit as u128 {
             Err(EvaluationError::Storage { required, limit })
         } else {
@@ -125,8 +230,8 @@ impl EvaluationWorkspace {
         }
     }
 
-    fn bytes(capacity: usize) -> u128 {
-        size_of::<Self>() as u128 + capacity as u128 * size_of::<bool>() as u128
+    fn bytes(&self, capacity: usize, numeric_bytes: u128) -> u128 {
+        size_of_val(self) as u128 + capacity as u128 * size_of::<bool>() as u128 + numeric_bytes
     }
 }
 
@@ -229,6 +334,19 @@ impl From<Stop> for EvaluationError {
     }
 }
 
+impl Refusal for EvaluationError {
+    fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Stopped(stop) => stop.is_resource_refusal(),
+            Self::Storage { .. } => true,
+        }
+    }
+
+    fn from_stop(stop: Stop) -> Self {
+        Self::Stopped(stop)
+    }
+}
+
 impl fmt::Display for EvaluationError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -242,3 +360,29 @@ impl fmt::Display for EvaluationError {
 }
 
 impl std::error::Error for EvaluationError {}
+
+#[cfg(test)]
+mod tests {
+    use super::EvaluationError;
+    use zetesis_cpu::{Refusal, Stop};
+
+    #[test]
+    fn evaluation_errors_classify_resource_refusals() {
+        for refusal in [
+            EvaluationError::Storage {
+                required: 9,
+                limit: 8,
+            },
+            EvaluationError::Stopped(Stop::WorkLimit),
+            EvaluationError::Stopped(Stop::Allocation),
+        ] {
+            assert!(refusal.is_resource_refusal(), "{refusal:?}");
+        }
+        for other in [
+            EvaluationError::Stopped(Stop::Cancelled),
+            EvaluationError::Stopped(Stop::WrongProgram),
+        ] {
+            assert!(!other.is_resource_refusal(), "{other:?}");
+        }
+    }
+}

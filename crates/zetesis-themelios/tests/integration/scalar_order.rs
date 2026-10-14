@@ -34,11 +34,10 @@ fn scalar_language_order_agrees_with_pinned_symbol_order_for_every_pair() {
             .unwrap();
             let value = match &admitted
                 .program()
-                .templates()
+                .facts()
                 .at(0)
                 .unwrap()
-                .head()
-                .unwrap()
+                .pattern()
                 .terms()
                 .at(0)
                 .unwrap()

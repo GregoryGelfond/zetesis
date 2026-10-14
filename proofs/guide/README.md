@@ -10,8 +10,12 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 | --- | --- |
 | When may an arithmetic-undefined substitution be omitted? | [ArithmeticFamilies](../Zetesis/ArithmeticFamilies.lean) specifies completed-family admission and warnings, distinguishes empty joins from zero divisors, and shows why prefixes and flattened outer bindings cannot justify the verdict. Concrete classification and family coverage remain implementation obligations. |
 | Can an aggregate be evaluated directly through the reduct? | [AggregateReduct](../Zetesis/AggregateReduct.lean) formalizes Ferraris Proposition 7: retain the original guard and evaluate the same guard over frozen eligibility. Whole-tuple grouping and concrete arithmetic remain separate obligations. |
+| When can extrema use integer ranks? | [Ranked extrema](ranked-extrema.md) preserves every declared guard under an order-preserving finite quotient, including empty endpoints and arbitrary frozen interpretations. Typed comparison and partition construction remain separate obligations. |
+| How can one row serve many min/max guards? | [Ordinal extrema](ordinal-extrema.md) proves the paired reduction and its witness cuts, including empty endpoints. |
 | Can a weighted threshold replace its expanded formula? | [ThresholdReduct](../Zetesis/ThresholdReduct.lean) connects the nonnegative threshold recurrence to direct sums and complete-mask aggregate semantics, for original truth and arbitrary frozen interpretations. Concrete storage and propagation remain separate obligations. |
 | When may threshold weights be divided by a common divisor? | [Threshold division](threshold-division.md) proves that dividing every weight by a positive common divisor and rounding each primitive threshold upward preserves original and arbitrary frozen truth. Signed bounds, finite-width arithmetic and executable normalization remain separate obligations. |
+| Which bounded values have zero remainder? | [Bounded multiples](bounded-multiples.md) gives the exact finite factor interval for a positive divisor, including divisor one and empty intervals. Executable selection and source diagnostics remain separate obligations. |
+| Can divisibility exclude a partial aggregate sum? | [Threshold residues](threshold-residues.md) confines every compatible sum to the known contribution plus a multiple of a divisor of the undecided coefficients. An empty intersection with the required interval refutes the region; a nonempty one does not prove realizability. |
 | When does one aggregate threshold imply another? | [Threshold prefixes](threshold-prefixes.md) proves implication and contraposition for exact nonnegative prefix rows, in the original interpretation and its frozen reduct. These are consequences, not replacements of one formula by another. |
 | When can a Boolean connective exchange threshold bounds? | [Threshold connectives](threshold-connectives.md) relates conjunction and disjunction to unit thresholds, including empty lists and membership-preserving normalization. It proves original satisfaction, leaving chain recognition and executable propagation as separate obligations. |
 | When is parallel signed addition safe from intermediate overflow? | [AggregateRanges](../Zetesis/AggregateRanges.lean) bounds every mathematical intermediate sum by separate positive and negative carrier totals. The actual execution must preserve contribution occurrences and implement the admitted arithmetic. |
@@ -88,7 +92,8 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 | Can a retained zero-cost priority change optimality? | `ObjectivePriorities.zero_slot_comparison` and `zero_slot_optima` preserve ranking and all optimal answer sets when an always-zero slot is inserted at a fixed position. Whether a source row is always inactive remains a separate coverage and evaluation obligation. |
 | How does an objective node table compute original truth? | [Reading the condition-table correspondence](objective-condition-table.md) follows the prefix invariant, backward-reference admission and last-node result. The mathematical representation law does not verify Rust indexing or source eligibility. |
 | When do required tuples determine an aggregate's value? | [AggregateInvariants](../Zetesis/AggregateInvariants.lean) separates required, possible and actual tuple carriers. Optional zero contributions preserve sums; optional dominated values preserve extrema with explicit empty endpoints. The priority corollary retains complete eligibility and the same-row numeric-weight witness. |
-| What changes when a source measure can take several values? | [SourceMeasures](../Zetesis/SourceMeasures.lean) enumerates every selection between required and possible keys, proves actual-value coverage and singleton compatibility, and filters complete objective rows without confusing source presence with answer activity. |
+| When must a charged operation observe control? | [ChargeCadence](../Zetesis/ChargeCadence.lean) proves the range decision and next-boundary coverage for a positive period; clocks, concurrent flags and runtime settlement remain separate. |
+| What changes when a source measure can take several values? | [SourceMeasures](../Zetesis/SourceMeasures.lean) enumerates every selection between required and possible keys, proves actual-value coverage, singleton compatibility and the required-key count, sum and extremum forms, and filters complete objective rows without confusing source presence with answer activity. |
 | How do equality columns preserve complete tuple matches? | [Typed relation columns](column-relations.md) explains dictionary round trips, correlated reconstruction, ordered selection and exact snapshot applicability. |
 | Can table selection preserve positive source bindings? | [The binding-family argument](table-bindings.md) composes flat matcher necessity, exact row selection and finite joins while retaining each source/row occurrence and resulting binding. Completed support and fallible execution remain separate obligations. |
 | May a join discard a locally matching row that cannot finish? | [Necessary domains and complete bindings](domain-bindings.md) requires conservative argument coverage and preserves the ordered complete continuations, including repeated results. Analyzer soundness and concrete scheduling remain separate obligations. |
@@ -116,6 +121,11 @@ The execution extensions connect these paths to [signed singleton heads](../Zete
 [finite gate projection](../Zetesis/GateProjection.lean). Each module states its
 unproved implementation correspondence explicitly.
 
+[Signed remainder intervals](../Zetesis/RemainderIntervals.lean) bound truncating
+remainder when both operands range over intervals. The separate checked law
+retains division-by-zero and machine-overflow exclusions; it does not establish
+that a source analysis supplied sound operand bounds.
+
 [Consuming positive arguments](../Zetesis/PositiveArguments.lean) extend the
 finite-value path: exact checks filter supplied support rows without creating
 bindings or atoms. Independent inputs and complete row coverage are premises;
@@ -129,6 +139,12 @@ Aggregate-producing source bounds and tuple-count heads connect
 original equality, and complete tuple/head correspondence retains every eligibility
 formula. These are source-to-formula obligations, not permission to substitute
 possible-support membership for logical truth.
+
+[AssociativeWitnesses](../Zetesis/AssociativeWitnesses.lean) gives the original
+satisfaction laws for shared conjunction and disjunction witnesses. A cut may
+stop at compound conditions; repeated leaves do not weaken a unique remaining
+witness. Coverage and containment transfer the corresponding row requirements.
+The Rust traversal, identity checks and worklist remain separate obligations.
 
 [CountHeadActivity](../Zetesis/CountHeadActivity.lean) removes the tuple/head
 bijection premise from the semantic row-table description. Head permission

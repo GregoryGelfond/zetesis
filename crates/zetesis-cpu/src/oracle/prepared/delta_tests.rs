@@ -27,7 +27,12 @@ fn fact(name: &str, values: &[i32]) -> Template {
 fn path(edges: i32, labels: i32) -> (Program, Model) {
     let (templates, expected) = path_input(edges, labels);
     (
-        Program::new(templates, AdmissionLimits::default()).unwrap(),
+        Program::new(
+            templates,
+            zetesis_core::FactTables::default(),
+            AdmissionLimits::default(),
+        )
+        .unwrap(),
         Model::new(expected).unwrap(),
     )
 }
@@ -135,7 +140,12 @@ fn an_incremental_round_selects_only_its_readers() {
         let mut templates: Vec<_> = (0..unrelated).map(|x| fact("unused", &[x])).collect();
         templates.extend(chain);
         expected.extend((0..unrelated).map(|x| atom("unused", &[x])));
-        let program = Program::new(templates, AdmissionLimits::default()).unwrap();
+        let program = Program::new(
+            templates,
+            zetesis_core::FactTables::default(),
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let recursive = program.templates().len() - 1;
         let cancellation = Cancellation::default();
         let prepared =
@@ -220,6 +230,7 @@ fn moving_rank_and_repeated_predicate_have_one_first_new_binding() {
                 ],
             ),
         ],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();
@@ -259,7 +270,12 @@ fn every_incomplete_delta_prefix_is_retired_before_reuse() {
         vec![],
         vec![],
     ));
-    let program = Program::new(templates, AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     expected.push(atom("enabled", &[]));
     let expected = Model::new(expected).unwrap();
     let cancellation = Cancellation::default();
@@ -400,6 +416,7 @@ fn bootstrap_gates_and_latched_constraints_preserve_rejection() {
             rule(pattern("c", vec![]), vec![pattern("b", vec![])]),
             Template::new(None, vec![pattern("c", vec![])], vec![], vec![], vec![]),
         ],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();

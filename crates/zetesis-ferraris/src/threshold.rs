@@ -23,8 +23,19 @@ impl Threshold<'_> {
     #[inline]
     pub fn evaluate<E: From<Stop>>(
         self,
-        mut read: impl FnMut(usize) -> Result<bool, E>,
+        read: impl FnMut(usize) -> Result<bool, E>,
     ) -> Result<bool, E> {
+        Ok(self.selected_sum(read)? >= self.bound)
+    }
+
+    /// Reduce every occurrence to a checked selected weight, independent of a
+    /// guard bound. The public threshold operation retains the same callback
+    /// order and error behavior; a pass-local row owner may reuse this result.
+    #[inline]
+    pub(crate) fn selected_sum<E: From<Stop>>(
+        self,
+        mut read: impl FnMut(usize) -> Result<bool, E>,
+    ) -> Result<i128, E> {
         if self.conditions.len() != self.weights.len() {
             return Err(Stop::InvalidProgram.into());
         }
@@ -36,6 +47,6 @@ impl Threshold<'_> {
                     .ok_or(Stop::InvalidProgram)?;
             }
         }
-        Ok(total >= self.bound)
+        Ok(total)
     }
 }

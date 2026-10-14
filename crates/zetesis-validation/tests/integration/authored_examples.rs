@@ -26,11 +26,13 @@ fn reviewed_default_sources_retain_their_shared_typed_contracts() {
             "scalability/pigeonhole.lp",
             "scalability/mastermind.lp",
             "scalability/mastermind-nested.lp",
+            "scalability/prime-sieve.lp",
+            "scalability/subset-sum.lp",
             "sudoku.lp",
             "einstein-riddle.lp"
         ]
     );
-    for (workload, count) in workloads.iter().zip([92, 0, 6_080, 1, 1, 1]) {
+    for (workload, count) in workloads.iter().zip([92, 0, 6_080, 1, 1, 15, 1, 1]) {
         assert!(workload.is_authored());
         assert!(!workload.is_amended());
         assert!(!workload.is_generated());
@@ -54,8 +56,8 @@ fn reviewed_default_sources_retain_their_shared_typed_contracts() {
         );
     }
     assert_eq!(workloads[3].contract().unwrap().witnesses()[0].len(), 6);
-    assert_eq!(workloads[4].contract().unwrap().witnesses()[0].len(), 81);
-    assert_eq!(workloads[5].contract().unwrap().witnesses()[0].len(), 5);
+    assert_eq!(workloads[6].contract().unwrap().witnesses()[0].len(), 81);
+    assert_eq!(workloads[7].contract().unwrap().witnesses()[0].len(), 5);
 }
 
 #[test]
@@ -63,32 +65,32 @@ fn scaling_population_has_distinct_sizes_and_reference_qualified_amendments() {
     let corpus = examples::load(&root().join("correctness"), examples::Limits::default()).unwrap();
     let workloads =
         scalability::workloads(&corpus, &root(), true, WorkloadLimits::default()).unwrap();
-    assert_eq!(workloads.len(), 15);
+    assert_eq!(workloads.len(), 21);
     assert_eq!(
         workloads
             .iter()
             .map(Workload::identity)
             .collect::<BTreeSet<_>>()
             .len(),
-        15
+        21
     );
     assert_eq!(
         workloads
             .iter()
             .filter(|workload| workload.is_authored())
             .count(),
-        12
+        18
     );
     assert_eq!(
         workloads
             .iter()
             .filter(|workload| workload.is_amended())
             .count(),
-        6
+        10
     );
     assert_eq!(workloads[9].entry(), "scalability/mastermind-nested.lp");
     assert_eq!(workloads[13].entry(), "sudoku.lp");
-    assert_eq!(workloads[14].entry(), "einstein-riddle.lp");
+    assert_eq!(workloads[20].entry(), "einstein-riddle.lp");
     for workload in &workloads {
         assert_eq!(workload.contract().is_none(), workload.is_amended());
     }
@@ -112,6 +114,103 @@ fn scaling_population_has_distinct_sizes_and_reference_qualified_amendments() {
     assert_eq!(edits[7], serde_json::json!([]));
     assert_eq!(edits[8][0]["before"], "6");
     assert_eq!(edits[8][0]["after"], "8");
+}
+
+#[test]
+fn arithmetic_sizes_follow_the_established_population() {
+    let corpus = examples::load(&root().join("correctness"), examples::Limits::default()).unwrap();
+    let workloads =
+        scalability::workloads(&corpus, &root(), false, WorkloadLimits::default()).unwrap();
+    assert_eq!(workloads.len(), 20);
+    assert_eq!(
+        workloads[..14]
+            .iter()
+            .map(Workload::entry)
+            .collect::<Vec<_>>(),
+        [
+            "scalability/n-queens.lp",
+            "scalability/n-queens.lp",
+            "scalability/n-queens.lp",
+            "scalability/pigeonhole.lp",
+            "scalability/pigeonhole.lp",
+            "scalability/pigeonhole.lp",
+            "scalability/mastermind.lp",
+            "scalability/mastermind.lp",
+            "scalability/mastermind.lp",
+            "scalability/mastermind-nested.lp",
+            "standalone/n-queens/variant-02.lp",
+            "standalone/send-money/send-money.lp",
+            "scenarios/task-allocation/variant-04/05-larger-mix.lp",
+            "sudoku.lp",
+        ]
+    );
+    for (workload, entry, before, after) in [
+        (&workloads[14], "prime-sieve", "30", None),
+        (&workloads[15], "prime-sieve", "30", Some("100")),
+        (&workloads[16], "prime-sieve", "30", Some("300")),
+        (&workloads[17], "subset-sum", "12", None),
+        (&workloads[18], "subset-sum", "12", Some("20")),
+        (&workloads[19], "subset-sum", "12", Some("30")),
+    ] {
+        assert_eq!(workload.entry(), format!("scalability/{entry}.lp"));
+        let value = serde_json::to_value(workload).unwrap();
+        let source = &value["sources"][0];
+        let edits = source["edits"].as_array().unwrap();
+        if let Some(after) = after {
+            assert_eq!(edits.len(), 1);
+            assert_eq!(edits[0]["before"], before);
+            assert_eq!(edits[0]["after"], after);
+            assert_ne!(source["base_sha256"], source["derived_sha256"]);
+            assert!(workload.contract().is_none());
+        } else {
+            assert!(edits.is_empty());
+            assert_eq!(source["base_sha256"], source["derived_sha256"]);
+            assert!(workload.contract().is_some());
+        }
+    }
+}
+
+#[test]
+fn prime_default_contract_lists_exactly_the_primes() {
+    let workloads = defaults();
+    let contract = workloads[4].contract().unwrap();
+    let mut primes = (2_u32..=30)
+        .filter(|number| (2..*number).all(|divisor| number % divisor != 0))
+        .map(|number| format!("prime({number})"))
+        .collect::<Vec<_>>();
+    primes.sort();
+    assert_eq!(primes.len(), 10);
+    assert_eq!(contract.witnesses(), [primes]);
+    assert_eq!(contract.model_count(), Some(1));
+}
+
+#[test]
+fn subset_default_contract_lists_every_distinct_weight_solution() {
+    let workloads = defaults();
+    let contract = workloads[5].contract().unwrap();
+    let expected = (0_u32..(1 << 12))
+        .map(|mask| {
+            (1_u32..=12)
+                .filter(|item| mask & (1 << (item - 1)) != 0)
+                .collect::<Vec<_>>()
+        })
+        .filter(|items| items.iter().sum::<u32>() == 12)
+        .map(|items| {
+            items
+                .iter()
+                .map(|item| format!("selected({item})"))
+                .collect::<BTreeSet<_>>()
+        })
+        .collect::<BTreeSet<_>>();
+    let recorded = contract
+        .witnesses()
+        .iter()
+        .map(|witness| witness.iter().cloned().collect::<BTreeSet<_>>())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(expected.len(), 15);
+    assert_eq!(recorded, expected);
+    assert_eq!(contract.witnesses().len(), 15);
+    assert_eq!(contract.model_count(), Some(15));
 }
 
 #[cfg(any(target_os = "linux", target_os = "macos"))]

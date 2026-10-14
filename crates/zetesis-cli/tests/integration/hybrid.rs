@@ -1,8 +1,9 @@
 //! Explicit lazy formula admission preserves original answers and scopes core work.
 
+use zetesis_reference_support::BundleFixture;
 use zetesis_test_support::document::spelled;
 
-use std::{fs, io};
+use std::io;
 
 use clap::Parser;
 use serde_json::Value as Json;
@@ -11,7 +12,7 @@ use zetesis_cli::{
     run_bundle_finalized_with_diagnostics, run_finalized_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
-use zetesis_themelios::{BundleLimits, FormulaFailure, HybridFeature, SourceBundle};
+use zetesis_themelios::{FormulaFailure, HybridFeature};
 use zetesis_validation::answers::native_json;
 
 const SOURCE: &str = "a|b. {hidden}. :- b. #show a/0.";
@@ -279,15 +280,10 @@ fn hybrid_retains_all_undefined_admission_refusal() {
 
 #[test]
 fn hybrid_bundle_uses_original_include_sources() {
-    let directory = tempfile::tempdir().unwrap();
-    fs::write(
-        directory.path().join("entry.lp"),
-        "a|b. {hidden}. #include \"constraints.lp\".",
-    )
-    .unwrap();
-    fs::write(directory.path().join("constraints.lp"), ":- b. #show a/0.").unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", "a|b. {hidden}. #include \"constraints.lp\".");
+    fixture.write("constraints.lp", ":- b. #show a/0.");
+    let bundle = fixture.bundle();
     let mut output = Vec::new();
     let outcome = run_bundle_finalized_with_diagnostics(
         bundle,

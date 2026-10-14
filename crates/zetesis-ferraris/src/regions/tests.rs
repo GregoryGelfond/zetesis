@@ -326,3 +326,18 @@ fn original_completed_knowledge_records_propagated_decisions() {
 fn frozen_completed_knowledge_records_propagated_decisions() {
     propagated_decisions_are_seen(true);
 }
+
+/// The region over four atoms that `code` spells in base three, one digit per
+/// atom from the least significant: open, cut or held.
+pub(super) fn partial_region(mut code: usize) -> crate::Region {
+    let mut region = crate::Region::all_open(4);
+    for atom in 0..4 {
+        match code % 3 {
+            1 => assert!(region.cut(atom)),
+            2 => assert!(region.hold(atom)),
+            _ => {}
+        }
+        code /= 3;
+    }
+    region
+}

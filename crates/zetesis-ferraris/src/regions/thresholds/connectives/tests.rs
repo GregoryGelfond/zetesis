@@ -1,10 +1,13 @@
 //! Unit-connective consequences preserve original models and leave frozen closure alone.
 
+mod locality;
+mod selection;
+
+use crate::test_support::{Allowance, close};
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaNodes, FormulaParts,
-    FrozenSubject, Interpretation, Knowledge, Narrower, Narrowing, NarrowingQuota,
-    NarrowingScratch, NarrowingStatistics, Node, NodeView, OriginalSubject, Region, RegionLimits,
-    Theory,
+    FrozenSubject, Interpretation, Knowledge, Narrower, Narrowing, NarrowingScratch,
+    NarrowingStatistics, Node, NodeView, OriginalSubject, Region, RegionLimits, Theory,
 };
 use zetesis_cpu::{Cancellation, Stop};
 
@@ -73,25 +76,6 @@ fn witness(native_source: bool, positive: bool) -> Theory {
         AdmissionLimits::default(),
     )
     .unwrap()
-}
-
-fn close(
-    theory: &Theory,
-    index: &Narrower,
-    region: &mut Region,
-    knowledge: &mut Knowledge,
-    scratch: &mut NarrowingScratch,
-) -> (Narrowing, NarrowingStatistics) {
-    index
-        .narrow_known(
-            OriginalSubject::new(theory, None),
-            region,
-            knowledge,
-            scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap()
 }
 
 #[test]
@@ -270,24 +254,6 @@ fn frozen_closure_ignores_connective_links() {
     }
 }
 
-struct Allowance {
-    remaining: u64,
-    failure: Stop,
-}
-impl NarrowingQuota for Allowance {
-    fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
-        let granted = wanted.min(self.remaining);
-        if granted == 0 {
-            return Err(self.failure);
-        }
-        self.remaining -= granted;
-        Ok(granted)
-    }
-    fn refund(&mut self, unspent: u64) {
-        self.remaining += unspent;
-    }
-}
-
 #[test]
 fn interrupted_bridge_work_does_not_taint_reuse() {
     let theory = witness(true, false);
@@ -381,7 +347,7 @@ fn discovery_authenticates_complete_unit_prefixes() {
                 && index.chains.iter().any(|chain| {
                     super::exact_prefix(
                         &row.terms,
-                        &chain.operands,
+                        chain.ordinary_leaves(),
                         &mut crate::regions::Work::new(u64::MAX),
                     )
                     .unwrap()
@@ -398,13 +364,13 @@ fn discovery_authenticates_complete_unit_prefixes() {
             for chain in &index.chains {
                 if super::exact_prefix(
                     &row.terms,
-                    &chain.operands,
+                    chain.ordinary_leaves(),
                     &mut crate::regions::Work::new(u64::MAX),
                 )
                 .unwrap()
                 {
                     assert!(index.thresholds.connectives.is_some());
-                    assert_eq!(chain.operands.iter().min(), Some(&first));
+                    assert_eq!(chain.ordinary_leaves().iter().min(), Some(&first));
                     assert_eq!(
                         index.parents[first]
                             .iter()

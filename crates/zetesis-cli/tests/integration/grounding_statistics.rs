@@ -43,7 +43,7 @@ fn json_attribution_preserves_typed_measurements() {
     for phase in GroundingPhase::ALL {
         let json = &view["measurements"][phase.label()];
         let measurement = typed.get(phase).unwrap();
-        assert_eq!(json["work"].as_object().unwrap().len(), 37);
+        assert_eq!(json["work"].as_object().unwrap().len(), 52);
         assert_eq!(
             json["elapsed_ns"].as_u64().map(u128::from),
             measurement.elapsed.map(|value| value.as_nanos())
@@ -54,42 +54,7 @@ fn json_attribution_preserves_typed_measurements() {
                 measurement.count(outcome)
             );
         }
-        assert_eq!(json["work"]["roots"].as_u64(), measurement.work.roots);
-        for (name, count) in [
-            (
-                "support_construction_work",
-                measurement.work.support_construction_work,
-            ),
-            (
-                "support_production_work",
-                measurement.work.support_production_work,
-            ),
-            ("support_join_work", measurement.work.support_join_work),
-            ("support_head_work", measurement.work.support_head_work),
-            ("support_order_work", measurement.work.support_order_work),
-            ("support_wake_work", measurement.work.support_wake_work),
-            (
-                "support_publication_work",
-                measurement.work.support_publication_work,
-            ),
-            ("domain_prepare_work", measurement.work.domain_prepare_work),
-            ("domain_guard_rows", measurement.work.domain_guard_rows),
-            ("domain_guard_checks", measurement.work.domain_guard_checks),
-            (
-                "domain_rejected_rows",
-                measurement.work.domain_rejected_rows,
-            ),
-            (
-                "domain_excluded_values",
-                measurement.work.domain_excluded_values,
-            ),
-        ] {
-            assert_eq!(json["work"][name].as_u64(), count);
-        }
-        assert_eq!(
-            json["work"]["expression_nodes"].as_u64(),
-            measurement.work.expression_nodes
-        );
+        assert_work_fields(json, &measurement.work);
     }
     assert!(
         std::str::from_utf8(&diagnostics)
@@ -98,11 +63,75 @@ fn json_attribution_preserves_typed_measurements() {
     );
 }
 
+fn assert_work_fields(json: &Value, work: &zetesis_themelios::GroundingWork) {
+    for (name, count) in [
+        ("support_construction_work", work.support_construction_work),
+        ("support_production_work", work.support_production_work),
+        ("support_join_work", work.support_join_work),
+        ("support_head_work", work.support_head_work),
+        ("support_order_work", work.support_order_work),
+        ("support_wake_work", work.support_wake_work),
+        ("support_publication_work", work.support_publication_work),
+        ("support_rounds", work.support_rounds),
+        ("support_producer_visits", work.support_producer_visits),
+        ("support_rich_traversals", work.support_rich_traversals),
+        ("support_unchanged_visits", work.support_unchanged_visits),
+        (
+            "support_snapshot_preparations",
+            work.support_snapshot_preparations,
+        ),
+        ("local_plan_requests", work.local_plan_requests),
+        ("local_plan_preparations", work.local_plan_preparations),
+        ("local_plan_reuses", work.local_plan_reuses),
+        ("support_atoms", work.support_atoms),
+        ("support_index_entries", work.support_index_entries),
+        ("join_probes", work.join_probes),
+        ("join_rows", work.join_rows),
+        ("indexed_probes", work.indexed_probes),
+        ("table_inapplicable_probes", work.table_inapplicable_probes),
+        ("table_preparations", work.table_preparations),
+        ("table_reuses", work.table_reuses),
+        ("table_probes", work.table_probes),
+        ("table_rows", work.table_rows),
+        ("table_prepare_work", work.table_prepare_work),
+        ("table_query_work", work.table_query_work),
+        ("table_index_bytes", work.table_index_bytes),
+        ("support_peak_bytes", work.support_peak_bytes),
+        ("domain_prepare_work", work.domain_prepare_work),
+        ("domain_guard_rows", work.domain_guard_rows),
+        ("domain_guard_checks", work.domain_guard_checks),
+        ("domain_rejected_rows", work.domain_rejected_rows),
+        ("domain_excluded_values", work.domain_excluded_values),
+        ("binding_snapshots", work.binding_snapshots),
+        ("expression_evaluations", work.expression_evaluations),
+        ("expression_nodes", work.expression_nodes),
+        ("integer_comparisons", work.integer_comparisons),
+        (
+            "integer_comparison_declines",
+            work.integer_comparison_declines,
+        ),
+        ("numeric_index_builds", work.numeric_index_builds),
+        ("numeric_index_declines", work.numeric_index_declines),
+        ("range_probes", work.range_probes),
+        ("range_probe_rows", work.range_probe_rows),
+        ("expression_key_probes", work.expression_key_probes),
+        ("expression_key_rows", work.expression_key_rows),
+        ("row_atoms", work.row_atoms),
+        ("row_atom_reuses", work.row_atom_reuses),
+        ("atom_lookups", work.atom_lookups),
+        ("atoms_inserted", work.atoms_inserted),
+        ("node_lookups", work.node_lookups),
+        ("nodes_inserted", work.nodes_inserted),
+        ("roots", work.roots),
+    ] {
+        assert_eq!(json["work"][name].as_u64(), count);
+    }
+}
+
 #[test]
 fn the_ordinary_command_requests_the_domain_analysis() {
-    // The choice head keeps this program outside the analysis's profile, so
-    // the attempt is measured and declines: its work is the applicability
-    // check alone, and no guard visits a row.
+    // Numeric analysis covers the choice producer. The separate finite-guard
+    // profile remains inapplicable, so no guard visits or excludes a row.
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_detailed_with_diagnostics(
@@ -123,14 +152,15 @@ fn the_ordinary_command_requests_the_domain_analysis() {
 }
 
 #[test]
-fn the_ordinary_command_narrows_candidates_by_comparison() {
-    // X < 3 excludes 198 of the 200 candidates the domain of d/1 offers
-    // before any row is read; the two answers are the instances that remain.
+fn eager_grounding_narrows_candidates_by_comparison() {
+    // Static analysis excludes 198 candidates. The numeric range probe selects
+    // the two remaining rows before the domain guard, which rejects neither.
+    // The one answer contains exactly those two p instances.
     let mut output = Vec::new();
     let mut diagnostics = Vec::new();
     let report = run_detailed_with_diagnostics(
         "d(1..200). p(X) :- d(X), X < 3.".into(),
-        &options(&[]),
+        &options(&["--grounder", "eager"]),
         &mut output,
         &mut diagnostics,
         &Cancellation::default(),
@@ -140,11 +170,23 @@ fn the_ordinary_command_narrows_candidates_by_comparison() {
     let analysis = typed.get(GroundingPhase::DomainAnalysis).unwrap();
     assert_eq!(analysis.work.domain_excluded_values, Some(198));
     let rules = typed.get(GroundingPhase::RuleInstantiation).unwrap();
-    assert_eq!(rules.work.domain_rejected_rows, Some(198));
+    assert_eq!(rules.work.domain_rejected_rows, Some(0));
+    assert_eq!(rules.work.domain_guard_rows, Some(2));
+    assert_eq!(rules.work.range_probes, Some(1));
+    assert_eq!(rules.work.range_probe_rows, Some(2));
+    assert_eq!(rules.work.binding_snapshots, Some(0));
+    // The driver also includes the 200 original fact roots in this phase.
+    assert_eq!(rules.work.roots, Some(202));
     let document: Value = serde_json::from_slice(&output).unwrap();
-    let json = &document["statistics"]["grounding_attribution"]["measurements"]
-        [GroundingPhase::DomainAnalysis.label()]["work"];
-    assert_eq!(json["domain_excluded_values"], 198);
+    let measurements = &document["statistics"]["grounding_attribution"]["measurements"];
+    assert_work_fields(
+        &measurements[GroundingPhase::DomainAnalysis.label()],
+        &analysis.work,
+    );
+    assert_work_fields(
+        &measurements[GroundingPhase::RuleInstantiation.label()],
+        &rules.work,
+    );
     let models = document["models"].as_array().unwrap();
     assert_eq!(models.len(), 1);
     // The one record spells every atom of the document and refers to them.
@@ -257,4 +299,24 @@ fn relational_grounding_stays_unmeasured_in_formula_attribution() {
             );
         }
     }
+}
+
+#[test]
+fn records_report_how_comparisons_were_compiled() {
+    let mut diagnostics = Vec::new();
+    run_detailed_with_diagnostics(
+        "p(1). p(a). r(X) :- p(X), X < 2, f(X) != 3.".into(),
+        &options(&[]),
+        &mut Vec::new(),
+        &mut diagnostics,
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let records = std::str::from_utf8(&diagnostics).unwrap();
+    assert!(
+        records.contains(
+            "Comparisons: with_form=1; long_operand=0; wide_slot=0; constructor=1; nonnumeric_constant=0; argument_position=0\n"
+        ),
+        "{records}"
+    );
 }

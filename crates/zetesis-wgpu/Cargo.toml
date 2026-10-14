@@ -5,12 +5,13 @@ description = "An exact, explicitly static batched reduct oracle on wgpu compute
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
+publish = false
 
 [dependencies]
-zetesis-backend = { path = "../zetesis-backend" }
-zetesis-core = { path = "../zetesis-core" }
-zetesis-cpu = { path = "../zetesis-cpu" }
-zetesis-ferraris = { path = "../zetesis-ferraris" }
+zetesis-backend.workspace = true
+zetesis-core.workspace = true
+zetesis-cpu.workspace = true
+zetesis-ferraris.workspace = true
 wgpu.workspace = true
 bytemuck.workspace = true
 pollster.workspace = true

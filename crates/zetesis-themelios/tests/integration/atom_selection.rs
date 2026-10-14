@@ -3,6 +3,7 @@
 use zetesis_core::catalog::AtomCatalog;
 use zetesis_core::{Atom, Predicate, Sign, Value};
 use zetesis_cpu::{Cancellation, Stop};
+use zetesis_reference_support::resource_limits;
 use zetesis_themelios::{AtomSelection, AtomSelectionLimits, PreparedSelection, observation};
 
 fn atom(name: &str, arity: usize, sign: Sign) -> Atom {
@@ -368,10 +369,7 @@ fn preparation_over_the_work_ceiling_keeps_the_search() {
         observation::prepare_selection(
             &selection,
             catalog.read(),
-            observation::Limits {
-                max_work,
-                ..observation::Limits::default()
-            },
+            resource_limits::observation_evaluation(observation::Resource::Work, max_work),
             &Cancellation::default(),
         )
         .unwrap()

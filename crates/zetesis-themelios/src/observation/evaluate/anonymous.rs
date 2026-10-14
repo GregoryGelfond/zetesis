@@ -31,7 +31,7 @@ pub(super) struct Keys<'a> {
     peak: u128,
 }
 impl Keys<'_> {
-    pub fn new(read: TermRead<'_>) -> Self {
+    pub(super) fn new(read: TermRead<'_>) -> Self {
         Self {
             nodes: Vec::new(),
             edges: Vec::new(),
@@ -40,14 +40,14 @@ impl Keys<'_> {
             peak: 0,
         }
     }
-    pub fn bytes(&self) -> u128 {
+    pub(super) fn bytes(&self) -> u128 {
         (size_of::<Self>() - size_of::<TermAssignment>()) as u128
             + self.nodes.capacity() as u128 * size_of::<Node>() as u128
             + self.edges.capacity() as u128 * size_of::<usize>() as u128
             + self.atoms.capacity() as u128 * size_of::<Atom<'_>>() as u128
             + self.terms.retained_bytes() as u128
     }
-    pub fn peak(&self) -> u128 {
+    pub(super) fn peak(&self) -> u128 {
         self.peak
     }
     fn reserve(

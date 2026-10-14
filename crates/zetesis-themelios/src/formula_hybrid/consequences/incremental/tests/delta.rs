@@ -75,6 +75,18 @@ fn synchronized(checker: &mut crate::ConstraintChecker<'_>, region: &Region) {
     prepared.incremental = Some(incremental);
 }
 
+/// A checker of `owner` after a clean first pass over the all-open region.
+fn completed(owner: &HybridFormula) -> crate::ConstraintChecker<'_> {
+    let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
+    let region = Region::all_open(owner.atom_catalog().atoms().len());
+    assert_eq!(
+        pass(&mut checker, &region, ConstraintRegionPass::First),
+        ConstraintConsequence::NoConsequence
+    );
+    assert_eq!(state(&checker).scans, [Scan::Clean]);
+    checker
+}
+
 #[test]
 fn bounded_unions_match_complete_region_scans() {
     let mut multi_changes = 0;
@@ -95,7 +107,7 @@ fn bounded_unions_match_complete_region_scans() {
             "../../../../../tests/fixtures/streamed-consequences/delta/repeated-pivots.lp"
         ),
     ] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let atoms = owner.atom_catalog().atoms().len();
         assert!(atoms <= 4);
         let mut eligible_changes = 0;
@@ -161,7 +173,7 @@ fn bounded_unions_match_complete_region_scans() {
 
 #[test]
 fn an_anchor_reduces_actual_source_visits() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/delta/late-anchor.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -195,7 +207,7 @@ fn an_anchor_reduces_actual_source_visits() {
 
 #[test]
 fn several_anchors_reduce_actual_source_visits() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/delta/late-anchor.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -228,7 +240,7 @@ fn several_anchors_reduce_actual_source_visits() {
 
 #[test]
 fn deferred_deltas_survive_draining_other_units() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/delta/deferred.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -269,7 +281,7 @@ fn deferred_deltas_survive_draining_other_units() {
 
 #[test]
 fn deferred_distinct_changes_accumulate_anchors() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/delta/deferred.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -322,7 +334,7 @@ fn enabling_nonpositive_occurrences_decline_anchors() {
             true,
         ),
     ] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
         let mut region = Region::all_open(owner.atom_catalog().atoms().len());
         assert_eq!(
@@ -341,7 +353,7 @@ fn enabling_nonpositive_occurrences_decline_anchors() {
 
 #[test]
 fn generated_rules_decline_anchors() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/generated-negative.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -373,7 +385,7 @@ fn generated_rules_decline_anchors() {
 
 #[test]
 fn repeated_occurrences_retain_one_delta() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/delta/alias-unit.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -412,7 +424,7 @@ fn repeated_occurrences_retain_one_delta() {
 
 #[test]
 fn several_positive_atoms_retain_all_anchors() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/delta/repeated-pivots.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -454,7 +466,7 @@ fn several_positive_atoms_retain_all_anchors() {
 
 #[test]
 fn overflowing_predicate_changes_keep_the_complete_scan() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/delta/late-anchor.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -486,7 +498,7 @@ fn overflowing_predicate_changes_keep_the_complete_scan() {
 
 #[test]
 fn overflowing_deferred_changes_keep_the_complete_scan() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/delta/late-anchor.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -522,7 +534,7 @@ fn overflowing_deferred_changes_keep_the_complete_scan() {
 
 #[test]
 fn mixed_positive_and_negative_changes_keep_the_complete_scan() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/two-positive-negative.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -543,7 +555,7 @@ fn mixed_positive_and_negative_changes_keep_the_complete_scan() {
 
 #[test]
 fn interrupted_anchor_unions_retire_their_premise() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/delta/late-anchor.lp"
     ));
     let old = Region::all_open(owner.atom_catalog().atoms().len());
@@ -605,7 +617,7 @@ fn interrupted_anchor_unions_retire_their_premise() {
 
 #[test]
 fn an_anchor_keeps_structural_pattern_matching() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../../tests/fixtures/streamed-consequences/delta/structural-anchor.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();

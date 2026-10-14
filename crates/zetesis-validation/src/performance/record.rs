@@ -136,7 +136,9 @@ impl Capture {
                 exit.signal.is_none()
                     && match exit.code {
                         Some(0) => true,
-                        Some(10 | 20 | 30) => reference,
+                        Some(code) if crate::answers::CLINGO_DECIDED_EXITS.contains(&code) => {
+                            reference
+                        }
                         _ => false,
                     }
             })

@@ -1,27 +1,22 @@
 //! Lazy original acceptance shares the ordinary objective and retention semantics.
 
-use std::{collections::BTreeMap, convert::Infallible, num::NonZeroUsize};
+use crate::support::models::ScoredFamily as Family;
+use std::{convert::Infallible, num::NonZeroUsize};
+use zetesis_reference_support::{formula, hybrid};
 
-use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_objective::Score;
 use zetesis_solve::{
     AnswerSelection, Backend, Completion, ExecutionObservation, ExecutionObserver, Grounder,
     Interruption, OptimizationStop, PreparedInput, SearchMethod, SemanticOutcome, Session,
     SolveConfig,
 };
 use zetesis_test_support::programs::model;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, HybridFormula,
-    admit_formula, prepare_formula,
-};
+use zetesis_themelios::AdmittedFormula;
 
 const PRIORITIES: &str = include_str!("../fixtures/hybrid-objectives/priorities.lp");
 const FALLBACK: &str = include_str!("../fixtures/hybrid-objectives/fallback.lp");
 const REQUIRED: &str = include_str!("../fixtures/hybrid-objectives/required.lp");
 const INCONSISTENT: &str = include_str!("../fixtures/hybrid-objectives/inconsistent.lp");
-
-type Family = BTreeMap<Model, Option<Score>>;
 
 fn config() -> SolveConfig {
     SolveConfig {
@@ -35,26 +30,8 @@ fn config() -> SolveConfig {
     }
 }
 
-fn hybrid(source: &str) -> HybridFormula {
-    prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_hybrid()
-    .unwrap()
-}
-
 fn eager(source: &str) -> AdmittedFormula {
-    admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
+    formula(source)
 }
 
 fn capture(

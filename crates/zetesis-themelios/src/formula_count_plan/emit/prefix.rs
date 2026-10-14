@@ -1,7 +1,8 @@
 //! A prefix keeps original child IDs and shared native rows together.
 
 use zetesis_ferraris::{
-    AdmissionError, ContributionRow, FormulaNodes, Node, NodeView, Theory, ThresholdDescriptor,
+    AdmissionError, ExtremumCutDescriptor, FormulaNodes, Node, NodeView, NumericRow, Theory,
+    ThresholdDescriptor,
 };
 
 use super::super::{CountPlanFailureKind as Fault, Work, bytes};
@@ -20,11 +21,14 @@ pub(super) fn copy(
         work.charge(1)?;
         children.push((index < length).then_some(index));
     }
-    // Selection's two internal maps have source-arena dimensions, even when
+    // Selection's three internal maps have source-arena dimensions, even when
     // the chosen prefix retains only some rows. The policy charges logical
     // requested payload; allocator slack is explicitly outside this allowance.
     work.payload(bytes::<Option<usize>>(original.parts().rows().len())?)?;
     work.payload(bytes::<Option<usize>>(original.parts().thresholds().len())?)?;
+    work.payload(bytes::<Option<usize>>(
+        original.parts().extremum_cuts().len(),
+    )?)?;
     work.payload(u64::try_from(sizes.payload).map_err(|_| Fault::Overflow)?)?;
     work.charge(u64::try_from(sizes.copying).map_err(|_| Fault::Overflow)?)?;
     let parts = original
@@ -44,6 +48,7 @@ fn sizes(original: &Theory, length: usize, work: &mut Work) -> Result<Sizes, Fau
     let source = original.parts();
     let mut rows = work.vector(source.rows().len())?;
     let mut descriptors = work.vector(source.thresholds().len())?;
+    let mut cuts = work.vector(source.extremum_cuts().len())?;
     for _ in source.rows() {
         work.charge(1)?;
         rows.push(false);
@@ -52,13 +57,17 @@ fn sizes(original: &Theory, length: usize, work: &mut Work) -> Result<Sizes, Fau
         work.charge(1)?;
         descriptors.push(false);
     }
+    for _ in source.extremum_cuts() {
+        work.charge(1)?;
+        cuts.push(false);
+    }
     let mut sizes = Sizes {
         payload: length as u128 * size_of::<Node>() as u128,
         // Two source selection passes, output writes/occurrence recount, and
-        // the initialization/reset of both internal descriptor maps.
+        // the initialization/reset of all internal maps.
         copying: 2 * original.nodes().len() as u128
             + 2 * length as u128
-            + 2 * (rows.len() as u128 + descriptors.len() as u128),
+            + 2 * (rows.len() as u128 + descriptors.len() as u128 + cuts.len() as u128),
     };
     let mut occurrences = 0_u128;
     for index in 0..length {
@@ -82,13 +91,32 @@ fn sizes(original: &Theory, length: usize, work: &mut Work) -> Result<Sizes, Fau
                     let row = source.thresholds()[descriptor].row;
                     if !rows[row] {
                         rows[row] = true;
-                        sizes.payload += size_of::<ContributionRow>() as u128
+                        sizes.payload += size_of::<NumericRow>() as u128
                             + threshold.conditions.len() as u128
                                 * (size_of::<usize>() + size_of::<u64>()) as u128;
                         sizes.copying += 1 + 2 * threshold.conditions.len() as u128;
                     }
                 }
                 threshold.conditions.len()
+            }
+            NodeView::ExtremumCut(cut) => {
+                let descriptor = source.nodes()[index]
+                    .extremum_cut_descriptor()
+                    .expect("extremum cut storage");
+                if !cuts[descriptor] {
+                    cuts[descriptor] = true;
+                    sizes.payload += size_of::<ExtremumCutDescriptor>() as u128;
+                    sizes.copying += 1;
+                    let row = source.extremum_cuts()[descriptor].row;
+                    if !rows[row] {
+                        rows[row] = true;
+                        sizes.payload += size_of::<NumericRow>() as u128
+                            + cut.row.conditions.len() as u128
+                                * (size_of::<usize>() + size_of::<u64>()) as u128;
+                        sizes.copying += 1 + 2 * cut.row.conditions.len() as u128;
+                    }
+                }
+                cut.row.conditions.len()
             }
             NodeView::Implies(_, _) => {
                 sizes.copying += 2;

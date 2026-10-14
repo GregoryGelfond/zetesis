@@ -24,7 +24,7 @@ fn eligibility_copy_retains_shared_numeric_rows() {
     assert_eq!(copied.parts().rows(), source.rows());
     assert_eq!(copied.parts().thresholds(), source.thresholds());
     assert_eq!(copied.parts().conditions(), source.conditions());
-    assert_eq!(copied.parts().weights(), source.weights());
+    assert_eq!(copied.parts().numeric_values(), source.numeric_values());
     assert_eq!(work.statistics.nodes, 5);
     // Two node passes, both numeric columns, one row and three descriptors.
     assert_eq!(work.statistics.work, 2 * 5 + 2 * 3 + 1 + 3);

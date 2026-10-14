@@ -1,42 +1,16 @@
 //! Inclusive work and terminal contracts of the original-candidate batch API.
 
+use crate::support::choice_theories::three_choices_falsum_first;
 use std::collections::BTreeSet;
 use std::convert::Infallible;
 
 use crate::support::batching::batch;
 use crate::support::clause_search::by_clauses;
 use zetesis_cpu::Stop;
-use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
+use zetesis_ferraris::{Interpretation, Theory};
 use zetesis_sat::{
     BatchError, BatchVerdict, Cancellation, Incomplete, Limits, SearchLimits, StableModels,
 };
-
-fn choices() -> Theory {
-    // Three independent a OR NOT a formulas: all eight interpretations are
-    // stable. External certificates below are checked by exhaustive Ferraris.
-    Theory::new(
-        3,
-        zetesis_ferraris::FormulaParts::new(
-            vec![
-                Node::falsum(),
-                Node::atom(0),
-                Node::atom(1),
-                Node::atom(2),
-                Node::implies(1, 0),
-                Node::or_pair([1, 4]),
-                Node::implies(2, 0),
-                Node::or_pair([2, 6]),
-                Node::implies(3, 0),
-                Node::or_pair([3, 8]),
-            ],
-            vec![],
-        )
-        .unwrap(),
-        vec![5, 7, 9],
-        AdmissionLimits::default(),
-    )
-    .unwrap()
-}
 
 fn never_called(_: &Theory, _: &[Interpretation]) -> Result<Vec<BatchVerdict>, Infallible> {
     panic!("a proposal/control refusal must not invoke the checker")
@@ -70,7 +44,7 @@ fn closed(search: &mut StableModels) {
 #[test]
 fn cancellation_before_proposal_and_before_retry_preserves_owned_candidates() {
     for retain_pending in [false, true] {
-        let theory = choices();
+        let theory = three_choices_falsum_first();
         let cancellation = Cancellation::default();
         let mut search =
             StableModels::new(&theory, Limits::default(), cancellation.clone()).unwrap();
@@ -97,7 +71,7 @@ fn cancellation_before_proposal_and_before_retry_preserves_owned_candidates() {
 
 #[test]
 fn candidate_decision_and_original_verification_limits_cannot_publish_proposals() {
-    let theory = choices();
+    let theory = three_choices_falsum_first();
     for (limits, expected) in [
         (
             Limits {
@@ -166,7 +140,7 @@ fn with_work(theory: &Theory, max_work: u64) -> StableModels {
 
 #[test]
 fn residual_work_exhaustion_cannot_commit_an_earlier_certified_prefix() {
-    let theory = choices();
+    let theory = three_choices_falsum_first();
     let (_, proposed) = proposal_work(&theory, 3);
     let mut search = with_work(&theory, proposed);
     let result = search.next_batch(batch(3), |original, candidates| {
@@ -204,7 +178,7 @@ fn residual_work_exhaustion_cannot_commit_an_earlier_certified_prefix() {
 
 #[test]
 fn every_first_proposal_work_cutoff_returns_only_proved_models_and_a_terminal_stop() {
-    let theory = choices();
+    let theory = three_choices_falsum_first();
     let (encoded, proposed) = proposal_work(&theory, 1);
     // The original index is charged whole when the walk starts: an
     // allowance short of it spends nothing and stops the batch.

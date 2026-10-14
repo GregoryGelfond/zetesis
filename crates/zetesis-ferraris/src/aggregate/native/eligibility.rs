@@ -1,19 +1,20 @@
 //! Actual occurrence masks acquired with the existing topological formula evaluator.
 
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, Meter, Stop};
 
 use super::{
-    Error, ErrorKind, Group, GroupRef, Reduction, ReductionLimits, Resource, Statistics, add,
-    bytes, storage,
+    Error, ErrorKind, Group, GroupRef, Reduction, ReductionLimits, Resource, Statistics, add, bytes,
 };
-use crate::{Interpretation, oracle};
+use crate::numeric_evaluation::NumericRowScratch;
+use crate::{Interpretation, Theory, oracle};
 
 /// Bounds for formula-prefix evaluation and retained tuple occurrence masks.
 #[derive(Clone, Copy, Debug)]
 pub struct EligibilityLimits {
-    /// Original/frozen node and operand visits, plus copied tuple observations.
+    /// Original/frozen node and operand visits, numeric-cache initialization and
+    /// packed-validity resets, plus copied tuple observations.
     pub max_work: u64,
-    /// Simultaneous node-truth scratch and output masks; borrowed theory, group,
+    /// Simultaneous node truth, numeric scratch and output masks; borrowed theory, group,
     /// interpretations, stack and allocator metadata are excluded.
     pub max_bytes: u64,
 }
@@ -129,8 +130,12 @@ impl<'a> GroupRef<'a> {
         cancellation: &Cancellation,
     ) -> Result<Eligibility<'a>, Error> {
         let mut statistics = Statistics::default();
-        let result = self.acquire(candidate, tested, limits, cancellation, &mut statistics);
-        result
+        let metered = cancellation.metered(limits.max_work, |meter| {
+            self.acquire(candidate, tested, limits, &mut statistics, meter)
+        });
+        statistics.work = metered.charged;
+        metered
+            .result
             .map(|(original, frozen)| Eligibility {
                 group: self,
                 candidate,
@@ -147,10 +152,10 @@ impl<'a> GroupRef<'a> {
         candidate: &Interpretation,
         tested: Option<&Interpretation>,
         limits: EligibilityLimits,
-        cancellation: &Cancellation,
         statistics: &mut Statistics,
+        meter: &mut Meter<'_>,
     ) -> Result<(Vec<bool>, Option<Vec<bool>>), ErrorKind> {
-        cancellation.poll().map_err(ErrorKind::Stopped)?;
+        meter.poll().map_err(ErrorKind::Stopped)?;
         if !self.data.theory.same_instance(candidate.theory())
             || tested.is_some_and(|tested| !self.data.theory.same_instance(tested.theory()))
         {
@@ -166,69 +171,173 @@ impl<'a> GroupRef<'a> {
                 .checked_mul(phases)
                 .ok_or(ErrorKind::Overflow)?,
         )?;
+        statistics.peak_bytes = add(
+            statistics.peak_bytes,
+            u64::try_from(NumericRowScratch::default().required_bytes(&self.data.theory))
+                .map_err(|_| ErrorKind::Overflow)?,
+        )?;
         if statistics.peak_bytes > limits.max_bytes {
             return Err(ErrorKind::Limit(Resource::Bytes));
         }
-        let mut work = oracle::Work {
-            limits: oracle::Limits {
-                max_work: limits.max_work,
-                max_subsets: 0,
-            },
-            cancellation,
-            statistics: oracle::Statistics::default(),
-        };
-        let result = observations(*self, candidate, tested, &mut work);
-        statistics.work = work.statistics.work;
-        let observations = result?;
-        cancellation.poll().map_err(ErrorKind::Stopped)?;
+        let mut work = oracle::Work::new(0, meter);
+        let observations = observations(
+            *self,
+            candidate,
+            tested,
+            limits.max_bytes,
+            statistics,
+            &mut work,
+        )?;
+        work.meter.poll().map_err(ErrorKind::Stopped)?;
         Ok(observations)
     }
+}
+
+/// The full requested envelope is checked before this owner reserves anything.
+/// Actual capacity is observed after each reservation on success and refusal.
+#[derive(Default)]
+struct Observations {
+    original_nodes: Vec<bool>,
+    frozen_nodes: Vec<bool>,
+    original: Vec<bool>,
+    frozen: Vec<bool>,
+    numeric: NumericRowScratch,
+}
+
+impl Observations {
+    fn bytes(&self) -> u128 {
+        self.original_nodes.capacity() as u128
+            + self.frozen_nodes.capacity() as u128
+            + self.original.capacity() as u128
+            + self.frozen.capacity() as u128
+            + self.numeric.retained_bytes()
+    }
+
+    fn observe(
+        &self,
+        reservation: Result<(), ErrorKind>,
+        limit: u64,
+        statistics: &mut Statistics,
+    ) -> Result<(), ErrorKind> {
+        observe_capacity(self.bytes(), reservation, limit, statistics)
+    }
+
+    fn reserve(
+        &mut self,
+        theory: &Theory,
+        tuples: usize,
+        frozen: bool,
+        limit: u64,
+        statistics: &mut Statistics,
+    ) -> Result<(), ErrorKind> {
+        let result = reserve_mask(&mut self.original_nodes, theory.nodes().len());
+        self.observe(result, limit, statistics)?;
+        let base = self.bytes() - self.numeric.retained_bytes();
+        self.numeric
+            .reserve_observed(theory, |actual| {
+                observe_capacity(base + actual, Ok(()), limit, statistics).map_err(Observed)
+            })
+            .map_err(|error| error.0)?;
+        let result = reserve_mask(&mut self.original, tuples);
+        self.observe(result, limit, statistics)?;
+        if frozen {
+            let result = reserve_mask(&mut self.frozen_nodes, theory.nodes().len());
+            self.observe(result, limit, statistics)?;
+            let result = reserve_mask(&mut self.frozen, tuples);
+            self.observe(result, limit, statistics)?;
+        }
+        Ok(())
+    }
+}
+
+// Adapt the native group's existing error vocabulary to generic scratch control.
+struct Observed(ErrorKind);
+impl From<Stop> for Observed {
+    fn from(stop: Stop) -> Self {
+        Self(stopped(stop))
+    }
+}
+
+fn observe_capacity(
+    bytes: u128,
+    reservation: Result<(), ErrorKind>,
+    limit: u64,
+    statistics: &mut Statistics,
+) -> Result<(), ErrorKind> {
+    let actual = u64::try_from(bytes).map_err(|_| ErrorKind::Overflow);
+    if let Ok(actual) = &actual {
+        statistics.storage_peak_bytes = statistics.storage_peak_bytes.max(*actual);
+    }
+    // Preserve the original allocation failure if observation also refuses.
+    reservation?;
+    if actual? > limit {
+        return Err(ErrorKind::Limit(Resource::Bytes));
+    }
+    Ok(())
+}
+
+fn reserve_mask(target: &mut Vec<bool>, count: usize) -> Result<(), ErrorKind> {
+    target
+        .try_reserve_exact(count)
+        .map_err(|_| ErrorKind::Stopped(Stop::Allocation))
 }
 
 fn observations(
     group: GroupRef<'_>,
     candidate: &Interpretation,
     tested: Option<&Interpretation>,
-    work: &mut oracle::Work<'_>,
+    limit: u64,
+    statistics: &mut Statistics,
+    work: &mut oracle::Work<'_, '_>,
 ) -> Result<(Vec<bool>, Option<Vec<bool>>), ErrorKind> {
-    let mut original_nodes = storage(group.data.theory.nodes().len())?;
+    let mut buffers = Observations::default();
+    buffers.reserve(
+        &group.data.theory,
+        group.data.tuples.len(),
+        tested.is_some(),
+        limit,
+        statistics,
+    )?;
     oracle::evaluate(
         &group.data.theory,
         candidate,
         None,
-        &mut original_nodes,
+        &mut buffers.original_nodes,
+        &mut buffers.numeric,
         work,
     )
     .map_err(stopped)?;
-    let original = project(group, &original_nodes, work)?;
-    let frozen = if let Some(tested) = tested {
-        let mut frozen_nodes = storage(group.data.theory.nodes().len())?;
+    project(group, &buffers.original_nodes, &mut buffers.original, work)?;
+    if let Some(tested) = tested {
         oracle::evaluate(
             &group.data.theory,
             tested,
-            Some(&original_nodes),
-            &mut frozen_nodes,
+            Some(&buffers.original_nodes),
+            &mut buffers.frozen_nodes,
+            &mut buffers.numeric,
             work,
         )
         .map_err(stopped)?;
-        Some(project(group, &frozen_nodes, work)?)
-    } else {
-        None
-    };
-    Ok((original, frozen))
+        project(group, &buffers.frozen_nodes, &mut buffers.frozen, work)?;
+    }
+    statistics.storage_bytes = add(
+        bytes::<bool>(buffers.original.capacity())?,
+        bytes::<bool>(buffers.frozen.capacity())?,
+    )?;
+    Ok((buffers.original, tested.map(|_| buffers.frozen)))
 }
 
 fn project(
     group: GroupRef<'_>,
     nodes: &[bool],
-    work: &mut oracle::Work<'_>,
-) -> Result<Vec<bool>, ErrorKind> {
-    let mut mask = storage(group.data.tuples.len())?;
+    mask: &mut Vec<bool>,
+    work: &mut oracle::Work<'_, '_>,
+) -> Result<(), ErrorKind> {
     for tuple in &group.data.tuples {
         work.tick().map_err(stopped)?;
         mask.push(nodes[tuple.condition]);
     }
-    Ok(mask)
+    Ok(())
 }
 
 fn stopped(stop: Stop) -> ErrorKind {

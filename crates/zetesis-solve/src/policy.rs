@@ -5,7 +5,9 @@
 /// Materialization policy, independent of execution hardware.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Grounder {
-    /// Prefer lazy source grounding where admitted, independently of hardware.
+    /// Select the input's certified execution policy. A complete acyclic normal
+    /// source can evaluate directly on CPU; other profiles retain their eager
+    /// base, terminal reconstruction or relational source execution.
     #[default]
     Auto,
     /// Instantiate on demand: source joins without a complete ground rule

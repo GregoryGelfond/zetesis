@@ -7,6 +7,7 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use super::Error;
+use crate::digest::spelled;
 
 /// A primary input's requested path, resolved file identity and exact byte seal.
 /// The bounded read must agree with the opened file's length before and after
@@ -192,7 +193,7 @@ fn content_seal<R: Read>(
             ),
         ));
     }
-    Ok((bytes, format!("{:x}", digest.finalize())))
+    Ok((bytes, spelled(&digest.finalize())))
 }
 
 pub(crate) fn recheck(before: &FileSeal) -> Change {
@@ -209,6 +210,126 @@ pub(crate) fn recheck(before: &FileSeal) -> Change {
             after: None,
             error: Some(error.to_string()),
         },
+    }
+}
+
+/// What a native run's report says about the executable that did its work.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum Named {
+    /// The report carries no statistics object, so the rule has no
+    /// `executable` key to read.
+    NoStatistics,
+    /// No `executable` key: a build that predates the key, which arrived with
+    /// the default install's front, so it cannot have handed the run off.
+    Omitted,
+    /// `null`, any other value that is not a path, or a path that is not
+    /// absolute: the run did not name its executable's resolved path.
+    Unresolved,
+    /// The absolute path a run names as its executable. A zetesis build writes
+    /// it resolved through links; [`Executables::settle`] resolves it again,
+    /// so a path through a link names the executable the link leads to.
+    Path(PathBuf),
+}
+
+/// What a native run's report names as its executable, read from the report's
+/// `statistics` value: absent or not an object, the report carries no
+/// statistics. A relative path is unresolved: it would resolve against this
+/// process's working directory, not the run's.
+pub(crate) fn named(statistics: &serde_json::Value) -> Named {
+    let Some(statistics) = statistics.as_object() else {
+        return Named::NoStatistics;
+    };
+    match statistics.get("executable") {
+        None => Named::Omitted,
+        Some(value) => value
+            .as_str()
+            .map(PathBuf::from)
+            .filter(|path| path.is_absolute())
+            .map_or(Named::Unresolved, Named::Path),
+    }
+}
+
+/// The executables a report's native runs name, settled against the native
+/// executable it sealed and invoked. Each named path is resolved through links
+/// before it is compared, so runs that name one executable by different paths
+/// name it once. A run naming the native executable, or naming none because it
+/// predates the key, changes nothing. The first other
+/// executable a run names, as when the default install's front hands a GPU run
+/// to its sibling, is sealed at that report; later runs may name the native
+/// executable or that one.
+#[derive(Debug)]
+pub(crate) struct Executables {
+    native: PathBuf,
+    other: Option<FileSeal>,
+    limit: usize,
+}
+
+impl Executables {
+    /// The rule for runs of the native executable sealed as `native`, sealing
+    /// another within `limit` bytes.
+    pub(crate) fn new(native: &FileSeal, limit: usize) -> Self {
+        Self {
+            native: native.canonical().to_owned(),
+            other: None,
+            limit,
+        }
+    }
+
+    /// Settle what one native run's report names.
+    ///
+    /// # Errors
+    /// Returns why the run's evidence is refused: its report carries no
+    /// statistics object to name its executable; it did not name its
+    /// executable's resolved path, so after a hand-off it may be the sibling;
+    /// the executable it names could not be resolved or sealed; or it names a
+    /// third executable, beside the native one and the other one sealed
+    /// earlier.
+    pub(crate) fn settle(&mut self, named: &Named) -> Result<(), String> {
+        let named = match named {
+            Named::NoStatistics => {
+                return Err(
+                    "the native report carries no statistics to name its executable".to_owned(),
+                );
+            }
+            Named::Omitted => return Ok(()),
+            Named::Unresolved => {
+                return Err("this run could not name the executable that did its work".to_owned());
+            }
+            Named::Path(path) => path,
+        };
+        let unsealed = |error: Error| {
+            format!(
+                "the executable this run names, {}, could not be sealed: {error}",
+                named.display()
+            )
+        };
+        let resolved =
+            std::fs::canonicalize(named).map_err(|source| unsealed(io(named, source)))?;
+        if resolved == self.native {
+            return Ok(());
+        }
+        match &self.other {
+            None => {
+                self.other = Some(seal(named, self.limit).map_err(unsealed)?);
+                Ok(())
+            }
+            Some(seal) if seal.canonical() == resolved => Ok(()),
+            Some(seal) => Err(format!(
+                "this run names {}, but an earlier run named {} besides the native {}",
+                named.display(),
+                seal.canonical().display(),
+                self.native.display()
+            )),
+        }
+    }
+
+    /// The other executable runs named, as sealed at its first report, and
+    /// its recheck now; both absent when no run named one. The value names no
+    /// other executable afterwards.
+    pub(crate) fn close(&mut self) -> (Option<FileSeal>, Option<Change>) {
+        let other = self.other.take();
+        let after = other.as_ref().map(recheck);
+        (other, after)
     }
 }
 

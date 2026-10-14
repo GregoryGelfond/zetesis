@@ -21,9 +21,21 @@ still need their own correspondence.
 
 For the Rust adapter, ordinary positive joins supply necessary data bindings;
 nonbinding aggregate/conditional truth never removes possible producers.
-Aggregate assignment proposals retain complete keys and every possible value,
-using `AggregateAssignment.covered_actual_sum_is_candidate` and
-`ValueExtrema.completed_candidate_coverage`. Their original equalities remain in the theory.
+Aggregate assignment proposals retain complete keys and every value of a
+selection between the required keys and the possible ones: the measure of the
+tuple set any model's frozen reading sees, which contains the required keys and
+lies within the possible ones. Three ingredients carry this: coverage by
+`SourceMeasures.actual_value_covered`, monotonicity in the possible keys by
+`SourceMeasures.possible_extension`, and the closed forms that tie the runtime
+count and sum operations to `SourceMeasures.carrier`
+(`required_count_carrier_membership`, `required_sum_carrier_membership`). The
+ordered-extremum closed form for `#min` and `#max` with required keys is not yet
+stated: without required keys their proposals are the family
+`ValueExtrema.completed_candidate_coverage` covers, and with required keys they
+are checked against exhaustive reduct enumeration and clingo in the aggregate
+campaign, whose sources reach both cases of that form: the required extremum
+alone, and optional values strictly before it. Aggregate assignment proposals'
+original equalities remain in the theory.
 These are the ingredients of the projection argument, not a formal refinement
 of parsing, local binding plans, checked arithmetic or the Rust fixed-point
 loop. An interrupted or resource-exhausted loop supplies no closure result.

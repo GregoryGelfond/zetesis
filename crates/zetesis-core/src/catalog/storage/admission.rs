@@ -7,7 +7,7 @@ use crate::ValueResource;
 use crate::catalog::{AtomRef, Limits, PredicateRef, TermRef};
 
 use super::control::{Work, uncontrolled};
-use super::nodes::{Measures, arity, ceiling, descriptor_measures};
+use super::nodes::{Measures, ceiling, descriptor_measures};
 use super::{AtomId, Failure, Fault, Read, Store, TermId, budget};
 
 #[derive(Clone, Copy)]
@@ -230,7 +230,7 @@ impl Store {
                         .ok_or(Fault::Overflow)?,
                     limits.max_bytes,
                 )?;
-                let children = arity(descriptor);
+                let children = descriptor.arity();
                 let start = ids.len().checked_sub(children).ok_or(Fault::Shape)?;
                 work.steps(children)?;
                 ids[start..].reverse();
@@ -283,7 +283,7 @@ impl Store {
                 let term = read.term(frame.source).ok_or(Fault::Shape)?;
                 work.step()?;
                 let descriptor = term.descriptor();
-                if frame.next < arity(descriptor) {
+                if frame.next < descriptor.arity() {
                     work.step()?;
                     let child = term.child(frame.next).ok_or(Fault::Shape)?;
                     allowance.reserve(

@@ -1,6 +1,7 @@
 //! Direct stratified evaluation retains complete original answer identity.
 
-use std::{collections::BTreeSet, num::NonZeroUsize};
+use crate::support::models::cost_family as family;
+use std::num::NonZeroUsize;
 
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
@@ -10,8 +11,6 @@ use zetesis_solve::{
     WorldViewLimits,
 };
 use zetesis_themelios::AdmittedFormula;
-
-type Family = BTreeSet<(zetesis_core::Model, Option<Vec<(i32, i64)>>)>;
 
 fn collect(owner: &AdmittedFormula, workers: usize, oracle: Oracle) -> WorldView {
     Session::builder(
@@ -28,19 +27,6 @@ fn collect(owner: &AdmittedFormula, workers: usize, oracle: Oracle) -> WorldView
     )
     .collect(WorldViewLimits::default())
     .unwrap()
-}
-
-fn family(view: &WorldView) -> Family {
-    view.answer_sets()
-        .iter()
-        .map(|answer| {
-            assert!(answer.subject().same_instance(view.subject()));
-            (
-                answer.interpretation().clone(),
-                answer.score().map(|score| score.costs().to_vec()),
-            )
-        })
-        .collect()
 }
 
 #[test]

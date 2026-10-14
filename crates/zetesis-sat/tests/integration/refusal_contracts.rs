@@ -1,5 +1,6 @@
 //! Typed failures preserve exact reduct enumeration and distinguish incomplete work.
 
+use crate::support::choice_theories::choices;
 use std::collections::BTreeSet;
 use std::error::Error as _;
 use std::time::Instant;
@@ -8,28 +9,6 @@ use crate::support::clause_search::by_clauses;
 use zetesis_cpu::Stop;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 use zetesis_sat::{Cancellation, Check, Incomplete, Limits, StableModels, check};
-
-fn choices() -> Theory {
-    Theory::new(
-        2,
-        zetesis_ferraris::FormulaParts::new(
-            vec![
-                Node::falsum(),
-                Node::atom(0),
-                Node::implies(1, 0),
-                Node::or_pair([1, 2]),
-                Node::atom(1),
-                Node::implies(4, 0),
-                Node::or_pair([4, 5]),
-            ],
-            vec![],
-        )
-        .unwrap(),
-        vec![3, 6],
-        AdmissionLimits::default(),
-    )
-    .unwrap()
-}
 
 fn remaining(search: &mut StableModels) -> BTreeSet<Vec<usize>> {
     let result = search
@@ -42,7 +21,7 @@ fn remaining(search: &mut StableModels) -> BTreeSet<Vec<usize>> {
 
 #[test]
 fn mismatched_restriction_error_does_not_consume_the_live_enumerator() {
-    let original = choices();
+    let original = choices(2);
     let mut search =
         StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
     let wrong = Theory::new(
@@ -77,7 +56,7 @@ fn mismatched_restriction_error_does_not_consume_the_live_enumerator() {
 
 #[test]
 fn late_restriction_capacity_error_keeps_its_cause_and_previous_model_block() {
-    let original = choices();
+    let original = choices(2);
     let mut limits = Limits::default();
     // Refuse the four-clause restriction itself, independently of history.
     limits.admission.max_clauses = 3;
@@ -115,7 +94,7 @@ fn late_restriction_capacity_error_keeps_its_cause_and_previous_model_block() {
 
 #[test]
 fn independent_verification_and_foreign_candidate_failures_are_not_rejections() {
-    let original = choices();
+    let original = choices(2);
     let candidate = Interpretation::new(&original, [0]).unwrap();
     let Check::Inconclusive(error) = check(
         &original,
@@ -134,7 +113,7 @@ fn independent_verification_and_foreign_candidate_failures_are_not_rejections() 
         Some(&Stop::WorkLimit)
     );
     assert!(error.to_string().starts_with("independent verification:"));
-    let other = choices();
+    let other = choices(2);
     let foreign = Interpretation::new(&other, [0]).unwrap();
     let Check::Inconclusive(error) = check(
         &original,

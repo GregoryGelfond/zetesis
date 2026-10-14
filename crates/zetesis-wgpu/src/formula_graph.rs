@@ -4,7 +4,7 @@
 
 use crate::{GpuError, GpuErrorKind};
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{NodeView, Theory, threshold_lowering};
+use zetesis_ferraris::{NodeView, Theory, extremum_lowering, threshold_lowering};
 
 mod lowering;
 pub(crate) use lowering::{pack, translated};
@@ -36,6 +36,18 @@ fn bytes(nodes: u32, wide_words: u32) -> Result<u64, GpuError> {
     Ok(u64::from(words.max(4)) * 4)
 }
 
+/// Constants use falsum alone, or falsum followed by its self implication.
+fn numeric_shape(gates: usize, constants: usize) -> Result<(u32, u32), GpuError> {
+    let nodes = gates
+        .checked_add(constants)
+        .ok_or_else(|| capacity("numeric physical nodes overflow"))?;
+    let edges = gates
+        .checked_mul(2)
+        .and_then(|n| n.checked_add(if constants == 2 { 2 } else { 0 }))
+        .ok_or_else(|| capacity("numeric physical edges overflow"))?;
+    Ok((address(nodes)?, address(edges)?))
+}
+
 impl Shape {
     #[cfg(test)]
     pub(crate) fn new(theory: &Theory, device: &wgpu::Limits) -> Result<Self, GpuError> {
@@ -64,21 +76,24 @@ impl Shape {
                         cancellation.poll().map_err(GpuError::interrupted)
                     })?;
                     scratch = scratch.max(shape.scratch);
-                    let constants = if shape.constant() == Some(false) {
-                        1
-                    } else {
-                        2
-                    };
-                    let count = shape
-                        .gates
-                        .checked_add(constants)
-                        .ok_or_else(|| capacity("threshold physical nodes overflow"))?;
-                    let edges = shape
-                        .gates
-                        .checked_mul(2)
-                        .and_then(|n| n.checked_add(if constants == 2 { 2 } else { 0 }))
-                        .ok_or_else(|| capacity("threshold physical edges overflow"))?;
-                    (address(count)?, address(edges)?)
+                    numeric_shape(
+                        shape.gates,
+                        if shape.constant() == Some(false) {
+                            1
+                        } else {
+                            2
+                        },
+                    )?
+                }
+                NodeView::ExtremumCut(cut) => {
+                    native = true;
+                    let shape = extremum_lowering::Shape::new(cut, || {
+                        cancellation.poll().map_err(GpuError::interrupted)
+                    })?;
+                    numeric_shape(
+                        shape.gates,
+                        if shape.constant() == Some(true) { 2 } else { 1 },
+                    )?
                 }
                 NodeView::And(children) | NodeView::Or(children) => (1, address(children.len())?),
                 NodeView::Implies(..) => (1, 2),
@@ -137,8 +152,8 @@ pub(crate) fn header(node: NodeView<'_>, tail: &mut u32) -> Result<[u32; 4], Gpu
         NodeView::False => [0, 0, 0, 0],
         NodeView::Atom(atom) => [1, address(atom)?, 0, 0],
         NodeView::Implies(left, right) => [4, address(left)?, address(right)?, 0],
-        NodeView::Threshold(_) => {
-            return Err(capacity("native threshold requires physical lowering"));
+        NodeView::Threshold(_) | NodeView::ExtremumCut(_) => {
+            return Err(capacity("native numeric node requires physical lowering"));
         }
         NodeView::And(children) | NodeView::Or(children) => {
             let conjunction = matches!(node, NodeView::And(_));
@@ -193,9 +208,9 @@ mod tests;
 impl From<threshold_lowering::Error> for GpuError {
     fn from(error: threshold_lowering::Error) -> Self {
         capacity(match error {
-            threshold_lowering::Error::Invalid => "invalid physical threshold row or scratch",
+            threshold_lowering::Error::Invalid => "invalid physical numeric row or scratch",
             threshold_lowering::Error::Capacity => {
-                "threshold physical expansion exceeds host capacity"
+                "numeric physical expansion exceeds host capacity"
             }
         })
     }

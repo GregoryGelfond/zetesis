@@ -3,7 +3,7 @@
 // ANCHOR: example
 use std::cell::Cell;
 
-use zetesis_domain::{Domain, Status};
+use zetesis_domain::numeric::Status;
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
     AdmissionOptions, AdmittedFormula, DomainLimits, DomainObservation, ExpansionLimits,
@@ -38,11 +38,12 @@ impl GroundingObserver for Observation {
         if let DomainObservation::Analyzed(analysis) = observation {
             // Inspect the actual borrowed result during the synchronous callback.
             // Retain only the owned status and information this example needs.
-            self.status.set(Some(analysis.status()));
+            self.status.set(Some(analysis.analysis().status()));
             self.unknown_argument.set(
                 analysis
+                    .analysis()
                     .arguments()
-                    .any(|(_, _, argument)| matches!(argument.domain(), Domain::Unknown)),
+                    .any(|(argument, _)| analysis.analysis().values(argument).is_none()),
             );
         }
     }

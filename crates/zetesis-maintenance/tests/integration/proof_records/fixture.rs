@@ -3,13 +3,13 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use std::{fs, path::Path};
 
-pub struct Fixture {
+pub(super) struct Fixture {
     pub directory: tempfile::TempDir,
     pub record: Value,
     pub entries: Value,
 }
 impl Fixture {
-    pub fn new() -> Self {
+    pub(super) fn new() -> Self {
         let directory = tempfile::tempdir().unwrap();
         let entries = json!([
             {"name":"Zetesis.first","file":"Zetesis/A.lean","line":8},
@@ -69,27 +69,27 @@ impl Fixture {
         fixture.refresh();
         fixture
     }
-    pub fn root(&self) -> &Path {
+    pub(super) fn root(&self) -> &Path {
         self.directory.path()
     }
-    pub fn write(&self, path: &str, content: &str) {
+    pub(super) fn write(&self, path: &str, content: &str) {
         let path = self.root().join(path);
         fs::create_dir_all(path.parent().unwrap()).unwrap();
         fs::write(path, content).unwrap();
     }
-    pub fn read(&self, path: &str) -> String {
+    pub(super) fn read(&self, path: &str) -> String {
         fs::read_to_string(self.root().join(path)).unwrap()
     }
-    pub fn digest(&self, path: &str) -> String {
+    pub(super) fn digest(&self, path: &str) -> String {
         format!(
             "{:x}",
             Sha256::digest(fs::read(self.root().join(path)).unwrap())
         )
     }
-    pub fn save(&self) {
+    pub(super) fn save(&self) {
         self.write("verification.json", &self.record.to_string());
     }
-    pub fn refresh(&mut self) {
+    pub(super) fn refresh(&mut self) {
         for section in [
             "source_sha256",
             "generated_artifact_sha256",
@@ -107,7 +107,7 @@ impl Fixture {
         }
         self.save();
     }
-    pub fn verify(
+    pub(super) fn verify(
         &self,
     ) -> Result<zetesis_maintenance::proofs::Summary, zetesis_maintenance::Error> {
         zetesis_maintenance::proofs::verify(
@@ -116,7 +116,7 @@ impl Fixture {
             zetesis_maintenance::proofs::Limits::default(),
         )
     }
-    pub fn reject(&self) {
+    pub(super) fn reject(&self) {
         assert!(self.verify().is_err());
     }
 }

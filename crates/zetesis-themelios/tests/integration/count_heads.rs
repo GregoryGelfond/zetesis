@@ -1,21 +1,19 @@
 //! Checked finite tuple/atom count heads preserve complete models and frozen reducts.
 
 use crate::support::finite_bindings::{Models, holds, remap, values};
-use crate::support::head_models::{complete, expected, limited, manual_holds, names, selected};
+use crate::support::head_models::{complete, expected, limited, manual_holds, selected};
 use crate::support::objective_dependency_records as objective_dependencies;
-use crate::support::thresholds::first_success;
+use zetesis_reference_support::{BundleFixture, admit, canonical, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
-use std::fs::{self};
 use std::time::Duration;
 
 use serde_json::{Value as Json, json};
 use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{admit, canonical};
 use zetesis_themelios::{
-    AdmissionOptions, BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, SourceBundle,
-    admit_bundle_formula, admit_extended,
+    AdmissionOptions, BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_bundle_formula, admit_extended,
 };
 
 fn cases() -> Vec<Json> {
@@ -265,24 +263,23 @@ fn checked_group_size_and_tuple_storage_obey_inclusive_limits() {
         "#count{X:p(X):X=1..4}.",
         "d(1..4).1#count{X:p(X):d(X)}2.",
     ] {
-        let mut limits = FormulaLimits::default();
-        limits.aggregate.max_elements = 4;
+        let limits =
+            |maximum| resource_limits::formula(FormulaResource::AggregateElements, maximum);
         assert!(
             limited(
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                &limits
+                &limits(4)
             )
             .is_ok()
         );
-        limits.aggregate.max_elements = 3;
         assert!(matches!(
             limited(
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                &limits
+                &limits(3)
             ),
             Err(FormulaFailure::Limit {
                 resource: FormulaResource::AggregateElements,
@@ -296,14 +293,14 @@ fn checked_group_size_and_tuple_storage_obey_inclusive_limits() {
         limited(
             source,
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_scalar_bytes: usize::try_from(limit).unwrap(),
-                ..ExpansionLimits::default()
-            },
+            resource_limits::expansion(ExpansionResource::ScalarBytes, limit),
             &FormulaLimits::default(),
         )
     };
-    let threshold = first_success(|limit| attempt(limit).is_ok());
+    let threshold = first_success(
+        resource_limits::expansion_default(ExpansionResource::ScalarBytes),
+        |limit| attempt(limit).is_ok(),
+    );
     assert!(matches!(
         attempt(threshold - 1),
         Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
@@ -330,20 +327,16 @@ fn eligibility_limits_fail_before_partial_publication() {
 fn validation_limits(source: &str) {
     for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
         let attempt = |limit| {
-            let mut limits = FormulaLimits::default();
-            if resource == FormulaResource::Work {
-                limits.max_work = limit;
-            } else {
-                limits.max_substitutions = limit;
-            }
             limited(
                 source,
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                &limits,
+                &resource_limits::formula(resource, limit),
             )
         };
-        let threshold = first_success(|limit| attempt(limit).is_ok());
+        let threshold = first_success(resource_limits::formula_default(resource), |limit| {
+            attempt(limit).is_ok()
+        });
         assert!(
             matches!(attempt(threshold-1), Err(FormulaFailure::Limit { resource: actual, observed, .. })
             if actual == resource && observed == u128::from(threshold))
@@ -358,16 +351,11 @@ fn validation_limits(source: &str) {
 
 #[test]
 fn duplicate_included_count_groups_retain_each_source_origin() {
-    let directory = tempfile::tempdir().unwrap();
+    let fixture = BundleFixture::new();
     let rule = "1#count{X:p(X):X=1..4}2.";
-    fs::write(
-        directory.path().join("entry.lp"),
-        format!("#include \"other.lp\".\n{rule}"),
-    )
-    .unwrap();
-    fs::write(directory.path().join("other.lp"), rule).unwrap();
-    let bundle =
-        SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+    fixture.write("entry.lp", &format!("#include \"other.lp\".\n{rule}"));
+    fixture.write("other.lp", rule);
+    let bundle = fixture.bundle();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),
@@ -422,34 +410,7 @@ fn clingo(source: &str) -> Models {
             .unwrap()
             .starts_with("clingo version 5.8.")
     );
-    assert!(matches!(
-        raw["Result"].as_str().unwrap(),
-        "SATISFIABLE" | "UNSATISFIABLE"
-    ));
-    assert_eq!(raw["Models"]["More"], "no");
-    let witnesses: Vec<_> = raw["Call"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-        .collect();
-    assert_eq!(
-        raw["Models"]["Number"].as_u64().unwrap(),
-        witnesses.len() as u64
-    );
-    let models: Models = witnesses
-        .iter()
-        .map(|witness| {
-            assert!(witness["Costs"].is_null());
-            names(&witness["Value"])
-        })
-        .collect();
-    assert_eq!(
-        models.len(),
-        witnesses.len(),
-        "fixtures show complete models without projection"
-    );
-    models
+    oracle::objective_free_models(&raw)
 }
 #[test]
 #[ignore = "requires clingo: fresh clingo original and expanded sources match complete models; each original and expansion has a bounded complete capture"]

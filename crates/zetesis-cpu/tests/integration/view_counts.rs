@@ -42,7 +42,12 @@ impl ExactSizeIterator for Views<'_> {}
 
 #[test]
 fn false_count_claims_refuse_before_source_work() {
-    let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let seed = Seed::new(&program, []).unwrap();
     for (claimed, actual) in [(0, 1), (1, 0), (1, 2), (2, 1)] {
         let views = Views {
@@ -70,7 +75,12 @@ fn false_count_claims_refuse_before_source_work() {
 
 #[test]
 fn changed_final_iteration_cannot_publish_missing_worlds() {
-    let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let seed = Seed::new(&program, []).unwrap();
     for actual in [0, 2] {
         let views = Views {
@@ -98,7 +108,12 @@ fn changed_final_iteration_cannot_publish_missing_worlds() {
 
 #[test]
 fn changed_packing_count_refuses_before_evaluation() {
-    let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let seed = Seed::new(&program, []).unwrap();
     for actual in [0, 2] {
         let views = Views {

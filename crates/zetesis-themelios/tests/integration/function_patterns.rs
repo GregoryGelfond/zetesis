@@ -1,10 +1,10 @@
 //! Constructor patterns retain exact source atoms through finite extraction.
 use crate::support::finite_bindings as reference;
 use crate::support::thresholds::minimum_preparation_bytes;
-use reference::{Models, exhaustive, external, holds, native, values};
+use reference::{Models, holds, native, values};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::{admit, canonical, formula, prepared, resource_limits};
 use zetesis_themelios::{
     AdmissionOptions, AnalysisBasis, ExpansionFailure, ExpansionLimits, ExpansionResource,
     FormulaFailure, FormulaLimits, FormulaResource, admit_formula, prepare_formula,
@@ -185,10 +185,7 @@ fn models_match_explicit_substitution() {
 
 #[test]
 fn stability_matches_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]
@@ -238,41 +235,14 @@ fn frozen_truth_matches_explicit_substitution() {
 #[test]
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
-    let mut total = 0;
-    let mut sources = 0;
-    for source in CASES
-        .iter()
-        .map(|&(source, _)| source)
-        .chain(PRIOR_NUMERIC_ARGUMENTS.iter().map(|&(source, _)| source))
-        .chain(MIXED_NUMERIC_ARGUMENTS.iter().map(|&(source, _)| source))
-    {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    assert!(
-                        expected.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&formula(source)), expected, "{source}");
-        total += count;
-        sources += 1;
-    }
-    println!("complete_sources={sources} full_models={total}");
+    reference::original_sources_match_clingo_full_models(
+        CASES
+            .iter()
+            .map(|&(source, _)| source)
+            .chain(PRIOR_NUMERIC_ARGUMENTS.iter().map(|&(source, _)| source))
+            .chain(MIXED_NUMERIC_ARGUMENTS.iter().map(|&(source, _)| source)),
+        formula,
+    );
 }
 
 #[test]
@@ -295,12 +265,7 @@ fn inverse_consequent_remains_a_typed_refusal() {
     // supplies the compared value, but cannot invert X+1 to bind X.
     assert!(
         matches!(
-            admit_formula(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default()
-            ),
+            admit(source, &FormulaLimits::default()),
             Err(FormulaFailure::UnboundArgumentInput { .. })
         ),
         "{source}"
@@ -312,12 +277,7 @@ fn negative_patterns_do_not_supply_bindings() {
     for source in ["p(X):-not q(f(X)).", "p(X):-not not q(f(X))."] {
         assert!(
             matches!(
-                admit_formula(
-                    source.into(),
-                    AdmissionOptions::default(),
-                    ExpansionLimits::default(),
-                    FormulaLimits::default()
-                ),
+                admit(source, &FormulaLimits::default()),
                 Err(FormulaFailure::UnsafeVariable { .. })
             ),
             "{source}"
@@ -328,12 +288,7 @@ fn negative_patterns_do_not_supply_bindings() {
 #[test]
 fn extraction_does_not_bind_unmentioned_names() {
     assert!(matches!(
-        admit_formula(
-            "p(X):-q(f(Y)).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
+        admit("p(X):-q(f(Y)).", &FormulaLimits::default()),
         Err(FormulaFailure::UnsafeVariable { .. })
     ));
 }
@@ -341,13 +296,7 @@ fn extraction_does_not_bind_unmentioned_names() {
 #[test]
 fn prepared_models_match_source_admission() {
     let source = "q(f(1)).p(X):-q(f(X)).";
-    let prepared = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared(source);
     let admitted = prepared.ground().unwrap();
     assert_eq!(native(&admitted), native(&formula(source)));
 }
@@ -396,11 +345,9 @@ fn captured_rules_retain_source_origins() {
 #[test]
 fn captures_obey_the_variable_ceiling() {
     for limit in [1, 2] {
-        let mut options = AdmissionOptions::default();
-        options.core_limits.max_variables_per_template = limit;
         let result = admit_formula(
             "q(f(1,2)).p(X):-q(f(X,_)).".into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, limit),
             ExpansionLimits::default(),
             FormulaLimits::default(),
         );
@@ -422,12 +369,10 @@ fn captures_obey_the_variable_ceiling() {
 
 #[test]
 fn anonymous_nodes_need_only_the_whole_capture() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 1;
     assert!(
         admit_formula(
             "q(f(1,g(2,3))).p:-q(f(_,g(_,_))).".into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 1),
             ExpansionLimits::default(),
             FormulaLimits::default()
         )
@@ -449,10 +394,7 @@ fn pattern_nodes_obey_the_value_ceiling() {
             let result = prepare_formula(
                 source.into(),
                 AdmissionOptions::default(),
-                ExpansionLimits {
-                    max_values: limit,
-                    ..ExpansionLimits::default()
-                },
+                resource_limits::expansion(ExpansionResource::Values, limit),
                 FormulaLimits::default(),
             );
             if limit == exact {
@@ -461,7 +403,7 @@ fn pattern_nodes_obey_the_value_ceiling() {
                 assert!(
                     matches!(result, Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
                 resource: ExpansionResource::Values, observed, ..
-            })) if observed == exact as u128),
+            })) if observed == u128::from(exact)),
                     "{source}"
                 );
             }

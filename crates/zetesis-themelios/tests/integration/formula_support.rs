@@ -2,16 +2,12 @@
 //! models were independently checked with clingo 5.8.2; this portable suite
 //! evaluates every finite candidate using the exhaustive Ferraris oracle.
 
-use crate::support::atom_models::Models;
+use crate::support::atom_models::{self, Models};
 use crate::support::objective_boundaries;
-use zetesis_core::Atom;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
-use zetesis_reference_support::formula;
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaFailure, FormulaLimits,
-    FormulaResource, admit, admit_formula,
-};
+use zetesis_reference_support::{admit, formula, resource_limits};
+use zetesis_themelios::{AdmittedFormula, FormulaFailure, FormulaResource};
 
 fn exhaustive(input: &AdmittedFormula) -> Models {
     let count = input.atoms().len();
@@ -54,39 +50,7 @@ fn expected(models: &[&str]) -> Models {
         .map(|model| {
             model
                 .split_ascii_whitespace()
-                .map(|source| {
-                    let fact = admit(format!("{source}."), AdmissionOptions::default())
-                        .expect("recorded scalar fact");
-                    let head = fact
-                        .program()
-                        .templates()
-                        .at(0)
-                        .unwrap()
-                        .head()
-                        .expect("fact head");
-                    let values = head
-                        .terms()
-                        .iter()
-                        .map(|term| match term {
-                            zetesis_core::TemplateTerm::Constant(value) => value
-                                .to_value(zetesis_core::ValueLimits::default())
-                                .unwrap(),
-                            zetesis_core::TemplateTerm::Variable(_) => {
-                                panic!("expected atoms are ground")
-                            }
-                        })
-                        .collect();
-                    Atom::new(
-                        zetesis_core::Predicate::with_sign(
-                            head.predicate().name(),
-                            head.predicate().arity(),
-                            head.predicate().sign(),
-                        )
-                        .unwrap(),
-                        values,
-                    )
-                    .expect("ground atom arity")
-                })
+                .map(atom_models::atom)
                 .collect()
         })
         .collect()
@@ -205,14 +169,9 @@ fn local_choice_joins_preserve_global_bindings_and_duplicate_eligibility() {
 fn incomplete_support_is_a_located_refusal_not_a_smaller_program() {
     let source = "p(1). p(2) :- p(1). p(3) :- p(2).";
     for max_support_rounds in [0, 1] {
-        let error = admit_formula(
-            source.to_owned(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
-                max_support_rounds,
-                ..FormulaLimits::default()
-            },
+        let error = admit(
+            source,
+            &resource_limits::formula(FormulaResource::SupportRounds, max_support_rounds),
         )
         .expect_err("support closure has not reached its final no-change round");
         assert!(matches!(

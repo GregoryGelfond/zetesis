@@ -24,7 +24,12 @@ source boundary. Native dense IDs, packed relations and formula DAGs are justifi
 execution representations with explicit validated conversions. Do not flatten
 logical values into strings for internal exchange or add another ASP parser.
 Keep the reviewed Git dependency pin. A dependency update must establish its
-source, API and semantic compatibility explicitly.
+source, API and semantic compatibility explicitly. Declare a dependency that
+several workspace crates use once, in the workspace table; each member adds
+only the features it needs. Requirements are caret ranges, and `Cargo.lock`
+fixes the version every build uses, so an update is a reviewed change to the
+lock; an exact requirement stays only where one release must match another,
+with that reason beside it.
 
 Library-first means a consumer can use the capability without clap options,
 process invocation, global I/O or parsing rendered prose. Typed configurations,
@@ -171,23 +176,34 @@ implementation; a passing command does not justify hiding an unused operation
 or weakening a check. Do not suppress
 `dead_code`, its `unused` parent group or `warnings`, whether with `allow` or
 `expect`. Do not manufacture uses or widen visibility to evade these checks.
+Declare each item at the visibility it has: the workspace denies
+`unreachable_pub`, so `pub` marks only what a crate root exports, and an export
+that nothing outside its crate needs is narrowed or, unused, removed.
 Shared test helpers should expose cohesive operations and be compiled only by
 the consumers that need them. Helpers that several crates' tests share live in
 internal support crates, each over one dependency closure, so a test build
 compiles only what its tests use and no crate's unit tests link a second copy of
 that crate. `zetesis-test-support`, over `zetesis-core`, holds the sinks that
-fail on purpose, builders of small programs and nonzero counts, the reader of a
-JSON document's spelled atoms, the answer sets a comparison holds, the data
-several crates' tests read and the repository directories they read in place,
-the shell scripts a test runs as child processes, and the names the harness
-gives a crate's own tests. `zetesis-theory-support`, over `zetesis-ferraris`,
-holds the small-theory builder and the CPU reference a device's aggregates are
-compared with. `zetesis-clingo-support`, over `zetesis-validation` alone, finds
-clingo, runs it within bounds and decodes its reports, so a comparison reaches
-clingo without compiling a solver. `zetesis-reference-support`, over
-`zetesis-themelios`, enumerates a small program's answer sets through the
-reduct check. A helper that only one crate's tests use stays in that crate's
-`tests/integration/support`. The support crates are not published, and every
+fail on purpose and the writers that record each write call, builders of small
+programs and nonzero counts, the reader of a JSON document's spelled atoms, the
+answer sets a comparison holds, the data several crates' tests read and the
+repository directories they read in place, the shell scripts a test runs as
+child processes, the names the harness gives a crate's own tests, and the search
+for the least resource limit an operation
+needs. `zetesis-theory-support`, over `zetesis-ferraris`, holds the
+small-theory builder and the CPU reference a device's aggregates are compared
+with. `zetesis-clingo-support`, over `zetesis-validation` alone, finds clingo,
+runs it within bounds and decodes its reports, so a comparison reaches clingo
+without compiling a solver. `zetesis-reference-support`, over
+`zetesis-themelios`, admits a source under default or given limits, enumerates
+a small program's answer sets through the reduct check, prepares a source and
+grounds it for hybrid execution, writes the temporary source bundles several
+crates' tests load or run, and names, by the resource a refusal reports, the
+limits an admission takes and those of loading a bundle, building an objective
+plan and evaluating observations, as its `resource_limits` module states. A
+helper that only one crate's tests use stays in that crate's
+`tests/integration/support`, as the pairings of limits only one crate's tests
+set do. The support crates are not published, and every
 coverage report skips their sources.
 
 The data a crate's tests read, unit or integration, lives in its
@@ -233,7 +249,14 @@ lint. Such an exception must use a narrow `expect` on the required declaration,
 explain the actual interface constraint, and join the audit's exception list,
 which names the file, the item and the lint with that constraint. It remains an
 exception, subject to
-review; this is not permission to suppress implementation defects. Avoid
+review; this is not permission to suppress implementation defects. Unsafe code
+is admitted on the same terms, and only when the maintainers accept the foreign
+call that needs it: a narrow `expect(unsafe_code)` on the one item that makes
+the call, a `SAFETY` argument at the unsafe block that includes why the
+declaration matches the foreign prototype, and an entry in the audit's exception
+list, which is the register of every such call. A crate holding one denies
+unsafe code rather than forbidding it. The one accepted call reads the host's
+physical memory on macOS (`sysctlbyname` for `hw.memsize`, in zetesis-cli). Avoid
 unbounded recursion on foreign input, unchecked arithmetic and hidden allocation
 or fallback behavior. Make malformed input, cancellation, partial results and
 writer/device failures intelligible typed outcomes.

@@ -1,18 +1,18 @@
 //! Display/declaration metadata preserves full stable models and source evidence.
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs;
 
-use crate::support::atom_models::Models;
+use crate::support::admission;
+use crate::support::atom_models::{self, Models, answer_sets};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
 use zetesis_clingo_support as oracle;
-use zetesis_core::{Atom, Program};
-use zetesis_cpu::{Cancellation, CandidateLimits, Candidates, Limits, check};
+use zetesis_core::Atom;
+use zetesis_reference_support::{BundleFixture, resource_limits};
 use zetesis_themelios::{
-    AdmissionOptions, Admitted, BundleAdmissionError, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, ExpansionResource, OutputSelection, SourceBundle,
-    SourceDirective, admit, admit_bundle_extended, admit_extended,
+    AdmissionOptions, Admitted, BundleAdmissionError, BundleAdmissionOptions, ExpansionFailure,
+    ExpansionLimits, ExpansionResource, OutputSelection, SourceDirective, admit,
+    admit_bundle_extended, admit_extended,
 };
 
 type Displays = BTreeMap<BTreeSet<Atom>, usize>;
@@ -24,33 +24,6 @@ fn input(source: &str) -> Admitted {
         ExpansionLimits::default(),
     )
     .unwrap_or_else(|error| panic!("metadata source {source}: {error}"))
-}
-
-fn models(program: &Program) -> Models {
-    let cancellation = Cancellation::default();
-    let mut models = BTreeSet::new();
-    for seed in Candidates::new(program, CandidateLimits::default(), cancellation.clone()) {
-        let result = check(
-            program,
-            &seed.expect("full candidate enumeration"),
-            Limits::default(),
-            &cancellation,
-        )
-        .expect("complete reduct");
-        if result.accepted() {
-            assert!(
-                models.insert(
-                    result
-                        .closure()
-                        .atoms()
-                        .iter()
-                        .map(|atom| atom.to_atom(zetesis_core::ValueLimits::default()).unwrap())
-                        .collect::<BTreeSet<_>>()
-                )
-            );
-        }
-    }
-    models
 }
 
 fn displays(models: &Models, selection: &OutputSelection) -> Displays {
@@ -72,10 +45,10 @@ fn defined_signatures_are_located_declarations_without_logical_effects() {
     let accepted = input(source);
     let base = input("p(1). {q}.");
     assert_eq!(
-        accepted.program().templates().iter().collect::<Vec<_>>(),
-        base.program().templates().iter().collect::<Vec<_>>()
+        zetesis_test_support::programs::rules(accepted.program()).collect::<Vec<_>>(),
+        zetesis_test_support::programs::rules(base.program()).collect::<Vec<_>>()
     );
-    assert_eq!(models(accepted.program()), models(base.program()));
+    assert_eq!(answer_sets(accepted.program()), answer_sets(base.program()));
     assert!(!accepted.metadata().output().is_explicit());
     assert!(
         accepted
@@ -97,7 +70,7 @@ fn defined_signatures_are_located_declarations_without_logical_effects() {
 #[test]
 fn signatures_select_exact_arities_and_never_rename_through_constants() {
     let accepted = input("#const p=7. p. p(1). q. #show p/0.");
-    let full = models(accepted.program());
+    let full = answer_sets(accepted.program());
     assert_eq!(full.first().expect("full model").len(), 3);
     let shown = displays(&full, accepted.metadata().output());
     let atom = shown
@@ -118,22 +91,28 @@ fn empty_show_activates_explicit_selection_without_erasing_other_signatures() {
         assert!(accepted.metadata().output().is_explicit());
         assert_eq!(accepted.metadata().output().signatures().len(), 1);
         assert_eq!(
-            displays(&models(accepted.program()), accepted.metadata().output())
-                .first_key_value()
-                .expect("display")
-                .0
-                .len(),
+            displays(
+                &answer_sets(accepted.program()),
+                accepted.metadata().output()
+            )
+            .first_key_value()
+            .expect("display")
+            .0
+            .len(),
             1
         );
     }
     let accepted = input("p. q. #show.");
     assert_eq!(
-        displays(&models(accepted.program()), accepted.metadata().output()),
+        displays(
+            &answer_sets(accepted.program()),
+            accepted.metadata().output()
+        ),
         BTreeMap::from([(BTreeSet::new(), 1)])
     );
     let default = input("p. q.");
     assert_eq!(
-        displays(&models(default.program()), default.metadata().output())
+        displays(&answer_sets(default.program()), default.metadata().output())
             .first_key_value()
             .expect("display")
             .0
@@ -145,14 +124,14 @@ fn empty_show_activates_explicit_selection_without_erasing_other_signatures() {
 #[test]
 fn equal_displays_do_not_collapse_full_model_identity_or_counts() {
     let accepted = input("{p}. {q}. #show p/0.");
-    let full = models(accepted.program());
+    let full = answer_sets(accepted.program());
     assert_eq!(full.len(), 4);
     let shown = displays(&full, accepted.metadata().output());
     assert_eq!(shown.len(), 2);
     assert!(shown.values().all(|count| *count == 2));
     let hidden = input("{p}. {q}. #show.");
     assert_eq!(
-        displays(&models(hidden.program()), hidden.metadata().output()),
+        displays(&answer_sets(hidden.program()), hidden.metadata().output()),
         BTreeMap::from([(BTreeSet::new(), 4)])
     );
 }
@@ -160,10 +139,7 @@ fn equal_displays_do_not_collapse_full_model_identity_or_counts() {
 #[test]
 fn duplicate_metadata_occurrences_keep_their_original_spans() {
     let source = "#show p/1.\r\n#show p/1.\r\n#defined q/2. #defined q/2.";
-    let options = AdmissionOptions {
-        source_id: SourceId::new(91),
-        ..AdmissionOptions::default()
-    };
+    let options = admission::options(SourceId::new(91));
     let accepted = admit_extended(source.to_owned(), options, ExpansionLimits::default())
         .expect("located metadata");
     assert_eq!(accepted.metadata().directives().len(), 4);
@@ -180,10 +156,7 @@ fn duplicate_metadata_occurrences_keep_their_original_spans() {
 
 #[test]
 fn raw_metadata_occurrences_have_their_own_budget_before_deduplication() {
-    let limits = ExpansionLimits {
-        max_metadata_statements: 1,
-        ..ExpansionLimits::default()
-    };
+    let limits = resource_limits::expansion(ExpansionResource::MetadataStatements, 1);
     assert!(matches!(
         admit_extended(
             "#show p/1. #show p/1.".to_owned(),
@@ -197,24 +170,20 @@ fn raw_metadata_occurrences_have_their_own_budget_before_deduplication() {
             ..
         })
     ));
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_templates = 0;
+    let options = resource_limits::admission_core(zetesis_core::AdmissionResource::Templates, 0);
     let accepted = admit_extended(
         "#defined p/2. #show.".to_owned(),
         options,
         ExpansionLimits::default(),
     )
     .expect("metadata consumes no templates");
-    assert!(accepted.program().templates().is_empty());
-    assert_eq!(models(accepted.program()).len(), 1);
+    assert!(accepted.program().is_empty());
+    assert_eq!(answer_sets(accepted.program()).len(), 1);
     assert!(
         admit_extended(
             "p.".to_owned(),
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_metadata_statements: 0,
-                ..ExpansionLimits::default()
-            }
+            resource_limits::expansion(ExpansionResource::MetadataStatements, 0)
         )
         .is_ok()
     );
@@ -251,30 +220,9 @@ fn strict_s0_and_unsupported_display_forms_still_refuse() {
     }
 }
 
-struct Fixture {
-    directory: tempfile::TempDir,
-}
-impl Fixture {
-    fn new() -> Self {
-        Self {
-            directory: tempfile::tempdir().expect("fixture directory"),
-        }
-    }
-    fn write(&self, name: &str, source: &str) {
-        fs::write(self.directory.path().join(name), source).expect("fixture source");
-    }
-    fn bundle(&self) -> SourceBundle {
-        SourceBundle::load(
-            self.directory.path().join("entry.lp"),
-            BundleLimits::default(),
-        )
-        .expect("original source graph")
-    }
-}
-
 #[test]
 fn bundle_metadata_unions_global_selection_and_keeps_file_identities() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     fixture.write(
         "entry.lp",
         "#include \"child.lp\". #show p/0. #defined missing/1.",
@@ -289,18 +237,21 @@ fn bundle_metadata_unions_global_selection_and_keeps_file_identities() {
     assert_eq!(accepted.metadata().directives().len(), 5);
     assert_eq!(accepted.metadata().output().signatures().len(), 2);
     assert_eq!(
-        models(accepted.program())
+        answer_sets(accepted.program())
             .first()
             .expect("full model")
             .len(),
         3
     );
     assert_eq!(
-        displays(&models(accepted.program()), accepted.metadata().output())
-            .first_key_value()
-            .expect("display")
-            .0
-            .len(),
+        displays(
+            &answer_sets(accepted.program()),
+            accepted.metadata().output()
+        )
+        .first_key_value()
+        .expect("display")
+        .0
+        .len(),
         2
     );
     let identities: BTreeSet<_> = accepted
@@ -327,10 +278,7 @@ fn bundle_metadata_unions_global_selection_and_keeps_file_identities() {
     let error = admit_bundle_extended(
         fixture.bundle(),
         BundleAdmissionOptions::default(),
-        ExpansionLimits {
-            max_metadata_statements: 4,
-            ..ExpansionLimits::default()
-        },
+        resource_limits::expansion(ExpansionResource::MetadataStatements, 4),
     )
     .expect_err("global metadata ceiling");
     assert!(matches!(
@@ -344,38 +292,6 @@ fn bundle_metadata_unions_global_selection_and_keeps_file_identities() {
     ));
 }
 
-fn oracle_atom(source: &str) -> Atom {
-    let accepted =
-        admit(format!("{source}."), AdmissionOptions::default()).expect("whole scalar oracle atom");
-    let head = accepted
-        .program()
-        .templates()
-        .at(0)
-        .unwrap()
-        .head()
-        .expect("oracle fact");
-    let values = head
-        .terms()
-        .iter()
-        .map(|term| match term {
-            zetesis_core::TemplateTerm::Constant(value) => value
-                .to_value(zetesis_core::ValueLimits::default())
-                .unwrap(),
-            zetesis_core::TemplateTerm::Variable(_) => panic!("ground oracle atom"),
-        })
-        .collect();
-    Atom::new(
-        zetesis_core::Predicate::with_sign(
-            head.predicate().name(),
-            head.predicate().arity(),
-            head.predicate().sign(),
-        )
-        .unwrap(),
-        values,
-    )
-    .expect("oracle atom arity")
-}
-
 fn oracle_json(output: &[u8]) -> Displays {
     let json: Json = serde_json::from_slice(output).expect("clingo JSON atom arrays");
     assert_eq!(json["Models"]["More"], "no");
@@ -387,11 +303,9 @@ fn oracle_json(output: &[u8]) -> Displays {
     for call in json["Call"].as_array().expect("oracle calls") {
         if let Some(witnesses) = call["Witnesses"].as_array() {
             for witness in witnesses {
-                let shown = witness["Value"]
-                    .as_array()
-                    .expect("whole atom values")
+                let shown = oracle::atoms(&witness["Value"])
                     .iter()
-                    .map(|atom| oracle_atom(atom.as_str().expect("atom string")))
+                    .map(|atom| atom_models::atom(atom))
                     .collect();
                 *displays.entry(shown).or_default() += 1;
             }
@@ -428,7 +342,7 @@ fn declarations_and_signature_display_match_clingo_without_model_projection() {
             "#show unknown/7.",
         ] {
             let accepted = input(&format!("{base} {metadata}"));
-            let full = models(accepted.program());
+            let full = answer_sets(accepted.program());
             assert_eq!(
                 displays(&full, &OutputSelection::default()),
                 external(base),
@@ -446,7 +360,7 @@ fn declarations_and_signature_display_match_clingo_without_model_projection() {
 #[test]
 #[ignore = "requires clingo: included signature metadata matches clingo complete display multiplicities"]
 fn included_signature_metadata_matches_clingo_complete_display_multiplicities() {
-    let fixture = Fixture::new();
+    let fixture = BundleFixture::new();
     for directives in ["#show.", "#show p/0.", "#show p/0. #show q/0."] {
         fixture.write(
             "entry.lp",
@@ -460,13 +374,16 @@ fn included_signature_metadata_matches_clingo_complete_display_multiplicities() 
         )
         .expect("metadata bundle");
         let run = oracle::run_in(
-            fixture.directory.path(),
+            fixture.directory(),
             ["entry.lp", "0", "--outf=2", "--warn=none"],
             &oracle::DECIDED,
             oracle::Limits::default(),
         );
         assert_eq!(
-            displays(&models(accepted.program()), accepted.metadata().output()),
+            displays(
+                &answer_sets(accepted.program()),
+                accepted.metadata().output()
+            ),
             oracle_json(run.stdout())
         );
     }

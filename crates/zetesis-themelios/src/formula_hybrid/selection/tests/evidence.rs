@@ -17,7 +17,7 @@ fn with_held_row(
         &FormulaLimits,
     ),
 ) {
-    let owner = owner_of(source);
+    let owner = hybrid(source);
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let prepared = checker.prepared.as_mut().unwrap();
     let mut counters = Counters::default();
@@ -272,7 +272,7 @@ fn positive_evidence_retains_body_work_refusal() {
 
 #[test]
 fn positive_row_evidence_cannot_replace_model_truth() {
-    let owner = owner_of(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/one-row-unit.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -365,7 +365,7 @@ fn positive_row_evidence_cannot_replace_model_truth() {
 
 #[test]
 fn unmapped_rows_keep_missing_owner_failures() {
-    let owner = owner_of(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/one-row-unit.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();

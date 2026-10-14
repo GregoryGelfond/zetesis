@@ -2,10 +2,11 @@
 
 `zetesis-ferraris` accepts an already finite formula DAG. Every edge refers to a
 preceding node. Roots are the formulas asserted by the theory; their conjunction
-is the semantic input. `FormulaParts` owns the node vector and operand arena
-as one pair. Two-child conjunctions and disjunctions use inline pairs; wider
-rows refer to the arena. `Theory::new` checks the complete shape and transfers
-both buffers with the roots, without grounding or searching. Semantic inspection
+is the semantic input. `FormulaParts` owns the nodes and their Boolean and numeric
+arenas together. Two-child conjunctions and disjunctions use inline pairs; wider
+rows refer to the operand arena. Weighted bounds and ordinal min/max cuts share
+numeric contribution rows. `Theory::new` checks the complete shape and transfers
+those buffers with the roots, without grounding or searching. Semantic inspection
 uses `theory.view().node(index)` to borrow the entire `NodeView` operand row.
 
 Here atom indices `0` and `1` denote `a` and `b`. The theory is `a | b.`.
@@ -30,6 +31,21 @@ The public reduct query permits arbitrary `J`, including interpretations not
 contained in `M`. The membership checker imposes the proper-subset condition.
 Its exhaustive subset enumeration is useful for small exact checks and reference
 comparisons; use the ordinary session for the composed native search.
+
+## Numeric formula storage
+
+`NodeView::Threshold` reads a nonnegative weighted bound; `ExtremumCut` reads a
+min/max cut over an ordered value dictionary. Both borrow shared numeric rows.
+Exhaustive visitors must handle these variants and preserve their original-truth
+gates when evaluating a frozen reduct. The [aggregate representation](../architecture/alignment.md#ordered-comparisons-and-objective-reductions)
+explains their semantics and the Boolean lowering used for device transport.
+
+Keep all arenas together when copying a formula. `theory.parts().try_clone()`
+copies its complete raw storage, including shared numeric rows; the result still
+needs admission and does not retain the original theory's identity.
+`FormulaParts::new(nodes, operands)` remains the Boolean-only constructor and
+refuses numeric nodes without their arenas. `FormulaParts::from_numeric_raw`
+transfers the complete raw representation; `Theory::new` validates it.
 
 ## Preserve the subject
 

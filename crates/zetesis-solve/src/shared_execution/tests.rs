@@ -11,6 +11,7 @@ fn accumulation_overflow_preserves_prior_evidence() {
     let head = AtomPattern::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap();
     let program = Program::new(
         vec![Template::new(Some(head), vec![], vec![], vec![], vec![])],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();
@@ -47,6 +48,7 @@ fn batch_results_transfer_payload_storage() {
     .unwrap();
     let program = Program::new(
         vec![Template::new(Some(head), vec![], vec![], vec![], vec![])],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();

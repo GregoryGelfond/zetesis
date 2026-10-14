@@ -1,23 +1,12 @@
 //! Joint propagation keeps the established last-subject split preference.
 
 use super::super::{CandidateKnowledge, Conditions, Narrower, Region, RegionCounts, narrow};
-use super::budget;
+use super::{budget, theory};
 use crate::ferraris::conditions::Bound;
 use crate::{Cancellation, Incomplete};
 use zetesis_ferraris::{
-    AdmissionLimits, FormulaParts, Narrowing, NarrowingScratch, Node, OriginalSubject,
-    RegionLimits, Theory,
+    ChoiceHeads, Narrowing, NarrowingScratch, Node, OriginalSubject, RegionLimits, Theory,
 };
-
-fn theory(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(
-        3,
-        FormulaParts::new(nodes, vec![]).unwrap(),
-        roots,
-        AdmissionLimits::default(),
-    )
-    .unwrap()
-}
 
 fn original() -> Theory {
     // `(b → c) → a`: its only unknown parent reads b and c, so b ranks first.
@@ -77,14 +66,27 @@ fn closed(
     conditions: &Conditions<(Theory, Narrower)>,
     limit: u64,
 ) -> (Result<Narrowing, Incomplete>, Region, RegionCounts, u64) {
-    let original = original();
-    let narrower = Narrower::new(&original);
+    closed_with(&original(), &ChoiceHeads::default(), conditions, limit)
+}
+
+/// Narrow the open region under `original`, whose split ranks `choices` first,
+/// and `conditions`.
+fn closed_with(
+    original: &Theory,
+    choices: &ChoiceHeads,
+    conditions: &Conditions<(Theory, Narrower)>,
+    limit: u64,
+) -> (Result<Narrowing, Incomplete>, Region, RegionCounts, u64) {
+    let narrower = Narrower::new(original);
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, limit);
     let mut counts = RegionCounts::default();
     let mut region = Region::all_open(3);
     let result = narrow(
-        (&original, &narrower, None),
+        (
+            OriginalSubject::new(original, None).with_choices(choices),
+            &narrower,
+        ),
         conditions,
         (&mut region, &mut CandidateKnowledge::default()),
         &mut NarrowingScratch::default(),
@@ -106,7 +108,9 @@ fn the_original_theory_supplies_an_unrestricted_preference() {
 fn a_zero_score_bound_prefers_the_lowest_open_atom() {
     let conditions = Conditions {
         permanent: vec![permanent(prefer_c())],
-        bound: Some(Bound::prepare(&tautology(), 1).unwrap()),
+        bound: Some(
+            Bound::prepare(&tautology(), 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
+        ),
     };
     let (result, region, _, _) = closed(&conditions, u64::MAX);
     assert_eq!(result.unwrap(), Narrowing::Fixed { changed: false });
@@ -130,7 +134,9 @@ fn the_current_bound_supplies_the_preference() {
     // branch of the bound/permanent/original policy.
     let conditions = Conditions {
         permanent: vec![permanent(prefer_a())],
-        bound: Some(Bound::prepare(&prefer_c(), 1).unwrap()),
+        bound: Some(
+            Bound::prepare(&prefer_c(), 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
+        ),
     };
     let (result, region, _, _) = closed(&conditions, u64::MAX);
     assert_eq!(result.unwrap(), Narrowing::Fixed { changed: false });
@@ -171,7 +177,7 @@ fn joint_closure_charges_one_preference_scan() {
     }
     let conditions = Conditions {
         permanent: vec![],
-        bound: Some(Bound::prepare(&bound, 1).unwrap()),
+        bound: Some(Bound::prepare(&bound, 1, u64::MAX, &crate::Cancellation::default()).unwrap()),
     };
     let (result, _, counts, work) = closed(&conditions, u64::MAX);
     result.unwrap();
@@ -204,7 +210,9 @@ fn a_selector_refusal_retains_the_shared_budget_prefix() {
 fn a_bound_selector_refusal_retains_the_shared_budget_prefix() {
     let conditions = Conditions {
         permanent: vec![],
-        bound: Some(Bound::prepare(&tautology(), 1).unwrap()),
+        bound: Some(
+            Bound::prepare(&tautology(), 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
+        ),
     };
     let (result, _, complete, work) = closed(&conditions, u64::MAX);
     result.unwrap();
@@ -222,4 +230,78 @@ fn a_bound_selector_refusal_retains_the_shared_budget_prefix() {
             "no partial preference is installed"
         );
     }
+}
+
+fn choose_c() -> Theory {
+    // `c ∨ ¬c` alone: c heads an atomic choice and no atom is decided.
+    theory(
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::falsum(),
+            Node::implies(2, 3),
+            Node::or_pair([2, 4]),
+        ],
+        vec![5],
+    )
+}
+
+/// The split of the open region under the choice theory and `conditions`,
+/// with and without the original theory's choice heads.
+fn composed_splits(conditions: &Conditions<(Theory, Narrower)>) -> (Option<usize>, Option<usize>) {
+    let original = choose_c();
+    let choices =
+        zetesis_ferraris::producers(&original, RegionLimits::default(), &Cancellation::default())
+            .unwrap()
+            .choice_heads;
+    let split = |choices: &ChoiceHeads| {
+        let (result, region, _, _) = closed_with(&original, choices, conditions, u64::MAX);
+        assert_eq!(result.unwrap(), Narrowing::Fixed { changed: false });
+        region.split_atom()
+    };
+    (split(&choices), split(&ChoiceHeads::default()))
+}
+
+#[test]
+fn original_choice_heads_outrank_a_restrictions_busier_atom() {
+    let conditions = Conditions {
+        permanent: vec![permanent(prefer_a())],
+        bound: None,
+    };
+    // Without choices the restriction's counts select a; with them, c.
+    assert_eq!(composed_splits(&conditions), (Some(2), Some(0)));
+}
+
+#[test]
+fn original_choice_heads_outrank_a_bounds_busier_atom() {
+    let conditions = Conditions {
+        permanent: vec![],
+        bound: Some(
+            Bound::prepare(&prefer_a(), 1, u64::MAX, &crate::Cancellation::default()).unwrap(),
+        ),
+    };
+    assert_eq!(composed_splits(&conditions), (Some(2), Some(0)));
+}
+
+#[test]
+fn the_region_search_settles_the_choice_before_the_loop() {
+    // Cut branches come first. Splitting on the choice head finishes both loop
+    // answers without a0 before either with it; splitting on a loop atom first
+    // would propose {a0, a2} second.
+    let theory = crate::ferraris::fixtures::choice_beside_a_loop();
+    let cancellation = Cancellation::default();
+    let mut budget = budget(&cancellation, u64::MAX);
+    let mut search = super::super::RegionSearch::new(&theory, u64::MAX, &mut budget).unwrap();
+    let mut owner = crate::ferraris::original_index::OriginalIndex::new(&theory, u64::MAX);
+    let index = owner.ensure(&cancellation, |_| Ok(())).unwrap();
+    let mut proposed = Vec::new();
+    for _ in 0..2 {
+        let leaf = search
+            .propose(&theory, index, &mut budget, &mut None)
+            .unwrap()
+            .unwrap();
+        proposed.push(leaf.atoms().collect::<Vec<_>>());
+    }
+    assert_eq!(proposed, [vec![2], vec![1]]);
 }

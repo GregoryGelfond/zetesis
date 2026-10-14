@@ -205,21 +205,20 @@ fn replay_keeps_scalar_overflow_visible() {
         let maximum = fixture.scalar(&Value::Number(i32::MAX), location());
         let zero = fixture.scalar(&Value::Number(0), location());
         let mut body = body(&mut fixture);
-        body.push(LiteralIr::Compare(
-            Expression {
-                nodes: vec![
-                    Operation::Constant(maximum),
-                    Operation::Variable(1),
-                    Operation::Variable(2),
-                    Operation::Binary(BinaryOp::Mul, 1, 2),
-                    Operation::Binary(BinaryOp::Add, 0, 3),
-                ],
-            },
+        // The comparison's form declines at the overflow, and the general
+        // evaluator then reports it.
+        body.push(LiteralIr::Compare(fixture.comparison(
+            vec![
+                Operation::Constant(maximum),
+                Operation::Variable(1),
+                Operation::Variable(2),
+                Operation::Binary(BinaryOp::Mul, 1, 2),
+                Operation::Binary(BinaryOp::Add, 0, 3),
+            ],
             Relation::Gt,
-            Expression {
-                nodes: vec![Operation::Constant(zero)],
-            },
-        ));
+            vec![Operation::Constant(zero)],
+            location(),
+        )));
         let rule = rule(body, 3);
         let selection = Selection {
             select: |_: usize, row: zetesis_core::relation::Row<'_, '_>| {
@@ -233,27 +232,30 @@ fn replay_keeps_scalar_overflow_visible() {
             single_open: false,
             visits: Cell::new(0),
         };
-        with_fixture(fixture, |support, computation, budget, counters| {
-            let limits = FormulaLimits::default();
-            let mut rows = Join::filtered_rule(
-                &rule,
-                support,
-                Some(&selection),
-                None,
-                budget,
-                Context::new(computation, &limits, counters, location()),
-            )
-            .unwrap();
-            let mut results = Vec::new();
-            let failure = loop {
-                match rows.next_row(computation, &limits, budget, counters, location()) {
-                    Ok(Some(row)) => results.push(exported(&row.values, computation)),
-                    Ok(None) => panic!("the overflowing admitted row must be evaluated"),
-                    Err(error) => break format!("{error:?}"),
-                }
-            };
-            (results, failure)
-        })
+        let (result, work) =
+            with_observed_fixture(fixture, |support, computation, budget, counters| {
+                let limits = FormulaLimits::default();
+                let mut rows = Join::filtered_rule(
+                    &rule,
+                    support,
+                    Some(&selection),
+                    None,
+                    budget,
+                    Context::new(computation, &limits, counters, location()),
+                )
+                .unwrap();
+                let mut results = Vec::new();
+                let failure = loop {
+                    match rows.next_row(computation, &limits, budget, counters, location()) {
+                        Ok(Some(row)) => results.push(exported(&row.values, computation)),
+                        Ok(None) => panic!("the overflowing admitted row must be evaluated"),
+                        Err(error) => break format!("{error:?}"),
+                    }
+                };
+                (results, failure)
+            });
+        assert!(work.integer_comparison_declines.unwrap() > 0);
+        result
     };
     let reference = run(false);
     assert!(reference.1.contains("Overflow"));

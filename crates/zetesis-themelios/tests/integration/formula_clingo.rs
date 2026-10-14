@@ -10,16 +10,15 @@
 //! without depending on a particular random-generator implementation.
 
 use std::collections::BTreeSet;
+use zetesis_reference_support::admit;
 
-use crate::support::atom_models::Models;
+use crate::support::atom_models::{self, Models, atom};
 use serde_json::Value as Json;
 use zetesis_clingo_support as oracle;
-use zetesis_core::{Atom, Predicate, TemplateTerm, ValueLimits};
+use zetesis_core::{Atom, ValueLimits};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, check};
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits, admit, admit_formula,
-};
+use zetesis_themelios::{AdmittedFormula, FormulaLimits};
 
 struct Case {
     source: String,
@@ -51,35 +50,6 @@ fn model(atoms: &Json) -> BTreeSet<Atom> {
         .collect();
     assert_eq!(result.len(), items.len(), "distinct atoms within a model");
     result
-}
-
-fn atom(source: &str) -> Atom {
-    // Parsing complete atoms preserves strings and numeric identities; output
-    // atoms are never split at whitespace or compared through display filters.
-    let input = admit(format!("{source}."), AdmissionOptions::default())
-        .expect("campaign atoms belong to the scalar profile");
-    assert_eq!(input.program().templates().len(), 1);
-    let head = input
-        .program()
-        .templates()
-        .at(0)
-        .unwrap()
-        .head()
-        .expect("ground atom");
-    let values = head
-        .terms()
-        .iter()
-        .map(|term| match term {
-            TemplateTerm::Constant(value) => value.to_value(ValueLimits::default()).unwrap(),
-            TemplateTerm::Variable(_) => panic!("oracle atom must be ground"),
-        })
-        .collect();
-    let predicate = head.predicate();
-    Atom::new(
-        Predicate::with_sign(predicate.name(), predicate.arity(), predicate.sign()).unwrap(),
-        values,
-    )
-    .expect("canonical atom arity")
 }
 
 fn exhaustive(input: &AdmittedFormula) -> Models {
@@ -115,12 +85,7 @@ fn exhaustive(input: &AdmittedFormula) -> Models {
 }
 
 fn native(case: &Case) -> Option<Models> {
-    match admit_formula(
-        case.source.clone(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    ) {
+    match admit(&case.source, &FormulaLimits::default()) {
         Ok(input) => Some(exhaustive(&input)),
         Err(error) => {
             assert!(
@@ -155,28 +120,7 @@ fn external(source: &str) -> Option<Models> {
         "clingo failed: {}",
         String::from_utf8_lossy(run.stderr())
     );
-    assert!(matches!(
-        json["Result"].as_str(),
-        Some("SATISFIABLE" | "UNSATISFIABLE")
-    ));
-    assert_eq!(json["Models"]["More"], "no", "exhaustive oracle coverage");
-    let mut models = Models::new();
-    for call in json["Call"].as_array().expect("oracle calls") {
-        if let Some(witnesses) = call["Witnesses"].as_array() {
-            for witness in witnesses {
-                assert!(
-                    models.insert(model(&witness["Value"])),
-                    "unique oracle model"
-                );
-            }
-        }
-    }
-    assert_eq!(
-        u64::try_from(models.len()).expect("bounded model count"),
-        json["Models"]["Number"].as_u64().expect("oracle count"),
-        "complete identity-preserving model count"
-    );
-    Some(models)
+    Some(atom_models::clingo_models(&json))
 }
 
 #[test]

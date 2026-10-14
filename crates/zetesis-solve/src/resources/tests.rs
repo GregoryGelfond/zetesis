@@ -167,7 +167,7 @@ fn simultaneously_materialized_source_families_use_memory() {
 
 #[test]
 fn all_formula_arenas_fit_their_dimension_shares() {
-    use zetesis_ferraris::{ContributionRow, Node, ThresholdDescriptor};
+    use zetesis_ferraris::{ExtremumCutDescriptor, Node, NumericRow, ThresholdDescriptor};
 
     for memory in [0, 1, 63, 1024, Resources::REFERENCE_MEMORY, u64::MAX] {
         let resources = Resources::new(memory, NonZeroUsize::MIN);
@@ -178,8 +178,9 @@ fn all_formula_arenas_fit_their_dimension_shares() {
         let operands = limits.max_operands as u128;
         let allowance = resources.bytes(4) as u128;
         let descriptors = nodes * size_of::<Node>() as u128
-            + nodes * size_of::<ContributionRow>() as u128
-            + nodes * size_of::<ThresholdDescriptor>() as u128;
+            + nodes * size_of::<NumericRow>() as u128
+            + nodes * size_of::<ThresholdDescriptor>() as u128
+            + nodes * size_of::<ExtremumCutDescriptor>() as u128;
         let columns = operands * size_of::<usize>() as u128
             + operands * size_of::<usize>() as u128
             + operands * size_of::<u64>() as u128;

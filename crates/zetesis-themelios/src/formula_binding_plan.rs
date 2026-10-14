@@ -66,8 +66,16 @@ impl Compiler<'_> {
                 };
                 let literal = slot.take().expect("inspected pending instruction");
                 let (target, instruction) = match (binding, literal) {
-                    (Binding::Left(target), LiteralIr::Compare(_, Relation::Eq, value))
-                    | (Binding::Right(target), LiteralIr::Compare(value, Relation::Eq, _)) => {
+                    (Binding::Left(target), LiteralIr::Compare(comparison))
+                        if comparison.relation() == Relation::Eq =>
+                    {
+                        let (_, _, value) = comparison.into_parts();
+                        (target, LiteralIr::Bind { target, value })
+                    }
+                    (Binding::Right(target), LiteralIr::Compare(comparison))
+                        if comparison.relation() == Relation::Eq =>
+                    {
+                        let (value, _, _) = comparison.into_parts();
                         (target, LiteralIr::Bind { target, value })
                     }
                     (Binding::Range(target), LiteralIr::Range { lower, upper, .. }) => (
@@ -119,7 +127,8 @@ impl Compiler<'_> {
         variables: &Variables,
     ) -> Result<Option<Binding>, FormulaFailure> {
         match literal {
-            LiteralIr::Compare(left, Relation::Eq, right) => {
+            LiteralIr::Compare(comparison) if comparison.relation() == Relation::Eq => {
+                let (left, right) = (comparison.left(), comparison.right());
                 if let Some(target) = whole_variable(left)
                     && !variables.safe.contains(&target)
                     && self.binding_ready(right, variables)?

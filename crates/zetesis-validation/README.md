@@ -303,7 +303,11 @@ zetesis-bench run --suite scalability --grounder eager \
 `performance::scalability::workloads` returns authored queens at n=8/9/10,
 pigeonhole at h=5/6/7, Mastermind at colors=5/6/8, nested Mastermind at colors=8, and unchanged queens variant
 02, SEND+MORE=MONEY and task allocation, followed by the authored Sudoku grid.
-`--include-einstein` adds the unchanged riddle as a fifteenth workload. Sudoku's reviewed source digest and
+Prime sieve at n=30/100/300 and subset sum at n=12/20/30 extend this unchanged
+fourteen-workload prefix to twenty workloads. They exercise positive divisibility
+joins and complete weighted-choice families (15/64/296 subsets), respectively.
+`--include-einstein` adds the unchanged riddle as a twenty-first workload. The
+separate 94-case corpus is unchanged. Sudoku's reviewed source digest and
 exact 81-digit display contract live in `scalability::sudoku`, also used by the
 ordinary CLI correctness test. Its eight givens per row make it a grounding and
 language workload, not a difficult search instance. The examples root is

@@ -18,7 +18,6 @@ use zetesis_core::AtomCatalog;
 use zetesis_ferraris::Theory;
 
 use crate::formula::Compiled;
-use crate::formula_ir::RuleIr;
 use crate::formula_owner::Owner;
 use crate::formula_support::{AccountingBaseline, ClosedSource};
 use crate::{AnalysisBasis, FormulaLimits, ProgramSite, SourceBundle, SourceMetadata};
@@ -39,7 +38,7 @@ pub enum FormulaMaterialization<T> {
 
 pub(crate) struct Extension {
     original: partition::OriginalAnalysis,
-    deferred: Vec<RuleIr>,
+    deferred: crate::formula_facts::Items,
     /// Shared with a hybrid base's streamed support, when there is one.
     closed: Arc<ClosedSource>,
     baseline: AccountingBaseline,
@@ -181,7 +180,11 @@ impl TerminalFormula {
     /// Analysis of the filtered base program, suitable only for base planning.
     #[must_use]
     pub fn base_analysis(&self) -> &themelios_analysis::Analysis {
-        &self.0.base.compiled().analysis
+        self.0
+            .base
+            .compiled()
+            .analyzed
+            .full_analysis(&self.0.base.compiled().analysis)
     }
 
     /// Semantic status of the base analysis input.
@@ -191,12 +194,23 @@ impl TerminalFormula {
     }
 
     /// Analysis of the complete normalized original source.
+    /// Terminal preparation already built and retained this complete view;
+    /// inspection borrows it without further construction.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
         &self.0.extension.original.analysis
     }
 
+    /// Structural classes of the retained source analysis. This view does not
+    /// require constructing the full analyzed program. Consult
+    /// [`Self::analysis_basis`] before using a verdict as a source property.
+    #[must_use]
+    pub fn source_classes(&self) -> &themelios_analysis::classify::Classes {
+        self.0.extension.original.analysis.classes()
+    }
+
     /// Complete normalized original program underlying the partition certificate.
+    /// Shares the complete view and its construction cost with [`Self::source_analysis`].
     #[must_use]
     pub fn analyzed_program(&self) -> &Program {
         &self.0.extension.original.program
@@ -259,7 +273,7 @@ impl TerminalFormula {
     /// Number of deferred lowered producer occurrences, including pool copies.
     #[must_use]
     pub fn deferred_templates(&self) -> usize {
-        self.0.extension.deferred.len()
+        self.0.extension.deferred.occurrences()
     }
 
     /// Original statement warnings established before answer reconstruction.

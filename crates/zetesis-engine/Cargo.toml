@@ -18,7 +18,6 @@ zetesis-solve = { workspace = true, default-features = false }
 zetesis-themelios.workspace = true
 
 [dev-dependencies]
-themelios-base.workspace = true
 themelios-macros.workspace = true
 themelios-query.workspace = true
 themelios-syntax.workspace = true

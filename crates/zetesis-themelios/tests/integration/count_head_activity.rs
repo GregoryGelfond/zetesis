@@ -2,18 +2,18 @@
 
 mod cases;
 use crate::support::finite_bindings as reference;
+use zetesis_reference_support::{admit, canonical, formula, prepared, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
 
 use cases::CASES;
-use reference::{Models, exhaustive, external, holds, native, values};
+use reference::{Models, holds, native, values};
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::{canonical, formula};
 use zetesis_themelios::{
-    AdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
-    prepare_formula,
+    AdmissionOptions, CountPlanLimits, CountPlanStatus, ExpansionFailure, ExpansionResource,
+    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
 };
 
 #[test]
@@ -29,10 +29,7 @@ fn models_match_separate_permissions() {
 
 #[test]
 fn stability_matches_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]
@@ -86,34 +83,10 @@ fn frozen_truth_matches_separate_permissions() {
 #[test]
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
-    let mut total = 0;
-    for &(source, _) in CASES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    assert!(
-                        expected.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&formula(source)), expected, "{source}");
-        total += count;
-    }
-    println!("complete_sources={} full_models={total}", CASES.len());
+    reference::original_sources_match_clingo_full_models(
+        CASES.iter().map(|&(source, _)| source),
+        formula,
+    );
 }
 
 #[test]
@@ -141,15 +114,9 @@ fn distinct_atoms_can_activate_one_tuple() {
 fn optional_planning_declines_nonbijective_groups() {
     for &(source, _) in CASES {
         let ordinary = formula(source);
-        let planned = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-        .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
-        .unwrap();
+        let planned = prepared(source)
+            .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
+            .unwrap();
         assert!(
             matches!(planned.count_plan(), CountPlanStatus::NoPlan(_)),
             "{source}"
@@ -173,15 +140,9 @@ fn optional_planning_declines_nonbijective_groups() {
 fn alias_groups_preserve_other_count_certificates() {
     let source = "2{a;b;c;d}2.{a;b}1.{c;d}1.1#count{1:e;1:f}1.";
     let ordinary = formula(source);
-    let planned = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
-    .unwrap();
+    let planned = prepared(source)
+        .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
+        .unwrap();
     let CountPlanStatus::Ready(plan) = planned.count_plan() else {
         panic!("the original disjoint atom partition remains applicable");
     };
@@ -205,24 +166,10 @@ fn alias_groups_preserve_other_count_certificates() {
 
 #[test]
 fn tuple_limits_count_distinct_complete_keys() {
-    let mut limits = FormulaLimits::default();
-    limits.aggregate.max_elements = 1;
-    assert!(
-        admit_formula(
-            "1#count{1:a;1:b}1.".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        )
-        .is_ok()
-    );
+    let limits = resource_limits::formula(FormulaResource::AggregateElements, 1);
+    assert!(admit("1#count{1:a;1:b}1.", &limits).is_ok());
     assert!(matches!(
-        admit_formula(
-            "1#count{1:a;2:a}1.".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        ),
+        admit("1#count{1:a;2:a}1.", &limits),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::AggregateElements,
             limit: 1,
@@ -234,48 +181,17 @@ fn tuple_limits_count_distinct_complete_keys() {
 
 #[test]
 fn original_sources_remain_owned() {
-    for &(source, _) in CASES {
-        assert_eq!(
-            formula(source).source().expect("source input").text(),
-            source
-        );
-    }
-}
-
-fn threshold(mut succeeds: impl FnMut(u64) -> bool) -> u64 {
-    let mut lower = 0;
-    let mut upper = 65_536;
-    assert!(succeeds(upper));
-    while lower + 1 < upper {
-        let middle = lower + (upper - lower) / 2;
-        if succeeds(middle) {
-            upper = middle;
-        } else {
-            lower = middle;
-        }
-    }
-    upper
+    reference::sources_remain_owned(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]
 fn alias_work_limits_are_inclusive() {
     for source in ["1#count{1:a;1:b}1.", "{b;c}.1#count{1:a:b;2:a:c}1."] {
         for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
-            let attempt = |maximum| {
-                let mut limits = FormulaLimits::default();
-                if resource == FormulaResource::Work {
-                    limits.max_work = maximum;
-                } else {
-                    limits.max_substitutions = maximum;
-                }
-                admit_formula(
-                    source.into(),
-                    AdmissionOptions::default(),
-                    ExpansionLimits::default(),
-                    limits,
-                )
-            };
-            let maximum = threshold(|limit| attempt(limit).is_ok());
+            let attempt = |maximum| admit(source, &resource_limits::formula(resource, maximum));
+            let maximum = first_success(resource_limits::formula_default(resource), |limit| {
+                attempt(limit).is_ok()
+            });
             assert!(matches!(attempt(maximum - 1), Err(FormulaFailure::Limit {
                 resource: actual, limit, observed, ..
             }) if actual == resource && limit == u128::from(maximum - 1)
@@ -293,14 +209,14 @@ fn alias_storage_limits_are_inclusive() {
             admit_formula(
                 source.into(),
                 AdmissionOptions::default(),
-                ExpansionLimits {
-                    max_scalar_bytes: usize::try_from(maximum).unwrap(),
-                    ..Default::default()
-                },
+                resource_limits::expansion(ExpansionResource::ScalarBytes, maximum),
                 FormulaLimits::default(),
             )
         };
-        let maximum = threshold(|limit| attempt(limit).is_ok());
+        let maximum = first_success(
+            resource_limits::expansion_default(ExpansionResource::ScalarBytes),
+            |limit| attempt(limit).is_ok(),
+        );
         assert!(
             matches!(attempt(maximum - 1), Err(FormulaFailure::Expansion(
             ExpansionFailure::Limit {

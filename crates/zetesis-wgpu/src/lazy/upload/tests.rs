@@ -98,7 +98,12 @@ fn source_round_receipts_preserve_actual_input_prefixes() {
             vec![],
         ));
     }
-    let program = Program::new(rules, AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        rules,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let seeds = [Seed::new(&program, []).unwrap()];
     for selection in [lazy::SourceSelection::Union, lazy::SourceSelection::Worlds] {
         let mut receipt = None;

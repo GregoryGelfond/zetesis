@@ -1,6 +1,7 @@
 //! Public renderers consume semantic views without CLI parsing or output decoding.
 
 use std::{io, num::NonZeroUsize};
+use zetesis_reference_support::formula;
 
 use zetesis_cli::{
     AnswerRenderer, AnswerView, Backend, ColorMode, Completion, HumanRenderer, JsonRenderer,
@@ -10,7 +11,6 @@ use zetesis_cli::{
 use zetesis_core::{Atom, Model, ValueLimits};
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::observation::Symbol;
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 fn config() -> PublicationConfig {
     let mut config = PublicationConfig::default();
@@ -63,13 +63,7 @@ fn publish(
     source: &str,
     renderer: &mut impl AnswerRenderer,
 ) -> Result<PublicationOutcome, zetesis_cli::PublicationFailure> {
-    let admitted = admit_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula(source);
     publish_prepared(
         PreparedInput::formula(&admitted),
         &config(),
@@ -248,13 +242,7 @@ fn each_json_document_owns_its_atom_indices() {
 
 #[test]
 fn atom_only_human_view_needs_no_observation_work() {
-    let admitted = admit_formula(
-        "p.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("p.");
     let mut configured = config();
     configured.observations.max_work = 0;
     let mut renderer = HumanRenderer::new(Vec::new(), ColorMode::Never, 8192);

@@ -1,22 +1,22 @@
 //! Canonical preparation separates input inspection, purpose and runtime control.
 
+use crate::support::unevaluable_directives::{objective, projection};
 use std::{cell::Cell, collections::BTreeSet, sync::Arc, time::Instant};
+use zetesis_reference_support::{exhaustive, resource_limits};
 
 use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
-use zetesis_reference_support::exhaustive;
 use zetesis_themelios::logical::{
     Name, Symbol, Term,
     program::{
-        Atom, Body, Choice, ChoiceElement, Condition, Direction, Guard, Optimize, OptimizeElement,
-        Program, Project, Relation, Rule, Show, Statement, weight,
+        Atom, Choice, ChoiceElement, Condition, Guard, Program, Relation, Rule, Show, Statement,
     },
     symbol::VarName,
 };
 use zetesis_themelios::{
-    ExpansionFailure, ExpansionResource, FormulaFailure, FormulaPurpose, GroundingObserver,
-    GroundingPhase, ProgramAdmissionOptions, ProgramFormulaOptions, ProgramSite, ProgramSubject,
-    prepare_program_formula_with, validate_program_formula,
+    ExpansionFailure, ExpansionResource, FormulaFailure, FormulaPurpose, FormulaResource,
+    GroundingObserver, GroundingPhase, ProgramAdmissionOptions, ProgramFormulaOptions, ProgramSite,
+    ProgramSubject, prepare_program_formula_with, validate_program_formula,
 };
 
 fn atom(name: &str) -> Atom {
@@ -33,29 +33,6 @@ fn choice() -> Rule {
         ["p", "q"].map(|name| ChoiceElement::new(atom(name).into(), Condition::empty())),
         Some(bound()),
     ))
-}
-
-fn objective() -> Statement {
-    Optimize::new(
-        Direction::Minimize,
-        [OptimizeElement::new(
-            weight(Term::from(1) / Term::from(0)),
-            [],
-            Condition::empty(),
-        )],
-    )
-    .into()
-}
-
-fn projection() -> Statement {
-    Project::atom_body(
-        Atom::new(
-            Name::new("selected").unwrap(),
-            [Term::from(1) / Term::from(0)],
-        ),
-        Body::empty(),
-    )
-    .into()
 }
 
 fn answers() -> ProgramFormulaOptions {
@@ -119,8 +96,8 @@ fn excluded_declarations_are_not_evaluated() {
 fn excluded_declarations_do_not_block_hybrid() {
     let program = Arc::new(Program::of([choice().into(), objective(), projection()]));
     let mut options = answers();
-    options.formula.objective.max_templates = 0;
-    options.expansion.max_metadata_statements = 0;
+    options.formula = resource_limits::formula(FormulaResource::ObjectiveElements, 0);
+    options.expansion = resource_limits::expansion(ExpansionResource::MetadataStatements, 0);
     let input = prepare_program_formula_with(program, options)
         .unwrap()
         .ground_hybrid()

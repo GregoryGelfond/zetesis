@@ -1,14 +1,47 @@
-//! Streaming typed metadata actions; arbitrary diagnostic bytes pass unchanged.
+//! Execution-detail records and source diagnostics, written in whole units.
+//!
+//! A *write unit* is what reaches the diagnostics writer in one call:
+//! - an execution-detail record: one line from `metadata`, `information` or an
+//!   `observe` arm, or a line the `test` workflow writes with `writeln!`, each
+//!   rendered by one formatting call;
+//! - each heading, rendered line and closing newline of a styled source
+//!   diagnostic;
+//! - a plain source diagnostic's final newline. Its `zetesis: ` prefix and each
+//!   fragment of its rendering pass through unchanged;
+//! - the statistics report, which the driver writes through `write_whole`.
+//!
+//! `write_whole` renders a unit whole into a transient buffer, then hands it to
+//! the writer in one `write_all` call. The writer is held by `UnitWriter`, which
+//! admits only whole units and slices passed through, so no method can write to
+//! the raw writer. A unit built from several calls through the diagnostics
+//! writer would make one write per call, so such a unit is rendered inside
+//! `write_whole` instead.
+//!
+//! The transient buffer belongs to one call. It is sized for the records of an
+//! ordinary run, and a longer unit grows by doubling. It is dropped on return,
+//! so no unit's bytes reach the writer after its call has returned, and no
+//! capacity outlives the unit.
+//!
+//! A writer whose acceptance and failure depend only on the bytes it is given,
+//! in order, such as a full disk, a closed pipe, a blocking pipe or a regular
+//! file, sees the same bytes and fails at the same byte however the bytes are
+//! divided into calls; a writer that depends on call boundaries sees whole
+//! units. A unit whose rendering fails writes nothing and returns an `Other`
+//! error.
+
+mod unit_writer;
 
 use super::ColorMode;
 use std::{
     fmt,
     io::{self, Write},
 };
+use unit_writer::{UnitBuffer, UnitWriter};
 
 pub(crate) enum Label {
     Source,
     Oracle,
+    Comparisons,
     Grounding,
     Backend,
 }
@@ -17,6 +50,7 @@ impl Label {
         match self {
             Self::Source => "Source",
             Self::Oracle => "Oracle",
+            Self::Comparisons => "Comparisons",
             Self::Grounding => "Grounding",
             Self::Backend => "Backend",
         }
@@ -26,9 +60,10 @@ impl Label {
 // A borrowed or owned writer plus one explicit policy, with no environment
 // lookup or terminal discovery. Metadata adds fixed label/style
 // bytes and delegates value formatting and I/O costs to their implementations.
-// Write calls and their failures remain observable in order.
+// Units reach the writer in the order of their calls, and their failures are
+// returned from those calls.
 pub(crate) struct Diagnostics<W> {
-    writer: W,
+    units: UnitWriter<W>,
     color: ColorMode,
     quiet: bool,
     width: std::num::NonZeroUsize,
@@ -43,7 +78,7 @@ enum Core {
 impl<W: Write> Diagnostics<W> {
     pub(crate) const fn new(writer: W, color: ColorMode) -> Self {
         Self {
-            writer,
+            units: UnitWriter::new(writer),
             color,
             quiet: false,
             width: std::num::NonZeroUsize::new(80).unwrap(),
@@ -55,6 +90,20 @@ impl<W: Write> Diagnostics<W> {
     pub(crate) const fn with_quiet(mut self, quiet: bool) -> Self {
         self.quiet = quiet;
         self
+    }
+
+    fn should_report(&self, observation: &crate::ExecutionObservation<'_>) -> bool {
+        use crate::ExecutionObservation as Event;
+        !self.quiet
+            || matches!(
+                observation,
+                Event::KeyAnalysisStopped(_)
+                    | Event::ObjectiveUnavailable(_)
+                    | Event::ChoiceObjectiveBoundUnavailable(_)
+                    | Event::ObjectiveBoundStopped(_)
+                    | Event::ObjectiveTheoryMismatch
+                    | Event::ObjectiveRestrictionStopped(_)
+            )
     }
 
     pub(crate) fn for_solve(writer: W, color: ColorMode, options: &crate::Options) -> Self {
@@ -76,7 +125,7 @@ impl<W: Write> Diagnostics<W> {
         if self.quiet {
             Ok(())
         } else {
-            self.color.metadata(&mut self.writer, label.text(), value)
+            self.color.metadata(&mut self.units, label.text(), value)
         }
     }
 
@@ -84,7 +133,7 @@ impl<W: Write> Diagnostics<W> {
         if self.quiet {
             Ok(())
         } else {
-            writeln!(self.writer, "{value}")
+            writeln!(self.units, "{value}")
         }
     }
 
@@ -140,22 +189,35 @@ impl<W: Write> Diagnostics<W> {
     }
 
     pub(crate) fn diagnostic(&mut self, diagnostic: &impl fmt::Display) -> io::Result<()> {
-        super::source_error::write(&mut self.writer, self.color, diagnostic)
+        super::source_error::write(&mut self.units, self.color, diagnostic)
+    }
+
+    /// Render one write unit whole, then hand it to the writer in one
+    /// `write_all` call, as every record is. If the rendering fails, nothing of
+    /// the unit is written. The driver writes the statistics report through it,
+    /// so the report's fragments are not each a write on unbuffered standard
+    /// error, its order relative to other diagnostics is unchanged, and a write
+    /// failure surfaces at this one write.
+    pub(crate) fn write_whole(
+        &mut self,
+        render: impl FnOnce(&mut UnitBuffer) -> io::Result<()>,
+    ) -> io::Result<()> {
+        self.units.write_whole(render)
     }
 }
 
 impl<W: Write> Write for Diagnostics<W> {
     fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
-        self.writer.write(bytes)
+        self.units.write(bytes)
     }
     fn write_all(&mut self, bytes: &[u8]) -> io::Result<()> {
-        self.writer.write_all(bytes)
+        self.units.write_all(bytes)
     }
     fn write_fmt(&mut self, args: fmt::Arguments<'_>) -> io::Result<()> {
-        self.writer.write_fmt(args)
+        self.units.write_fmt(args)
     }
     fn flush(&mut self) -> io::Result<()> {
-        self.writer.flush()
+        self.units.flush()
     }
 }
 
@@ -163,20 +225,12 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
     type Error = io::Error;
     fn observe(&mut self, observation: crate::ExecutionObservation<'_>) -> Result<(), Self::Error> {
         use crate::ExecutionObservation as Event;
-        if self.quiet
-            && !matches!(
-                &observation,
-                Event::KeyAnalysisStopped(_)
-                    | Event::ObjectiveUnavailable(_)
-                    | Event::ChoiceObjectiveBoundUnavailable(_)
-                    | Event::ObjectiveBoundStopped(_)
-                    | Event::ObjectiveTheoryMismatch
-                    | Event::ObjectiveRestrictionStopped(_)
-            )
-        {
+        if !self.should_report(&observation) {
             return Ok(());
         }
         match observation {
+            Event::SourceEvaluation => self.metadata(Label::Backend,
+                format_args!("cpu (dependency-ordered source evaluation; constraints checked before publication)")),
             Event::StaticGrounding { requested, atoms, rules, limits } => self.metadata(
                 Label::Grounding,
                 format_args!("requested={}, effective=eager (static atoms={atoms}, rules={rules}; lowering caps atoms={}, rules={}, substitutions={})", requested.label(), limits.max_atoms, limits.max_ground_rules, limits.max_substitutions),
@@ -205,7 +259,7 @@ impl<W: Write> crate::ExecutionObserver for Diagnostics<W> {
                 format_args!("cpu (shared {} source rounds, {workers} workers; collective source and per-world evaluation budgets)", batching.label())),
             Event::CpuFormula { oracle, grounder, search } => self.cpu_formula(oracle, grounder, search),
             Event::ParallelRegions { workers } => writeln!(self,
-                "Parallel regions: {workers} workers; models arrive in the schedule's order"),
+                "Parallel regions: up to {workers} workers, started once the walk outlasts their start; models arrive in the scalar walk's order until then, and in the schedule's order after"),
             Event::ParallelProposals { workers } => writeln!(self,
                 "Parallel candidate production: {workers} workers; joined before batch membership checking"),
             Event::ExactCompletion { workers, max_scratch_bytes } => writeln!(self,

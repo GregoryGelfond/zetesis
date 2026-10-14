@@ -1,14 +1,17 @@
+use crate::numeric_evaluation::NumericRowScratch;
 use crate::{
     EvaluationError, EvaluationLimits, EvaluationWorkspace, FrozenReduct, Interpretation, NodeView,
     Theory,
 };
-use zetesis_cpu::{Cancellation, Stop};
+use zetesis_cpu::{Cancellation, ChargeError, Meter, Stop};
 
 /// Per-call bounds for exact finite checking. Exceeding a bound is incomplete,
 /// never a proof of stability or nonminimality.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
-    /// Charged node and operand evaluations, root tests, atom scans and subset-bit operations.
+    /// Charged node/operand evaluations, numeric-cache initialization/reset,
+    /// root tests, atom scans and subset-bit operations. A shared numeric row
+    /// is reduced once per complete evaluation pass.
     pub max_work: u64,
     /// Maximum number of proper subsets checked against a frozen reduct.
     pub max_subsets: u64,
@@ -74,19 +77,31 @@ impl Check {
     }
 }
 
-pub(super) struct Work<'a> {
-    pub(super) limits: Limits,
-    pub(super) cancellation: &'a Cancellation,
-    pub(super) statistics: Statistics,
+/// Formula evaluation's work: its meter, its subset ceiling and the subsets
+/// tested so far.
+pub(super) struct Work<'m, 'c> {
+    pub(super) max_subsets: u64,
+    pub(super) meter: &'m mut Meter<'c>,
+    pub(super) subsets: u64,
 }
-impl Work<'_> {
-    pub(super) fn tick(&mut self) -> Result<(), Stop> {
-        self.cancellation.poll()?;
-        if self.statistics.work >= self.limits.max_work {
-            return Err(Stop::WorkLimit);
+impl<'m, 'c> Work<'m, 'c> {
+    pub(super) fn new(max_subsets: u64, meter: &'m mut Meter<'c>) -> Self {
+        Self {
+            max_subsets,
+            meter,
+            subsets: 0,
         }
-        self.statistics.work += 1;
-        Ok(())
+    }
+
+    pub(super) fn tick(&mut self) -> Result<(), Stop> {
+        self.meter.charge().map_err(ChargeError::into_stop)
+    }
+
+    pub(super) fn statistics(&self) -> Statistics {
+        Statistics {
+            work: self.meter.charged(),
+            subsets: self.subsets,
+        }
     }
 }
 
@@ -111,14 +126,16 @@ pub(super) fn evaluate(
     interpretation: &Interpretation,
     frozen: Option<&[bool]>,
     output: &mut Vec<bool>,
-    work: &mut Work<'_>,
+    numeric: &mut NumericRowScratch,
+    work: &mut Work<'_, '_>,
 ) -> Result<(), Stop> {
     output.clear();
+    numeric.reset(theory, || work.tick())?;
     let view = theory.view();
     for index in 0..view.len() {
         work.tick()?;
         let node = view.node(index).map_err(|_| Stop::InvalidProgram)?;
-        let value = evaluate_node(node, interpretation, output, work)?;
+        let value = evaluate_node(index, node, interpretation, output, numeric, work)?;
         // A maximal M-false subformula becomes falsum. Masking every M-false
         // node has the same root meaning and avoids materializing a new DAG.
         output.push(value && frozen.is_none_or(|mask| mask[index]));
@@ -129,20 +146,30 @@ pub(super) fn evaluate(
 /// Compute one node from its complete predecessor values. The caller publishes
 /// its result only after this read-only phase finishes, including all child work.
 fn evaluate_node(
+    index: usize,
     node: NodeView<'_>,
     interpretation: &Interpretation,
     values: &[bool],
-    work: &mut Work<'_>,
+    numeric: &mut NumericRowScratch,
+    work: &mut Work<'_, '_>,
 ) -> Result<bool, Stop> {
     match node {
         NodeView::Atom(atom) => Ok(interpretation.contains(atom)),
         NodeView::False => Ok(false),
         NodeView::And(operands) => evaluate_operands(operands, values, true, work),
         NodeView::Or(operands) => evaluate_operands(operands, values, false, work),
-        NodeView::Threshold(threshold) => threshold.evaluate(|child| {
-            work.tick()?;
-            Ok(values[child])
-        }),
+        NodeView::Threshold(threshold) => {
+            numeric.threshold(interpretation.theory(), index, threshold, |child| {
+                work.tick()?;
+                Ok(values[child])
+            })
+        }
+        NodeView::ExtremumCut(cut) => numeric
+            .extremum(interpretation.theory(), index, cut, |child| {
+                work.tick()?;
+                Ok(values[child])
+            })
+            .map(|measure| cut.rule.holds(measure)),
         NodeView::Implies(a, b) => {
             work.tick()?;
             let antecedent = values[a];
@@ -159,7 +186,7 @@ fn evaluate_operands(
     operands: &[usize],
     values: &[bool],
     conjunction: bool,
-    work: &mut Work<'_>,
+    work: &mut Work<'_, '_>,
 ) -> Result<bool, Stop> {
     let mut value = conjunction;
     for &operand in operands {
@@ -177,7 +204,7 @@ fn evaluate_operands(
 pub(super) fn failed_root(
     theory: &Theory,
     values: &[bool],
-    work: &mut Work<'_>,
+    work: &mut Work<'_, '_>,
 ) -> Result<Option<usize>, Stop> {
     for root in theory.roots() {
         work.tick()?;
@@ -233,17 +260,33 @@ pub fn models_reduct(
     limits: Limits,
     cancellation: &Cancellation,
 ) -> Result<bool, Stop> {
+    cancellation
+        .metered(limits.max_work, |meter| {
+            reduct_satisfaction(
+                theory,
+                candidate,
+                tested,
+                Work::new(limits.max_subsets, meter),
+            )
+        })
+        .result
+}
+
+/// [`models_reduct`] charged to `work`.
+fn reduct_satisfaction(
+    theory: &Theory,
+    candidate: &Interpretation,
+    tested: &Interpretation,
+    mut work: Work<'_, '_>,
+) -> Result<bool, Stop> {
     identities(theory, candidate)?;
     identities(theory, tested)?;
-    cancellation.poll()?;
-    let mut work = Work {
-        limits,
-        cancellation,
-        statistics: Statistics::default(),
-    };
+    work.meter.poll()?;
     let mut values = reserve(theory.nodes().len())?;
-    let reduct = FrozenReduct::freeze(candidate, &mut work)?;
-    reduct.satisfied_by(tested, &mut values, &mut work)
+    let mut numeric = NumericRowScratch::default();
+    numeric.reserve(theory)?;
+    let reduct = FrozenReduct::freeze(candidate, &mut numeric, &mut work)?;
+    reduct.satisfied_by(tested, &mut values, &mut numeric, &mut work)
 }
 
 /// Append the candidate's atom coordinates in increasing order. The caller has
@@ -253,7 +296,7 @@ fn select_atoms(
     theory: &Theory,
     candidate: &Interpretation,
     selected: &mut Vec<usize>,
-    work: &mut Work<'_>,
+    work: &mut Work<'_, '_>,
 ) -> Result<(), Stop> {
     for atom in 0..theory.atom_count() {
         work.tick()?;
@@ -273,7 +316,7 @@ fn advance_subset(
     selected: &[usize],
     subset: &mut Interpretation,
     present: &mut usize,
-    work: &mut Work<'_>,
+    work: &mut Work<'_, '_>,
 ) -> Result<(), Stop> {
     for atom in selected {
         work.tick()?;
@@ -299,14 +342,15 @@ fn check_subset(
     subset: &Interpretation,
     frozen: &[bool],
     values: &mut Vec<bool>,
-    work: &mut Work<'_>,
+    numeric: &mut NumericRowScratch,
+    work: &mut Work<'_, '_>,
 ) -> Result<bool, Stop> {
-    work.cancellation.poll()?;
-    if work.statistics.subsets >= work.limits.max_subsets {
+    work.meter.poll()?;
+    if work.subsets >= work.max_subsets {
         return Err(Stop::CandidateLimit);
     }
-    work.statistics.subsets += 1;
-    evaluate(theory, subset, Some(frozen), values, work)?;
+    work.subsets += 1;
+    evaluate(theory, subset, Some(frozen), values, numeric, work)?;
     Ok(failed_root(theory, values, work)?.is_none())
 }
 
@@ -322,14 +366,15 @@ fn find_countermodel(
     selected: &[usize],
     subset: &mut Interpretation,
     values: &mut Vec<bool>,
-    work: &mut Work<'_>,
+    numeric: &mut NumericRowScratch,
+    work: &mut Work<'_, '_>,
 ) -> Result<bool, Stop> {
     // Empty is the first proper subset unless M itself is empty. Incrementing
     // over selected atom indices avoids machine-word cardinality restrictions.
     let mut present = 0;
     let mut countermodel = Ok(false);
     while present < selected.len() {
-        countermodel = check_subset(theory, subset, frozen, values, work);
+        countermodel = check_subset(theory, subset, frozen, values, numeric, work);
         match countermodel {
             Ok(false) => {
                 if let Err(stop) = advance_subset(selected, subset, &mut present, work) {
@@ -357,19 +402,36 @@ pub fn check(
     limits: Limits,
     cancellation: &Cancellation,
 ) -> Result<Check, Stop> {
+    cancellation
+        .metered(limits.max_work, |meter| {
+            exhaustive_check(theory, candidate, Work::new(limits.max_subsets, meter))
+        })
+        .result
+}
+
+/// [`check`] charged to `work`.
+fn exhaustive_check(
+    theory: &Theory,
+    candidate: &Interpretation,
+    mut work: Work<'_, '_>,
+) -> Result<Check, Stop> {
     identities(theory, candidate)?;
-    cancellation.poll()?;
-    let mut work = Work {
-        limits,
-        cancellation,
-        statistics: Statistics::default(),
-    };
+    work.meter.poll()?;
     let mut frozen = reserve(theory.nodes().len())?;
-    evaluate(theory, candidate, None, &mut frozen, &mut work)?;
+    let mut numeric = NumericRowScratch::default();
+    numeric.reserve(theory)?;
+    evaluate(
+        theory,
+        candidate,
+        None,
+        &mut frozen,
+        &mut numeric,
+        &mut work,
+    )?;
     if let Some(root) = failed_root(theory, &frozen, &mut work)? {
         return Ok(Check {
             verdict: Verdict::NotModel { root },
-            statistics: work.statistics,
+            statistics: work.statistics(),
         });
     }
     let mut selected = reserve(theory.atom_count())?;
@@ -387,6 +449,7 @@ pub fn check(
         &selected,
         &mut subset,
         &mut values,
+        &mut numeric,
         &mut work,
     )? {
         Verdict::NonMinimal { witness: subset }
@@ -395,7 +458,7 @@ pub fn check(
     };
     Ok(Check {
         verdict,
-        statistics: work.statistics,
+        statistics: work.statistics(),
     })
 }
 
@@ -405,18 +468,41 @@ mod tests {
     use crate::{AdmissionLimits, Interpretation, Theory};
     use zetesis_cpu::{Cancellation, Stop};
 
-    fn work(cancellation: &Cancellation, allowance: u64) -> Work<'_> {
-        Work {
-            limits: Limits {
-                max_work: 7 + allowance,
-                max_subsets: 5,
-            },
-            cancellation,
-            statistics: Statistics {
-                work: 7,
-                subsets: 3,
-            },
-        }
+    /// Run `test` on work whose meter has admitted seven operations, between
+    /// metered boundaries, under a limit `allowance` operations further, with
+    /// three subsets already tested. With `stop`, a stop is requested once the
+    /// meter is there. The test's own value is returned unsettled.
+    fn with_work<R>(allowance: u64, stop: bool, test: impl FnOnce(&mut Work<'_, '_>) -> R) -> R {
+        let cancellation = Cancellation::default();
+        let limits = Limits {
+            max_work: 7 + allowance,
+            max_subsets: 5,
+        };
+        cancellation
+            .metered(limits.max_work, |meter| {
+                for _ in 0..7 {
+                    meter.charge().unwrap();
+                }
+                if stop {
+                    cancellation.cancel();
+                }
+                let mut work = Work {
+                    max_subsets: limits.max_subsets,
+                    meter,
+                    subsets: 3,
+                };
+                Ok::<_, Stop>(test(&mut work))
+            })
+            .result
+            .unwrap()
+    }
+
+    #[test]
+    fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
+        // A refused charge leaves the count where it was.
+        let tick = |stop| with_work(0, stop, |work| (work.tick(), work.statistics().work));
+        assert_eq!(tick(false), (Err(Stop::WorkLimit), 7));
+        assert_eq!(tick(true), (Err(Stop::Cancelled), 7));
     }
 
     #[test]
@@ -430,11 +516,13 @@ mod tests {
         .unwrap();
         let atoms = [0, 63, 64, 129];
         let candidate = Interpretation::new(&theory, atoms).unwrap();
-        let cancellation = Cancellation::default();
         for allowance in [0, 1, 63, 64, 65, 129, 130, 131] {
-            let mut selected = reserve(theory.atom_count()).unwrap();
-            let mut work = work(&cancellation, u64::try_from(allowance).unwrap());
-            let result = select_atoms(&theory, &candidate, &mut selected, &mut work);
+            let (selected, result, statistics) =
+                with_work(u64::try_from(allowance).unwrap(), false, |work| {
+                    let mut selected = reserve(theory.atom_count()).unwrap();
+                    let result = select_atoms(&theory, &candidate, &mut selected, work);
+                    (selected, result, work.statistics())
+                });
             let expected = atoms
                 .into_iter()
                 .filter(|atom| *atom < allowance)
@@ -450,7 +538,7 @@ mod tests {
                 "allowance {allowance}"
             );
             assert_eq!(
-                work.statistics,
+                statistics,
                 Statistics {
                     work: 7 + u64::try_from(allowance.min(130)).unwrap(),
                     subsets: 3,
@@ -468,14 +556,16 @@ mod tests {
             AdmissionLimits::default(),
         )
         .unwrap();
-        let cancellation = Cancellation::default();
         // The carry clears 0 and 63, sets 64, then stops before reaching 129.
         let expected: [&[usize]; 5] = [&[0, 63], &[63], &[], &[64], &[64]];
         for (allowance, expected) in expected.into_iter().enumerate() {
             let mut subset = Interpretation::new(&theory, [0, 63]).unwrap();
             let mut present = 2;
-            let mut work = work(&cancellation, u64::try_from(allowance).unwrap());
-            let result = advance_subset(&[0, 63, 64, 129], &mut subset, &mut present, &mut work);
+            let (result, statistics) =
+                with_work(u64::try_from(allowance).unwrap(), false, |work| {
+                    let result = advance_subset(&[0, 63, 64, 129], &mut subset, &mut present, work);
+                    (result, work.statistics())
+                });
             assert_eq!(subset.atoms().collect::<Vec<_>>(), expected);
             assert_eq!(present, expected.len());
             assert_eq!(
@@ -487,7 +577,7 @@ mod tests {
                 }
             );
             assert_eq!(
-                work.statistics,
+                statistics,
                 Statistics {
                     work: 7 + u64::try_from(allowance.min(3)).unwrap(),
                     subsets: 3,
@@ -506,17 +596,15 @@ mod tests {
         )
         .unwrap();
         let candidate = Interpretation::new(&theory, []).unwrap();
-        let cancellation = Cancellation::default();
-        cancellation.cancel();
         let mut selected = reserve(0).unwrap();
-        let mut work = work(&cancellation, 0);
-        let before = work.statistics;
-        assert_eq!(
-            select_atoms(&theory, &candidate, &mut selected, &mut work),
-            Ok(())
-        );
+        let (result, before, after) = with_work(0, true, |work| {
+            let before = work.statistics();
+            let result = select_atoms(&theory, &candidate, &mut selected, work);
+            (result, before, work.statistics())
+        });
+        assert_eq!(result, Ok(()));
         assert!(selected.is_empty());
-        assert_eq!(work.statistics, before);
+        assert_eq!(after, before);
     }
 
     #[test]
@@ -529,18 +617,16 @@ mod tests {
         )
         .unwrap();
         let mut subset = Interpretation::new(&theory, []).unwrap();
-        let cancellation = Cancellation::default();
-        cancellation.cancel();
         let mut present = 0;
-        let mut work = work(&cancellation, 0);
-        let before = work.statistics;
-        assert_eq!(
-            advance_subset(&[], &mut subset, &mut present, &mut work),
-            Ok(())
-        );
+        let (result, before, after) = with_work(0, true, |work| {
+            let before = work.statistics();
+            let result = advance_subset(&[], &mut subset, &mut present, work);
+            (result, before, work.statistics())
+        });
+        assert_eq!(result, Ok(()));
         assert!(subset.atoms().next().is_none());
         assert_eq!(present, 0);
-        assert_eq!(work.statistics, before);
+        assert_eq!(after, before);
     }
 
     #[test]

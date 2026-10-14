@@ -1,13 +1,15 @@
 //! Optional source-count plans preserve the original reduct subject.
 
+use crate::support::count_plan_resources;
 use crate::support::finite_bindings as reference;
+use zetesis_reference_support::{BundleFixture, canonical, prepared, resource_limits};
 
 use reference::{exhaustive, external, holds, native, values};
+use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::canonical;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionLimits,
-    FormulaLimits, prepare_formula,
+    AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanResource, CountPlanStatus,
+    ExpansionLimits, FormulaLimits, FormulaResource, prepare_formula,
 };
 
 const SOURCES: &[&str] = &[
@@ -24,13 +26,7 @@ const SOURCES: &[&str] = &[
 ];
 
 fn admitted(source: &str, planned: bool) -> AdmittedFormula {
-    let source = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let source = prepared(source);
     if planned {
         source
             .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
@@ -188,27 +184,7 @@ fn unsupported_premises_produce_no_plan() {
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
     for source in SOURCES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = reference::Models::new();
-        for call in result["Call"].as_array().unwrap() {
-            for model in call["Witnesses"].as_array().into_iter().flatten() {
-                assert!(
-                    expected.insert(
-                        model["Value"]
-                            .as_array()
-                            .unwrap()
-                            .iter()
-                            .map(|v| v.as_str().unwrap().to_owned())
-                            .collect()
-                    )
-                );
-            }
-        }
-        assert_eq!(
-            result["Models"]["Number"].as_u64(),
-            Some(u64::try_from(expected.len()).unwrap())
-        );
+        let expected = oracle::full_models(&external(source, true));
         assert_eq!(native(&admitted(source, true)), expected, "{source}");
     }
 }
@@ -218,15 +194,9 @@ fn planned_with(
     limits: CountPlanLimits,
     cancellation: &Cancellation,
 ) -> AdmittedFormula {
-    prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_with_count_plan(limits, cancellation, None)
-    .unwrap()
+    prepared(source)
+        .ground_with_count_plan(limits, cancellation, None)
+        .unwrap()
 }
 
 #[test]
@@ -388,10 +358,7 @@ fn optional_planning_preserves_original_work_failures() {
                 SOURCES[0].into(),
                 AdmissionOptions::default(),
                 ExpansionLimits::default(),
-                FormulaLimits {
-                    max_work: maximum,
-                    ..FormulaLimits::default()
-                },
+                resource_limits::formula(FormulaResource::Work, maximum),
             )
             .and_then(|prepared| {
                 if planned {
@@ -427,10 +394,7 @@ fn optional_planning_preserves_grounding_round_failures() {
             SOURCES[0].into(),
             AdmissionOptions::default(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                max_support_rounds: 0,
-                ..FormulaLimits::default()
-            },
+            resource_limits::formula(FormulaResource::SupportRounds, 0),
         )
         .expect("source preparation does not construct possible support")
     };
@@ -453,18 +417,10 @@ fn optional_planning_preserves_grounding_round_failures() {
 
 #[test]
 fn bundle_plans_retain_resolvable_premise_origins() {
-    let directory = tempfile::tempdir().unwrap();
-    std::fs::write(
-        directory.path().join("entry.lp"),
-        "#include \"groups.lp\".2{a;b;c;d}2.",
-    )
-    .unwrap();
-    std::fs::write(directory.path().join("groups.lp"), "{a;b}1.{c;d}1.").unwrap();
-    let bundle = zetesis_themelios::SourceBundle::load(
-        directory.path().join("entry.lp"),
-        zetesis_themelios::BundleLimits::default(),
-    )
-    .unwrap();
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", "#include \"groups.lp\".2{a;b;c;d}2.");
+    fixture.write("groups.lp", "{a;b}1.{c;d}1.");
+    let bundle = fixture.bundle();
     let input = zetesis_themelios::prepare_bundle_formula(
         bundle,
         zetesis_themelios::BundleAdmissionOptions::default(),
@@ -496,22 +452,15 @@ fn bundle_plans_retain_resolvable_premise_origins() {
 
 #[test]
 fn included_source_refusal_keeps_bundle_ownership() {
-    let directory = tempfile::tempdir().unwrap();
+    let fixture = BundleFixture::new();
     let source = SOURCES[0];
-    std::fs::write(directory.path().join("input.lp"), source).unwrap();
-    let bundle = zetesis_themelios::SourceBundle::load(
-        directory.path().join("input.lp"),
-        zetesis_themelios::BundleLimits::default(),
-    )
-    .unwrap();
+    fixture.write("entry.lp", source);
+    let bundle = fixture.bundle();
     let input = zetesis_themelios::prepare_bundle_formula(
         bundle,
         zetesis_themelios::BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_support_rounds: 0,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::SupportRounds, 0),
     )
     .unwrap();
     let error = input
@@ -600,15 +549,7 @@ fn source_order_preserves_partition_models() {
 #[test]
 fn count_aliases_do_not_certify_atom_partitions() {
     for source in ["1#count{same:a;same:b}1.", "1#count{x:a;y:a}1."] {
-        let prepare = || {
-            prepare_formula(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default(),
-            )
-            .unwrap()
-        };
+        let prepare = || prepared(source);
         let original = prepare().ground().unwrap();
         let planned = prepare()
             .ground_with_count_plan(CountPlanLimits::default(), &Cancellation::default(), None)
@@ -646,18 +587,10 @@ fn optional_planning_preserves_objective_templates() {
 
 #[test]
 fn stopped_bundle_planning_keeps_original_sources() {
-    let directory = tempfile::tempdir().unwrap();
-    std::fs::write(
-        directory.path().join("entry.lp"),
-        "#include \"groups.lp\".2{a;b;c;d}2.",
-    )
-    .unwrap();
-    std::fs::write(directory.path().join("groups.lp"), "{a;b}1.{c;d}1.").unwrap();
-    let bundle = zetesis_themelios::SourceBundle::load(
-        directory.path().join("entry.lp"),
-        zetesis_themelios::BundleLimits::default(),
-    )
-    .unwrap();
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", "#include \"groups.lp\".2{a;b;c;d}2.");
+    fixture.write("groups.lp", "{a;b}1.{c;d}1.");
+    let bundle = fixture.bundle();
     let input = zetesis_themelios::prepare_bundle_formula(
         bundle,
         zetesis_themelios::BundleAdmissionOptions::default(),
@@ -666,10 +599,7 @@ fn stopped_bundle_planning_keeps_original_sources() {
     )
     .unwrap()
     .ground_with_count_plan(
-        CountPlanLimits {
-            max_groups: 0,
-            ..CountPlanLimits::default()
-        },
+        count_plan_resources::limits(CountPlanResource::Groups, 0),
         &Cancellation::default(),
         None,
     )
@@ -706,10 +636,7 @@ fn source_tuple_payload_is_not_retained_by_count_planning() {
     let short = admitted(&source("first"), true);
     let bytes = plan(&short).statistics().storage_bytes;
     assert!(bytes > 0);
-    let limits = CountPlanLimits {
-        max_bytes: bytes,
-        ..CountPlanLimits::default()
-    };
+    let limits = count_plan_resources::limits(CountPlanResource::Bytes, bytes);
     let long = planned_with(
         &source(&"long_key".repeat(128)),
         limits,

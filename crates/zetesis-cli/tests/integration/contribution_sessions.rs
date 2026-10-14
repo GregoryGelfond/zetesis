@@ -1,6 +1,7 @@
 //! Complete identities are specified independently of projected presentation.
 
 use crate::support::contribution_sources;
+use zetesis_reference_support::formula;
 
 use std::ffi::OsStr;
 use std::num::NonZeroUsize;
@@ -15,7 +16,6 @@ use zetesis_clingo_support::REPORT_BYTES as MAX_REPORT_BYTES;
 use zetesis_core::{Atom, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::programs::nullary as atom;
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 use zetesis_validation::answers;
 
 struct Expected {
@@ -90,13 +90,7 @@ fn expected() -> [Expected; 2] {
 #[test]
 fn composed_profiles_preserve_complete_optimum_answers() {
     for (source, expected) in contribution_sources::SOURCES.into_iter().zip(expected()) {
-        let input = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap();
+        let input = formula(source);
         assert!(input.atoms().len() <= 8);
         for (workers, batch) in [(1, 1), (4, 3)] {
             let config = SolveConfig {

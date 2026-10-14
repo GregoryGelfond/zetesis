@@ -77,7 +77,7 @@ impl Builder<'_, '_, '_> {
         let negative = self.neg(necessary, location)?;
         let guard = self.neg(negative, location)?;
         self.admit_root(metadata.origins(atom).len(), location)?;
-        let origins = metadata.copy_origins(atom, &mut self.counters, self.limits)?;
+        let origins = metadata.copy_origins(atom, self.counters, self.limits)?;
         self.publish_root(guard, origins);
         Ok(())
     }
@@ -125,7 +125,7 @@ impl Builder<'_, '_, '_> {
         #[cfg(test)]
         tests::point(tests::Point::Evidence);
         let mut evidence: Buffer<ProgramSite> =
-            Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+            Buffer::new(self.computation, self.limits, self.counters, location)?;
         for &head in heads {
             self.work(location)?;
             let Node::Atom(atom) = self.nodes.view().node(head).expect("owned head") else {
@@ -157,7 +157,7 @@ impl Builder<'_, '_, '_> {
                         origin,
                         self.computation,
                         self.limits,
-                        &mut self.counters,
+                        self.counters,
                         location,
                     )?;
                     evidence.slice_mut()[start..].rotate_right(1);
@@ -230,7 +230,7 @@ impl Plan {
         let mut directory = Buffer::new(
             builder.computation,
             builder.limits,
-            &mut builder.counters,
+            builder.counters,
             location,
         )?;
         directory.resize(
@@ -238,7 +238,7 @@ impl Plan {
             None,
             builder.computation,
             builder.limits,
-            &mut builder.counters,
+            builder.counters,
             location,
         )?;
         let mut plan = Self {
@@ -246,13 +246,13 @@ impl Plan {
             groups: Buffer::new(
                 builder.computation,
                 builder.limits,
-                &mut builder.counters,
+                builder.counters,
                 location,
             )?,
             heads: Buffer::new(
                 builder.computation,
                 builder.limits,
-                &mut builder.counters,
+                builder.counters,
                 location,
             )?,
         };
@@ -302,7 +302,7 @@ impl Plan {
                         },
                         builder.computation,
                         builder.limits,
-                        &mut builder.counters,
+                        builder.counters,
                         location,
                     )?;
                     self.directory.slice_mut()[condition] = Some(stored);
@@ -371,7 +371,7 @@ impl Plan {
             0,
             builder.computation,
             builder.limits,
-            &mut builder.counters,
+            builder.counters,
             location,
         )?;
         for atom in 0..builder.catalog.len() {

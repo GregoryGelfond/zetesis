@@ -2,13 +2,18 @@
 
 use std::collections::BTreeSet;
 
+use crate::support::admission;
+use crate::support::atom_models::ground_atom;
+use zetesis_reference_support::resource_limits;
+
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Span};
 use themelios_program::term::EvalError;
 use zetesis_core::{Atom, Term};
+use zetesis_test_support::programs::rules;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, Admitted, ExpansionFailure, ExpansionLimits,
-    ExpansionResource, ExpansionUsage, ProfileFeature, admit, admit_extended,
+    ExpansionResource, ExpansionUsage, InputLimit, ProfileFeature, admit, admit_extended,
 };
 
 fn extended(text: &str) -> Admitted {
@@ -21,36 +26,13 @@ fn extended(text: &str) -> Admitted {
 }
 
 fn ground_heads(input: &Admitted) -> BTreeSet<Atom> {
-    input
-        .program()
-        .templates()
-        .iter()
+    rules(input.program())
         .map(|template| {
             assert!(template.positive().is_empty());
             assert!(template.gate_true().is_empty());
             assert!(template.gate_false().is_empty());
             assert!(template.filters().is_empty());
-            let head = template.head().expect("fact");
-            let values = head
-                .terms()
-                .iter()
-                .map(|term| match term {
-                    zetesis_core::TemplateTerm::Constant(value) => value
-                        .to_value(zetesis_core::ValueLimits::default())
-                        .unwrap(),
-                    zetesis_core::TemplateTerm::Variable(_) => panic!("ground fact"),
-                })
-                .collect();
-            Atom::new(
-                zetesis_core::Predicate::with_sign(
-                    head.predicate().name(),
-                    head.predicate().arity(),
-                    head.predicate().sign(),
-                )
-                .unwrap(),
-                values,
-            )
-            .expect("head arity")
+            ground_atom(template.head().expect("fact"))
         })
         .collect()
 }
@@ -80,11 +62,10 @@ fn checked_ground_arithmetic_matches_explicit_scalars() {
     assert_eq!(
         minimum
             .program()
-            .templates()
+            .facts()
             .at(0)
             .unwrap()
-            .head()
-            .expect("head")
+            .pattern()
             .terms()
             .iter()
             .collect::<Vec<_>>(),
@@ -173,32 +154,24 @@ fn scalar_normalization_preserves_relational_bindings_and_frozen_gates() {
     )
     .expect("explicit S0 program");
     assert_eq!(
-        expanded.program().templates().len(),
-        explicit.program().templates().len()
+        expanded.program().rules().len(),
+        explicit.program().rules().len()
     );
-    for template in expanded.program().templates() {
-        assert!(
-            explicit
-                .program()
-                .templates()
-                .iter()
-                .any(|other| other == template)
-        );
+    for template in rules(expanded.program()) {
+        assert!(rules(explicit.program()).any(|other| other == template));
     }
 }
 
 #[test]
 fn expansion_retains_original_rule_spans_and_source_bytes() {
     let text = "#const n=2.\r\n% no regenerated source\r\np(1..n).\r\np(1..n).";
-    let options = AdmissionOptions {
-        source_id: SourceId::new(81),
-        ..AdmissionOptions::default()
-    };
+    let options = admission::options(SourceId::new(81));
     let input = admit_extended(text.to_owned(), options, ExpansionLimits::default())
         .expect("located expansion");
     assert_eq!(input.source().text(), text);
-    assert_eq!(input.program().templates().len(), 2);
-    for origins in input.template_origins() {
+    assert_eq!(input.program().facts().len(), 2);
+    assert!(input.program().templates().is_empty());
+    for origins in input.fact_origins() {
         assert_eq!(
             origins.len(),
             2,
@@ -332,10 +305,7 @@ fn unsupported_forms_never_disappear_behind_empty_intervals() {
 
 #[test]
 fn giant_products_are_bounded_before_fact_materialization() {
-    let limits = ExpansionLimits {
-        max_templates: 5,
-        ..ExpansionLimits::default()
-    };
+    let limits = resource_limits::expansion(ExpansionResource::Templates, 5);
     let failure = admit_extended(
         "p(1..3,1..3).".to_owned(),
         AdmissionOptions::default(),
@@ -367,40 +337,17 @@ fn giant_products_are_bounded_before_fact_materialization() {
 
 #[test]
 fn independent_expansion_budgets_and_zero_limits_are_enforced() {
-    for (text, limits, expected) in [
-        (
-            "#const n=2. p(n).",
-            ExpansionLimits {
-                max_constants: 0,
-                ..ExpansionLimits::default()
-            },
-            ExpansionResource::Constants,
-        ),
-        (
-            "p(1+2).",
-            ExpansionLimits {
-                max_term_work: 0,
-                ..ExpansionLimits::default()
-            },
-            ExpansionResource::TermWork,
-        ),
-        (
-            "p(1..2).",
-            ExpansionLimits {
-                max_values: 3,
-                ..ExpansionLimits::default()
-            },
-            ExpansionResource::Values,
-        ),
+    for (text, expected, limit) in [
+        ("#const n=2. p(n).", ExpansionResource::Constants, 0),
+        ("p(1+2).", ExpansionResource::TermWork, 0),
+        ("p(1..2).", ExpansionResource::Values, 3),
         (
             "#const s=\"abcd\". p(s;s;s).",
-            ExpansionLimits {
-                max_scalar_bytes: 3,
-                ..ExpansionLimits::default()
-            },
             ExpansionResource::ScalarBytes,
+            3,
         ),
     ] {
+        let limits = resource_limits::expansion(expected, limit);
         assert!(
             matches!(admit_extended(text.to_owned(), AdmissionOptions::default(), limits), Err(ExpansionFailure::Limit { resource, .. }) if resource == expected)
         );
@@ -420,10 +367,7 @@ fn independent_expansion_budgets_and_zero_limits_are_enforced() {
         admit_extended(
             "p.".to_owned(),
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_values: 0,
-                ..ExpansionLimits::default()
-            }
+            resource_limits::expansion(ExpansionResource::Values, 0)
         )
         .is_ok()
     );
@@ -431,10 +375,7 @@ fn independent_expansion_budgets_and_zero_limits_are_enforced() {
         admit_extended(
             "p(2..1).".to_owned(),
             AdmissionOptions::default(),
-            ExpansionLimits {
-                max_templates: 0,
-                ..ExpansionLimits::default()
-            }
+            resource_limits::expansion(ExpansionResource::Templates, 0)
         )
         .is_ok()
     );
@@ -446,16 +387,14 @@ fn extended_is_explicit_and_source_and_core_limits_still_apply() {
         assert!(admit(text.to_owned(), AdmissionOptions::default()).is_err());
         extended(text);
     }
-    let options = AdmissionOptions {
-        max_source_bytes: 2,
-        ..AdmissionOptions::default()
-    };
+    let options = resource_limits::admission(InputLimit::SourceBytes, 2);
     assert!(matches!(
         admit_extended("p(1..2).".to_owned(), options, ExpansionLimits::default()),
         Err(ExpansionFailure::Admission(AdmissionFailure::Limit { .. }))
     ));
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_templates = 1;
+    // Expansion caps its template budget at the core ceiling, so it reports
+    // the core limit as its own.
+    let options = resource_limits::admission_core(zetesis_core::AdmissionResource::Templates, 1);
     assert!(matches!(
         admit_extended("p(1..2).".to_owned(), options, ExpansionLimits::default()),
         Err(ExpansionFailure::Limit {
@@ -468,10 +407,7 @@ fn extended_is_explicit_and_source_and_core_limits_still_apply() {
 
 #[test]
 fn duplicated_rule_evidence_is_bounded_before_per_fact_copying() {
-    let limits = ExpansionLimits {
-        max_origin_locations: 3,
-        ..ExpansionLimits::default()
-    };
+    let limits = resource_limits::expansion(ExpansionResource::Origins, 3);
     assert!(matches!(
         admit_extended(
             "p(1..2). p(1..2).".to_owned(),
@@ -496,7 +432,7 @@ fn valid_closed_structures_do_not_make_an_empty_fact_product_nonempty() {
             ExpansionLimits::default(),
         )
         .unwrap();
-        assert!(input.program().templates().is_empty());
+        assert!(input.program().is_empty());
         assert_eq!(input.source().text(), source);
     }
 }
@@ -547,10 +483,7 @@ fn a_term_work_ceiling_trips_at_the_node_the_normalization_reaches() {
     // the refusal names the running total there and that statement's span.
     let (resource, limit, observed, span) = limit_failure(
         "e(0,1,2). e(3,4,5).",
-        ExpansionLimits {
-            max_term_work: 4,
-            ..ExpansionLimits::default()
-        },
+        resource_limits::expansion(ExpansionResource::TermWork, 4),
     );
     assert_eq!(resource, ExpansionResource::TermWork);
     assert_eq!((limit, observed), (4, 5));
@@ -565,10 +498,7 @@ fn scalars_are_charged_head_first_and_then_in_argument_order() {
     // Four bytes in the head exceed a ceiling of three before the body's one
     // byte is reached; one byte in the first argument is within it and the
     // four of the second then make five.
-    let limits = ExpansionLimits {
-        max_scalar_bytes: 3,
-        ..ExpansionLimits::default()
-    };
+    let limits = resource_limits::expansion(ExpansionResource::ScalarBytes, 3);
     let (resource, limit, observed, _) = limit_failure("q(\"aaaa\") :- p(\"b\").", limits);
     assert_eq!(
         (resource, limit, observed),
@@ -601,10 +531,11 @@ fn plain_rules_compile_as_their_explicit_s0_admission_does() {
     let explicit = admit(text.to_owned(), AdmissionOptions::default()).expect("S0");
     let expanded = extended(text);
     assert_eq!(
-        expanded.program().templates().iter().collect::<Vec<_>>(),
-        explicit.program().templates().iter().collect::<Vec<_>>()
+        rules(expanded.program()).collect::<Vec<_>>(),
+        rules(explicit.program()).collect::<Vec<_>>()
     );
     assert_eq!(expanded.template_origins(), explicit.template_origins());
+    assert_eq!(expanded.fact_origins(), explicit.fact_origins());
 }
 
 #[test]

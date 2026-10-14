@@ -250,7 +250,7 @@ impl Model {
     /// Returns `None` on arithmetic overflow. Retention accounts this per model
     /// entry, even when a cloned model physically shares its selection vector.
     #[must_use]
-    pub fn selection_payload_bytes(&self) -> Option<usize> {
+    pub(crate) fn selection_payload_bytes(&self) -> Option<usize> {
         LENGTH_BYTES.checked_add(self.0.positions.len().checked_mul(LENGTH_BYTES)?)
     }
 }
@@ -498,6 +498,19 @@ pub enum ModelError {
     /// Input, selection or prepared-order metadata reservation failed.
     Allocation,
 }
+impl ModelError {
+    /// Whether construction refused a resource, independently of model shape
+    /// and catalog identity. A nested catalog cause keeps its classification.
+    #[must_use]
+    pub const fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Bytes { .. } | Self::Allocation => true,
+            Self::Catalog(error) => error.is_resource_refusal(),
+            Self::Order { .. } | Self::Position { .. } => false,
+        }
+    }
+}
+
 impl fmt::Display for ModelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

@@ -1,11 +1,10 @@
 //! Source declarations stay separate from completed fixed-domain projection.
 
 use zetesis_core::Predicate;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_test_support::programs::unary as atom;
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    SourceDirective, admit_formula,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, SourceDirective, admit_formula,
 };
 
 fn selected_pair() -> (
@@ -76,11 +75,9 @@ fn project_metadata_records_the_explicit_domain() {
 
 #[test]
 fn absent_project_heads_leave_an_explicit_empty_domain() {
-    let result = admit_formula(
-        "p(1).#project q(X):p(X).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits {
+    let result = admit(
+        "p(1).#project q(X):p(X).",
+        &FormulaLimits {
             max_project_atoms: 0,
             max_project_bytes: 0,
             ..FormulaLimits::default()
@@ -123,29 +120,11 @@ fn pooled_project_declarations_union_into_the_same_fixed_domain() {
 #[test]
 fn projection_admission_refuses_the_complete_owner_at_its_own_limit() {
     let source = "p(1;2).#project p/1.";
-    for (limits, resource) in [
-        (
-            FormulaLimits {
-                max_project_atoms: 1,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::ProjectAtoms,
-        ),
-        (
-            FormulaLimits {
-                max_project_bytes: 0,
-                ..FormulaLimits::default()
-            },
-            FormulaResource::ProjectBytes,
-        ),
+    for (resource, limit) in [
+        (FormulaResource::ProjectAtoms, 1),
+        (FormulaResource::ProjectBytes, 0),
     ] {
-        let error = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            limits,
-        )
-        .unwrap_err();
+        let error = admit(source, &resource_limits::formula(resource, limit)).unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Limit { resource: actual, .. } if actual == resource),
             "{error}"
@@ -160,10 +139,7 @@ fn declaration_bodies_count_authored_occurrences_before_deduplication() {
     let source = "p(1).#project p(X):p(X),p(X).";
     let error = admit_formula(
         source.into(),
-        AdmissionOptions {
-            max_body_elements: 1,
-            ..AdmissionOptions::default()
-        },
+        resource_limits::admission(InputLimit::BodyElements, 1),
         ExpansionLimits::default(),
         FormulaLimits::default(),
     )
@@ -189,19 +165,10 @@ fn declaration_bodies_count_authored_occurrences_before_deduplication() {
 
 #[test]
 fn project_constants_use_a_separate_domain_allowance() {
-    let limits = FormulaLimits {
-        max_domain_values: 2,
-        ..FormulaLimits::default()
-    };
+    let limits = resource_limits::formula(FormulaResource::DomainValues, 2);
     let source = "p(1).";
     let original = formula(source);
-    let selected = admit_formula(
-        format!("{source}#project q((2;3))."),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        limits,
-    )
-    .unwrap();
+    let selected = admit(&format!("{source}#project q((2;3))."), &limits).unwrap();
     assert_eq!(selected.atoms(), original.atoms());
     assert_eq!(
         (selected.theory().nodes(), selected.theory().operands()),

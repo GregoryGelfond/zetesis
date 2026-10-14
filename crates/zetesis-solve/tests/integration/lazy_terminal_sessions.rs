@@ -4,25 +4,18 @@
 use std::{collections::BTreeSet, num::NonZeroUsize};
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::prepared;
 use zetesis_solve::{
     Backend, Completion, Grounder, Oracle, PreparedInput, Session, SolveConfig, SolveError,
     WorldViewLimits,
 };
 use zetesis_themelios::{
-    AdmissionOptions, BaseKind, ConstraintCheckLimits, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaMaterialization, HybridFormula, TerminalBase, TerminalFormula,
-    prepare_formula,
+    BaseKind, ConstraintCheckLimits, FormulaFailure, FormulaMaterialization, HybridFormula,
+    TerminalBase, TerminalFormula,
 };
 
 fn lazy(source: &str) -> Result<FormulaMaterialization<HybridFormula>, FormulaFailure> {
-    prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_lazy()
+    prepared(source).ground_lazy()
 }
 
 fn lazy_terminal(source: &str) -> TerminalFormula {
@@ -33,15 +26,8 @@ fn lazy_terminal(source: &str) -> TerminalFormula {
 }
 
 fn adaptive_terminal(source: &str) -> TerminalFormula {
-    let FormulaMaterialization::Terminal(owner) = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_adaptive()
-    .unwrap() else {
+    let FormulaMaterialization::Terminal(owner) = prepared(source).ground_adaptive().unwrap()
+    else {
         panic!("fixture requires a certified terminal partition");
     };
     owner

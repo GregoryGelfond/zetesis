@@ -6,13 +6,14 @@
 //! results; failed computations are never retained. Selection requires its own
 //! certificate, while source-family evidence retains complete traversal. Each
 //! lookup and retained pair consumes work and leased support storage.
-//! Ordinary cursors own their entries; prepared rules can retain a completed
-//! finite-domain map for immutable borrowing by later cursors.
+//! Ordinary cursors own their entries. Prepared rules and same-rule support
+//! rounds can retain a complete-column map for immutable borrowing by later
+//! cursors; only the prepared-rule owner establishes completed support.
 
 mod domains;
 mod totality;
-pub(super) use totality::needed as needs_totality;
 pub(crate) use totality::supports_column_totality;
+pub(super) use totality::{needed as needs_totality, positive_bounds, range_body};
 
 use std::{cmp::Ordering, ops::Deref};
 
@@ -47,8 +48,9 @@ struct Projection<'a> {
     inputs: TermTable,
     results: Binding<'static>,
     /// A prefix covering every possible complete binding of this expression's
-    /// input. Only completed source-domain totality publishes this witness;
-    /// ordinary successful memo entries establish no coverage.
+    /// input within its immutable support snapshot. Only full-column totality
+    /// publishes this witness; ordinary memo entries establish no coverage.
+    /// A growing-round owner grants no completed-support selection authority.
     covered: Option<usize>,
 }
 
@@ -98,7 +100,9 @@ impl<'a> ProjectionValues<'a> {
         }
         for (literal, value) in literals.iter().enumerate() {
             tick(&mut context)?;
-            let Some((left, _, right)) = comparison(value) else {
+            let Some(([left, right], _)) =
+                comparison(value).map(crate::formula_ir::Comparison::operands)
+            else {
                 continue;
             };
             for (side, expression) in [left, right].into_iter().enumerate() {
@@ -234,8 +238,22 @@ impl<'a> Projections<'a> {
         ProjectionValues::new(context).map(Self::Local)
     }
 
+    /// A cursor's projections: the borrowed complete-column map of its prepared
+    /// rule or support round, when one is supplied, as [`Self::borrowed`]
+    /// borrows it, and otherwise its own.
+    pub(super) fn for_cursor(
+        total: Option<&'a ProjectionValues<'a>>,
+        context: &Context<'_, &Computation<'_, '_>>,
+    ) -> Result<Self, FormulaFailure> {
+        match total {
+            Some(values) => Self::borrowed(values, context),
+            None => Self::new(context),
+        }
+    }
+
     /// Borrow only within the workspace that owns the retained map's leases.
-    /// Completion identity separately authenticates its rule and term carrier.
+    /// The caller's completed-rule or round owner separately authenticates the
+    /// exact rule and immutable support snapshot.
     pub(super) fn borrowed(
         values: &'a ProjectionValues<'a>,
         context: &Context<'_, &Computation<'_, '_>>,
@@ -274,6 +292,16 @@ impl<'a> Projections<'a> {
         evaluation: &mut Evaluation,
         mut context: Context<'_, &mut Computation<'_, '_>>,
     ) -> Result<bool, FormulaFailure> {
+        // Single-node expressions never have a projection entry. Reuse the
+        // canonical evaluator's borrowed leaves instead of making temporary
+        // owner keys and resolving them again. Its existing fallback handles
+        // a one-node constructor; no second leaf grammar is needed here.
+        if expressions
+            .iter()
+            .all(|expression| expression.nodes.len() == 1)
+        {
+            return evaluation.source_comparison((expressions, relation), binding, context);
+        }
         let mut failures = Failures::default();
         let mut values = [None, None];
         for (side, expression) in expressions.into_iter().enumerate() {

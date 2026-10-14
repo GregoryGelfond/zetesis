@@ -504,6 +504,7 @@ mod tests {
                 Template::new(Some(b.clone()), vec![a], vec![], vec![c.clone()], vec![]),
                 Template::new(None, vec![b], vec![c], vec![], vec![]),
             ],
+            zetesis_core::FactTables::default(),
             AdmissionLimits::default(),
         )
         .expect("admitted fixture");

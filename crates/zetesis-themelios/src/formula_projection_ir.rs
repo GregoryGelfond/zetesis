@@ -5,12 +5,12 @@
 //! node is charged to the cumulative term-work ceiling before inspection.
 
 use crate::formula_support::components::{Predicate, Term as CoreTerm};
-use themelios_program::program::{Arguments, Atom, DefaultNegation, Relation};
+use themelios_program::program::{Arguments, Atom, DefaultNegation};
 use themelios_program::term::{Term, Variable};
 use zetesis_core::ValueNodeRef;
 
 use crate::formula::ceiling;
-use crate::formula_ir::{Compiler, Expression, LiteralIr, Operation, Projection, Variables};
+use crate::formula_ir::{Compiler, LiteralIr, Operation, Projection, Variables};
 use crate::formula_pattern::{ArgumentPattern, PatternAtom, PatternNode, push, reserve};
 use crate::{ExpansionResource, FormulaFailure, FormulaResource};
 
@@ -101,18 +101,8 @@ impl Compiler<'_> {
             std::mem::size_of::<Operation>() as u128,
             self.location,
         )?;
-        push(
-            bindings,
-            LiteralIr::Compare(
-                Expression {
-                    nodes: vec![Operation::Variable(target)],
-                },
-                Relation::Eq,
-                value,
-            ),
-            self.budget,
-            self.location,
-        )?;
+        let equality = self.generated_equality(target, value)?;
+        push(bindings, equality, self.budget, self.location)?;
         Ok(CoreTerm::Variable(target))
     }
 

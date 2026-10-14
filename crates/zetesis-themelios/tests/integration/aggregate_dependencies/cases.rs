@@ -1,4 +1,7 @@
 //! Finite substitutions retain dependent aggregate equalities in each row.
+//! Each expansion lists the instances the source grounds: an assignment
+//! proposes only the measures of selections that contain its required tuples,
+//! those from elements whose conditions hold for every binding.
 
 pub(super) const CASES: &[(&str, &str)] = &[
     (
@@ -11,11 +14,11 @@ pub(super) const CASES: &[(&str, &str)] = &[
     ),
     (
         "{p}.q(N,M):-N=#count{1:p},M=#sum{N}.",
-        "{p}.q(0,0):-0=#count{1:p},0=#sum{0}.q(1,0):-1=#count{1:p},0=#sum{1}.q(1,1):-1=#count{1:p},1=#sum{1}.",
+        "{p}.q(0,0):-0=#count{1:p},0=#sum{0}.q(1,1):-1=#count{1:p},1=#sum{1}.",
     ),
     (
         "q(M):-N=#count{},Y=N+1,M=#sum{Y}.",
-        "q(0):-0=#count{},1=0+1,0=#sum{1}.q(1):-0=#count{},1=0+1,1=#sum{1}.",
+        "q(1):-0=#count{},1=0+1,1=#sum{1}.",
     ),
     (
         "{p}.q(N,M):-N=#sum{-1:p},M=#sum+{N}.",
@@ -80,7 +83,7 @@ pub(super) const CASES: &[(&str, &str)] = &[
     ),
     (
         "q(M):-N=#count{},Y=f(N),M=#count{Y}.",
-        "q(0):-0=#count{},f(0)=f(0),0=#count{f(0)}.q(1):-0=#count{},f(0)=f(0),1=#count{f(0)}.",
+        "q(1):-0=#count{},f(0)=f(0),1=#count{f(0)}.",
     ),
     (
         "{p}.q(M):-N=#count{1:p},M=#count{N:p;0:p}.",
@@ -92,11 +95,11 @@ pub(super) const CASES: &[(&str, &str)] = &[
     ),
     (
         "{p}.M{a;b}M:-N=#count{1:p},M=#sum{N}.",
-        "{p}.0{a;b}0:-0=#count{1:p},0=#sum{0}.0{a;b}0:-1=#count{1:p},0=#sum{1}.1{a;b}1:-1=#count{1:p},1=#sum{1}.",
+        "{p}.0{a;b}0:-0=#count{1:p},0=#sum{0}.1{a;b}1:-1=#count{1:p},1=#sum{1}.",
     ),
     (
         "{p}.M#count{1:a;2:b}M:-N=#count{1:p},M=#sum{N}.",
-        "{p}.0{a;b}0:-0=#count{1:p},0=#sum{0}.0{a;b}0:-1=#count{1:p},0=#sum{1}.1{a;b}1:-1=#count{1:p},1=#sum{1}.",
+        "{p}.0{a;b}0:-0=#count{1:p},0=#sum{0}.1{a;b}1:-1=#count{1:p},1=#sum{1}.",
     ),
     (
         "{p}.q(M):-N=#count{},M=#count{N:not q(1)}.",

@@ -1,5 +1,7 @@
 //! Exact optional cost guards are checked against independent objective evaluation.
 
+use crate::support::objective_bound_resources;
+use crate::support::objective_plans::exact as plan;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 
@@ -7,7 +9,7 @@ use zetesis_core::{Model, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, evaluate};
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{formula, resource_limits};
 use zetesis_sat::StableModels;
 use zetesis_themelios::AdmittedFormula;
 use zetesis_themelios::objective_bound::{
@@ -30,16 +32,6 @@ fn score(input: &AdmittedFormula, mask: usize) -> Score {
     .expect("independent score")
     .score()
     .clone()
-}
-fn plan(input: &AdmittedFormula) -> ObjectivePlan {
-    ObjectivePlan::new(
-        input.theory(),
-        input.atoms(),
-        input.objectives(),
-        ObjectivePlanLimits::default(),
-        &Cancellation::default(),
-    )
-    .expect("complete eligibility plan")
 }
 fn compare_all(source: &str) {
     let input = formula(source);
@@ -233,66 +225,39 @@ fn optional_plan_limits_are_typed() {
     let input = formula("{p(1);p(2)}.#minimize{-1@0,X:p(X)}.");
     for (limits, resource) in [
         (
-            ObjectivePlanLimits {
-                max_atoms: 0,
-                ..ObjectivePlanLimits::default()
-            },
+            resource_limits::objective_plan(ObjectiveBoundResource::Atoms, 0),
             ObjectiveBoundResource::Atoms,
         ),
         (
-            ObjectivePlanLimits {
-                max_bindings: 0,
-                ..ObjectivePlanLimits::default()
-            },
+            resource_limits::objective_plan(ObjectiveBoundResource::Bindings, 0),
             ObjectiveBoundResource::Bindings,
         ),
         (
-            ObjectivePlanLimits {
-                max_keys: 0,
-                ..ObjectivePlanLimits::default()
-            },
+            resource_limits::objective_plan(ObjectiveBoundResource::Keys, 0),
             ObjectiveBoundResource::Keys,
         ),
         (
-            ObjectivePlanLimits {
-                max_key_bytes: 0,
-                ..ObjectivePlanLimits::default()
-            },
+            resource_limits::objective_plan(ObjectiveBoundResource::KeyBytes, 0),
             ObjectiveBoundResource::KeyBytes,
         ),
         (
-            ObjectivePlanLimits {
-                max_tuple_width: 0,
-                ..ObjectivePlanLimits::default()
-            },
+            resource_limits::objective_plan(ObjectiveBoundResource::TupleWidth, 0),
             ObjectiveBoundResource::TupleWidth,
         ),
         (
-            ObjectivePlanLimits {
-                max_nodes: 0,
-                ..ObjectivePlanLimits::default()
-            },
+            resource_limits::objective_plan(ObjectiveBoundResource::Nodes, 0),
             ObjectiveBoundResource::Nodes,
         ),
         (
-            ObjectivePlanLimits {
-                max_variables: 0,
-                ..ObjectivePlanLimits::default()
-            },
+            resource_limits::objective_plan(ObjectiveBoundResource::Variables, 0),
             ObjectiveBoundResource::Variables,
         ),
         (
-            ObjectivePlanLimits {
-                max_body_atoms: 0,
-                ..ObjectivePlanLimits::default()
-            },
+            resource_limits::objective_plan(ObjectiveBoundResource::BodyAtoms, 0),
             ObjectiveBoundResource::BodyAtoms,
         ),
         (
-            ObjectivePlanLimits {
-                max_work: 0,
-                ..ObjectivePlanLimits::default()
-            },
+            resource_limits::objective_plan(ObjectiveBoundResource::Work, 0),
             ObjectiveBoundResource::Work,
         ),
     ] {
@@ -313,13 +278,8 @@ fn optional_bound_failures_do_not_poison_the_plan_or_theory() {
     let input = formula("{p(1..4)}.#minimize{-1@0,X:p(X)}.");
     let plan = plan(&input);
     let incumbent = score(&input, 3);
-    let limits = ObjectiveBoundLimits {
-        aggregate: zetesis_ferraris::AggregateLimits {
-            max_states: 0,
-            ..zetesis_ferraris::AggregateLimits::default()
-        },
-        ..ObjectiveBoundLimits::default()
-    };
+    let limits =
+        objective_bound_resources::aggregate(zetesis_ferraris::AggregateErrorKind::StateLimit, 0);
     assert!(matches!(
         plan.bound(&incumbent, limits, &Cancellation::default())
             .expect_err("both exact representations exceed the state ceiling")
@@ -373,10 +333,7 @@ fn cumulative_accounting_respects_inclusive_work_limits_on_every_return() {
             input.theory(),
             input.atoms(),
             input.objectives(),
-            ObjectivePlanLimits {
-                max_work: ceiling,
-                ..ObjectivePlanLimits::default()
-            },
+            resource_limits::objective_plan(ObjectiveBoundResource::Work, ceiling),
             &Cancellation::default(),
         );
         if ceiling == plan_work {
@@ -405,10 +362,7 @@ fn cumulative_accounting_respects_inclusive_work_limits_on_every_return() {
     for ceiling in [0, 1, bound_work - 1, bound_work] {
         let result = complete_plan.bound(
             &incumbent,
-            ObjectiveBoundLimits {
-                max_work: ceiling,
-                ..ObjectiveBoundLimits::default()
-            },
+            objective_bound_resources::limits(ObjectiveBoundResource::Work, ceiling),
             &Cancellation::default(),
         );
         if ceiling == bound_work {

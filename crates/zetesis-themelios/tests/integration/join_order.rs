@@ -5,10 +5,11 @@
 
 use std::cell::Cell;
 use std::fmt::Write as _;
+use zetesis_reference_support::resource_limits;
 
 use zetesis_themelios::ProgramSite;
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaLimits, GroundingObserver, GroundingOutcome,
+    AdmissionOptions, ExpansionLimits, FormulaResource, GroundingObserver, GroundingOutcome,
     GroundingPhase, GroundingWork, admit_formula_with_grounding_observer,
 };
 
@@ -65,10 +66,7 @@ fn support_counts(source: &str) -> (u64, u64) {
         source.to_owned(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_work: 100_000_000,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::Work, 100_000_000),
         Some(&rows),
     )
     .unwrap();
@@ -82,10 +80,7 @@ fn instantiation_rows(source: &str) -> u64 {
         source.to_owned(),
         AdmissionOptions::default(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_work: 100_000_000,
-            ..FormulaLimits::default()
-        },
+        resource_limits::formula(FormulaResource::Work, 100_000_000),
         Some(&rows),
     )
     .unwrap();
@@ -99,13 +94,13 @@ fn support_rows(source: &str) -> u64 {
 #[test]
 fn a_waiting_comparison_is_decided_before_an_unrelated_relation_is_joined() {
     // Over d(1..40), X < Y holds for 780 of the 1,600 pairs. Joining d(Y)
-    // second decides it before d(Z) multiplies the rows: 40 + 1,600 + 780 × 40
+    // second selects them before d(Z) multiplies the rows: 40 + 780 + 780 × 40
     // rows in the round that derives p, and none in the round that finds no
     // new d row, whose pivot is joined first and offers nothing. Which letter
     // names the third variable is not a criterion.
     let named_z = support_rows("d(1..40). p(X,Y,Z) :- d(X), d(Y), X < Y, d(Z).");
     let named_w = support_rows("d(1..40). p(X,Y,W) :- d(X), d(Y), X < Y, d(W).");
-    assert_eq!(named_z, 40 + 1_600 + 780 * 40);
+    assert_eq!(named_z, 40 + 780 + 780 * 40);
     assert_eq!(named_w, named_z);
 }
 
@@ -127,29 +122,29 @@ fn a_literal_whose_variables_are_bound_is_a_test_and_precedes_generators() {
 
 #[test]
 fn a_comparison_is_evaluated_once_at_the_depth_that_binds_it() {
-    // X < Y is decided once d(Y) is joined: two expressions for each of the
-    // 1,600 pairs, and none again for the 31,200 rows d(Z) adds beneath the
-    // 780 surviving pairs, whose verdict the deeper prefix inherits.
+    // The index evaluates its 40 keys once and one bound per X. X < Y is
+    // then checked for each of the 780 selected pairs, and never again for
+    // the 31,200 rows d(Z) adds beneath them.
     let (_, evaluations) = support_counts("d(1..40). p(X,Y,Z) :- d(X), d(Y), X < Y, d(Z).");
-    assert_eq!(evaluations, 2 * 1_600);
+    assert_eq!(evaluations, 40 + 40 + 2 * 780);
 }
 
 #[test]
 fn rule_instantiation_reads_only_the_substitutions_the_comparisons_leave() {
     // A substitution X < Y excludes is not an instance, so instantiation
-    // prunes it as possible support does: 40 + 1,600 + 780 × 40 rows, not
+    // prunes it as possible support does: 40 + 780 + 780 × 40 rows, not
     // the full 65,640-row product validated before the exclusion rule.
     let rows = instantiation_rows("d(1..40). p(X,Y,Z) :- d(X), d(Y), X < Y, d(Z).");
-    assert_eq!(rows, 40 + 1_600 + 780 * 40);
+    assert_eq!(rows, 40 + 780 + 780 * 40);
 }
 
 #[test]
 fn a_comparison_a_prefix_decided_is_not_evaluated_again_for_the_complete_row() {
-    // q(1). r(2).  X < Y is decided once r binds Y: two evaluations, one per
-    // side. The tuple comparison waits for the complete row and costs four
-    // more, and nothing else is evaluated: the decided comparison is not
-    // read a second time.
+    // q(1). r(2). The numeric probe evaluates one key and one bound. X < Y
+    // is then decided once r binds Y: two evaluations, one per side. The
+    // tuple comparison waits for the complete row and costs four more;
+    // the decided comparison is not read a second time.
     let (_, evaluations) =
         support_counts("q(1). r(2). p(X,Y) :- q(X), r(Y), X < Y, (X,Y) != (1,2).");
-    assert_eq!(evaluations, 6);
+    assert_eq!(evaluations, 1 + 1 + 2 + 4);
 }

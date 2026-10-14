@@ -1,15 +1,14 @@
 //! Explicit base sections preserve the original single-shot program.
 
+use crate::support::admission;
 use crate::support::finite_bindings as reference;
 
-use std::collections::BTreeSet;
-
-use reference::{Models, exhaustive, external, native};
+use reference::native;
 use themelios_base::source::SourceId;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{formula, prepared, resource_limits};
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, AdmittedFormula, ExpansionLimits, FormulaLimits,
-    InputLimit, ProfileFeature, admit, admit_extended, admit_formula, prepare_formula,
+    InputLimit, ProfileFeature, admit, admit_extended,
 };
 
 const CASES: &[(&str, &str)] = &[
@@ -53,38 +52,16 @@ fn explicit_base_preserves_stable_models() {
 
 #[test]
 fn explicit_base_matches_exhaustive_reduct_checking() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]
 #[ignore = "requires clingo: explicit base matches clingo full models"]
 fn explicit_base_matches_clingo_full_models() {
-    for &(source, _) in CASES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    let model: BTreeSet<_> = witness["Value"]
-                        .as_array()
-                        .unwrap()
-                        .iter()
-                        .map(|atom| atom.as_str().unwrap().to_owned())
-                        .collect();
-                    assert!(expected.insert(model), "duplicate full model");
-                }
-            }
-        }
-        assert_eq!(
-            result["Models"]["Number"].as_u64(),
-            Some(expected.len() as u64)
-        );
-        assert_eq!(native(&formula(source)), expected, "{source}");
-    }
+    reference::original_sources_match_clingo_full_models(
+        CASES.iter().map(|&(source, _)| source),
+        formula,
+    );
 }
 
 #[test]
@@ -102,8 +79,8 @@ fn scalar_admission_preserves_explicit_base_rules() {
         )
         .unwrap();
         assert_eq!(
-            direct.program().templates().iter().collect::<Vec<_>>(),
-            extended.program().templates().iter().collect::<Vec<_>>()
+            zetesis_test_support::programs::rules(direct.program()).collect::<Vec<_>>(),
+            zetesis_test_support::programs::rules(extended.program()).collect::<Vec<_>>()
         );
         assert_eq!(direct.source().text(), source);
     }
@@ -112,13 +89,7 @@ fn scalar_admission_preserves_explicit_base_rules() {
 #[test]
 fn preparation_retains_original_base_sections() {
     let source = "#program base. p. #program base. q :- p.";
-    let prepared = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared(source);
     assert_eq!(prepared.source().expect("source input").text(), source);
     assert!(
         prepared
@@ -171,14 +142,7 @@ fn nonbase_parts_remain_located_refusals() {
             delimiter.to_owned(),
             format!("p. {delimiter} #program base. q."),
         ] {
-            let error = admit(
-                source.clone(),
-                AdmissionOptions {
-                    source_id: SourceId::new(61),
-                    ..AdmissionOptions::default()
-                },
-            )
-            .unwrap_err();
+            let error = admit(source.clone(), admission::options(SourceId::new(61))).unwrap_err();
             let AdmissionFailure::Profile { feature, location } = error else {
                 panic!("expected a program-part refusal: {error}");
             };
@@ -207,17 +171,17 @@ fn base_delimiters_consume_the_syntax_budget() {
         zetesis_themelios::syntax::dialect::Dialect::Clingo,
     );
     let nodes = parsed.syntax().descendants().count();
-    let options = AdmissionOptions {
-        max_syntax_nodes: nodes,
-        ..AdmissionOptions::default()
-    };
-    admit(source.into(), options).unwrap();
-    let options = AdmissionOptions {
-        max_syntax_nodes: nodes - 1,
-        ..options
-    };
+    let exact = u64::try_from(nodes).unwrap();
+    admit(
+        source.into(),
+        resource_limits::admission(InputLimit::SyntaxNodes, exact),
+    )
+    .unwrap();
     assert!(matches!(
-        admit(source.into(), options),
+        admit(
+            source.into(),
+            resource_limits::admission(InputLimit::SyntaxNodes, exact - 1)
+        ),
         Err(AdmissionFailure::Limit {
             resource: InputLimit::SyntaxNodes,
             limit,
@@ -235,13 +199,7 @@ fn base_sections_do_not_hide_invalid_rules() {
         "#program base. p(.",
     ] {
         assert!(
-            admit_formula(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default(),
-            )
-            .is_err(),
+            zetesis_reference_support::admit(source, &FormulaLimits::default()).is_err(),
             "{source}"
         );
     }

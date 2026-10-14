@@ -136,10 +136,11 @@ impl ConstraintChecker<'_> {
         let result = self
             .authenticate(Candidate::Region(theory, region))
             .and_then(|()| {
-                cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
-                let consequence = self
-                    .accounting
-                    .with_cancellation(cancellation, |counters| {
+                self.accounting.controlled::<_, ConstraintCheckCause>(
+                    Some(cancellation),
+                    crate::grounding_observer::Work::default(),
+                    ProgramSite::program(),
+                    |counters| {
                         if let Some(prepared) = &mut self.prepared {
                             prepared.prepare_selection(self.owner, counters)?;
                         }
@@ -148,9 +149,8 @@ impl ConstraintChecker<'_> {
                                 scan(self.prepared.as_mut(), budget, counters, region)
                             })
                             .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))
-                    })?;
-                cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
-                Ok(consequence)
+                    },
+                )
             });
         let statistics = self.statistics();
         match result {

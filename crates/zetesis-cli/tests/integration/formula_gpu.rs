@@ -45,7 +45,11 @@ fn cpu_output(source: &str, json: bool) -> Vec<u8> {
         &Cancellation::default(),
     )
     .unwrap();
-    assert_eq!(report.completion, Completion::Exhausted);
+    assert_eq!(
+        report.completion,
+        Completion::Exhausted,
+        "{source}: {report:?}"
+    );
     output
 }
 

@@ -2,7 +2,6 @@
 
 use crate::support::source_cases;
 
-use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
 use zetesis_themelios::FormulaLimits;
 
@@ -28,48 +27,13 @@ fn cyclic_producers_preserve_full_scored_answers() {
 
 #[test]
 fn cyclic_producers_keeps_the_original_reduct_subject() {
-    for case in source_cases::cases(CASES) {
-        let program = case
-            .source
-            .split("#minimize")
-            .next()
-            .unwrap()
-            .split("#maximize")
-            .next()
-            .unwrap()
-            .split(":~")
-            .next()
-            .unwrap();
-        let original = reference::admit(program, &FormulaLimits::default()).unwrap();
-        let observed = reference::admit(&case.source, &FormulaLimits::default()).unwrap();
-        assert_eq!(original.atoms(), observed.atoms(), "{}", case.name);
-        assert_eq!(
-            (original.theory().nodes(), original.theory().operands()),
-            (observed.theory().nodes(), observed.theory().operands()),
-            "{}",
-            case.name
-        );
-        assert_eq!(
-            original.theory().roots(),
-            observed.theory().roots(),
-            "{}",
-            case.name
-        );
-        assert_eq!(
-            original.formula_origins(),
-            observed.formula_origins(),
-            "{}",
-            case.name
-        );
-    }
+    source_cases::objectives_keep_the_original_reduct_subject(CASES);
 }
 
 #[test]
 #[ignore = "requires clingo: cyclic producers match fresh clingo; 15 original cyclic sources"]
 fn cyclic_producers_match_fresh_clingo() {
-    for case in source_cases::cases(CASES) {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    source_cases::clingo_matches_every_case(&source_cases::cases(CASES));
 }
 
 #[test]

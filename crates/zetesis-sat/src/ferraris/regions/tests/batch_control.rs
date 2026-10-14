@@ -76,7 +76,10 @@ fn cancelled_narrowing<Q: Quota>(quota: Q, cancellation: &Cancellation) -> (Inco
     };
     let mut counts = RegionCounts::default();
     let stop = narrow(
-        (&theory, &narrower, None),
+        (
+            zetesis_ferraris::OriginalSubject::new(&theory, None),
+            &narrower,
+        ),
         &Conditions::<(Theory, Narrower)>::default(),
         (
             &mut Region::all_open(theory.atom_count()),

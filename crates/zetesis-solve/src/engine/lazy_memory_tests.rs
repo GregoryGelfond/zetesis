@@ -53,6 +53,7 @@ fn repeated_gate() -> Program {
             vec![],
             vec![],
         )],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap()

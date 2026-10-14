@@ -403,6 +403,15 @@ fn generic_gpu_failure_does_not_claim_adapter_absence() {
     );
 }
 #[test]
+fn an_unavailable_gpu_executable_keeps_its_own_disposition() {
+    assert_eq!(
+        outcome::check(&failed("gpu_executable_unavailable"), Some(exit(2)))
+            .unwrap_err()
+            .0,
+        Decision::GpuExecutableUnavailable
+    );
+}
+#[test]
 fn explicit_backend_unavailability_keeps_its_own_disposition() {
     assert_eq!(
         outcome::check(&failed("backend_unavailable"), Some(exit(2)))

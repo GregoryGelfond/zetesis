@@ -1,6 +1,6 @@
 //! Unchanged original programs and their complete, unprojected model sets.
 
-pub const CASES: &[(&str, &[&[&str]])] = &[
+pub(super) const CASES: &[(&str, &[&[&str]])] = &[
     ("1=1.", &[&[]]),
     ("1==1.", &[&[]]),
     ("1=2.", &[]),

@@ -1,20 +1,20 @@
 //! Necessary source-choice costs preserve every original model at an admissible
 //! lexicographic cost, including ties and conditional group activation.
 
+use crate::support::count_plan_resources;
+use crate::support::objective_bound_resources;
+use crate::support::objective_plans::exact;
 use std::cmp::Ordering;
 
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Limits, Theory, models};
 use zetesis_objective::Score;
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{formula, prepared};
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
     ObjectivePlanLimits,
 };
-use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, CountPlanStatus, ExpansionLimits, FormulaLimits,
-    RequiredChoices, prepare_formula,
-};
+use zetesis_themelios::{AdmittedFormula, CountPlanResource, CountPlanStatus, RequiredChoices};
 
 const DERIVED: &str = include_str!("../fixtures/required-choice-objectives/derived.lp");
 const SHARED_KEY: &str = include_str!("../fixtures/required-choice-objectives/shared-key.lp");
@@ -26,17 +26,6 @@ const CONDITIONAL: &str =
     include_str!("../fixtures/required-choice-objectives/conditional-element.lp");
 const ZERO_LOWER: &str = include_str!("../fixtures/required-choice-objectives/zero-lower.lp");
 const EMPTY: &str = include_str!("../fixtures/required-choice-objectives/inconsistent-empty.lp");
-
-fn exact(input: &AdmittedFormula) -> ObjectivePlan {
-    ObjectivePlan::new(
-        input.theory(),
-        input.atoms(),
-        input.objectives(),
-        ObjectivePlanLimits::default(),
-        &Cancellation::default(),
-    )
-    .unwrap()
-}
 
 fn prepare(plan: &mut ObjectivePlan, choices: &RequiredChoices) {
     let statistics = plan
@@ -168,15 +157,7 @@ fn an_empty_head_never_creates_a_required_member() {
 #[test]
 fn eager_and_hybrid_capture_the_same_choice_premises() {
     let eager = formula(DERIVED);
-    let hybrid = prepare_formula(
-        DERIVED.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_hybrid()
-    .unwrap();
+    let hybrid = zetesis_reference_support::hybrid(DERIVED);
     let eager_choices = eager.required_choices().unwrap();
     let hybrid_choices = hybrid.core().required_choices().unwrap();
     assert_eq!(eager_choices.len(), hybrid_choices.len());
@@ -250,10 +231,10 @@ fn failed_strengthening_returns_the_exact_bound() {
         )
         .unwrap();
     prepare(&mut plan, input.required_choices().unwrap());
-    let limits = ObjectiveBoundLimits {
-        max_work: exact_bound.statistics().work,
-        ..ObjectiveBoundLimits::default()
-    };
+    let limits = objective_bound_resources::limits(
+        ObjectiveBoundResource::Work,
+        exact_bound.statistics().work,
+    );
     let fallback = plan
         .bound(&incumbent, limits, &Cancellation::default())
         .unwrap();
@@ -328,22 +309,13 @@ fn failed_repreparation_retains_certified_choice_costs() {
 
 #[test]
 fn source_capture_refusal_keeps_exact_admission() {
-    let input = prepare_formula(
-        DERIVED.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_with_count_plan(
-        zetesis_themelios::CountPlanLimits {
-            max_groups: 0,
-            ..zetesis_themelios::CountPlanLimits::default()
-        },
-        &Cancellation::default(),
-        None,
-    )
-    .unwrap();
+    let input = prepared(DERIVED)
+        .ground_with_count_plan(
+            count_plan_resources::limits(CountPlanResource::Groups, 0),
+            &Cancellation::default(),
+            None,
+        )
+        .unwrap();
     let choices = input.required_choices().unwrap();
     let capture = choices.capture_failure().expect("optional capture limit");
     assert!(capture.statistics().work > 0);
@@ -439,19 +411,13 @@ fn prepaid_cost_refutes_an_unaffordable_open_group() {
 fn conditional_members_never_supply_partition_caps() {
     const SOURCE: &str =
         include_str!("../fixtures/required-choice-objectives/conditional-partition.lp");
-    let input = prepare_formula(
-        SOURCE.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_with_count_plan(
-        zetesis_themelios::CountPlanLimits::default(),
-        &Cancellation::default(),
-        None,
-    )
-    .unwrap();
+    let input = prepared(SOURCE)
+        .ground_with_count_plan(
+            zetesis_themelios::CountPlanLimits::default(),
+            &Cancellation::default(),
+            None,
+        )
+        .unwrap();
     // a and b may both be true: only a's condition is true. Treating this
     // conditional upper bound as a bound on true heads would wrongly demand c
     // or d from the unconditional two-of-four group.
@@ -483,15 +449,7 @@ impl zetesis_themelios::GroundingObserver for GroundingPeak {
 #[test]
 fn optional_capture_preserves_mandatory_storage_peak() {
     const SOURCE: &str = include_str!("../fixtures/required-choice-objectives/storage-boundary.lp");
-    let prepare = || {
-        prepare_formula(
-            SOURCE.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .unwrap()
-    };
+    let prepare = || prepared(SOURCE);
     let ordinary_peak = GroundingPeak::default();
     let ordinary = prepare()
         .ground_with_observer(Some(&ordinary_peak))
@@ -550,10 +508,8 @@ fn bound_reuses_prepared_activation_closure() {
             .unwrap();
         assert!(bound.choice_failure().is_none());
         if let Some(&earlier) = bounds.first() {
-            let exact_allowance = ObjectiveBoundLimits {
-                max_work: earlier,
-                ..ObjectiveBoundLimits::default()
-            };
+            let exact_allowance =
+                objective_bound_resources::limits(ObjectiveBoundResource::Work, earlier);
             let repeated = plan
                 .bound(&incumbent, exact_allowance, &Cancellation::default())
                 .unwrap();

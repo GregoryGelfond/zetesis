@@ -14,7 +14,8 @@ pub struct PartialReport {
     /// Stable models from completed membership, including queued formula models
     /// and all accepted closure-batch results, even before their consumption.
     pub verified_models: u64,
-    /// Closure result/control records consumed, or formula candidates proposed.
+    /// Closure result/control records consumed, formula candidates proposed,
+    /// or completed source evaluations.
     /// A shared batch stop is one control record, not one completed candidate.
     /// A completed closure batch can verify more models than the driver consumes.
     pub checked: u64,
@@ -41,6 +42,9 @@ pub struct PartialReport {
     pub hybrid_execution: Option<zetesis_solve::HybridExecutionStatistics>,
     /// Base answers and completed original reconstruction, including a pending attempt.
     pub terminal_execution: Option<zetesis_solve::TerminalExecutionStatistics>,
+    /// Cumulative source admission and exact evaluation charges. This receipt
+    /// alone establishes neither membership nor complete coverage.
+    pub source_evaluation: Option<zetesis_themelios::SourceEvaluationStatistics>,
     /// Formula-model ordering and selection work retained before failure.
     pub model_construction: Option<zetesis_solve::ModelConstructionStatistics>,
     /// Actual lazy device work, including incomplete batch progress.
@@ -74,7 +78,7 @@ pub struct RunFailure {
 impl RunFailure {
     /// Discard additional evidence for the original convenience API.
     #[must_use]
-    pub fn into_cause(self) -> RunError {
+    pub(crate) fn into_cause(self) -> RunError {
         *self.cause
     }
 }
@@ -166,6 +170,7 @@ impl Progress {
             formula_execution: semantic.formula_execution().cloned(),
             hybrid_execution: semantic.hybrid_execution().copied(),
             terminal_execution: semantic.terminal_execution().copied(),
+            source_evaluation: semantic.source_evaluation().copied(),
             model_construction: semantic.model_construction().copied(),
             lazy_execution: semantic.lazy_execution().cloned(),
             shared_execution: semantic.shared_execution().cloned(),
@@ -238,6 +243,9 @@ impl Progress {
                 .copied(),
             terminal_execution: semantic
                 .and_then(crate::SemanticOutcome::terminal_execution)
+                .copied(),
+            source_evaluation: semantic
+                .and_then(crate::SemanticOutcome::source_evaluation)
                 .copied(),
             model_construction: semantic
                 .and_then(crate::SemanticOutcome::model_construction)

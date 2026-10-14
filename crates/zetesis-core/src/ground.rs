@@ -6,8 +6,8 @@ use std::fmt;
 use crate::atom_interner::{AtomInterner, Failure as InternFailure, Limits as InternLimits};
 use crate::carrier::advance;
 use crate::{
-    AtomCatalog, CarrierError, Model, ModelError, PatternRef, Patterns, Program, Seed, SeedError,
-    SeedView, TemplateRef, catalog::TermRef,
+    AtomCatalog, CarrierError, Model, ModelError, PatternRef, Patterns, Program, RuleRef, Seed,
+    SeedError, SeedView, TemplateRef, catalog::TermRef,
 };
 
 /// Dense atom index within one [`GroundProgram`]. It is never a symbolic identity.
@@ -24,7 +24,8 @@ pub struct StaticLimits {
     pub max_atoms: usize,
     /// Maximum filter-valid rules retained, including constraints.
     pub max_ground_rules: usize,
-    /// Maximum complete variable assignments inspected across every template.
+    /// Maximum complete assignments across ordered source rules. Each fact
+    /// occurrence contributes one empty assignment, including duplicates.
     pub max_substitutions: usize,
 }
 impl Default for StaticLimits {
@@ -121,10 +122,16 @@ impl GroundProgram {
             return Err(StaticError::DenseIdOverflow.into());
         }
         let mut substitution_count = 0usize;
-        for template in program.templates() {
+        for rule in program.rules() {
             before().map_err(StaticFailure::Stopped)?;
+            let assignments = match rule {
+                RuleRef::Template { template, .. } => {
+                    power(program.domain().len(), template.variable_count())?
+                }
+                RuleRef::Fact(_) => 1,
+            };
             substitution_count = substitution_count
-                .checked_add(power(program.domain().len(), template.variable_count())?)
+                .checked_add(assignments)
                 .ok_or(StaticError::CountOverflow)?;
             bound(
                 "substitutions",
@@ -170,8 +177,19 @@ impl GroundProgram {
                     .push(u32::try_from(index).map_err(|_| StaticError::DenseIdOverflow)?);
             }
         }
-        for template in program.templates() {
-            graph.compile_template(template, limits.max_ground_rules, &mut before)?;
+        for rule in program.rules() {
+            match rule {
+                RuleRef::Template { template, .. } => {
+                    graph.compile_template(template, limits.max_ground_rules, &mut before)?;
+                }
+                RuleRef::Fact(fact) => {
+                    graph.compile_template(
+                        fact.as_template(),
+                        limits.max_ground_rules,
+                        &mut before,
+                    )?;
+                }
+            }
         }
         Ok(graph)
     }
@@ -301,7 +319,8 @@ impl GroundProgram {
     pub fn atom_count(&self) -> usize {
         self.atoms.atoms().len()
     }
-    /// All filter-valid ground rules in template/substitution order.
+    /// All filter-valid ground rules in source-rule/substitution order.
+    /// Each fact occurrence remains one rule at its original source anchor.
     #[must_use]
     pub fn rules(&self) -> &[GroundRule] {
         &self.rules

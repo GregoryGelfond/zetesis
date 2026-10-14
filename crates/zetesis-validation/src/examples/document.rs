@@ -1,13 +1,14 @@
 //! Immutable checked corpus values and pinned document admission.
 
+use crate::corpus_files::Failure as _;
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
 use super::{
-    CASE_COUNT, Contract, Error, Family, Limits, MANIFEST_SHA256, ORIGINAL_MANIFEST_SHA256,
-    Resource, SOURCE_COUNT, Satisfiability, UPSTREAM_REVISION, ceiling, files,
+    CASE_COUNT, Contract, Error, Family, Files, Limits, MANIFEST_SHA256, ORIGINAL_MANIFEST_SHA256,
+    Resource, SOURCE_COUNT, Satisfiability, UPSTREAM_REVISION,
 };
 
 /// Coordinates of one removed whole-line comment in the original source.
@@ -309,25 +310,25 @@ impl Corpus {
 }
 
 pub(super) fn load(root: &Path, limits: Limits) -> Result<Corpus, Error> {
-    let root = files::canonical(root)?;
-    let bytes = files::read(
-        &files::confined(&root, "manifest.json")?,
+    let root = Files::canonical(root)?;
+    let bytes = Files::read(
+        &Files::confined(&root, "manifest.json")?,
         limits.manifest_bytes,
         Resource::ManifestBytes,
     )?;
-    files::digest("manifest.json", &bytes, MANIFEST_SHA256)?;
+    Files::digest("manifest.json", &bytes, MANIFEST_SHA256)?;
     let mut document: Document = serde_json::from_slice(&bytes).map_err(Error::Json)?;
     validate_header(&document, limits)?;
-    let license = files::read(
-        &files::confined(&root, "LICENSE")?,
+    let license = Files::read(
+        &Files::confined(&root, "LICENSE")?,
         limits.source_bytes,
         Resource::SourceBytes,
     )?;
-    files::digest("LICENSE", &license, &document.license_sha256)?;
+    Files::digest("LICENSE", &license, &document.license_sha256)?;
     let mut total = 0_u128;
     let mut paths = BTreeSet::new();
     for source in &mut document.files {
-        files::relative(&source.path)?;
+        Files::relative(&source.path)?;
         if !paths.insert(source.path.clone())
             || Path::new(&source.path).extension() != Some(std::ffi::OsStr::new("lp"))
             || source.path.contains("clingcon")
@@ -337,14 +338,14 @@ pub(super) fn load(root: &Path, limits: Limits) -> Result<Corpus, Error> {
                 source.path
             )));
         }
-        let bytes = files::read(
-            &files::confined(&root, &source.path)?,
+        let bytes = Files::read(
+            &Files::confined(&root, &source.path)?,
             limits.source_bytes,
             Resource::SourceBytes,
         )?;
-        files::digest(&source.path, &bytes, &source.sha256)?;
+        Files::digest(&source.path, &bytes, &source.sha256)?;
         total += bytes.len() as u128;
-        ceiling(Resource::TotalSourceBytes, total, limits.total_source_bytes)?;
+        Error::ceiling(Resource::TotalSourceBytes, total, limits.total_source_bytes)?;
         source.text = String::from_utf8(bytes).map_err(Error::Utf8)?;
         if source
             .text
@@ -370,8 +371,8 @@ pub(super) fn load(root: &Path, limits: Limits) -> Result<Corpus, Error> {
 }
 
 fn validate_header(document: &Document, limits: Limits) -> Result<(), Error> {
-    ceiling(Resource::Files, document.files.len() as u128, limits.files)?;
-    ceiling(Resource::Cases, document.cases.len() as u128, limits.cases)?;
+    Error::ceiling(Resource::Files, document.files.len() as u128, limits.files)?;
+    Error::ceiling(Resource::Cases, document.cases.len() as u128, limits.cases)?;
     if document.schema_version != 2
         || document.upstream != "https://github.com/GregoryGelfond/kr-domains"
         || document.revision != UPSTREAM_REVISION
@@ -423,8 +424,8 @@ fn validate_cases(document: &Document, root: &Path, limits: Limits) -> Result<()
                     let parent = Path::new(&dependency.path)
                         .parent()
                         .ok_or_else(|| Error::Path(dependency.path.clone()))?;
-                    let resolved = files::canonical(&root.join(parent).join(&include.spelling))?;
-                    if resolved != files::confined(root, include.path())? {
+                    let resolved = Files::canonical(&root.join(parent).join(&include.spelling))?;
+                    if resolved != Files::confined(root, include.path())? {
                         return Err(Error::Contract(format!(
                             "include spelling differs in {}",
                             dependency.path
@@ -453,7 +454,7 @@ fn validate_cases(document: &Document, root: &Path, limits: Limits) -> Result<()
             .map(|witness| witness.len() as u128)
             .sum::<u128>()
             + case.contract.required_symbols.len() as u128;
-        ceiling(Resource::ContractSymbols, symbols, limits.contract_symbols)?;
+        Error::ceiling(Resource::ContractSymbols, symbols, limits.contract_symbols)?;
     }
     Ok(())
 }

@@ -12,9 +12,8 @@ use zetesis_cli::{
     publish_prepared, run_with_diagnostics, run_with_renderer,
 };
 use zetesis_cpu::Cancellation;
-use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaLimits, GroundingPhase, admit_formula,
-};
+use zetesis_reference_support::formula;
+use zetesis_themelios::GroundingPhase;
 
 struct Rendered {
     report: Report,
@@ -60,6 +59,27 @@ fn eager_summary_reports_separate_stage_times() {
     assert!(timing.ends_with(" ms\n"));
     assert!(!timing.contains("unavailable"));
     assert!(rendered.diagnostics.is_empty());
+}
+
+#[test]
+fn automatic_summary_identifies_direct_source_evaluation() {
+    let rendered = solve("d(1). p(X) :- d(X), X+1=2.", &serial(&[]));
+    assert_eq!(rendered.report.completion, Completion::Exhausted);
+    assert_eq!(rendered.report.models, 1);
+    assert!(
+        rendered
+            .answers
+            .contains("CPU · 1 thread · direct source evaluation")
+    );
+    assert!(
+        rendered
+            .answers
+            .contains("Answer: 1\nd(1) p(1)\nSATISFIABLE\nModels: 1")
+    );
+    assert!(rendered.diagnostics.is_empty());
+    let timings = rendered.report.phase_timings.unwrap();
+    assert!(timings.stages.get(SolveStage::Grounding).is_some());
+    assert!(timings.stages.get(SolveStage::Solving).is_some());
 }
 
 #[test]
@@ -191,13 +211,7 @@ fn source_json_renderer_does_not_request_timings() {
 
 #[test]
 fn prepared_json_renderer_does_not_request_timings() {
-    let admitted = admit_formula(
-        "p.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("p.");
     let config = PublicationConfig {
         solve: crate::support::options::serial_config(),
         ..Default::default()

@@ -12,6 +12,7 @@ use crate::{Config, Grounder};
 
 #[derive(Default)]
 struct Route {
+    source: bool,
     lazy: bool,
     hybrid_constraints: usize,
     terminal_definitions: usize,
@@ -23,6 +24,7 @@ impl ExecutionObserver for Route {
 
     fn observe(&mut self, event: ExecutionObservation<'_>) -> Result<(), Self::Error> {
         match event {
+            ExecutionObservation::SourceEvaluation => self.source = true,
             ExecutionObservation::CpuClosure {
                 grounder: zetesis_solve::Grounder::Lazy,
                 ..
@@ -105,8 +107,9 @@ fn eager_configuration_materializes_the_full_theory() {
 }
 
 #[test]
-fn automatic_configuration_reconstructs_terminal_definitions() {
+fn automatic_configuration_evaluates_an_acyclic_source() {
     let (profile, route) = execute(program! { p(1..2). q(X) :- p(X). }, Grounder::Auto);
-    assert_eq!(profile, PreparedProfile::TerminalDefinitions);
-    assert!(route.terminal_definitions > 0);
+    assert_eq!(profile, PreparedProfile::AcyclicSource);
+    assert!(route.source);
+    assert_eq!(route.terminal_definitions, 0);
 }

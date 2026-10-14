@@ -96,6 +96,23 @@ impl Fixture {
         })
     }
 
+    /// The comparison `left relation right` over this fixture's catalog,
+    /// compiled with its integer comparison form ([`comparison`]).
+    pub(crate) fn comparison(
+        &mut self,
+        left: Vec<crate::formula_ir::Operation>,
+        relation: themelios_program::program::Relation,
+        right: Vec<crate::formula_ir::Operation>,
+        location: ProgramSite,
+    ) -> crate::formula_ir::Comparison {
+        comparison(
+            &mut self.owner,
+            (left, relation, right),
+            &mut self.counters,
+            location,
+        )
+    }
+
     /// Admit a test pattern through the same authority as its eventual rows.
     pub(crate) fn pattern(
         &mut self,
@@ -108,7 +125,11 @@ impl Fixture {
     pub(crate) fn with<T>(
         &mut self,
         location: ProgramSite,
-        run: impl FnOnce(&Support<'_>, &mut Computation<'_, '_>, &mut Counters) -> T,
+        run: impl for<'source> FnOnce(
+            &Support<'source>,
+            &mut Computation<'_, 'source>,
+            &mut Counters,
+        ) -> T,
     ) -> T {
         let limits = FormulaLimits::default();
         let (relations, mut append) = self
@@ -119,6 +140,44 @@ impl Fixture {
         let mut computation = Computation::new(&mut append, &support);
         run(&support, &mut computation, &mut self.counters)
     }
+}
+
+/// The comparison `left relation right` over `catalog`, built as the compiler
+/// builds one: its component admission is opened, the compiler's one
+/// constructor compiles the literal with its integer comparison form, reading
+/// each constant from the catalog the general evaluator then reads, and the
+/// admission is finished. The literal has whatever form its operands' shape
+/// admits.
+pub(crate) fn comparison(
+    catalog: &mut SupportCatalog,
+    (left, relation, right): (
+        Vec<crate::formula_ir::Operation>,
+        themelios_program::program::Relation,
+        Vec<crate::formula_ir::Operation>,
+    ),
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> crate::formula_ir::Comparison {
+    let limits = FormulaLimits::default();
+    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
+    let source = catalog
+        .component_admission(&limits, counters, location)
+        .unwrap();
+    let comparison = crate::formula_ir::testing::comparison(
+        (
+            crate::formula_ir::Expression::new(left),
+            relation,
+            crate::formula_ir::Expression::new(right),
+        ),
+        &source,
+        &limits,
+        counters,
+        &mut budget,
+        location,
+    )
+    .unwrap();
+    source.finish(&limits, counters, location).unwrap();
+    comparison
 }
 
 pub(crate) fn admit_pattern(
@@ -197,10 +256,10 @@ pub(crate) fn prepare(text: &str) -> crate::formula::Preparation {
 /// Complete source support and lend its canonical query and computation owners.
 pub(crate) fn with_completed_source(
     text: &str,
-    run: impl FnOnce(
-        &crate::formula_ir::Prepared,
-        &Support<'_>,
-        &mut Computation<'_, '_>,
+    run: impl for<'source> FnOnce(
+        &'source crate::formula_ir::Prepared,
+        &Support<'source>,
+        &mut Computation<'_, 'source>,
         &mut Counters,
     ),
 ) {
@@ -251,7 +310,10 @@ fn prepare_into(
         catalog,
         work: super::GroundingWork::new(&FormulaLimits::default(), counters, location),
     }
-    .prepare(&raised, metadata.project_selection().clone())
+    .prepare(
+        &std::sync::Arc::new(raised),
+        metadata.project_selection().clone(),
+    )
     .unwrap();
     (prepared, location)
 }
@@ -265,4 +327,10 @@ pub(crate) fn budget() -> Budget {
 /// `values` as number values.
 pub(crate) fn numbers(values: &[i32]) -> Vec<Value> {
     values.iter().map(|&value| Value::Number(value)).collect()
+}
+
+/// Inspect the current source authority plus workspace in storage-owner tests.
+/// Tests taking differences must leave canonical storage unchanged between reads.
+pub(crate) fn live_bytes(support: &Support<'_>) -> usize {
+    support.live_bytes()
 }

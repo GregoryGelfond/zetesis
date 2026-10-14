@@ -9,7 +9,7 @@ use crate::ProgramSite;
 use crate::formula_support::Context;
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Span};
-use themelios_program::program::{DefaultNegation, Relation as Comparison};
+use themelios_program::program::{DefaultNegation, Relation};
 use themelios_program::term::BinaryOp;
 use zetesis_core::relation::Limits;
 use zetesis_core::{
@@ -105,9 +105,7 @@ fn tuple(catalog: &mut SupportCatalog, arity: usize) -> super::components::Const
 }
 
 fn number(catalog: &mut SupportCatalog, value: i32) -> Expression {
-    Expression {
-        nodes: vec![constant(catalog, value)],
-    }
+    Expression::new(vec![constant(catalog, value)])
 }
 
 fn evaluate(
@@ -320,21 +318,21 @@ fn column_filters_retain_checked_binding_generation() {
         )),
         LiteralIr::Bind {
             target: 1,
-            value: Expression {
-                nodes: vec![
-                    Operation::Variable(0),
-                    constant(&mut support, 2),
-                    Operation::Binary(BinaryOp::Mul, 0, 1),
-                ],
-            },
+            value: Expression::new(vec![
+                Operation::Variable(0),
+                constant(&mut support, 2),
+                Operation::Binary(BinaryOp::Mul, 0, 1),
+            ]),
         },
-        LiteralIr::Compare(
-            Expression {
-                nodes: vec![Operation::Variable(1)],
-            },
-            Comparison::Gt,
-            number(&mut support, 10),
-        ),
+        LiteralIr::Compare({
+            let ten = number(&mut support, 10).nodes;
+            crate::formula_support::testing::comparison(
+                &mut support,
+                (vec![Operation::Variable(1)], Relation::Gt, ten),
+                &mut Counters::default(),
+                location(),
+            )
+        }),
     ];
     agree(&mut support, &literals, &[], 2, &[numbers(&[6, 12])]);
 }
@@ -349,18 +347,16 @@ fn column_filters_preserve_arithmetic_failures() {
         )),
         LiteralIr::TupleCompare(
             vec![number(&mut support, 0)],
-            Comparison::Eq,
+            Relation::Eq,
             vec![number(&mut support, 1)],
         ),
         LiteralIr::TupleCompare(
-            vec![Expression {
-                nodes: vec![
-                    constant(&mut support, 1),
-                    constant(&mut support, 0),
-                    Operation::Binary(BinaryOp::Div, 0, 1),
-                ],
-            }],
-            Comparison::Eq,
+            vec![Expression::new(vec![
+                constant(&mut support, 1),
+                constant(&mut support, 0),
+                Operation::Binary(BinaryOp::Div, 0, 1),
+            ])],
+            Relation::Eq,
             vec![number(&mut support, 0)],
         ),
     ];

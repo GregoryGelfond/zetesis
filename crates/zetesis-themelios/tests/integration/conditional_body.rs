@@ -1,39 +1,32 @@
 //! Scoped universal body conditionals retain their original implication reducts.
 //! Exact external records complement a separate finite definition evaluator.
 
+use crate::support::admission;
 use std::collections::BTreeSet;
-use std::fs::{self};
+use zetesis_reference_support::{BundleFixture, canonical, resource_limits};
 
-use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected, json_model};
+use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected};
 use crate::support::finite_bindings::{Models, exhaustive, native, values};
 use crate::support::formula_trees::{Formula, world};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
+use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::NodeView as Node;
-use zetesis_reference_support::canonical;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    ProfileFeature, SourceBundle, admit_bundle_formula, admit_formula,
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
+    admit_bundle_formula, admit_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(97);
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
+    admission::admit(SOURCE, source)
 }
 
 fn cases() -> Vec<Json> {
@@ -207,10 +200,7 @@ fn partial_local_iteration_never_certifies_vacuity_and_exact_caps_are_inclusive(
             source.into(),
             options(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                max_substitutions: cap,
-                ..Default::default()
-            },
+            resource_limits::formula(FormulaResource::Substitutions, cap),
         );
         match result {
             Ok(program) => {
@@ -242,10 +232,7 @@ fn partial_local_iteration_never_certifies_vacuity_and_exact_caps_are_inclusive(
             source.into(),
             options(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                max_substitutions: cap - 1,
-                ..Default::default()
-            }
+            resource_limits::formula(FormulaResource::Substitutions, cap - 1)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::Substitutions,
@@ -255,16 +242,13 @@ fn partial_local_iteration_never_certifies_vacuity_and_exact_caps_are_inclusive(
     for (source, limit) in [("d(1).p(1).q:-p(X):d(X),X=1.", 1), ("q:-p(X,Y):d(X,Y).", 1)] {
         let options = if source.contains("X,Y") {
             AdmissionOptions {
-                core_limits: zetesis_core::AdmissionLimits {
-                    max_variables_per_template: limit,
-                    ..Default::default()
-                },
-                ..options()
+                source_id: SOURCE,
+                ..resource_limits::admission_formula(FormulaResource::Variables, limit)
             }
         } else {
             AdmissionOptions {
-                max_body_elements: limit,
-                ..options()
+                source_id: SOURCE,
+                ..resource_limits::admission(zetesis_themelios::InputLimit::BodyElements, limit)
             }
         };
         let error = admit_formula(
@@ -288,14 +272,12 @@ fn partial_local_iteration_never_certifies_vacuity_and_exact_caps_are_inclusive(
 
 #[test]
 fn included_conditionals_preserve_original_locations_and_output_selection() {
-    let directory = tempfile::tempdir().unwrap();
-    let root = directory.path().join("root.lp");
-    let rules = directory.path().join("rules.lp");
+    let fixture = BundleFixture::new();
     let source = "#include \"rules.lp\". d(1..2).p(1..2).#show q/0.";
     let conditional = "q:-p(X):d(X).";
-    fs::write(&root, source).unwrap();
-    fs::write(&rules, conditional).unwrap();
-    let bundle = SourceBundle::load(&root, BundleLimits::default()).unwrap();
+    fixture.write("entry.lp", source);
+    fixture.write("rules.lp", conditional);
+    let bundle = fixture.bundle();
     let program = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),
@@ -364,25 +346,11 @@ fn conditional_body_matches_clingo() {
             continue;
         }
         valid += 1;
-        assert_eq!(actual["Models"]["More"], "no");
-        let witnesses: Vec<_> = actual["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .collect();
-        let models: Models = witnesses
-            .iter()
-            .map(|witness| json_model(&witness["Value"]))
-            .collect();
-        assert_eq!(models.len(), witnesses.len());
-        assert_eq!(
-            actual["Models"]["Number"].as_u64(),
-            Some(witnesses.len() as u64)
-        );
+        let records = oracle::model_records(&actual);
+        let models: Models = records.iter().map(|(atoms, _)| atoms.clone()).collect();
         assert_eq!(models, expected(&row), "{}", row["name"]);
         if row["native"] == "admit" {
-            assert!(witnesses.iter().all(|witness| witness["Costs"].is_null()));
+            assert!(records.iter().all(|(_, costs)| costs.is_none()));
             assert_eq!(
                 native(&input(row["source"].as_str().unwrap()).unwrap()),
                 models,

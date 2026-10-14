@@ -385,6 +385,7 @@ impl Work<'_> {
             NodeView::And([_]) | NodeView::Or([_]) => (0, 0),
             NodeView::And(row) | NodeView::Or(row) => (1, row.len()),
             NodeView::Threshold(row) => (1, row.conditions.len()),
+            NodeView::ExtremumCut(cut) => (1, cut.row.conditions.len()),
             NodeView::Implies(_, _) => (1, 2),
             NodeView::Atom(_) | NodeView::False => (1, 0),
         };
@@ -417,13 +418,24 @@ impl Work<'_> {
                 .checked_mul(2)
                 .and_then(|cells| cells.checked_add(2))
                 .ok_or_else(|| self.error(ObjectiveBoundErrorKind::Overflow))?,
+            NodeView::ExtremumCut(cut) => cut
+                .row
+                .conditions
+                .len()
+                .checked_mul(2)
+                .and_then(|cells| cells.checked_add(2))
+                .ok_or_else(|| self.error(ObjectiveBoundErrorKind::Overflow))?,
             _ => 0,
         };
-        if matches!(node, NodeView::Threshold(_)) {
+        if matches!(node, NodeView::Threshold(_) | NodeView::ExtremumCut(_)) {
             self.charge(
                 u64::try_from(nodes.parts().pending_numeric_validation_work())
                     .map_err(|_| self.error(ObjectiveBoundErrorKind::Overflow))?,
             )?;
+        }
+        // Ordinal publication also validates its independently supplied cut rule.
+        if matches!(node, NodeView::ExtremumCut(_)) {
+            self.tick()?;
         }
         for _ in 0..edges {
             self.tick()?;

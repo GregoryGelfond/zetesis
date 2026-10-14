@@ -1,5 +1,6 @@
 //! Located API failures retain source evidence, and observations preserve typed values.
 
+use crate::support::admission;
 use std::error::Error as _;
 use std::fs;
 use std::io;
@@ -8,6 +9,7 @@ use std::path::{Path, PathBuf};
 use themelios_base::source::{FromBytesRefusal, SourceId};
 use zetesis_core::{Atom, AtomPattern, ConstructionError, Model, Predicate, Value};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::resource_limits;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, BundleAdmissionError, BundleAdmissionOptions, BundleError,
     BundleLimits, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, InputLimit,
@@ -18,10 +20,7 @@ use zetesis_themelios::{
 const SOURCE: SourceId = SourceId::new(73);
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn formula(
@@ -50,40 +49,16 @@ fn located(error: &AdmissionFailure, source: &str) {
 #[test]
 fn input_quota_diagnostics_preserve_observed_count_source_and_typed_boundary() {
     let source = "p(a) :- q(a), q(a).";
-    for (options, expected, phrase) in [
-        (
-            AdmissionOptions {
-                max_source_bytes: source.len() - 1,
-                ..options()
-            },
-            InputLimit::SourceBytes,
-            "source bytes",
-        ),
-        (
-            AdmissionOptions {
-                max_syntax_nodes: 0,
-                ..options()
-            },
-            InputLimit::SyntaxNodes,
-            "syntax nodes",
-        ),
-        (
-            AdmissionOptions {
-                max_syntax_depth: 1,
-                ..options()
-            },
-            InputLimit::SyntaxDepth,
-            "syntax depth",
-        ),
-        (
-            AdmissionOptions {
-                max_body_elements: 1,
-                ..options()
-            },
-            InputLimit::BodyElements,
-            "body elements",
-        ),
+    for (expected, bound, phrase) in [
+        (InputLimit::SourceBytes, source.len() - 1, "source bytes"),
+        (InputLimit::SyntaxNodes, 0, "syntax nodes"),
+        (InputLimit::SyntaxDepth, 1, "syntax depth"),
+        (InputLimit::BodyElements, 1, "body elements"),
     ] {
+        let options = AdmissionOptions {
+            source_id: SOURCE,
+            ..resource_limits::admission(expected, u64::try_from(bound).unwrap())
+        };
         let error = admit(source.to_owned(), options).unwrap_err();
         located(&error, source);
         let AdmissionFailure::Limit {
@@ -107,8 +82,8 @@ fn input_quota_diagnostics_preserve_observed_count_source_and_typed_boundary() {
     let error = admit_formula(
         source.to_owned(),
         AdmissionOptions {
-            max_source_bytes: 0,
-            ..options()
+            source_id: SOURCE,
+            ..resource_limits::admission(InputLimit::SourceBytes, 0)
         },
         ExpansionLimits::default(),
         FormulaLimits::default(),
@@ -195,7 +170,7 @@ fn extremum_diagnostics_explain_the_retained_guard() {
         located(admission, &source);
         assert_eq!(
             admission.to_string(),
-            format!("numeric extremum endpoint {value} is excluded by the zetesis endpoint guard")
+            format!("numeric extremum endpoint {value} is excluded by the numeric endpoint guard")
         );
     }
 }
@@ -214,8 +189,10 @@ fn core_shape_and_program_limits_remain_actionable_through_source_admission() {
         }
     );
     assert!(arity.to_string().contains('2') && arity.to_string().contains('0'));
-    let mut limits = options();
-    limits.core_limits.max_templates = 1;
+    let limits = AdmissionOptions {
+        source_id: SOURCE,
+        ..resource_limits::admission_core(zetesis_core::AdmissionResource::Templates, 1)
+    };
     let source = "p. q.";
     let error = admit(source.to_owned(), limits).unwrap_err();
     let cause = error
@@ -230,7 +207,7 @@ fn core_shape_and_program_limits_remain_actionable_through_source_admission() {
         admit(source.to_owned(), options())
             .unwrap()
             .program()
-            .templates()
+            .facts()
             .len(),
         2
     );
@@ -282,8 +259,8 @@ fn constant_refusals_retain_duplicate_or_policy_locations_and_evaluation_causes(
 
 #[test]
 fn formula_resource_failures_keep_the_actual_nested_admission_cause() {
-    let mut objective = FormulaLimits::default();
-    objective.objective.max_filters = 0;
+    let objective =
+        resource_limits::formula_objective(zetesis_objective::AdmissionResource::Filters, 0);
     let error = formula("p(1). #minimize{X:p(X),X!=0}.", &objective).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::Objective { .. }),
@@ -303,8 +280,8 @@ fn formula_resource_failures_keep_the_actual_nested_admission_cause() {
     let source = "{q(1..3)}. p :- #count{X:q(X)}>=2.";
     let admitted = formula(source, &FormulaLimits::default()).unwrap();
     assert!(!admitted.theory().parts().thresholds().is_empty());
-    let mut aggregate = FormulaLimits::default();
-    aggregate.aggregate.max_states = 0;
+    let aggregate =
+        resource_limits::formula_aggregate(zetesis_ferraris::AggregateErrorKind::StateLimit, 0);
     let error = formula(source, &aggregate).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::Aggregate { .. }),
@@ -321,8 +298,8 @@ fn formula_resource_failures_keep_the_actual_nested_admission_cause() {
     );
     assert!(error.to_string().contains("state limit"));
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
-    let mut observation = FormulaLimits::default();
-    observation.observation.max_nodes = 0;
+    let observation =
+        resource_limits::formula_observation(zetesis_themelios::observation::Resource::Nodes, 0);
     let error = formula("p. #show f(1).", &observation).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::Observation { .. }),
@@ -339,6 +316,8 @@ fn formula_resource_failures_keep_the_actual_nested_admission_cause() {
     assert_eq!(error.diagnostics()[0].primary().location.source, SOURCE);
 }
 
+// The refusals compare canonical paths and decode raw bytes, which the shared
+// bundle fixture's temporary directory and text sources do not provide.
 struct Fixture(tempfile::TempDir);
 impl Fixture {
     /// A directory under the canonical temporary directory, so its paths are
@@ -478,7 +457,8 @@ fn bundled_admission_keeps_the_catalog_after_failure_and_moves_program_identity_
     let identity = admitted.program().clone();
     let program = admitted.into_program();
     assert!(program.same_instance(&identity));
-    assert_eq!(program.templates().len(), 2);
+    assert_eq!(program.facts().len(), 2);
+    assert!(program.templates().is_empty());
     fixture.close();
 }
 
@@ -576,10 +556,7 @@ fn observation_bindings_preserve_symbol_string_and_infinite_value_identity() {
             .render(
                 &model,
                 input.metadata().output(),
-                observation::Limits {
-                    max_symbol_nodes: 2,
-                    ..Default::default()
-                },
+                resource_limits::observation_evaluation(observation::Resource::Nodes, 2),
                 &Cancellation::default(),
             )
             .unwrap();
@@ -588,10 +565,7 @@ fn observation_bindings_preserve_symbol_string_and_infinite_value_identity() {
             .render(
                 &model,
                 input.metadata().output(),
-                observation::Limits {
-                    max_symbol_nodes: 1,
-                    ..Default::default()
-                },
+                resource_limits::observation_evaluation(observation::Resource::Nodes, 1),
                 &Cancellation::default(),
             )
             .unwrap_err();

@@ -3,7 +3,8 @@ use crate::support::finite_bindings as reference;
 use crate::support::witnesses::limited;
 use reference::{Models, exhaustive, holds, native, values};
 use std::collections::BTreeSet;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::{BundleFixture, canonical, formula, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 use zetesis_themelios::{
     ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure, FormulaLimits,
     FormulaResource,
@@ -285,10 +286,7 @@ fn templates_charge_duplicate_occurrences_before_deduplication() {
     let source = "p(1;1;2);q.";
     let error = limited(
         source,
-        ExpansionLimits {
-            max_templates: 2,
-            ..ExpansionLimits::default()
-        },
+        resource_limits::expansion(ExpansionResource::Templates, 2),
         &FormulaLimits::default(),
     )
     .unwrap_err();
@@ -304,32 +302,11 @@ fn templates_charge_duplicate_occurrences_before_deduplication() {
     assert!(
         limited(
             source,
-            ExpansionLimits {
-                max_templates: 3,
-                ..ExpansionLimits::default()
-            },
+            resource_limits::expansion(ExpansionResource::Templates, 3),
             &FormulaLimits::default()
         )
         .is_ok()
     );
-}
-
-fn first_success(mut accepts: impl FnMut(usize) -> bool) -> usize {
-    let mut high = 1;
-    while !accepts(high) {
-        high *= 2;
-        assert!(high <= 1 << 24);
-    }
-    let mut low = 0;
-    while low + 1 < high {
-        let middle = usize::midpoint(low, high);
-        if accepts(middle) {
-            high = middle;
-        } else {
-            low = middle;
-        }
-    }
-    high
 }
 
 #[test]
@@ -341,28 +318,34 @@ fn independent_limits_are_inclusive_and_failure_retains_source_location() {
         ExpansionResource::ScalarBytes,
         ExpansionResource::Origins,
     ] {
-        let configured = |limit| {
-            let mut bounds = ExpansionLimits::default();
-            match resource {
-                ExpansionResource::TermWork => bounds.max_term_work = limit,
-                ExpansionResource::Values => bounds.max_values = limit,
-                ExpansionResource::ScalarBytes => bounds.max_scalar_bytes = limit,
-                ExpansionResource::Origins => bounds.max_origin_locations = limit,
-                _ => unreachable!(),
-            }
-            bounds
-        };
-        let exact = first_success(|limit| {
-            limited(source, configured(limit), &FormulaLimits::default()).is_ok()
+        let exact = first_success(resource_limits::expansion_default(resource), |limit| {
+            limited(
+                source,
+                resource_limits::expansion(resource, limit),
+                &FormulaLimits::default(),
+            )
+            .is_ok()
         });
-        let error = limited(source, configured(exact - 1), &FormulaLimits::default()).unwrap_err();
+        let error = limited(
+            source,
+            resource_limits::expansion(resource, exact - 1),
+            &FormulaLimits::default(),
+        )
+        .unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, location, .. })
             if actual == resource && !location.location().expect("parsed source").span.is_empty()),
             "{error}"
         );
         assert_eq!(
-            native(&limited(source, configured(exact), &FormulaLimits::default()).unwrap()),
+            native(
+                &limited(
+                    source,
+                    resource_limits::expansion(resource, exact),
+                    &FormulaLimits::default()
+                )
+                .unwrap()
+            ),
             native(&formula(source))
         );
     }
@@ -371,21 +354,20 @@ fn independent_limits_are_inclusive_and_failure_retains_source_location() {
         FormulaResource::Substitutions,
         FormulaResource::Work,
     ] {
-        let configured = |limit: usize| {
-            let mut bounds = FormulaLimits::default();
-            match resource {
-                FormulaResource::AnalysisNodes => bounds.max_analysis_nodes = limit,
-                FormulaResource::Substitutions => bounds.max_substitutions = limit as u64,
-                FormulaResource::Work => bounds.max_work = limit as u64,
-                _ => unreachable!(),
-            }
-            bounds
-        };
-        let exact = first_success(|limit| {
-            limited(source, ExpansionLimits::default(), &configured(limit)).is_ok()
+        let exact = first_success(resource_limits::formula_default(resource), |limit| {
+            limited(
+                source,
+                ExpansionLimits::default(),
+                &resource_limits::formula(resource, limit),
+            )
+            .is_ok()
         });
-        let error =
-            limited(source, ExpansionLimits::default(), &configured(exact - 1)).unwrap_err();
+        let error = limited(
+            source,
+            ExpansionLimits::default(),
+            &resource_limits::formula(resource, exact - 1),
+        )
+        .unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Limit { resource: actual, .. } if actual == resource),
             "{error}"
@@ -436,9 +418,11 @@ fn conditional_value_alternatives_cannot_bind_source_names() {
 
 #[test]
 fn local_value_owners_respect_each_expansion_ceiling() {
-    for source in [
-        "{d(1);d(2)}.q:-f(X)=f(1..2):d(X).",
-        "{p(f(1));p(f(2))}.q:-2{p(f(1..2))}2.",
+    // The conditional owns separate condition and generated-value frames; the
+    // aggregate has one local frame and retains an exact cross-run ceiling.
+    for (source, distinct_local_frames) in [
+        ("{d(1);d(2)}.q:-f(X)=f(1..2):d(X).", true),
+        ("{p(f(1));p(f(2))}.q:-2{p(f(1..2))}2.", false),
     ] {
         let expected = native(&formula(source));
         for resource in [
@@ -446,27 +430,44 @@ fn local_value_owners_respect_each_expansion_ceiling() {
             ExpansionResource::Values,
             ExpansionResource::ScalarBytes,
         ] {
-            let configured = |limit| {
-                let mut bounds = ExpansionLimits::default();
-                match resource {
-                    ExpansionResource::TermWork => bounds.max_term_work = limit,
-                    ExpansionResource::Values => bounds.max_values = limit,
-                    ExpansionResource::ScalarBytes => bounds.max_scalar_bytes = limit,
-                    _ => unreachable!(),
-                }
-                bounds
-            };
-            let exact = first_success(|limit| {
-                limited(source, configured(limit), &FormulaLimits::default()).is_ok()
+            if resource == ExpansionResource::TermWork && distinct_local_frames {
+                crate::support::thresholds::bounded_term_work(
+                    |limit| {
+                        limited(
+                            source,
+                            resource_limits::expansion(resource, limit),
+                            &FormulaLimits::default(),
+                        )
+                    },
+                    |actual| assert_eq!(native(actual), expected, "{source}"),
+                );
+                continue;
+            }
+            let exact = first_success(resource_limits::expansion_default(resource), |limit| {
+                limited(
+                    source,
+                    resource_limits::expansion(resource, limit),
+                    &FormulaLimits::default(),
+                )
+                .is_ok()
             });
-            let error =
-                limited(source, configured(exact - 1), &FormulaLimits::default()).unwrap_err();
+            let error = limited(
+                source,
+                resource_limits::expansion(resource, exact - 1),
+                &FormulaLimits::default(),
+            )
+            .unwrap_err();
             assert!(
                 matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: actual, location, .. })
                 if actual == resource && !location.location().expect("parsed source").span.is_empty()),
                 "{source}: {error}"
             );
-            let accepted = limited(source, configured(exact), &FormulaLimits::default()).unwrap();
+            let accepted = limited(
+                source,
+                resource_limits::expansion(resource, exact),
+                &FormulaLimits::default(),
+            )
+            .unwrap();
             assert_eq!(native(&accepted), expected, "{source}: {resource:?}");
         }
     }
@@ -494,47 +495,20 @@ fn unsafe_or_undefined_alternatives_remain_located_refusals() {
 #[test]
 #[ignore = "requires clingo: pool cases match declared clingo families"]
 fn pool_cases_match_declared_clingo_families() {
-    for &(source, _) in CASES {
-        let raw = reference::external(source, true);
-        assert_eq!(raw["Models"]["More"], "no");
-        let models: Models = raw["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .map(|model| {
-                model["Value"]
-                    .as_array()
-                    .unwrap()
-                    .iter()
-                    .map(|atom| atom.as_str().unwrap().to_owned())
-                    .collect()
-            })
-            .collect();
-        let native = native(&formula(source));
-        assert_eq!(native, models, "{source}");
-    }
+    reference::original_sources_match_clingo_full_models(
+        CASES.iter().map(|&(source, _)| source),
+        formula,
+    );
 }
 
 #[test]
 fn include_origins_survive_duplicate_rules_and_choice_groups() {
-    use zetesis_themelios::{
-        BundleAdmissionOptions, BundleLimits, SourceBundle, admit_bundle_formula,
-    };
-    let directory = tempfile::tempdir().unwrap();
+    use zetesis_themelios::{BundleAdmissionOptions, admit_bundle_formula};
+    let fixture = BundleFixture::new();
     for rule in ["p(one;2);q.", "1{p(one;2)}1."] {
-        std::fs::write(
-            directory.path().join("entry.lp"),
-            format!("#include \"data.lp\".\n{rule}"),
-        )
-        .unwrap();
-        std::fs::write(
-            directory.path().join("data.lp"),
-            format!("#const one=1.\n{rule}"),
-        )
-        .unwrap();
-        let bundle =
-            SourceBundle::load(directory.path().join("entry.lp"), BundleLimits::default()).unwrap();
+        fixture.write("entry.lp", &format!("#include \"data.lp\".\n{rule}"));
+        fixture.write("data.lp", &format!("#const one=1.\n{rule}"));
+        let bundle = fixture.bundle();
         let admitted = admit_bundle_formula(
             bundle,
             BundleAdmissionOptions::default(),
@@ -587,10 +561,7 @@ fn pooled_head_values_obey_the_cumulative_limit() {
         limited(
             "p(X):-X=(1;2).",
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_generated_values: 1,
-                ..FormulaLimits::default()
-            }
+            &resource_limits::formula(FormulaResource::GeneratedValues, 1)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::GeneratedValues,
@@ -605,10 +576,7 @@ fn recursive_pool_growth_obeys_the_round_limit() {
         limited(
             "p(0).p(Y):-p(X),Y=(X+1;X+2).",
             ExpansionLimits::default(),
-            &FormulaLimits {
-                max_support_rounds: 3,
-                ..FormulaLimits::default()
-            }
+            &resource_limits::formula(FormulaResource::SupportRounds, 3)
         ),
         Err(FormulaFailure::Limit {
             resource: FormulaResource::SupportRounds,
@@ -713,14 +681,23 @@ fn empty_alternatives_never_erase_required_source_safety() {
 #[test]
 fn pool_free_rules_have_an_inclusive_charged_scan_and_no_pool_projection() {
     for source in ["p:-q.", "{p}.", "p(X):-X=1..2."] {
-        let configured = |limit| ExpansionLimits {
-            max_term_work: limit,
-            ..ExpansionLimits::default()
-        };
-        let exact = first_success(|limit| {
-            limited(source, configured(limit), &FormulaLimits::default()).is_ok()
-        });
-        let error = limited(source, configured(exact - 1), &FormulaLimits::default()).unwrap_err();
+        let exact = first_success(
+            resource_limits::expansion_default(ExpansionResource::TermWork),
+            |limit| {
+                limited(
+                    source,
+                    resource_limits::expansion(ExpansionResource::TermWork, limit),
+                    &FormulaLimits::default(),
+                )
+                .is_ok()
+            },
+        );
+        let error = limited(
+            source,
+            resource_limits::expansion(ExpansionResource::TermWork, exact - 1),
+            &FormulaLimits::default(),
+        )
+        .unwrap_err();
         assert!(
             matches!(
                 error,
@@ -732,7 +709,14 @@ fn pool_free_rules_have_an_inclusive_charged_scan_and_no_pool_projection() {
             "{source}: {error}"
         );
         assert_eq!(
-            native(&limited(source, configured(exact), &FormulaLimits::default()).unwrap()),
+            native(
+                &limited(
+                    source,
+                    resource_limits::expansion(ExpansionResource::TermWork, exact),
+                    &FormulaLimits::default()
+                )
+                .unwrap()
+            ),
             native(&formula(source))
         );
         println!("pool-free inclusive expansion work: {source} => {exact}");
@@ -741,14 +725,8 @@ fn pool_free_rules_have_an_inclusive_charged_scan_and_no_pool_projection() {
     assert!(
         limited(
             "",
-            ExpansionLimits {
-                max_term_work: 0,
-                ..ExpansionLimits::default()
-            },
-            &FormulaLimits {
-                max_analysis_nodes: 0,
-                ..FormulaLimits::default()
-            }
+            resource_limits::expansion(ExpansionResource::TermWork, 0),
+            &resource_limits::formula(FormulaResource::AnalysisNodes, 0)
         )
         .is_ok()
     );
@@ -762,29 +740,41 @@ fn zero_arity_disjunct_carriers_have_an_independent_preclone_node_ceiling() {
             .collect::<Vec<_>>()
             .join(";");
         let source = format!("p(1;2);{head}.");
-        let configured = |limit| FormulaLimits {
-            max_analysis_nodes: limit,
-            ..FormulaLimits::default()
-        };
-        let exact = first_success(|limit| {
-            limited(&source, ExpansionLimits::default(), &configured(limit)).is_ok()
-        });
+        let exact = first_success(
+            resource_limits::formula_default(FormulaResource::AnalysisNodes),
+            |limit| {
+                limited(
+                    &source,
+                    ExpansionLimits::default(),
+                    &resource_limits::formula(FormulaResource::AnalysisNodes, limit),
+                )
+                .is_ok()
+            },
+        );
         // Zero-argument predicates still add structural nodes in both complete
         // source copies; a text-only payload counter cannot replace this ceiling.
-        assert!(exact >= 2 * (count + 1));
-        let error =
-            limited(&source, ExpansionLimits::default(), &configured(exact - 1)).unwrap_err();
+        assert!(exact >= u64::try_from(2 * (count + 1)).unwrap());
+        let error = limited(
+            &source,
+            ExpansionLimits::default(),
+            &resource_limits::formula(FormulaResource::AnalysisNodes, exact - 1),
+        )
+        .unwrap_err();
         assert!(
             matches!(error, FormulaFailure::Limit {
             resource: FormulaResource::AnalysisNodes, observed, location, ..
-        } if observed == exact as u128 && !location.location().expect("parsed source").span.is_empty()),
+        } if observed == u128::from(exact) && !location.location().expect("parsed source").span.is_empty()),
             "{error}"
         );
         assert_eq!(
-            limited(&source, ExpansionLimits::default(), &configured(exact))
-                .unwrap()
-                .atoms()
-                .len(),
+            limited(
+                &source,
+                ExpansionLimits::default(),
+                &resource_limits::formula(FormulaResource::AnalysisNodes, exact)
+            )
+            .unwrap()
+            .atoms()
+            .len(),
             count + 2
         );
         println!("zero-arity disjuncts={count}, inclusive projection nodes={exact}");
@@ -795,6 +785,7 @@ fn zero_arity_disjunct_carriers_have_an_independent_preclone_node_ceiling() {
 fn compact_source_refuses_an_oversized_materialized_pool() {
     let arguments = ["(0;1)"; 12].join(",");
     let source = format!("p(f({arguments})).");
+    // Lifts three limits so that only the family bytes can refuse.
     let error = limited(
         &source,
         ExpansionLimits {

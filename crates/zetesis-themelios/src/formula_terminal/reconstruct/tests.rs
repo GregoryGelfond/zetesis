@@ -1,16 +1,13 @@
 use super::*;
-use crate::{AdmissionOptions, ExpansionLimits, FormulaLimits, FormulaMaterialization};
+use crate::test_support::prepared;
+use crate::{FormulaLimits, FormulaMaterialization};
 
 fn terminal() -> TerminalFormula {
-    let FormulaMaterialization::Terminal(owner) = crate::prepare_formula(
-        "{seed(1..3)}. left(X):-seed(X). right(X):-seed(X).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_adaptive()
-    .unwrap() else {
+    let FormulaMaterialization::Terminal(owner) =
+        prepared("{seed(1..3)}. left(X):-seed(X). right(X):-seed(X).")
+            .ground_adaptive()
+            .unwrap()
+    else {
         panic!("terminal profile required")
     };
     assert_eq!(owner.deferred_templates(), 2);
@@ -34,7 +31,8 @@ fn failed_preparation_publishes_no_partial_plan() {
     std::sync::Arc::get_mut(&mut owner.0)
         .unwrap()
         .extension
-        .deferred[1]
+        .deferred
+        .rules_mut()[1]
         .head = crate::formula_ir::HeadIr::Normal(None);
     let model = selection(&owner);
     let mut cursor = owner.reconstruction().unwrap();
@@ -76,9 +74,12 @@ fn a_reused_plan_is_charged_before_opening_a_writer() {
     };
     let mut accounting = prepared.baseline.start();
     let failure = accounting
-        .with_cancellation(&Cancellation::default(), |counters| {
-            extend(&owner, &mut plan, &model, counters, &limits)
-        })
+        .controlled(
+            Some(&Cancellation::default()),
+            crate::grounding_observer::Work::default(),
+            prepared.location,
+            |counters| extend(&owner, &mut plan, &model, counters, &limits),
+        )
         .unwrap_err();
     assert!(matches!(
         failure,
@@ -89,4 +90,24 @@ fn a_reused_plan_is_charged_before_opening_a_writer() {
                 ..
             } if observed == before_plan + plan_bytes)
     ));
+}
+
+#[test]
+fn a_plan_reserves_a_step_for_every_deferred_row() {
+    // The variable producers of d defer its two rules and d(2..6)'s five-row
+    // fact block: three items and seven producer occurrences, a step each.
+    // Room for the items alone would grow past seven by doubling.
+    let FormulaMaterialization::Terminal(owner) =
+        prepared("p(1). q(2). d(2..6). d(X):-p(X). d(X):-q(X).")
+            .ground_adaptive()
+            .unwrap()
+    else {
+        panic!("terminal profile required")
+    };
+    let model = selection(&owner);
+    let mut cursor = owner.reconstruction().unwrap();
+    cursor
+        .reconstruct(&model, &Cancellation::default())
+        .unwrap();
+    assert_eq!(cursor.plan.as_ref().unwrap().step_room(), (7, 7));
 }

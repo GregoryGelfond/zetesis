@@ -6,6 +6,7 @@
 //! fixture; no alternative report parser or representative-selection rule is used.
 
 use std::{collections::BTreeSet, ffi::OsStr, num::NonZeroUsize, path::Path};
+use zetesis_reference_support::{formula, resource_limits};
 
 use zetesis_clingo_support as oracle;
 use zetesis_clingo_support::REPORT_BYTES;
@@ -16,7 +17,7 @@ use zetesis_solve::{
     Session, SolveConfig,
 };
 use zetesis_themelios::{
-    AdmissionOptions, ExpansionLimits, FormulaLimits, OutputSelection, admit_formula,
+    OutputSelection,
     observation::{self, ObservationProgram},
 };
 use zetesis_validation::answers;
@@ -156,10 +157,10 @@ fn model_symbols(model: &Model) -> Vec<String> {
         .render(
             model,
             &OutputSelection::default(),
-            observation::Limits {
-                max_output_bytes: REPORT_BYTES,
-                ..observation::Limits::default()
-            },
+            resource_limits::observation_evaluation(
+                observation::Resource::OutputBytes,
+                u64::try_from(REPORT_BYTES).unwrap(),
+            ),
             &Cancellation::default(),
         )
         .unwrap();
@@ -257,13 +258,7 @@ fn check(case: &Case) {
 }
 
 fn check_native(case: &Case, selected: &Family, expected: &Family) {
-    let owner = admit_formula(
-        case.source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let owner = formula(case.source);
     assert_eq!(owner.source().expect("source input").text(), case.source);
     assert!(owner.projection().is_explicit());
     // Explicit fixture export feeds the bounded renderer used by the external

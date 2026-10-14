@@ -2,16 +2,16 @@
 //! Exact external records complement a separate finite definition evaluator.
 
 use std::collections::BTreeSet;
-use std::fs::{self};
+use zetesis_reference_support::{BundleFixture, resource_limits};
 
-use crate::support::clingo_reports::{enumerated, expected, json_model};
-use crate::support::finite_bindings::{Models, exhaustive, holds, native, remap, values};
+use crate::support::clingo_reports::{enumerated, expected};
+use crate::support::finite_bindings::{exhaustive, holds, native, remap, values};
 use crate::support::sourced_admission::{SOURCE, input, options};
 use serde_json::Value as Json;
+use zetesis_clingo_support as oracle;
 use zetesis_themelios::{
-    BundleAdmissionOptions, BundleLimits, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, SourceBundle, admit_bundle_formula,
-    admit_formula,
+    BundleAdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
+    FormulaLimits, FormulaResource, admit_bundle_formula, admit_formula,
 };
 
 fn cases() -> Vec<Json> {
@@ -182,10 +182,7 @@ fn incomplete_guard_construction_and_ground_evaluation_have_located_limits() {
     let error = admit_formula(
         source.into(),
         options(),
-        ExpansionLimits {
-            max_term_work: 1,
-            ..Default::default()
-        },
+        resource_limits::expansion(ExpansionResource::TermWork, 1),
         FormulaLimits::default(),
     )
     .unwrap_err();
@@ -196,10 +193,7 @@ fn incomplete_guard_construction_and_ground_evaluation_have_located_limits() {
         source.into(),
         options(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_work: 0,
-            ..Default::default()
-        },
+        resource_limits::formula(FormulaResource::Work, 0),
     )
     .unwrap_err();
     assert!(
@@ -218,14 +212,12 @@ fn incomplete_guard_construction_and_ground_evaluation_have_located_limits() {
 
 #[test]
 fn bundle_guards_keep_original_sources_signatures_and_rule_origins() {
-    let directory = tempfile::tempdir().unwrap();
-    let root = directory.path().join("root.lp");
-    let rules = directory.path().join("rules.lp");
+    let fixture = BundleFixture::new();
     let source = "#include \"rules.lp\". d(1..3). #show p/1. #defined d/1.";
     let rule = "p(X):-d(X),not 0<X<3.";
-    fs::write(&root, source).unwrap();
-    fs::write(&rules, rule).unwrap();
-    let bundle = SourceBundle::load(&root, BundleLimits::default()).unwrap();
+    fixture.write("entry.lp", source);
+    fixture.write("rules.lp", rule);
+    let bundle = fixture.bundle();
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),
@@ -283,32 +275,9 @@ fn bundle_guards_keep_original_sources_signatures_and_rule_origins() {
 #[ignore = "requires clingo: ground guards match clingo; exact sources and complete full-model replay"]
 fn ground_guards_match_clingo() {
     for row in cases() {
-        let actual = enumerated(row["source"].as_str().unwrap());
-        assert_eq!(actual["Models"]["More"], "no");
-        let witnesses: Vec<_> = actual["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .collect();
-        let records: Models = witnesses
-            .iter()
-            .map(|witness| {
-                assert!(witness["Costs"].is_null());
-                json_model(&witness["Value"])
-            })
-            .collect();
-        assert_eq!(records.len(), witnesses.len());
-        assert_eq!(
-            actual["Models"]["Number"].as_u64(),
-            Some(witnesses.len() as u64)
-        );
+        let source = row["source"].as_str().unwrap();
+        let records = oracle::objective_free_models(&enumerated(source));
         assert_eq!(records, expected(&row), "{}", row["name"]);
-        assert_eq!(
-            native(&input(row["source"].as_str().unwrap()).unwrap()),
-            records,
-            "{}",
-            row["name"]
-        );
+        assert_eq!(native(&input(source).unwrap()), records, "{}", row["name"]);
     }
 }

@@ -6,11 +6,12 @@ use std::num::NonZeroUsize;
 use zetesis_cpu::Cancellation;
 
 use crate::{
-    AdmissionLimits, EvaluationLimits, EvaluationWorkspace, Interpretation, Narrower, Node, Region,
+    AdmissionLimits, EvaluationLimits, EvaluationWorkspace, Interpretation, Narrower, Node,
     RegionLimits, Theory,
 };
 
 use super::super::{chain_position, encoded_chain};
+use super::partial_region;
 
 fn dissolved_chains() -> Theory {
     Theory::new(
@@ -98,7 +99,7 @@ fn live_chain_links_follow_dissolved_chain_removal() {
         narrower
             .chains
             .iter()
-            .map(|chain| (chain.root, chain.disjunction, chain.operands.as_slice()))
+            .map(|chain| (chain.root, chain.disjunction, chain.ordinary_leaves()))
             .collect::<Vec<_>>(),
         [
             (5, true, &[0, 1, 2][..]),
@@ -112,23 +113,11 @@ fn live_chain_links_follow_dissolved_chain_removal() {
     );
 }
 
-fn partial_region(mut code: usize) -> Region {
-    let mut region = Region::all_open(4);
-    for atom in 0..4 {
-        match code % 3 {
-            1 => assert!(region.cut(atom)),
-            2 => assert!(region.hold(atom)),
-            _ => {}
-        }
-        code /= 3;
-    }
-    region
-}
-
 fn compare_closures(theory: &Theory, frozen: Option<&[bool]>) {
     let original = Narrower::new(theory);
     let mut reordered = original.clone();
     reordered.chains.reverse();
+    reordered.witness_chains.reverse();
     reordered.chain_of.fill(None);
     // Reconstruct links from each chain's authoritative root. The consumer
     // comparison must not obtain its reference links by decoding the original.

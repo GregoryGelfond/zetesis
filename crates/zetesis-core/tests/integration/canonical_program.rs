@@ -26,7 +26,12 @@ fn interned_subterms_do_not_expand_the_domain() {
         ValueLimits::default(),
     )
     .unwrap();
-    let program = Program::new(vec![fact(value.clone())], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![fact(value.clone())],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     assert_eq!(program.domain().len(), 1);
     assert_eq!(program.domain().at(0).unwrap(), value);
     assert!(
@@ -53,8 +58,12 @@ fn interned_subterms_do_not_expand_the_domain() {
 #[test]
 fn admitted_views_share_the_constant_payload() {
     let template = fact(Value::Symbol("a-longer-owned-symbol".into()));
-    let program =
-        Program::new(vec![template.clone(), template], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![template.clone(), template],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let domain = program.domain().at(0).unwrap();
     let zetesis_core::ValueNodeRef::Symbol(domain_text) = domain.descriptor() else {
         panic!("symbol domain");
@@ -88,7 +97,12 @@ fn admission_preserves_explicitly_admitted_depth() {
         },
     )
     .unwrap();
-    let program = Program::new(vec![fact(value)], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![fact(value)],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     assert_eq!(program.domain().at(0).unwrap().depth(), depth);
 }
 
@@ -98,6 +112,7 @@ fn admission_bounds_template_metadata() {
     let template = Template::new(Some(pattern), vec![], vec![], vec![], vec![]);
     let error = Program::new(
         vec![template; 100],
+        zetesis_core::FactTables::default(),
         AdmissionLimits {
             max_bytes: 1024,
             ..AdmissionLimits::default()
@@ -134,7 +149,12 @@ fn admitted_keys_preserve_substitution_identity() {
         vec![],
         vec![],
     );
-    let program = Program::new(vec![template], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![template],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let assignment = [Value::Number(9)];
     let expected = Atom::new(
         predicate,
@@ -178,7 +198,12 @@ fn admitted_keys_preserve_substitution_identity() {
 fn admitted_key_comparison_stops_at_each_work_boundary() {
     let value = Value::String("compared text".into());
     let template = fact(value.clone());
-    let program = Program::new(vec![template], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![template],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let empty: &[Value] = &[];
     let key = program
         .templates()
@@ -227,6 +252,7 @@ fn filter_views_share_the_ingress_evaluator() {
             vec![],
             vec![filter.clone()],
         )],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();

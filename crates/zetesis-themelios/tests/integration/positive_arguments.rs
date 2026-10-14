@@ -1,13 +1,13 @@
 //! Evaluated positive arguments consume bindings and retain actual source atoms.
 use crate::support::finite_bindings as reference;
 use crate::support::thresholds::minimum_preparation_bytes as minimum_bytes;
-use reference::{Models, exhaustive, external, holds, native, values};
+use reference::{Models, native};
 use std::collections::BTreeSet;
 use std::fmt::Write as _;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::{admit, formula, prepare, prepared, resource_limits};
 use zetesis_themelios::{
-    AdmissionOptions, AnalysisBasis, ExpansionFailure, ExpansionLimits, FormulaFailure,
-    FormulaLimits, FormulaResource, admit_formula, prepare_formula,
+    AnalysisBasis, ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits,
+    FormulaResource, admit_formula,
 };
 
 // Explicit finite substitutions retain each whole supporting atom. Arithmetic
@@ -127,88 +127,21 @@ fn models_match_explicit_substitution() {
 
 #[test]
 fn stability_matches_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]
 fn frozen_truth_matches_explicit_substitution() {
-    let mut pairs = 0;
-    for &(source, expanded) in CASES {
-        let left = formula(source);
-        let right = formula(expanded);
-        let names: Vec<_> = left.atoms().iter().map(canonical).collect();
-        let other: Vec<_> = right.atoms().iter().map(canonical).collect();
-        assert_eq!(
-            names.iter().collect::<BTreeSet<_>>(),
-            other.iter().collect(),
-            "{source}"
-        );
-        assert!(names.len() <= 7);
-        let remap = |mask: usize| {
-            names.iter().enumerate().fold(0, |result, (index, name)| {
-                result
-                    | (usize::from(mask & (1 << index) != 0)
-                        << other.iter().position(|other| other == name).unwrap())
-            })
-        };
-        for outer in 0..1 << names.len() {
-            let a = values(left.theory(), outer, None);
-            let b = values(right.theory(), remap(outer), None);
-            assert_eq!(
-                holds(left.theory(), &a),
-                holds(right.theory(), &b),
-                "{source}"
-            );
-            for inner in 0..1 << names.len() {
-                assert_eq!(
-                    holds(left.theory(), &values(left.theory(), inner, Some(&a))),
-                    holds(
-                        right.theory(),
-                        &values(right.theory(), remap(inner), Some(&b))
-                    ),
-                    "{source}: M={outer} J={inner}"
-                );
-                pairs += 1;
-            }
-        }
-    }
-    println!("source_pairs={} frozen_pairs={pairs}", CASES.len());
+    reference::frozen_truth_matches(CASES.iter().copied(), formula);
 }
 
 #[test]
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
-    let mut total = 0;
-    for &(source, _) in CASES {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    assert!(
-                        expected.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&formula(source)), expected, "{source}");
-        total += count;
-    }
-    println!("complete_sources={} full_models={total}", CASES.len());
+    reference::original_sources_match_clingo_full_models(
+        CASES.iter().map(|&(source, _)| source),
+        formula,
+    );
 }
 
 #[test]
@@ -222,12 +155,7 @@ fn inverse_bindings_have_an_explicit_profile_refusal() {
     ] {
         assert!(
             matches!(
-                admit_formula(
-                    source.into(),
-                    AdmissionOptions::default(),
-                    ExpansionLimits::default(),
-                    FormulaLimits::default()
-                ),
+                admit(source, &FormulaLimits::default()),
                 Err(FormulaFailure::UnboundArgumentInput { .. })
             ),
             "{source}"
@@ -238,25 +166,14 @@ fn inverse_bindings_have_an_explicit_profile_refusal() {
 #[test]
 fn anonymous_arithmetic_has_no_named_input() {
     assert!(matches!(
-        admit_formula(
-            "d(1).p(2).q:-d(X),p(X+_).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
+        admit("d(1).p(2).q:-d(X),p(X+_).", &FormulaLimits::default()),
         Err(FormulaFailure::UnboundArgumentInput { .. })
     ));
 }
 
 #[test]
 fn input_refusal_explains_the_located_profile_boundary() {
-    let error = admit_formula(
-        "p(1).q(X):-p(X+1).".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap_err();
+    let error = admit("p(1).q(X):-p(X+1).", &FormulaLimits::default()).unwrap_err();
     assert!(error.to_string().contains("independently bound input"));
     assert!(
         error
@@ -269,12 +186,7 @@ fn input_refusal_explains_the_located_profile_boundary() {
 #[test]
 fn empty_support_cannot_supply_an_expression_input() {
     assert!(matches!(
-        prepare_formula(
-            "q(X):-p(X+1).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
+        prepare("q(X):-p(X+1)."),
         Err(FormulaFailure::UnboundArgumentInput { .. })
     ));
 }
@@ -282,11 +194,9 @@ fn empty_support_cannot_supply_an_expression_input() {
 #[test]
 fn local_inputs_do_not_make_an_outer_head_safe() {
     assert!(matches!(
-        admit_formula(
-            "d(1).p(2).q(X):-0<#count{Y:d(Y),p(Y+1)}.".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
+        admit(
+            "d(1).p(2).q(X):-0<#count{Y:d(Y),p(Y+1)}.",
+            &FormulaLimits::default()
         ),
         Err(FormulaFailure::UnsafeVariable { .. })
     ));
@@ -303,24 +213,10 @@ fn aggregate_proposals_must_match_captured_arguments() {
 #[test]
 fn undefined_arithmetic_requires_a_complete_row() {
     for source in ["d(1).q(X):-d(X),p(X/0).", "p(1).q(X):-d(X),p(X/0)."] {
-        assert!(
-            admit_formula(
-                source.into(),
-                AdmissionOptions::default(),
-                ExpansionLimits::default(),
-                FormulaLimits::default()
-            )
-            .is_ok(),
-            "{source}"
-        );
+        assert!(admit(source, &FormulaLimits::default()).is_ok(), "{source}");
     }
     assert!(matches!(
-        admit_formula(
-            "d(1).p(1).q(X):-d(X),p(X/0).".into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default()
-        ),
+        admit("d(1).p(1).q(X):-d(X),p(X/0).", &FormulaLimits::default()),
         Err(FormulaFailure::Expansion(
             ExpansionFailure::Evaluation { .. }
         ))
@@ -343,13 +239,7 @@ fn late_mismatch_preserves_the_next_row() {
 #[test]
 fn prepared_models_match_source_admission() {
     let source = "d(1).p(2).q(X):-p(X+1),d(X).";
-    let prepared = prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = prepared(source);
     assert_eq!(
         native(&prepared.ground().unwrap()),
         native(&formula(source))
@@ -399,11 +289,9 @@ fn captured_rules_retain_source_origins() {
 fn captures_obey_the_variable_ceiling() {
     for (source, exact) in [("q(X):-d(X),p(X+1).", 2), ("q(X):-p(f(X,X+1)).", 3)] {
         for limit in [exact - 1, exact] {
-            let mut options = AdmissionOptions::default();
-            options.core_limits.max_variables_per_template = limit;
             let result = admit_formula(
                 source.into(),
-                options,
+                resource_limits::admission_formula(FormulaResource::Variables, limit),
                 ExpansionLimits::default(),
                 FormulaLimits::default(),
             );
@@ -411,7 +299,7 @@ fn captures_obey_the_variable_ceiling() {
                 assert!(result.is_ok(), "{source}: {result:?}");
             } else {
                 assert!(
-                    matches!(result, Err(FormulaFailure::Limit { resource: FormulaResource::Variables, observed, .. }) if observed == exact as u128),
+                    matches!(result, Err(FormulaFailure::Limit { resource: FormulaResource::Variables, observed, .. }) if observed == u128::from(exact)),
                     "{source}: {result:?}"
                 );
             }
@@ -434,14 +322,9 @@ fn work_prefixes_refuse_until_complete_admission() {
     // The bounded search checks every interrupted prefix, including comparison
     // readiness/evaluation and final formula emission; no prefix is an answer.
     for cap in 0..4096 {
-        let result = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits {
-                max_work: cap,
-                ..FormulaLimits::default()
-            },
+        let result = admit(
+            source,
+            &resource_limits::formula(FormulaResource::Work, cap),
         );
         match result {
             Ok(admitted) => {

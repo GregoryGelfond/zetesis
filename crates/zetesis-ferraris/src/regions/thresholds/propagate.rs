@@ -95,6 +95,12 @@ impl<C: Count> Closure<'_, C> {
         {
             return Ok(Step::Contradiction);
         }
+        if frozen.is_none()
+            && index.thresholds.rows[row].has_nonunit_coefficient()
+            && state.has_residual_interval()
+        {
+            self.lists.queue_residual(row);
+        }
         let step = self.threshold_guards(index, row, frozen, work)?;
         if step == Step::Contradiction {
             return Ok(step);

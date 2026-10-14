@@ -3,6 +3,7 @@
 use crate::support::sessions::config as cpu_config;
 use std::{sync::mpsc, thread, time::Duration};
 use zetesis_cpu::Cancellation;
+use zetesis_reference_support::formula;
 use zetesis_solve::{
     Completion, ExecutionObservation, ExecutionObserver, GroundingOutcome, GroundingPhase,
     GroundingWork, PreparedInput, Session, SolveConfig, SolveMeasurements, SolvePhase, SolveStage,
@@ -461,18 +462,10 @@ fn stages_only_phase_guards_preserve_coarse_intervals() {
 
 #[test]
 fn stages_only_grounding_omits_detailed_attribution() {
-    use zetesis_themelios::{ExpansionLimits, FormulaLimits, prepare_formula};
-
     let owner = SolveMeasurements::stages_only();
     let observer = owner.grounding_observer().unwrap();
     assert!(!observer.details_enabled());
-    let prepared = prepare_formula(
-        "p(0). p(X+1):-p(X),X<3.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let prepared = zetesis_reference_support::prepared("p(0). p(X+1):-p(X),X<3.");
     let admitted = prepared.ground_with_observer(Some(&observer)).unwrap();
     assert_eq!(admitted.atom_catalog().atoms().len(), 4);
     let snapshot = owner.snapshot().unwrap();
@@ -513,15 +506,7 @@ fn stages_only_observers_ignore_detailed_callbacks() {
 
 #[test]
 fn stages_only_sessions_disable_detailed_search_clocks() {
-    use zetesis_themelios::{ExpansionLimits, FormulaLimits, admit_formula};
-
-    let admitted = admit_formula(
-        "a | b.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("a | b.");
     let owner = SolveMeasurements::stages_only();
     let mut session = Session::builder(
         PreparedInput::formula(&admitted),
@@ -585,4 +570,16 @@ fn stages_only_lazy_grounding_remains_interleaved() {
     );
     assert!(stages.get(SolveStage::Grounding).is_none());
     assert!(stages.get(SolveStage::Solving).is_some());
+}
+
+#[test]
+fn timing_observers_decline_unused_numeric_diagnostics() {
+    for owner in [
+        SolveMeasurements::new(true),
+        SolveMeasurements::stages_only(),
+    ] {
+        let observer = owner.grounding_observer().unwrap();
+        assert!(!observer.domain_diagnostics_enabled());
+        assert_eq!(observer.details_enabled(), owner.details_enabled());
+    }
 }

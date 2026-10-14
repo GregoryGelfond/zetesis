@@ -1,6 +1,7 @@
 //! Exact subject ownership and build accounting for the shared original index.
 
 use std::num::NonZeroUsize;
+use std::time::Duration;
 
 use super::*;
 use crate::ferraris::fresh_membership;
@@ -12,7 +13,7 @@ use crate::{
     SearchStatistics, StableModels, Statistics,
 };
 use std::sync::Arc;
-use zetesis_ferraris::{AdmissionLimits, Node};
+use zetesis_ferraris::{AdmissionLimits, FormulaParts, Node};
 
 thread_local! {
     // Counts actual subject invocations, including closures charging no work.
@@ -83,25 +84,64 @@ fn extraction(theory: &Theory) -> u64 {
 }
 
 fn built(theory: &Theory) -> Arc<IndexedTheory> {
-    Arc::clone(OriginalIndex::new(theory).ensure(|_| Ok(())).unwrap())
+    Arc::clone(
+        OriginalIndex::new(theory, u64::MAX)
+            .ensure(&crate::Cancellation::default(), |_| Ok(()))
+            .unwrap(),
+    )
 }
 
-/// Every region route, by name: scalar, parallel workers and producers.
-const ROUTES: [(&str, usize, bool); 5] = [
+/// Every region route, by name: scalar, parallel workers started at the
+/// first pull, a parallel walk that stays on the calling thread, and
+/// producers.
+const ROUTES: [(&str, usize, bool); 7] = [
     ("scalar", 1, false),
     ("parallel", 2, false),
     ("parallel", 4, false),
+    ("coordinator", 2, false),
+    ("coordinator", 4, false),
     ("producers", 2, true),
     ("producers", 4, true),
 ];
 
-fn enumeration(theory: &Theory, workers: usize, producers: bool, limits: Limits) -> StableModels {
+/// The enumeration a route of `ROUTES` names: the coordinator route never
+/// engages its workers, and the parallel route starts them at the first pull.
+fn enumeration(
+    theory: &Theory,
+    route: &str,
+    workers: usize,
+    producers: bool,
+    limits: Limits,
+) -> StableModels {
     let workers = NonZeroUsize::new(workers).unwrap();
     if producers {
         StableModels::with_region_producers(theory, workers, limits, Cancellation::default())
     } else {
-        StableModels::with_region_workers(theory, workers, limits, Cancellation::default())
+        let engagement = if route == "coordinator" {
+            super::super::Engagement::After(Duration::MAX)
+        } else {
+            super::super::Engagement::Immediate
+        };
+        StableModels::with_region_workers_engaging(
+            theory,
+            workers,
+            engagement,
+            limits,
+            Cancellation::default(),
+        )
     }
+    .unwrap()
+}
+
+/// The theory over three atoms with the formula nodes `nodes` and the roots
+/// `roots`, under the default admission limits.
+fn theory(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
+    Theory::new(
+        3,
+        FormulaParts::new(nodes, vec![]).unwrap(),
+        roots,
+        AdmissionLimits::default(),
+    )
     .unwrap()
 }
 
@@ -112,7 +152,7 @@ fn an_enumeration_builds_one_original_index() {
     // run admits its own theory, so the per-instance count is this run's.
     for (route, workers, producers) in ROUTES {
         let theory = cycle();
-        let mut search = enumeration(&theory, workers, producers, Limits::default());
+        let mut search = enumeration(&theory, route, workers, producers, Limits::default());
         assert_eq!(
             hooks::builds(&theory),
             0,
@@ -139,9 +179,10 @@ fn an_enumeration_builds_one_original_index() {
 }
 
 /// Complete receipts on every region route. The original index costs N + E
-/// = 4 + 4, counted once beside 28 producer/walk operations. The reduct walks
-/// reuse that index. Search also charges two splits and two subset-atom reads.
-const CYCLE_REGIONS_WORK: u64 = 28 + 8;
+/// = 4 + 4, counted once beside 28 producer/walk operations and the choice-head
+/// scan's visit to each of the 2 roots. The reduct walks reuse that index.
+/// Search also charges two splits and two subset-atom reads.
+const CYCLE_REGIONS_WORK: u64 = 28 + 2 + 8;
 const CYCLE_REDUCT_WORK: u64 = 18;
 const CYCLE_SEARCH_WORK: u64 = CYCLE_REGIONS_WORK + CYCLE_REDUCT_WORK + 4;
 
@@ -149,7 +190,7 @@ const CYCLE_SEARCH_WORK: u64 = CYCLE_REGIONS_WORK + CYCLE_REDUCT_WORK + 4;
 fn a_positive_certificate_route_builds_no_index() {
     for (route, workers, producers) in ROUTES {
         let theory = positive();
-        let mut search = enumeration(&theory, workers, producers, Limits::default());
+        let mut search = enumeration(&theory, route, workers, producers, Limits::default());
         assert!(
             search
                 .enable_class_checking(
@@ -174,7 +215,7 @@ fn a_positive_certificate_route_builds_no_index() {
 fn a_batched_positive_certificate_route_builds_no_index() {
     for (route, workers, producers) in ROUTES {
         let theory = positive();
-        let mut search = enumeration(&theory, workers, producers, Limits::default());
+        let mut search = enumeration(&theory, route, workers, producers, Limits::default());
         assert!(
             search
                 .enable_class_checking(
@@ -215,7 +256,7 @@ fn a_refused_index_charge_builds_nothing_and_stops_incomplete() {
             },
             ..Limits::default()
         };
-        let mut search = enumeration(&theory, workers, producers, limits);
+        let mut search = enumeration(&theory, route, workers, producers, limits);
         assert!(matches!(search.next(), Some(Err(Incomplete::WorkLimit))));
         assert!(search.next().is_none());
         assert!(!search.exhausted(), "{route}");
@@ -236,7 +277,7 @@ fn a_build_failing_after_its_charge_keeps_the_charge_in_both_receipts() {
     // admitted prefix: search work and the walk's `regions.work` agree.
     for (route, workers, producers) in ROUTES {
         let theory = cycle();
-        let mut search = enumeration(&theory, workers, producers, Limits::default());
+        let mut search = enumeration(&theory, route, workers, producers, Limits::default());
         hooks::fail_next_build();
         assert!(matches!(search.next(), Some(Err(Incomplete::Allocation))));
         assert!(!search.exhausted(), "{route}");
@@ -252,11 +293,11 @@ fn a_build_failing_after_its_charge_keeps_the_charge_in_both_receipts() {
 #[test]
 fn a_refused_charge_leaves_the_owner_unbuilt() {
     let theory = cycle();
-    let mut owner = OriginalIndex::new(&theory);
+    let mut owner = OriginalIndex::new(&theory, u64::MAX);
     let mut asked = None;
     assert_eq!(
         owner
-            .ensure(|work| {
+            .ensure(&crate::Cancellation::default(), |work| {
                 asked = Some(work);
                 Err(Incomplete::WorkLimit)
             })
@@ -314,14 +355,18 @@ fn a_built_index_needs_no_second_grant() {
     let theory = cycle();
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
-    let mut owner = OriginalIndex::new(&theory);
-    owner.ensure(|work| budget.charge(work)).unwrap();
+    let mut owner = OriginalIndex::new(&theory, u64::MAX);
+    owner
+        .ensure(&crate::Cancellation::default(), |work| budget.charge(work))
+        .unwrap();
     let paid = budget.statistics;
     assert_eq!(paid.work, indexing_work(&theory));
     budget.limits.max_work = paid.work;
     let index = Arc::clone(
         owner
-            .ensure(|_| panic!("a built index is never charged again"))
+            .ensure(&crate::Cancellation::default(), |_| {
+                panic!("a built index is never charged again")
+            })
             .unwrap(),
     );
     assert_eq!(hooks::builds(&theory), 1);

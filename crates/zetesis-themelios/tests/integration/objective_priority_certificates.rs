@@ -1,9 +1,8 @@
 //! Invariant aggregate values discharge generated priority obligations.
 
 use crate::support::source_cases;
+use zetesis_reference_support::{admit, exhaustive, resource_limits};
 
-use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{admit, exhaustive};
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
 const CASES: &str = r#"{"name":"mandatory_count","source":"a.n(N):-N=#count{1:a}.#minimize{1@N:n(N)}.","priorities":[1],"records":[[["a","n(1)"],[1]]]}
@@ -74,20 +73,17 @@ fn invariant_priorities_preserve_scored_answers() {
 fn certificate_storage_has_an_inclusive_limit() {
     // One request, two tuple sets, two cone predicates, one transported name
     // and one completed carrier value coexist during certification.
-    const CERTIFICATE_ENTRIES: usize = 7;
+    const CERTIFICATE_ENTRIES: u64 = 7;
     let source = "a.n(N):-N=#count{1:a}.#minimize{1@N:n(N)}.";
-    let mut limits = FormulaLimits {
-        max_objective_presence_entries: CERTIFICATE_ENTRIES - 1,
-        ..FormulaLimits::default()
-    };
-    let error = admit(source, &limits).unwrap_err();
+    let limits =
+        |maximum| resource_limits::formula(FormulaResource::ObjectivePresenceEntries, maximum);
+    let error = admit(source, &limits(CERTIFICATE_ENTRIES - 1)).unwrap_err();
     assert!(matches!(error, FormulaFailure::Limit {
         resource: FormulaResource::ObjectivePresenceEntries,
         observed,
         ..
-    } if observed == CERTIFICATE_ENTRIES as u128));
-    limits.max_objective_presence_entries = CERTIFICATE_ENTRIES;
-    assert!(admit(source, &limits).is_ok());
+    } if observed == u128::from(CERTIFICATE_ENTRIES)));
+    assert!(admit(source, &limits(CERTIFICATE_ENTRIES)).is_ok());
 }
 
 #[test]
@@ -110,10 +106,7 @@ fn certificates_preserve_original_equalities() {
 #[test]
 #[ignore = "requires clingo: original sources match complete clingo records"]
 fn original_sources_match_complete_clingo_records() {
-    for case in source_cases::cases(CASES.trim())
-        .into_iter()
-        .chain(source_cases::cases(CHANGING_ORDER.trim()))
-    {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    let mut cases = source_cases::cases(CASES.trim());
+    cases.extend(source_cases::cases(CHANGING_ORDER.trim()));
+    source_cases::clingo_matches_every_case(&cases);
 }

@@ -22,8 +22,8 @@
 use zetesis_cpu::Stop;
 use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use zetesis_ferraris::{
-    FrozenSubject, Interpretation, Knowledge, Narrower, NarrowingAttempt, NarrowingQuota,
-    NarrowingScratch, Producers, RegionLimits, Theory,
+    ChoiceHeads, FrozenSubject, Interpretation, Knowledge, Narrower, NarrowingAttempt,
+    NarrowingQuota, NarrowingScratch, OriginalSubject, Producers, RegionLimits, Theory,
 };
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
@@ -156,6 +156,7 @@ pub struct RegionFrontierStatistics {
 /// What the region proposer did, cumulatively: the counts of its walk over
 /// the candidate tree, and whether the theory lies in the producer
 /// fragment.
+#[non_exhaustive]
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RegionSearchStatistics {
     /// The walk's counts.
@@ -166,6 +167,71 @@ pub struct RegionSearchStatistics {
     /// Frontier ownership measured by parallel candidate production. Other
     /// schedules do not currently measure it; absence does not mean zero bytes.
     pub frontier: Option<RegionFrontierStatistics>,
+    /// The parallel region walk's workers. The scalar walk starts no worker,
+    /// and the device route's pool starts at construction, so both report
+    /// `None`.
+    pub workers: Option<RegionWorkerStatistics>,
+}
+
+/// The parallel region walk's workers: how many, when they were to start,
+/// and whether and when they did.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct RegionWorkerStatistics {
+    /// The workers the walk was configured with.
+    pub configured: usize,
+    /// The engagement delay in force, `configured × c` by default; `None` for
+    /// a delay whose deadline overflows, which never engages.
+    pub engagement_delay: Option<std::time::Duration>,
+    /// Whether and when the walk engaged its workers, and what it did before.
+    pub engagement: RegionWalkEngagement,
+}
+
+/// Whether a parallel region walk engaged its workers. The record is frozen
+/// once the walk ends.
+#[non_exhaustive]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RegionWalkEngagement {
+    /// No pull has begun the walk. A run whose candidates a positive
+    /// certificate determined never walks.
+    NotBegun,
+    /// The walk has run on the calling thread only. `elapsed` runs from the
+    /// walk's beginning to the end of its last pull that stepped, the caller's
+    /// time between pulls included; `walking` is the coordinator's own time
+    /// inside those pulls.
+    Unengaged {
+        /// From the walk's beginning to the end of its last pull that stepped.
+        elapsed: std::time::Duration,
+        /// The coordinator's own time inside the pulls that stepped.
+        walking: std::time::Duration,
+    },
+    /// The workers started `after` the walk's beginning, once the coordinator
+    /// had spent `walking` inside its pulls; `launched` threads were spawned
+    /// (fewer than configured only after a refused reservation or spawn), and
+    /// the spawn loop took `spawn`.
+    Engaged {
+        /// When the workers started, from the walk's beginning.
+        after: std::time::Duration,
+        /// The coordinator's own time inside its pulls before then.
+        walking: std::time::Duration,
+        /// The threads actually spawned.
+        launched: usize,
+        /// The spawn loop's wall duration.
+        spawn: std::time::Duration,
+    },
+}
+
+impl RegionWalkEngagement {
+    /// Stable machine-readable identifier of the state: `not_begun`,
+    /// `unengaged` or `engaged`.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::NotBegun => "not_begun",
+            Self::Unengaged { .. } => "unengaged",
+            Self::Engaged { .. } => "engaged",
+        }
+    }
 }
 
 type Checker<'a> = Option<crate::region_filter::Worker<'a>>;
@@ -193,7 +259,7 @@ impl std::fmt::Debug for RetainedFilter {
 
 #[derive(Debug)]
 pub(crate) struct RegionSearch {
-    producers: Option<Producers>,
+    parts: OriginalParts,
     /// Each region carries what is known about it under the theory and
     /// under each restriction, in order; a restriction added after a region
     /// was reached gets fresh knowledge when the region is next narrowed.
@@ -204,15 +270,32 @@ pub(crate) struct RegionSearch {
     scratch: NarrowingScratch,
     statistics: RegionSearchStatistics,
     filter: Option<RetainedFilter>,
+    native_byte_limit: u64,
 }
 
-/// What opening a region search over a theory establishes: its producers,
-/// when it lies in the producer fragment, and the statistics of the
-/// extraction, charged to the budget. The original theory's index is not
-/// built here: the enumeration's `OriginalIndex` builds it when a walk first
-/// needs it, and its work is then recorded in these counts.
+/// What a region walk reads of the original theory beyond the theory itself:
+/// its producers, when it lies in the producer fragment, and the heads of its
+/// atomic choice roots, which every split ranks first.
+#[derive(Debug)]
+pub(crate) struct OriginalParts {
+    producers: Option<Producers>,
+    choice_heads: ChoiceHeads,
+}
+
+impl OriginalParts {
+    /// The walk's subject over `theory`, the theory these parts came from.
+    pub(crate) fn subject<'a>(&'a self, theory: &'a Theory) -> OriginalSubject<'a> {
+        OriginalSubject::new(theory, self.producers.as_ref()).with_choices(&self.choice_heads)
+    }
+}
+
+/// What opening a region search over a theory establishes: the parts of the
+/// original theory its walk reads, and the statistics of the extraction,
+/// charged to the budget. The original theory's index is not built here: the
+/// enumeration's `OriginalIndex` builds it when a walk first needs it, and its
+/// work is then recorded in these counts.
 pub(crate) struct Opened {
-    pub(crate) producers: Option<Producers>,
+    pub(crate) parts: OriginalParts,
     pub(crate) statistics: RegionSearchStatistics,
 }
 
@@ -230,8 +313,12 @@ pub(crate) fn open(theory: &Theory, budget: &mut Budget<'_>) -> Result<Opened, I
             },
             producers: extraction.producers.is_some(),
             frontier: None,
+            workers: None,
         },
-        producers: extraction.producers,
+        parts: OriginalParts {
+            producers: extraction.producers,
+            choice_heads: extraction.choice_heads,
+        },
     })
 }
 
@@ -251,14 +338,15 @@ pub(crate) fn leaf_interpretation(
 impl RegionSearch {
     /// Extract the producers and queue the root region with no knowledge;
     /// its first narrowing creates each knowledge slot.
-    pub(crate) fn new(theory: &Theory, budget: &mut Budget<'_>) -> Result<Self, Incomplete> {
-        let Opened {
-            producers,
-            statistics,
-        } = open(theory, budget)?;
+    pub(crate) fn new(
+        theory: &Theory,
+        native_byte_limit: u64,
+        budget: &mut Budget<'_>,
+    ) -> Result<Self, Incomplete> {
+        let Opened { parts, statistics } = open(theory, budget)?;
         Ok(Self {
             statistics,
-            producers,
+            parts,
             traversal: Traversal::with_state(
                 Region::all_open(theory.atom_count()),
                 Counting::Never,
@@ -267,6 +355,7 @@ impl RegionSearch {
             restrictions: Conditions::default(),
             scratch: NarrowingScratch::default(),
             filter: None,
+            native_byte_limit,
         })
     }
 
@@ -307,6 +396,7 @@ impl RegionSearch {
             },
             producers: self.statistics.producers,
             frontier: None,
+            workers: None,
         }
     }
 
@@ -321,7 +411,11 @@ impl RegionSearch {
             .permanent
             .try_reserve(1)
             .map_err(|_| Incomplete::Allocation)?;
-        let narrower = Narrower::try_new(restriction).map_err(stopped)?;
+        let narrower = super::original_index::prepare(
+            restriction,
+            self.native_byte_limit,
+            budget.cancellation,
+        )?;
         budget.charge(narrower.work())?;
         self.statistics.counts.work += narrower.work();
         self.restrictions
@@ -337,17 +431,13 @@ impl RegionSearch {
         generation: u64,
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
-        budget.cancellation.poll()?;
-        let bound = Bound::prepare(restriction, generation)?;
-        budget.charge(bound.work())?;
-        let work = self
-            .statistics
-            .counts
-            .work
-            .checked_add(bound.work())
-            .ok_or(Incomplete::CounterOverflow)?;
-        self.statistics.counts.work = work;
-        budget.cancellation.poll()?;
+        let bound = Bound::tightened(
+            restriction,
+            generation,
+            self.native_byte_limit,
+            budget,
+            &mut self.statistics.counts.work,
+        )?;
         self.restrictions.bound = Some(bound);
         Ok(())
     }
@@ -401,19 +491,20 @@ impl RegionSearch {
         timings: &mut Option<crate::SearchPhaseTimings>,
     ) -> Result<Option<Interpretation>, Incomplete> {
         let Self {
-            producers,
+            parts,
             traversal,
             restrictions,
             scratch,
             statistics,
             filter,
+            native_byte_limit: _,
         } = self;
         let (formulas, narrower) = index.subject(theory)?;
         let before = traversal.statistics();
         let mut advance = |mut check: Option<crate::region_filter::Check<'_, '_>>| {
             traversal.next(|region, knowledge| -> Result<Narrowing, Incomplete> {
                 narrow(
-                    (formulas, narrower, producers.as_ref()),
+                    (parts.subject(formulas), narrower),
                     restrictions,
                     (region, knowledge),
                     scratch,
@@ -469,9 +560,12 @@ impl Drop for RegionSearch {
 /// candidate bound, else the latest permanent restriction, else the original
 /// theory. This preserves the traversal policy of narrowing those subjects in
 /// sequence while charging only the final subject's scan, one count read per
-/// open atom. Ties prefer the lower atom.
+/// open atom. Open atoms heading the original subject's atomic choice roots
+/// ([`OriginalSubject::choices`]) rank first, so choices are decided before
+/// the atoms they derive, whether or not the theory lies in the producer
+/// fragment. Ties prefer the lower atom.
 pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
-    (theory, narrower, producers): (&Theory, &Narrower, Option<&Producers>),
+    (original, narrower): (OriginalSubject<'_>, &Narrower),
     restrictions: &Conditions<R>,
     (region, knowledge): (&mut Region, &mut CandidateKnowledge),
     scratch: &mut NarrowingScratch,
@@ -483,18 +577,19 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     let mut pass = crate::RegionPass::First;
     loop {
         let mut revisit = false;
-        for (index, (formulas, narrower)) in std::iter::once((theory, narrower))
+        // A restriction is not a rule of the original theory: it is read
+        // without producers, and only the original's choice heads rank splits.
+        for (index, (subject, narrower)) in std::iter::once((original, narrower))
             .chain(restrictions.permanent.iter().map(|restriction| {
                 let (theory, narrower) = restriction.borrow();
-                (theory, narrower)
+                (OriginalSubject::new(theory, None), narrower)
             }))
             .enumerate()
         {
-            let producers = if index == 0 { producers } else { None };
             let known = knowledge.permanent(index, narrower)?;
             let attempt = BudgetQuota::narrow(budget, |cancellation, quota| {
                 narrower.propagate_known_reserved(
-                    zetesis_ferraris::OriginalSubject::new(formulas, producers),
+                    subject,
                     region,
                     known,
                     scratch,
@@ -533,7 +628,8 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
         }
         if !revisit {
             if let Some(filter) = &mut filter {
-                let consequence = filter.consequence(theory, region, budget.cancellation, pass)?;
+                let consequence =
+                    filter.consequence(original.theory(), region, budget.cancellation, pass)?;
                 match consequence {
                     crate::RegionConsequence::Refuted => return Ok(Narrowing::Refuted),
                     crate::RegionConsequence::Unchanged => {}
@@ -561,7 +657,8 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
                 budget,
                 failure: None,
             };
-            let preference = known.preferred_atom_reserved(region, cancellation, &mut quota);
+            let preference =
+                known.preferred_atom_reserved(region, original.choices(), cancellation, &mut quota);
             counts.work += preference.work;
             let preferred = preference
                 .result

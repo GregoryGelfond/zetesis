@@ -1,52 +1,6 @@
 //! Direct formulas for a one-atom count, independent of aggregate lowering.
 
-#[derive(Clone, Copy)]
-pub(super) struct Truth {
-    pub whole: bool,
-    pub frozen: bool,
-}
-
-impl Truth {
-    pub fn constant(value: bool) -> Self {
-        Self {
-            whole: value,
-            frozen: value,
-        }
-    }
-
-    pub fn atom(outer: bool, inner: bool) -> Self {
-        Self {
-            whole: outer,
-            frozen: outer && inner,
-        }
-    }
-
-    pub fn negate(self) -> Self {
-        self.implies(Self::constant(false))
-    }
-
-    pub fn and(self, other: Self) -> Self {
-        Self {
-            whole: self.whole && other.whole,
-            frozen: self.frozen && other.frozen,
-        }
-    }
-
-    pub fn or(self, other: Self) -> Self {
-        Self {
-            whole: self.whole || other.whole,
-            frozen: self.frozen || other.frozen,
-        }
-    }
-
-    pub fn implies(self, other: Self) -> Self {
-        let whole = !self.whole || other.whole;
-        Self {
-            whole,
-            frozen: whole && (!self.frozen || other.frozen),
-        }
-    }
-}
+use crate::support::frozen_truth::Truth;
 
 fn compare(left: i32, relation: &str, right: i32) -> bool {
     match relation {

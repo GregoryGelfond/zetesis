@@ -7,6 +7,21 @@ their own source revisions, workloads and measurement conditions.
 
 ## Recorded comparisons
 
+The [final 0.6.0 CPU check](cpu-corpus-final-20261014.md) records all 94 cases at
+one and fourteen threads. At fourteen, summed process time is 520.523 ms against
+clingo’s 803.673 ms, with 16 wins, 65 close cases and 13 losses under a 3% band.
+The final total is about 33% below the earlier recorded 0.5.0 total; the baseline
+was not rerun in this final check. The page includes complete tables, individual
+observations, memory, identities and reproduction commands.
+
+The [14 October CPU corpus comparison](cpu-corpus-20261014.md) compares released
+0.5.0 with a frozen pre-release candidate at one and fourteen workers. Summed
+process-time estimates fall 35.48% and 35.78%, respectively, including the
+change from the release's combined executable to the candidate's CPU front.
+The page retains all 94 cases, direct clingo comparisons with a descriptive 3%
+band, internal stages, memory, binary identities and reproduction commands.
+This is a cumulative candidate measurement, not a released-version claim.
+
 The [10 October CPU corpus comparison](cpu-corpus-20261010.md) measures all
 94 cases before and after the final combined propagation, objective-preparation
 and arithmetic-checking changes. Automatic grounding's summed wall medians rise
@@ -132,11 +147,13 @@ zetesis-bench run --suite scalability --grounder eager \
   --timeout-seconds 30 --campaign-seconds 1800 --report scalability-timing.json
 ```
 
-Both use fourteen workloads: authored queens at n=8/9/10, pigeonhole at h=5/6/7,
+Both use twenty workloads: authored queens at n=8/9/10, pigeonhole at h=5/6/7,
 Mastermind at colors=5/6/8, nested Mastermind at colors=8,
 three unchanged corpus cases (queens variant 02,
-SEND+MORE=MONEY and task allocation), and the authored Sudoku grid.
-`--include-einstein` adds the unchanged riddle as a fifteenth workload. The test runs complete-family
+SEND+MORE=MONEY and task allocation), and the authored Sudoku grid, followed by
+prime sieve at n=30/100/300 and subset sum at n=12/20/30. The first fourteen keep
+their established order; the separate 94-case corpus is unchanged.
+`--include-einstein` adds the unchanged riddle as a twenty-first workload. The test runs complete-family
 qualifications only. The benchmark qualifies clingo once per case, then measures
 each native thread profile separately. Reports retain all refusals and limits;
 the workload's inclusion is not a scaling claim. `--memory` sets a common native

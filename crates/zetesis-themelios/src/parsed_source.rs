@@ -23,8 +23,9 @@ use crate::{
 ///
 /// Retaining this owner retains the source and upstream syntax tree, with
 /// O(source bytes + syntax nodes) space. Moving it between profile attempts
-/// neither clones the source nor reparses it. Each attempt still performs its
-/// own checked raising and normalization with the supplied expansion limits.
+/// neither clones the source nor reparses it. Explicit attempts perform their own
+/// checked raising and normalization. Automatic admission shares completed source
+/// checks and raising when the extended refusal permits formula preparation.
 ///
 /// ```
 /// use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, ParsedSource};
@@ -129,6 +130,31 @@ impl ParsedSource {
         cancellation: &zetesis_cpu::Cancellation,
     ) -> Result<Admitted, SourceFailure<ExpansionFailure>> {
         extended::admit_parsed(self, limits, Some(cancellation.clone()))
+    }
+
+    /// Admit the extended relational profile, preparing formulas only after a
+    /// refusal explicitly eligible for that profile. A completed extended attempt
+    /// shares its profile traversal and raised program with formula preparation;
+    /// early refusals retain the ordinary formula checks and their order.
+    /// The returned formula preparation keeps domain analysis an explicit opt-in.
+    ///
+    /// # Errors
+    /// Retains this exact source beside the selected profile's first refusal.
+    /// Cancellation, resource limits and malformed input never trigger fallback.
+    /// The token remains shared through subsequent formula materialization.
+    pub fn admit_automatic_with_cancellation(
+        self,
+        expansion: ExpansionLimits,
+        limits: FormulaLimits,
+        cancellation: &zetesis_cpu::Cancellation,
+    ) -> Result<
+        crate::AutomaticAdmission<Admitted, PreparedFormula>,
+        crate::AutomaticAdmissionFailure<
+            SourceFailure<ExpansionFailure>,
+            SourceFailure<FormulaFailure>,
+        >,
+    > {
+        crate::automatic::admit_source(self, expansion, &limits, cancellation)
     }
 
     /// Prepare the finite formula profile without reparsing original bytes.
@@ -323,6 +349,7 @@ mod tests {
 
     #[test]
     fn bundle_relational_admission_observes_control() {
+        // The shared bundle fixture is built over this crate, so its unit tests write their own.
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("entry.lp");
         std::fs::write(&path, "p(1..3).").unwrap();
@@ -348,6 +375,7 @@ mod tests {
 
     #[test]
     fn bundle_formula_materialization_retains_preparation_control() {
+        // The shared bundle fixture is built over this crate, so its unit tests write their own.
         let directory = tempfile::tempdir().unwrap();
         let path = directory.path().join("entry.lp");
         std::fs::write(&path, "a | b.").unwrap();

@@ -1,6 +1,7 @@
 [package]
 name = "zetesis-sat"
 version.workspace = true
+description = "Bounded native Boolean search and finite Ferraris stable-model enumeration."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -14,9 +15,10 @@ zetesis-ferraris.workspace = true
 
 [dev-dependencies]
 zetesis-themelios.workspace = true
-proptest = "1.11"
+proptest.workspace = true
 zetesis-test-support.workspace = true
 zetesis-theory-support.workspace = true
+zetesis-reference-support.workspace = true
 
 [lints]
 workspace = true

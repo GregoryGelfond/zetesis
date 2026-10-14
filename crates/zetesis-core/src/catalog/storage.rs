@@ -93,6 +93,27 @@ pub enum Fault {
     CatalogHasBase,
 }
 
+impl Fault {
+    /// Whether this cause refuses capacity, representation size or allocation,
+    /// rather than the supplied shape or canonical authority.
+    #[must_use]
+    pub const fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Value(ValueError::Limit { .. } | ValueError::Allocation)
+            | Self::Allocation
+            | Self::Storage { .. }
+            | Self::IdExhausted
+            | Self::Overflow => true,
+            Self::Value(ValueError::Shape)
+            | Self::Shape
+            | Self::FrozenVocabulary
+            | Self::VocabularyHasAtoms
+            | Self::UnindexedVocabulary
+            | Self::CatalogHasBase => false,
+        }
+    }
+}
+
 impl From<ValueError> for Fault {
     fn from(value: ValueError) -> Self {
         Self::Value(value)

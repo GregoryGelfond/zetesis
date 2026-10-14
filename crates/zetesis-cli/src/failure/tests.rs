@@ -1,11 +1,10 @@
 //! Compatibility projections must not become semantic state.
 
 use std::{io, num::NonZeroUsize};
+use zetesis_reference_support::formula;
 
 use zetesis_cpu::Cancellation;
-use zetesis_themelios::{
-    AdmissionOptions, Admitted, ExpansionLimits, FormulaLimits, admit_extended, admit_formula,
-};
+use zetesis_themelios::{AdmissionOptions, Admitted, ExpansionLimits, admit_extended};
 
 use crate::{Backend, Completion, PreparedInput, RunError, Session, SolveConfig, Subject};
 
@@ -114,13 +113,7 @@ fn report_mutation_cannot_rewrite_later_failure() {
 
 #[test]
 fn scoring_stop_remains_distinct_from_publication() {
-    let admitted = admit_formula(
-        "a. #minimize {1,k:a}.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("a. #minimize {1,k:a}.");
     let mut session = Session::new(
         PreparedInput::formula(&admitted),
         SolveConfig {
@@ -225,13 +218,7 @@ fn unpublished_membership_is_satisfiable() {
 
 #[test]
 fn unpublished_optimum_retains_its_status() {
-    let admitted = admit_formula(
-        "a. #minimize {1,k:a}.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = formula("a. #minimize {1,k:a}.");
     let progress = unpublished_session(PreparedInput::formula(&admitted), config());
     let semantic = progress.semantic().unwrap();
     assert_eq!(semantic.verified_models(), 1);

@@ -123,10 +123,10 @@ fn finite_expansion_is_automatic_and_respects_its_own_limits() {
         zetesis_themelios::AdmissionOptions::default(),
     )
     .unwrap()
-    .admit_extended(zetesis_themelios::ExpansionLimits {
-        max_templates: 2,
-        ..Default::default()
-    })
+    .admit_extended(zetesis_reference_support::resource_limits::expansion(
+        zetesis_themelios::ExpansionResource::Templates,
+        2,
+    ))
     .unwrap_err();
     assert!(matches!(
         error.error(),
@@ -207,7 +207,9 @@ fn process_includes_configuration_in_the_human_view() {
     assert!(!errors.contains("Answer:"));
 }
 
-#[cfg(not(feature = "gpu"))]
+// The default install's front is also built without `gpu`, but it hands a
+// device inventory to its sibling instead of answering it.
+#[cfg(not(any(feature = "gpu", feature = "front")))]
 #[test]
 fn cpu_only_devices_and_explicit_gpu_refusal_are_truthful() {
     let result = ProcessCommand::new(env!("CARGO_BIN_EXE_zetesis"))
@@ -234,6 +236,23 @@ fn cpu_only_devices_and_explicit_gpu_refusal_are_truthful() {
             &output
         )));
     }
+}
+
+// No sibling is installed beside a test build, so the front has nothing to hand
+// its device inventory to and must say so rather than answer it.
+#[cfg(all(unix, feature = "front", not(feature = "gpu")))]
+#[test]
+fn a_front_without_its_sibling_refuses_its_device_inventory() {
+    let result = ProcessCommand::new(env!("CARGO_BIN_EXE_zetesis"))
+        .arg("devices")
+        .stdin(Stdio::null())
+        .output()
+        .unwrap();
+    assert_eq!(result.status.code(), Some(2));
+    assert!(result.stdout.is_empty());
+    let errors = String::from_utf8(result.stderr).unwrap();
+    assert!(errors.contains("this install's GPU executable"), "{errors}");
+    assert!(errors.contains("could not be run"), "{errors}");
 }
 
 #[cfg(feature = "gpu")]

@@ -1,6 +1,7 @@
 //! Delta support coverage agrees with complete finite source substitutions.
 
 use std::cell::Cell;
+use zetesis_reference_support::resource_limits;
 
 use zetesis_clingo_support as oracle;
 use zetesis_reference_support as reference;
@@ -88,15 +89,9 @@ fn delta_completion_excludes_what_a_false_comparison_excludes() {
 #[test]
 fn support_completion_requires_the_final_empty_round() {
     let source = "p(0). p(X+1):-p(X),X<3,not stop(X).";
-    let exact = FormulaLimits {
-        max_support_rounds: 5,
-        ..Default::default()
-    };
+    let exact = resource_limits::formula(FormulaResource::SupportRounds, 5);
     assert!(reference::admit(source, &exact).is_ok());
-    let short = FormulaLimits {
-        max_support_rounds: 4,
-        ..exact
-    };
+    let short = resource_limits::formula(FormulaResource::SupportRounds, 4);
     assert!(matches!(
         reference::admit(source, &short),
         Err(FormulaFailure::Limit {
@@ -216,13 +211,7 @@ fn negative_delta_cannot_publish_a_refused_support_prefix() {
     let observation = SupportObservation::default();
     let result = observed(
         "p(0).p(1):-p(0).r(X,Y):-p(X),not blocked(X),p(Y).",
-        &FormulaLimits {
-            theory: zetesis_ferraris::AdmissionLimits {
-                max_atoms: 3,
-                ..zetesis_ferraris::AdmissionLimits::default()
-            },
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::Atoms, 3),
         &observation,
     );
     assert!(matches!(

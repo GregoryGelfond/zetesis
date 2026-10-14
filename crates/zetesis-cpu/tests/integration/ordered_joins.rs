@@ -68,7 +68,12 @@ fn source(rows: u8, selectors: u8) -> Program {
             vec![],
         ),
     ]);
-    Program::new(rules, AdmissionLimits::default()).unwrap()
+    Program::new(
+        rules,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn seed(source: &Program, bits: u8) -> Seed {
@@ -161,6 +166,7 @@ fn a_failed_suffix_cannot_poison_later_prefixes() {
                 vec![],
             ),
         ],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();

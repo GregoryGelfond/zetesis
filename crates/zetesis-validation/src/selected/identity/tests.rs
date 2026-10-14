@@ -1,4 +1,5 @@
-//! Adversarial contracts for the private corpus boundary.
+//! Adversarial contracts for the private corpus boundary and for the rule
+//! that settles the executables native runs name.
 
 use super::*;
 
@@ -210,4 +211,163 @@ fn non_utf8_symlink_targets_are_refused() {
     assert!(
         matches!(error, Error::Path { path: refused, detail:"canonical path requires lossless UTF-8 representation" } if refused == path.canonicalize().unwrap())
     );
+}
+
+/// Files standing in for the native executable, the one it hands runs to,
+/// and a third, with the rule for runs of the first.
+fn executables() -> (tempfile::TempDir, Executables, PathBuf, PathBuf, PathBuf) {
+    let directory = tempfile::tempdir().unwrap();
+    let path = |name: &str| {
+        let path = directory.path().join(name);
+        std::fs::write(&path, name).unwrap();
+        path.canonicalize().unwrap()
+    };
+    let (native, sibling, third) = (path("native"), path("sibling"), path("third"));
+    let rule = Executables::new(&seal(&native, 1024).unwrap(), 1024);
+    (directory, rule, native, sibling, third)
+}
+
+#[test]
+fn a_statistics_object_names_its_executable_by_key() {
+    let named = |statistics: serde_json::Value| super::named(&statistics);
+    assert_eq!(named(serde_json::json!({})), Named::Omitted);
+    assert_eq!(
+        named(serde_json::json!({"executable": null})),
+        Named::Unresolved
+    );
+    assert_eq!(
+        named(serde_json::json!({"executable": "/opt/zetesis"})),
+        Named::Path("/opt/zetesis".into())
+    );
+}
+
+#[test]
+fn an_executable_value_that_is_not_a_path_reads_as_unresolved() {
+    // No zetesis build writes these; another executable or a corrupted report
+    // could, and such a run must not count as the native executable.
+    let named = |executable: serde_json::Value| {
+        super::named(&serde_json::json!({ "executable": executable }))
+    };
+    for value in [
+        serde_json::json!(42),
+        serde_json::json!(true),
+        serde_json::json!(["/opt/zetesis"]),
+        serde_json::json!({}),
+    ] {
+        assert_eq!(named(value.clone()), Named::Unresolved, "{value}");
+    }
+}
+
+#[test]
+fn statistics_that_are_not_an_object_read_as_no_statistics() {
+    let named = |statistics: serde_json::Value| super::named(&statistics);
+    assert_eq!(named(serde_json::Value::Null), Named::NoStatistics);
+    assert_eq!(named(serde_json::json!("statistics")), Named::NoStatistics);
+}
+
+#[test]
+fn a_run_whose_report_has_no_statistics_is_refused() {
+    // Counting it as the native executable would attribute a handed-off GPU
+    // run to the front.
+    let (_directory, mut rule, _, _, _) = executables();
+    let refusal = rule.settle(&Named::NoStatistics).unwrap_err();
+    assert!(refusal.contains("no statistics"), "{refusal}");
+}
+
+#[test]
+fn runs_naming_the_native_executable_or_none_seal_nothing() {
+    let (_directory, mut rule, native, _, _) = executables();
+    for named in [Named::Path(native), Named::Omitted] {
+        rule.settle(&named).unwrap();
+    }
+    let (sealed, after) = rule.close();
+    assert!(sealed.is_none() && after.is_none());
+}
+
+#[test]
+fn a_run_that_cannot_name_its_executable_is_refused() {
+    // After a hand-off the run that cannot name itself is the sibling, so it
+    // cannot count as the native executable.
+    let (_directory, mut rule, _, _, _) = executables();
+    let refusal = rule.settle(&Named::Unresolved).unwrap_err();
+    assert!(refusal.contains("could not name"), "{refusal}");
+}
+
+#[test]
+fn runs_alternating_with_one_other_executable_seal_it_once() {
+    let (_directory, mut rule, native, sibling, _) = executables();
+    for named in [
+        Named::Path(native.clone()),
+        Named::Path(sibling.clone()),
+        Named::Path(native),
+        Named::Path(sibling.clone()),
+    ] {
+        rule.settle(&named).unwrap();
+    }
+    let (sealed, after) = rule.close();
+    let sealed = sealed.unwrap();
+    assert_eq!(sealed.canonical(), sibling);
+    assert_eq!(sealed.bytes(), "sibling".len() as u64);
+    assert!(after.unwrap().unchanged());
+}
+
+#[test]
+fn a_run_naming_a_third_executable_is_refused() {
+    let (_directory, mut rule, native, sibling, third) = executables();
+    rule.settle(&Named::Path(sibling.clone())).unwrap();
+    let refusal = rule.settle(&Named::Path(third.clone())).unwrap_err();
+    for path in [&third, &sibling, &native] {
+        assert!(refusal.contains(&path.display().to_string()), "{refusal}");
+    }
+    assert_eq!(rule.close().0.unwrap().canonical(), sibling);
+}
+
+#[test]
+fn an_executable_that_cannot_be_sealed_is_refused() {
+    let (directory, mut rule, _, _, _) = executables();
+    let refusal = rule
+        .settle(&Named::Path(directory.path().join("missing")))
+        .unwrap_err();
+    assert!(refusal.contains("could not be sealed"), "{refusal}");
+}
+
+#[test]
+fn a_relative_executable_path_reads_as_unresolved() {
+    // A relative path would resolve against this process's working directory,
+    // not the run's, so it names no executable this rule can check.
+    let named = |executable: &str| super::named(&serde_json::json!({ "executable": executable }));
+    for executable in ["zetesis", "bin/zetesis", "./zetesis", ""] {
+        assert_eq!(named(executable), Named::Unresolved, "{executable:?}");
+    }
+}
+
+/// A link named `name` in `directory` to `target`.
+#[cfg(unix)]
+fn link(directory: &tempfile::TempDir, name: &str, target: &Path) -> PathBuf {
+    let alias = directory.path().join(name);
+    std::os::unix::fs::symlink(target, &alias).unwrap();
+    alias
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_to_the_native_executable_names_the_native_one() {
+    let (directory, mut rule, native, _, _) = executables();
+    let alias = link(&directory, "native-alias", &native);
+    rule.settle(&Named::Path(alias)).unwrap();
+    let (sealed, after) = rule.close();
+    assert!(sealed.is_none() && after.is_none());
+}
+
+#[cfg(unix)]
+#[test]
+fn runs_naming_one_executable_through_a_link_settle_to_it() {
+    // Comparing the named path itself would refuse the second run as naming a
+    // third executable.
+    let (directory, mut rule, _, sibling, _) = executables();
+    let alias = link(&directory, "sibling-alias", &sibling);
+    for named in [alias.clone(), alias, sibling.clone()] {
+        rule.settle(&Named::Path(named)).unwrap();
+    }
+    assert_eq!(rule.close().0.unwrap().canonical(), sibling);
 }

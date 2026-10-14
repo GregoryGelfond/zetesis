@@ -1,37 +1,30 @@
 //! Comparison generators retain the complete guards and original reduct semantics.
 //! Exact external records complement a separate finite definition evaluator.
 
+use crate::support::admission;
 use std::collections::BTreeSet;
-use std::fs::{self};
+use zetesis_reference_support::{BundleFixture, canonical, resource_limits};
 
-use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected, json_model};
-use crate::support::finite_bindings::{Models, exhaustive, holds, native, remap, values};
+use crate::support::clingo_reports::{enumerated_or_refused_unsafe, expected};
+use crate::support::finite_bindings::{exhaustive, holds, native, remap, values};
 use serde_json::Value as Json;
 use themelios_base::source::SourceId;
+use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::canonical;
 use zetesis_themelios::{
-    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits,
-    ExpansionFailure, ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource,
-    ProfileFeature, SourceBundle, admit_bundle_formula, admit_formula,
+    AdmissionFailure, AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, ExpansionFailure,
+    ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature,
+    admit_bundle_formula, admit_formula,
 };
 
 const SOURCE: SourceId = SourceId::new(101);
 
 fn options() -> AdmissionOptions {
-    AdmissionOptions {
-        source_id: SOURCE,
-        ..Default::default()
-    }
+    admission::options(SOURCE)
 }
 
 fn input(source: &str) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        options(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
+    admission::admit(SOURCE, source)
 }
 
 fn cases() -> Vec<Json> {
@@ -175,10 +168,7 @@ fn exact_integer_domain_bounds_and_empty_endpoints_do_not_wrap() {
         source.into(),
         options(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_assignment_values: 2,
-            ..Default::default()
-        },
+        resource_limits::formula(FormulaResource::AssignmentValues, 2),
     );
     assert!(
         matches!(result, Err(FormulaFailure::Limit { resource: FormulaResource::AssignmentValues, limit: 2, observed: 3, location }) if location.location().expect("parsed source").source == SOURCE)
@@ -187,10 +177,7 @@ fn exact_integer_domain_bounds_and_empty_endpoints_do_not_wrap() {
         source.into(),
         options(),
         ExpansionLimits::default(),
-        FormulaLimits {
-            max_assignment_values: 3,
-            ..Default::default()
-        },
+        resource_limits::formula(FormulaResource::AssignmentValues, 3),
     )
     .unwrap();
     assert_eq!(native(&result), native(&input("p(1..3).").unwrap()));
@@ -203,10 +190,7 @@ fn exact_integer_domain_bounds_and_empty_endpoints_do_not_wrap() {
             source.into(),
             options(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                max_assignment_values: 0,
-                ..Default::default()
-            },
+            resource_limits::formula(FormulaResource::AssignmentValues, 0),
         )
         .unwrap();
         assert_eq!(
@@ -226,10 +210,7 @@ fn interrupted_generator_construction_never_returns_a_partial_program() {
             source.into(),
             options(),
             ExpansionLimits::default(),
-            FormulaLimits {
-                max_substitutions: cap,
-                ..Default::default()
-            },
+            resource_limits::formula(FormulaResource::Substitutions, cap),
         );
         match result {
             Ok(program) => {
@@ -261,15 +242,13 @@ fn interrupted_generator_construction_never_returns_a_partial_program() {
 
 #[test]
 fn generated_include_rules_keep_original_identity_and_display_selection() {
-    let directory = tempfile::tempdir().unwrap();
-    let root = directory.path().join("root.lp");
-    let rules = directory.path().join("rules.lp");
+    let fixture = BundleFixture::new();
     let source = "#include \"rules.lp\". #show p/1.";
     let rule = "p(X):-not not X=1<2.";
-    fs::write(&root, source).unwrap();
-    fs::write(&rules, rule).unwrap();
+    fixture.write("entry.lp", source);
+    fixture.write("rules.lp", rule);
     let program = admit_bundle_formula(
-        SourceBundle::load(&root, BundleLimits::default()).unwrap(),
+        fixture.bundle(),
         BundleAdmissionOptions::default(),
         ExpansionLimits::default(),
         FormulaLimits::default(),
@@ -333,23 +312,7 @@ fn comparison_generators_match_clingo() {
             continue;
         }
         valid += 1;
-        assert_eq!(actual["Models"]["More"], "no");
-        let witnesses: Vec<_> = actual["Call"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .flat_map(|call| call["Witnesses"].as_array().into_iter().flatten())
-            .collect();
-        assert!(witnesses.iter().all(|witness| witness["Costs"].is_null()));
-        let models: Models = witnesses
-            .iter()
-            .map(|witness| json_model(&witness["Value"]))
-            .collect();
-        assert_eq!(models.len(), witnesses.len());
-        assert_eq!(
-            actual["Models"]["Number"].as_u64(),
-            Some(witnesses.len() as u64)
-        );
+        let models = oracle::objective_free_models(&actual);
         assert_eq!(models, expected(&row), "{}", row["name"]);
         // Keep the historical fixture and fresh oracle checks unchanged;
         // the mixed-family policy now admits this row with one warning.

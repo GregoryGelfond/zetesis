@@ -1,14 +1,13 @@
 //! Pure expression evaluation observes full models without extending logical grounding.
 
+use crate::support::observation_construction;
 use crate::support::observation_reference;
 use crate::support::observation_rendering::shown as terms;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
-use zetesis_reference_support::formula;
-use zetesis_themelios::observation::{
-    ConstructionLimits, ErrorKind, EvaluationError, Limits, Resource,
-};
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
+use zetesis_reference_support::{admit, formula};
+use zetesis_themelios::FormulaLimits;
+use zetesis_themelios::observation::{ErrorKind, EvaluationError, Limits, Resource};
 
 #[test]
 fn checked_integer_operators_construct_their_scalar_results() {
@@ -93,7 +92,7 @@ fn comparison_operands_share_the_construction_ceiling() {
             .evaluate_with_construction_limits(
                 &Model::default(),
                 Limits::default(),
-                ConstructionLimits { max_bytes },
+                observation_construction::limits(Resource::ConstructionBytes, max_bytes),
                 &Cancellation::default(),
             )
     };
@@ -188,12 +187,7 @@ fn completed_directives_release_their_owned_bindings() {
 
 #[test]
 fn circular_equalities_do_not_establish_a_finite_binding() {
-    let result = admit_formula(
-        "#show X:X=Y,Y=X.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    );
+    let result = admit("#show X:X=Y,Y=X.", &FormulaLimits::default());
     assert!(
         matches!(result, Err(zetesis_themelios::FormulaFailure::Observation { error })
         if error.kind() == &ErrorKind::Unsupported(zetesis_themelios::observation::Feature::UnsafeVariable))
@@ -354,12 +348,7 @@ fn a_pool_exports_only_variables_captured_in_every_branch() {
         "#show x:p(X;1),#count{Y:q(X,Y)}>0.",
         "#show x:p(X;1),q(X):r.",
     ] {
-        let result = admit_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        );
+        let result = admit(source, &FormulaLimits::default());
         assert!(
             matches!(result, Err(zetesis_themelios::FormulaFailure::Observation { error }) if error.kind() == &ErrorKind::Unsupported(zetesis_themelios::observation::Feature::UnsafeVariable)),
             "{source}"
@@ -501,11 +490,9 @@ fn atom_pattern_cases_preserve_complete_displays() {
 fn structural_pool_products_are_charged_before_materialization() {
     for (arity, pool, minimum) in [(32, "(1;2)", 1u128 << 32), (64, "(1;2;3;4)", u128::MAX)] {
         let arguments = vec![pool; arity].join(",");
-        let result = admit_formula(
-            format!("#show x:p({arguments})."),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
+        let result = admit(
+            &format!("#show x:p({arguments})."),
+            &FormulaLimits::default(),
         );
         assert!(
             matches!(result, Err(zetesis_themelios::FormulaFailure::Observation { error }) if matches!(error.kind(), ErrorKind::Limit { resource: Resource::Nodes, observed, .. } if *observed >= minimum))

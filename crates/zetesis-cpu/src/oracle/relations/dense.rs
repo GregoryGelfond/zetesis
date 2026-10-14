@@ -21,7 +21,7 @@ use std::{mem::size_of, ops::Range, sync::Arc};
 use zetesis_core::catalog::{PredicateRef, TermRef};
 #[cfg(test)]
 use zetesis_core::{Atom, Predicate, Value};
-use zetesis_core::{AtomKey, Program};
+use zetesis_core::{AtomKey, DomainPositions, Program};
 
 use super::super::argument_bounds::Bound;
 use super::{RowSet, Work, charge};
@@ -166,6 +166,59 @@ impl Layout {
             }
         }
         Ok(None)
+    }
+
+    /// The rank of a domain position on an argument's axis, by an integer
+    /// search charging one unit per probe as [`Self::rank`] does. Each axis
+    /// lists domain positions in increasing order and the domain is in
+    /// canonical order, so this is the rank the content search finds.
+    fn rank_position(
+        &self,
+        argument: usize,
+        position: usize,
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, Stop> {
+        let Some(axis) = self.axes.get(argument) else {
+            return Ok(None);
+        };
+        let (mut start, mut end) = (0, axis.len());
+        while start < end {
+            charge(work, 1)?;
+            let middle = start + (end - start) / 2;
+            match axis[middle].cmp(&position) {
+                std::cmp::Ordering::Equal => return Ok(Some(middle)),
+                std::cmp::Ordering::Less => start = middle + 1,
+                std::cmp::Ordering::Greater => end = middle,
+            }
+        }
+        Ok(None)
+    }
+
+    /// [`Self::position_of`] for preparation, which holds the program's domain
+    /// position table: each value's rank comes from its domain position, and
+    /// a value the table cannot name takes the content search.
+    pub(in crate::oracle) fn position_by_identity<'v, T: Into<TermRef<'v>>>(
+        &self,
+        values: impl IntoIterator<Item = T>,
+        positions: &DomainPositions<'_>,
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, Stop> {
+        let mut position = 0;
+        let mut arguments = 0;
+        for (argument, value) in values.into_iter().enumerate() {
+            let value = value.into();
+            charge(work, 2)?;
+            let rank = match positions.position(value) {
+                Some(domain) => self.rank_position(argument, domain, work)?,
+                None => self.rank(argument, value, work)?,
+            };
+            let Some(rank) = rank else {
+                return Ok(None);
+            };
+            position += rank * self.strides[argument];
+            arguments += 1;
+        }
+        Ok((arguments == self.axes.len()).then_some(position))
     }
 
     pub(in crate::oracle) fn position_of<'v, T: Into<TermRef<'v>>>(

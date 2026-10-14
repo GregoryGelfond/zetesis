@@ -7,7 +7,7 @@ use zetesis_test_support::programs::nullary_pattern as atom;
 
 /// Families expose both rule-order sensitivity and independent parallel work.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Family {
+pub(crate) enum Family {
     /// Consequences precede their support, requiring repeated dense scans.
     ReverseChain,
     /// Independent gated consequences share a single positive root.
@@ -17,7 +17,7 @@ pub enum Family {
 /// A compiled static program of one family: eight gates, a root consequence,
 /// `consequences - 1` gated rules and one constraint, so batches hold both
 /// accepted and constraint-rejected worlds.
-pub fn program(family: Family, consequences: usize) -> GroundProgram {
+pub(crate) fn program(family: Family, consequences: usize) -> GroundProgram {
     let gates: Vec<_> = (0..8).map(|index| atom(&format!("g{index}"))).collect();
     let atoms: Vec<_> = (0..consequences)
         .map(|index| atom(&format!("p{index:04}")))
@@ -67,8 +67,12 @@ pub fn program(family: Family, consequences: usize) -> GroundProgram {
         vec![],
         vec![],
     ));
-    let program =
-        Program::new(templates, AdmissionLimits::default()).expect("the fixture program is safe");
+    let program = Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .expect("the fixture program is safe");
     GroundProgram::compile(
         &program,
         StaticLimits {
@@ -83,7 +87,7 @@ pub fn program(family: Family, consequences: usize) -> GroundProgram {
 /// `count` worlds with shifted gate patterns; `salt` changes their content in
 /// place. Counts above 256 repeat patterns, scaling the batch rather than
 /// adding distinct candidates.
-pub fn seeds(program: &GroundProgram, count: usize, salt: usize) -> Vec<Seed> {
+pub(crate) fn seeds(program: &GroundProgram, count: usize, salt: usize) -> Vec<Seed> {
     let gates: Vec<_> = program
         .program()
         .gate_atoms()

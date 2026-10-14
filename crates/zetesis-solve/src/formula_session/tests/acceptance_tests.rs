@@ -12,10 +12,7 @@ use std::convert::Infallible;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
 use zetesis_sat::{Incomplete, StableModels};
-use zetesis_themelios::{
-    AdmissionOptions, ConstraintCheckLimits, ConstraintVerdict, ExpansionLimits, FormulaLimits,
-    prepare_formula,
-};
+use zetesis_themelios::{ConstraintCheckLimits, ConstraintVerdict};
 
 /// A fixed order of independently checked core interpretations. Ending this
 /// controlled prefix reports an interruption, never fabricated exhaustion.
@@ -53,15 +50,9 @@ impl ExecutionObserver for BoundScores {
 
 #[test]
 fn a_rejected_cheap_proposal_cannot_tighten_the_bound() {
-    let owner = prepare_formula(
-        include_str!("../../../tests/fixtures/hybrid-objectives/cheap-invalid.lp").into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_hybrid()
-    .unwrap();
+    let owner = zetesis_reference_support::hybrid(include_str!(
+        "../../../tests/fixtures/hybrid-objectives/cheap-invalid.lp"
+    ));
     let p = owner
         .atom_catalog()
         .atoms()

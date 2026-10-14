@@ -1,25 +1,19 @@
 //! Successful admission retains bounded warnings and original source evidence.
 
-use std::fs;
+use crate::support::admission;
+use zetesis_reference_support::{BundleFixture, resource_limits};
 
 use zetesis_test_support::fixtures::ZERO_DIVISOR as SOURCE;
 use zetesis_themelios::base::{diagnostic::Severity, source::SourceId};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, BundleAdmissionOptions, BundleLimits, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, FormulaWarning, SourceBundle,
-    admit_bundle_formula, admit_formula,
+    AdmittedFormula, BundleAdmissionOptions, ExpansionLimits, FormulaFailure, FormulaLimits,
+    FormulaResource, FormulaWarning, admit_bundle_formula,
 };
 
+const SOURCE_ID: SourceId = SourceId::new(7);
+
 fn admit(source: &str, limits: &FormulaLimits) -> Result<AdmittedFormula, FormulaFailure> {
-    admit_formula(
-        source.into(),
-        AdmissionOptions {
-            source_id: SourceId::new(7),
-            ..AdmissionOptions::default()
-        },
-        ExpansionLimits::default(),
-        *limits,
-    )
+    admission::admit_with(SOURCE_ID, source, ExpansionLimits::default(), limits)
 }
 
 #[test]
@@ -30,7 +24,7 @@ fn warnings_retain_their_original_locations() {
     };
     assert_eq!(
         location.location().expect("parsed source").source,
-        SourceId::new(7)
+        SOURCE_ID
     );
     assert_eq!(warning.site(), *location);
     assert_eq!(
@@ -82,10 +76,7 @@ fn unreached_zero_divisors_retain_no_warnings() {
     ] {
         let admitted = admit(
             source,
-            &FormulaLimits {
-                max_warnings: 0,
-                ..FormulaLimits::default()
-            },
+            &resource_limits::formula(FormulaResource::Warnings, 0),
         )
         .unwrap();
         assert!(admitted.warnings().is_empty(), "{source}");
@@ -97,10 +88,7 @@ fn unreached_zero_divisors_retain_no_warnings() {
 fn repeated_evaluations_retain_one_warning_location() {
     let admitted = admit(
         "d(0..4). p(X,Y) :- d(X), d(Y), 1/X=1.",
-        &FormulaLimits {
-            max_warnings: 1,
-            ..FormulaLimits::default()
-        },
+        &resource_limits::formula(FormulaResource::Warnings, 1),
     )
     .unwrap();
     assert_eq!(admitted.warnings().len(), 1);
@@ -130,10 +118,7 @@ fn warning_retention_exhaustion_refuses_admission() {
     ] {
         let failure = admit(
             source,
-            &FormulaLimits {
-                max_warnings: limit,
-                ..FormulaLimits::default()
-            },
+            &resource_limits::formula(FormulaResource::Warnings, limit),
         )
         .unwrap_err();
         assert!(
@@ -142,7 +127,7 @@ fn warning_retention_exhaustion_refuses_admission() {
                 limit: ceiling,
                 observed,
                 ..
-            } if ceiling == limit as u128 && observed == limit as u128 + 1),
+            } if ceiling == u128::from(limit) && observed == u128::from(limit) + 1),
             "{failure}"
         );
     }
@@ -150,19 +135,17 @@ fn warning_retention_exhaustion_refuses_admission() {
 
 #[test]
 fn bundle_warning_view_uses_retained_original_bytes() {
-    let directory = tempfile::tempdir().unwrap();
-    let entry = directory.path().join("entry.lp");
-    let child = directory.path().join("child.lp");
-    fs::write(&entry, "#include \"child.lp\".\n").unwrap();
-    fs::write(&child, SOURCE).unwrap();
-    let bundle = SourceBundle::load(&entry, BundleLimits::default()).unwrap();
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", "#include \"child.lp\".\n");
+    fixture.write("child.lp", SOURCE);
+    let bundle = fixture.bundle();
     let source_id = bundle
         .sources()
         .iter()
         .find(|source| source.id() != bundle.entry())
         .unwrap()
         .id();
-    fs::write(&child, "replacement.\n").unwrap();
+    fixture.write("child.lp", "replacement.\n");
     let admitted = admit_bundle_formula(
         bundle,
         BundleAdmissionOptions::default(),

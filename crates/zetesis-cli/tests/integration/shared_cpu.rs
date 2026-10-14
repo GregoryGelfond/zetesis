@@ -343,13 +343,7 @@ fn prepared_relational_sessions_expose_shared_evidence() {
 
 #[test]
 fn prepared_formula_cannot_ignore_shared_source_selection() {
-    let admitted = zetesis_themelios::admit_formula(
-        "a|b.".into(),
-        zetesis_themelios::AdmissionOptions::default(),
-        zetesis_themelios::ExpansionLimits::default(),
-        zetesis_themelios::FormulaLimits::default(),
-    )
-    .unwrap();
+    let admitted = zetesis_reference_support::formula("a|b.");
     let Err(error) = zetesis_cli::Session::new(
         zetesis_cli::PreparedInput::formula(&admitted),
         zetesis_cli::SolveConfig {

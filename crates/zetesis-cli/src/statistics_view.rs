@@ -134,7 +134,15 @@ impl Statistics<'_> {
                 ),
             ]),
             Row::new([
-                "Candidate progress".to_owned(),
+                if self
+                    .semantic
+                    .is_some_and(|value| value.source_evaluation().is_some())
+                {
+                    "Completed source evaluations"
+                } else {
+                    "Candidate progress"
+                }
+                .to_owned(),
                 self.semantic.map_or_else(
                     || "unavailable".to_owned(),
                     |value| value.candidate_progress().to_string(),

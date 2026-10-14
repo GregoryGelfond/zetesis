@@ -3,7 +3,7 @@
 use std::mem::size_of;
 
 use super::{Budget, StratifiedError, StratifiedPlan, evaluate, order};
-use crate::{Interpretation, NodeView, Theory, Threshold};
+use crate::{ExtremumCut, Interpretation, NodeView, Theory, Threshold};
 use zetesis_cpu::Stop;
 
 #[derive(Clone, Copy)]
@@ -39,19 +39,19 @@ pub(super) struct Graph {
 }
 
 impl Graph {
-    pub fn vertices(&self) -> usize {
+    pub(super) fn vertices(&self) -> usize {
         self.offsets.len() - 1
     }
 
-    pub fn outgoing(&self, vertex: usize) -> &[Edge] {
+    pub(super) fn outgoing(&self, vertex: usize) -> &[Edge] {
         &self.edges[self.offsets[vertex]..self.offsets[vertex + 1]]
     }
 
-    pub fn incoming(&self, vertex: usize) -> &[usize] {
+    pub(super) fn incoming(&self, vertex: usize) -> &[usize] {
         &self.sources[self.reverse_offsets[vertex]..self.reverse_offsets[vertex + 1]]
     }
 
-    pub fn release(self, budget: &mut Budget<'_>) -> Result<(), StratifiedError> {
+    pub(super) fn release(self, budget: &mut Budget<'_, '_>) -> Result<(), StratifiedError> {
         budget.release(self.offsets)?;
         budget.release(self.edges)?;
         budget.release(self.reverse_offsets)?;
@@ -61,9 +61,9 @@ impl Graph {
 
 pub(super) fn build(
     theory: &Theory,
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<(Interpretation, Option<usize>), StratifiedError> {
-    budget.cancellation.poll()?;
+    budget.meter.poll()?;
     // Reserve all concurrently held vector headers, including temporary graph
     // cursors and component DFS storage. Capacity is admitted separately.
     let headers = size_of::<StratifiedPlan>()
@@ -90,7 +90,7 @@ pub(super) fn build(
     Ok((consequences, failed_constraint))
 }
 
-fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, StratifiedError> {
+fn classify(theory: &Theory, budget: &mut Budget<'_, '_>) -> Result<Vec<Kind>, StratifiedError> {
     let mut kinds: Vec<Kind> = budget.reserve(theory.nodes().len())?;
     let view = theory.view();
     for index in 0..view.len() {
@@ -121,6 +121,7 @@ fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, Strat
                 }
             }
             NodeView::Threshold(threshold) => classify_threshold(threshold, &kinds, budget)?,
+            NodeView::ExtremumCut(cut) => classify_cut(cut, &kinds, budget)?,
             NodeView::Or(_) => Kind::Unsupported,
         };
         kinds.push(kind);
@@ -131,13 +132,39 @@ fn classify(theory: &Theory, budget: &mut Budget<'_>) -> Result<Vec<Kind>, Strat
 fn resolved_kind(
     kinds: &[Kind],
     mut index: usize,
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Kind, StratifiedError> {
     while let Kind::Alias(child) = kinds[index] {
         budget.tick()?;
         index = child;
     }
     Ok(kinds[index])
+}
+
+/// An interior cut is a disjunction of qualifying witnesses. Only no witness
+/// or repetitions of one normal child fit the existing conjunction grammar.
+fn classify_cut(
+    cut: ExtremumCut<'_>,
+    kinds: &[Kind],
+    budget: &mut Budget<'_, '_>,
+) -> Result<Kind, StratifiedError> {
+    if let Some(truth) = cut.endpoint_truth() {
+        return Ok(if truth { Kind::True } else { Kind::False });
+    }
+    let mut first = None;
+    let mut same = true;
+    for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+        budget.tick()?;
+        if cut.qualifies(rank) {
+            same &= first.is_none_or(|previous| previous == child);
+            first = first.or(Some(child));
+        }
+    }
+    Ok(match first {
+        None => Kind::False,
+        Some(child) if same && kinds[child].normal() => Kind::Alias(child),
+        Some(_) => Kind::Unsupported,
+    })
 }
 
 /// Admit only the existing conjunction/literal grammar. Every positive entry
@@ -147,7 +174,7 @@ fn resolved_kind(
 fn classify_threshold(
     threshold: Threshold<'_>,
     kinds: &[Kind],
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Kind, StratifiedError> {
     let mut total = 0_i128;
     let mut smallest = i128::MAX;
@@ -186,7 +213,7 @@ fn classify_threshold(
 fn graph(
     theory: &Theory,
     kinds: &[Kind],
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Graph, StratifiedError> {
     let vertices = theory
         .atom_count()
@@ -252,8 +279,8 @@ fn graph(
 fn edges(
     theory: &Theory,
     kinds: &[Kind],
-    budget: &mut Budget<'_>,
-    mut visit: impl FnMut(usize, Edge, &mut Budget<'_>) -> Result<(), StratifiedError>,
+    budget: &mut Budget<'_, '_>,
+    mut visit: impl FnMut(usize, Edge, &mut Budget<'_, '_>) -> Result<(), StratifiedError>,
 ) -> Result<(), StratifiedError> {
     let atoms = theory.atom_count();
     let view = theory.view();
@@ -346,7 +373,7 @@ fn producer(
     theory: &Theory,
     root: usize,
     kinds: &[Kind],
-    budget: &mut Budget<'_>,
+    budget: &mut Budget<'_, '_>,
 ) -> Result<Option<(usize, usize)>, StratifiedError> {
     let view = theory.view();
     match view.node(root).map_err(|_| Stop::InvalidProgram)? {
@@ -364,7 +391,7 @@ fn producer(
                 _ => Err(StratifiedError::UnsupportedRoot { root }),
             }
         }
-        NodeView::And(_) | NodeView::Or(_) | NodeView::Threshold(_) => {
+        NodeView::And(_) | NodeView::Or(_) | NodeView::Threshold(_) | NodeView::ExtremumCut(_) => {
             Err(StratifiedError::UnsupportedRoot { root })
         }
     }

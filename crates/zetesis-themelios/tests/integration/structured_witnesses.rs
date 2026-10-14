@@ -1,12 +1,12 @@
 //! Local witnesses retain complete atoms under structural selection.
 use crate::support::finite_bindings as reference;
-use crate::support::witnesses::limited;
-use reference::{Models, exhaustive, external, holds, native, values};
+use crate::support::witnesses::{self, limited};
+use reference::{Models, native, values};
 use std::collections::BTreeSet;
-use zetesis_reference_support::{canonical, formula};
+use zetesis_reference_support::{canonical, formula, resource_limits};
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, ExpansionFailure, ExpansionLimits, ExpansionResource,
-    FormulaFailure, FormulaLimits, FormulaResource, admit_formula,
+    AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionResource, FormulaFailure,
+    FormulaLimits, FormulaResource, admit_formula,
 };
 
 // Written finite substitutions retain full supporting atoms. A condition row
@@ -144,55 +144,12 @@ fn models_match_finite_substitution() {
 
 #[test]
 fn stability_matches_subset_enumeration() {
-    for &(source, _) in CASES {
-        let admitted = formula(source);
-        assert_eq!(native(&admitted), exhaustive(&admitted), "{source}");
-    }
+    reference::stability_matches_exhaustion(CASES.iter().map(|&(source, _)| source), formula);
 }
 
 #[test]
 fn frozen_truth_matches_finite_substitution() {
-    let mut pairs = 0;
-    for &(source, expanded) in CASES {
-        let left = formula(source);
-        let right = formula(expanded);
-        let names: Vec<_> = left.atoms().iter().map(canonical).collect();
-        let other: Vec<_> = right.atoms().iter().map(canonical).collect();
-        assert_eq!(
-            names.iter().collect::<BTreeSet<_>>(),
-            other.iter().collect(),
-            "{source}"
-        );
-        assert!(names.len() <= 7);
-        let remap = |mask: usize| {
-            names.iter().enumerate().fold(0, |result, (index, name)| {
-                result
-                    | (usize::from(mask & (1 << index) != 0)
-                        << other.iter().position(|other| other == name).unwrap())
-            })
-        };
-        for outer in 0..1 << names.len() {
-            let a = values(left.theory(), outer, None);
-            let b = values(right.theory(), remap(outer), None);
-            assert_eq!(
-                holds(left.theory(), &a),
-                holds(right.theory(), &b),
-                "{source}"
-            );
-            for inner in 0..1 << names.len() {
-                assert_eq!(
-                    holds(left.theory(), &values(left.theory(), inner, Some(&a))),
-                    holds(
-                        right.theory(),
-                        &values(right.theory(), remap(inner), Some(&b))
-                    ),
-                    "{source}: M={outer} J={inner}"
-                );
-                pairs += 1;
-            }
-        }
-    }
-    println!("source_pairs={} frozen_pairs={pairs}", CASES.len());
+    reference::frozen_truth_matches(CASES.iter().copied(), formula);
 }
 
 // A pair is truth at M and truth of the formula frozen at M, evaluated at J.
@@ -262,40 +219,12 @@ fn conditional_truth_matches_quantified_witnesses() {
 #[test]
 #[ignore = "requires clingo: original sources match clingo full models"]
 fn original_sources_match_clingo_full_models() {
-    let mut total = 0;
-    for source in CASES
-        .iter()
-        .map(|&(source, _)| source)
-        .chain(NEGATIVE_ANONYMOUS_CASES.iter().map(|&(source, _)| source))
-    {
-        let result = external(source, true);
-        assert_eq!(result["Models"]["More"], "no");
-        let mut expected = Models::new();
-        let mut count = 0;
-        for call in result["Call"].as_array().unwrap() {
-            if let Some(witnesses) = call["Witnesses"].as_array() {
-                for witness in witnesses {
-                    count += 1;
-                    assert!(
-                        expected.insert(
-                            witness["Value"]
-                                .as_array()
-                                .unwrap()
-                                .iter()
-                                .map(|atom| atom.as_str().unwrap().to_owned())
-                                .collect()
-                        )
-                    );
-                }
-            }
-        }
-        assert_eq!(result["Models"]["Number"].as_u64(), Some(count));
-        assert_eq!(native(&formula(source)), expected, "{source}");
-        total += count;
-    }
-    println!(
-        "complete_sources={} full_models={total}",
-        CASES.len() + NEGATIVE_ANONYMOUS_CASES.len()
+    reference::original_sources_match_clingo_full_models(
+        CASES
+            .iter()
+            .map(|&(source, _)| source)
+            .chain(NEGATIVE_ANONYMOUS_CASES.iter().map(|&(source, _)| source)),
+        formula,
     );
 }
 
@@ -407,12 +336,10 @@ fn late_mismatch_cannot_poison_the_next_witness() {
 
 #[test]
 fn anonymous_positions_need_only_the_whole_capture() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 1;
     assert!(
         admit_formula(
             "p(f(1,g(2,3))).q:-p(f(_,g(_,_))):#true.".into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 1),
             ExpansionLimits::default(),
             FormulaLimits::default()
         )
@@ -422,23 +349,20 @@ fn anonymous_positions_need_only_the_whole_capture() {
 
 #[test]
 fn witness_capture_limit_is_inclusive() {
-    let mut options = AdmissionOptions::default();
-    options.core_limits.max_variables_per_template = 2;
     let source = "p(f(1)).q:-p(f(X)):#true.";
     assert!(
         admit_formula(
             source.into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 2),
             ExpansionLimits::default(),
             FormulaLimits::default()
         )
         .is_ok()
     );
-    options.core_limits.max_variables_per_template = 1;
     assert!(matches!(
         admit_formula(
             source.into(),
-            options,
+            resource_limits::admission_formula(FormulaResource::Variables, 1),
             ExpansionLimits::default(),
             FormulaLimits::default()
         ),
@@ -465,10 +389,7 @@ fn witness_nodes_obey_the_value_ceiling() {
             let result = zetesis_themelios::prepare_formula(
                 source.into(),
                 AdmissionOptions::default(),
-                ExpansionLimits {
-                    max_values: cap,
-                    ..Default::default()
-                },
+                resource_limits::expansion(ExpansionResource::Values, cap),
                 FormulaLimits::default(),
             );
             if cap == exact {
@@ -477,7 +398,7 @@ fn witness_nodes_obey_the_value_ceiling() {
                 assert!(
                     matches!(result, Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
                     resource: ExpansionResource::Values, limit, observed, ..
-                })) if limit == cap as u128 && observed == exact as u128),
+                })) if limit == u128::from(cap) && observed == u128::from(exact)),
                     "{source}"
                 );
             }
@@ -500,42 +421,18 @@ fn compiled_witnesses_retain_source_provenance() {
     }));
 }
 
-// Admission is monotone in each isolated resource ceiling. Each iteration halves
-// a finite interval; only the one varied typed refusal is accepted below it.
-fn first_cap(
-    mut run: impl FnMut(usize) -> Result<AdmittedFormula, FormulaFailure>,
-    refused: impl Fn(&FormulaFailure) -> bool,
-) -> usize {
-    let (mut low, mut high) = (0, 1_000_000);
-    assert!(run(high).is_ok());
-    while low < high {
-        let middle = low + (high - low) / 2;
-        match run(middle) {
-            Ok(_) => high = middle,
-            Err(error) => {
-                assert!(refused(&error), "{error}");
-                low = middle + 1;
-            }
-        }
-    }
-    assert!(low > 0);
-    assert!(refused(&run(low - 1).unwrap_err()));
-    assert_eq!(native(&run(low).unwrap()), native(&formula(BOUNDED)));
-    low
-}
 const BOUNDED: &str = "{p(f(1,2));p(f(2,2));p(f(3,3))}.q:-p(f(X,X)):#true.";
 
 #[test]
 fn witness_work_limit_is_inclusive() {
-    let cap = first_cap(
+    let cap = witnesses::inclusive_ceiling(
+        BOUNDED,
+        resource_limits::formula_default(FormulaResource::Work),
         |cap| {
             limited(
                 BOUNDED,
                 ExpansionLimits::default(),
-                &FormulaLimits {
-                    max_work: cap as u64,
-                    ..Default::default()
-                },
+                &resource_limits::formula(FormulaResource::Work, cap),
             )
         },
         // A relation operation can charge a bounded group of cells at once.
@@ -546,70 +443,15 @@ fn witness_work_limit_is_inclusive() {
 
 #[test]
 fn witness_substitution_limit_is_inclusive() {
-    let cap = first_cap(
-        |cap| {
-            limited(
-                BOUNDED,
-                ExpansionLimits::default(),
-                &FormulaLimits {
-                    max_substitutions: cap as u64,
-                    ..Default::default()
-                },
-            )
-        },
-        |error| matches!(error, FormulaFailure::Limit { resource: FormulaResource::Substitutions, observed, limit, .. } if *observed == limit + 1),
-    );
-    println!("substitutions={cap}");
+    println!("substitutions={}", witnesses::substitution_ceiling(BOUNDED));
 }
 
 #[test]
 fn witness_storage_limit_is_inclusive() {
-    let cap = first_cap(
-        |cap| {
-            limited(
-                BOUNDED,
-                ExpansionLimits {
-                    max_scalar_bytes: cap,
-                    ..Default::default()
-                },
-                &FormulaLimits::default(),
-            )
-        },
-        |error| {
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Limit {
-                    resource: ExpansionResource::ScalarBytes,
-                    ..
-                })
-            )
-        },
-    );
-    println!("scalar_bytes={cap}");
+    println!("scalar_bytes={}", witnesses::scalar_bytes_ceiling(BOUNDED));
 }
 
 #[test]
-fn witness_term_work_limit_is_inclusive() {
-    let cap = first_cap(
-        |cap| {
-            limited(
-                BOUNDED,
-                ExpansionLimits {
-                    max_term_work: cap,
-                    ..Default::default()
-                },
-                &FormulaLimits::default(),
-            )
-        },
-        |error| {
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Limit {
-                    resource: ExpansionResource::TermWork,
-                    ..
-                })
-            )
-        },
-    );
-    println!("term_work={cap}");
+fn witness_term_work_admissions_obey_their_limits() {
+    println!("term_work={}", witnesses::term_work_admissions(BOUNDED));
 }

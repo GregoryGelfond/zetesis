@@ -160,7 +160,7 @@ impl Predicate {
     /// Whether the two predicates share one name allocation, as a program's
     /// atoms of one predicate do after admission.
     #[must_use]
-    pub fn shares_name(&self, other: &Self) -> bool {
+    pub(crate) fn shares_name(&self, other: &Self) -> bool {
         std::sync::Arc::ptr_eq(&self.name, &other.name)
     }
     /// The exact predicate name.

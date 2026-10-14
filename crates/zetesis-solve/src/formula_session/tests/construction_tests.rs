@@ -10,8 +10,8 @@ use crate::{
 };
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::Interpretation;
+use zetesis_reference_support::formula;
 use zetesis_sat::StableModels;
-use zetesis_themelios::{AdmissionOptions, ExpansionLimits, FormulaLimits, admit_formula};
 
 struct CancelAfterMembership;
 
@@ -37,13 +37,7 @@ impl MembershipExecution for CancelAfterMembership {
 
 #[test]
 fn cancellation_after_membership_prevents_construction() {
-    let owner = admit_formula(
-        "a.".into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap();
+    let owner = formula("a.");
     let config = SolveConfig {
         backend: Backend::Cpu,
         workers: std::num::NonZeroUsize::MIN,

@@ -1,12 +1,12 @@
 //! Source priority carriers are distinct from realized aggregate values.
 
 use crate::support::source_cases;
+use zetesis_reference_support::{admit, exhaustive, resource_limits};
+use zetesis_test_support::thresholds::first_success;
 
 use std::collections::BTreeSet;
 
 use proptest::prelude::*;
-use zetesis_clingo_support as oracle;
-use zetesis_reference_support::{admit, exhaustive};
 use zetesis_test_support::records::Records;
 use zetesis_themelios::{FormulaFailure, FormulaLimits, FormulaResource};
 
@@ -54,9 +54,7 @@ fn source_carriers_preserve_complete_scored_answers() {
 #[test]
 #[ignore = "requires clingo: original sources match complete clingo records"]
 fn original_sources_match_complete_clingo_records() {
-    for case in source_cases::cases(CASES.trim()) {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    source_cases::clingo_matches_every_case(&source_cases::cases(CASES.trim()));
 }
 
 proptest! {
@@ -166,61 +164,50 @@ fn mixed_source_rows_retain_warnings_and_complete_costs() {
 fn source_carriers_bound_retained_values() {
     // Request + two cone predicates + one transported predicate + two possible
     // tuple keys + two weights + four source values reach this reservation.
-    const ENTRIES: usize = 12;
+    const ENTRIES: u64 = 12;
     let source = "{a}.n(N):-N=#sum{2:a;3:a}.#minimize{1@N:n(N)}.";
-    let mut limits = FormulaLimits {
-        max_objective_presence_entries: ENTRIES - 1,
-        ..FormulaLimits::default()
-    };
-    let error = admit(source, &limits).unwrap_err();
+    let limits =
+        |maximum| resource_limits::formula(FormulaResource::ObjectivePresenceEntries, maximum);
+    let error = admit(source, &limits(ENTRIES - 1)).unwrap_err();
     assert!(
-        matches!(error, FormulaFailure::Limit { resource: FormulaResource::ObjectivePresenceEntries, observed, .. } if observed == ENTRIES as u128)
+        matches!(error, FormulaFailure::Limit { resource: FormulaResource::ObjectivePresenceEntries, observed, .. } if observed == u128::from(ENTRIES))
     );
     assert!(!error.diagnostics().is_empty());
-    limits.max_objective_presence_entries = ENTRIES;
-    assert!(admit(source, &limits).is_ok());
+    assert!(admit(source, &limits(ENTRIES)).is_ok());
 }
 
 #[test]
 fn source_products_share_the_certificate_budget() {
-    const ENTRIES: usize = 14;
+    const ENTRIES: u64 = 14;
     let source = "{a}.n(N):-N=#count{1:a}.m(P):-P=#sum{2:a}.#minimize{1@(N+P):n(N),m(P)}.";
-    let mut limits = FormulaLimits {
-        max_objective_presence_entries: ENTRIES - 1,
-        ..FormulaLimits::default()
-    };
-    let error = admit(source, &limits).unwrap_err();
+    let limits =
+        |maximum| resource_limits::formula(FormulaResource::ObjectivePresenceEntries, maximum);
+    let error = admit(source, &limits(ENTRIES - 1)).unwrap_err();
     assert!(
-        matches!(error, FormulaFailure::Limit { resource: FormulaResource::ObjectivePresenceEntries, observed, .. } if observed == ENTRIES as u128),
+        matches!(error, FormulaFailure::Limit { resource: FormulaResource::ObjectivePresenceEntries, observed, .. } if observed == u128::from(ENTRIES)),
         "{error}"
     );
-    limits.max_objective_presence_entries = ENTRIES;
-    assert!(admit(source, &limits).is_ok());
+    assert!(admit(source, &limits(ENTRIES)).is_ok());
 }
 
 #[test]
 fn unrealized_values_consume_assignment_capacity() {
-    const SOURCE_VALUES: usize = 4;
+    const SOURCE_VALUES: u64 = 4;
     let source = "{a}.n(N):-N=#sum{2:a;3:a}.#minimize{1@N:n(N)}.";
-    let mut limits = FormulaLimits {
-        max_assignment_values: SOURCE_VALUES - 1,
-        ..FormulaLimits::default()
-    };
-    let error = admit(source, &limits).unwrap_err();
+    let limits = |maximum| resource_limits::formula(FormulaResource::AssignmentValues, maximum);
+    let error = admit(source, &limits(SOURCE_VALUES - 1)).unwrap_err();
     assert!(
-        matches!(error, FormulaFailure::Limit { resource: FormulaResource::AssignmentValues, observed, .. } if observed == SOURCE_VALUES as u128)
+        matches!(error, FormulaFailure::Limit { resource: FormulaResource::AssignmentValues, observed, .. } if observed == u128::from(SOURCE_VALUES))
     );
-    limits.max_assignment_values = SOURCE_VALUES;
-    assert!(admit(source, &limits).is_ok());
+    assert!(admit(source, &limits(SOURCE_VALUES)).is_ok());
 }
 
 #[test]
 fn source_products_bound_specialized_objectives() {
-    const SOURCE_ROWS: usize = 4;
+    const SOURCE_ROWS: u64 = 4;
     let source = "{a}.n(N):-N=#count{1:a}.m(P):-P=#sum{2:a}.#minimize{1@(N+P):n(N),m(P)}.";
-    let mut limits = FormulaLimits::default();
-    limits.objective.max_templates = SOURCE_ROWS - 1;
-    let error = admit(source, &limits).unwrap_err();
+    let limits = |maximum| resource_limits::formula(FormulaResource::ObjectiveElements, maximum);
+    let error = admit(source, &limits(SOURCE_ROWS - 1)).unwrap_err();
     let FormulaFailure::Limit {
         resource: FormulaResource::ObjectiveElements,
         observed,
@@ -230,7 +217,7 @@ fn source_products_bound_specialized_objectives() {
     else {
         panic!("{error}");
     };
-    assert_eq!(*observed, SOURCE_ROWS as u128);
+    assert_eq!(*observed, u128::from(SOURCE_ROWS));
     let start = usize::try_from(
         location
             .location()
@@ -243,8 +230,7 @@ fn source_products_bound_specialized_objectives() {
     let end =
         usize::try_from(location.location().expect("parsed source").span.end().get()).unwrap();
     assert_eq!(&source[start..end], "#minimize{1@(N+P):n(N),m(P)}.");
-    limits.objective.max_templates = SOURCE_ROWS;
-    assert!(admit(source, &limits).is_ok());
+    assert!(admit(source, &limits(SOURCE_ROWS)).is_ok());
 }
 
 #[test]
@@ -299,40 +285,22 @@ fn selected_carriers_preserve_original_equalities() {
 #[test]
 #[ignore = "requires clingo: selected source carriers match fresh clingo; 12 original filtered-carrier sources"]
 fn selected_source_carriers_match_fresh_clingo() {
-    for case in source_cases::cases(include_str!(
+    source_cases::clingo_matches_every_case(&source_cases::cases(include_str!(
         "../fixtures/objective-filtered-carriers.jsonl"
-    )) {
-        assert_eq!(oracle::records(&case.source), case.records, "{}", case.name);
-    }
+    )));
 }
 
 #[test]
 fn completed_carriers_respect_grounding_work_limits() {
-    const SEARCH_BOUND: u64 = 65_536;
     let case = source_cases::cases(CASES.trim())
         .into_iter()
         .find(|case| case.name == "shared_product")
         .unwrap();
     for resource in [FormulaResource::Work, FormulaResource::Substitutions] {
-        let attempt = |maximum| {
-            let mut limits = FormulaLimits::default();
-            match resource {
-                FormulaResource::Work => limits.max_work = maximum,
-                FormulaResource::Substitutions => limits.max_substitutions = maximum,
-                _ => unreachable!("selected work resource"),
-            }
-            admit(&case.source, &limits)
-        };
-        let (mut lower, mut upper) = (0, SEARCH_BOUND);
-        assert!(attempt(upper).is_ok());
-        while lower + 1 < upper {
-            let middle = lower + (upper - lower) / 2;
-            if attempt(middle).is_ok() {
-                upper = middle;
-            } else {
-                lower = middle;
-            }
-        }
+        let attempt = |maximum| admit(&case.source, &resource_limits::formula(resource, maximum));
+        let upper = first_success(resource_limits::formula_default(resource), |middle| {
+            attempt(middle).is_ok()
+        });
         assert_eq!(exhaustive(&attempt(upper).unwrap()), case.records);
         let error = attempt(upper - 1).unwrap_err();
         assert!(

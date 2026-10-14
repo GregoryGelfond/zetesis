@@ -1,7 +1,7 @@
 //! Only the exact immutable prepared owner authorizes topology reuse.
 
 use super::*;
-use crate::ReductPreparationLimits;
+use crate::test_support::prepare;
 use zetesis_ferraris::{Node, Theory};
 
 fn theory(root: usize) -> Theory {
@@ -11,16 +11,6 @@ fn theory(root: usize) -> Theory {
         vec![root],
         zetesis_ferraris::AdmissionLimits::default(),
     )
-    .unwrap()
-}
-
-fn prepare(theory: &Theory) -> PreparedReduct {
-    PreparedReduct::prepare(
-        theory,
-        ReductPreparationLimits::default(),
-        &Cancellation::default(),
-    )
-    .result
     .unwrap()
 }
 

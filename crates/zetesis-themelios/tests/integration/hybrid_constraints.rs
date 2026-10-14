@@ -1,28 +1,18 @@
 //! Hybrid admission preserves original source validation and candidate identity.
 
+use std::cell::Cell;
 use std::fmt::Write;
+use zetesis_reference_support::{hybrid, prepare, prepared};
 
 use zetesis_core::Model;
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_themelios::{
-    AdmissionOptions, ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits,
-    ConstraintCheckStatistics, ConstraintVerdict, ExpansionFailure, ExpansionLimits,
-    FormulaFailure, FormulaLimits, FormulaResource, GroundingOptions, HybridFeature, HybridFormula,
-    JoinStrategy, prepare_formula,
+    ConstraintAllowance, ConstraintCheckCause, ConstraintCheckLimits, ConstraintCheckStatistics,
+    ConstraintVerdict, ExpansionFailure, FormulaFailure, FormulaResource, GroundingObserver,
+    GroundingOptions, GroundingOutcome, GroundingPhase, GroundingWork, HybridFeature,
+    HybridFormula, JoinStrategy, ProgramSite,
 };
 
-fn prepare(source: &str) -> zetesis_themelios::PreparedFormula {
-    prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-}
-fn admit(source: &str) -> HybridFormula {
-    prepare(source).ground_hybrid().unwrap()
-}
 fn model(owner: &HybridFormula, selected: &[&str]) -> Model {
     // Parse fixture names through the existing source door, then select by
     // complete typed identity. This helper does not decide model membership.
@@ -30,7 +20,7 @@ fn model(owner: &HybridFormula, selected: &[&str]) -> Model {
     for atom in selected {
         write!(facts, "{atom}. ").unwrap();
     }
-    let expected = prepare(&facts).ground().unwrap();
+    let expected = prepared(&facts).ground().unwrap();
     let positions: Vec<_> = owner
         .atom_catalog()
         .atoms()
@@ -75,7 +65,7 @@ fn prepare_shared_rows(owner: &HybridFormula) {
 
 #[test]
 fn model_selection_skips_absent_positive_rows() {
-    let owner = admit("{p(1..8)}. :-p(X),X>0.");
+    let owner = hybrid("{p(1..8)}. :-p(X),X>0.");
     let mut checker = owner
         .checker(ConstraintCheckLimits {
             max_substitutions: 1,
@@ -99,7 +89,7 @@ fn model_selection_skips_absent_positive_rows() {
 
 #[test]
 fn candidate_truth_is_distinct_from_possible_support() {
-    let owner = admit("d(1..2). {p(X)}:-d(X). :-p(X),X=2.");
+    let owner = hybrid("d(1..2). {p(X)}:-d(X). :-p(X),X=2.");
     assert!(owner.streamed_templates() > 0);
     assert_eq!(
         verdict(&owner, &["d(1)", "d(2)", "p(1)"]),
@@ -111,9 +101,78 @@ fn candidate_truth_is_distinct_from_possible_support() {
     ));
 }
 
+/// Sums the integer comparison receipts of every observed phase: rows decided
+/// by a form and rows that declined.
+#[derive(Default)]
+struct IntegerComparisons(Cell<(u64, u64)>);
+
+impl GroundingObserver for IntegerComparisons {
+    fn enter(&self) {}
+    fn exit(&self) {}
+    fn details_enabled(&self) -> bool {
+        true
+    }
+    fn phase_exit(
+        &self,
+        _phase: GroundingPhase,
+        _site: Option<ProgramSite>,
+        _outcome: GroundingOutcome,
+        work: GroundingWork,
+    ) {
+        let (decided, declined) = self.0.get();
+        self.0.set((
+            decided + work.integer_comparisons.unwrap(),
+            declined + work.integer_comparison_declines.unwrap(),
+        ));
+    }
+}
+
+/// `source` grounded for hybrid execution, with the rows its capture decided
+/// by integer comparison forms and the rows that declined. The frozen checks
+/// are not observed.
+fn captured(source: &str) -> (HybridFormula, (u64, u64)) {
+    let observer = IntegerComparisons::default();
+    let owner = prepared(source)
+        .ground_hybrid_with_observer(Some(&observer))
+        .unwrap();
+    assert!(owner.streamed_templates() > 0);
+    (owner, observer.0.get())
+}
+
+#[test]
+fn frozen_checks_decide_integer_comparisons_without_admitted_operands() {
+    // X - Y takes the values -2 to 2; no fact or head constructs -2, -1 or 0.
+    // Capture decides the comparison on its nine rows by its form, admitting
+    // none of them, and so do the frozen checks, which could not admit them.
+    let (owner, receipts) = captured("{q(1..3)}. :- q(X), q(Y), X - Y = 2.");
+    assert_eq!(receipts, (9, 0));
+    assert!(matches!(
+        verdict(&owner, &["q(1)", "q(3)"]),
+        ConstraintVerdict::Violated { .. }
+    ));
+    assert_eq!(
+        verdict(&owner, &["q(1)", "q(2)"]),
+        ConstraintVerdict::Satisfied
+    );
+}
+
+#[test]
+fn frozen_checks_of_a_rejected_row_decide_by_its_form() {
+    // Y = 10/X fails on X = 0, and that row's check X - 5 < 0 is decided by
+    // its form, in capture and in the frozen checks alike. No fact or head
+    // constructs X - 5 for any X: -5, -4 and -3 are never admitted.
+    let (owner, receipts) = captured("{p(0..2)}. :- p(X), Y = 10/X, X - 5 < 0.");
+    assert_eq!(receipts, (6, 0));
+    assert_eq!(verdict(&owner, &["p(0)"]), ConstraintVerdict::Satisfied);
+    assert!(matches!(
+        verdict(&owner, &["p(0)", "p(2)"]),
+        ConstraintVerdict::Violated { .. }
+    ));
+}
+
 #[test]
 fn default_negation_preserves_typed_signed_identity() {
-    let owner = admit("{p(1);p(\"1\");-p(1)}. :-not p(1),not not p(\"1\"). :- -p(1),not p(1).");
+    let owner = hybrid("{p(1);p(\"1\");-p(1)}. :-not p(1),not not p(\"1\"). :- -p(1),not p(1).");
     for selected in [vec!["p(\"1\")"], vec!["-p(1)"]] {
         assert!(matches!(
             verdict(&owner, &selected),
@@ -129,7 +188,7 @@ fn default_negation_preserves_typed_signed_identity() {
 
 #[test]
 fn unsupported_atoms_retain_catalog_positions() {
-    let owner = admit(":-not missing.");
+    let owner = hybrid(":-not missing.");
     assert_eq!(owner.atom_catalog().atoms().len(), 1);
     assert_eq!(
         owner
@@ -158,7 +217,7 @@ fn unsupported_atoms_retain_catalog_positions() {
 
 #[test]
 fn mixed_undefined_instances_warn_before_checking() {
-    let owner = admit("d(0;1). {p(X)}:-d(X). :-p(X),1/X=1.");
+    let owner = hybrid("d(0;1). {p(X)}:-d(X). :-p(X),1/X=1.");
     assert_eq!(owner.warnings().len(), 1);
     assert!(owner.warning_view().to_string().contains("zero-divisor"));
     assert_eq!(
@@ -173,7 +232,7 @@ fn mixed_undefined_instances_warn_before_checking() {
 
 #[test]
 fn defined_false_instances_witness_arithmetic_admission() {
-    let owner = admit("d(0;2). {p(X)}:-d(X). :-p(X),1/X=1.");
+    let owner = hybrid("d(0;2). {p(X)}:-d(X). :-p(X),1/X=1.");
     assert_eq!(owner.warnings().len(), 1);
     assert_eq!(
         verdict(&owner, &["d(0)", "d(2)", "p(0)", "p(2)"]),
@@ -190,13 +249,7 @@ fn candidate_gates_cannot_hide_fatal_source_arithmetic() {
     ] {
         // An interpretation can omit p, but original arithmetic validation
         // precedes every candidate and must refuse the source itself.
-        let result = prepare_formula(
-            source.into(),
-            AdmissionOptions::default(),
-            ExpansionLimits::default(),
-            FormulaLimits::default(),
-        )
-        .and_then(zetesis_themelios::PreparedFormula::ground_hybrid);
+        let result = prepare(source).and_then(zetesis_themelios::PreparedFormula::ground_hybrid);
         assert!(
             matches!(
                 result,
@@ -211,7 +264,7 @@ fn candidate_gates_cannot_hide_fatal_source_arithmetic() {
 
 #[test]
 fn independent_constraint_families_do_not_rescue_undefined_ones() {
-    let result = prepare("d(0). {p(X)}:-d(X). :-p(X),1/X=1. :-p(X),X=1.").ground_hybrid();
+    let result = prepared("d(0). {p(X)}:-d(X). :-p(X),1/X=1. :-p(X),X=1.").ground_hybrid();
     assert!(matches!(
         result,
         Err(FormulaFailure::Expansion(
@@ -222,7 +275,7 @@ fn independent_constraint_families_do_not_rescue_undefined_ones() {
 
 #[test]
 fn generators_reuse_the_checked_join() {
-    let owner = admit("d(1..2). {p(2..3)}. :-d(X),Y=X+1,p(Y),Y>2.");
+    let owner = hybrid("d(1..2). {p(2..3)}. :-d(X),Y=X+1,p(Y),Y>2.");
     assert_eq!(
         verdict(&owner, &["d(1)", "d(2)", "p(2)"]),
         ConstraintVerdict::Satisfied
@@ -235,7 +288,7 @@ fn generators_reuse_the_checked_join() {
 
 #[test]
 fn scoped_constraints_remain_eager() {
-    let owner = admit("{p(1);p(2)}. :-#count{X:p(X)}>1. :-p(1),not p(2).");
+    let owner = hybrid("{p(1);p(2)}. :-#count{X:p(X)}>1. :-p(1),not p(2).");
     assert_eq!(owner.streamed_templates(), 1);
     assert!(owner.core_theory().roots().len() > 2);
 }
@@ -243,8 +296,8 @@ fn scoped_constraints_remain_eager() {
 #[test]
 fn hybrid_admission_preserves_original_objectives() {
     let source = "{p}. :-not p. #minimize{2@3,key:p}.";
-    let eager = prepare(source).ground().unwrap();
-    let hybrid = admit(source);
+    let eager = prepared(source).ground().unwrap();
+    let hybrid = hybrid(source);
     assert_eq!(hybrid.streamed_templates(), 1);
     assert!(hybrid.objectives().is_present());
     assert_eq!(hybrid.objectives().priorities(), &[3]);
@@ -256,7 +309,7 @@ fn hybrid_admission_preserves_original_objectives() {
 
 #[test]
 fn table_policy_is_not_silently_replaced() {
-    let result = prepare("{p}. :-p.")
+    let result = prepared("{p}. :-p.")
         .with_grounding_options(GroundingOptions {
             joins: JoinStrategy::Table,
         })
@@ -272,7 +325,7 @@ fn table_policy_is_not_silently_replaced() {
 
 #[test]
 fn empty_stream_requires_no_check_budget() {
-    let owner = admit("a.");
+    let owner = hybrid("a.");
     assert_eq!(owner.streamed_templates(), 0);
     let mut checker = owner
         .checker(ConstraintCheckLimits {
@@ -292,8 +345,8 @@ fn empty_stream_requires_no_check_budget() {
 
 #[test]
 fn source_equivalence_does_not_replace_owner_identity() {
-    let owner = admit("{p}. :-p.");
-    let other = admit("{p}. :-p.");
+    let owner = hybrid("{p}. :-p.");
+    let other = hybrid("{p}. :-p.");
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let failure = checker
         .check(&model(&other, &[]), &Cancellation::default())
@@ -309,7 +362,7 @@ fn source_equivalence_does_not_replace_owner_identity() {
 
 #[test]
 fn cancellation_preserves_the_unchecked_verdict() {
-    let owner = admit("{p}. :-p.");
+    let owner = hybrid("{p}. :-p.");
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let before = checker.statistics();
     let cancellation = Cancellation::default();
@@ -325,7 +378,7 @@ fn cancellation_preserves_the_unchecked_verdict() {
 fn each_check_has_its_own_substitution_allowance() {
     // One substitution per check under a one-substitution ceiling: the
     // ceiling bounds each check, never the number of checks.
-    let owner = admit("{p;q}. :-p,not q.");
+    let owner = hybrid("{p;q}. :-p,not q.");
     let mut checker = owner
         .checker(ConstraintCheckLimits {
             max_substitutions: 1,
@@ -344,7 +397,7 @@ fn each_check_has_its_own_substitution_allowance() {
 
 #[test]
 fn moving_a_checker_preserves_its_receipts() {
-    let owner = admit("{p;q}. :-p,not q.");
+    let owner = hybrid("{p;q}. :-p,not q.");
     let mut checker = owner
         .checker(ConstraintCheckLimits {
             max_substitutions: 1,
@@ -377,7 +430,7 @@ fn moving_a_checker_preserves_its_receipts() {
 fn each_check_has_its_own_work_allowance() {
     // The ceiling admits the first check (preparation included), the most
     // costly; three checks under it charge what three unbounded checks do.
-    let owner = admit("{p}. :-p.");
+    let owner = hybrid("{p}. :-p.");
     let candidate = model(&owner, &[]);
     prepare_shared_rows(&owner);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -409,7 +462,7 @@ fn a_check_is_refused_relative_to_its_own_allowance() {
     // second check is refused against the ceiling itself, not the checker's
     // history. The second candidate holds every q and r, so not r keeps
     // the quadratic second family false without filtering its positive rows.
-    let owner = admit("{p;r}. {q(1..32)}. :-p,q(X). :-q(X),q(Y),X<Y,not r.");
+    let owner = hybrid("{p;r}. {q(1..32)}. :-p,q(X). :-q(X),q(Y),X<Y,not r.");
     let violating = model(&owner, &["p", "q(32)"]);
     let satisfying = Model::from_positions(
         owner.atom_catalog(),
@@ -465,7 +518,7 @@ fn a_check_is_refused_relative_to_its_own_allowance() {
 fn each_check_has_its_own_scalar_allowance() {
     // The first check includes one-time structural preparation as well as its
     // scan. Three checks under that ceiling must match the unbounded receipts.
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../fixtures/hybrid-constraints/scalar-allowance.lp"
     ));
     let candidate = model(&owner, &["p(f(1))"]);
@@ -511,8 +564,8 @@ fn excluded_rows_preserve_eager_source_admission() {
         "d(0). :-d(X),X!=0,1/X=1,not q(X).",
         ":-unknown(X),1/X=1.",
     ] {
-        let eager = prepare(source).ground().unwrap();
-        let hybrid = admit(source);
+        let eager = prepared(source).ground().unwrap();
+        let hybrid = hybrid(source);
         assert!(eager.warnings().is_empty(), "{source}");
         assert_eq!(hybrid.warnings(), eager.warnings(), "{source}");
         assert_eq!(
@@ -540,8 +593,8 @@ fn streamed_satisfaction_composes_with_the_retained_core() {
         "{p(4,4);p(4,5);p(5,5)}.q(2). :-p(X,X),q(Y),X/2=Y.",
         "{p(1..3)}. X=2 :-p(X),X/2=1.",
     ] {
-        let eager = prepare(source).ground().unwrap();
-        let hybrid = admit(source);
+        let eager = prepared(source).ground().unwrap();
+        let hybrid = hybrid(source);
         assert_eq!(
             eager.atoms().iter().collect::<BTreeSet<_>>(),
             hybrid.atom_catalog().atoms().iter().collect()
@@ -593,7 +646,7 @@ fn frozen_checks_reuse_speculative_column_values() {
         // a source fault; the frozen retry must preserve that same boundary.
         "p(2,keep).p(symbol,skip). :-p(X,keep),X/2=5.",
     ] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         assert_eq!(owner.streamed_templates(), 1);
         let all =
             Model::from_positions(owner.atom_catalog(), 0..owner.atom_catalog().atoms().len())
@@ -611,7 +664,7 @@ fn frozen_checks_reuse_speculative_column_values() {
 
 #[test]
 fn computed_domains_select_only_matching_substitutions() {
-    let owner = admit("{p(1..6);block}.q(2). :-p(X),q(Y),X/2=Y,not block.");
+    let owner = hybrid("{p(1..6);block}.q(2). :-p(X),q(Y),X/2=Y,not block.");
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     for count in 1..=2 {
         // Every positive row is present. The negative block literal keeps
@@ -628,7 +681,7 @@ fn computed_domains_select_only_matching_substitutions() {
 
 #[test]
 fn computed_selection_keeps_inclusive_work_limits() {
-    let owner = admit("{p(1..6);block}.q(2). :-p(X),q(Y),X/2=Y,not block.");
+    let owner = hybrid("{p(1..6);block}.q(2). :-p(X),q(Y),X/2=Y,not block.");
     let candidate = all_atoms(&owner);
     prepare_shared_rows(&owner);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -666,7 +719,7 @@ fn computed_selection_keeps_inclusive_work_limits() {
 
 #[test]
 fn retained_computed_domains_move_with_the_checker() {
-    let owner = admit("{p(1..6);block}.q(2). :-p(X),q(Y),X/2=Y,not block.");
+    let owner = hybrid("{p(1..6);block}.q(2). :-p(X),q(Y),X/2=Y,not block.");
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
     let candidate = all_atoms(&owner);
     assert_eq!(
@@ -690,7 +743,7 @@ fn retained_computed_domains_move_with_the_checker() {
 
 #[test]
 fn checkers_sharing_an_allowance_each_check_within_it() {
-    let owner = admit("{p(1..6);block}.q(2). :-p(X),q(Y),X/2=Y,not block.");
+    let owner = hybrid("{p(1..6);block}.q(2). :-p(X),q(Y),X/2=Y,not block.");
     let candidate = all_atoms(&owner);
     let cancellation = Cancellation::default();
     prepare_shared_rows(&owner);
@@ -734,7 +787,7 @@ fn checkers_sharing_an_allowance_each_check_within_it() {
 
 #[test]
 fn preparation_publishes_before_returning_the_checker() {
-    let owner = admit("{p(f(1));p(f(2))}. :-p(f(X)),X>1.");
+    let owner = hybrid("{p(f(1));p(f(2))}. :-p(f(X)),X>1.");
     let allowance = ConstraintAllowance::new(ConstraintCheckLimits::default());
     let checker = owner
         .checker_with_allowance(&allowance, &Cancellation::default())
@@ -748,7 +801,7 @@ fn preparation_publishes_before_returning_the_checker() {
 
 #[test]
 fn preparation_refusals_publish_their_accepted_prefix() {
-    let owner = admit("{p(1);q(1);r(1)}. :-p(X),q(X),r(X).");
+    let owner = hybrid("{p(1);q(1);r(1)}. :-p(X),q(X),r(X).");
     let complete = owner
         .checker(ConstraintCheckLimits::default())
         .unwrap()
@@ -783,7 +836,7 @@ fn preparation_refusals_publish_their_accepted_prefix() {
 fn completed_checks_publish_before_returning() {
     // Both checks finish a scalar-passing row. The negative literal keeps
     // the first body false without removing its positive row from the join.
-    let owner = admit("{p(f(1));p(f(2));block}. :-p(f(X)),X>1,not block.");
+    let owner = hybrid("{p(f(1));p(f(2));block}. :-p(f(X)),X>1,not block.");
     let allowance = ConstraintAllowance::new(ConstraintCheckLimits::default());
     let cancellation = Cancellation::default();
     let mut checker = owner
@@ -804,7 +857,7 @@ fn completed_checks_publish_before_returning() {
 fn refused_checks_publish_before_returning() {
     // Both structural bindings survive model selection. The negative block
     // literal makes each body false, so no earlier violation stops the scan.
-    let owner = admit("{p(f(1));p(f(2));block}. :-p(f(X)),X>0,not block.");
+    let owner = hybrid("{p(f(1));p(f(2));block}. :-p(f(X)),X>0,not block.");
     let cancellation = Cancellation::default();
     let candidate = model(&owner, &["p(f(1))", "p(f(2))", "block"]);
     let mut baseline = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -834,3 +887,5 @@ fn refused_checks_publish_before_returning() {
     assert_eq!(allowance.statistics(), failure.statistics);
     assert_eq!(checker.statistics(), failure.statistics);
 }
+
+mod numeric_totality;

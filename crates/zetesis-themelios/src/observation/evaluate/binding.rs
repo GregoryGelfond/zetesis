@@ -23,7 +23,7 @@ pub(super) struct Binding<'input> {
 }
 
 impl<'input> Binding<'input> {
-    pub fn new(
+    pub(super) fn new(
         variables: usize,
         outer: Option<&Self>,
         terms: TermRead<'_>,
@@ -60,23 +60,26 @@ impl<'input> Binding<'input> {
         })
     }
 
-    pub fn input(&self, slot: usize) -> Option<TermRef<'input>> {
+    pub(super) fn input(&self, slot: usize) -> Option<TermRef<'input>> {
         match self.slots[slot] {
             Some(Slot::Input(value)) => Some(value),
             _ => None,
         }
     }
-    pub fn key(&self, slot: usize) -> Result<TermKey, zetesis_core::catalog::AssignmentError> {
+    pub(super) fn key(
+        &self,
+        slot: usize,
+    ) -> Result<TermKey, zetesis_core::catalog::AssignmentError> {
         self.terms
             .key(slot)?
             .ok_or(zetesis_core::catalog::AssignmentError::Unbound { slot })
     }
 
-    pub fn is_bound(&self, slot: usize) -> bool {
+    pub(super) fn is_bound(&self, slot: usize) -> bool {
         self.slots[slot].is_some()
     }
 
-    pub fn value<'read>(
+    pub(super) fn value<'read>(
         &'read self,
         slot: usize,
         terms: TermRead<'read>,
@@ -97,14 +100,14 @@ impl<'input> Binding<'input> {
         }
     }
 
-    pub fn pattern(&self, slot: usize) -> Option<super::anonymous::Key> {
+    pub(super) fn pattern(&self, slot: usize) -> Option<super::anonymous::Key> {
         match self.slots[slot] {
             Some(Slot::Pattern { key, .. }) => Some(key),
             _ => None,
         }
     }
 
-    pub fn capture(&mut self, slot: usize, value: TermRef<'input>) {
+    pub(super) fn capture(&mut self, slot: usize, value: TermRef<'input>) {
         assert!(
             self.slots[slot].is_none(),
             "a capture introduces an absent slot"
@@ -114,7 +117,7 @@ impl<'input> Binding<'input> {
 
     /// The caller has admitted the logical charge. Work refusal precedes both
     /// the active slot and its ownership mark, so failed installation owns none.
-    pub fn bind_term(
+    pub(super) fn bind_term(
         &mut self,
         slot: usize,
         key: &TermKey,
@@ -133,7 +136,7 @@ impl<'input> Binding<'input> {
         Ok(())
     }
 
-    pub fn bind_pattern(
+    pub(super) fn bind_pattern(
         &mut self,
         slot: usize,
         key: super::anonymous::Key,
@@ -153,14 +156,14 @@ impl<'input> Binding<'input> {
 
     /// Cleanup cannot stop. The inactive ID cell is ignored until overwritten;
     /// its canonical term remains in the interpreter's append-only arena.
-    pub fn clear(&mut self, slot: usize, work: &mut Work<'_>) {
+    pub(super) fn clear(&mut self, slot: usize, work: &mut Work<'_>) {
         if let Some(value) = self.slots[slot].take() {
             work.local_bytes -= charge(value);
         }
     }
 
     /// Release only this scope's logical ownership, including on a visitor stop.
-    pub fn release(&mut self, work: &mut Work<'_>) {
+    pub(super) fn release(&mut self, work: &mut Work<'_>) {
         for slot in &mut self.slots {
             if let Some(value) = slot.take() {
                 work.local_bytes -= charge(value);

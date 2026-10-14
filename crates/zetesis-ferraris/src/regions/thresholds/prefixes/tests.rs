@@ -1,16 +1,19 @@
 //! Prefix discovery, original bound transport and isolation from frozen closure.
 
+use crate::test_support::{Allowance, close};
 use zetesis_cpu::{Cancellation, Stop};
 
 use crate::regions::{Known, NarrowingStatistics, Width};
 use crate::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaNodes, FormulaParts,
-    FrozenSubject, Interpretation, Knowledge, Narrower, Narrowing, NarrowingQuota,
-    NarrowingScratch, Node, NodeView, OriginalSubject, Region, RegionLimits, Theory, Threshold,
+    FrozenSubject, Interpretation, Knowledge, Narrower, Narrowing, NarrowingScratch, Node,
+    NodeView, OriginalSubject, Region, RegionLimits, Theory, Threshold,
 };
 
 use super::super::{Row, State};
 use super::{links, prepare};
+
+mod promotion;
 
 fn row(conditions: &[usize], weights: &[u64]) -> Row {
     Row::new(Threshold {
@@ -124,25 +127,6 @@ fn gap_theory(positive: bool) -> Theory {
         AdmissionLimits::default(),
     )
     .unwrap()
-}
-
-fn close(
-    theory: &Theory,
-    index: &Narrower,
-    region: &mut Region,
-    knowledge: &mut Knowledge,
-    scratch: &mut NarrowingScratch,
-) -> (Narrowing, NarrowingStatistics) {
-    index
-        .narrow_known(
-            OriginalSubject::new(theory, None),
-            region,
-            knowledge,
-            scratch,
-            RegionLimits::default(),
-            &Cancellation::default(),
-        )
-        .unwrap()
 }
 
 fn snapshot(knowledge: &Knowledge) -> (Vec<u64>, Vec<State>) {
@@ -310,26 +294,6 @@ fn inherited_bounds_are_closed_and_branch_local() {
     }
 }
 
-struct Allowance {
-    remaining: u64,
-    failure: Stop,
-}
-
-impl NarrowingQuota for Allowance {
-    fn reserve(&mut self, wanted: u64) -> Result<u64, Stop> {
-        let granted = wanted.min(self.remaining);
-        if granted == 0 {
-            return Err(self.failure);
-        }
-        self.remaining -= granted;
-        Ok(granted)
-    }
-
-    fn refund(&mut self, unspent: u64) {
-        self.remaining += unspent;
-    }
-}
-
 fn assert_pending_rows(scratch: &NarrowingScratch, rows: usize) {
     for row in 0..rows {
         let queued = scratch
@@ -383,7 +347,9 @@ fn every_refused_prefix_discards_scratch_authority() {
             assert_eq!(region, expected_region);
             assert_eq!(snapshot(&knowledge), snapshot(&expected));
             assert!(scratch.threshold_rows.is_empty());
+            assert!(scratch.residual_rows.is_empty());
             assert!(scratch.pending_thresholds.iter().all(|&word| word == 0));
+            assert!(scratch.pending_residuals.iter().all(|&word| word == 0));
         }
     }
 }

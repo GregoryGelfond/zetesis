@@ -7,8 +7,8 @@ use std::hash::{Hash, Hasher};
 
 use crate::catalog::{AtomRef, Error, PredicateRef, TermRef};
 use crate::{
-    Atom, AtomPattern, InstantiationError, PatternRef, Predicate, TemplateTerm, Value, ValueError,
-    ValueLimits, ValueResource,
+    Atom, AtomPattern, InstantiationError, PatternRef, Predicate, TemplateTerm, Value, ValueLimits,
+    ValueResource,
 };
 
 /// A complete atom identity borrowed from a pattern and immutable assignment.
@@ -271,7 +271,7 @@ impl<'a> AtomKey<'a> {
     /// Compare with a canonical or ingress atom view without materialization.
     /// Predicate and argument contents determine order across independent stores.
     #[must_use]
-    pub fn compare_ref(&self, atom: AtomRef<'_>) -> Ordering {
+    pub(crate) fn compare_ref(&self, atom: AtomRef<'_>) -> Ordering {
         compare(self, &atom)
     }
 
@@ -311,7 +311,7 @@ impl<'a> AtomKey<'a> {
         let arity = self.predicate().arity();
         let requested = arity as u128 * std::mem::size_of::<Value>() as u128
             + self.predicate().name().len() as u128;
-        materialization_ceiling(requested, limits.max_bytes)?;
+        crate::structured::ceiling(ValueResource::Bytes, requested, limits.max_bytes)?;
         let mut values = Vec::new();
         values
             .try_reserve_exact(arity)
@@ -321,7 +321,7 @@ impl<'a> AtomKey<'a> {
             .map_err(|_| Error::Allocation)?;
         let mut bytes = values.capacity() as u128 * std::mem::size_of::<Value>() as u128
             + name.capacity() as u128;
-        materialization_ceiling(bytes, limits.max_bytes)?;
+        crate::structured::ceiling(ValueResource::Bytes, bytes, limits.max_bytes)?;
         name.push_str(self.predicate().name());
         for column in 0..arity {
             let remaining =
@@ -333,7 +333,7 @@ impl<'a> AtomKey<'a> {
             bytes += value
                 .checked_payload_capacity_bytes()
                 .ok_or(Error::Overflow)?;
-            materialization_ceiling(bytes, limits.max_bytes)?;
+            crate::structured::ceiling(ValueResource::Bytes, bytes, limits.max_bytes)?;
             values.push(value);
         }
         let predicate =
@@ -443,17 +443,4 @@ fn compare<L: View + ?Sized, R: View + ?Sized>(left: &L, right: &R) -> Ordering 
         }
     }
     Ordering::Equal
-}
-
-fn materialization_ceiling(observed: u128, limit: usize) -> Result<(), Error> {
-    if observed > limit as u128 {
-        Err(ValueError::Limit {
-            resource: ValueResource::Bytes,
-            observed,
-            limit,
-        }
-        .into())
-    } else {
-        Ok(())
-    }
 }

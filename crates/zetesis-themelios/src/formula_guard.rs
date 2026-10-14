@@ -14,7 +14,7 @@ use themelios_program::term::Term;
 use zetesis_core::ValueNodeRef;
 use zetesis_core::catalog::{AssignmentError, CatalogRead, TermKey, TermRef};
 
-use crate::formula_ir::{Compiler, Expression, LiteralIr, Variables};
+use crate::formula_ir::{ComparisonParts, Compiler, Expression, LiteralIr, Variables};
 use crate::formula_support::{Computation, Counters, Evaluation, Failures, compare};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits};
 
@@ -189,13 +189,12 @@ impl Compiler<'_> {
             self.budget
                 .charge(ExpansionResource::TermWork, 1, self.location)?;
             let test = match self.comparison(left, relation, right, variables)? {
-                LiteralIr::Compare(left, relation, right) => {
+                ComparisonParts::Scalar(left, relation, right) => {
                     GuardComparison::Scalar(left, relation, right)
                 }
-                LiteralIr::TupleCompare(left, relation, right) => {
+                ComparisonParts::Tuple(left, relation, right) => {
                     GuardComparison::Tuple(left, relation, right)
                 }
-                _ => unreachable!("comparison produces a scalar or tuple test"),
             };
             comparisons.push(test);
             left = right;

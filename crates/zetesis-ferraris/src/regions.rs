@@ -34,7 +34,7 @@
 //! held or cut.
 //!
 //! Work is charged per node read, root test, producer check and threshold row
-//! or relation visit,
+//! or relation visit, and residual coefficient or Euclidean step,
 //! against `RegionLimits`, and control is polled once per narrowing. Metered
 //! entry points instead acquire each permit from the caller's quota, which can
 //! also poll control, and retain the admitted prefix on every returned failure.
@@ -50,8 +50,10 @@ use crate::{FormulaView, NodeView, Theory};
 
 mod adjacency;
 mod counters;
+mod extrema;
 mod masks;
 mod thresholds;
+mod witnesses;
 use adjacency::Adjacency;
 use counters::{Count, Counters, compact_fits};
 use masks::Masks;
@@ -61,7 +63,7 @@ use masks::Masks;
 /// bounds the events too.
 #[derive(Clone, Copy, Debug)]
 pub struct RegionLimits {
-    /// Charged node reads, root tests, producer checks and threshold transfers.
+    /// Charged node reads, root tests, producer checks and threshold operations.
     pub max_work: u64,
 }
 impl Default for RegionLimits {
@@ -82,16 +84,20 @@ struct Producer {
 }
 
 /// What one narrowing reads: the theory; the producers of its support
-/// fragment, when the support cut applies; and the frozen truth of every
+/// fragment, when the support cut applies; the frozen truth of every
 /// node under which the theory is read as a candidate's reduct, when it
-/// is. A knowledge is closed under one subject and reused under the same
-/// ([`Knowledge`]).
+/// is; and the choice heads its split selection ranks first. A knowledge is
+/// closed under one subject and reused under the same ([`Knowledge`]).
 #[derive(Clone, Copy)]
 struct Subject<'a> {
     theory: &'a Theory,
     producers: Option<&'a Producers>,
     frozen: Option<&'a [bool]>,
+    choices: &'a ChoiceHeads,
 }
+
+/// The marks of a subject that ranks no atom as a choice.
+static NO_CHOICES: ChoiceHeads = ChoiceHeads { words: Vec::new() };
 
 /// A theory read for its candidates, with the producers of its support
 /// fragment when the support cut applies: what original narrowing reads.
@@ -99,13 +105,38 @@ struct Subject<'a> {
 pub struct OriginalSubject<'a> {
     theory: &'a Theory,
     producers: Option<&'a Producers>,
+    choices: &'a ChoiceHeads,
 }
 
 impl<'a> OriginalSubject<'a> {
     /// The candidates of `theory`, cut by `producers`' support when given.
+    /// A narrowing that selects its own split ranks no atom as a choice.
     #[must_use]
     pub const fn new(theory: &'a Theory, producers: Option<&'a Producers>) -> Self {
-        Self { theory, producers }
+        Self {
+            theory,
+            producers,
+            choices: &NO_CHOICES,
+        }
+    }
+
+    /// The same subject, whose own split selection ranks `choices` first, as
+    /// [`Knowledge::preferred_atom_reserved`] describes.
+    #[must_use]
+    pub const fn with_choices(self, choices: &'a ChoiceHeads) -> Self {
+        Self { choices, ..self }
+    }
+
+    /// The theory read.
+    #[must_use]
+    pub const fn theory(&self) -> &'a Theory {
+        self.theory
+    }
+
+    /// The choice heads a split ranks first; empty unless given.
+    #[must_use]
+    pub const fn choices(&self) -> &'a ChoiceHeads {
+        self.choices
     }
 }
 
@@ -115,6 +146,7 @@ impl<'a> From<OriginalSubject<'a>> for Subject<'a> {
             theory: subject.theory,
             producers: subject.producers,
             frozen: None,
+            choices: subject.choices,
         }
     }
 }
@@ -154,6 +186,7 @@ impl<'a> From<FrozenSubject<'a>> for Subject<'a> {
             theory: subject.theory,
             producers: None,
             frozen: Some(subject.truth),
+            choices: &NO_CHOICES,
         }
     }
 }
@@ -170,11 +203,35 @@ pub struct Producers {
     has_competing_heads: bool,
 }
 
+/// The atoms that head an atomic choice root of a theory, `a ∨ ¬a` standing
+/// alone or as an implication's consequent. A mark records that the theory
+/// chooses the atom, not that no other rule derives it. The default marks no
+/// atom.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct ChoiceHeads {
+    /// One bit per atom of the theory's universe.
+    words: Vec<u64>,
+}
+
+impl ChoiceHeads {
+    /// Whether `atom` heads an atomic choice root; false for any atom outside
+    /// the universe the marks were taken over.
+    #[must_use]
+    pub fn contains(&self, atom: usize) -> bool {
+        self.words
+            .get(atom / 64)
+            .is_some_and(|word| word & (1u64 << (atom % 64)) != 0)
+    }
+}
+
 /// The outcome of extracting a theory's producers.
 #[derive(Clone, Debug)]
 pub struct Extraction {
     /// The producers, or none when a root lies outside the fragment.
     pub producers: Option<Producers>,
+    /// The heads of the theory's atomic choice roots, whether or not every
+    /// root lies in the fragment.
+    pub choice_heads: ChoiceHeads,
     /// Charged node and root visits, the same for a declined extraction.
     pub work: u64,
 }
@@ -183,7 +240,8 @@ pub struct Extraction {
 /// whose head is a disjunction of atoms with falsum, an atomic choice, or
 /// falsum: the fragment `DisjunctiveSupport.Covered` names, with a fact's
 /// head standing alone. No producers when a root lies outside it, in which
-/// case the support rule does not apply.
+/// case the support rule does not apply. The heads of atomic choice roots are
+/// marked for every theory, in one more charged visit per root.
 ///
 /// # Errors
 /// Returns the stop when extraction exceeds `limits.max_work`, control stops,
@@ -196,11 +254,30 @@ pub fn producers(
 ) -> Result<Extraction, Stop> {
     cancellation.poll()?;
     let mut work = Work::new(limits.max_work);
+    let choice_heads = choice_heads(theory, &mut work)?;
     let producers = extract(theory, &mut work)?;
     Ok(Extraction {
         producers,
+        choice_heads,
         work: work.spent,
     })
+}
+
+/// Mark the head of every atomic choice root, one charged visit per root.
+fn choice_heads(theory: &Theory, work: &mut Work<'_>) -> Result<ChoiceHeads, Stop> {
+    let nodes = theory.view();
+    let mut words = vec![0; flag_words(theory.atom_count())];
+    for &root in theory.roots() {
+        work.tick()?;
+        let head = match nodes.node(root).map_err(|_| Stop::InvalidProgram)? {
+            NodeView::Implies(_, head) => head,
+            _ => root,
+        };
+        if let Some(atom) = crate::atomic_choice::atom(theory, head) {
+            words[atom / 64] |= 1u64 << (atom % 64);
+        }
+    }
+    Ok(ChoiceHeads { words })
 }
 
 fn ordinary_operands(
@@ -297,11 +374,11 @@ fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, St
 /// The work one narrowing charged.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct NarrowingStatistics {
-    /// Charged node reads, root tests, producer checks and threshold transfers.
+    /// Charged node reads, root tests, producer checks and threshold operations.
     pub work: u64,
     /// Propagation events: nodes and atoms learned and their neighbours
     /// revisited, atoms whose support was rechecked, and threshold rows whose
-    /// changed requirements were transported to related rows.
+    /// residual divisibility or changed requirements were checked.
     pub propagations: u64,
     /// Atoms held by the narrowing.
     pub held: u64,
@@ -324,7 +401,9 @@ pub struct NarrowingAttempt<E = Stop> {
 /// prefix. A selection changes neither the region nor its closed knowledge.
 #[derive(Debug)]
 pub struct PreferenceAttempt {
-    /// The most constrained open atom, or no atom when the region is decided.
+    /// The open atom to split on, ranked as
+    /// [`Knowledge::preferred_atom_reserved`] describes, or no atom when the
+    /// region is decided.
     pub result: Result<Option<usize>, Stop>,
     /// One charged unknown-parent-count read per open atom inspected.
     pub work: u64,
@@ -349,8 +428,9 @@ pub trait NarrowingQuota {
 }
 
 /// The most charged reads a narrowing asks its [`NarrowingQuota`] for at once,
-/// and so the most reads between two consultations of it.
-pub const NARROWING_BATCH: u64 = 256;
+/// and so the most reads between two consultations of it: the shared metered
+/// polling interval, [`zetesis_cpu::POLL_INTERVAL`].
+pub const NARROWING_BATCH: u64 = zetesis_cpu::POLL_INTERVAL;
 
 /// The narrowing's charged reads: a fixed ceiling, or permits granted by a
 /// quota in batches and spent locally.
@@ -397,7 +477,7 @@ impl<'q> Work<'q> {
         Ok(())
     }
     /// Return the unspent permits to the quota.
-    fn settle(&mut self) {
+    fn refund(&mut self) {
         if let Some(quota) = &mut self.quota {
             quota.refund(std::mem::take(&mut self.available));
         }
@@ -436,6 +516,10 @@ pub struct Narrower {
     /// Largest chain length or initial per-atom parent-occurrence count.
     counter_bound: usize,
     thresholds: thresholds::Thresholds,
+    extrema: extrema::Extrema,
+    equal_extrema: extrema::EqualWitnesses,
+    /// Roles in shared same-connective edges; empty when no such edge exists.
+    witness_chains: Vec<u8>,
     /// Logical indexing visits: each native node and operand occurrence.
     work: u64,
 }
@@ -446,7 +530,36 @@ struct Chain {
     disjunction: bool,
     root: usize,
     /// The leaves, distinct nodes, in operand order.
-    operands: Vec<usize>,
+    operands: ChainOperands,
+}
+
+/// Ordinary chains own their leaves; ordinal cuts borrow a prepared row column.
+/// This is an index view, never another formula or authoritative tuple store.
+#[derive(Clone, Debug)]
+enum ChainOperands {
+    Owned(Vec<usize>),
+    Ordinal { column: usize, length: usize },
+}
+
+impl Chain {
+    fn leaves<'a>(&'a self, extrema: &'a extrema::Extrema) -> &'a [usize] {
+        match &self.operands {
+            ChainOperands::Owned(values) => values,
+            ChainOperands::Ordinal { column, length } => extrema.leaves(*column, *length),
+        }
+    }
+
+    fn ordinal(&self) -> bool {
+        matches!(self.operands, ChainOperands::Ordinal { .. })
+    }
+
+    #[cfg(test)]
+    fn ordinary_leaves(&self) -> &[usize] {
+        match &self.operands {
+            ChainOperands::Owned(leaves) => leaves,
+            ChainOperands::Ordinal { .. } => panic!("ordinary-chain test fixture"),
+        }
+    }
 }
 
 /// A one-based chain link. Both construction maps point into allocated chain
@@ -467,9 +580,11 @@ fn connective_operands(node: NodeView<'_>) -> Option<(bool, &[usize])> {
     match node {
         NodeView::Or(operands) => Some((true, operands)),
         NodeView::And(operands) => Some((false, operands)),
-        NodeView::Atom(_) | NodeView::False | NodeView::Implies(_, _) | NodeView::Threshold(_) => {
-            None
-        }
+        NodeView::Atom(_)
+        | NodeView::False
+        | NodeView::Implies(_, _)
+        | NodeView::Threshold(_)
+        | NodeView::ExtremumCut(_) => None,
     }
 }
 
@@ -489,6 +604,17 @@ fn absorbed_nodes(theory: &Theory) -> Vec<bool> {
             NodeView::Atom(_) | NodeView::False => continue,
             NodeView::And(operands) | NodeView::Or(operands) => operands,
             NodeView::Threshold(row) => row.conditions,
+            NodeView::ExtremumCut(cut) => {
+                if cut.endpoint_truth().is_none() {
+                    for (&child, &rank) in cut.row.conditions.iter().zip(cut.row.ranks) {
+                        if cut.qualifies(rank) && last_parent[child] != Some(index) {
+                            last_parent[child] = Some(index);
+                            parent_count[child] += 1;
+                        }
+                    }
+                }
+                continue;
+            }
             NodeView::Implies(a, b) => {
                 pair = [a, b];
                 &pair
@@ -567,7 +693,7 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>)
         chains.push(Chain {
             disjunction,
             root,
-            operands,
+            operands: ChainOperands::Owned(operands),
         });
     }
     (chains, chain_of, absorbed)
@@ -635,12 +761,17 @@ enum Width {
 }
 
 impl Knowledge {
-    /// Select the open atom with most unknown parents in this knowledge;
-    /// ties, including all-zero scores, select the lowest atom. The region
-    /// and knowledge must use the same atom universe and atom identities;
-    /// their correspondence is a caller precondition, not checked here.
-    /// This preference only orders an exhaustive split; it establishes no
-    /// truth and does not complete propagation.
+    /// Select the open atom to split on. An open atom marked in `choices`, the
+    /// heads of the theory's atomic choice roots, ranks before every unmarked
+    /// one: deciding the choices first leaves the atoms they derive to
+    /// propagation and support. Among equally ranked atoms, the one with most
+    /// unknown parents in this knowledge wins; ties, including all-zero
+    /// scores, select the lowest atom. Empty `choices` rank by unknown parents
+    /// alone. The region, knowledge and choices must use the same atom
+    /// universe and atom identities; their correspondence is a caller
+    /// precondition, not checked here. This preference only orders an
+    /// exhaustive split; it establishes no truth and does not complete
+    /// propagation.
     ///
     /// For `A` atoms and `U` open atoms the scan takes `O(A / 64 + U)` time
     /// and constant additional space. It charges one count read per open
@@ -661,25 +792,31 @@ impl Knowledge {
     pub fn preferred_atom_reserved(
         &self,
         region: &Region,
+        choices: &ChoiceHeads,
         cancellation: &Cancellation,
         quota: &mut dyn NarrowingQuota,
     ) -> PreferenceAttempt {
         let mut work = Work::reserved(quota);
         let result = cancellation
             .poll()
-            .and_then(|()| self.preferred_atom(region, &mut work));
-        work.settle();
+            .and_then(|()| self.preferred_atom(region, choices, &mut work));
+        work.refund();
         PreferenceAttempt {
             result,
             work: work.spent,
         }
     }
 
-    fn preferred_atom(&self, region: &Region, work: &mut Work<'_>) -> Result<Option<usize>, Stop> {
+    fn preferred_atom(
+        &self,
+        region: &Region,
+        choices: &ChoiceHeads,
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, Stop> {
         match &self.width {
-            Width::Compact16(known) => most_constrained(region, known, work),
-            Width::Compact32(known) => most_constrained(region, known, work),
-            Width::Native(known) => most_constrained(region, known, work),
+            Width::Compact16(known) => preferred_split(region, known, choices, work),
+            Width::Compact32(known) => preferred_split(region, known, choices, work),
+            Width::Native(known) => preferred_split(region, known, choices, work),
         }
     }
 
@@ -723,12 +860,11 @@ fn dependencies<'a>(
 ) -> impl Iterator<Item = (usize, usize)> + Clone + 'a {
     chains
         .iter()
-        .flat_map(|chain| {
-            chain
-                .operands
-                .iter()
-                .map(move |&operand| (operand, chain.root))
+        .filter_map(|chain| match &chain.operands {
+            ChainOperands::Owned(operands) => Some((chain, operands)),
+            ChainOperands::Ordinal { .. } => None,
         })
+        .flat_map(|(chain, operands)| operands.iter().map(move |&operand| (operand, chain.root)))
         .chain((0..nodes.len()).flat_map(move |index| {
             let operands = match nodes.node(index).expect("admitted node") {
                 NodeView::Implies(a, b) => [Some(a), (b != a).then_some(b)],
@@ -752,10 +888,11 @@ fn counter_bound(
     parents: &Adjacency,
     atom_nodes: &Adjacency,
     thresholds: &thresholds::Thresholds,
+    extrema: &extrema::Extrema,
 ) -> usize {
     let chain_bound = chains
         .iter()
-        .map(|chain| chain.operands.len())
+        .map(|chain| chain.leaves(extrema).len())
         .max()
         .unwrap_or(0);
     atom_nodes.iter().fold(chain_bound, |bound, nodes| {
@@ -763,6 +900,7 @@ fn counter_bound(
             count
                 .checked_add(parents[node].len())
                 .and_then(|count| count.checked_add(thresholds.parent_count(node)))
+                .and_then(|count| count.checked_add(extrema.parent_count(node)))
                 .expect("atom parent occurrences fit their allocated table")
         });
         bound.max(occurrences)
@@ -804,9 +942,10 @@ impl Narrower {
     /// When unit rows exist, immutable anchor projections retain one entry per
     /// eligible row and matching Boolean chain, with sparse reverse chain
     /// lookup. Chain minima are read once; their operand order is unchanged.
-    /// For U unit rows, C chains, L chain leaves and A anchors, this adds
-    /// O(R + U log U + L + (R + C) log(A + 1)) preparation work and O(U + C)
-    /// storage, with fallible reservations. There are no row/chain pairs or
+    /// For N nodes, U unit rows, C chains, L chain leaves and A anchors, this
+    /// adds O(N + R + U log U + L + (R + C + L) log(A + 1)) preparation work,
+    /// including the per-chain anchored-cone summary, and O(U + C) storage,
+    /// with fallible reservations. There are no row/chain pairs or
     /// node-sized offsets. With no unit row there is no allocation or chain
     /// scan. Runtime anchor lookups, posting visits and exact-prefix comparisons
     /// consume propagation work; no per-Boolean mutable state is added.
@@ -819,8 +958,17 @@ impl Narrower {
     /// This constructor has no independent cancellation contract.
     pub fn try_new(theory: &Theory) -> Result<Self, Stop> {
         let nodes = theory.view();
-        let (chains, chain_of, absorbed) = chains(theory);
-        let thresholds = thresholds::Thresholds::prepare(theory, &chains)?;
+        let (mut chains, mut chain_of, absorbed) = chains(theory);
+        let extrema = extrema::Extrema::prepare(theory)?;
+        extrema.append_chains(&mut chains, &mut chain_of)?;
+        let witness_chains = witnesses::nested(&chains, &chain_of, &extrema)?;
+        let thresholds = thresholds::Thresholds::prepare(
+            theory,
+            &chains,
+            &chain_of,
+            &extrema,
+            !witness_chains.is_empty(),
+        )?;
         let parents = Adjacency::build(nodes.len(), dependencies(nodes, &chains))?;
         let atom_operands = Adjacency::try_build(
             nodes.len(),
@@ -840,8 +988,8 @@ impl Narrower {
                 Err(_) => Some(Err(Stop::InvalidProgram)),
             }),
         )?;
-        let counter_bound = counter_bound(&chains, &parents, &atom_nodes, &thresholds);
-        Ok(Self {
+        let counter_bound = counter_bound(&chains, &parents, &atom_nodes, &thresholds, &extrema);
+        let mut result = Self {
             parents,
             atom_nodes,
             chains,
@@ -850,9 +998,51 @@ impl Narrower {
             atom_operands,
             counter_bound,
             thresholds,
+            extrema,
+            equal_extrema: extrema::EqualWitnesses::default(),
+            witness_chains,
             work: u64::try_from(nodes.len() as u128 + theory.parts().occurrences() as u128)
                 .map_err(|_| Stop::Allocation)?,
-        })
+        };
+        result.equal_extrema = extrema::EqualWitnesses::prepare(&result)?;
+        Ok(result)
+    }
+
+    /// Additional retained native-extrema index capacity. Dedicated owners use
+    /// their actual headers and vector capacities. For shared containers, native
+    /// Chain slots plus unused capacity and the whole witness-role and anchor
+    /// projection payloads are
+    /// conservatively attributed to native cuts; live ordinary Chain slots are
+    /// excluded. Zero-cut theories report zero. Temporary preparation and
+    /// per-chain counters already in knowledge accounting are excluded.
+    #[must_use]
+    pub fn extremum_index_bytes(&self) -> u128 {
+        if self.extrema.is_empty() {
+            return 0;
+        }
+        let native_chains = self.extrema.chain_count();
+        let shared = if native_chains == 0 {
+            0
+        } else {
+            (native_chains as u128 + (self.chains.capacity() - self.chains.len()) as u128)
+                * size_of::<Chain>() as u128
+                + self.witness_chains.capacity() as u128 * size_of::<u8>() as u128
+                + self.thresholds.connective_storage_bytes()
+        };
+        size_of::<extrema::Extrema>() as u128
+            + size_of::<extrema::EqualWitnesses>() as u128
+            + self.extrema.retained_bytes()
+            + self.equal_extrema.retained_bytes()
+            + shared
+    }
+
+    /// Direct Boolean parents followed by ordinal-cut parents. The ordinal
+    /// incidences are streamed from compact row postings, never materialized.
+    fn logical_parents(&self, node: usize) -> impl DoubleEndedIterator<Item = usize> + Clone + '_ {
+        self.parents[node]
+            .iter()
+            .copied()
+            .chain(self.extrema.parents(node))
     }
 
     /// The logical index receipt: one visit per node and operand occurrence.
@@ -884,7 +1074,9 @@ impl Narrower {
             for &node in nodes {
                 unknown.add(
                     atom,
-                    self.parents[node].len() + self.thresholds.parent_count(node),
+                    self.parents[node].len()
+                        + self.thresholds.parent_count(node)
+                        + self.extrema.parent_count(node),
                 );
             }
         }
@@ -1087,13 +1279,13 @@ impl Narrower {
             }?;
             if matches!(narrowing, Narrowing::Fixed { .. })
                 && matches!(selection, SplitSelection::Choose)
-                && let Some(atom) = knowledge.preferred_atom(region, &mut work)?
+                && let Some(atom) = knowledge.preferred_atom(region, subject.choices, &mut work)?
             {
                 region.prefer(atom);
             }
             Ok(narrowing)
         });
-        work.settle();
+        work.refund();
         statistics.work = work.spent;
         NarrowingAttempt { result, statistics }
     }
@@ -1139,22 +1331,24 @@ impl Narrower {
     }
 }
 
-/// The open atom with the most parents still unknown, the one whose
-/// decision the theory is most sensitive to; ties go to the lower atom.
-/// This chooses the split, as the clause search branches on the variable
-/// with the most unresolved occurrences. The counts are kept as parents
+/// The open atom to split on. Atoms marked in `choices` rank before every
+/// unmarked one; among equally ranked atoms, the one with the most parents
+/// still unknown, whose decision the theory is most sensitive to, as the
+/// clause search branches on the variable with the most unresolved
+/// occurrences; ties go to the lower atom. The counts are kept as parents
 /// become known, so the ranking is one read per open atom.
-fn most_constrained<C: Count>(
+fn preferred_split<C: Count>(
     region: &Region,
     known: &Known<C>,
+    choices: &ChoiceHeads,
     work: &mut Work<'_>,
 ) -> Result<Option<usize>, Stop> {
-    let mut best: Option<(usize, usize)> = None;
+    let mut best: Option<(usize, (bool, usize))> = None;
     for atom in region.open() {
         work.tick()?;
-        let unknown = known.unknown.get(atom);
-        if best.is_none_or(|(_, count)| unknown > count) {
-            best = Some((atom, unknown));
+        let rank = (choices.contains(atom), known.unknown.get(atom));
+        if best.is_none_or(|(_, best)| rank > best) {
+            best = Some((atom, rank));
         }
     }
     Ok(best.map(|(atom, _)| atom))
@@ -1232,10 +1426,17 @@ pub struct NarrowingScratch {
     /// One bit per atom, set exactly while the atom is in `heads`, so an
     /// atom's recheck is queued once until it runs.
     pending: Vec<u64>,
-    /// Original-subject rows whose numeric requirements need transporting.
+    /// Original-subject rows awaiting prefix/Boolean requirement transport.
     threshold_rows: Vec<usize>,
     /// One bit per row, set exactly while it is in `threshold_rows`.
     pending_thresholds: Vec<u64>,
+    /// Original-subject arithmetic checks, deferred until mandatory propagation
+    /// reaches a fixed point. These entries never change transport order.
+    residual_rows: Vec<usize>,
+    /// One bit per row, set exactly while it is in `residual_rows`.
+    pending_residuals: Vec<u64>,
+    /// Shared connective views and dirty worklists belong to the walker.
+    witnesses: witnesses::Scratch,
 }
 
 impl NarrowingScratch {
@@ -1246,57 +1447,96 @@ impl NarrowingScratch {
         (self.learned.capacity() + self.heads.capacity()) as u128 * size_of::<usize>() as u128
             + self.nodes.capacity() as u128 * size_of::<(usize, bool)>() as u128
             + self.pending.capacity() as u128 * size_of::<u64>() as u128
-            + self.threshold_rows.capacity() as u128 * size_of::<usize>() as u128
-            + self.pending_thresholds.capacity() as u128 * size_of::<u64>() as u128
+            + (self.threshold_rows.capacity() + self.residual_rows.capacity()) as u128
+                * size_of::<usize>() as u128
+            + (self.pending_thresholds.capacity() + self.pending_residuals.capacity()) as u128
+                * size_of::<u64>() as u128
+            + self.witnesses.retained_bytes()
     }
 
     /// Discard every entry, keeping the capacity, for a narrowing over
     /// `atoms` atoms.
     fn prepare(&mut self, atoms: usize) {
+        self.witnesses.clear();
         for &atom in &self.heads {
             self.pending[atom / 64] &= !(1u64 << (atom % 64));
         }
         for &row in &self.threshold_rows {
             self.pending_thresholds[row / 64] &= !(1u64 << (row % 64));
         }
+        for &row in &self.residual_rows {
+            self.pending_residuals[row / 64] &= !(1u64 << (row % 64));
+        }
         self.learned.clear();
         self.nodes.clear();
         self.heads.clear();
         self.threshold_rows.clear();
+        self.residual_rows.clear();
         if self.pending.len() < flag_words(atoms) {
             self.pending.resize(flag_words(atoms), 0);
         }
     }
 
-    /// Reserve the bounded original-subject worklist before closure begins.
-    /// At most one entry per row is pending; no allocation is needed to enqueue.
-    /// Frozen subjects never request this additional scratch.
+    /// Reserve each original-subject worklist only when its route is present.
+    /// At most one entry per row is pending; enqueueing never allocates.
+    /// Frozen subjects never request either additional worklist.
     fn prepare_thresholds(&mut self, rows: usize) -> Result<(), Stop> {
-        self.threshold_rows
-            .try_reserve_exact(rows.saturating_sub(self.threshold_rows.len()))
+        Self::prepare_rows(&mut self.threshold_rows, &mut self.pending_thresholds, rows)
+    }
+
+    fn prepare_residuals(&mut self, rows: usize) -> Result<(), Stop> {
+        Self::prepare_rows(&mut self.residual_rows, &mut self.pending_residuals, rows)
+    }
+
+    fn prepare_rows(
+        entries: &mut Vec<usize>,
+        pending: &mut Vec<u64>,
+        rows: usize,
+    ) -> Result<(), Stop> {
+        entries
+            .try_reserve_exact(rows.saturating_sub(entries.len()))
             .map_err(|_| Stop::Allocation)?;
         let words = flag_words(rows);
-        if self.pending_thresholds.len() < words {
-            self.pending_thresholds
-                .try_reserve_exact(words - self.pending_thresholds.len())
+        if pending.len() < words {
+            pending
+                .try_reserve_exact(words - pending.len())
                 .map_err(|_| Stop::Allocation)?;
-            self.pending_thresholds.resize(words, 0);
+            pending.resize(words, 0);
         }
         Ok(())
     }
 
-    /// Coalesce repeated requirement changes until the row is consumed.
+    /// Requirement transport retains its own insertion order. Each producer
+    /// then runs `threshold_row`, which separately marks eligible arithmetic.
     fn queue_threshold(&mut self, row: usize) {
+        Self::queue_row(&mut self.threshold_rows, &mut self.pending_thresholds, row);
+    }
+
+    /// Condition changes request only arithmetic, not prefix or bridge walks.
+    /// All mandatory waves coalesce into one check of the final row state.
+    fn queue_residual(&mut self, row: usize) {
+        Self::queue_row(&mut self.residual_rows, &mut self.pending_residuals, row);
+    }
+
+    fn queue_row(entries: &mut Vec<usize>, pending: &mut [u64], row: usize) {
         let (word, flag) = (row / 64, 1u64 << (row % 64));
-        if self.pending_thresholds[word] & flag == 0 {
-            self.pending_thresholds[word] |= flag;
-            self.threshold_rows.push(row);
+        if pending[word] & flag == 0 {
+            pending[word] |= flag;
+            entries.push(row);
         }
     }
 
     fn next_threshold(&mut self) -> Option<usize> {
-        let row = self.threshold_rows.pop()?;
-        self.pending_thresholds[row / 64] &= !(1u64 << (row % 64));
+        Self::next_row(&mut self.threshold_rows, &mut self.pending_thresholds)
+    }
+
+    fn next_residual(&mut self) -> Option<usize> {
+        Self::next_row(&mut self.residual_rows, &mut self.pending_residuals)
+    }
+
+    fn next_row(entries: &mut Vec<usize>, pending: &mut [u64]) -> Option<usize> {
+        let row = entries.pop()?;
+        pending[row / 64] &= !(1u64 << (row % 64));
         Some(row)
     }
 
@@ -1483,8 +1723,10 @@ impl<C: Count> Closure<'_, C> {
     /// Close the knowledge from the region's decisions, falsum and the
     /// roots. Node events follow new bits or initial seeds. Original threshold
     /// row events follow strictly tighter requirements from the finite set of
-    /// native and linked Boolean bounds, so exact-prefix transport also reaches
-    /// a fixed point. Boolean chains retain their existing operand counters.
+    /// native and linked Boolean bounds, or processed condition events. A
+    /// residual divisibility check runs only after all mandatory queues drain:
+    /// it adds no bounds or events, so each dirty row is checked at most once.
+    /// Thus both row routes terminate; Boolean chains retain their counters.
     fn close(
         &mut self,
         subject: Subject<'_>,
@@ -1497,9 +1739,18 @@ impl<C: Count> Closure<'_, C> {
             theory,
             producers,
             frozen,
+            choices: _,
         } = subject;
-        if frozen.is_none() && index.thresholds.has_relations() {
-            self.lists.prepare_thresholds(index.thresholds.rows.len())?;
+        if frozen.is_none() {
+            if index.thresholds.has_relations() {
+                self.lists.prepare_thresholds(index.thresholds.rows.len())?;
+            }
+            if index.thresholds.has_residuals() {
+                self.lists.prepare_residuals(index.thresholds.rows.len())?;
+            }
+        }
+        if !index.witness_chains.is_empty() && (frozen.is_none() || !index.extrema.is_empty()) {
+            self.lists.witnesses.prepare_dirty(index.chains.len())?;
         }
         let nodes = theory.view();
         let mut step = Step::Unchanged;
@@ -1518,6 +1769,10 @@ impl<C: Count> Closure<'_, C> {
                         return Ok(step);
                     }
                 }
+            }
+            step = step.join(self.seed_extrema(index, frozen, work)?);
+            if step == Step::Contradiction {
+                return Ok(step);
             }
             step = step.join(self.seed_thresholds(index, frozen, work)?);
             if step == Step::Contradiction {
@@ -1565,11 +1820,18 @@ impl<C: Count> Closure<'_, C> {
                 );
                 statistics.propagations += 1;
                 self.threshold_requirements(index, row, work)?
+            } else if let Some(chain) = self.lists.witnesses.next_dirty() {
+                statistics.propagations += 1;
+                self.witness_changed(index, chain, frozen, work)?
             } else if let Some(atom) = self.lists.next_recheck() {
                 statistics.propagations += 1;
                 let producers =
                     producers.expect("a support recheck is queued only when producers are known");
                 self.recheck(index, producers, atom, work)?
+            } else if let Some(row) = self.lists.next_residual() {
+                debug_assert!(frozen.is_none(), "only original rows check residual sums");
+                statistics.propagations += 1;
+                self.threshold_residual(index, row, work)?
             } else {
                 return Ok(Step::Changed);
             };
@@ -1607,6 +1869,19 @@ impl<C: Count> Closure<'_, C> {
         for &atom in &index.atom_operands[node] {
             self.known.unknown.decrement(atom);
         }
+        if let Some(chain) = index.chain_of[node] {
+            let chain = &index.chains[chain_position(chain)];
+            if chain.ordinal() {
+                for &operand in chain.leaves(&index.extrema) {
+                    work.tick()?;
+                    if let NodeView::Atom(atom) =
+                        nodes.node(operand).map_err(|_| Stop::InvalidProgram)?
+                    {
+                        self.known.unknown.decrement(atom);
+                    }
+                }
+            }
+        }
         let mut step = Step::Unchanged;
         if !masked(node) {
             step = step.join(self.teach_operands(subject, index, node, work)?);
@@ -1625,13 +1900,24 @@ impl<C: Count> Closure<'_, C> {
         if step == Step::Contradiction {
             return Ok(step);
         }
-        for &parent in &index.parents[node] {
+        for parent in index.logical_parents(node) {
             work.tick()?;
             if masked(parent) {
                 continue;
             }
             step = step.join(if let Some(chain) = index.chain_of[parent] {
-                self.operand_changed(index, chain_position(chain), value, work)?
+                let chain = chain_position(chain);
+                let step = self.operand_changed(index, chain, value, work)?;
+                // An absorbing operand supplies a witness and settles its root.
+                // Neither relay nor an expanded unit obligation remains.
+                if step != Step::Contradiction
+                    && value != index.chains[chain].disjunction
+                    && witnesses::participates(index, chain)
+                    && self.needs_witness_notification(index, chain, frozen)
+                {
+                    self.lists.witnesses.queue_dirty(chain);
+                }
+                step
             } else {
                 self.revisit_implication(nodes, parent, node, value)
             });
@@ -1654,11 +1940,9 @@ impl<C: Count> Closure<'_, C> {
         value: bool,
         work: &mut Work<'_>,
     ) -> Result<Step, Stop> {
-        let Chain {
-            disjunction,
-            root,
-            ref operands,
-        } = index.chains[chain];
+        let source = &index.chains[chain];
+        let (disjunction, root) = (source.disjunction, source.root);
+        let operands = source.leaves(&index.extrema);
         let total = operands.len();
         if value == disjunction {
             self.known.witnessed[chain / 64] |= 1u64 << (chain % 64);
@@ -1693,11 +1977,9 @@ impl<C: Count> Closure<'_, C> {
     /// may find none, every operand being known with one count pending,
     /// and then the pending step decides the chain.
     fn unit(&mut self, index: &Narrower, chain: usize, work: &mut Work<'_>) -> Result<Step, Stop> {
-        let Chain {
-            disjunction,
-            ref operands,
-            ..
-        } = index.chains[chain];
+        let source = &index.chains[chain];
+        let disjunction = source.disjunction;
+        let operands = source.leaves(&index.extrema);
         // Callers have counted all but one operand at the opposite polarity.
         // A processed witness is therefore the sole possible target, already
         // known as required. Bits precede their events, but counts never do.
@@ -1738,6 +2020,7 @@ impl<C: Count> Closure<'_, C> {
             theory,
             producers,
             frozen,
+            choices: _,
         } = subject;
         let nodes = theory.view();
         if let Some(chain) = index.chain_of[node] {
@@ -1745,6 +2028,21 @@ impl<C: Count> Closure<'_, C> {
             // rule is the chain's; the generic connective arms teach nothing.
             let chain = chain_position(chain);
             let step = self.teach_chain(index, chain, work)?;
+            if step == Step::Contradiction {
+                return Ok(step);
+            }
+            // This event already fixes the root, so only an expanded unit
+            // obligation can remain; relay-only chains have nothing to teach.
+            if witnesses::expands(index, chain)
+                && self.needs_witness_notification(index, chain, frozen)
+            {
+                self.lists.witnesses.queue_dirty(chain);
+            }
+            let step = step.join(self.extremum_order(index, chain, frozen, work)?);
+            if step == Step::Contradiction {
+                return Ok(step);
+            }
+            let step = step.join(self.equal_extremum_witnesses(index, chain, frozen, work)?);
             if step == Step::Contradiction || frozen.is_some() {
                 return Ok(step);
             }
@@ -1778,7 +2076,9 @@ impl<C: Count> Closure<'_, C> {
                 }
             }
             NodeView::False if bit(self.known.sure, node) => Step::Contradiction,
-            NodeView::False | NodeView::And(..) | NodeView::Or(..) => Step::Unchanged,
+            NodeView::False | NodeView::And(..) | NodeView::Or(..) | NodeView::ExtremumCut(_) => {
+                Step::Unchanged
+            }
             NodeView::Implies(a, b) => self.teach_implication(node, a, b),
             NodeView::Threshold(row) => {
                 self.threshold_guard(index, theory, node, row.bound, frozen, work)?
@@ -1820,11 +2120,9 @@ impl<C: Count> Closure<'_, C> {
         chain: usize,
         work: &mut Work<'_>,
     ) -> Result<Step, Stop> {
-        let Chain {
-            disjunction,
-            root,
-            ref operands,
-        } = index.chains[chain];
+        let source = &index.chains[chain];
+        let (disjunction, root) = (source.disjunction, source.root);
+        let operands = source.leaves(&index.extrema);
         let total = operands.len();
         let mut step = Step::Unchanged;
         if bit(self.known.sure, root) {

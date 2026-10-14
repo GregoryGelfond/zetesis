@@ -103,93 +103,94 @@ fn admit_terminal(
     let crate::formula_ground::RetainedGrounding {
         mut compiled,
         catalog,
-        accounting,
+        mut accounting,
         budget,
         mut output_storage,
         streamed,
     } = retained;
-    let mut counters = Counters::resume(accounting, crate::grounding_observer::Work::default())
-        .with_cancellation(budget.cancellation());
-    let (closed, constraints, relation_bytes) =
-        close_base(catalog, streamed, &limits, &mut counters, location)?;
-    let directory_bytes = closed
-        .storage
-        .prior_publication_metadata_bytes(&compiled.atoms)
-        .map_err(|error| FormulaFailure::TemplateCatalog {
-            error: zetesis_core::TemplateCatalogFailure::Read(error),
-            location,
-        })?
-        - compiled.atoms.publication_bytes();
-    // Output maps and transferred buffers already have a live lease.
-    // Replace the temporary grounding envelope; charge independent
-    // old snapshot directories only after authenticating that prefix.
-    let output_bytes = output_storage
-        .bytes()
-        .checked_sub(envelope_bytes)
-        .ok_or_else(|| components::missing(location))? as u128;
-    // The closed source itself is counted by its storage; the owner holds a
-    // shared handle to it.
-    let fixed =
-        (size_of::<Admitted>() - size_of::<Arc<crate::formula_support::ClosedSource>>()) as u128;
-    let metadata_bytes = output_bytes
-        + directory_bytes
-        + fixed
-        + partition::deferred_bytes(&deferred)
-        + relation_bytes;
-    // Before retiring leases, admit both the final owner and the
-    // current source-history workspace. Publication never resets work.
-    let overlap = closed.storage_bytes() + metadata_bytes + counters.workspace_bytes() as u128
-        - output_storage.bytes() as u128
-        - deferred_storage.bytes() as u128;
-    ceiling(
-        FormulaResource::SupportBytes,
-        overlap,
-        limits.max_support_bytes as u128,
+    accounting.controlled::<_, FormulaFailure>(
+        budget.cancellation(),
+        crate::grounding_observer::Work::default(),
         location,
-    )?;
-    output_storage.observe(
-        usize::try_from(output_bytes).map_err(|_| super::storage::overflow(location))?,
-        location,
-    )?;
-    // These metadata owners now belong to the admitted extension, not a mutable
-    // workspace. No canonical payload is moved or reimported here.
-    drop(output_storage);
-    drop(deferred_storage);
-    let baseline = counters
-        .into_accounting()
-        .into_flat_baseline()
-        .map_err(|_| components::missing(location))?;
-    ceiling(
-        FormulaResource::GeneratedValues,
-        baseline.generated_values as u128,
-        limits.max_generated_values as u128,
-        location,
-    )?;
-    compiled.expansion = budget.usage();
-    let final_bytes = closed.storage_bytes() + metadata_bytes;
-    ceiling(
-        FormulaResource::SupportBytes,
-        final_bytes,
-        limits.max_support_bytes as u128,
-        location,
-    )?;
-    Ok(Materialized {
-        compiled,
-        core: if hybrid {
-            Core::Hybrid(constraints.map(Box::new))
-        } else {
-            Core::Eager
+        |counters| {
+            let (closed, constraints, relation_bytes) =
+                close_base(catalog, streamed, &limits, counters, location)?;
+            let directory_bytes = prior_directory_bytes(&closed, &compiled, location)?;
+            // Output maps and transferred buffers already have a live lease.
+            // Replace the temporary grounding envelope; charge independent
+            // old snapshot directories only after authenticating that prefix.
+            let output_bytes = output_storage
+                .bytes()
+                .checked_sub(envelope_bytes)
+                .ok_or_else(|| components::missing(location))?
+                as u128;
+            // The closed source itself is counted by its storage; the owner holds a
+            // shared handle to it.
+            let fixed = (size_of::<Admitted>()
+                - size_of::<Arc<crate::formula_support::ClosedSource>>())
+                as u128;
+            let metadata_bytes = output_bytes
+                + directory_bytes
+                + fixed
+                + partition::deferred_bytes(&deferred)
+                + relation_bytes;
+            // Before retiring leases, admit both the final owner and the
+            // current source-history workspace. Publication never resets work.
+            let overlap =
+                closed.storage_bytes() + metadata_bytes + counters.workspace_bytes() as u128
+                    - output_storage.bytes() as u128
+                    - deferred_storage.bytes() as u128;
+            ceiling(
+                FormulaResource::SupportBytes,
+                overlap,
+                limits.max_support_bytes as u128,
+                location,
+            )?;
+            output_storage.observe(
+                usize::try_from(output_bytes).map_err(|_| super::storage::overflow(location))?,
+                location,
+            )?;
+            // These metadata owners now belong to the admitted extension, not a mutable
+            // workspace. No canonical payload is moved or reimported here.
+            drop(output_storage);
+            drop(deferred_storage);
+            let baseline = counters
+                .accounting
+                .flat_baseline()
+                .map_err(|_| components::missing(location))?;
+            ceiling(
+                FormulaResource::GeneratedValues,
+                baseline.generated_values as u128,
+                limits.max_generated_values as u128,
+                location,
+            )?;
+            compiled.expansion = budget.usage();
+            let final_bytes = closed.storage_bytes() + metadata_bytes;
+            ceiling(
+                FormulaResource::SupportBytes,
+                final_bytes,
+                limits.max_support_bytes as u128,
+                location,
+            )?;
+            Ok(Materialized {
+                compiled,
+                core: if hybrid {
+                    Core::Hybrid(constraints.map(Box::new))
+                } else {
+                    Core::Eager
+                },
+                terminal: Some(Extension {
+                    original,
+                    deferred,
+                    closed,
+                    baseline,
+                    limits,
+                    location,
+                    metadata_bytes,
+                }),
+            })
         },
-        terminal: Some(Extension {
-            original,
-            deferred,
-            closed,
-            baseline,
-            limits,
-            location,
-            metadata_bytes,
-        }),
-    })
+    )
 }
 
 /// Close the base catalog once. For a hybrid base with a stream, the close
@@ -238,4 +239,21 @@ fn close_base(
             Ok((Arc::new(closed), None, 0))
         }
     }
+}
+
+/// The retained snapshot directories, excluding the current publication already
+/// covered by its output lease. Authenticating the prefix precedes subtraction.
+fn prior_directory_bytes(
+    closed: &crate::formula_support::ClosedSource,
+    compiled: &Compiled,
+    location: crate::ProgramSite,
+) -> Result<u128, FormulaFailure> {
+    let prior = closed
+        .storage
+        .prior_publication_metadata_bytes(&compiled.atoms)
+        .map_err(|error| FormulaFailure::TemplateCatalog {
+            error: zetesis_core::TemplateCatalogFailure::Read(error),
+            location,
+        })?;
+    Ok(prior - compiled.atoms.publication_bytes())
 }

@@ -16,6 +16,7 @@ pub(in crate::oracle) fn program(atoms: &[Atom]) -> Program {
                 Template::new(Some(head), vec![], vec![], vec![], vec![])
             })
             .collect(),
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap()

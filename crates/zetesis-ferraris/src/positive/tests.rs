@@ -1,17 +1,8 @@
 //! Whole-root grammar, linear incidence and exact reduct-family controls.
 
 use super::*;
-use crate::{AdmissionLimits, Limits, Node};
-
-fn theory(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
-    Theory::new(
-        atoms,
-        crate::FormulaParts::new(nodes, vec![]).unwrap(),
-        roots,
-        AdmissionLimits::default(),
-    )
-    .unwrap()
-}
+use crate::test_support::theory;
+use crate::{Limits, Node};
 
 fn plan(theory: &Theory) -> PositivePlan {
     PositivePlan::compile(
@@ -244,18 +235,26 @@ fn false_producer_from_an_invalid_closure_is_a_refusal() {
     let owner = theory(1, vec![Node::atom(0)], vec![0]);
     let not_closed = Interpretation::new(&owner, []).unwrap();
     let cancellation = Cancellation::default();
-    let mut budget = Budget {
-        limits: PositivePlanLimits::default(),
-        cancellation: &cancellation,
-        statistics: PositivePlanStatistics::default(),
-        current_bytes: 0,
-    };
+    let limits = PositivePlanLimits::default();
+    let mut statistics = PositivePlanStatistics::default();
+    let metered = cancellation.metered(limits.max_work, |meter| {
+        validation::complete(
+            &not_closed,
+            &mut Budget {
+                limits,
+                cancellation: &cancellation,
+                meter,
+                statistics: &mut statistics,
+                current_bytes: 0,
+            },
+        )
+    });
     assert_eq!(
-        validation::complete(&not_closed, &mut budget),
+        metered.result,
         Err(PositiveError::InvalidClosure { root: 0 })
     );
-    assert_eq!(budget.statistics.work, 2); // One node and its false original root.
-    assert_eq!(budget.statistics.retained_bytes, 0);
+    assert_eq!(metered.charged, 2); // One node and its false original root.
+    assert_eq!(statistics.retained_bytes, 0);
 }
 
 #[test]
@@ -494,4 +493,96 @@ fn empty_theory_keeps_its_exact_owner() {
     assert_eq!(complete.least_consequences().atoms().count(), 0);
     assert_eq!(complete.failed_constraint(), None);
     assert_eq!(complete.statistics().derived_atoms, 0);
+}
+
+#[test]
+fn a_requested_stop_precedes_the_work_limit_between_boundaries() {
+    // Seven charged operations is not a metered boundary. The tick's own
+    // report is returned as a value so the exit leaves it alone.
+    let tick = |stop: bool| {
+        let cancellation = Cancellation::default();
+        let limits = PositivePlanLimits {
+            max_work: 7,
+            ..PositivePlanLimits::default()
+        };
+        let mut statistics = PositivePlanStatistics::default();
+        cancellation
+            .metered(limits.max_work, |meter| {
+                for _ in 0..7 {
+                    meter.charge().unwrap();
+                }
+                if stop {
+                    cancellation.cancel();
+                }
+                Ok::<_, PositiveError>(
+                    Budget {
+                        limits,
+                        cancellation: &cancellation,
+                        meter,
+                        statistics: &mut statistics,
+                        current_bytes: 0,
+                    }
+                    .tick(),
+                )
+            })
+            .result
+            .unwrap()
+    };
+    assert_eq!(
+        tick(false),
+        Err(PositiveError::Limit {
+            resource: PositiveResource::Work,
+            observed: 8,
+            limit: 7,
+        })
+    );
+    assert_eq!(tick(true), Err(PositiveError::Stopped(Stop::Cancelled)));
+}
+
+#[test]
+fn a_ceiling_refusal_settles_to_a_requested_stop() {
+    let refused = |stop: bool| {
+        let cancellation = Cancellation::default();
+        cancellation
+            .metered(u64::MAX, |_| {
+                if stop {
+                    cancellation.cancel();
+                }
+                Budget::ceiling(PositiveResource::Dependencies, 2, 1)
+            })
+            .result
+    };
+    assert_eq!(
+        refused(false),
+        Err(PositiveError::Limit {
+            resource: PositiveResource::Dependencies,
+            observed: 2,
+            limit: 1,
+        })
+    );
+    assert_eq!(refused(true), Err(PositiveError::Stopped(Stop::Cancelled)));
+}
+
+#[test]
+fn plan_errors_classify_resource_refusals() {
+    use zetesis_cpu::Refusal;
+    for refusal in [
+        PositiveError::Limit {
+            resource: PositiveResource::Bytes,
+            observed: 2,
+            limit: 1,
+        },
+        PositiveError::Overflow,
+        PositiveError::Stopped(Stop::Allocation),
+    ] {
+        assert!(refusal.is_resource_refusal(), "{refusal:?}");
+    }
+    for shape in [
+        PositiveError::UnsupportedRoot { root: 0 },
+        PositiveError::UnsupportedBody { root: 0, body: 1 },
+        PositiveError::InvalidClosure { root: 0 },
+        PositiveError::Stopped(Stop::Cancelled),
+    ] {
+        assert!(!shape.is_resource_refusal(), "{shape:?}");
+    }
 }

@@ -6,22 +6,12 @@ mod retention;
 mod wakeups;
 
 use super::*;
+use crate::test_support::hybrid;
 use crate::{
     AdmissionOptions, ConstraintCheckLimits, ConstraintRegionPass, ExpansionLimits, HybridFormula,
 };
 use zetesis_cpu::Cancellation;
 
-fn admit(source: &str) -> HybridFormula {
-    crate::prepare_formula(
-        source.into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
-    .unwrap()
-    .ground_hybrid()
-    .unwrap()
-}
 fn atom(owner: &HybridFormula, text: &str) -> usize {
     owner
         .atom_catalog()
@@ -56,7 +46,7 @@ fn state<'a, 'b>(checker: &'a crate::ConstraintChecker<'b>) -> &'a Incremental<'
 
 #[test]
 fn one_rule_collects_distinct_consequences() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/three-row-units.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -83,7 +73,7 @@ fn one_rule_collects_distinct_consequences() {
 
 #[test]
 fn unchanged_regions_cannot_forget_unapplied_units() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/two-row-units.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -107,7 +97,7 @@ fn unchanged_regions_cannot_forget_unapplied_units() {
 
 #[test]
 fn equal_decided_unions_do_not_authenticate_siblings() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/two-row-gated-units.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -141,7 +131,7 @@ fn completed_rules_wake_on_each_default_polarity() {
             true,
         ),
     ] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
         let mut region = Region::all_open(owner.atom_catalog().atoms().len());
         let r = atom(&owner, "r");
@@ -161,7 +151,7 @@ fn completed_rules_wake_on_each_default_polarity() {
 
 #[test]
 fn decided_pending_units_are_skipped() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/three-row-units.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -181,7 +171,7 @@ fn decided_pending_units_are_skipped() {
 
 #[test]
 fn opposite_pending_units_refute_the_narrowing() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/two-row-units.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -200,7 +190,7 @@ fn opposite_pending_units_refute_the_narrowing() {
 
 #[test]
 fn partial_arithmetic_keeps_the_legacy_scan() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/partial-division.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -227,7 +217,7 @@ fn nested_constraint_patterns_use_the_incremental_route() {
         ),
         include_str!("../../../../tests/fixtures/streamed-consequences/nested-time-comparison.lp"),
     ] {
-        let owner = admit(source);
+        let owner = hybrid(source);
         let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
         let mut region = Region::all_open(owner.atom_catalog().atoms().len());
         // Facts are already held after core closure in the real route.
@@ -255,7 +245,7 @@ fn nested_constraint_patterns_use_the_incremental_route() {
 
 #[test]
 fn draining_a_batch_keeps_the_original_work_ceiling() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/three-row-units.lp"
     ));
     let region = Region::all_open(owner.atom_catalog().atoms().len());
@@ -300,7 +290,7 @@ fn draining_a_batch_keeps_the_original_work_ceiling() {
 
 #[test]
 fn ordinary_checks_invalidate_candidate_evidence() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/two-row-units.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -330,10 +320,10 @@ fn ordinary_checks_invalidate_candidate_evidence() {
 
 #[test]
 fn foreign_theories_cannot_drain_a_pending_batch() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/two-row-units.lp"
     ));
-    let foreign = admit(include_str!(
+    let foreign = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/two-row-units.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -359,7 +349,7 @@ fn foreign_theories_cannot_drain_a_pending_batch() {
 
 #[test]
 fn arithmetic_inside_constructors_disables_batching() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/nested-arithmetic.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -375,15 +365,9 @@ fn arithmetic_inside_constructors_disables_batching() {
 fn oversized_constructor_prefixes_fail_during_capture() {
     // Eighteen shared DAG constructors exceed the logical node ceiling without
     // allocating a corresponding exponential source expression or owned tree.
-    let failure = crate::prepare_formula(
-        include_str!(
-            "../../../../tests/fixtures/streamed-consequences/oversized-constructor-chain.lp"
-        )
-        .into(),
-        AdmissionOptions::default(),
-        ExpansionLimits::default(),
-        FormulaLimits::default(),
-    )
+    let failure = crate::test_support::prepare(include_str!(
+        "../../../../tests/fixtures/streamed-consequences/oversized-constructor-chain.lp"
+    ))
     .and_then(crate::PreparedFormula::ground_hybrid)
     .expect_err("oversized constructor cannot be captured");
     assert!(
@@ -408,7 +392,7 @@ fn oversized_constructor_prefixes_fail_during_capture() {
 
 #[test]
 fn cancellation_retires_pending_consequences() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/three-row-units.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -448,7 +432,7 @@ fn cancellation_retires_pending_consequences() {
 
 #[test]
 fn work_refusal_discards_a_partial_rule_batch() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/three-row-units.lp"
     ));
     let region = Region::all_open(owner.atom_catalog().atoms().len());
@@ -498,7 +482,7 @@ fn work_refusal_discards_a_partial_rule_batch() {
 
 #[test]
 fn pending_cleanup_visits_only_undelivered_units() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/sparse-units.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();
@@ -526,7 +510,7 @@ fn pending_cleanup_visits_only_undelivered_units() {
 
 #[test]
 fn pending_cleanup_resumes_after_work_refusal() {
-    let owner = admit(include_str!(
+    let owner = hybrid(include_str!(
         "../../../../tests/fixtures/streamed-consequences/four-row-units.lp"
     ));
     let mut checker = owner.checker(ConstraintCheckLimits::default()).unwrap();

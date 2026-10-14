@@ -15,9 +15,10 @@ use crate::timing::{self, Phase};
 use crate::{AdmissionError, Cancellation, Incomplete, Limits, SearchStatistics};
 use std::sync::Arc;
 use zetesis_ferraris::{
-    Interpretation, PositiveError, PositivePlan, PositivePlanLimits, PositiveResource,
-    StratifiedError, StratifiedPlan, StratifiedPlanLimits, StratifiedResource, TightCheckLimits,
-    TightError, TightPlan, TightPlanLimits, TightResource, TightVerdict, TightWorkspace,
+    EvaluationWorkspace, Interpretation, PositiveError, PositivePlan, PositivePlanLimits,
+    PositiveResource, StratifiedError, StratifiedPlan, StratifiedPlanLimits, StratifiedResource,
+    TightCheckLimits, TightError, TightPlan, TightPlanLimits, TightResource, TightVerdict,
+    TightWorkspace,
 };
 
 /// Exclusive scratch retained by one membership checker, never by a shared plan.
@@ -79,33 +80,24 @@ impl Certification {
         }
     }
 
-    /// A complete check's work bound in the primitive's charged units:
-    /// tight checking visits every node, root, producer and packed candidate
-    /// word, and at most every operand occurrence; deterministic checking
-    /// compares atoms, then visits nodes, operand occurrences and roots. Early
-    /// refusals or refutations can consume less, never more.
+    /// The most work one check can charge, in the primitive's charged units:
+    /// for a tight plan, [`TightPlan::check_work_bound`], which covers both a
+    /// complete evaluation and an update of a worker's retained evaluation;
+    /// deterministic checking compares atoms, then evaluates the original
+    /// formula, including fresh numeric-cache initialization and validity
+    /// resets through the primitive's evaluation bound. Early refusal or
+    /// refutation can consume less.
     pub(super) fn checking_work_bound(&self) -> Result<u64, Incomplete> {
-        let (theory, producers, membership) = match self {
-            Self::Tight { plan, .. } => (
-                plan.theory(),
-                plan.producers().len(),
-                plan.theory().atom_count().div_ceil(32),
-            ),
-            Self::Positive { plan, .. } => (plan.theory(), 0, plan.theory().atom_count()),
-            Self::Stratified { plan, .. } => (plan.theory(), 0, plan.theory().atom_count()),
+        let theory = match self {
+            Self::Tight { plan, .. } => {
+                return u64::try_from(plan.check_work_bound())
+                    .map_err(|_| Incomplete::CounterOverflow);
+            }
+            Self::Positive { plan, .. } => plan.theory(),
+            Self::Stratified { plan, .. } => plan.theory(),
         };
-        [
-            membership,
-            theory.nodes().len(),
-            theory.parts().occurrences(),
-            theory.roots().len(),
-            producers,
-        ]
-        .into_iter()
-        .try_fold(0u64, |sum, count| {
-            sum.checked_add(u64::try_from(count).map_err(|_| Incomplete::CounterOverflow)?)
-                .ok_or(Incomplete::CounterOverflow)
-        })
+        u64::try_from(EvaluationWorkspace::work_bound(theory) + theory.atom_count() as u128)
+            .map_err(|_| Incomplete::CounterOverflow)
     }
 }
 
@@ -266,7 +258,7 @@ impl StableModels {
         let result = (|| {
             for kind in kinds {
                 let prepared = match kind {
-                    Kind::Tight => self.prepare_tight(limits.tight, &mut stats),
+                    Kind::Tight => self.prepare_tight(limits.tight, usage, &mut stats),
                     Kind::Positive => self.prepare_positive(limits.positive, &mut stats),
                     Kind::Stratified => self.prepare_stratified(limits.stratified, &mut stats),
                 }?;
@@ -314,6 +306,7 @@ impl StableModels {
     fn prepare_tight(
         &mut self,
         mut limits: TightPlanLimits,
+        usage: Use,
         stats: &mut CertifiedStatistics,
     ) -> Result<Option<Certification>, Incomplete> {
         limits.max_work = limits.max_work.min(self.remaining_certificate_work());
@@ -321,10 +314,27 @@ impl StableModels {
         self.statistics.search.work += attempt.work;
         stats.construction_work += attempt.work;
         match attempt.result {
-            Ok(plan) => Ok(Some(Certification::Tight {
-                plan: Arc::new(plan),
-                max_bytes: limits.max_bytes,
-            })),
+            Ok(mut plan) => {
+                // CPU checking reuses each worker's retained evaluation. The
+                // index is built only when the remaining certificate work and the
+                // byte allowance cover its build, so a build they cannot complete
+                // spends none of the checks' allowance; a completed build is
+                // charged to it, and a plan without the index checks every
+                // candidate completely.
+                if usage == Use::Cpu {
+                    limits.max_work = limits.max_work.min(self.remaining_certificate_work());
+                    let prepared = plan.prepare_updates(limits, &self.cancellation);
+                    self.statistics.search.work += prepared.work;
+                    stats.construction_work += prepared.work;
+                    if let Err(TightError::Stopped(stop)) = prepared.result {
+                        return Err(stop.into());
+                    }
+                }
+                Ok(Some(Certification::Tight {
+                    plan: Arc::new(plan),
+                    max_bytes: limits.max_bytes,
+                }))
+            }
             Err(error) => {
                 stats.tight_refusal = Some(error);
                 stats.refusal = Some(CertificateError::Tight(error));

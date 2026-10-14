@@ -1,20 +1,15 @@
 //! Original source ownership across explicit profile attempts.
 
+use crate::support::admission;
 use themelios_base::source::SourceId;
+use zetesis_reference_support::resource_limits;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, FormulaFailure,
     FormulaLimits, InputLimit, ParsedSource, admit_extended, prepare_formula,
 };
 
 fn input(text: &str) -> ParsedSource {
-    ParsedSource::new(
-        text.into(),
-        AdmissionOptions {
-            source_id: SourceId::new(19),
-            ..AdmissionOptions::default()
-        },
-    )
-    .unwrap()
+    ParsedSource::new(text.into(), admission::options(SourceId::new(19))).unwrap()
 }
 
 #[test]
@@ -115,10 +110,7 @@ fn formula_failure_preserves_the_original_parse() {
 fn source_limits_precede_parsing() {
     let error = ParsedSource::new(
         "{ malformed".into(),
-        AdmissionOptions {
-            max_source_bytes: 0,
-            ..AdmissionOptions::default()
-        },
+        resource_limits::admission(InputLimit::SourceBytes, 0),
     )
     .unwrap_err();
     assert!(matches!(
@@ -133,10 +125,7 @@ fn source_limits_precede_parsing() {
 #[test]
 fn syntax_refusal_retains_all_original_diagnostics() {
     let text = "% original é\r\n{a,b :- q.\r\nq :- c.\r\n";
-    let options = AdmissionOptions {
-        source_id: SourceId::new(19),
-        ..AdmissionOptions::default()
-    };
+    let options = admission::options(SourceId::new(19));
     let error = ParsedSource::new(text.into(), options).unwrap_err();
     let AdmissionFailure::Syntax(syntax) = error else {
         panic!("expected syntax refusal")
@@ -150,10 +139,7 @@ fn syntax_refusal_retains_all_original_diagnostics() {
 fn profile_attempts_keep_the_original_syntax_limit() {
     let source = ParsedSource::new(
         "p.".into(),
-        AdmissionOptions {
-            max_syntax_nodes: 0,
-            ..AdmissionOptions::default()
-        },
+        resource_limits::admission(InputLimit::SyntaxNodes, 0),
     )
     .unwrap();
     let failed = source

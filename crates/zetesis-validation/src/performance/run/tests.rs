@@ -127,3 +127,28 @@ fn reference_solver_exit_codes_cannot_qualify_helpers() {
     );
     assert!(matches!(result, Err((Decision::InvocationFailure, _))));
 }
+
+#[test]
+fn the_native_seal_is_at_its_named_position() {
+    let corpus = corpus();
+    let directory = tempfile::tempdir().unwrap();
+    let (native, reference) = (
+        directory.path().join("native"),
+        directory.path().join("reference"),
+    );
+    std::fs::write(&native, b"native identity fixture").unwrap();
+    std::fs::write(&reference, b"reference identity fixture").unwrap();
+    let sealed = seals(
+        &corpus,
+        &BTreeSet::new(),
+        corpus.root(),
+        &native,
+        Some(&reference),
+        super::super::Limits::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        sealed[NATIVE_SEAL].canonical(),
+        native.canonicalize().unwrap()
+    );
+}
