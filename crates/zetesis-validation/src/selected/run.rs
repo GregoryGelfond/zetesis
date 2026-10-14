@@ -11,7 +11,8 @@ use super::{
 };
 use crate::{curated, process};
 
-/// Result of a case's process, enumeration and immutable model contracts.
+/// Result of a case's process, enumeration and immutable model contracts, and
+/// of the campaign's settlement of the executable its native report names.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Decision {
@@ -296,8 +297,8 @@ pub(super) fn campaign(request: &Request<'_>) -> Result<Report, Error> {
 /// inputs: [`seals`] places the reference first and the native second.
 const NATIVE_SEAL: usize = 1;
 
-/// A passing case's decision once the executable its native report names is
-/// settled by `executables`; a report that is not JSON, or a refused
+/// An otherwise passing case's decision once the executable its native report
+/// names is settled by `executables`; a report that is not JSON, or a refused
 /// settlement, makes the case an invalid report.
 fn settled(
     (decision, detail): (Decision, Option<String>),

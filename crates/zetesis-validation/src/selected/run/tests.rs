@@ -159,7 +159,7 @@ fn a_passing_case_whose_native_run_names_another_executable_seals_it() {
 }
 
 #[test]
-fn a_passing_case_whose_native_run_names_a_third_executable_is_an_invalid_report() {
+fn an_otherwise_passing_case_whose_native_run_names_a_third_executable_is_an_invalid_report() {
     let directory = tempfile::tempdir().unwrap();
     let paths: Vec<std::path::PathBuf> = ["native", "sibling", "third"]
         .iter()
@@ -186,7 +186,7 @@ fn a_passing_case_whose_native_run_names_a_third_executable_is_an_invalid_report
 }
 
 #[test]
-fn a_passing_native_report_that_is_not_json_is_an_invalid_report() {
+fn an_otherwise_passing_native_report_that_is_not_json_is_an_invalid_report() {
     let directory = tempfile::tempdir().unwrap();
     let native = directory.path().join("native");
     std::fs::write(&native, "native").unwrap();
@@ -196,7 +196,7 @@ fn a_passing_native_report_that_is_not_json_is_an_invalid_report() {
 }
 
 #[test]
-fn a_passing_native_report_with_null_statistics_is_an_invalid_report() {
+fn an_otherwise_passing_native_report_with_null_statistics_is_an_invalid_report() {
     let directory = tempfile::tempdir().unwrap();
     let native = directory.path().join("native");
     std::fs::write(&native, "native").unwrap();
@@ -211,7 +211,7 @@ fn a_passing_native_report_with_null_statistics_is_an_invalid_report() {
 }
 
 #[test]
-fn a_passing_native_report_without_statistics_is_an_invalid_report() {
+fn an_otherwise_passing_native_report_without_statistics_is_an_invalid_report() {
     let directory = tempfile::tempdir().unwrap();
     let native = directory.path().join("native");
     std::fs::write(&native, "native").unwrap();
