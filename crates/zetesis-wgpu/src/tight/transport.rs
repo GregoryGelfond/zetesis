@@ -51,6 +51,7 @@ impl Resident {
         seeds: &[u32],
         plan: &Plan,
         activity: &mut TightGpuActivity,
+        compute_time: &mut Option<Duration>,
     ) -> Result<runtime::Completion<Vec<TightGpuCheck>>, GpuError> {
         let Execution {
             device,
@@ -60,7 +61,7 @@ impl Resident {
             cancellation,
         } = *execution;
         if self.transport.is_none() {
-            self.transport = Some(Transport::new(device, pipeline, self, plan));
+            self.transport = Some(Transport::new(device, pipeline, self, plan)?);
         }
         let transport = self
             .transport
@@ -86,6 +87,7 @@ impl Resident {
                 result: &transport.results,
                 readback: &transport.readback,
                 result_bytes: plan.results,
+                timing: transport.timing.as_ref(),
             },
         );
         activity.submissions = 1;
@@ -97,12 +99,29 @@ impl Resident {
             submission,
             timeout,
             || poll(cancellation),
-            |words| packing::decode(words, &self.graph, plan, seeds, cancellation),
+            |words| {
+                let (words, measured) = crate::timing::split_readback(
+                    words,
+                    transport.timing.as_ref(),
+                    transport
+                        .timing
+                        .as_ref()
+                        .map_or(0.0, |_| queue.get_timestamp_period()),
+                )?;
+                let checks = packing::decode(words, &self.graph, plan, seeds, cancellation)?;
+                *compute_time = measured;
+                Ok(checks)
+            },
         );
         if result.is_ok() {
             activity.completed_candidates = u64::from(plan.worlds);
             activity.completed_work = activity.scheduled_work;
-            activity.downloaded_bytes = plan.results;
+            activity.downloaded_bytes = plan.results
+                + if transport.timing.is_some() {
+                    crate::timing::READBACK_BYTES
+                } else {
+                    0
+                };
         }
         Ok(result)
     }
@@ -123,6 +142,7 @@ pub(super) struct Transport {
     results: wgpu::Buffer,
     readback: wgpu::Buffer,
     group: wgpu::BindGroup,
+    timing: Option<crate::timing::PassTimer>,
 }
 impl Transport {
     fn new(
@@ -130,7 +150,13 @@ impl Transport {
         pipeline: &wgpu::ComputePipeline,
         resident: &Resident,
         plan: &Plan,
-    ) -> Self {
+    ) -> Result<Self, GpuError> {
+        let timing = crate::timing::PassTimer::new(device);
+        let readback_bytes = crate::timing::readback_size(
+            plan.results,
+            timing.is_some(),
+            device.limits().max_buffer_size,
+        )?;
         let params = buffer(
             device,
             "tight parameters",
@@ -164,7 +190,7 @@ impl Transport {
         let readback = buffer(
             device,
             "tight readback",
-            plan.results,
+            readback_bytes,
             wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         );
         let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -181,13 +207,14 @@ impl Transport {
                 entry(7, &results),
             ],
         });
-        Self {
+        Ok(Self {
             worlds: plan.worlds,
             params,
             seeds,
             results,
             readback,
             group,
-        }
+            timing,
+        })
     }
 }

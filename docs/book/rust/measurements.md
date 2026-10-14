@@ -1,7 +1,7 @@
-# Observations and host measurements
+# Observations and measurements
 
 An execution observation describes a selected route or attempted operation.
-A measurement records host work. Neither establishes that an interpretation is
+A measurement records host work or an explicitly enabled device interval. Neither establishes that an interpretation is
 an answer set: membership and coverage belong to the session's semantic result.
 
 ## Observe execution
@@ -97,6 +97,47 @@ that ended without a traversal because nothing the producer reads had changed.
 They distinguish affected-producer scheduling from a full round scan without
 asserting a timing benefit. Fields missing from older
 reports remain unavailable.
+
+## GPU compute-pass timing
+
+For formula and tight-support execution, `SolveConfig::stats` requests optional
+wgpu timestamp queries when the session creates its own device. The CLI's
+`solve --stats` uses this same library path. Adapter selection still applies the
+selected primitive's capability requirements. No timing feature or storage is
+requested by the ordinary statistics-off constructors.
+
+Caller-supplied resources retain their exact context and compiled profile;
+statistics do not replace either owner. To opt in explicitly, use
+`GpuContext::new_selected_with_timing` and pass it through
+`ExecutionResources::with_gpu`, or create a
+`GpuFormulaProfile::new_selected_with_timing` for reuse. Standalone formula and
+tight oracles also have `new_selected_with_timing` constructors.
+`GpuContext::compute_timing()` reports `NotRequested`, `Unsupported` or `Enabled`.
+Unsupported timestamps do not prevent solving.
+
+`FormulaExecutionStatistics::gpu_compute_timing` sums valid durations from
+successfully decoded batches. `elapsed` stays absent until a valid sample is
+recorded; a measured zero duration remains distinct from unavailable timing.
+`is_complete()` requires at least one valid sample and no missing sample or
+accounting overflow among decoded batches. Submitted batches that fail before
+decoding retain their submission receipts separately. Neither timing completeness
+nor a timestamp establishes complete enumeration or optimality.
+
+The interval covers the compute pass, including memory access within it. It
+excludes host preparation, command-buffer copies, submission and waiting.
+`GpuHostOracle` continues to measure the broader host call; these durations are
+not interchangeable. Each resident transport reuses two timestamp slots and a
+resolve buffer, appending the result to its ordinary readback. There is no
+additional submission or wait. Admission reserves 48 logical bytes for the query
+slots, resolve buffer and readback tail; this allowance does not measure
+additional driver-private allocation. Timing adds device work and should be
+kept consistent across measured versions.
+
+JSON statistics retain the status, elapsed nanoseconds, measured and unavailable
+batch counts, and the explicit `decoded_device_compute_passes` scope. Human
+statistics show the corresponding interval and availability. The maintained
+benchmark runner already requests these statistics and preserves them in its raw
+native reports.
 
 ## Thread and failure contracts
 

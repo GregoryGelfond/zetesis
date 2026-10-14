@@ -1462,10 +1462,22 @@ Rust/WGSL obligations. The laws justify domain narrowing, not answer-set accepta
 preserves initial agreement with a reference valuation by induction over ready
 assignments. The evaluator reads only declared dependencies; those dependencies already agree,
 and the reference satisfies each local equation. Complete root coverage then
-preserves ordered observations. This explains the formula kernel's original-truth
-schedule before reduct masking. Constructing its packed levels, preserving node
+preserves ordered observations. This explains both formula kernels' shared
+original-truth schedule, before reduct masking or tight-support checking.
+Constructing its packed levels, preserving node
 IDs and proving concurrent writes and barriers refine the sequential schedule
 remain implementation obligations. A cached order does not cache candidate truth.
+
+The general kernel also visits those levels in reverse during frozen propagation.
+This is not an application of the evaluation theorem: the local operations are
+sound domain intersections, rather than assignments of original truth. Every
+transfer must preserve all satisfying completions, including under stale sibling
+reads, and original-false connectives remain disabled. Reordering such transfers
+retains that invariant. A complete sweep visits every gate and then checks strict
+subset availability; a fixed point or bounded stop remains a residual for exact
+completion. Packed-level coverage, collective barriers, atomic refinement and
+the changed work receipts remain Rust/WGSL obligations. No new shader-verification
+claim follows from reusing the schedule.
 
 The CPU oracle's [`Work::charge`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle.rs)
 charges a payload amount before the corresponding comparison or copy.

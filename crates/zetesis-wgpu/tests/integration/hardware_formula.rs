@@ -41,7 +41,7 @@ fn candidates(theory: &Theory) -> Vec<Interpretation> {
         .collect()
 }
 
-fn setup_work(theory: &Theory) -> u32 {
+fn scheduled_levels(theory: &Theory) -> usize {
     // Independent dependency depths over the original nodes; no production
     // schedule or packed output positions are consulted for this work receipt.
     let mut depths = Vec::<usize>::new();
@@ -58,13 +58,27 @@ fn setup_work(theory: &Theory) -> u32 {
         });
     }
     let levels = depths.iter().max().map_or(0, |depth| depth + 1);
-    let barriers = if levels == depths.len() { 0 } else { levels };
+    if levels == depths.len() { 0 } else { levels }
+}
+
+fn setup_work(theory: &Theory) -> u32 {
     u32::try_from(
-        2 * depths.len()
+        2 * theory.view().len()
             + theory.parts().occurrences()
             + theory.atom_count()
             + theory.roots().len()
-            + barriers,
+            + scheduled_levels(theory),
+    )
+    .unwrap()
+}
+
+fn sweep_work(theory: &Theory) -> u32 {
+    u32::try_from(
+        9 * theory.nodes().len()
+            + 2 * theory.parts().occurrences()
+            + theory.atom_count()
+            + 65
+            + scheduled_levels(theory),
     )
     .unwrap()
 }
@@ -105,10 +119,7 @@ fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
             FormulaVerdict::NotModel => {}
         }
         let setup = setup_work(theory);
-        let sweep = u32::try_from(
-            9 * theory.nodes().len() + 2 * theory.parts().occurrences() + theory.atom_count() + 65,
-        )
-        .unwrap();
+        let sweep = sweep_work(theory);
         assert_eq!(
             result.statistics().work,
             setup + result.statistics().rounds * sweep
@@ -269,6 +280,7 @@ fn qualify_frozen_queries(backend: GpuApi, projection: GateProjection) {
     }
     assert!(totals.0 > 0 && totals.1 > 0);
     println!("completed refutations={} residuals={}", totals.0, totals.1);
+    qualify_root_propagation(&mut oracle);
     qualify_subset_strides(&mut oracle);
     native::qualify(&mut oracle);
 }
@@ -295,6 +307,57 @@ fn scheduled_theories() -> [Theory; 2] {
             vec![3],
         ),
     ]
+}
+
+fn qualify_root_propagation(oracle: &mut GpuFormulaOracle) {
+    let mut chain = vec![Node::atom(0)];
+    chain.extend((1..128).map(|index| Node::and_pair([index - 1, index - 1])));
+    let chain = theory(1, chain, vec![127]);
+
+    // Each of the eight layers spans more than one lane stride. A true root
+    // requires both semantic atoms, despite shared and repeated child slots.
+    let mut nodes = vec![Node::atom(0), Node::atom(1)];
+    let mut prior = vec![0, 1];
+    for _ in 0..8 {
+        let start = nodes.len();
+        for index in 0..65 {
+            nodes.push(Node::and_pair([
+                prior[index % prior.len()],
+                prior[(index + 1) % prior.len()],
+            ]));
+        }
+        prior = (start..nodes.len()).collect();
+    }
+    let root = nodes.len() - 1;
+    let layered = theory(2, nodes, vec![root]);
+    for graph in [chain, layered] {
+        let candidate = Interpretation::new(&graph, 0..graph.atom_count()).unwrap();
+        assert!(
+            check(
+                &graph,
+                &candidate,
+                Limits::default(),
+                &Cancellation::default()
+            )
+            .unwrap()
+            .accepted()
+        );
+        let work = setup_work(&graph) + sweep_work(&graph);
+        let results = oracle
+            .propagate_batch(
+                &graph,
+                &[candidate],
+                FormulaLimits {
+                    max_rounds: 1,
+                    max_work_per_candidate: work,
+                    ..FormulaLimits::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(results[0].verdict(), FormulaVerdict::NoProperSubset);
+        assert_eq!(results[0].statistics().rounds, 1);
+        assert_eq!(results[0].statistics().work, work);
+    }
 }
 
 fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
@@ -333,9 +396,10 @@ fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
         }
         // Authored constants: 133 nodes, 131 atoms, 131-|available| facts.
         // Setup visits nodes twice, atoms once, roots once and one level. Each sweep
-        // reserves 9 per node, one per atom, 64 summaries and one application.
+        // reserves 9 per node, one per atom, 64 summaries, one application and
+        // one dependency level.
         let setup = 529 - u32::try_from(available.len()).unwrap();
-        let sweep = 1393;
+        let sweep = 1394;
         let expected = match available.len() {
             0 => FormulaVerdict::NoProperSubset,
             1 => FormulaVerdict::Residual(ResidualReason::RoundLimit),

@@ -7,6 +7,13 @@ use crate::runtime::{self, Dispatch, buffer, entry, initialized};
 use crate::{GpuError, GpuErrorKind};
 use std::time::Duration;
 
+/// Logical checks and timing are published only after shared scope settlement.
+#[derive(Debug)]
+pub(super) struct DecodedBatch {
+    pub(super) checks: Vec<FormulaCheck>,
+    pub(super) compute_time: Option<Duration>,
+}
+
 pub(super) struct Resident {
     pub(super) graph: Graph,
     nodes: wgpu::Buffer,
@@ -45,12 +52,12 @@ impl Resident {
         timeout: Duration,
         cancellation: &zetesis_cpu::Cancellation,
         submitted_candidates: &mut Option<usize>,
-    ) -> Result<runtime::Completion<Vec<FormulaCheck>>, GpuError> {
+    ) -> Result<runtime::Completion<DecodedBatch>, GpuError> {
         let device = runtime.device();
         let queue = runtime.queue();
         let pipeline = &runtime.pipeline;
         if self.transport.is_none() {
-            self.transport = Some(Transport::new(device, pipeline, self, plan));
+            self.transport = Some(Transport::new(device, pipeline, self, plan)?);
         }
         let transport = self
             .transport
@@ -74,6 +81,7 @@ impl Resident {
                 result: &transport.results,
                 readback: &transport.readback,
                 result_bytes: plan.results,
+                timing: transport.timing.as_ref(),
             },
         );
         *submitted_candidates = Some(plan.worlds as usize);
@@ -83,7 +91,21 @@ impl Resident {
             submission,
             timeout,
             || cancellation.poll().map_err(GpuError::interrupted),
-            |words| packing::decode(words, plan),
+            |words| {
+                let (words, measured) = crate::timing::split_readback(
+                    words,
+                    transport.timing.as_ref(),
+                    transport
+                        .timing
+                        .as_ref()
+                        .map_or(0.0, |_| queue.get_timestamp_period()),
+                )?;
+                let checks = packing::decode(words, plan)?;
+                Ok(DecodedBatch {
+                    checks,
+                    compute_time: measured,
+                })
+            },
         ))
     }
 }
@@ -94,6 +116,7 @@ pub(super) struct Transport {
     results: wgpu::Buffer,
     readback: wgpu::Buffer,
     group: wgpu::BindGroup,
+    timing: Option<crate::timing::PassTimer>,
 }
 impl Transport {
     fn new(
@@ -101,7 +124,11 @@ impl Transport {
         pipeline: &wgpu::ComputePipeline,
         resident: &Resident,
         plan: &Plan,
-    ) -> Self {
+    ) -> Result<Self, GpuError> {
+        let timed = device.features().contains(wgpu::Features::TIMESTAMP_QUERY);
+        let readback_bytes =
+            crate::timing::readback_size(plan.results, timed, device.limits().max_buffer_size)?;
+        let timing = crate::timing::PassTimer::new(device);
         let params = buffer(
             device,
             "formula parameters",
@@ -135,7 +162,7 @@ impl Transport {
         let readback = buffer(
             device,
             "formula readback",
-            plan.results,
+            readback_bytes,
             wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         );
         let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
@@ -151,13 +178,14 @@ impl Transport {
                 entry(6, &results),
             ],
         });
-        Self {
+        Ok(Self {
             worlds: plan.worlds,
             params,
             seeds,
             results,
             readback,
             group,
-        }
+            timing,
+        })
     }
 }

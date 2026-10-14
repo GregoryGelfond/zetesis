@@ -87,6 +87,9 @@ pub struct FormulaExecutionStatistics {
     pub queued_models: usize,
     /// Conservative peak authored allocation accounting reported by the device API.
     pub peak_accounted_bytes: u64,
+    /// Optional device compute-pass time from completely decoded batches.
+    /// Separate from host-oracle, transfer, waiting and exact residual time.
+    pub gpu_compute_timing: zetesis_backend::ComputeTiming,
 }
 
 pub(crate) enum Failure {
@@ -195,12 +198,20 @@ impl Execution {
         let context = resources
             .gpu_for(options.backend)
             .map_err(SolveError::Gpu)?;
+        // Explicit resources retain their exact identity and granted features.
+        // Independent constructors retain profile-specific adapter eligibility.
         if let Some(plan) = tight_plan {
             return Self::tight(options, context, plan, observations);
         }
         let oracle = match (resources.formula_profile(), context) {
             (Some(profile), _) => zetesis_wgpu::GpuFormulaOracle::from_profile(profile),
             (None, Some(context)) => zetesis_wgpu::GpuFormulaOracle::from_context(context),
+            (None, None) if options.stats => {
+                zetesis_wgpu::GpuFormulaOracle::new_selected_with_timing(
+                    zetesis_wgpu::GpuOptions::default(),
+                    crate::engine::selection(options.backend),
+                )
+            }
             (None, None) => zetesis_wgpu::GpuFormulaOracle::new_selected(
                 zetesis_wgpu::GpuOptions::default(),
                 crate::engine::selection(options.backend),
@@ -221,6 +232,8 @@ impl Execution {
             batch_size: options.batch_size,
             completion_workers: options.completion_workers,
         })?;
+        let gpu_compute_timing =
+            zetesis_backend::ComputeTiming::new(oracle.context().compute_timing());
         Ok(Self::Hybrid {
             oracle: Box::new(oracle),
             queue: Box::new(crate::formula_queue::BatchQueue::new(options)?),
@@ -228,6 +241,7 @@ impl Execution {
                 adapter,
                 gpu_limits: Some(options.into()),
                 gpu_residuals: Some(FormulaResidualStatistics::default()),
+                gpu_compute_timing,
                 ..Default::default()
             }),
         })
@@ -354,6 +368,9 @@ fn propagate(
         None => Failure::Run(SolveError::Gpu(error)),
     })?;
     submitted?;
+    statistics
+        .gpu_compute_timing
+        .record(oracle.last_compute_time());
     add(&mut statistics.gpu_batches, 1)?;
     add(
         &mut statistics.gpu_candidates,

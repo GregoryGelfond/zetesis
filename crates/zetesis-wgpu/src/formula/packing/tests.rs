@@ -85,7 +85,7 @@ fn packed_nodes_preserve_topology_shared_atom_ids_and_original_operators() {
     let plan = plan(&graph, limits, true);
     assert_eq!(
         plan.params(&graph),
-        [2, 6, 1, 6, 1, 2, 64, 100_000_000, 24, 133, 7, 3]
+        [2, 6, 1, 6, 1, 2, 64, 100_000_000, 24, 136, 7, 3]
     );
     let a = Interpretation::new(&graph.shape.theory, [0]).unwrap();
     let b = Interpretation::new(&graph.shape.theory, [1]).unwrap();
@@ -227,14 +227,14 @@ fn device_limits_zero_atoms_and_word_boundaries_have_explicit_layouts() {
 fn result_records_validate_epoch_world_status_and_exact_charged_work() {
     let graph = graph(&theory(), &device()).unwrap();
     let plan = plan(&graph, FormulaLimits::default(), false);
-    let valid = [7, 0, 1, 0, 24, MAGIC, 7, 1, 2, 1, 157, MAGIC];
+    let valid = [7, 0, 1, 0, 24, MAGIC, 7, 1, 2, 1, 160, MAGIC];
     let checks = decode(&valid, &plan).unwrap();
     assert_eq!(checks[0].verdict(), FormulaVerdict::NotModel);
     assert_eq!(checks[1].verdict(), FormulaVerdict::NoProperSubset);
     assert_eq!(
         checks[1].statistics(),
         FormulaStatistics {
-            work: 157,
+            work: 160,
             rounds: 1
         }
     );
@@ -247,7 +247,7 @@ fn result_records_validate_epoch_world_status_and_exact_charged_work() {
         (5, 0),
         (8, 2),
         (9, 0),
-        (10, 156),
+        (10, 159),
     ] {
         let mut invalid = valid;
         invalid[index] = value;
@@ -282,7 +282,7 @@ fn result_records_validate_epoch_world_status_and_exact_charged_work() {
     }
     let fixed = Plan::new(&graph, 1, FormulaLimits::default(), &device(), false, 1).unwrap();
     assert_eq!(
-        decode(&[1, 0, 3, 1, 157, MAGIC], &fixed).unwrap()[0].verdict(),
+        decode(&[1, 0, 3, 1, 160, MAGIC], &fixed).unwrap()[0].verdict(),
         FormulaVerdict::Residual(ResidualReason::FixedPoint)
     );
 }
@@ -290,8 +290,8 @@ fn result_records_validate_epoch_world_status_and_exact_charged_work() {
 #[test]
 fn summary_merge_work_is_required_before_a_complete_sweep() {
     let graph = graph(&theory(), &device()).unwrap();
-    // Six nodes, two atoms, one root, three levels: setup=24, sweep=133.
-    for (work, full_sweep) in [(156, false), (157, true)] {
+    // Six nodes, two atoms, one root, three levels: setup=24, sweep=136.
+    for (work, full_sweep) in [(159, false), (160, true)] {
         let plan = Plan::new(
             &graph,
             1,
@@ -304,9 +304,16 @@ fn summary_merge_work_is_required_before_a_complete_sweep() {
             1,
         )
         .unwrap();
-        assert_eq!(decode(&[1, 0, 2, 1, 157, MAGIC], &plan).is_ok(), full_sweep);
+        assert_eq!(decode(&[1, 0, 2, 1, 160, MAGIC], &plan).is_ok(), full_sweep);
         assert_eq!(decode(&[1, 0, 5, 0, 24, MAGIC], &plan).is_ok(), !full_sweep);
     }
+}
+
+#[test]
+fn level_visits_cannot_overflow_sweep_work() {
+    let mut graph = graph(&theory(), &device()).unwrap();
+    graph.shape.sweep_work = u32::MAX;
+    assert!(Plan::new(&graph, 1, FormulaLimits::default(), &device(), false, 1).is_err());
 }
 
 #[test]

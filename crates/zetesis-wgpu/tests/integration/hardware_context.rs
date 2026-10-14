@@ -2,7 +2,7 @@
 
 use crate::support::physical;
 
-use zetesis_backend::GpuApi;
+use zetesis_backend::{ComputeTimingStatus, GpuApi};
 use zetesis_core::{
     Atom, Predicate, Value,
     relation::{Limits, Relation},
@@ -10,20 +10,42 @@ use zetesis_core::{
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory};
 use zetesis_wgpu::{
-    FormulaLimits, FormulaVerdict, GpuContext, GpuFormulaOracle, GpuOptions, GpuRelationExecutor,
-    GpuSelection, RelationGpuLimits,
+    FormulaCheck, FormulaLimits, FormulaVerdict, GpuContext, GpuFormulaOracle, GpuOptions,
+    GpuRelationExecutor, GpuSelection, RelationGpuLimits,
 };
 
-fn compose(backend: GpuApi) {
-    let context =
-        GpuContext::new_selected(GpuOptions::default(), GpuSelection { api: backend }).unwrap();
-    physical::verify(backend, context.info());
+fn qualify_timing(context: &GpuContext) -> bool {
     println!(
         "optional features: advertised={:?}; enabled={:?}",
         context.info().features(),
         context.features()
     );
     assert!(context.info().features().contains(context.features()));
+    let timing_enabled = context
+        .info()
+        .features()
+        .contains(wgpu::Features::TIMESTAMP_QUERY);
+    assert_eq!(
+        context.compute_timing(),
+        if timing_enabled {
+            ComputeTimingStatus::Enabled
+        } else {
+            ComputeTimingStatus::Unsupported
+        }
+    );
+    assert_eq!(
+        context.features().contains(wgpu::Features::TIMESTAMP_QUERY),
+        timing_enabled
+    );
+    timing_enabled
+}
+
+fn compose(backend: GpuApi) {
+    let context =
+        GpuContext::new_selected_with_timing(GpuOptions::default(), GpuSelection { api: backend })
+            .unwrap();
+    physical::verify(backend, context.info());
+    let timing_enabled = qualify_timing(&context);
     let mut relation_executor = GpuRelationExecutor::from_context(&context).unwrap();
     let mut formula = GpuFormulaOracle::from_context(&context.clone()).unwrap();
     assert!(context.same_instance(relation_executor.context()));
@@ -66,9 +88,14 @@ fn compose(backend: GpuApi) {
             .unwrap();
         assert_eq!(checks[0].verdict(), FormulaVerdict::NotModel);
         assert_eq!(checks[1].verdict(), FormulaVerdict::NoProperSubset);
+        // Zero is a valid observation at the adapter's timestamp resolution.
+        assert_eq!(formula.last_compute_time().is_some(), timing_enabled);
         let stats = formula.last_batch_stats().unwrap();
         assert_eq!(stats.theory_uploaded, repetition == 0);
         assert_eq!(stats.transport_allocated, repetition == 0);
+        if repetition == 0 {
+            compare_timing_accounting(backend, &theory, &candidates, &checks, &formula);
+        }
         let masks = prepared
             .filter(
                 &queries,
@@ -91,6 +118,56 @@ fn compose(backend: GpuApi) {
         .unwrap();
     assert_eq!(checks[1].verdict(), FormulaVerdict::NoProperSubset);
     assert!(!formula.last_batch_stats().unwrap().theory_uploaded);
+    assert_eq!(formula.last_compute_time().is_some(), timing_enabled);
+    assert!(
+        formula
+            .propagate_batch(&theory, &[], FormulaLimits::default())
+            .unwrap()
+            .is_empty()
+    );
+    assert_eq!(formula.last_compute_time(), None);
+}
+
+fn compare_timing_accounting(
+    backend: GpuApi,
+    theory: &Theory,
+    candidates: &[Interpretation],
+    checks: &[FormulaCheck],
+    formula: &GpuFormulaOracle,
+) {
+    let mut untimed =
+        GpuFormulaOracle::new_selected(GpuOptions::default(), GpuSelection { api: backend })
+            .unwrap();
+    let untimed_checks = untimed
+        .propagate_batch(theory, candidates, FormulaLimits::default())
+        .unwrap();
+    assert_eq!(
+        untimed.context().compute_timing(),
+        ComputeTimingStatus::NotRequested
+    );
+    assert_eq!(untimed.last_compute_time(), None);
+    let untimed_cold = untimed.last_batch_stats().unwrap();
+    // Two query slots, a resolve buffer and the appended readback: 48 logical
+    // bytes, excluding any driver-private query allocation.
+    let timing_bytes = if formula.context().compute_timing() == ComputeTimingStatus::Enabled {
+        48
+    } else {
+        0
+    };
+
+    let stats = formula.last_batch_stats().unwrap();
+    assert_eq!(
+        stats.resident_transport_bytes,
+        untimed_cold.resident_transport_bytes + timing_bytes
+    );
+    assert_eq!(
+        stats.accounted_bytes,
+        untimed_cold.accounted_bytes + timing_bytes
+    );
+    assert_eq!(checks.len(), untimed_checks.len());
+    for (actual, expected) in checks.iter().zip(&untimed_checks) {
+        assert_eq!(actual.verdict(), expected.verdict());
+    }
 }
 
 #[test]

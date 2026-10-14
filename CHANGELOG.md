@@ -4,11 +4,19 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ## Unreleased
 
+### Added
+
+- Requested GPU statistics include compute-pass time when the device supports
+  timestamps, separately from host preparation and waiting.
+
 ### Changed
 
 - GPU formula checking retains shared numeric aggregate rows instead of expanding
   them into Boolean formulas. Original satisfaction and reduct membership keep
   their existing meaning; unresolved device checks still receive exact CPU checks.
+- GPU tight checking evaluates independent formulas in parallel. General reduct
+  propagation uses the same dependency schedule to carry root constraints toward
+  their operands; bounded checks retain exact CPU completion.
 - Lazy constraint checks avoid revisiting the same binding through several newly
   held atoms or repeated body occurrences.
 - Eligible grounding joins use completed numeric-domain analysis to filter bindings

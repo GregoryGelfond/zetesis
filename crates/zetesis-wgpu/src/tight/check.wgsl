@@ -18,7 +18,7 @@ const RESULT_MAGIC: u32 = 0x54535031u;
 const RESULT_GROUPED_MAGIC: u32 = 0x54534731u;
 struct Params {
     atoms: u32, nodes: u32, roots: u32, producers: u32,
-    words: u32, worlds: u32, work: u32, epoch: u32,
+    words: u32, levels: u32, work: u32, epoch: u32,
 }
 struct Node { tag: u32, left: u32, right: u32, padding: u32 }
 struct Producer { head: u32, body: u32, has_body: u32, padding: u32 }
@@ -64,33 +64,54 @@ fn enabled(producer: Producer, values: u32) -> bool {
     return true;
 }
 
+// Both schedules call the same scalar node transfer. Every child is visible
+// before its parent; native numeric rows read the same frozen truth columns.
+fn original(world: u32, values: u32, index: u32) {
+    let node = node_at(index);
+    var value = false;
+    if (node.tag == NODE_ATOM) { value = contains(world, node.left); }
+    if (node.tag >= NODE_AND && node.tag <= NODE_IMPLIES) {
+        value = operation(node.tag, frozen[values + node.left] != 0u,
+            frozen[values + node.right] != 0u);
+    }
+    if (node.tag == NODE_ALL || node.tag == NODE_ANY) {
+        value = node.tag == NODE_ALL;
+        for (var child = 0u; child < node.right; child++) {
+            let next = frozen[values + operand_at(node, child)] != 0u;
+            value = select(value || next, value && next, node.tag == NODE_ALL);
+        }
+    }
+    if (node.tag >= 7u && node.tag <= 9u) { value = numeric_truth(values, node); }
+    if (node.tag == 10u) { value = true; }
+    frozen[values + index] = select(0u, 1u, value);
+}
+
 fn check_support(world: u32, lane: u32, grouped: bool) {
     let values = world * params.nodes;
     let supported = world * params.words;
     if (lane == 0u) {
         atomicStore(&first_root, params.roots);
         atomicStore(&first_atom, params.atoms);
-        // Children precede their parent. Only this invocation writes truth.
-        for (var index = 0u; index < params.nodes; index += 1u) {
-            let node = node_at(index);
-            var value = false;
-            if (node.tag == NODE_ATOM) { value = contains(world, node.left); }
-            if (node.tag >= NODE_AND && node.tag <= NODE_IMPLIES) {
-                value = operation(node.tag, frozen[values + node.left] != 0u,
-                    frozen[values + node.right] != 0u);
+    }
+    if (params.levels == 0u) {
+        if (lane == 0u) {
+            for (var index = 0u; index < params.nodes; index++) {
+                original(world, values, index);
             }
-            if (node.tag == NODE_ALL || node.tag == NODE_ANY) {
-                value = node.tag == NODE_ALL;
-                for (var child = 0u; child < node.right; child++) {
-                    let next = frozen[values + operand_at(node, child)] != 0u;
-                    value = select(value || next, value && next, node.tag == NODE_ALL);
-                }
+        }
+    } else {
+        let offsets = params.roots;
+        let order = offsets + params.levels + 1u;
+        for (var level = 0u; level < params.levels; level++) {
+            let end = roots[offsets + level + 1u];
+            for (var position = roots[offsets + level] + lane; position < end; position += WORKGROUP_SIZE) {
+                original(world, values, roots[order + position]);
             }
-            if (node.tag >= 7u && node.tag <= 9u) { value = numeric_truth(values, node); }
-            if (node.tag == 10u) { value = true; }
-            frozen[values + index] = select(0u, 1u, value);
+            storageBarrier();
+            workgroupBarrier();
         }
     }
+
     if (!grouped) {
         for (var word = lane; word < params.words; word += WORKGROUP_SIZE) {
             atomicStore(&support[supported + word], 0u);

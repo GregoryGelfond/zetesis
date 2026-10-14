@@ -130,6 +130,44 @@ fn finish(world: u32, status: u32, rounds: u32, work: u32) {
     results[base + 4u] = work;
     results[base + 5u] = 0x46525031u;
 }
+fn propagate_node(base: u32, mask_base: u32, index: u32) {
+    let node = node_at(index);
+    // Crucial reduct boundary: an M-false composite is just false.
+    // Its original connective must not constrain the children.
+    if (frozen[mask_base + index] != 0u) {
+        if (node.tag == 10u) { narrow(base + node.output, 2u); }
+        else if (node.tag >= 8u) { extremum_gate(base, node); }
+        else if (node.tag == 7u) { threshold_gate(base, node); }
+        else if (node.tag >= 5u) { group_gate(base, node); }
+        else if (node.tag >= 2u) { gate(base, node); }
+    }
+}
+// Asserted roots constrain their operands. Reuse original truth's dependency
+// levels in reverse so each level observes the preceding parent intersections.
+// Within a level, shared operands still use the same sound atomic transfers.
+// One sweep visits every node once; upward consequences may require another
+// sweep. Neither this order nor a fixed point establishes a countermodel.
+fn propagate_levels(base: u32, mask_base: u32, lane: u32) {
+    if (params.levels == 0u) {
+        if (lane == 0u) {
+            for (var remaining = params.nodes; remaining > 0u; remaining--) {
+                propagate_node(base, mask_base, remaining - 1u);
+            }
+        }
+    } else {
+        let order = params.roots + params.levels + 1u;
+        for (var remaining = params.levels; remaining > 0u; remaining--) {
+            let level = remaining - 1u;
+            let start = roots[params.roots + level];
+            let end = roots[params.roots + level + 1u];
+            for (var offset = start + lane; offset < end; offset += 64u) {
+                propagate_node(base, mask_base, roots[order + offset]);
+            }
+            storageBarrier();
+            workgroupBarrier();
+        }
+    }
+}
 @compute @workgroup_size(64)
 fn propagate(@builtin(workgroup_id) group: vec3<u32>,
              @builtin(local_invocation_index) lane: u32) {
@@ -202,18 +240,7 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
             atomicStore(&subset_last, 0u);
         }
         workgroupBarrier();
-        for (var index = lane; index < params.nodes; index += 64u) {
-            let node = node_at(index);
-            // Crucial reduct boundary: an M-false composite is just false.
-            // Its original connective must not constrain the children.
-            if (frozen[mask_base + index] != 0u) {
-                if (node.tag == 10u) { narrow(base + node.output, 2u); }
-                else if (node.tag >= 8u) { extremum_gate(base, node); }
-                else if (node.tag == 7u) { threshold_gate(base, node); }
-                else if (node.tag >= 5u) { group_gate(base, node); }
-                else if (node.tag >= 2u) { gate(base, node); }
-            }
-        }
+        propagate_levels(base, mask_base, lane);
         storageBarrier();
         workgroupBarrier();
         // J is already constrained to M. Only M-true semantic atoms, never

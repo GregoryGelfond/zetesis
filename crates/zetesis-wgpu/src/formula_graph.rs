@@ -9,6 +9,7 @@ use crate::{GpuError, GpuErrorKind};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{ExtremumCutRule, NodeView, Theory};
 
+pub(crate) mod dependency;
 mod numeric;
 pub(crate) use numeric::Rows;
 

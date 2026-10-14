@@ -92,6 +92,7 @@ impl Resident {
                 result: &transport.output,
                 readback: &transport.readback,
                 result_bytes: plan.results,
+                timing: None,
             },
         );
         activity.submissions = 1;

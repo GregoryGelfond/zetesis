@@ -33,6 +33,31 @@ impl GpuFormulaProfile {
         Self::new_selected_with_projection(options, selection, GateProjection::default())
     }
 
+    /// Select a native device and request optional compute-pass timestamps.
+    ///
+    /// Retains the default gate implementation and the same profile-specific
+    /// adapter eligibility as [`Self::new_selected`]. Unsupported timestamps
+    /// leave the solver available; inspect [`GpuContext::compute_timing`].
+    ///
+    /// # Errors
+    /// Returns the same typed construction failures as [`Self::new_selected`].
+    pub fn new_selected_with_timing(
+        options: GpuOptions,
+        selection: GpuSelection,
+    ) -> Result<Self, GpuError> {
+        let projection = GateProjection::default();
+        let runtime = pollster::block_on(Runtime::new_with_timing(
+            options,
+            selection,
+            Self::descriptor(projection)?,
+            true,
+        ))?;
+        Ok(Self {
+            runtime: Arc::new(runtime),
+            projection,
+        })
+    }
+
     /// Select a native device and compile exactly the requested implementation.
     ///
     /// Enumerated source is borrowed. Bitwise assembles one fixed source with a

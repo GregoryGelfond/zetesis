@@ -246,6 +246,14 @@ output. RSS is a separate child-resource observation, not device memory or an
 allocator counter. Primitive work counts are not elapsed time or machine
 instructions.
 
+Native GPU reports also retain optional compute-pass timestamps in
+`gpu_compute_timing`. Their scope is successfully decoded device batches,
+excluding host preparation, command-buffer copies and waiting; process and host
+oracle timings remain separate. An unavailable timestamp is not a measured zero.
+The normal `--stats` request enables timing when supported without changing the
+benchmark options. See [GPU timing](../rust/measurements.md#gpu-compute-pass-timing)
+for availability, resource accounting and interpretation.
+
 A first non-pass disables later launches for that cell; a campaign stop retains
 the remaining planned positions. Neither is replaced by another sample. The
 human and JSON summaries compute wall-time distributions only when the cell's

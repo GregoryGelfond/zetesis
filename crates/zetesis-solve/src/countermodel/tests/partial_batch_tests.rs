@@ -71,6 +71,7 @@ impl MembershipExecution for Injected {
             pending_candidates: batch.pending,
             queued_models: self.queue.len(),
             peak_accounted_bytes: 0,
+            gpu_compute_timing: zetesis_backend::ComputeTiming::default(),
             completion: self.queue.accounting(),
         })
     }

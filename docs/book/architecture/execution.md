@@ -408,10 +408,15 @@ question. Ordinary formula sessions with automatic membership policy select this
 primitive on an explicit device backend when complete tight preparation succeeds.
 
 The complete device-work allowance is
-`nodes + edges + roots + producers + 2 * ceil(atoms / 32)`, where `edges`
+`nodes + edges + roots + producers + 2 * ceil(atoms / 32) + levels`, where `edges`
 counts every child occurrence, including repetitions, inline pairs and
 implication. Original truth reads every operand; one word scan constructs or
-initializes support and one checks missing support. Work receipts and
+initializes support and one checks missing support. `levels` is zero for serial
+truth evaluation. Cold preparation uses a level schedule when its extra storage
+and work fit; otherwise it retains serial evaluation. A tighter work allowance
+can also select serial evaluation over an already retained graph. Retained
+schedule storage remains accounted even then, so reducing a later byte allowance
+can still produce a typed capacity refusal. Work receipts and
 pre-dispatch admission use this same allowance: an exact allowance is admitted
 and one less is refused. Historical work counts need their source identity
 when compared. These counts do not measure latency or change membership.
@@ -492,8 +497,8 @@ independently against both device buffer limits and included in resident and
 cold-upload accounting. Formula cold admission also checks actual retained
 staging capacity. Binding counts remain unchanged.
 
-The general formula kernel assigns one workgroup to each candidate. A prepared
-theory groups original DAG nodes by dependency depth, taking the maximum depth
+Both formula kernels assign one workgroup to each candidate. One shared
+preparation operation groups original DAG nodes by dependency depth, taking the maximum depth
 over every child in a native row. Nodes in one level read
 only earlier levels, so the lanes can compute them independently:
 
@@ -508,6 +513,16 @@ identities remain unchanged. The order is reused for the same retained theory;
 truth is recomputed for every candidate. A chain with one node per level keeps
 the serial fold because it contains no independent node work. Other narrow
 levels may still pay more in barriers than they gain in parallel evaluation.
+
+General frozen-reduct propagation reuses those levels in reverse order. Asserted
+roots can therefore constrain operands across several depths in one sweep.
+Every node still receives one transfer per complete sweep; only the order changes.
+Nodes in a level may share operands, so their transfers retain atomic domain
+intersections and the existing protection against stale reads. Every lane reaches
+the barrier before the next level. Pure chains run the reverse fold on one lane.
+Consequences flowing back toward parents can require another sweep; this schedule
+does not promise fewer rounds for every graph or make a fixed point a proof of
+membership.
 
 During propagation, only semantic atoms can witness a proper subset. Each lane
 scans its atom positions and the workgroup combines exact summaries:
@@ -529,8 +544,8 @@ original proper-subset query.
 
 Mandatory device setup charges `2*nodes+edges+atoms+roots+levels`; pure chains
 and empty graphs use zero levels. Each complete sweep reserves
-`9*nodes+2*edges+atoms+65`, covering binary relation rows, both possible native
-operand scans and the strict-subset reduction. Setup and each sweep also reserve
+`9*nodes+2*edges+atoms+65+levels`, covering binary relation rows, both possible native
+operand scans, the dependency-level walk and the strict-subset reduction. Setup and each sweep also reserve
 `48*n+32` per variable threshold and `24*n+16` per variable extremum cut, where
 `n` counts its condition occurrences. These conservative units include portable
 limb arithmetic; they are not raw instruction counts. A limit below setup is refused before dispatch;
@@ -650,7 +665,12 @@ must not turn an unfinished operation into acceptance, rejection or exhaustion.
 Performance work measures the actual boundary: admission, source work,
 candidate generation, oracle calls, residual completion, scoring and output.
 Host elapsed time around a GPU call includes transport and waiting; it is not
-kernel time. Logical storage budgets are not process RSS or total device memory.
+kernel time. When statistics are requested, a newly created device context also
+requests optional wgpu timestamp queries. Formula and tight batches then measure
+their compute pass through the existing submission and readback. Unsupported or
+invalid samples remain explicitly unavailable. Caller-supplied contexts retain
+their granted features; statistics never replace them. Timing storage is accounted
+separately and absent when disabled. Logical storage budgets are not process RSS or total device memory.
 The [outcome contracts](../rust/outcomes.md) preserve these distinctions for
 library consumers.
 

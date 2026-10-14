@@ -63,11 +63,13 @@ All 64 lanes scan distinct semantic-atom positions for the strict-subset
 condition. Their counts and last eligible positions are merged before a zero
 count refutes the query or a unique eligible atom is required to be false.
 Auxiliary nodes never witness strict removal. This uses 24 bytes of workgroup
-storage; a sweep reserves `9*nodes+2*edges+atoms+65` policy work units, including 64
-summary merges and one application. These units are not GPU instruction counts.
+storage; a sweep reserves `9*nodes+2*edges+atoms+65+levels` policy work units, including 64
+summary merges, one application and the reverse dependency-level walk. These units are not GPU instruction counts.
 Original truth is evaluated before propagation. A cold graph groups original
-node IDs by dependency level; nodes in a level run in parallel and a barrier
-precedes dependent reads. Pure chains retain serial evaluation because they
+node IDs by dependency level; both formula and tight checkers reuse this layout.
+Nodes in a level run in parallel and a barrier precedes dependent reads. General
+propagation visits levels in reverse to carry root requirements toward operands,
+using the same frozen gates and atomic domain intersections. Pure chains retain serial evaluation because they
 contain no independent node work. Other narrow levels may still pay more in
 synchronization than they gain in parallel work. Setup charges
 `2*nodes+edges+atoms+roots+levels` policy units, with zero level units on the serial

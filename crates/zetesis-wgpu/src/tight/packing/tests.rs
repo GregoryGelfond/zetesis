@@ -108,7 +108,7 @@ fn certificate_packing_retains_original_formula_structure() {
     assert_eq!(graph.work, 28);
     assert_eq!(
         plan(&graph, 2, true).params(&graph),
-        [3, 9, 4, 3, 1, 2, 28, 7]
+        [3, 9, 4, 3, 1, 0, 28, 7]
     );
 }
 
@@ -971,4 +971,173 @@ fn ordinal_producer_bodies_use_physical_result_addresses() {
             }
         }
     }
+}
+
+#[test]
+fn dependency_schedule_preserves_ids_and_charges_cold_storage() {
+    let certificate = certificate();
+    let device = wgpu::Limits::default();
+    let mut graph = Graph::new(&certificate, atomic(&device)).unwrap();
+    let mut selected = plan(&graph, 2, true);
+    let serial_bytes = selected.accounted;
+    let packed = graph
+        .prepare(
+            &certificate,
+            TightGpuLimits::default(),
+            &device,
+            &mut selected,
+            &Cancellation::default(),
+        )
+        .unwrap();
+    assert_eq!(graph.levels, 3);
+    assert_eq!(selected.levels, 3);
+    assert_eq!(selected.work, 31);
+    assert_eq!(selected.accounted, serial_bytes + 104);
+    assert_eq!(
+        packed.roots,
+        [8, 5, 7, 1, 0, 4, 6, 9, 0, 1, 2, 3, 4, 6, 5, 7, 8]
+    );
+    assert!(
+        packed
+            .nodes
+            .chunks_exact(4)
+            .take(graph.nodes as usize)
+            .all(|node| node[3] == 0)
+    );
+    assert_eq!(selected.params(&graph)[5], 3);
+}
+
+#[test]
+fn cold_schedule_falls_back_at_serial_byte_and_work_boundaries() {
+    let certificate = certificate();
+    let device = wgpu::Limits::default();
+    let graph = Graph::new(&certificate, atomic(&device)).unwrap();
+    let serial = plan(&graph, 2, true);
+    for limits in [
+        TightGpuLimits {
+            max_batch_bytes: serial.accounted,
+            ..TightGpuLimits::default()
+        },
+        TightGpuLimits {
+            max_work_per_candidate: u64::from(graph.work),
+            ..TightGpuLimits::default()
+        },
+    ] {
+        let mut graph = Graph::new(&certificate, atomic(&device)).unwrap();
+        let mut selected = Plan::new(&graph, 2, limits, &device, true, 7).unwrap();
+        let packed = graph
+            .prepare(
+                &certificate,
+                limits,
+                &device,
+                &mut selected,
+                &Cancellation::default(),
+            )
+            .unwrap();
+        assert_eq!(graph.levels, 0);
+        assert_eq!(selected.levels, 0);
+        assert_eq!(selected.work, 28);
+        assert_eq!(selected.accounted, serial.accounted);
+        assert_eq!(packed.roots, [8, 5, 7, 1]);
+    }
+}
+
+#[test]
+fn resident_schedule_can_use_serial_work_but_retains_its_real_bytes() {
+    let certificate = certificate();
+    let device = wgpu::Limits::default();
+    let mut graph = Graph::new(&certificate, atomic(&device)).unwrap();
+    let serial_hot = plan(&graph, 2, false).accounted;
+    let mut cold = plan(&graph, 2, true);
+    graph
+        .prepare(
+            &certificate,
+            TightGpuLimits::default(),
+            &device,
+            &mut cold,
+            &Cancellation::default(),
+        )
+        .unwrap();
+    let limits = TightGpuLimits {
+        max_work_per_candidate: u64::from(graph.work),
+        ..TightGpuLimits::default()
+    };
+    let selected = Plan::new(&graph, 2, limits, &device, false, 8).unwrap();
+    assert_eq!(selected.levels, 0);
+    assert_eq!(selected.work, 28);
+    assert_eq!(graph.levels, 3);
+    assert_eq!(selected.accounted, serial_hot + 52);
+    let limits = TightGpuLimits {
+        max_batch_bytes: serial_hot,
+        ..limits
+    };
+    assert_eq!(
+        Plan::new(&graph, 2, limits, &device, false, 8)
+            .err()
+            .unwrap()
+            .kind(),
+        GpuErrorKind::Capacity
+    );
+}
+
+#[test]
+fn pure_chain_needs_no_level_storage() {
+    let mut nodes = vec![Node::atom(0)];
+    for index in 1..128 {
+        nodes.push(Node::and_pair([index - 1, index - 1]));
+    }
+    let theory = Theory::new(
+        1,
+        zetesis_ferraris::FormulaParts::new(nodes, vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let certificate = TightPlan::compile(
+        &theory,
+        TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let device = wgpu::Limits::default();
+    let mut graph = Graph::new(&certificate, atomic(&device)).unwrap();
+    let mut selected = plan(&graph, 1, true);
+    let bytes = selected.accounted;
+    let packed = graph
+        .prepare(
+            &certificate,
+            TightGpuLimits::default(),
+            &device,
+            &mut selected,
+            &Cancellation::default(),
+        )
+        .unwrap();
+    assert_eq!(graph.levels, 0);
+    assert_eq!(selected.accounted, bytes);
+    assert_eq!(packed.roots, [0]);
+}
+
+#[test]
+fn interrupted_schedule_preparation_retains_no_publishable_buffers() {
+    let certificate = certificate();
+    let device = wgpu::Limits::default();
+    let mut graph = Graph::new(&certificate, atomic(&device)).unwrap();
+    let mut selected = plan(&graph, 1, true);
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    assert_eq!(
+        graph
+            .prepare(
+                &certificate,
+                TightGpuLimits::default(),
+                &device,
+                &mut selected,
+                &cancellation
+            )
+            .err()
+            .unwrap()
+            .interruption,
+        Some(zetesis_cpu::Stop::Cancelled)
+    );
+    assert_eq!(graph.levels, 0);
 }

@@ -42,7 +42,9 @@ pub struct TightGpuLimits {
     /// operations, plus `48*n+32` for each variable threshold and `24*n+16`
     /// for each variable extremum cut with `n` condition occurrences. These
     /// conservative units cover portable limb arithmetic; constant guards carry
-    /// no numeric row charge. Here `edges` counts child occurrences and
+    /// no numeric row charge. A cooperative truth schedule adds one unit per
+    /// dependency level. Serial execution remains available when that schedule
+    /// cannot fit the work or cold-storage allowance. Here `edges` counts child occurrences and
     /// `words = ceil(atoms / 32)`. One word scan initializes
     /// or constructs packed support under the selected [`TightSupport`] policy;
     /// the other finds unsupported candidate bits by words. This replaces the
@@ -112,6 +114,8 @@ pub struct TightGpuBatchStats {
     pub work: u64,
     /// Actual compute submissions; one for this nonempty successful batch.
     pub dispatches: u64,
+    /// Dependency levels evaluated cooperatively; zero selects serial original truth.
+    pub truth_levels: u32,
     /// Authored initialized/write-buffer payload, not measured bus traffic.
     pub uploaded_bytes: u64,
     /// Successfully decoded readback payload, not measured bus traffic.

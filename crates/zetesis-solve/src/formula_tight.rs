@@ -22,6 +22,10 @@ impl Execution {
     ) -> Result<Self, SolveError> {
         let oracle = match context {
             Some(context) => GpuTightOracle::from_context(context),
+            None if options.stats => GpuTightOracle::new_selected_with_timing(
+                GpuOptions::default(),
+                crate::engine::selection(options.backend),
+            ),
             None => GpuTightOracle::new_selected(
                 GpuOptions::default(),
                 crate::engine::selection(options.backend),
@@ -40,6 +44,8 @@ impl Execution {
             oracle.info().backend(),
             oracle.info().vendor_id(),
         );
+        let gpu_compute_timing =
+            zetesis_backend::ComputeTiming::new(oracle.context().compute_timing());
         Ok(Self::Tight {
             oracle: Box::new(oracle),
             plan,
@@ -50,6 +56,7 @@ impl Execution {
                 adapter,
                 tight_work_per_candidate: Some(u64::from(options.gpu_formula_work)),
                 gpu_scheduled_work: Some(0),
+                gpu_compute_timing,
                 ..Default::default()
             }),
         })
@@ -95,6 +102,9 @@ pub(crate) fn check(
     })?;
     submission?;
     scheduled?;
+    statistics
+        .gpu_compute_timing
+        .record(oracle.last_compute_time());
     if let Some(batch) = oracle.last_batch_stats() {
         add(&mut statistics.gpu_batches, batch.dispatches)?;
         add(&mut statistics.gpu_candidates, batch.candidates)?;

@@ -250,6 +250,7 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
                     result: &transport.result,
                     readback: &transport.readback,
                     result_bytes: plan.result_bytes,
+                    timing: None,
                 },
             );
             self.activity.submissions = 1;

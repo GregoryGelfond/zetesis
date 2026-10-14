@@ -42,7 +42,7 @@ fn shared_interleaved_nodes_have_literal_stable_levels() {
     let outputs: Vec<_> = prepared.nodes.chunks_exact(4).map(|node| node[3]).collect();
     assert_eq!(outputs, [0, 2, 1, 3, 4, 5, 0, 6]);
     assert_eq!(plan.setup, 32); // 2*8 nodes + 8 edges + 2 atoms + 2 roots + 4 levels.
-    assert_eq!(plan.sweep, 155); // 9*8 + 2*8 edges + 2 + 64 + 1.
+    assert_eq!(plan.sweep, 159); // 9*8 + 2*8 edges + 2 + 64 + 1 + 4 levels.
 }
 
 #[test]
@@ -276,7 +276,7 @@ fn native_depth_visits_every_operand_and_keeps_one_header() {
     assert_eq!(packed.graph.schedule.levels, 4);
     assert_eq!(&packed.nodes[16..], &[5, 0, 3, 4, 0, 1, 3]);
     assert_eq!(packed.roots, [4, 0, 2, 3, 4, 5, 0, 1, 2, 3, 4]);
-    assert_eq!((plan.setup, plan.sweep), (24, 126));
+    assert_eq!((plan.setup, plan.sweep), (24, 130));
     for (ceiling, accepted) in [(23, false), (24, true)] {
         let result = Preparation::new(
             &theory,

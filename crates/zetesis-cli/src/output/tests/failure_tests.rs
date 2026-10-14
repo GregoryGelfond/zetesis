@@ -382,3 +382,47 @@ fn residual_json_distinguishes_decoding_from_cpu_completion() {
     let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
     assert!(value["gpu_residuals"].is_null());
 }
+
+#[test]
+fn compute_timing_json_distinguishes_absence_from_zero() {
+    use zetesis_backend::{ComputeTiming, ComputeTimingStatus};
+    for (status, sample, expected) in [
+        (
+            ComputeTimingStatus::NotRequested,
+            None,
+            serde_json::Value::Null,
+        ),
+        (
+            ComputeTimingStatus::Unsupported,
+            None,
+            serde_json::Value::Null,
+        ),
+        (ComputeTimingStatus::Enabled, None, serde_json::Value::Null),
+        (
+            ComputeTimingStatus::Enabled,
+            Some(std::time::Duration::ZERO),
+            serde_json::json!(0),
+        ),
+    ] {
+        let mut timing = ComputeTiming::new(status);
+        timing.record(sample);
+        let statistics = crate::FormulaExecutionStatistics {
+            gpu_compute_timing: timing,
+            ..Default::default()
+        };
+        let mut out = Buffer::new(4096);
+        super::execution_statistics(&mut out, Some(&statistics)).unwrap();
+        let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+        let measured = &value["gpu_compute_timing"];
+        assert_eq!(measured["status"], status.label());
+        assert_eq!(measured["elapsed_ns"], expected);
+        assert_eq!(measured["complete"], sample.is_some());
+        assert_eq!(measured["measured_batches"], u64::from(sample.is_some()));
+        assert_eq!(
+            measured["unavailable_batches"],
+            u64::from(status != ComputeTimingStatus::NotRequested && sample.is_none())
+        );
+        assert_eq!(measured["scope"], "decoded_device_compute_passes");
+        assert_eq!(measured["host_oracle"], "excluded");
+    }
+}

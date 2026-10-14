@@ -137,20 +137,8 @@ pub(super) struct Schedule {
 }
 impl Schedule {
     pub(super) fn new(shape: &Shape, levels: u32, device: &wgpu::Limits) -> Result<Self, GpuError> {
-        let root_words = if levels == 0 {
-            shape.roots.max(1)
-        } else {
-            if levels > shape.nodes {
-                return Err(capacity("formula levels exceed node count"));
-            }
-            shape
-                .roots
-                .checked_add(levels)
-                .and_then(|n| n.checked_add(1))
-                .and_then(|n| n.checked_add(shape.nodes))
-                .filter(|n| *n <= u32::MAX - 64)
-                .ok_or_else(|| capacity("formula schedule addresses overflow"))?
-        };
+        let root_words =
+            crate::formula_graph::dependency::root_words(shape.nodes, shape.roots, levels)?;
         let root_bytes = mul(u64::from(root_words), 4)?;
         buffer(root_bytes, device)?;
         Ok(Self {
@@ -264,7 +252,13 @@ impl Plan {
             transport,
             accounted,
             setup: schedule.setup_work,
-            sweep: shape.sweep_work,
+            // One gate visit per node plus the reverse dependency-level walk.
+            // Like setup's level charge, this is an authored work measure, not
+            // a count of GPU instructions or elapsed barrier cycles.
+            sweep: shape
+                .sweep_work
+                .checked_add(schedule.levels)
+                .ok_or_else(|| capacity("formula sweep level work overflows"))?,
             max_rounds: limits.max_rounds,
             max_work: limits.max_work_per_candidate,
             epoch,

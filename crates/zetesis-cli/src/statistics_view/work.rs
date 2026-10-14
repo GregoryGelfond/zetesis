@@ -382,6 +382,24 @@ fn device(rows: &mut Vec<Row>, execution: &crate::FormulaExecutionStatistics) {
         execution.cpu_residuals,
         "completed exact residual results committed",
     ));
+    let timing = &execution.gpu_compute_timing;
+    rows.push(Row::new([
+        "GPU compute passes".to_owned(),
+        timing.elapsed.map_or_else(
+            || format!("unavailable ({})", timing.status.label()),
+            |elapsed| format!("{:.3} ms", elapsed.as_secs_f64() * 1_000.0),
+        ),
+        format!(
+            "{} measured batches; {} unavailable; host preparation, transfers and waits excluded{}",
+            timing.measured_batches,
+            timing.unavailable_batches,
+            if timing.overflowed {
+                "; accounting incomplete"
+            } else {
+                ""
+            },
+        ),
+    ]));
 }
 
 fn completion(rows: &mut Vec<Row>, execution: &crate::CompletionAccounting) {

@@ -37,6 +37,7 @@ struct Resources {
     queue: wgpu::Queue,
     info: GpuInfo,
     limits: wgpu::Limits,
+    compute_timing: zetesis_backend::ComputeTimingStatus,
     lifecycle: Lifecycle,
 }
 
@@ -71,6 +72,36 @@ impl GpuContext {
         Ok(context)
     }
 
+    /// Select a device and request optional compute-pass timestamps when supported.
+    ///
+    /// Unsupported timing leaves solving available and is reported explicitly by
+    /// [`Self::compute_timing`]. Other constructors leave timestamps disabled.
+    /// Formula and tight-support transports allocate bounded timestamp storage
+    /// only when a nonempty batch is admitted; no extra queue wait is introduced.
+    ///
+    /// # Errors
+    /// Returns the same adapter, policy and device failures as [`Self::new_selected`].
+    pub fn new_selected_with_timing(
+        options: GpuOptions,
+        selection: GpuSelection,
+    ) -> Result<Self, GpuError> {
+        let context = pollster::block_on(Self::create_with_timing(
+            options,
+            selection,
+            "zetesis shared device",
+            |_| Ok(()),
+            true,
+        ))?;
+        context.check_health()?;
+        Ok(context)
+    }
+
+    /// Timestamp capability requested at creation; observation has no device effects.
+    #[must_use]
+    pub fn compute_timing(&self) -> zetesis_backend::ComputeTimingStatus {
+        self.resources.compute_timing
+    }
+
     /// Actual adapter metadata; observation performs no device operation.
     #[must_use]
     pub fn info(&self) -> &GpuInfo {
@@ -80,8 +111,9 @@ impl GpuContext {
     /// Optional wgpu features granted at device creation.
     ///
     /// These can be a strict subset of [`GpuInfo::features`]. The current
-    /// constructors request no optional features; reporting adapter support
-    /// must not be mistaken for enabling an optimized kernel. Observation
+    /// constructors request none unless [`Self::new_selected_with_timing`] asks
+    /// for supported timestamps. Adapter support must not be mistaken for
+    /// enabling an optimized kernel. Observation
     /// performs no submission and does not establish context health.
     #[must_use]
     pub fn features(&self) -> wgpu::Features {
@@ -130,12 +162,29 @@ impl GpuContext {
         label: &'static str,
         validate: fn(&wgpu::Limits) -> Result<(), GpuError>,
     ) -> Result<Self, GpuError> {
+        Self::create_with_timing(options, selection, label, validate, false).await
+    }
+
+    pub(crate) async fn create_with_timing(
+        options: GpuOptions,
+        selection: GpuSelection,
+        label: &'static str,
+        validate: fn(&wgpu::Limits) -> Result<(), GpuError>,
+        timing: bool,
+    ) -> Result<Self, GpuError> {
         let (adapter, info) = selection::select_adapter(options, selection, validate).await?;
         let limits = adapter.limits();
+        let compute_timing = timing_status(timing, adapter.features());
+        let required_features = if compute_timing == zetesis_backend::ComputeTimingStatus::Enabled {
+            wgpu::Features::TIMESTAMP_QUERY
+        } else {
+            wgpu::Features::empty()
+        };
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some(label),
                 required_limits: limits,
+                required_features,
                 ..Default::default()
             })
             .await
@@ -149,6 +198,7 @@ impl GpuContext {
                 queue,
                 info,
                 limits,
+                compute_timing,
                 lifecycle: Lifecycle::new(faults),
             }),
         })
@@ -178,6 +228,20 @@ impl GpuContext {
         self.resources
             .lifecycle
             .complete(validation, outcome, effects)
+    }
+}
+
+fn timing_status(
+    requested: bool,
+    supported: wgpu::Features,
+) -> zetesis_backend::ComputeTimingStatus {
+    use zetesis_backend::ComputeTimingStatus;
+    if !requested {
+        ComputeTimingStatus::NotRequested
+    } else if supported.contains(wgpu::Features::TIMESTAMP_QUERY) {
+        ComputeTimingStatus::Enabled
+    } else {
+        ComputeTimingStatus::Unsupported
     }
 }
 

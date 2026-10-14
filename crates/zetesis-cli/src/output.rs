@@ -1153,6 +1153,21 @@ fn execution_statistics(
     out.number_field("pending_candidates", stats.pending_candidates)?;
     out.number_field("queued_models", stats.queued_models)?;
     out.number_field("peak_accounted_bytes", stats.peak_accounted_bytes)?;
+    out.text(",\"gpu_compute_timing\":{")?;
+    let timing = &stats.gpu_compute_timing;
+    out.text("\"status\":")?;
+    out.string(timing.status.label())?;
+    out.number_field("measured_batches", timing.measured_batches)?;
+    out.number_field("unavailable_batches", timing.unavailable_batches)?;
+    out.text(",\"elapsed_ns\":")?;
+    optional_number(out, timing.elapsed.map(|elapsed| elapsed.as_nanos()))?;
+    out.text(",\"complete\":")?;
+    out.text(if timing.is_complete() {
+        "true"
+    } else {
+        "false"
+    })?;
+    out.text(",\"scope\":\"decoded_device_compute_passes\",\"host_oracle\":\"excluded\"}")?;
     out.text(",\"completion\":{\"requested_workers\":")?;
     let stats = &stats.completion;
     out.text(&stats.requested_workers.to_string())?;

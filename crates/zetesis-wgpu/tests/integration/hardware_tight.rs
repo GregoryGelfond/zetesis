@@ -33,12 +33,21 @@ fn certificate(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> TightPlan {
 }
 
 fn oracle(backend: GpuApi, support: TightSupport) -> GpuTightOracle {
-    let oracle = GpuTightOracle::new_with_support(
-        GpuOptions::default(),
-        GpuSelection { api: backend },
-        support,
-    )
-    .unwrap();
+    let oracle = if support == TightSupport::Atomic {
+        let context = zetesis_wgpu::GpuContext::new_selected_with_timing(
+            GpuOptions::default(),
+            GpuSelection { api: backend },
+        )
+        .unwrap();
+        GpuTightOracle::from_context(&context).unwrap()
+    } else {
+        GpuTightOracle::new_with_support(
+            GpuOptions::default(),
+            GpuSelection { api: backend },
+            support,
+        )
+        .unwrap()
+    };
     physical::verify(backend, oracle.info());
     assert_eq!(oracle.support(), support);
     println!(
@@ -130,6 +139,10 @@ fn compare(oracle: &mut GpuTightOracle, certificate: &TightPlan) -> usize {
             )
             .unwrap();
         assert_eq!(results.len(), candidates.len());
+        assert_eq!(
+            oracle.last_compute_time().is_some(),
+            oracle.context().compute_timing() == zetesis_backend::ComputeTimingStatus::Enabled
+        );
         let stats = *oracle.last_batch_stats().unwrap();
         assert_eq!(stats.dispatches, 1);
         assert_eq!(stats.candidates, candidates.len() as u64);
@@ -327,6 +340,7 @@ fn qualify_support_matches_exact_reduct_semantics(backend: GpuApi, support: Tigh
     assert_eq!(compared, 370);
     println!("tight support exact candidate occurrences={compared}");
     native::qualify(&mut oracle);
+    qualify_dependency_schedules(&mut oracle);
 }
 
 #[test]
@@ -422,7 +436,7 @@ fn compare_word_witnesses(oracle: &mut GpuTightOracle) {
     assert_eq!(results[127].verdict(), TightVerdict::Stable);
     assert_eq!(results[128].verdict(), TightVerdict::NotModel { root: 0 });
     assert_eq!(results[129].verdict(), TightVerdict::NotModel { root: 1 });
-    assert!(results.iter().all(|result| result.work() == 16));
+    assert!(results.iter().all(|result| result.work() == 17));
 }
 
 fn compare_skewed_support(oracle: &mut GpuTightOracle) {
@@ -711,4 +725,52 @@ fn qualify_support_residency_tracks_theory_identity(backend: GpuApi, support: Ti
         expected
     );
     assert!(oracle.last_batch_stats().unwrap().theory_uploaded);
+}
+
+// The same original truth and producer checks run under both schedules. This
+// exercises the actual shader branch, including roots that are out of node order.
+fn qualify_dependency_schedules(oracle: &mut GpuTightOracle) {
+    let mut scheduled = 0;
+    let mut serial = 0;
+    for certificate in fixtures() {
+        let candidates = inputs(certificate.theory());
+        let expected = oracle
+            .check_batch(
+                &certificate,
+                &candidates,
+                TightGpuLimits::default(),
+                &Cancellation::default(),
+            )
+            .unwrap();
+        let levels = oracle.last_batch_stats().unwrap().truth_levels;
+        if levels == 0 {
+            serial += 1;
+            continue;
+        }
+        scheduled += 1;
+        let limits = TightGpuLimits {
+            max_work_per_candidate: expected[0].work() - u64::from(levels),
+            ..TightGpuLimits::default()
+        };
+        let actual = oracle
+            .check_batch(&certificate, &candidates, limits, &Cancellation::default())
+            .unwrap();
+        assert_eq!(oracle.last_batch_stats().unwrap().truth_levels, 0);
+        assert!(!oracle.last_batch_stats().unwrap().theory_uploaded);
+        for (expected, actual) in expected.iter().zip(actual) {
+            assert_eq!(expected.verdict(), actual.verdict());
+            assert_eq!(expected.work() - u64::from(levels), actual.work());
+        }
+    }
+    assert!(scheduled > 0 && serial > 0);
+    let certificate = certificate(0, vec![], vec![]);
+    oracle
+        .check_batch(
+            &certificate,
+            &[],
+            TightGpuLimits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
+    assert_eq!(oracle.last_compute_time(), None);
 }

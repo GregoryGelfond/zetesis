@@ -27,6 +27,7 @@ pub struct GpuFormulaOracle {
     epoch: u32,
     last: Option<FormulaBatchStats>,
     last_submission_candidates: Option<usize>,
+    last_compute_time: Option<std::time::Duration>,
 }
 
 struct PreparedCall {
@@ -43,6 +44,23 @@ impl GpuFormulaOracle {
     /// Selection follows the hard API and physical-device policy.
     pub fn new_selected(options: GpuOptions, selection: GpuSelection) -> Result<Self, GpuError> {
         Self::new_selected_with_projection(options, selection, GateProjection::default())
+    }
+
+    /// Select a native device and request optional compute-pass timestamps.
+    ///
+    /// Keeps the same profile-specific adapter eligibility as [`Self::new_selected`].
+    /// Unsupported timing is reported by [`crate::GpuContext::compute_timing`];
+    /// it does not prevent solving.
+    ///
+    /// # Errors
+    /// Returns the same typed construction failures as [`Self::new_selected`].
+    pub fn new_selected_with_timing(
+        options: GpuOptions,
+        selection: GpuSelection,
+    ) -> Result<Self, GpuError> {
+        Ok(Self::with_profile(
+            GpuFormulaProfile::new_selected_with_timing(options, selection)?,
+        ))
     }
 
     /// Create an independently owned native device/pipeline for this projection.
@@ -130,6 +148,7 @@ impl GpuFormulaOracle {
             epoch: 0,
             last: None,
             last_submission_candidates: None,
+            last_compute_time: None,
         }
     }
 
@@ -157,6 +176,13 @@ impl GpuFormulaOracle {
     pub const fn last_submission_candidates(&self) -> Option<usize> {
         self.last_submission_candidates
     }
+    /// Valid device compute-pass duration for the latest completely decoded batch.
+    /// Absent for disabled/unsupported timing, invalid timestamps and incomplete
+    /// batches. Zero is a valid measurement. Host preparation and waits are excluded.
+    #[must_use]
+    pub const fn last_compute_time(&self) -> Option<std::time::Duration> {
+        self.last_compute_time
+    }
     /// Release authored resident handles. This neither cancels GPU work nor
     /// repairs an invalidated device; driver retirement can occur later.
     /// Clears the last batch and submission receipts.
@@ -164,6 +190,7 @@ impl GpuFormulaOracle {
         self.resident = None;
         self.last = None;
         self.last_submission_candidates = None;
+        self.last_compute_time = None;
     }
     /// Evaluate original roots, freeze M, and cooperatively narrow the proper-
     /// subset query. Results retain input order and no partial batch is returned.
@@ -214,6 +241,7 @@ impl GpuFormulaOracle {
     ) -> Result<Vec<FormulaCheck>, GpuError> {
         self.last = None;
         self.last_submission_candidates = None;
+        self.last_compute_time = None;
         let context = self.profile.runtime.context.clone();
         let _lease = context.lease()?;
         cancellation.poll().map_err(GpuError::interrupted)?;
@@ -250,11 +278,10 @@ impl GpuFormulaOracle {
                     &mut self.last_submission_candidates,
                 )
             });
-        let result = self.profile.runtime.complete(scopes, outcome);
-        if result.is_ok() {
-            self.last = Some(stats);
-        }
-        result
+        let batch = self.profile.runtime.complete(scopes, outcome)?;
+        self.last = Some(stats);
+        self.last_compute_time = batch.compute_time;
+        Ok(batch.checks)
     }
 
     // All cold staging is owned and admitted before device effects. Minimum
@@ -264,10 +291,26 @@ impl GpuFormulaOracle {
         &mut self,
         theory: &Theory,
         candidates: &[Interpretation],
-        limits: FormulaLimits,
+        mut limits: FormulaLimits,
         cancellation: &Cancellation,
         epoch: u32,
     ) -> Result<PreparedCall, GpuError> {
+        let timed =
+            self.context().compute_timing() == zetesis_backend::ComputeTimingStatus::Enabled;
+        let timing_bytes = if timed {
+            crate::timing::OVERHEAD_BYTES
+        } else {
+            0
+        };
+        limits.max_batch_bytes = limits
+            .max_batch_bytes
+            .checked_sub(timing_bytes)
+            .ok_or_else(|| {
+                GpuError::new(
+                    GpuErrorKind::Capacity,
+                    "formula timestamp storage exceeds the batch byte allowance",
+                )
+            })?;
         let (fresh, plan) = if self
             .resident
             .as_ref()
@@ -301,6 +344,11 @@ impl GpuFormulaOracle {
                 preparation.finish(self.profile.runtime.limits(), cancellation)?;
             (Some(prepared), plan)
         };
+        crate::timing::readback_size(
+            plan.results,
+            timed,
+            self.profile.runtime.limits().max_buffer_size,
+        )?;
         let graph = fresh
             .as_ref()
             .map(|prepared| &prepared.graph)
@@ -314,8 +362,8 @@ impl GpuFormulaOracle {
                     .as_ref()
                     .is_none_or(|resident| !resident.matches(&plan)),
             resident_theory_bytes: graph.schedule.bytes,
-            resident_transport_bytes: plan.transport,
-            accounted_bytes: plan.accounted,
+            resident_transport_bytes: plan.transport + timing_bytes,
+            accounted_bytes: plan.accounted + timing_bytes,
         };
         if stats.transport_allocated
             && let Some(resident) = self.resident.as_mut()

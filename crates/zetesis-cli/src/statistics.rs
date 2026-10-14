@@ -1103,8 +1103,21 @@ fn formula_gpu(
     }
     writeln!(
         sink,
-        "  formula GPU resources: peak authored GPU bytes={}; GPU kernel timing=unavailable",
+        "  formula GPU resources: peak authored GPU bytes={}",
         execution.peak_accounted_bytes
+    )?;
+    let timing = &execution.gpu_compute_timing;
+    writeln!(
+        sink,
+        "  GPU compute passes: status={}; elapsed_ns={}; measured batches={}; unavailable batches={}; complete={}; host preparation, transfers and waits excluded",
+        timing.status.label(),
+        timing.elapsed.map_or_else(
+            || "unavailable".to_owned(),
+            |duration| duration.as_nanos().to_string()
+        ),
+        timing.measured_batches,
+        timing.unavailable_batches,
+        timing.is_complete(),
     )
 }
 

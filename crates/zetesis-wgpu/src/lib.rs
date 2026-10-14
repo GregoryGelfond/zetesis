@@ -30,6 +30,7 @@ mod residency;
 mod runtime;
 mod selection;
 mod tight;
+mod timing;
 
 use std::fmt;
 use std::time::Duration;

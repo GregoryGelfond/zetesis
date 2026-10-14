@@ -361,6 +361,7 @@ fn hybrid_statistics_preserve_reported_fields() {
             gpu_residuals: None,
             tight_work_per_candidate: None,
             gpu_scheduled_work: None,
+            gpu_compute_timing: zetesis_backend::ComputeTiming::default(),
             gpu_limits: Some(crate::FormulaDeviceLimits {
                 work_per_candidate: 789,
                 rounds_per_candidate: 17,
@@ -392,7 +393,7 @@ fn hybrid_statistics_preserve_reported_fields() {
             "pending candidates={pending}; queued verified models={queued}"
         )));
         assert!(text.contains("peak authored GPU bytes=456"));
-        assert!(text.contains("GPU kernel timing=unavailable"));
+        assert!(text.contains("GPU compute passes: status=not_requested; elapsed_ns=unavailable"));
         assert!(text.contains("propagation sweeps/candidate=17; propagation work/candidate=789"));
         assert!(text.contains("submitted: batches=3; candidates=10"));
         assert!(!text.contains("Backend: gpu"));

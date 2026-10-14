@@ -29,13 +29,23 @@ impl Runtime {
         selection: GpuSelection,
         profile: DeviceProfile,
     ) -> Result<Self, GpuError> {
+        Self::new_with_timing(options, selection, profile, false).await
+    }
+
+    pub(crate) async fn new_with_timing(
+        options: GpuOptions,
+        selection: GpuSelection,
+        profile: DeviceProfile,
+        timing: bool,
+    ) -> Result<Self, GpuError> {
         // Independent constructors retain both early advertised-limit validation
         // and the granted-limit check before shader construction.
-        let context = GpuContext::create(
+        let context = GpuContext::create_with_timing(
             options,
             selection,
             profile.device_label,
             profile.validate_limits,
+            timing,
         )
         .await?;
         let _lease = context.lease()?;
@@ -145,6 +155,7 @@ pub(crate) struct Dispatch<'a> {
     pub(crate) result: &'a wgpu::Buffer,
     pub(crate) readback: &'a wgpu::Buffer,
     pub(crate) result_bytes: u64,
+    pub(crate) timing: Option<&'a crate::timing::PassTimer>,
 }
 
 pub(crate) fn submit(
@@ -158,7 +169,7 @@ pub(crate) fn submit(
     {
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some(dispatch.pass_label),
-            timestamp_writes: None,
+            timestamp_writes: dispatch.timing.map(crate::timing::PassTimer::writes),
         });
         pass.set_pipeline(dispatch.pipeline);
         pass.set_bind_group(0, dispatch.group, &[]);
@@ -172,6 +183,9 @@ pub(crate) fn submit(
         0,
         dispatch.result_bytes,
     );
+    if let Some(timing) = dispatch.timing {
+        timing.resolve(&mut encoder, dispatch.readback, dispatch.result_bytes);
+    }
     queue.submit([encoder.finish()])
 }
 

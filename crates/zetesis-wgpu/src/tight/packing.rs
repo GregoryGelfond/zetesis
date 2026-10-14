@@ -1,6 +1,7 @@
 //! Pure bounded layout, canonical certificate packing and ordered result decoding.
 
 use super::{TightGpuCheck, TightGpuLimits, TightSupport, poll};
+use crate::formula_graph::dependency;
 use crate::{GpuError, GpuErrorKind};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory, TightPlan, TightVerdict};
@@ -77,6 +78,8 @@ pub(super) struct Graph {
     pub(super) nodes: u32,
     pub(super) roots: u32,
     pub(super) edges: u32,
+    pub(super) wide_words: u32,
+    pub(super) levels: u32,
     pub(super) rows: crate::formula_graph::Rows,
     pub(super) producers: u32,
     pub(super) words: u32,
@@ -145,6 +148,8 @@ impl Graph {
             nodes,
             roots,
             edges: graph.edges,
+            wide_words: graph.wide_words,
+            levels: 0,
             rows: graph.rows,
             producers,
             words,
@@ -167,11 +172,11 @@ impl Graph {
         Ok(shape)
     }
 
-    pub(super) fn pack(
+    fn pack_nodes(
         &self,
         certificate: &TightPlan,
         cancellation: &Cancellation,
-    ) -> Result<Packed, GpuError> {
+    ) -> Result<Vec<u32>, GpuError> {
         if !self.theory.same_instance(certificate.theory()) {
             return Err(GpuError::new(
                 GpuErrorKind::Seed,
@@ -180,13 +185,84 @@ impl Graph {
         }
         let mut nodes = words(self.node_bytes)?;
         crate::formula_graph::pack(&self.theory, &self.rows, &mut nodes, cancellation)?;
-        let mut roots = words(self.root_bytes)?;
-        for &root in self.theory.roots() {
-            poll(cancellation)?;
-            roots.push(address(root)?);
+        Ok(nodes)
+    }
+
+    /// Complete an already-admitted serial shape. Optional level storage is
+    /// selected only when its complete cold layout and work also fit.
+    pub(super) fn prepare(
+        &mut self,
+        certificate: &TightPlan,
+        limits: TightGpuLimits,
+        device: &wgpu::Limits,
+        plan: &mut Plan,
+        cancellation: &Cancellation,
+    ) -> Result<Packed, GpuError> {
+        let mut nodes = self.pack_nodes(certificate, cancellation)?;
+        let depths =
+            dependency::label_depths(self.nodes, self.wide_words, &mut nodes, cancellation)?;
+        let levels = dependency::parallel_levels(self.nodes, depths);
+        if levels != 0 {
+            let serial = (self.root_bytes, self.bytes, self.packing_bytes);
+            let scheduled = (|| {
+                let root_bytes =
+                    u64::from(dependency::root_words(self.nodes, self.roots, levels)?) * 4;
+                buffer(root_bytes, device)?;
+                let added = root_bytes - self.root_bytes;
+                self.bytes = sum(&[self.bytes, added])?;
+                self.packing_bytes = sum(&[self.packing_bytes, added])?;
+                self.root_bytes = root_bytes;
+                self.levels = levels;
+                Plan::new(self, plan.worlds as usize, limits, device, true, plan.epoch)
+            })();
+            match scheduled {
+                Ok(selected) if selected.levels != 0 => *plan = selected,
+                Ok(_) => {
+                    (self.root_bytes, self.bytes, self.packing_bytes) = serial;
+                    self.levels = 0;
+                }
+                Err(error) if error.kind() == GpuErrorKind::Capacity => {
+                    (self.root_bytes, self.bytes, self.packing_bytes) = serial;
+                    self.levels = 0;
+                }
+                Err(error) => return Err(error),
+            }
         }
-        if roots.is_empty() {
-            roots.push(0);
+        self.pack_columns(certificate, nodes, cancellation)
+    }
+
+    #[cfg(test)]
+    pub(super) fn pack(
+        &self,
+        certificate: &TightPlan,
+        cancellation: &Cancellation,
+    ) -> Result<Packed, GpuError> {
+        self.pack_columns(
+            certificate,
+            self.pack_nodes(certificate, cancellation)?,
+            cancellation,
+        )
+    }
+
+    fn pack_columns(
+        &self,
+        certificate: &TightPlan,
+        mut nodes: Vec<u32>,
+        cancellation: &Cancellation,
+    ) -> Result<Packed, GpuError> {
+        let mut roots = words(self.root_bytes)?;
+        dependency::pack(
+            &self.theory,
+            self.nodes,
+            self.levels,
+            &nodes,
+            &mut roots,
+            cancellation,
+        )?;
+        // Depths are preparation scratch, never resident node state.
+        for header in nodes.chunks_exact_mut(4).take(self.nodes as usize) {
+            poll(cancellation)?;
+            header[3] = 0;
         }
         let producers = self.pack_producers(certificate, cancellation)?;
         Ok(Packed {
@@ -259,6 +335,7 @@ pub(super) struct Plan {
     pub(super) transport: u64,
     pub(super) accounted: u64,
     pub(super) work: u32,
+    pub(super) levels: u32,
     pub(super) epoch: u32,
 }
 impl Plan {
@@ -278,6 +355,13 @@ impl Plan {
         if limits.max_work_per_candidate < u64::from(graph.work) || epoch == 0 {
             return Err(capacity("tight full-scan work or epoch exceeds limits"));
         }
+        // A resident schedule may be bypassed under a tighter work allowance.
+        // Its real retained storage is still charged below.
+        let (levels, work) = graph
+            .work
+            .checked_add(graph.levels)
+            .filter(|work| u64::from(*work) <= limits.max_work_per_candidate)
+            .map_or((0, graph.work), |work| (graph.levels, work));
         let array = |length: u32| -> Result<u64, GpuError> {
             let elements = u64::from(length) * u64::from(count);
             if elements > u64::from(u32::MAX) {
@@ -320,7 +404,8 @@ impl Plan {
             results,
             transport,
             accounted,
-            work: graph.work,
+            work,
+            levels,
             epoch,
         })
     }
@@ -332,7 +417,7 @@ impl Plan {
             graph.roots,
             graph.producers,
             graph.words,
-            self.worlds,
+            self.levels,
             self.work,
             self.epoch,
         ]

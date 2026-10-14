@@ -9,6 +9,7 @@ use super::{
 };
 use crate::runtime::{DeviceProfile, ErrorScopes, Runtime};
 use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
+use std::time::Duration;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, TightPlan};
 
@@ -27,9 +28,10 @@ use zetesis_ferraris::{Interpretation, TightPlan};
 /// in the immutable transport; both original-truth checkers use the same portable
 /// limb arithmetic. No Boolean numeric expansion or optional-width feature is
 /// required. Work is linear in candidates times nodes, row occurrences, roots,
-/// producers and atoms. Each
-/// workgroup evaluates its DAG sequentially, then shares root/support scans
-/// across 64 invocations. Truth uses one word per node; candidate membership and
+/// producers and atoms. Each workgroup evaluates independent nodes of each
+/// dependency level across 64 invocations, then shares root/support scans.
+/// Pure chains and cold preparations without room for the additional schedule
+/// retain serial original-truth evaluation. Truth uses one word per node; candidate membership and
 /// producer support use one bit per atom, in separate world-major arrays. Heads
 /// sharing a support word use atomic OR by default. Grouped support instead
 /// visits each word's producers sequentially in one invocation; this trades
@@ -44,6 +46,7 @@ pub struct GpuTightOracle {
     epoch: u32,
     last: Option<TightGpuBatchStats>,
     activity: TightGpuActivity,
+    last_compute_time: Option<Duration>,
 }
 impl GpuTightOracle {
     /// Create an independently owned device/pipeline using hard adapter filters.
@@ -53,6 +56,26 @@ impl GpuTightOracle {
     /// Returns typed adapter, capability, allocation, validation or device errors.
     pub fn new_selected(options: GpuOptions, selection: GpuSelection) -> Result<Self, GpuError> {
         Self::new_with_support(options, selection, TightSupport::Atomic)
+    }
+
+    /// Select a device with optional compute-pass timing, using the same tight
+    /// capability requirements and adapter policy as [`Self::new_selected`].
+    /// Unsupported timestamps leave solving available without a device sample.
+    ///
+    /// # Errors
+    /// Returns the same typed construction failures as [`Self::new_selected`].
+    pub fn new_selected_with_timing(
+        options: GpuOptions,
+        selection: GpuSelection,
+    ) -> Result<Self, GpuError> {
+        let support = TightSupport::Atomic;
+        let runtime = pollster::block_on(Runtime::new_with_timing(
+            options,
+            selection,
+            Self::profile(support),
+            true,
+        ))?;
+        Ok(Self::with_runtime(runtime, support))
     }
 
     /// Create a device with an explicit producer-support construction policy.
@@ -113,6 +136,7 @@ impl GpuTightOracle {
             epoch: 0,
             last: None,
             activity: TightGpuActivity::default(),
+            last_compute_time: None,
         }
     }
 
@@ -144,6 +168,13 @@ impl GpuTightOracle {
     pub fn last_batch_stats(&self) -> Option<&TightGpuBatchStats> {
         self.last.as_ref()
     }
+    /// Optional device timestamp interval for the last successful compute pass.
+    /// Excludes host packing, uploads, readback and waits; unavailable unless
+    /// timing was requested on a context supporting compute-pass timestamps.
+    #[must_use]
+    pub const fn last_compute_time(&self) -> Option<Duration> {
+        self.last_compute_time
+    }
     /// Submitted and validated work in the latest attempt, including failure.
     /// Absence of completion never establishes that submitted work did not run.
     #[must_use]
@@ -156,6 +187,7 @@ impl GpuTightOracle {
     pub fn clear_residency(&mut self) {
         self.resident = None;
         self.last = None;
+        self.last_compute_time = None;
     }
 
     /// Check complete original truth and support for every ordered occurrence.
@@ -177,6 +209,10 @@ impl GpuTightOracle {
     /// allocation/submission invalidate the entire context; a fresh context is
     /// required before retrying. Busy contention submits no work and permits retry.
     /// Cancellation is polled during packing, waiting, decoding and before returning.
+    /// A tighter work limit can bypass a resident dependency schedule. Its bytes
+    /// remain charged: a smaller byte limit may refuse that retained layout.
+    /// Requested device timing adds its query, resolve and readback payload to
+    /// the same batch allowance; it never changes logical verdicts.
     pub fn check_batch(
         &mut self,
         certificate: &TightPlan,
@@ -185,6 +221,7 @@ impl GpuTightOracle {
         cancellation: &Cancellation,
     ) -> Result<Vec<TightGpuCheck>, TightGpuError> {
         self.last = None;
+        self.last_compute_time = None;
         self.activity = TightGpuActivity::default();
         self.check(certificate, candidates, limits, cancellation)
             .map_err(Into::into)
@@ -204,10 +241,16 @@ impl GpuTightOracle {
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
-        let Admission { fresh, plan, stats } = Admission::new(
+        let timed = self
+            .runtime
+            .device()
+            .features()
+            .contains(wgpu::Features::TIMESTAMP_QUERY);
+        let (admitted_limits, timing_bytes) = reserve_timing(limits, timed)?;
+        let mut admission = Admission::new(
             certificate,
             candidates,
-            limits,
+            admitted_limits,
             Packing {
                 device: self.runtime.limits(),
                 support: self.support,
@@ -220,22 +263,41 @@ impl GpuTightOracle {
         )?;
         // Evict authored buffers before replacing them; deferred driver retirement
         // is explicitly outside the logical payload budget.
-        if fresh.is_some() {
+        crate::timing::readback_size(
+            admission.plan.results,
+            timed,
+            self.runtime.limits().max_buffer_size,
+        )?;
+        if admission.fresh.is_some() {
             self.resident = None;
-        } else if stats.transport_allocated
+        } else if admission.stats.transport_allocated
             && let Some(resident) = self.resident.as_mut()
         {
             resident.transport = None;
         }
+        let packed = admission.pack(
+            certificate,
+            admitted_limits,
+            self.runtime.limits(),
+            cancellation,
+        )?;
+        let Admission {
+            fresh,
+            plan,
+            mut stats,
+        } = admission;
+        stats.accounted_bytes += timing_bytes;
+        stats.resident_transport_bytes += timing_bytes;
+        stats.downloaded_bytes += if timed {
+            crate::timing::READBACK_BYTES
+        } else {
+            0
+        };
         let graph = fresh
             .as_ref()
             .or_else(|| self.resident.as_ref().map(|r| &r.graph))
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing tight packing graph"))?;
         let seeds = plan.pack(graph, candidates, cancellation)?;
-        let packed = fresh
-            .as_ref()
-            .map(|g| g.pack(certificate, cancellation))
-            .transpose()?;
         poll(cancellation)?;
         let scopes = ErrorScopes::new(self.runtime.device());
         if let Some((mut graph, packed)) = fresh.zip(packed) {
@@ -260,6 +322,7 @@ impl GpuTightOracle {
                     &seeds,
                     &plan,
                     &mut self.activity,
+                    &mut self.last_compute_time,
                 )
             });
         let result = self.runtime.complete(scopes, outcome).and_then(|checks| {
@@ -268,9 +331,31 @@ impl GpuTightOracle {
         });
         if result.is_ok() {
             self.last = Some(stats);
+        } else {
+            self.last_compute_time = None;
         }
         result
     }
+}
+
+// Reserve optional observation storage before ordinary batch admission. This
+// leaves graph/work policy unchanged and keeps all authored bytes in one limit.
+fn reserve_timing(limits: TightGpuLimits, timed: bool) -> Result<(TightGpuLimits, u64), GpuError> {
+    let bytes = if timed {
+        crate::timing::OVERHEAD_BYTES
+    } else {
+        0
+    };
+    let admitted = TightGpuLimits {
+        max_batch_bytes: limits.max_batch_bytes.checked_sub(bytes).ok_or_else(|| {
+            GpuError::new(
+                GpuErrorKind::Capacity,
+                "tight timing exceeds batch byte ceiling",
+            )
+        })?,
+        ..limits
+    };
+    Ok((admitted, bytes))
 }
 
 fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {

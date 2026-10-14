@@ -1,5 +1,22 @@
 use super::*;
 
+#[test]
+fn timestamps_require_an_explicit_supported_request() {
+    use zetesis_backend::ComputeTimingStatus;
+    assert_eq!(
+        timing_status(false, wgpu::Features::TIMESTAMP_QUERY),
+        ComputeTimingStatus::NotRequested
+    );
+    assert_eq!(
+        timing_status(true, wgpu::Features::empty()),
+        ComputeTimingStatus::Unsupported
+    );
+    assert_eq!(
+        timing_status(true, wgpu::Features::TIMESTAMP_QUERY),
+        ComputeTimingStatus::Enabled
+    );
+}
+
 fn state() -> (mpsc::SyncSender<String>, Faults) {
     let (sender, receiver) = mpsc::sync_channel(1);
     (
