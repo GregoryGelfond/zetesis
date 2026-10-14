@@ -54,7 +54,7 @@ pub(crate) struct Prepared {
     pub analysis: themelios_analysis::Analysis,
     pub analysis_basis: crate::AnalysisBasis,
     pub analyzed: SourceProgram,
-    /// The rules and fact products, reached through [`Self::items`] or, by a
+    /// The rules and fact blocks, reached through [`Self::items`] or, by a
     /// reader that never sees facts, [`Self::rules_without_facts`].
     items: crate::formula_facts::Items,
     pub projection: Vec<RuleIr>,
@@ -73,7 +73,7 @@ pub(crate) struct Prepared {
     pub comparison_forms: ComparisonForms,
 }
 impl Prepared {
-    /// The prepared program in item order: each rule, and each fact product
+    /// The prepared program in item order: each rule, and each fact block
     /// where its fact rules stood.
     pub(crate) fn items(&self) -> &crate::formula_facts::Items {
         &self.items
@@ -644,7 +644,7 @@ impl PreparationContext<'_> {
         compiler
             .source
             .finish(limits, compiler.counters, fallback)?;
-        // Fact products hold values, not literals, so no comparison is among
+        // Fact blocks hold values, not literals, so no comparison is among
         // them.
         let comparison_forms =
             ComparisonForms::of(parts.items.rules(), &parts.projection, &parts.objectives);
@@ -745,7 +745,7 @@ fn replace_constraints(
     asked: crate::formula_rewrite::Replacements,
     fallback: ProgramSite,
 ) -> Result<SourceProgram, FormulaFailure> {
-    // Replacements are constraints, so no fact product is owned by an asked
+    // Replacements are constraints, so no fact block is owned by an asked
     // statement: the products stay, and the replacements' rules follow.
     parts.items.retain_rules(|rule| {
         rule.location

@@ -11,11 +11,11 @@ use zetesis_core::{PatternRef, TemplateTerm};
 
 use super::{Computation, Counters, SourceAtom, Support, SupportAppend};
 use crate::formula_binding::Binding;
-use crate::formula_facts::{FactProduct, Item, Items, Row};
+use crate::formula_facts::{FactBlock, Item, Items, Row};
 use crate::grounding_observer::Event;
 use crate::{AdmissionFailure, FormulaFailure, FormulaLimits, ProgramSite};
 
-/// One fact product's head: its predicate, read once, scratch for a row's
+/// One fact block's head: its predicate, read once, scratch for a row's
 /// terms, and the empty assignment every row is interned under.
 pub(crate) struct FactHead<'source> {
     predicate: PredicateRef<'source>,
@@ -25,17 +25,17 @@ pub(crate) struct FactHead<'source> {
 
 impl<'source> FactHead<'source> {
     pub(crate) fn new(
-        product: FactProduct<'_>,
+        block: FactBlock<'_>,
         computation: &Computation<'_, 'source>,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let predicate =
-            computation.static_predicate(product.predicate(), limits, counters, location)?;
+            computation.static_predicate(block.predicate(), limits, counters, location)?;
         let mut terms = Vec::new();
         terms
-            .try_reserve_exact(product.arity())
+            .try_reserve_exact(block.arity())
             .map_err(|error| FormulaFailure::AtomAllocation { error, location })?;
         let empty = Binding::new(computation, limits, counters, location)?;
         Ok(Self {
@@ -66,7 +66,7 @@ impl<'source> FactHead<'source> {
 }
 
 /// Support completion's first round over the item sequence: each fact
-/// product's rows enter the round's pending population at the product's item
+/// block's rows enter the round's pending population at the block's item
 /// position among the rules the round visits. Facts enter support in the first
 /// round only: a fact rule's atom entered the delta in no later round.
 pub(super) struct FirstRound<'items> {
@@ -79,7 +79,7 @@ impl<'items> FirstRound<'items> {
         Self { items, position: 0 }
     }
 
-    /// Intern every product that stands before the rule `index`, and move past
+    /// Intern every block that stands before the rule `index`, and move past
     /// that rule.
     pub(super) fn before_rule<'source>(
         &mut self,
@@ -95,13 +95,13 @@ impl<'items> FirstRound<'items> {
             match item {
                 Item::Rule(rule, _) if rule == index => return Ok(()),
                 Item::Rule(..) => {}
-                Item::Facts(product) => intern(product, delta, support, limits, counters)?,
+                Item::Facts(block) => intern(block, delta, support, limits, counters)?,
             }
         }
         Ok(())
     }
 
-    /// Intern every product after the round's last visited rule.
+    /// Intern every block after the round's last visited rule.
     pub(super) fn finish<'source>(
         mut self,
         delta: &mut SupportAppend<'source>,
@@ -115,15 +115,15 @@ impl<'items> FirstRound<'items> {
 
 /// Discover each row's atom and select it into the round's pending support.
 fn intern<'source>(
-    product: FactProduct<'_>,
+    block: FactBlock<'_>,
     delta: &mut SupportAppend<'source>,
     support: &Support<'source>,
     limits: &FormulaLimits,
     counters: &mut Counters,
 ) -> Result<(), FormulaFailure> {
     let mut computation = Computation::new(delta, support);
-    let mut head = FactHead::new(product, &computation, limits, counters, product.location())?;
-    for row in product.rows() {
+    let mut head = FactHead::new(block, &computation, limits, counters, block.location())?;
+    for row in block.rows() {
         let location = row.location();
         counters.work(limits, location)?;
         counters.observe_work(Event::SupportHeadWork, |counters| {

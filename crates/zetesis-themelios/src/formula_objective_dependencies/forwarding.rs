@@ -51,7 +51,7 @@ pub(super) fn certify(
 
 /// Missing means no definition; None means competing producer occurrences.
 /// Default-negated choice operands never supply positive producer permission.
-/// A fact product is a producer no renaming certifies, so its predicate has no
+/// A fact block is a producer no renaming certifies, so its predicate has no
 /// forwarding definition: as a sole fact rule's body-free shape was skipped.
 fn definitions<'rules>(
     items: &'rules crate::formula_facts::Items,
@@ -69,9 +69,9 @@ fn definitions<'rules>(
                         .or_insert(Some(rule));
                 }
             }
-            crate::formula_facts::Item::Facts(product) => {
-                context.location = product.location();
-                definitions.insert(context.product_signature(product.predicate())?, None);
+            crate::formula_facts::Item::Facts(block) => {
+                context.location = block.location();
+                definitions.insert(context.block_signature(block.predicate())?, None);
             }
         }
     }

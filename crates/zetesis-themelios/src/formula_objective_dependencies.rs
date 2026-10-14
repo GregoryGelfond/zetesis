@@ -53,8 +53,8 @@ impl<'source> Context<'_, 'source> {
             .charge_work(predicate.name().len() as u128, self.limits, self.location)?;
         Ok(signature(predicate))
     }
-    /// A fact product's predicate, read as a head pattern's predicate is.
-    fn product_signature(
+    /// A fact block's predicate, read as a head pattern's predicate is.
+    fn block_signature(
         &mut self,
         predicate: crate::formula_support::components::Predicate,
     ) -> Result<Signature, FormulaFailure> {

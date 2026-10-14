@@ -33,7 +33,7 @@ impl<'a> Context<'a, '_> {
         pattern.get(self.components, self.limits, self.counters, self.location)
     }
 
-    /// A fact product's predicate.
+    /// A fact block's predicate.
     pub(super) fn predicate(
         &mut self,
         predicate: crate::formula_support::components::Predicate,

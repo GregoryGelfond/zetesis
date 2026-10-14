@@ -119,7 +119,7 @@ fn all_terminal_producers_move_into_the_deferred_program() {
         panic!("eligible terminal definitions")
     };
     assert_eq!(deferred.len(), 2);
-    // The facts p(1) and q(2) stay as two fact products.
+    // The facts p(1) and q(2) stay as two fact blocks.
     assert_eq!(base.program.items().len(), 2);
     assert!(base.program.rules_without_facts().is_empty());
     assert_eq!(original.program.statements().count(), original_count);
@@ -553,7 +553,7 @@ fn deferred(prepared: crate::formula::Preparation) -> Option<usize> {
 #[test]
 fn a_rule_without_origins_still_finds_its_definition() {
     // Origins only nominate candidates; without them every definition is tried.
-    // Fact products always carry their statement's evidence; this clears the
+    // Fact blocks always carry their statement's evidence; this clears the
     // origins of the fact rules of the reference path.
     let mut prepared = crate::formula_ir::testing::with_facts_as_rules(|| {
         prepare("p(1). q(2). d(X):-p(X). d(X):-q(X).")
@@ -568,7 +568,7 @@ fn a_rule_without_origins_still_finds_its_definition() {
 fn reordered_occurrences_of_one_origin_still_correspond() {
     // The facts of one pooled statement share an origin; reversed, the outer
     // two miss the definition at their own place and every one is tried. A
-    // fact product's rows keep their order, so this edits fact rules.
+    // fact block's rows keep their order, so this edits fact rules.
     let mut prepared =
         crate::formula_ir::testing::with_facts_as_rules(|| prepare("d(1;2;3). e(X):-d(X)."));
     let facts: Vec<usize> = prepared

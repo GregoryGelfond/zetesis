@@ -31,7 +31,7 @@ pub(crate) use acyclic::{Exact, evaluate_acyclic};
 use crate::expansion::Budget;
 use crate::formula::ceiling;
 use crate::formula_binding::Binding;
-use crate::formula_facts::{FactProduct, Item};
+use crate::formula_facts::{FactBlock, Item};
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::formula_support::{
     self, CompletedQueries, Computation, Counters, Join, SourceAtom, SourceSelection, StorageLease,
@@ -144,14 +144,14 @@ impl Context<'_, '_, '_> {
         Ok(actual == expected.name.as_str())
     }
 
-    /// Whether a fact product's predicate is `expected`, read once for its rows.
+    /// Whether a fact block's predicate is `expected`, read once for its rows.
     fn produces_facts(
         &mut self,
-        product: FactProduct<'_>,
+        block: FactBlock<'_>,
         expected: &Signature,
     ) -> Result<bool, FormulaFailure> {
         let predicate = self.computation.static_predicate(
-            product.predicate(),
+            block.predicate(),
             self.limits,
             self.counters,
             self.location,
@@ -380,7 +380,7 @@ impl SourceEligibility {
         temporary: usize,
         context: &mut Context<'_, '_, '_>,
     ) -> Result<(), FormulaFailure> {
-        // A fact product is a precise producer: a normal head over an empty body.
+        // A fact block is a precise producer: a normal head over an empty body.
         let mut precise = true;
         for rule in prepared.rules_without_facts() {
             context.work()?;
@@ -406,12 +406,12 @@ impl SourceEligibility {
                         }
                         self.rule(rule, predicate, support, temporary, context)?;
                     }
-                    Item::Facts(product) => {
-                        context.location = product.location();
-                        if !context.produces_facts(product, predicate)? {
+                    Item::Facts(block) => {
+                        context.location = block.location();
+                        if !context.produces_facts(block, predicate)? {
                             continue;
                         }
-                        self.facts(product, temporary, context)?;
+                        self.facts(block, temporary, context)?;
                     }
                 }
             }
@@ -535,18 +535,18 @@ impl SourceEligibility {
     /// empty body.
     fn facts(
         &mut self,
-        product: FactProduct<'_>,
+        block: FactBlock<'_>,
         temporary: usize,
         context: &mut Context<'_, '_, '_>,
     ) -> Result<(), FormulaFailure> {
         let mut head = crate::formula_support::facts::FactHead::new(
-            product,
+            block,
             context.computation,
             context.limits,
             context.counters,
             context.location,
         )?;
-        for row in product.rows() {
+        for row in block.rows() {
             context.location = row.location();
             let atom = head.atom(row, context.computation, context.limits, context.counters)?;
             self.stage(&atom, Activity::Required, temporary, context)?;

@@ -28,7 +28,7 @@ pub(super) fn select<'source>(
     let mut signatures = Scratch::new(context)?;
     for (item, selected) in prepared.items().iter().zip(selected.iter()) {
         context.work()?;
-        // A fact product is ground: it adds no signature, and moves with one.
+        // A fact block is ground: it adds no signature, and moves with one.
         if let Item::Rule(_, rule) = item
             && *selected != 0
             && rule.variables != 0
@@ -79,7 +79,7 @@ fn predicate<'a>(
             };
             Ok(context.pattern(head)?.predicate())
         }
-        Item::Facts(product) => context.predicate(product.predicate()),
+        Item::Facts(block) => context.predicate(block.predicate()),
     }
 }
 

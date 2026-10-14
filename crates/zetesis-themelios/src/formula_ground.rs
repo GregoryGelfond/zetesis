@@ -690,10 +690,10 @@ impl Builder<'_, '_, '_> {
                     },
                 )?,
                 // A fact is never a streamed constraint.
-                crate::formula_facts::Item::Facts(product) => profile.phase(
+                crate::formula_facts::Item::Facts(block) => profile.phase(
                     crate::GroundingPhase::RuleInstantiation,
-                    Some(product.location()),
-                    || self.facts(product),
+                    Some(block.location()),
+                    || self.facts(block),
                 )?,
             }
         }
@@ -705,18 +705,15 @@ impl Builder<'_, '_, '_> {
     /// evidence as the root's own vector, the head's producer and its origins.
     /// No join, factoring, continuation, producer-rule, range, witness or
     /// domain-guard attempt is made: each declines on a body-free ground rule.
-    fn facts(
-        &mut self,
-        product: crate::formula_facts::FactProduct<'_>,
-    ) -> Result<(), FormulaFailure> {
+    fn facts(&mut self, block: crate::formula_facts::FactBlock<'_>) -> Result<(), FormulaFailure> {
         let mut head = formula_support::facts::FactHead::new(
-            product,
+            block,
             self.computation,
             self.limits,
             &mut self.counters,
-            product.location(),
+            block.location(),
         )?;
-        for row in product.rows() {
+        for row in block.rows() {
             let location = row.location();
             // The row's step, and its head atom's, as for a fact rule's row.
             self.work(location)?;

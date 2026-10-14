@@ -39,7 +39,7 @@ pub(super) struct Partition {
 
 pub(super) struct Definitions {
     pub(super) original: OriginalAnalysis,
-    /// The deferred rules and fact products, in item order.
+    /// The deferred rules and fact blocks, in item order.
     pub(super) deferred: Items,
     pub(super) deferred_storage: StorageLease,
 }
@@ -76,7 +76,7 @@ pub(super) fn partition(mut preparation: Preparation) -> Result<Partition, Formu
     };
     // Component validation and movement permits precede the move, which
     // reserves before it moves. Each original IR occurrence remains present
-    // exactly once: every rule and fact product, in item order.
+    // exactly once: every rule and fact block, in item order.
     let deferred = preparation
         .program
         .split_items(&selected.selected.values)

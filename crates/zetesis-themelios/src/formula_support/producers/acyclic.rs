@@ -13,7 +13,7 @@ use zetesis_core::relation::Failure;
 
 pub(crate) struct AcyclicPlan {
     scope: SourceScope,
-    // Component rank followed by item position: a rule's, or a fact product's
+    // Component rank followed by item position: a rule's, or a fact block's
     // where its fact rules stood. Constraints sort last.
     items: Vec<(usize, usize)>,
     _lease: StorageLease,
@@ -40,17 +40,17 @@ impl AcyclicPlan {
         for (position, item) in source.items().iter().enumerate() {
             let rule = match item {
                 Item::Rule(_, rule) => rule,
-                Item::Facts(product) => {
-                    // A product's rows share its predicate, and so its rank;
+                Item::Facts(block) => {
+                    // A block's rows share its predicate, and so its rank;
                     // a fact reads no predicate.
-                    let location = product.location();
+                    let location = block.location();
                     counters.work(limits, location)?;
                     let view = components
                         .ok_or_else(|| crate::formula_support::components::missing(location))?;
                     let node = find(
                         nodes.len(),
                         |i| nodes[i].signature,
-                        product.predicate().get(view, limits, counters, location)?,
+                        block.predicate().get(view, limits, counters, location)?,
                         limits,
                         counters,
                         location,
@@ -156,7 +156,7 @@ fn eligible(
             return Ok(false);
         }
     }
-    // A fact product is a normal producer with an empty body: always in class.
+    // A fact block is a normal producer with an empty body: always in class.
     for rule in source.rules_without_facts() {
         counters.work(limits, rule.location)?;
         if !matches!(rule.head, HeadIr::Normal(_))

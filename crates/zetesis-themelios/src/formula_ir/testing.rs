@@ -1,6 +1,6 @@
 //! Test support for the compiler: a compiler over an empty source, for tests
 //! of compiler-internal steps, and the switch that compiles facts as rules,
-//! for tests that compare fact products with the rule form.
+//! for tests that compare fact blocks with the rule form.
 
 use themelios_base::source::{Source, SourceId};
 

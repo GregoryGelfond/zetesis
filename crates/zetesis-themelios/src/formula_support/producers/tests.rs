@@ -71,7 +71,7 @@ fn pool_alternatives_keep_distinct_plan_occurrences() {
     // Admitted head pool alternatives instead create two distinct IR occurrences
     // before the separate analyzed program coalesces their equal rules. Body
     // atom pools are outside the current source pool profile.
-    // The fact d(0) is a fact product, which has no plan slot.
+    // The fact d(0) is a fact block, which has no plan slot.
     let owner = prepare("d(0).p(1;1):-d(0).");
     let prepared = &owner.program;
     let plan = plan(prepared, &owner.catalog);

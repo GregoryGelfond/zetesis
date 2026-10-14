@@ -87,11 +87,11 @@ impl<'a> Plan<'a> {
             .ok_or_else(|| super::super::storage::overflow(work.location))?;
         work.reserve(&mut plan.bodies, body_count, &mut lease, fixed, writer)?;
         let (rows, cells) = items
-            .products()
-            .fold((0_usize, 0_usize), |(rows, cells), product| {
+            .blocks()
+            .fold((0_usize, 0_usize), |(rows, cells), block| {
                 (
-                    rows.saturating_add(product.len()),
-                    cells.saturating_add(product.len().saturating_mul(product.arity())),
+                    rows.saturating_add(block.len()),
+                    cells.saturating_add(block.len().saturating_mul(block.arity())),
                 )
             });
         let fixed = fixed
@@ -109,8 +109,8 @@ impl<'a> Plan<'a> {
         for item in items.iter() {
             let rule = match item {
                 Item::Rule(_, rule) => rule,
-                Item::Facts(product) => {
-                    plan.facts(product, components, work)?;
+                Item::Facts(block) => {
+                    plan.facts(block, components, work)?;
                     continue;
                 }
             };
@@ -146,21 +146,21 @@ impl<'a> Plan<'a> {
         Ok(plan)
     }
 
-    /// Resolve a deferred product's rows: its predicate once, each row's
+    /// Resolve a deferred block's rows: its predicate once, each row's
     /// cells, and the row's statement site.
     fn facts(
         &mut self,
-        product: crate::formula_facts::FactProduct<'_>,
+        block: crate::formula_facts::FactBlock<'_>,
         components: TemplateComponentsRef<'a>,
         work: &mut Work<'_>,
     ) -> Result<(), ReconstructionError> {
-        work.location = product.location();
+        work.location = block.location();
         work.permit()?;
         let predicate =
-            product
+            block
                 .predicate()
                 .get(components, work.limits, work.counters, work.location)?;
-        for row in product.rows() {
+        for row in block.rows() {
             work.location = row.location();
             work.permit()?;
             let start = self.terms.len();

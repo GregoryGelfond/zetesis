@@ -136,7 +136,7 @@ pub(super) fn select(
 /// corresponds to no definition. A fact reads nothing; each row of a selected
 /// product must correspond to its analyzed fact statement, as its fact rule did.
 fn product_head(
-    product: crate::formula_facts::FactProduct<'_>,
+    product: crate::formula_facts::FactBlock<'_>,
     defined: &Defined<'_>,
     covered: &mut [u8],
     cursors: &mut [usize],

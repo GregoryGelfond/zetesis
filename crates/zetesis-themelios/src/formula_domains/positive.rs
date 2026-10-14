@@ -111,12 +111,12 @@ fn applicable<'source>(
             }
         }
     }
-    // A fact product is a positive-flat producer when each of its constants
+    // A fact block is a positive-flat producer when each of its constants
     // is one a head may hold. That test is a function of each value alone, so
     // each admitted cell is checked once, for all the rows that select it.
-    for product in prepared.items().products() {
-        let location = product.location();
-        for &cell in product.cells() {
+    for block in prepared.items().blocks() {
+        let location = block.location();
+        for &cell in block.cells() {
             counters.work(limits, location)?;
             if !flat_constant(cell, components, limits, counters, location)? {
                 return Ok(None);

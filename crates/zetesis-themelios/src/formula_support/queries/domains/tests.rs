@@ -470,7 +470,7 @@ fn candidate_text_borrows_the_admitted_source_spelling() {
             // logical identity.
             let source = program
                 .items()
-                .products()
+                .blocks()
                 .flat_map(|product| {
                     product
                         .cells()

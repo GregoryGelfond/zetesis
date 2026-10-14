@@ -574,13 +574,13 @@ fn complete(
         rounds += 1;
         counters.record(Event::SupportRound);
         let changed = {
-            // Rules alone are scheduled: a fact product has no producer slot,
+            // Rules alone are scheduled: a fact block has no producer slot,
             // and enters support in the first round at its item position.
             let mut schedule = plan.as_ref().map_or_else(
                 || producers::Schedule::all(prepared.rules_without_facts()),
                 producers::ProducerPlan::schedule,
             );
-            let mut facts = (rounds == 1 && prepared.items().products().next().is_some())
+            let mut facts = (rounds == 1 && prepared.items().blocks().next().is_some())
                 .then(|| facts::FirstRound::new(prepared.items()));
             let mut selected = schedule.next(limits, counters, fallback)?;
             if selected.is_none() && plan.is_some() && facts.is_none() {

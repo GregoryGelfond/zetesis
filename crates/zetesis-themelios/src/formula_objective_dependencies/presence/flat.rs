@@ -93,14 +93,14 @@ impl<'source> Context<'_, '_, 'source> {
     ) -> Result<bool, FormulaFailure> {
         left.equals_ref_with(right, || self.inspect())
     }
-    /// Whether a fact product's predicate is `predicate`, read once for all its rows.
-    fn product_predicate(
+    /// Whether a fact block's predicate is `predicate`, read once for all its rows.
+    fn block_predicate(
         &mut self,
-        product: crate::formula_facts::FactProduct<'_>,
+        block: crate::formula_facts::FactBlock<'_>,
         predicate: PredicateRef<'_>,
     ) -> Result<bool, FormulaFailure> {
         let head = self.computation.static_predicate(
-            product.predicate(),
+            block.predicate(),
             self.limits,
             self.counters,
             self.location,
@@ -297,12 +297,12 @@ fn activity(
         context.inspect()?;
         let producer = match item {
             crate::formula_facts::Item::Rule(_, rule) => rule,
-            crate::formula_facts::Item::Facts(product) => {
+            crate::formula_facts::Item::Facts(block) => {
                 // A fact row is a closed producer with an empty body.
-                if !context.product_predicate(product, atom.predicate())? {
+                if !context.block_predicate(block, atom.predicate())? {
                     continue;
                 }
-                for row in product.rows() {
+                for row in block.rows() {
                     if context.same_row(row, atom)? {
                         activity = Activity::Required;
                     }
@@ -468,10 +468,10 @@ fn unique(
         context.inspect()?;
         let rule = match item {
             crate::formula_facts::Item::Rule(_, rule) => rule,
-            crate::formula_facts::Item::Facts(product) => {
+            crate::formula_facts::Item::Facts(block) => {
                 // Each fact row is one normal producer occurrence.
-                if context.product_predicate(product, predicate)? {
-                    occurrences += product.len();
+                if context.block_predicate(block, predicate)? {
+                    occurrences += block.len();
                 }
                 continue;
             }

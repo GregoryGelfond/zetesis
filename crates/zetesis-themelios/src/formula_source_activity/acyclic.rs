@@ -3,7 +3,7 @@
 //! by source eligibility; only this stronger certificate permits exact output.
 
 use super::{Activity, Context, SourceEligibility};
-use crate::formula_facts::{FactProduct, Item};
+use crate::formula_facts::{FactBlock, Item};
 use crate::formula_ir::HeadIr;
 use crate::formula_support::{AcyclicPlan, Join, SourceAtom, SourceSelection, StorageLease};
 use crate::grounding_observer::Profile;
@@ -76,12 +76,12 @@ pub(crate) fn evaluate_acyclic(
                     || result.rule_exact(rule, support, context),
                 )?;
             }
-            Item::Facts(product) => {
-                context.location = product.location();
+            Item::Facts(block) => {
+                context.location = block.location();
                 profile.phase(
                     GroundingPhase::RuleInstantiation,
-                    Some(product.location()),
-                    || result.facts_exact(product, context),
+                    Some(block.location()),
+                    || result.facts_exact(block, context),
                 )?;
             }
         }
@@ -95,17 +95,17 @@ impl SourceEligibility {
     /// has that activity, since the fold over no literal starts from it.
     fn facts_exact(
         &mut self,
-        product: FactProduct<'_>,
+        block: FactBlock<'_>,
         context: &mut Context<'_, '_, '_>,
     ) -> Result<(), FormulaFailure> {
         let mut head = crate::formula_support::facts::FactHead::new(
-            product,
+            block,
             context.computation,
             context.limits,
             context.counters,
             context.location,
         )?;
-        for row in product.rows() {
+        for row in block.rows() {
             context.location = row.location();
             let atom = head.atom(row, context.computation, context.limits, context.counters)?;
             self.stage_exact(&atom, Activity::Required, context)?;

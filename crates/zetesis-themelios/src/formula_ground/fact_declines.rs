@@ -1,5 +1,5 @@
 //! The decline lemmas: each attempt the join path makes on a rule declines on
-//! a fact rule, for a structural reason, so a fact product makes none of them.
+//! a fact rule, for a structural reason, so a fact block makes none of them.
 //! They run on the reference path's fact rules, with every attempt's test
 //! switch at its default.
 

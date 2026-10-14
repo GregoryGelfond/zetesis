@@ -1,25 +1,26 @@
-//! The prepared program as items: rules, and facts held as columnar products.
+//! The prepared program as items: rules, and facts held in fact blocks.
 //!
 //! A fact statement `p(t₁, …, tₙ).` expands to one product per argument
-//! alternative (`fact_expansion`). Compilation stores each product in the fact
+//! alternative (`fact_expansion`). Compilation stores the facts in the fact
 //! arena instead of building a rule with an empty body for each of its rows:
-//! the product's predicate is admitted once, its columns hold admitted scalar
-//! keys, and the statement's evidence is stored once. Consecutive one-row
-//! statements of one predicate share a run: one row of cells and one evidence
-//! range per statement.
+//! a block's predicate is admitted once, its cells hold admitted scalar keys,
+//! and the statement's evidence is stored once. A fact block is one item in one
+//! of two layouts: a product, the Cartesian product of one statement
+//! alternative's columns, or a run, consecutive one-row statements of one
+//! predicate stored row by row with one evidence range per statement.
 //!
-//! Readers traverse the prepared program as [`Item`]s: a rule, or a fact
-//! product standing exactly where its fact rules stood, its rows in expansion
-//! order (alternatives in order, last argument fastest). Every consumer that
-//! visits the rules in order visits items in the same order, so wherever the
-//! rule form discovered, staged, interned or emitted a fact rule's head, the
-//! product's row is discovered, staged, interned or emitted at the same point.
-//! A run stands for its statements' consecutive products; it changes storage,
-//! not visit order.
+//! Readers traverse the prepared program as [`Item`]s: a rule, or a fact block
+//! standing exactly where its fact rules stood, its rows in expansion order
+//! (alternatives in order, last argument fastest). Every consumer that visits
+//! the rules in order visits items in the same order, so wherever the rule form
+//! discovered, staged, interned or emitted a fact rule's head, the block's row
+//! is discovered, staged, interned or emitted at the same point. A run is one
+//! item: it keeps its statements' rows in order, and a reader that counts items
+//! counts it once.
 //!
-//! Storage is O(admitted cells + evidence + products + runs) and is reserved
-//! fallibly. Reading a row allocates nothing: a product's cell is selected from
-//! its column by the row's mixed-radix position.
+//! Storage is O(admitted cells + evidence + blocks) and is reserved fallibly.
+//! Reading a row allocates nothing: a product's cell is selected from its
+//! column by the row's mixed-radix position.
 
 use std::collections::TryReserveError;
 use std::ops::Range;
@@ -56,8 +57,8 @@ pub(crate) struct Items {
 pub(crate) enum Item<'a> {
     /// A rule and its index among the rules.
     Rule(usize, &'a RuleIr),
-    /// A fact product, standing where its fact rules stood.
-    Facts(FactProduct<'a>),
+    /// A fact block, standing where its fact rules stood.
+    Facts(FactBlock<'a>),
 }
 
 impl Items {
@@ -77,7 +78,7 @@ impl Items {
     fn item(&self, slot: Slot) -> Item<'_> {
         match slot {
             Slot::Rule(index) => Item::Rule(index, &self.rules[index]),
-            Slot::Facts(block) => Item::Facts(FactProduct {
+            Slot::Facts(block) => Item::Facts(FactBlock {
                 arena: &self.facts,
                 block,
             }),
@@ -89,11 +90,11 @@ impl Items {
         self.order.iter().map(|&slot| self.item(slot))
     }
 
-    /// Every fact product, in item order. A block another sequence took by
+    /// Every fact block, in item order. A block another sequence took by
     /// [`Self::split_off`] is no longer an item, and is not listed.
-    pub(crate) fn products(&self) -> impl Iterator<Item = FactProduct<'_>> + '_ {
+    pub(crate) fn blocks(&self) -> impl Iterator<Item = FactBlock<'_>> + '_ {
         self.order.iter().filter_map(|&slot| match slot {
-            Slot::Facts(block) => Some(FactProduct {
+            Slot::Facts(block) => Some(FactBlock {
                 arena: &self.facts,
                 block,
             }),
@@ -103,7 +104,7 @@ impl Items {
 
     /// The program's producer occurrences: its rules and its fact rows.
     pub(crate) fn occurrences(&self) -> usize {
-        self.rules.len() + self.products().map(FactProduct::len).sum::<usize>()
+        self.rules.len() + self.blocks().map(FactBlock::len).sum::<usize>()
     }
 
     /// The rules alone, in item order.
@@ -117,7 +118,7 @@ impl Items {
         &mut self.rules
     }
 
-    /// Move the rules out. The fact products stay, and the rules' item
+    /// Move the rules out. The fact blocks stay, and the rules' item
     /// positions no longer resolve; only a consumer done with the item
     /// sequence takes them.
     pub(crate) fn take_rules(&mut self) -> Vec<RuleIr> {
@@ -285,7 +286,7 @@ impl Items {
     }
 }
 
-/// Facts stored by product and run, with each statement's evidence once.
+/// Facts stored by block, with each statement's evidence once.
 #[derive(Default)]
 pub(crate) struct FactArena {
     blocks: Vec<Block>,
@@ -482,9 +483,9 @@ impl FactArena {
 
     /// Reserve, in `target`, everything [`Self::copy_block`] appends for `block`.
     fn reserve_copy(&self, block: usize, target: &mut Self) -> Result<(), TryReserveError> {
-        let product = FactProduct { arena: self, block };
+        let facts = FactBlock { arena: self, block };
         target.blocks.try_reserve(1)?;
-        target.cells.try_reserve(product.cells().len())?;
+        target.cells.try_reserve(facts.cells().len())?;
         match &self.blocks[block].layout {
             Layout::Product { columns, evidence } => {
                 target.columns.try_reserve(columns.len())?;
@@ -492,7 +493,7 @@ impl FactArena {
             }
             Layout::Run { .. } => {
                 target.ends.try_reserve(self.blocks[block].rows)?;
-                let rows = product.rows();
+                let rows = facts.rows();
                 let evidence = rows.map(|row| row.evidence().len()).sum();
                 target.evidence.try_reserve(evidence)?;
             }
@@ -504,14 +505,14 @@ impl FactArena {
     /// [`Self::reserve_copy`] reserved.
     fn copy_block(&self, block: usize, target: &mut Self) {
         let source = &self.blocks[block];
-        let product = FactProduct { arena: self, block };
+        let facts = FactBlock { arena: self, block };
         let cells = target.cells.len();
-        target.cells.extend_from_slice(product.cells());
+        target.cells.extend_from_slice(facts.cells());
         let layout = match &source.layout {
             Layout::Product { columns, evidence } => {
                 let first = target.columns.len();
                 for column in &self.columns[columns.clone()] {
-                    let start = cells + (column.cells.start - product.cells_start());
+                    let start = cells + (column.cells.start - facts.cells_start());
                     target.columns.push(Column {
                         cells: start..start + column.cells.len(),
                         stride: column.stride,
@@ -529,7 +530,7 @@ impl FactArena {
             Layout::Run { .. } => {
                 let ends = target.ends.len();
                 let evidence = target.evidence.len();
-                for row in product.rows() {
+                for row in facts.rows() {
                     target.evidence.extend_from_slice(row.evidence());
                     target.ends.push(target.evidence.len());
                 }
@@ -549,25 +550,27 @@ impl FactArena {
     }
 }
 
-/// A fact product: one statement's alternative, or a run of one-row
-/// statements, of one predicate.
+/// A fact block: one item holding rows of one predicate, in one of two
+/// layouts. A product holds one statement alternative's rows as the Cartesian
+/// product of its columns; a run holds consecutive one-row statements, one row
+/// each.
 #[derive(Clone, Copy)]
-pub(crate) struct FactProduct<'a> {
+pub(crate) struct FactBlock<'a> {
     arena: &'a FactArena,
     block: usize,
 }
 
-impl<'a> FactProduct<'a> {
+impl<'a> FactBlock<'a> {
     fn block(self) -> &'a Block {
         &self.arena.blocks[self.block]
     }
 
-    /// The predicate, admitted once for the product.
+    /// The predicate, admitted once for the block.
     pub(crate) fn predicate(self) -> Predicate {
         self.block().predicate
     }
 
-    /// The product's arity.
+    /// The block's arity.
     pub(crate) fn arity(self) -> usize {
         self.block().arity
     }
@@ -577,11 +580,11 @@ impl<'a> FactProduct<'a> {
         self.block().rows
     }
 
-    /// The site of the product's first statement.
+    /// The site of the block's first statement.
     pub(crate) fn location(self) -> ProgramSite {
         self.rows()
             .next()
-            .expect("a stored product has a row")
+            .expect("a stored block has a row")
             .location()
     }
 
@@ -596,8 +599,8 @@ impl<'a> FactProduct<'a> {
         }
     }
 
-    /// Every admitted cell of the product: each column's distinct values, or
-    /// each run row's cells.
+    /// Every admitted cell of the block: each product column's distinct
+    /// values, or each run row's cells.
     pub(crate) fn cells(self) -> &'a [Scalar] {
         let start = self.cells_start();
         let end = match &self.block().layout {
@@ -609,8 +612,8 @@ impl<'a> FactProduct<'a> {
         &self.arena.cells[start..end]
     }
 
-    /// The bytes the product retains in its arena: its block, cells, columns
-    /// and evidence.
+    /// The bytes the block retains in its arena: its block entry, cells,
+    /// columns and evidence.
     pub(crate) fn retained_bytes(self) -> usize {
         let (columns, evidence, ends) = match &self.block().layout {
             Layout::Product { columns, evidence } => (columns.len(), evidence.len(), 0),
@@ -629,25 +632,22 @@ impl<'a> FactProduct<'a> {
 
     /// The rows in expansion order.
     pub(crate) fn rows(self) -> impl Iterator<Item = Row<'a>> + use<'a> {
-        (0..self.len()).map(move |index| Row {
-            product: self,
-            index,
-        })
+        (0..self.len()).map(move |index| Row { facts: self, index })
     }
 }
 
-/// One row of a fact product: one fact.
+/// One row of a fact block: one fact.
 #[derive(Clone, Copy)]
 pub(crate) struct Row<'a> {
-    product: FactProduct<'a>,
+    facts: FactBlock<'a>,
     index: usize,
 }
 
 impl<'a> Row<'a> {
     /// The row's admitted cells, in argument order.
     pub(crate) fn cells(self) -> impl Iterator<Item = Scalar> + use<'a> {
-        let arena = self.product.arena;
-        let block = self.product.block();
+        let arena = self.facts.arena;
+        let block = self.facts.block();
         let index = self.index;
         (0..block.arity).map(move |column| match &block.layout {
             Layout::Product { columns, .. } => {
@@ -661,8 +661,8 @@ impl<'a> Row<'a> {
 
     /// The evidence of the row's statement.
     pub(crate) fn evidence(self) -> &'a [ProgramSite] {
-        let arena = self.product.arena;
-        match &self.product.block().layout {
+        let arena = self.facts.arena;
+        match &self.facts.block().layout {
             Layout::Product { evidence, .. } => &arena.evidence[evidence.clone()],
             Layout::Run { ends, evidence, .. } => {
                 let start = if self.index == 0 {

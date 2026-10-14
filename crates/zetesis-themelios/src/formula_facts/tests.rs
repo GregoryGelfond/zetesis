@@ -15,7 +15,7 @@ use std::path::{Path, PathBuf};
 use zetesis_core::{Model, ValueLimits};
 use zetesis_cpu::Cancellation;
 
-use super::{FactProduct, Item};
+use super::{FactBlock, Item};
 use crate::formula_ir::testing::with_facts_as_rules;
 use crate::formula_support::facts::rounds;
 use crate::{
@@ -349,8 +349,8 @@ fn a_run_holds_consecutive_one_row_statements_of_one_predicate() {
         .preparation()
         .program
         .items()
-        .products()
-        .map(FactProduct::len)
+        .blocks()
+        .map(FactBlock::len)
         .collect();
     // p(1), p(2) and p(3) share a run; p(4;5) is two argument alternatives,
     // a product each; q(1) starts a run of its own.
@@ -366,7 +366,7 @@ fn a_product_admits_each_column_value_once() {
         .preparation()
         .program
         .items()
-        .products()
+        .blocks()
         .next()
         .unwrap();
     assert_eq!(product.len(), 12);
