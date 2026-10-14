@@ -52,24 +52,36 @@ Notable changes by release. Versions follow Semantic Versioning.
   newline. A record or statistics report whose formatting fails while the
   writer did not returns an `Other` error, and writes nothing of the unit,
   where the standard library panicked.
-- The formula route holds facts as columnar fact products instead of building a
-  rule with an empty body for each fact. Each argument alternative of a fact
-  statement is stored as one product, its predicate admitted once, each column
-  value admitted once and the statement's evidence stored once; consecutive
-  one-row statements of a predicate share a run. Support completion interns the
-  rows in its first round where their rules stood, exact activity stages them
-  required, and emission asserts each with its own root, producer and origins,
-  without a join or any join-path attempt. Answers, theories, atom order and
-  output are unchanged. Receipts measure the work performed:
+- The formula route holds facts in fact blocks instead of building a rule with
+  an empty body for each fact. Each argument alternative of a fact statement is
+  stored as one product, its predicate admitted once, each column value admitted
+  once and the statement's evidence stored once; consecutive one-row statements
+  of a predicate share a run, stored row by row. Each product, and each run, is
+  one fact block, standing where its fact rules stood. Support completion
+  interns the rows in its first round where their rules stood, exact activity
+  stages them required, and emission asserts each with its own root, producer
+  and origins, without a join or any join-path attempt. Answers, theories, atom
+  order and output are unchanged. Receipts measure the work performed:
   `expansion_usage()` reports each fact's origins once, where the fact's rule
-  charged them a second time for its own vector; grounding work falls by the
+  charged them a second time for its own vector, and its scalar bytes count the
+  scratch a block is laid out in as that grows (eight bytes per column and
+  sixteen per cell of the widest block so far); grounding work falls by the
   facts' support visits, joins and attempts, and
-  `GroundingWork.support_producer_visits` no longer counts facts; support bytes
-  fall by the facts' pattern rows and rise by the fact storage. A work, origin or
-  support-storage ceiling can therefore be reached later than before. Grounding
-  observers see one rule-instantiation phase per fact product or run, at its
-  first statement, instead of one per fact; `TerminalFormula::deferred_templates()`
-  still counts each deferred fact.
+  `GroundingWork.support_producer_visits` no longer counts facts. Support bytes
+  fall by the facts' pattern rows and rise by the fact storage, each growth of
+  which is admitted before it is allocated, with its whole replacement counted.
+  The largest support peak falls on fact-heavy programs (by 3 to 20% on
+  2,000-fact shapes) and rises on programs with few facts per block, where the
+  blocks' entries and columns and the storage's growth slack exceed the pattern
+  rows they replace (by at most 5.5% on the maintained examples, median 1.9%). A
+  work or origin ceiling can therefore be reached later than before, and a
+  support-storage ceiling earlier or later. When adaptive grounding defers fact
+  blocks, both sides of the move are reserved and admitted before anything
+  moves, one work unit for each vector reserved, and the move allocates nothing;
+  the deferred blocks are copies, and the base keeps their storage, leased,
+  until it is dropped. Grounding observers see one rule-instantiation phase per
+  fact block, at its first statement, instead of one per fact;
+  `TerminalFormula::deferred_templates()` still counts each deferred fact.
 - Formula preparation grows the record of each analyzed statement's original
   statement geometrically, where it reserved exactly the next statement's slots,
   so a program of n statements reallocates it a logarithmic number of times

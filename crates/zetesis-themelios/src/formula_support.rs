@@ -15,7 +15,7 @@ pub(crate) use computation::Computation;
 pub(crate) use publication::Publication;
 pub(crate) use selection::SourceSelection;
 pub(crate) use storage::{
-    StorageLease, growth_capacity, reserve, reserve_exact, reserve_exact_scoped,
+    StorageLease, growth_capacity, growth_target, reserve, reserve_exact, reserve_exact_scoped,
 };
 mod accounting;
 mod generated;

@@ -966,7 +966,7 @@ the key work ceiling and the term work remaining, charged to the term work,
 and a stop, reported on the admitted formula and by the CLI, leaves the
 constraints not yet asked as written.
 
-### Facts as fact products
+### Facts as fact blocks
 
 A fact is a rule with an empty body: its reduct with respect to any candidate is
 itself, so every answer set contains it. The formula route compiles a fact
@@ -975,16 +975,17 @@ instead of into one such rule per fact. Each argument alternative of the
 statement becomes a product: its predicate admitted once, each column's values
 admitted once in the order the rows first reach them, and the statement's
 evidence stored once. Consecutive one-row statements of one predicate share a
-run. Facts that keep a function, tuple or arithmetic subterm after
-normalization stay rules.
+run, stored row by row. Each product, and each run, is one item of the prepared
+program, a fact block. Facts that keep a function, tuple or arithmetic subterm
+after normalization stay rules.
 
-Every reader of the prepared program visits its items, a rule or a fact product,
+Every reader of the prepared program visits its items, a rule or a fact block,
 in the order the rules stood; readers that never see facts name the rules alone
-and the reason. Support completion interns each product's rows by the atom
-operation a fact rule's head reaches, into its first round at the product's item
+and the reason. Support completion interns each block's rows by the atom
+operation a fact rule's head reaches, into its first round at the block's item
 position, and publishes them in the same canonical order; facts have no producer
-slot and no visit. Exact activity stages each row required at the product's
-plan position. Final emission asserts each row as the rule form did: the head
+slot and no visit. Exact activity stages each row required at the block's plan
+position. Final emission asserts each row as the rule form did: the head
 atom, the node `⊤ → head`, its root with the statement's evidence, the head's
 producer and its origins. No join is built for a fact, and no factoring,
 continuation, producer-rule, range-multiple, witness or domain-guard attempt is
@@ -997,8 +998,15 @@ compare both forms on the examples tree and generated fact shapes.
 The receipts measure the work performed. A fact's origins are charged once with
 its statement, not again for a rule's own vector; support visits, joins and
 attempts for facts are not charged; and the arena's storage, which replaces the
-facts' pattern rows, counts against `max_support_bytes`. Grounding observers see
-one rule-instantiation phase per fact product or run, at its first statement.
+facts' pattern rows, counts against `max_support_bytes`. Each growth of the
+arena is admitted before it is allocated, with its whole replacement (the old
+and the new capacity together) counted, and grows geometrically only when that
+replacement fits. The scratch a fact block is laid out in is charged to the
+expansion's scalar bytes as it grows. When adaptive materialization defers fact
+blocks, both sides of the move are reserved and admitted before anything moves;
+the deferred blocks are copies, and the base keeps their storage, leased, until
+it is dropped. Grounding observers see one rule-instantiation phase per fact
+block, at its first statement.
 
 ### Completed possible support
 
@@ -1071,7 +1079,7 @@ optional domain guards. Scheduling separately excludes objectives, including
 empty declarations; domain guards permit them. The plan checks signed predicate
 names and arities, positive dependency edges and the existing themelios SCC order. Canonical source
 rules may coalesce duplicates; plan slots still refer to the original IR rules
-and preserve their provenance. Facts have no slot (see below). The plan borrows that preparation and caches
+and preserve their provenance. Facts have no slot ([Facts as fact blocks](#facts-as-fact-blocks), above). The plan borrows that preparation and caches
 positive body occurrence IDs. Reverse signed-predicate postings mark original
 producer IDs in a packed active set. Bootstrap visits zero-input producers;
 later rounds visit only producers affected by the previous round's newly

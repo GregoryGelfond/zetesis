@@ -276,7 +276,7 @@ handles the strict-rank case: every producer reads only lower-ranked positive
 atoms and frozen gates. A single complete producer scan per rank equals the
 stratified result; constraints then decide answer-set membership. Rust's
 `AcyclicPlan` checks the complete normalized source and orders all producers:
-its rules and its fact products, whose rows it stages required at the product's
+its rules and its fact blocks, whose rows it stages required at the block's
 position, as the scan computes for a rule with an empty body.
 `AcyclicSource` evaluates that order after complete support and original-family
 arithmetic admission, retaining the original program and exact interpretation.

@@ -25,6 +25,25 @@ use crate::expansion::Budget;
 use crate::formula_ir::{Compiler, RuleIr};
 use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature};
 
+/// Where compiled rules go: the program's items, which record each rule's
+/// slot as they append it, or a plain list such as the projection's
+/// declarations.
+pub(super) trait RuleSink {
+    fn push_rule(&mut self, rule: RuleIr);
+}
+
+impl RuleSink for Vec<RuleIr> {
+    fn push_rule(&mut self, rule: RuleIr) {
+        self.push(rule);
+    }
+}
+
+impl RuleSink for crate::formula_facts::Items {
+    fn push_rule(&mut self, rule: RuleIr) {
+        crate::formula_facts::Items::push_rule(self, rule);
+    }
+}
+
 impl Compiler<'_> {
     /// Weak constraints have the same outer body-product law as rules. Local
     /// aggregate and conditional scopes remain untouched for their consumers.
@@ -81,7 +100,7 @@ impl Compiler<'_> {
         statement: &WithProvenance<Statement>,
         origins: &[ProgramSite],
         projection_nodes: &mut u128,
-        rules: &mut Vec<RuleIr>,
+        rules: &mut impl RuleSink,
         analyzed: &mut Vec<WithProvenance<Statement>>,
     ) -> Result<(), FormulaFailure> {
         // Local pooling reconstructs choice element carriers. Retain the
@@ -106,7 +125,7 @@ impl Compiler<'_> {
                 let Statement::Rule(rule) = statement.get() else {
                     unreachable!("pool expansion retains a rule")
                 };
-                rules.push(self.rule(rule, origins.to_vec(), choice_source)?);
+                rules.push_rule(self.rule(rule, origins.to_vec(), choice_source)?);
                 analyzed.extend(self.conditional_projection(&statement, projection_nodes)?);
             }
         } else {
@@ -120,7 +139,7 @@ impl Compiler<'_> {
             let Statement::Rule(rule) = statement.get() else {
                 return Err(unsupported(ProfileFeature::Statement, self.location).into());
             };
-            rules.push(self.rule(rule, origins.to_vec(), choice_source)?);
+            rules.push_rule(self.rule(rule, origins.to_vec(), choice_source)?);
             analyzed.extend(self.conditional_projection(statement, projection_nodes)?);
         }
         Ok(())

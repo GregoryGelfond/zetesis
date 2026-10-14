@@ -609,6 +609,92 @@ fn a_definition_matched_only_by_an_earlier_rule_is_still_covered() {
     assert_eq!(deferred(prepared), Some(1));
 }
 
+/// Reserves exactly and unadmitted, recording each request's count in order.
+#[derive(Default)]
+struct Recorded(Vec<usize>);
+
+impl crate::formula_facts::LeasedReserve for Recorded {
+    fn reserve_leased<T>(
+        &mut self,
+        values: &mut Vec<T>,
+        additional: usize,
+        _lease: &mut crate::formula_support::StorageLease,
+    ) -> Result<(), crate::FormulaFailure> {
+        self.0.push(additional);
+        values.try_reserve_exact(additional).unwrap();
+        Ok(())
+    }
+}
+
+/// Each item's rows, or `None` for a rule.
+fn shape(items: &crate::formula_facts::Items) -> Vec<Option<usize>> {
+    items
+        .iter()
+        .map(|item| match item {
+            crate::formula_facts::Item::Rule(..) => None,
+            crate::formula_facts::Item::Facts(block) => Some(block.len()),
+        })
+        .collect()
+}
+
+#[test]
+fn a_split_reserves_the_sum_of_what_moves_into_each_vector() {
+    let mut prepared = prepare("d(1;2). d(3..5). e(X):-d(X). f(1). f(2). f(3). g(X):-f(X).");
+    // In the program's canonical order: d(3..5)'s three-row product, d(1;2)'s
+    // two one-row products, e's rule, f's three-row run and g's rule.
+    assert_eq!(
+        shape(prepared.program.items()),
+        [Some(3), Some(1), Some(1), None, Some(3), None]
+    );
+    // Move d(1;2)'s two products, e's rule and f's run: their cells sum to
+    // five, past any one block's three.
+    let selected = [0, 1, 1, 1, 1, 0];
+    let counters = Counters::default();
+    let (mut moved_lease, mut kept_lease) = (counters.lease(), counters.lease());
+    let mut recorded = Recorded::default();
+    let room = prepared
+        .program
+        .items()
+        .reserve_split(&selected, &mut recorded, &mut moved_lease, &mut kept_lease)
+        .unwrap();
+    // Moved rules and items; the moved arena's blocks, cells, columns,
+    // evidence (each product's statement evidence, and each run row's) and
+    // run ends; the kept rules and items.
+    assert_eq!(recorded.0, [1, 4, 3, 5, 2, 5, 3, 1, 2]);
+    let deferred = prepared.program.split_items(&selected, room);
+    assert_eq!(deferred.spare_room(), [0; 7]);
+    assert_eq!(prepared.program.items().spare_room()[..2], [0, 0]);
+    assert_eq!(shape(&deferred), [Some(1), Some(1), None, Some(3)]);
+    assert_eq!(shape(prepared.program.items()), [Some(3), None]);
+}
+
+#[test]
+fn retained_rules_keep_their_order_and_their_slots() {
+    let mut prepared = prepare("a(1). b:-a(1). c(2). d:-c(2). e:-a(1).");
+    let items = prepared.program.items_mut();
+    // In the program's canonical order: a's run, b's rule, c's run, and the
+    // rules of d and e.
+    assert_eq!(shape(items), [Some(1), None, Some(1), None, None]);
+    let locations: Vec<_> = items.rules().iter().map(|rule| rule.location).collect();
+    let mut decided = 0;
+    items.retain_rules(|_| {
+        decided += 1;
+        decided != 2
+    });
+    // Each rule is decided once, in rule order, and d's is dropped.
+    assert_eq!(decided, 3);
+    let kept: Vec<_> = items.rules().iter().map(|rule| rule.location).collect();
+    assert_eq!(kept, [locations[0], locations[2]]);
+    let slots: Vec<_> = items
+        .iter()
+        .map(|item| match item {
+            crate::formula_facts::Item::Rule(index, _) => Some(index),
+            crate::formula_facts::Item::Facts(_) => None,
+        })
+        .collect();
+    assert_eq!(slots, [None, Some(0), None, Some(1)]);
+}
+
 #[test]
 fn an_out_of_order_pool_of_fact_rows_still_corresponds() {
     // The variable producers of d defer d(3;1;2)'s rows, which follow its

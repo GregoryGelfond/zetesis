@@ -97,12 +97,14 @@ impl Prepared {
         self.items.take_rules()
     }
 
-    /// Move the items `selected` marks into their own sequence.
+    /// Move the items `selected` marks into their own sequence, in the `room`
+    /// reserved for them by [`crate::formula_facts::Items::reserve_split`].
     pub(crate) fn split_items(
         &mut self,
         selected: &[u8],
-    ) -> Result<crate::formula_facts::Items, std::collections::TryReserveError> {
-        self.items.split_off(selected)
+        room: crate::formula_facts::SplitRoom,
+    ) -> crate::formula_facts::Items {
+        self.items.split_off(selected, room)
     }
 
     /// The item sequence, for tests that edit the compiled program.
@@ -1073,15 +1075,13 @@ impl Compiler<'_> {
                 )?);
             }
         } else {
-            let start = parts.items.rules().len();
             self.source_rules(
                 statement,
                 &origins,
                 &mut parts.pool_projection_nodes,
-                parts.items.rules_vec(),
+                &mut parts.items,
                 &mut parts.analyzed,
             )?;
-            parts.items.note_rules(start);
         }
         Ok(())
     }

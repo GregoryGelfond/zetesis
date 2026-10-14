@@ -336,6 +336,20 @@ fn corpus_programs_agree_with_fact_rules() {
 }
 
 #[test]
+fn the_fact_arena_is_leased_for_everything_it_retains() {
+    // Every vector the arena grows is reserved through its lease, so the
+    // lease holds exactly the arena's retained capacity.
+    let directory = tempfile::tempdir().unwrap();
+    for (name, text) in shapes(200) {
+        let path = written(directory.path(), name, &text);
+        let prepared = prepare(&path).unwrap();
+        let (leased, retained) = prepared.preparation().program.items().arena_receipt();
+        assert!(retained > 0, "{name}");
+        assert_eq!(leased, Some(retained), "{name}");
+    }
+}
+
+#[test]
 fn a_run_holds_consecutive_one_row_statements_of_one_predicate() {
     let directory = tempfile::tempdir().unwrap();
     // Statements compile in the program's canonical order: the p facts first.

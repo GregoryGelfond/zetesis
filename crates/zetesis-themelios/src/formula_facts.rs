@@ -18,20 +18,18 @@
 //! item: it keeps its statements' rows in order, and a reader that counts items
 //! counts it once.
 //!
-//! Storage is O(admitted cells + evidence + blocks) and is reserved fallibly.
-//! Reading a row allocates nothing: a product's cell is selected from its
-//! column by the row's mixed-radix position.
+//! Storage is O(admitted cells + evidence + blocks). Every vector of an arena
+//! grows only through a caller's [`LeasedReserve`], which admits the growth
+//! before it is allocated; filling reserved room allocates nothing. Reading a
+//! row allocates nothing: a product's cell is selected from its column by the
+//! row's mixed-radix position.
 
-use std::collections::TryReserveError;
 use std::ops::Range;
 
-use crate::ProgramSite;
 use crate::formula_ir::RuleIr;
 use crate::formula_support::StorageLease;
 use crate::formula_support::components::{Predicate, Scalar};
-
-/// The bytes one position of the item sequence retains.
-pub(crate) const ITEM_BYTES: usize = size_of::<Slot>();
+use crate::{FormulaFailure, ProgramSite};
 
 /// One position of the item sequence.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -42,9 +40,32 @@ enum Slot {
     Facts(usize),
 }
 
-/// The prepared program in item order. The rules keep their relative order,
-/// so a rule's index among the rules is stable for readers that never see
-/// facts.
+/// Reserves room in a vector before anything is written to it, admitting the
+/// allocation under `lease` first. The lease holds every buffer its caller
+/// grows through it, so its receipt less `values`'s own capacity is the bytes
+/// it holds besides `values`.
+pub(crate) trait LeasedReserve {
+    /// Reserve room for `additional` more entries in `values`.
+    ///
+    /// # Errors
+    /// A refused admission, or an allocation failure, before `values` changes.
+    fn reserve_leased<T>(
+        &mut self,
+        values: &mut Vec<T>,
+        additional: usize,
+        lease: &mut StorageLease,
+    ) -> Result<(), FormulaFailure>;
+}
+
+/// The prepared program in item order.
+///
+/// Every rule has exactly one rule slot, and the `k`-th rule slot in item
+/// order names rule `k`. The rules therefore keep their relative order, a
+/// rule's index among the rules is stable for readers that never see facts,
+/// and a reader that pairs the rule slots with the rules in their stored order
+/// pairs each slot with its own rule. Each operation that adds, removes or
+/// moves rules keeps this: a rule is only ever appended through
+/// [`Self::push_rule`], which records its slot.
 #[derive(Default)]
 pub(crate) struct Items {
     rules: Vec<RuleIr>,
@@ -59,6 +80,15 @@ pub(crate) enum Item<'a> {
     Rule(usize, &'a RuleIr),
     /// A fact block, standing where its fact rules stood.
     Facts(FactBlock<'a>),
+}
+
+/// The room [`Items::reserve_split`] reserves before anything moves: the moved
+/// sequence with its vectors reserved for exactly what moves into them, and
+/// the kept rules' and items' replacement vectors.
+pub(crate) struct SplitRoom {
+    moved: Items,
+    kept_rules: Vec<RuleIr>,
+    kept_order: Vec<Slot>,
 }
 
 impl Items {
@@ -126,16 +156,10 @@ impl Items {
         std::mem::take(&mut self.rules)
     }
 
-    /// Record the rules appended to [`Self::rules_vec`] since there were
-    /// `start` rules, as the next items.
-    pub(crate) fn note_rules(&mut self, start: usize) {
-        self.order.extend((start..self.rules.len()).map(Slot::Rule));
-    }
-
-    /// The rule storage, for compilation steps that append several rules.
-    /// Callers record the appended rules with [`Self::note_rules`].
-    pub(crate) fn rules_vec(&mut self) -> &mut Vec<RuleIr> {
-        &mut self.rules
+    /// Append a rule as the last item, recording its slot.
+    pub(crate) fn push_rule(&mut self, rule: RuleIr) {
+        self.order.push(Slot::Rule(self.rules.len()));
+        self.rules.push(rule);
     }
 
     /// The fact arena under construction.
@@ -155,88 +179,131 @@ impl Items {
     }
 
     /// Keep the rules `keep` accepts and every fact block, in their order.
+    /// `keep` decides each rule once, in rule order. Allocates nothing: the
+    /// kept rules are compacted in place.
     pub(crate) fn retain_rules(&mut self, mut keep: impl FnMut(&RuleIr) -> bool) {
-        let mut renumbered = Vec::with_capacity(self.rules.len());
+        let rules = &mut self.rules;
+        // Rule slots name the rules in their stored order (the type's
+        // invariant), so the slots visit the rules in order: below `kept` lie
+        // the rules kept so far, from `kept` to the rule visited the rules
+        // dropped so far, and above it the rules not yet visited.
         let mut next = 0;
-        for rule in &self.rules {
-            if keep(rule) {
-                renumbered.push(Some(next));
-                next += 1;
-            } else {
-                renumbered.push(None);
-            }
-        }
-        let mut position = 0;
-        self.rules.retain(|_| {
-            let kept = renumbered[position].is_some();
-            position += 1;
-            kept
-        });
+        let mut kept = 0;
         self.order.retain_mut(|slot| match slot {
-            Slot::Rule(index) => match renumbered[*index] {
-                Some(new) => {
-                    *index = new;
+            Slot::Rule(index) => {
+                debug_assert_eq!(*index, next, "the k-th rule slot names rule k");
+                next += 1;
+                if keep(&rules[*index]) {
+                    rules.swap(kept, *index);
+                    *index = kept;
+                    kept += 1;
                     true
+                } else {
+                    false
                 }
-                None => false,
-            },
+            }
             Slot::Facts(_) => true,
         });
+        rules.truncate(kept);
     }
 
-    /// Move the items `selected` marks (one flag per item, nonzero to move) into
-    /// a new sequence, keeping both sequences' order. The moved fact blocks are
-    /// copied into the new sequence's own arena, which holds no lease: its
-    /// retained bytes are the caller's to charge. Their storage stays in this
-    /// arena, which keeps its capacity and lease; they are no longer its items.
+    /// Reserve, before anything moves, the room moving the items `selected`
+    /// marks (one flag per item, nonzero to move) needs:
+    /// - under `moved_lease`, the moved sequence's rules and items, and its
+    ///   arena's vectors, each for the summed requirement of everything that
+    ///   moves into it;
+    /// - under `kept_lease`, the replacement vectors of this sequence's kept
+    ///   rules and items.
+    ///
+    /// The moved arena holds no lease of its own: its bytes are
+    /// `moved_lease`'s.
     ///
     /// # Errors
-    /// Refuses an allocation failure before anything moves.
-    pub(crate) fn split_off(&mut self, selected: &[u8]) -> Result<Self, TryReserveError> {
+    /// A refused admission or allocation, before anything moves.
+    ///
+    /// # Panics
+    /// Panics if `selected` does not hold one flag per item.
+    pub(crate) fn reserve_split(
+        &self,
+        selected: &[u8],
+        room: &mut impl LeasedReserve,
+        moved_lease: &mut StorageLease,
+        kept_lease: &mut StorageLease,
+    ) -> Result<SplitRoom, FormulaFailure> {
         assert_eq!(selected.len(), self.order.len(), "one flag per item");
-        let moving = selected.iter().filter(|flag| **flag != 0).count();
-        let moving_rules = self
-            .order
-            .iter()
-            .zip(selected)
-            .filter(|(slot, flag)| **flag != 0 && matches!(slot, Slot::Rule(_)))
-            .count();
-        let mut moved = Self::default();
-        moved.rules.try_reserve_exact(moving_rules)?;
-        moved.order.try_reserve_exact(moving)?;
+        let mut moving = 0;
+        let mut moving_rules = 0;
+        let mut growth = Growth::default();
         for (slot, flag) in self.order.iter().zip(selected) {
-            if let (Slot::Facts(block), true) = (slot, *flag != 0) {
-                self.facts.reserve_copy(*block, &mut moved.facts)?;
+            if *flag == 0 {
+                continue;
+            }
+            moving += 1;
+            match *slot {
+                Slot::Rule(_) => moving_rules += 1,
+                Slot::Facts(block) => growth.add(self.facts.footprint(block)),
             }
         }
-        let mut kept_rules = Vec::new();
-        kept_rules.try_reserve_exact(self.rules.len() - moving_rules)?;
-        let mut kept_order = Vec::new();
-        kept_order.try_reserve_exact(self.order.len() - moving)?;
-        // Rule slots name the rules in their stored order.
+        let mut split = SplitRoom {
+            moved: Self::default(),
+            kept_rules: Vec::new(),
+            kept_order: Vec::new(),
+        };
+        room.reserve_leased(&mut split.moved.rules, moving_rules, moved_lease)?;
+        room.reserve_leased(&mut split.moved.order, moving, moved_lease)?;
+        split.moved.facts.reserve_in(growth, room, moved_lease)?;
+        room.reserve_leased(
+            &mut split.kept_rules,
+            self.rules.len() - moving_rules,
+            kept_lease,
+        )?;
+        room.reserve_leased(&mut split.kept_order, self.order.len() - moving, kept_lease)?;
+        Ok(split)
+    }
+
+    /// Move the items `selected` marks into the `room` that
+    /// [`Self::reserve_split`] reserved for them, keeping both sequences'
+    /// order, and return the moved sequence. Allocates nothing.
+    ///
+    /// The moved fact blocks are copied. Their storage stays in this arena,
+    /// which keeps its capacity and lease, and they are no longer its items:
+    /// until this arena is dropped, a moved block's cells and evidence are
+    /// held twice, here and in the moved sequence, each under its own lease.
+    ///
+    /// # Panics
+    /// Panics if `selected` does not hold one flag per item.
+    pub(crate) fn split_off(&mut self, selected: &[u8], room: SplitRoom) -> Self {
+        assert_eq!(selected.len(), self.order.len(), "one flag per item");
+        let SplitRoom {
+            mut moved,
+            mut kept_rules,
+            mut kept_order,
+        } = room;
+        // Rule slots name the rules in their stored order (the type's
+        // invariant), so the k-th rule slot takes the k-th rule.
         let mut rules = std::mem::take(&mut self.rules).into_iter();
         for (&slot, flag) in self.order.iter().zip(selected) {
             match (slot, *flag != 0) {
                 (Slot::Rule(_), true) => {
-                    moved.order.push(Slot::Rule(moved.rules.len()));
-                    moved
-                        .rules
-                        .push(rules.next().expect("one rule per rule slot"));
+                    push_reserved(&mut moved.order, Slot::Rule(moved.rules.len()));
+                    let rule = rules.next().expect("one rule per rule slot");
+                    push_reserved(&mut moved.rules, rule);
                 }
                 (Slot::Rule(_), false) => {
-                    kept_order.push(Slot::Rule(kept_rules.len()));
-                    kept_rules.push(rules.next().expect("one rule per rule slot"));
+                    push_reserved(&mut kept_order, Slot::Rule(kept_rules.len()));
+                    let rule = rules.next().expect("one rule per rule slot");
+                    push_reserved(&mut kept_rules, rule);
                 }
                 (Slot::Facts(block), true) => {
-                    moved.order.push(Slot::Facts(moved.facts.blocks.len()));
+                    push_reserved(&mut moved.order, Slot::Facts(moved.facts.blocks.len()));
                     self.facts.copy_block(block, &mut moved.facts);
                 }
-                (Slot::Facts(block), false) => kept_order.push(Slot::Facts(block)),
+                (Slot::Facts(block), false) => push_reserved(&mut kept_order, Slot::Facts(block)),
             }
         }
         self.rules = kept_rules;
         self.order = kept_order;
-        Ok(moved)
+        moved
     }
 
     /// The retained capacities of the rules' and arena's vectors, and of each
@@ -255,11 +322,26 @@ impl Items {
             + self.facts.retained_bytes() as u128
     }
 
-    /// Append a rule as the last item.
+    /// Each vector's unused capacity: the rules, the items, and the arena's
+    /// blocks, cells, columns, evidence and ends.
     #[cfg(test)]
-    pub(crate) fn push_rule(&mut self, rule: RuleIr) {
-        self.order.push(Slot::Rule(self.rules.len()));
-        self.rules.push(rule);
+    pub(crate) fn spare_room(&self) -> [usize; 7] {
+        let facts = &self.facts;
+        [
+            self.rules.capacity() - self.rules.len(),
+            self.order.capacity() - self.order.len(),
+            facts.blocks.capacity() - facts.blocks.len(),
+            facts.cells.capacity() - facts.cells.len(),
+            facts.columns.capacity() - facts.columns.len(),
+            facts.evidence.capacity() - facts.evidence.len(),
+            facts.ends.capacity() - facts.ends.len(),
+        ]
+    }
+
+    /// The bytes the arena's lease holds, and the arena's retained bytes.
+    #[cfg(test)]
+    pub(crate) fn arena_receipt(&self) -> (Option<usize>, usize) {
+        (self.facts.leased_bytes(), self.facts.retained_bytes())
     }
 
     /// Every admitted cell of the arena, for tests that edit a fact.
@@ -283,6 +365,46 @@ impl Items {
             Slot::Facts(_) => true,
         });
         rule
+    }
+}
+
+/// Append `value` to room reserved for it: the reservation admitted the
+/// allocation, and this push makes none.
+fn push_reserved<T>(values: &mut Vec<T>, value: T) {
+    debug_assert!(
+        values.len() < values.capacity(),
+        "pushed into reserved room"
+    );
+    values.push(value);
+}
+
+/// Append `slice` to room reserved for it, making no allocation.
+fn extend_reserved<T: Clone>(values: &mut Vec<T>, slice: &[T]) {
+    debug_assert!(
+        values.capacity() - values.len() >= slice.len(),
+        "extended into reserved room"
+    );
+    values.extend_from_slice(slice);
+}
+
+/// What a statement adds to an arena, or a split moves into one: entries per
+/// vector.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Growth {
+    pub(crate) blocks: usize,
+    pub(crate) cells: usize,
+    pub(crate) columns: usize,
+    pub(crate) evidence: usize,
+    pub(crate) ends: usize,
+}
+
+impl Growth {
+    fn add(&mut self, other: Self) {
+        self.blocks += other.blocks;
+        self.cells += other.cells;
+        self.columns += other.columns;
+        self.evidence += other.evidence;
+        self.ends += other.ends;
     }
 }
 
@@ -338,30 +460,54 @@ struct Column {
     stride: usize,
 }
 
-/// A statement's evidence in the arena, shared by the products it expands to.
+/// A statement's evidence in the arena, shared by the blocks it expands to.
 #[derive(Clone, Debug)]
 pub(crate) struct Evidence(Range<usize>);
 
 impl FactArena {
-    /// Store a statement's evidence once for the products it expands to.
-    pub(crate) fn store_evidence(
+    /// Reserve `growth` under the arena's lease, installed by `install` on
+    /// first use, admitting each vector's growth before it is allocated.
+    ///
+    /// # Errors
+    /// A refused admission or allocation, before the arena changes.
+    pub(crate) fn reserve(
         &mut self,
-        origins: &[ProgramSite],
-    ) -> Result<Evidence, TryReserveError> {
-        self.evidence.try_reserve(origins.len())?;
+        growth: Growth,
+        install: impl FnOnce() -> StorageLease,
+        room: &mut impl LeasedReserve,
+    ) -> Result<(), FormulaFailure> {
+        let mut lease = self.lease.take().unwrap_or_else(install);
+        let reserved = self.reserve_in(growth, room, &mut lease);
+        self.lease = Some(lease);
+        reserved
+    }
+
+    /// Reserve `growth` in each vector under `lease`.
+    fn reserve_in(
+        &mut self,
+        growth: Growth,
+        room: &mut impl LeasedReserve,
+        lease: &mut StorageLease,
+    ) -> Result<(), FormulaFailure> {
+        room.reserve_leased(&mut self.blocks, growth.blocks, lease)?;
+        room.reserve_leased(&mut self.cells, growth.cells, lease)?;
+        room.reserve_leased(&mut self.columns, growth.columns, lease)?;
+        room.reserve_leased(&mut self.evidence, growth.evidence, lease)?;
+        room.reserve_leased(&mut self.ends, growth.ends, lease)
+    }
+
+    /// Store a statement's evidence once for the blocks it expands to, in
+    /// reserved room.
+    pub(crate) fn store_evidence(&mut self, origins: &[ProgramSite]) -> Evidence {
         let start = self.evidence.len();
-        self.evidence.extend_from_slice(origins);
-        Ok(Evidence(start..self.evidence.len()))
+        extend_reserved(&mut self.evidence, origins);
+        Evidence(start..self.evidence.len())
     }
 
-    /// Reserve room for `additional` admitted cells.
-    pub(crate) fn reserve_cells(&mut self, additional: usize) -> Result<(), TryReserveError> {
-        self.cells.try_reserve(additional)
-    }
-
-    /// Append one admitted cell to the block under construction.
+    /// Append one admitted cell to the block under construction, in reserved
+    /// room.
     pub(crate) fn push_cell(&mut self, cell: Scalar) {
-        self.cells.push(cell);
+        push_reserved(&mut self.cells, cell);
     }
 
     /// The number of admitted cells so far, the start of the next column or row.
@@ -369,86 +515,85 @@ impl FactArena {
         self.cells.len()
     }
 
-    /// Start a product of `predicate` over the columns whose cells begin at
-    /// each of `starts` and run to the next start, the last one to the current
-    /// cell count. The product has as many rows as the columns' widths
-    /// multiply to, and its rows share `evidence`.
+    /// Start a product of `predicate`, in reserved room, over the columns
+    /// whose cells begin at each of `starts` and run to the next start, the
+    /// last one to the current cell count. The product has as many rows as the
+    /// columns' widths multiply to, and its rows share `evidence`.
     pub(crate) fn push_product(
         &mut self,
         predicate: Predicate,
         starts: &[usize],
         evidence: &Evidence,
-    ) -> Result<usize, TryReserveError> {
-        self.columns.try_reserve(starts.len())?;
-        self.blocks.try_reserve(1)?;
+    ) -> usize {
         let first = self.columns.len();
         // Last column fastest: a column advances once every row of the
         // columns after it has passed.
         let mut stride = 1_usize;
         let mut end = self.cells.len();
         for &start in starts.iter().rev() {
-            self.columns.push(Column {
-                cells: start..end,
-                stride,
-            });
+            push_reserved(
+                &mut self.columns,
+                Column {
+                    cells: start..end,
+                    stride,
+                },
+            );
             stride = stride.saturating_mul(end - start);
             end = start;
         }
         self.columns[first..].reverse();
         let block = self.blocks.len();
-        self.blocks.push(Block {
-            predicate,
-            arity: starts.len(),
-            rows: stride,
-            layout: Layout::Product {
-                columns: first..self.columns.len(),
-                evidence: evidence.0.clone(),
+        push_reserved(
+            &mut self.blocks,
+            Block {
+                predicate,
+                arity: starts.len(),
+                rows: stride,
+                layout: Layout::Product {
+                    columns: first..self.columns.len(),
+                    evidence: evidence.0.clone(),
+                },
             },
-        });
-        Ok(block)
+        );
+        block
     }
 
-    /// Start a run of `predicate` whose first row is the `arity` cells pushed
-    /// last, with `evidence`.
+    /// Start a run of `predicate`, in reserved room, whose first row is the
+    /// `arity` cells pushed last, with `evidence`.
     pub(crate) fn push_run(
         &mut self,
         predicate: Predicate,
         arity: usize,
         evidence: &Evidence,
-    ) -> Result<usize, TryReserveError> {
-        self.blocks.try_reserve(1)?;
-        self.ends.try_reserve(1)?;
+    ) -> usize {
         let block = self.blocks.len();
-        self.blocks.push(Block {
-            predicate,
-            arity,
-            rows: 1,
-            layout: Layout::Run {
-                cells: self.cells.len() - arity,
-                ends: self.ends.len(),
-                evidence: evidence.0.start,
+        push_reserved(
+            &mut self.blocks,
+            Block {
+                predicate,
+                arity,
+                rows: 1,
+                layout: Layout::Run {
+                    cells: self.cells.len() - arity,
+                    ends: self.ends.len(),
+                    evidence: evidence.0.start,
+                },
             },
-        });
-        self.ends.push(evidence.0.end);
-        Ok(block)
+        );
+        push_reserved(&mut self.ends, evidence.0.end);
+        block
     }
 
-    /// Continue the run `block` with the row of cells pushed last, whose
-    /// evidence was stored last.
-    pub(crate) fn extend_run(
-        &mut self,
-        block: usize,
-        evidence: &Evidence,
-    ) -> Result<(), TryReserveError> {
-        self.ends.try_reserve(1)?;
+    /// Continue the run `block`, in reserved room, with the row of cells
+    /// pushed last, whose evidence was stored last.
+    pub(crate) fn extend_run(&mut self, block: usize, evidence: &Evidence) {
         debug_assert_eq!(
             self.ends.last().copied(),
             Some(evidence.0.start),
             "a run's rows store their evidence contiguously"
         );
-        self.ends.push(evidence.0.end);
+        push_reserved(&mut self.ends, evidence.0.end);
         self.blocks[block].rows += 1;
-        Ok(())
     }
 
     /// The last run, if its source predicate is `predicate`: its block and its
@@ -475,53 +620,55 @@ impl FactArena {
             + self.ends.capacity() * size_of::<usize>()
     }
 
-    /// The lease holding the arena's retained bytes, installed by `install`
-    /// on first use.
-    pub(crate) fn lease(&mut self, install: impl FnOnce() -> StorageLease) -> &mut StorageLease {
-        self.lease.get_or_insert_with(install)
+    /// The bytes the arena's lease holds, if it has one.
+    #[cfg(test)]
+    pub(crate) fn leased_bytes(&self) -> Option<usize> {
+        self.lease.as_ref().map(StorageLease::bytes)
     }
 
-    /// Reserve, in `target`, everything [`Self::copy_block`] appends for `block`.
-    fn reserve_copy(&self, block: usize, target: &mut Self) -> Result<(), TryReserveError> {
-        let facts = FactBlock { arena: self, block };
-        target.blocks.try_reserve(1)?;
-        target.cells.try_reserve(facts.cells().len())?;
+    /// What [`Self::copy_block`] appends for `block`, per vector.
+    fn footprint(&self, block: usize) -> Growth {
+        let source = FactBlock { arena: self, block };
+        let mut growth = Growth {
+            blocks: 1,
+            cells: source.cells().len(),
+            ..Growth::default()
+        };
         match &self.blocks[block].layout {
             Layout::Product { columns, evidence } => {
-                target.columns.try_reserve(columns.len())?;
-                target.evidence.try_reserve(evidence.len())?;
+                growth.columns = columns.len();
+                growth.evidence = evidence.len();
             }
             Layout::Run { .. } => {
-                target.ends.try_reserve(self.blocks[block].rows)?;
-                let rows = facts.rows();
-                let evidence = rows.map(|row| row.evidence().len()).sum();
-                target.evidence.try_reserve(evidence)?;
+                growth.ends = self.blocks[block].rows;
+                growth.evidence = source.rows().map(|row| row.evidence().len()).sum();
             }
         }
-        Ok(())
+        growth
     }
 
-    /// Append a copy of `block` to `target`, whose room
-    /// [`Self::reserve_copy`] reserved.
+    /// Append a copy of `block` to `target`, in the room its
+    /// [`Self::footprint`] reserved there.
     fn copy_block(&self, block: usize, target: &mut Self) {
         let source = &self.blocks[block];
         let facts = FactBlock { arena: self, block };
         let cells = target.cells.len();
-        target.cells.extend_from_slice(facts.cells());
+        extend_reserved(&mut target.cells, facts.cells());
         let layout = match &source.layout {
             Layout::Product { columns, evidence } => {
                 let first = target.columns.len();
                 for column in &self.columns[columns.clone()] {
                     let start = cells + (column.cells.start - facts.cells_start());
-                    target.columns.push(Column {
-                        cells: start..start + column.cells.len(),
-                        stride: column.stride,
-                    });
+                    push_reserved(
+                        &mut target.columns,
+                        Column {
+                            cells: start..start + column.cells.len(),
+                            stride: column.stride,
+                        },
+                    );
                 }
                 let start = target.evidence.len();
-                target
-                    .evidence
-                    .extend_from_slice(&self.evidence[evidence.clone()]);
+                extend_reserved(&mut target.evidence, &self.evidence[evidence.clone()]);
                 Layout::Product {
                     columns: first..target.columns.len(),
                     evidence: start..target.evidence.len(),
@@ -531,8 +678,8 @@ impl FactArena {
                 let ends = target.ends.len();
                 let evidence = target.evidence.len();
                 for row in facts.rows() {
-                    target.evidence.extend_from_slice(row.evidence());
-                    target.ends.push(target.evidence.len());
+                    extend_reserved(&mut target.evidence, row.evidence());
+                    push_reserved(&mut target.ends, target.evidence.len());
                 }
                 Layout::Run {
                     cells,
@@ -541,12 +688,15 @@ impl FactArena {
                 }
             }
         };
-        target.blocks.push(Block {
-            predicate: source.predicate,
-            arity: source.arity,
-            rows: source.rows,
-            layout,
-        });
+        push_reserved(
+            &mut target.blocks,
+            Block {
+                predicate: source.predicate,
+                arity: source.arity,
+                rows: source.rows,
+                layout,
+            },
+        );
     }
 }
 
@@ -610,24 +760,6 @@ impl<'a> FactBlock<'a> {
             Layout::Run { cells, .. } => cells + self.block().rows * self.block().arity,
         };
         &self.arena.cells[start..end]
-    }
-
-    /// The bytes the block retains in its arena: its block entry, cells,
-    /// columns and evidence.
-    pub(crate) fn retained_bytes(self) -> usize {
-        let (columns, evidence, ends) = match &self.block().layout {
-            Layout::Product { columns, evidence } => (columns.len(), evidence.len(), 0),
-            Layout::Run { .. } => (
-                0,
-                self.rows().map(|row| row.evidence().len()).sum(),
-                self.len(),
-            ),
-        };
-        size_of::<Block>()
-            + size_of_val(self.cells())
-            + columns * size_of::<Column>()
-            + evidence * size_of::<ProgramSite>()
-            + ends * size_of::<usize>()
     }
 
     /// The rows in expansion order.

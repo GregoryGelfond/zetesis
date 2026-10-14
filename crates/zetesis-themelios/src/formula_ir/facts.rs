@@ -2,24 +2,34 @@
 
 use zetesis_core::Value;
 
-use super::Compiler;
+use super::{Compiler, Counters, components};
+use crate::expansion::Budget;
 use crate::fact_expansion::{Cell, Facts, ProductView};
 use crate::formula::ceiling;
-use crate::formula_facts::Items;
+use crate::formula_facts::{Growth, Items, LeasedReserve};
 use crate::formula_support::components::Scalar;
-use crate::{FormulaFailure, FormulaResource, ProgramSite};
+use crate::formula_support::{StorageLease, growth_target};
+use crate::{FormulaFailure, FormulaLimits, FormulaResource, ProgramSite};
+use zetesis_core::catalog::{AssignmentError, AssignmentFailure, Error};
 
 impl Compiler<'_> {
-    /// Store a fact statement's products in the arena as items, where its fact
-    /// rules would have stood.
+    /// Store a fact statement's products in the arena as fact blocks, where
+    /// its fact rules would have stood.
     ///
     /// Each product's arity ceiling and predicate admission run once: every row
     /// of a product shares its predicate, so the ceiling's verdict is its first
     /// row's, at the same statement site. Each column value's scalar admission
     /// runs once, however many rows select it. The statement's evidence is
-    /// stored once for all its products. A one-row statement of the predicate of
+    /// stored once for all its blocks. A one-row statement of the predicate of
     /// the run that is the last item continues that run, reusing its admitted
     /// predicate.
+    ///
+    /// After a product's admissions and before the arena grows, the growth it
+    /// needs (its cells, its block entry and columns or its run row's end, and
+    /// with the first product the statement's evidence) is admitted against
+    /// the support workspace through the arena's lease. Each vector grows
+    /// geometrically when its whole replacement fits the allowance, and
+    /// exactly otherwise, as the support's other leased storage grows.
     pub(super) fn facts(
         &mut self,
         facts: &Facts,
@@ -32,12 +42,8 @@ impl Compiler<'_> {
             // An empty family has no row and so nothing to store.
             return Ok(());
         }
-        let previous = items.arena().retained_bytes();
-        let evidence = items
-            .arena()
-            .store_evidence(origins)
-            .map_err(|error| allocation(error, location))?;
         let single = facts.products().nth(1).is_none();
+        let mut evidence = None;
         for product in facts.products() {
             let source = product.predicate();
             ceiling(
@@ -46,7 +52,7 @@ impl Compiler<'_> {
                 self.options.core_limits.max_predicate_arity as u128,
                 location,
             )?;
-            scratch.layout(product, location)?;
+            scratch.layout(product, self.budget, location)?;
             let run = single && product.len() == 1;
             let open = items
                 .arena()
@@ -75,40 +81,54 @@ impl Compiler<'_> {
                     scratch.admitted[start + offset] = Some(self.cell(value)?);
                 }
             }
+            let mut growth = Growth {
+                cells: scratch.admitted.len(),
+                ..Growth::default()
+            };
+            if evidence.is_none() {
+                growth.evidence = origins.len();
+            }
+            if open.is_some() {
+                growth.ends = 1;
+            } else if run {
+                growth.blocks = 1;
+                growth.ends = 1;
+            } else {
+                growth.blocks = 1;
+                growth.columns = scratch.starts.len();
+            }
+            let mut room = ArenaGrowth {
+                source: &self.source,
+                limits: self.limits,
+                counters: self.counters,
+                location,
+            };
+            items
+                .arena()
+                .reserve(growth, || self.source.lease(), &mut room)?;
             let arena = items.arena();
-            arena
-                .reserve_cells(scratch.admitted.len())
-                .map_err(|error| allocation(error, location))?;
+            let evidence = evidence.get_or_insert_with(|| arena.store_evidence(origins));
             let first = arena.cell_count();
             for cell in scratch.admitted.drain(..) {
                 arena.push_cell(cell.expect("every column value is admitted"));
             }
             if let Some((block, _)) = open {
-                items
-                    .arena()
-                    .extend_run(block, &evidence)
-                    .map_err(|error| allocation(error, location))?;
+                arena.extend_run(block, evidence);
                 continue;
             }
             let block = if run {
-                let block = items
-                    .arena()
-                    .push_run(predicate, source.arity(), &evidence)
-                    .map_err(|error| allocation(error, location))?;
-                items.arena().open(source.clone(), block);
+                let block = arena.push_run(predicate, source.arity(), evidence);
+                arena.open(source.clone(), block);
                 block
             } else {
                 for start in &mut scratch.starts {
                     *start += first;
                 }
-                items
-                    .arena()
-                    .push_product(predicate, &scratch.starts, &evidence)
-                    .map_err(|error| allocation(error, location))?
+                arena.push_product(predicate, &scratch.starts, evidence)
             };
             items.note_block(block);
         }
-        self.observe(items, previous)
+        Ok(())
     }
 
     /// Admit one column value, as a fact rule's head admitted each of its terms.
@@ -118,21 +138,71 @@ impl Compiler<'_> {
             Column::Number(number) => self.root_scalar(&Value::Number(number)),
         }
     }
+}
 
-    /// Charge the arena's retained capacities to the support workspace, as its
-    /// neighbouring compiler storage is charged.
-    fn observe(&mut self, items: &mut Items, previous: usize) -> Result<(), FormulaFailure> {
-        let bytes = items.arena().retained_bytes();
-        let lease = items.arena().lease(|| self.source.lease());
-        lease.observe(bytes, self.location)?;
-        self.source.storage_observed(
+/// Grows the fact arena under its lease in the compiler's support workspace,
+/// admitting each vector's whole replacement (the vector's old and new
+/// capacity, beside every other buffer the lease holds) before allocating it:
+/// geometrically when that replacement fits the allowance, exactly when only
+/// the requirement does. The arena's growth charges storage, not work, as the
+/// compiler's other storage does.
+struct ArenaGrowth<'c, 'a> {
+    source: &'c components::Admission<'a>,
+    limits: &'c FormulaLimits,
+    counters: &'c Counters,
+    location: ProgramSite,
+}
+
+impl LeasedReserve for ArenaGrowth<'_, '_> {
+    fn reserve_leased<T>(
+        &mut self,
+        values: &mut Vec<T>,
+        additional: usize,
+        lease: &mut StorageLease,
+    ) -> Result<(), FormulaFailure> {
+        let previous = lease.bytes();
+        let others = previous
+            .checked_sub(values.capacity() * size_of::<T>())
+            .expect("the arena's lease holds each vector it grows");
+        let maximum = self.source.allowance(lease, self.limits, self.location)?;
+        let result = growth_target::<T>(
+            values.len(),
+            values.capacity(),
+            additional,
+            others,
+            maximum,
+            true,
+        )
+        .and_then(|target| match target {
+            None => Ok(()),
+            Some(target) => values
+                .try_reserve_exact(target - values.len())
+                .map_err(|_| {
+                    AssignmentFailure::Assignment(AssignmentError::Storage(Error::Allocation))
+                }),
+        });
+        let actual = values
+            .capacity()
+            .checked_mul(size_of::<T>())
+            .and_then(|bytes| bytes.checked_add(others))
+            .ok_or_else(|| {
+                crate::formula_binding::assignment(
+                    AssignmentError::Storage(Error::Overflow),
+                    self.location,
+                )
+            })?;
+        lease.observe(actual, self.location)?;
+        let observed = self.source.storage_observed(
             lease,
             previous,
-            0,
+            others,
             self.limits,
             self.counters,
             self.location,
-        )
+        );
+        self.source
+            .storage_result(result, lease, self.limits, self.location)?;
+        observed
     }
 }
 
@@ -187,19 +257,25 @@ pub(super) struct Scratch {
 
 impl Scratch {
     /// Lay out `product`'s columns: each column's start among its cells, and an
-    /// empty slot per cell.
+    /// empty slot per cell. The scratch is charged to the expansion's scalar
+    /// bytes as it is reserved, as the compiler's other buffers are; it is
+    /// reused across statements, so only its growth is charged.
     fn layout(
         &mut self,
         product: ProductView<'_>,
+        budget: &mut Budget,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.starts.clear();
         self.admitted.clear();
+        crate::formula_pattern::reserve_amortized(
+            &mut self.starts,
+            product.columns().count(),
+            budget,
+            location,
+        )?;
         let mut total = 0_usize;
         for column in product.columns() {
-            self.starts
-                .try_reserve(1)
-                .map_err(|error| allocation(error, location))?;
             self.starts.push(total);
             for cell in column {
                 total = total.saturating_add(match cell {
@@ -210,16 +286,10 @@ impl Scratch {
                 });
             }
         }
-        self.admitted
-            .try_reserve(total)
-            .map_err(|error| allocation(error, location))?;
+        crate::formula_pattern::reserve_amortized(&mut self.admitted, total, budget, location)?;
         self.admitted.resize(total, None);
         Ok(())
     }
-}
-
-fn allocation(error: std::collections::TryReserveError, location: ProgramSite) -> FormulaFailure {
-    FormulaFailure::AtomAllocation { error, location }
 }
 
 /// The reference path the differential tests compare the arena against.
@@ -248,5 +318,139 @@ pub(crate) mod testing {
         }
         let _restore = Restore(FACTS_AS_RULES.with(|cell| cell.replace(true)));
         body()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use themelios_program::program::{Atom, Rule, Statement};
+    use themelios_program::provenance::WithProvenance;
+    use themelios_program::symbol::Name;
+    use themelios_program::term::Term;
+
+    use super::{ArenaGrowth, Scratch};
+    use crate::expansion::Budget;
+    use crate::formula_facts::{FactArena, Growth};
+    use crate::formula_ir::Compiler;
+    use crate::formula_ir::testing::with_compiler;
+    use crate::formula_support::components::Scalar;
+    use crate::{
+        ExpansionLimits, FormulaFailure, FormulaLimits, FormulaResource, ProgramSite, StatementId,
+    };
+
+    /// `p(1..upper).`
+    fn interval(upper: i32) -> WithProvenance<Statement> {
+        WithProvenance::constructed(
+            Rule::fact(Atom::new(
+                Name::new("p").unwrap(),
+                [Term::Interval {
+                    lower: Box::new(1.into()),
+                    upper: Box::new(upper.into()),
+                }],
+            ))
+            .into(),
+        )
+    }
+
+    #[test]
+    fn the_fact_scratch_is_charged_as_it_grows() {
+        let location = ProgramSite::statement(StatementId::new(0), None);
+        let mut expansion = Budget::new(ExpansionLimits::default(), 100);
+        let wide = crate::fact_expansion::facts(&interval(10), &mut expansion, location)
+            .unwrap()
+            .unwrap();
+        let narrow = crate::fact_expansion::facts(&interval(4), &mut expansion, location)
+            .unwrap()
+            .unwrap();
+        let mut budget = Budget::new(ExpansionLimits::default(), 100);
+        let mut scratch = Scratch::default();
+        let charged = size_of::<usize>() + 10 * size_of::<Option<Scalar>>();
+        scratch
+            .layout(wide.products().next().unwrap(), &mut budget, location)
+            .unwrap();
+        assert_eq!(budget.usage().scalar_bytes, charged);
+        // A narrower product reuses the room, and nothing more is charged.
+        scratch
+            .layout(narrow.products().next().unwrap(), &mut budget, location)
+            .unwrap();
+        assert_eq!(budget.usage().scalar_bytes, charged);
+    }
+
+    /// Limits that leave the fact arena `bytes` of support storage beside
+    /// what the compiler's workspace already holds.
+    fn allowing(compiler: &Compiler<'_>, bytes: usize) -> FormulaLimits {
+        let defaults = FormulaLimits::default();
+        let probe = compiler.source.lease();
+        let outside = defaults.max_support_bytes
+            - compiler
+                .source
+                .allowance(&probe, &defaults, compiler.location)
+                .unwrap();
+        FormulaLimits {
+            max_support_bytes: outside + bytes,
+            ..defaults
+        }
+    }
+
+    #[test]
+    fn arena_growth_beyond_the_allowance_is_refused_before_allocating() {
+        with_compiler(ExpansionLimits::default(), |compiler| {
+            let limits = allowing(compiler, 1024);
+            let mut arena = FactArena::default();
+            let mut room = ArenaGrowth {
+                source: &compiler.source,
+                limits: &limits,
+                counters: compiler.counters,
+                location: compiler.location,
+            };
+            let growth = Growth {
+                cells: 1024,
+                ..Growth::default()
+            };
+            let refused = arena.reserve(growth, || compiler.source.lease(), &mut room);
+            assert!(matches!(
+                refused,
+                Err(FormulaFailure::Limit {
+                    resource: FormulaResource::SupportBytes,
+                    ..
+                })
+            ));
+            assert_eq!(arena.retained_bytes(), 0);
+        });
+    }
+
+    #[test]
+    fn arena_growth_takes_exact_room_when_only_that_fits() {
+        // Four cells grow to five: doubling to eight would hold the old four
+        // and the new eight at once, twelve cells, past an allowance of ten,
+        // where the exact five with the old four, nine, fit.
+        let cell = size_of::<Scalar>();
+        with_compiler(ExpansionLimits::default(), |compiler| {
+            let one = compiler
+                .root_scalar(&zetesis_core::Value::Number(1))
+                .unwrap();
+            let limits = allowing(compiler, 10 * cell);
+            let mut arena = FactArena::default();
+            let mut room = ArenaGrowth {
+                source: &compiler.source,
+                limits: &limits,
+                counters: compiler.counters,
+                location: compiler.location,
+            };
+            let cells = |cells| Growth {
+                cells,
+                ..Growth::default()
+            };
+            arena
+                .reserve(cells(4), || compiler.source.lease(), &mut room)
+                .unwrap();
+            for _ in 0..4 {
+                arena.push_cell(one);
+            }
+            arena
+                .reserve(cells(1), || compiler.source.lease(), &mut room)
+                .unwrap();
+            assert_eq!(arena.retained_bytes(), 5 * cell);
+        });
     }
 }

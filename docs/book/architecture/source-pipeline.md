@@ -90,7 +90,7 @@ those instructions rather than interpreting the plan as new program semantics.
 | Source catalog and includes | `bundle`, `bundle_admission` | Original files, paths, source identities and located failures |
 | Diagnostic and strict-profile checks | `profile`, `diagnostic`, `source_diagnostics` | Typed refusals and source views; no recovered partial program |
 | Relational templates | `compile`, `extended`, `expansion`, `fact_expansion` | Closed values, bounded constants/arithmetic/fact expansion and template admission |
-| Fact products | `formula_facts`, `formula_ir::facts` | On the formula route, facts held as columnar products of admitted values with their statements' evidence, standing in item order where rules with empty bodies would have stood |
+| Fact blocks | `formula_facts`, `formula_ir::facts` | On the formula route, facts held in fact blocks, products and runs of admitted values, with their statements' evidence, standing in item order where rules with empty bodies would have stood |
 | Classical negation | `coherence` | Distinct signed predicates and consistency constraints |
 | Semantic value conversion | `structural_value`, `scalar_arithmetic`, `formula_value` | Typed closed values and checked arithmetic; no atom support |
 | Formula preparation | `formula`, `formula::preparation`, `formula_ir` | Public owned preparation, scoped rule/objective IR and cumulative budgets |

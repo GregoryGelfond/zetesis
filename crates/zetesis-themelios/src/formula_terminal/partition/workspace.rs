@@ -3,12 +3,13 @@
 use crate::ProgramSite;
 use zetesis_core::{PatternRef, TemplateComponentsRef};
 
+use crate::formula_facts::LeasedReserve;
 use crate::formula_support::{
     Counters, GroundingWork, StorageLease,
     components::{Admission, Pattern},
     reserve_exact_scoped,
 };
-use crate::{FormulaFailure, FormulaLimits};
+use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
 pub(super) struct Context<'a, 'source> {
     pub admission: &'a Admission<'source>,
@@ -117,28 +118,6 @@ impl<T> Scratch<T> {
         )
     }
 
-    pub(super) fn retain_existing(
-        &mut self,
-        bytes: usize,
-        context: &Context<'_, '_>,
-    ) -> Result<(), FormulaFailure> {
-        // This is a change of ownership for buffers that are already live,
-        // not an allocating replacement or a proposed allocation envelope.
-        self.lease.observe(bytes, context.location)?;
-        context.admission.storage_observed(
-            &self.lease,
-            0,
-            0,
-            context.limits,
-            context.counters,
-            context.location,
-        )
-    }
-
-    pub(super) fn into_leased_values(self) -> (Vec<T>, StorageLease) {
-        (self.values, self.lease)
-    }
-
     pub(super) fn push(
         &mut self,
         value: T,
@@ -151,5 +130,81 @@ impl<T> Scratch<T> {
         context.work()?;
         self.values.push(value);
         Ok(())
+    }
+}
+
+/// Exact reservations under the partition's leases, each admitted before it is
+/// allocated.
+impl LeasedReserve for Context<'_, '_> {
+    fn reserve_leased<T>(
+        &mut self,
+        values: &mut Vec<T>,
+        additional: usize,
+        lease: &mut StorageLease,
+    ) -> Result<(), FormulaFailure> {
+        let others = lease
+            .bytes()
+            .checked_sub(values.capacity() * size_of::<T>())
+            .expect("the lease holds each vector it reserves");
+        self.reserve(values, additional, lease, others)
+    }
+}
+
+/// A lease on storage the partition admits without holding it in a buffer of
+/// its own: the vectors a split reserves, and the live buffers whose owner a
+/// move changes.
+pub(super) struct Lease(StorageLease);
+
+impl Lease {
+    pub(super) fn new(context: &Context<'_, '_>) -> Result<Self, FormulaFailure> {
+        let mut lease = context.admission.lease();
+        lease.observe(size_of::<Self>(), context.location)?;
+        context.admission.storage_observed(
+            &lease,
+            0,
+            size_of::<Self>(),
+            context.limits,
+            context.counters,
+            context.location,
+        )?;
+        Ok(Self(lease))
+    }
+
+    /// The lease, for reservations made under it.
+    pub(super) fn get_mut(&mut self) -> &mut StorageLease {
+        &mut self.0
+    }
+
+    /// Add `bytes` of buffers that are already live and whose owner the move
+    /// changes. Nothing is allocated: the receipt grows by what changes owner,
+    /// and the workspace's total must still fit.
+    pub(super) fn retain_existing(
+        &mut self,
+        bytes: usize,
+        context: &Context<'_, '_>,
+    ) -> Result<(), FormulaFailure> {
+        let total = self
+            .0
+            .bytes()
+            .checked_add(bytes)
+            .ok_or(FormulaFailure::Limit {
+                resource: FormulaResource::SupportBytes,
+                observed: self.0.bytes() as u128 + bytes as u128,
+                limit: context.limits.max_support_bytes as u128,
+                location: context.location,
+            })?;
+        self.0.observe(total, context.location)?;
+        context.admission.storage_observed(
+            &self.0,
+            0,
+            0,
+            context.limits,
+            context.counters,
+            context.location,
+        )
+    }
+
+    pub(super) fn into_lease(self) -> StorageLease {
+        self.0
     }
 }
