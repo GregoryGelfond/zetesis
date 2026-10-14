@@ -1100,7 +1100,9 @@ the plan is released before completed support is returned. These
 checks qualify support scheduling, not satisfiability, unique-answer claims or
 source-to-Rust semantic refinement. Richer programs keep the existing schedule.
 `GroundingWork.support_producer_visits` counts charged entries into actual rule
-variant traversal; `support_snapshot_preparations` counts charged growing
+variant traversal; `support_unchanged_visits` counts the rich-producer visits
+that ended at the registration's test below, without a traversal;
+`support_snapshot_preparations` counts charged growing
 snapshot attempts, including attempts that subsequently fail. These optional
 fields do not retroactively turn missing historical observations into zeros.
 The [producer scheduling laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/producer-scheduling.md)
@@ -1157,7 +1159,20 @@ the cursor does not first prepare an unrestricted order and then replace it.
 An ordinary producer without positive inputs runs once, even if it has negative
 non-input atoms. Changing such atoms' possible presence cannot enable another
 head proposal, because support generation ignores their truth. Aggregate,
-conditional, projected and nonnormal producers retain full-round traversal.
+conditional, projected and nonnormal producers are traversed in full when they
+are traversed at all. Without a whole-program plan, each producer is registered
+once per completion: an ordinary producer with its positive occurrences, and
+such a rich producer with its read set, the distinct signed predicates of every
+atom occurrence in its body and its head elements' conditions, at every depth
+and of either sign. After the first round, a rich producer is traversed exactly
+when one of its read predicates gained rows at the last publication. Otherwise
+every relation it reads is the one its last traversal read, and support
+membership only grows, so another traversal would follow the same plan over the
+same rows and propose only heads already supported. Facts have no producer slot:
+a fact's rows are published at the end of the first round and wake a rich
+producer that reads them in the second. The
+[scheduling law](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/producer-scheduling.md)
+covers both registrations.
 Structural occurrences use the original whole-row capture and the same nested
 constructor, constant, repeated-variable and anonymous-pattern checks. Bound
 structural postings intersect the old/new interval by actual relation row position.
@@ -1181,7 +1196,11 @@ corresponding gate-invariance law for mathematical normalized rules. Connecting
 the compiler's typed instances and checked expressions to that law remains a
 representation obligation. Scheduling fewer old combinations can change the
 charged work and the first bounded refusal; it does not change the cumulative
-generated-value population or turn a failed attempt into completed support.
+generated-value population or turn a failed attempt into completed support. The
+same holds for rich producers that the registration does not traverse: their
+skipped traversals no longer charge work, while each later visit charges its read
+set's test, so a work ceiling can be reached earlier or later than before, and
+the registration's bytes count against `max_support_bytes` for the completion.
 
 The [support builder](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs)
 returns `CompletedCatalog` only after an entire round adds no atom. Its

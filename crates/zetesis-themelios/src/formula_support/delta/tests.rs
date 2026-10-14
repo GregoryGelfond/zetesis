@@ -7,10 +7,11 @@ use std::cell::Cell;
 use themelios_program::program::DefaultNegation;
 use zetesis_core::{Atom, AtomPattern, Predicate, Term, Value, ValueLimits};
 
-use super::{Variant, variants};
+use super::Variant;
 use crate::expansion::Budget;
 use crate::formula_ir::{HeadIr, HeadLiteral, HeadOperand, LiteralIr, RuleIr};
 use crate::formula_support::components::Pattern;
+use crate::formula_support::producers::Registration;
 use crate::formula_support::{Computation, Counters, Join, Support, testing::Fixture};
 use crate::test_support::location;
 use crate::{ExpansionLimits, FormulaLimits};
@@ -69,6 +70,25 @@ fn rule(fixture: &mut Fixture, body: Vec<LiteralIr>, slots: usize) -> RuleIr {
         origins: vec![location()],
         location: location(),
     }
+}
+
+/// The registration of `rule` alone, as completion prepares it without
+/// a producer plan; its producer index is zero.
+fn registered<'a>(
+    rule: &'a RuleIr,
+    support: &Support<'_>,
+    limits: &FormulaLimits,
+    counters: &mut Counters,
+) -> Registration<'a> {
+    Registration::prepare(
+        std::slice::from_ref(rule),
+        support.components(),
+        0,
+        limits,
+        counters,
+        location(),
+    )
+    .unwrap()
 }
 
 fn catalog() -> Fixture {
@@ -130,7 +150,10 @@ fn noninputs_preserve_disjoint_source_occurrences() {
     let rule = rule(&mut fixture, body, 2);
     let limits = FormulaLimits::default();
     fixture.with(location(), |support, computation, counters| {
-        let mut schedule = variants(&rule, support, false, &limits, counters).unwrap();
+        let registration = registered(&rule, support, &limits, counters);
+        let mut schedule = registration
+            .variants(0, &rule, support, false, &limits, counters)
+            .unwrap();
         let mut pivots = Vec::new();
         let mut actual = Vec::new();
         while let Some(variant) = schedule.next(&limits, counters).unwrap() {
@@ -272,13 +295,18 @@ fn negative_only_producers_require_only_bootstrap() {
     let limits = FormulaLimits::default();
     fixture.with(location(), |support, computation, counters| {
         for rule in &rules {
-            let mut first = variants(rule, support, true, &limits, counters).unwrap();
+            let registration = registered(rule, support, &limits, counters);
+            let mut first = registration
+                .variants(0, rule, support, true, &limits, counters)
+                .unwrap();
             assert!(matches!(
                 first.next(&limits, counters).unwrap(),
                 Some(Variant::Full)
             ));
             assert!(first.next(&limits, counters).unwrap().is_none());
-            let mut later = variants(rule, support, false, &limits, counters).unwrap();
+            let mut later = registration
+                .variants(0, rule, support, false, &limits, counters)
+                .unwrap();
             assert!(later.next(&limits, counters).unwrap().is_none());
             assert_eq!(
                 selected(rule, support, None, computation, counters),
@@ -288,22 +316,32 @@ fn negative_only_producers_require_only_bootstrap() {
     });
 }
 
-#[test]
-fn disjunctive_producers_retain_complete_rounds() {
-    let mut fixture = catalog();
-    let body = vec![literal(&mut fixture, DefaultNegation::None, "p", &[0])];
-    let mut rule = rule(&mut fixture, body, 1);
+/// A disjunctive producer over `p`: rich, with `p` its one read predicate.
+fn disjunctive(fixture: &mut Fixture) -> RuleIr {
+    let body = vec![literal(fixture, DefaultNegation::None, "p", &[0])];
+    let mut rule = rule(fixture, body, 1);
     rule.head = HeadIr::Disjunction(
         ["r", "s"]
             .map(|name| HeadLiteral {
                 negation: DefaultNegation::None,
-                operand: HeadOperand::Atom(pattern(&mut fixture, name, &[0])),
+                operand: HeadOperand::Atom(pattern(fixture, name, &[0])),
             })
             .into(),
     );
+    rule
+}
+
+#[test]
+fn a_rich_producer_is_traversed_when_a_read_predicate_gained_rows() {
+    // The catalog publishes `p`'s second row last, so `p` has a new row.
+    let mut fixture = catalog();
+    let rule = disjunctive(&mut fixture);
     let limits = FormulaLimits::default();
     fixture.with(location(), |support, computation, counters| {
-        let mut schedule = variants(&rule, support, false, &limits, counters).unwrap();
+        let registration = registered(&rule, support, &limits, counters);
+        let mut schedule = registration
+            .variants(0, &rule, support, false, &limits, counters)
+            .unwrap();
         assert!(matches!(
             schedule.next(&limits, counters).unwrap(),
             Some(Variant::Full)
@@ -313,5 +351,58 @@ fn disjunctive_producers_retain_complete_rounds() {
             selected(&rule, support, None, computation, counters).len(),
             2
         );
+    });
+}
+
+#[test]
+fn a_rich_producer_whose_reads_are_unchanged_takes_no_variant() {
+    // Publishing `q` after `p` leaves every row of `p` old.
+    let mut fixture = Fixture::from_atoms(
+        [
+            Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(7)]).unwrap(),
+            Atom::new(Predicate::new("q", 1).unwrap(), vec![Value::Number(7)]).unwrap(),
+        ],
+        location(),
+    );
+    let rule = disjunctive(&mut fixture);
+    let limits = FormulaLimits::default();
+    fixture.with(location(), |support, _, counters| {
+        let predicate = Predicate::new("p", 1).unwrap();
+        assert_eq!(support.old_rows(&predicate), support.row_count(&predicate));
+        let registration = registered(&rule, support, &limits, counters);
+        let mut later = registration
+            .variants(0, &rule, support, false, &limits, counters)
+            .unwrap();
+        assert!(later.next(&limits, counters).unwrap().is_none());
+        let mut first = registration
+            .variants(0, &rule, support, true, &limits, counters)
+            .unwrap();
+        assert!(matches!(
+            first.next(&limits, counters).unwrap(),
+            Some(Variant::Full)
+        ));
+    });
+}
+
+#[test]
+fn a_rich_producer_whose_own_heads_alone_gained_rows_takes_no_variant() {
+    // `r` is the producer's head relation, published after its read `p`.
+    let mut fixture = Fixture::from_atoms(
+        [
+            Atom::new(Predicate::new("p", 1).unwrap(), vec![Value::Number(7)]).unwrap(),
+            Atom::new(Predicate::new("r", 1).unwrap(), vec![Value::Number(7)]).unwrap(),
+        ],
+        location(),
+    );
+    let rule = disjunctive(&mut fixture);
+    let limits = FormulaLimits::default();
+    fixture.with(location(), |support, _, counters| {
+        let head = Predicate::new("r", 1).unwrap();
+        assert!(support.old_rows(&head) < support.row_count(&head));
+        let registration = registered(&rule, support, &limits, counters);
+        let mut later = registration
+            .variants(0, &rule, support, false, &limits, counters)
+            .unwrap();
+        assert!(later.next(&limits, counters).unwrap().is_none());
     });
 }

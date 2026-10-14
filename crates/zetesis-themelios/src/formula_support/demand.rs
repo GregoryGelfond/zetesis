@@ -24,8 +24,8 @@ use zetesis_core::catalog::PredicateRef;
 use zetesis_core::{Predicate, TemplateComponentsRef, TemplateTerm};
 
 use super::Counters;
-use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
-use crate::formula_ir::{AggregateKey, HeadIr, LiteralIr, Prepared, Projection, RuleIr};
+use super::occurrences::{self, Occurrence};
+use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::{FormulaFailure, FormulaLimits, ProgramSite};
 use themelios_program::program::DefaultNegation;
 
@@ -86,7 +86,7 @@ impl Demand {
             for &atom in &objective.positive {
                 walk.every_column(atom)?;
             }
-            walk.nested(objective.condition.literals())?;
+            occurrences::frame(objective.condition.literals(), &mut walk)?;
         }
         Ok(Self {
             columns: walk.found,
@@ -109,17 +109,9 @@ impl Walk<'_, '_> {
 
     fn rule(&mut self, rule: &RuleIr) -> Result<(), FormulaFailure> {
         match &rule.head {
-            HeadIr::Choice(group) => {
-                self.nested(&rule.body)?;
-                for element in &group.elements {
-                    self.nested(&element.condition)?;
-                }
-            }
-            HeadIr::ConditionalDisjunction { elements, .. } => {
-                self.nested(&rule.body)?;
-                for element in elements {
-                    self.nested(&element.condition)?;
-                }
+            // The body and every element condition, as nested frames.
+            HeadIr::Choice(_) | HeadIr::ConditionalDisjunction { .. } => {
+                occurrences::rule(rule, self)?;
             }
             HeadIr::Normal(head) => {
                 let heads: Vec<_> = head.iter().copied().collect();
@@ -144,7 +136,7 @@ impl Walk<'_, '_> {
         heads: &[super::components::Pattern],
     ) -> Result<(), FormulaFailure> {
         if !literals.iter().all(flat) {
-            return self.nested(literals);
+            return occurrences::frame(literals, self);
         }
         let mut occurrences: BTreeMap<usize, usize> = BTreeMap::new();
         for &head in heads {
@@ -177,82 +169,6 @@ impl Walk<'_, '_> {
                     })
                     .collect();
                 self.record(pattern.predicate(), demanded);
-            }
-        }
-        Ok(())
-    }
-
-    /// A frame read conservatively, with every frame nested in it.
-    fn nested(&mut self, literals: &[LiteralIr]) -> Result<(), FormulaFailure> {
-        let mut pending = vec![literals];
-        while let Some(literals) = pending.pop() {
-            for literal in literals {
-                self.work()?;
-                match literal {
-                    LiteralIr::Atom(_, atom) => self.every_column(*atom)?,
-                    LiteralIr::PatternAtom(atom) => self.every_column(atom.atom)?,
-                    LiteralIr::ProjectedAtom(_, projection) => {
-                        self.projection(projection, &mut pending)?;
-                    }
-                    LiteralIr::Conditional(value) => {
-                        pending.push(&value.condition);
-                        match &value.consequent {
-                            Consequent::Atoms(_, alternatives) => {
-                                for alternative in alternatives {
-                                    pending.push(&alternative.bindings);
-                                    match &alternative.operand {
-                                        ConsequentOperand::Atom(atom) => {
-                                            self.every_column(*atom)?;
-                                        }
-                                        ConsequentOperand::Projection(projection) => {
-                                            self.projection(projection, &mut pending)?;
-                                        }
-                                    }
-                                }
-                            }
-                            Consequent::Guards(alternatives) => {
-                                for alternative in alternatives {
-                                    pending.push(&alternative.bindings);
-                                }
-                            }
-                            Consequent::Guard(_) => {}
-                        }
-                    }
-                    LiteralIr::Aggregate(value) => {
-                        for element in &value.elements {
-                            pending.push(&element.condition);
-                            if let AggregateKey::Atom(atom) = &element.key {
-                                self.every_column(*atom)?;
-                            }
-                        }
-                    }
-                    LiteralIr::Compare(..)
-                    | LiteralIr::ArgumentCheck { .. }
-                    | LiteralIr::TupleCompare(..)
-                    | LiteralIr::Guard(_)
-                    | LiteralIr::HeadGuard(_)
-                    | LiteralIr::Bind { .. }
-                    | LiteralIr::Range { .. } => {}
-                }
-            }
-        }
-        Ok(())
-    }
-
-    fn projection<'ir>(
-        &mut self,
-        projection: &'ir Projection,
-        pending: &mut Vec<&'ir [LiteralIr]>,
-    ) -> Result<(), FormulaFailure> {
-        match projection {
-            Projection::Arguments { predicate, .. } => {
-                let predicate =
-                    predicate.get(self.view, self.limits, self.counters, self.location)?;
-                self.record(predicate, vec![true; predicate.arity()]);
-            }
-            Projection::Witnesses { atom, bindings, .. } => {
-                self.every_column(*atom)?;
-                pending.push(bindings);
             }
         }
         Ok(())
@@ -318,6 +234,26 @@ impl Walk<'_, '_> {
                 .collect(),
             _ => unreachable!("only flat literals are counted"),
         })
+    }
+}
+
+/// A nested frame is read conservatively: every column of an occurrence that
+/// holds a constant or a variable, and every column a projection names.
+impl occurrences::Visitor for Walk<'_, '_> {
+    fn work(&mut self) -> Result<(), FormulaFailure> {
+        Walk::work(self)
+    }
+
+    fn occurrence(&mut self, occurrence: Occurrence) -> Result<(), FormulaFailure> {
+        match occurrence {
+            Occurrence::Atom(atom) => self.every_column(atom),
+            Occurrence::Projected(predicate) => {
+                let predicate =
+                    predicate.get(self.view, self.limits, self.counters, self.location)?;
+                self.record(predicate, vec![true; predicate.arity()]);
+                Ok(())
+            }
+        }
     }
 }
 

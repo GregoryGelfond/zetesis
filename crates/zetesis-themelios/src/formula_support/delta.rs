@@ -7,8 +7,9 @@
 //! Scalar checks and generators remain with the complete existing matcher.
 //! Ordinary negative atoms are non-inputs: their truth remains in the emitted
 //! formula, while their already-bound arguments supply no support restriction.
-//! Rich producers retain full-round traversal. This scheduling certificate is
-//! not a certificate of authored-body validation during final formula emission.
+//! A rich producer takes one full traversal when it is traversed at all, which
+//! its registration decides. This scheduling certificate is not a certificate
+//! of authored-body validation during final formula emission.
 
 #[cfg(test)]
 mod tests;
@@ -19,68 +20,30 @@ use crate::ProgramSite;
 use themelios_program::program::DefaultNegation;
 
 use super::{Counters, Support};
-use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
+use crate::formula_ir::{LiteralIr, RuleIr};
 use crate::{FormulaFailure, FormulaLimits};
 
+/// One visit's variants: the full traversal at most once, then a certified
+/// producer's delta variants over its registered positive occurrences.
 pub(super) struct Variants<'a, 'source> {
     rule: &'a RuleIr,
     support: &'a Support<'source>,
     full: bool,
-    certified: bool,
     next: usize,
-    prepared: Option<&'a [usize]>,
+    inputs: &'a [usize],
 }
 
-pub(super) fn variants<'a, 'source>(
-    rule: &'a RuleIr,
-    support: &'a Support<'source>,
-    first: bool,
-    limits: &FormulaLimits,
-    counters: &mut Counters,
-) -> Result<Variants<'a, 'source>, FormulaFailure> {
-    let mut certified = matches!(rule.head, HeadIr::Normal(Some(_)));
-    let mut inputs = 0;
-    for literal in &rule.body {
-        counters.work(limits, rule.location)?;
-        match literal {
-            LiteralIr::Atom(DefaultNegation::None, _) | LiteralIr::PatternAtom(_) => inputs += 1,
-            // Join::new collects only positive inputs. Flat negative atoms
-            // neither generate bindings nor filter possible heads; any argument
-            // evaluation is a separate, retained scalar operation in the IR.
-            LiteralIr::Atom(DefaultNegation::Not | DefaultNegation::NotNot, _)
-            | LiteralIr::Compare(..)
-            | LiteralIr::ArgumentCheck { .. }
-            | LiteralIr::TupleCompare(..)
-            | LiteralIr::Guard(_)
-            | LiteralIr::HeadGuard(_)
-            | LiteralIr::Bind { .. }
-            | LiteralIr::Range { .. } => {}
-            LiteralIr::ProjectedAtom(..) | LiteralIr::Conditional(_) | LiteralIr::Aggregate(_) => {
-                certified = false;
-            }
-        }
-    }
-    #[cfg(test)]
-    if !tests::structural_enabled()
-        && rule
-            .body
-            .iter()
-            .any(|literal| matches!(literal, LiteralIr::PatternAtom(_)))
-    {
-        certified = false;
-    }
-    Ok(Variants {
-        rule,
-        support,
-        full: !certified || (inputs == 0 && first),
-        certified,
-        next: 0,
-        prepared: None,
-    })
+/// Whether structural occurrences are certified delta inputs; the test-only
+/// structural reference turns this off.
+#[cfg(test)]
+pub(super) fn structural_enabled() -> bool {
+    tests::structural_enabled()
 }
 
-/// The producer plan has already checked the complete positive-flat rule and
-/// preserves these original body occurrences. No per-round classification scan.
+/// A certified producer's variants over its positive body occurrences, which
+/// the producer plan or the producer's registration recorded once; no
+/// per-round classification scan. A producer without inputs runs once, in the
+/// first round.
 pub(super) fn prepared_variants<'a, 'source>(
     rule: &'a RuleIr,
     support: &'a Support<'source>,
@@ -91,9 +54,24 @@ pub(super) fn prepared_variants<'a, 'source>(
         rule,
         support,
         full: inputs.is_empty() && first,
-        certified: true,
         next: 0,
-        prepared: Some(inputs),
+        inputs,
+    }
+}
+
+/// A rich producer's variants: its one full traversal when `traversed`, and
+/// none otherwise.
+pub(super) fn traversal<'a, 'source>(
+    rule: &'a RuleIr,
+    support: &'a Support<'source>,
+    traversed: bool,
+) -> Variants<'a, 'source> {
+    Variants {
+        rule,
+        support,
+        full: traversed,
+        next: 0,
+        inputs: &[],
     }
 }
 
@@ -112,36 +90,29 @@ impl Variants<'_, '_> {
         if std::mem::take(&mut self.full) {
             return Ok(Some(Variant::Full));
         }
-        if self.certified {
-            loop {
-                let occurrence = match self.prepared {
-                    Some(inputs) => inputs.get(self.next).copied(),
-                    None => (self.next < self.rule.body.len()).then_some(self.next),
-                };
-                let Some(occurrence) = occurrence else { break };
-                counters.work(limits, self.rule.location)?;
-                let literal = &self.rule.body[occurrence];
-                self.next += 1;
-                let atom = match literal {
-                    LiteralIr::Atom(DefaultNegation::None, atom) => Some(*atom),
-                    LiteralIr::PatternAtom(pattern) => Some(pattern.atom),
-                    _ => None,
-                };
-                if let Some(atom) = atom {
-                    let components = self
-                        .support
-                        .components()
-                        .ok_or_else(|| super::components::missing(self.rule.location))?;
-                    let atom = atom.get(components, limits, counters, self.rule.location)?;
-                    if self.support.old_rows(atom.predicate())
-                        < self.support.row_count(atom.predicate())
-                    {
-                        #[cfg(test)]
-                        if matches!(literal, LiteralIr::PatternAtom(_)) {
-                            tests::record_structural();
-                        }
-                        return Ok(Some(Variant::Delta(occurrence)));
+        while let Some(&occurrence) = self.inputs.get(self.next) {
+            counters.work(limits, self.rule.location)?;
+            let literal = &self.rule.body[occurrence];
+            self.next += 1;
+            let atom = match literal {
+                LiteralIr::Atom(DefaultNegation::None, atom) => Some(*atom),
+                LiteralIr::PatternAtom(pattern) => Some(pattern.atom),
+                _ => None,
+            };
+            if let Some(atom) = atom {
+                let components = self
+                    .support
+                    .components()
+                    .ok_or_else(|| super::components::missing(self.rule.location))?;
+                let atom = atom.get(components, limits, counters, self.rule.location)?;
+                if self.support.old_rows(atom.predicate())
+                    < self.support.row_count(atom.predicate())
+                {
+                    #[cfg(test)]
+                    if matches!(literal, LiteralIr::PatternAtom(_)) {
+                        tests::record_structural();
                     }
+                    return Ok(Some(Variant::Delta(occurrence)));
                 }
             }
         }

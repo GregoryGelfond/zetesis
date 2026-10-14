@@ -3,8 +3,26 @@
 use std::collections::BTreeSet;
 
 use super::*;
+use crate::formula_support::producers::Registration;
 use crate::formula_support::{SupportCatalog, delta::Variant};
 use zetesis_core::{Atom, Predicate};
+
+/// The registration of `rule` alone, prepared under its own counters so the
+/// measured counters see only the variants' work.
+fn registered<'a>(
+    rule: &'a crate::formula_ir::RuleIr,
+    support: &crate::formula_support::Support<'_>,
+) -> Registration<'a> {
+    Registration::prepare(
+        std::slice::from_ref(rule),
+        support.components(),
+        0,
+        &FormulaLimits::default(),
+        &mut crate::formula_support::Counters::default(),
+        rule.location,
+    )
+    .unwrap()
+}
 
 const FIRST: &str = include_str!("../../../../tests/fixtures/divisibility-join/delta-first.lp");
 const LAST: &str = include_str!("../../../../tests/fixtures/divisibility-join/delta-last.lp");
@@ -179,14 +197,10 @@ fn partition(source: &str) -> BTreeSet<std::cmp::Ordering> {
     snapshot.with(|rule, support, computation, counters| {
         let full = run(rule, support, computation, counters, Variant::Full, false).values;
         let expected: BTreeSet<_> = full.into_iter().filter(|row| !old.contains(row)).collect();
-        let mut variants = crate::formula_support::delta::variants(
-            rule,
-            support,
-            false,
-            &FormulaLimits::default(),
-            counters,
-        )
-        .unwrap();
+        let registration = registered(rule, support);
+        let mut variants = registration
+            .variants(0, rule, support, false, &FormulaLimits::default(), counters)
+            .unwrap();
         let mut all = Vec::new();
         let target = occurrence(rule, computation, counters, true);
         let mut pivots = Vec::new();

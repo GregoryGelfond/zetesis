@@ -47,6 +47,7 @@ mod keys;
 #[cfg(test)]
 mod membership;
 mod multiples;
+mod occurrences;
 mod range_selection;
 pub(crate) use range_selection::Prepared as RangeSelection;
 #[cfg(test)]
@@ -524,12 +525,12 @@ pub(crate) fn build(
     fallback: ProgramSite,
 ) -> Result<CompletedCatalog, FormulaFailure> {
     counters.observe_work(Event::SupportConstructionWork, |counters| {
-        let plan =
-            producers::ProducerPlan::prepare(prepared, &catalog, limits, counters, fallback)?;
+        let producers =
+            producers::Producers::prepare(prepared, &catalog, limits, counters, fallback)?;
         complete(
             catalog,
             prepared,
-            plan,
+            producers,
             domains,
             budget,
             GroundingWork::new(limits, counters, fallback),
@@ -543,7 +544,7 @@ pub(crate) fn build(
 fn complete(
     mut catalog: SupportCatalog,
     prepared: &Prepared,
-    mut plan: Option<producers::ProducerPlan<'_>>,
+    mut producers: producers::Producers<'_>,
     domains: Option<&crate::formula_domains::Domains<'_>>,
     budget: &mut Budget,
     work: GroundingWork<'_>,
@@ -553,7 +554,7 @@ fn complete(
         counters,
         location: fallback,
     } = work;
-    catalog.prepared_bytes(plan.as_ref().map_or(0, producers::ProducerPlan::bytes));
+    catalog.prepared_bytes(producers.bytes());
     // Postings are kept only for columns a join can bind, decided before the
     // first relation is created, since a column cannot gain postings later.
     if let Some(view) = catalog.component_view(limits, counters, fallback)? {
@@ -576,21 +577,18 @@ fn complete(
         let changed = {
             // Rules alone are scheduled: a fact block has no producer slot,
             // and enters support in the first round at its item position.
-            let mut schedule = plan.as_ref().map_or_else(
-                || producers::Schedule::all(prepared.rules_without_facts()),
-                producers::ProducerPlan::schedule,
-            );
+            let mut schedule = producers.schedule();
             let mut facts = (rounds == 1 && prepared.items().blocks().next().is_some())
                 .then(|| facts::FirstRound::new(prepared.items()));
             let mut selected = schedule.next(limits, counters, fallback)?;
-            if selected.is_none() && plan.is_some() && facts.is_none() {
+            if selected.is_none() && producers.is_planned() && facts.is_none() {
                 // Every zero-input producer ran at bootstrap. Every subsequent
                 // new positive binding needs a changed predicate, whose complete
                 // posting would have selected its original producer. Thus this
                 // admitted round is unchanged without a new relation snapshot.
                 return finish(
                     catalog,
-                    plan,
+                    producers,
                     GroundingWork::new(limits, counters, fallback),
                 );
             }
@@ -606,12 +604,8 @@ fn complete(
                     let rule = &prepared.rules_without_facts()[index];
                     counters.work(limits, rule.location)?;
                     counters.record(Event::SupportProducerVisit);
-                    let mut variants = match &plan {
-                        Some(plan) => {
-                            plan.variants(index, rule, &support, rounds == 1, limits, counters)?
-                        }
-                        None => delta::variants(rule, &support, rounds == 1, limits, counters)?,
-                    };
+                    let mut variants =
+                        producers.variants(index, rule, &support, rounds == 1, limits, counters)?;
                     let mut computation = Computation::new(&mut delta, &support);
                     let guards = match domains {
                         Some(domains) => support.domain_guards(
@@ -643,14 +637,14 @@ fn complete(
             drop(support);
             advance_round(
                 &mut delta,
-                plan.as_mut(),
+                producers.plan_mut(),
                 GroundingWork::new(limits, counters, fallback),
             )?
         };
         if !changed {
             return finish(
                 catalog,
-                plan,
+                producers,
                 GroundingWork::new(limits, counters, fallback),
             );
         }
@@ -689,7 +683,7 @@ fn advance_round(
 /// The fixed point drops its scheduling metadata before final publication.
 fn finish(
     mut catalog: SupportCatalog,
-    plan: Option<producers::ProducerPlan<'_>>,
+    producers: producers::Producers<'_>,
     work: GroundingWork<'_>,
 ) -> Result<CompletedCatalog, FormulaFailure> {
     let GroundingWork {
@@ -697,7 +691,7 @@ fn finish(
         counters,
         location,
     } = work;
-    drop(plan);
+    drop(producers);
     catalog.release_preparation();
     catalog.publish(limits, counters, location)?;
     Ok(CompletedCatalog {

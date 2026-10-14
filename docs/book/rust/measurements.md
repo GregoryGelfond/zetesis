@@ -87,10 +87,13 @@ output and includes refused attempts. The separate model-construction receipt
 records accepted operations and actual metadata peaks without requiring clocks;
 constructed model counts establish neither publication nor complete enumeration.
 
-The grounding profile also exposes `support_producer_visits` and
-`support_snapshot_preparations`. These count entered operations, including those
-followed by failure. They distinguish affected-producer scheduling from a full
-round scan without asserting a timing benefit. Fields missing from older
+The grounding profile also exposes `support_producer_visits`,
+`support_unchanged_visits` and `support_snapshot_preparations`. These count
+entered operations, including those followed by failure.
+`support_unchanged_visits` counts the rich-producer visits after the first round
+that ended without a traversal because nothing the producer reads had changed.
+They distinguish affected-producer scheduling from a full round scan without
+asserting a timing benefit. Fields missing from older
 reports remain unavailable.
 
 ## Thread and failure contracts

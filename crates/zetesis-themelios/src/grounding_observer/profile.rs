@@ -137,6 +137,11 @@ pub struct GroundingWork {
     /// Original producer occurrences entered for variant traversal, after an
     /// admitted work tick. A later failure retains the entered occurrence.
     pub support_producer_visits: Option<u64>,
+    /// Rich-producer visits after the first round that ended at the
+    /// registration's test: no predicate the producer reads gained rows, so
+    /// it was not traversed. Always zero on the positive-flat plan's schedule,
+    /// which has no rich producers.
+    pub support_unchanged_visits: Option<u64>,
     /// Growing support/query snapshot attempts entered after an admitted work
     /// tick. Counts attempts, including a later allocation or query refusal.
     pub support_snapshot_preparations: Option<u64>,
@@ -229,6 +234,7 @@ impl Default for GroundingWork {
             support_publication_work: Some(0),
             support_rounds: Some(0),
             support_producer_visits: Some(0),
+            support_unchanged_visits: Some(0),
             support_snapshot_preparations: Some(0),
             support_atoms: Some(0),
             support_index_entries: Some(0),
@@ -275,6 +281,7 @@ pub(crate) enum Event {
     SupportPublicationWork(u64),
     SupportRound,
     SupportProducerVisit,
+    SupportUnchangedVisit,
     SupportSnapshotPreparation,
     SupportAtom,
     SupportIndexEntry,
@@ -341,6 +348,10 @@ impl GroundingWork {
             support_producer_visits: sum(
                 self.support_producer_visits,
                 other.support_producer_visits,
+            ),
+            support_unchanged_visits: sum(
+                self.support_unchanged_visits,
+                other.support_unchanged_visits,
             ),
             support_snapshot_preparations: sum(
                 self.support_snapshot_preparations,
@@ -418,6 +429,7 @@ impl GroundingWork {
             Event::SupportPublicationWork(_) => &mut self.support_publication_work,
             Event::SupportRound => &mut self.support_rounds,
             Event::SupportProducerVisit => &mut self.support_producer_visits,
+            Event::SupportUnchangedVisit => &mut self.support_unchanged_visits,
             Event::SupportSnapshotPreparation => &mut self.support_snapshot_preparations,
             Event::SupportAtom => &mut self.support_atoms,
             Event::SupportIndexEntry => &mut self.support_index_entries,

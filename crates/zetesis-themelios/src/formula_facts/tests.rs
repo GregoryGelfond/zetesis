@@ -110,13 +110,28 @@ fn reconstructed(owner: &crate::TerminalFormula) -> String {
     rendered
 }
 
+/// A refusal's text. A work ceiling's crossing amount is the work charged up
+/// to the operation that crossed it, which fact products and fact rules charge
+/// differently by design; of a work refusal only the resource and its limit
+/// are compared.
+fn refused(error: &crate::FormulaFailure) -> String {
+    match error.cause() {
+        crate::FormulaFailure::Limit {
+            resource: crate::FormulaResource::Work,
+            limit,
+            ..
+        } => format!("refused formula work limit {limit} exceeded"),
+        _ => format!("refused {error}"),
+    }
+}
+
 fn observe(path: &Path) -> (Observed, Receipts) {
     let mut observed = Observed::default();
     let mut receipts = Receipts::default();
     let (source, published) = rounds::capture(|| match prepare(path) {
         Err(error) => format!("refused {error}"),
         Ok(prepared) => match prepared.try_source() {
-            Err(failure) => format!("refused {}", failure.error()),
+            Err(failure) => refused(failure.error()),
             Ok(SourceAdmission::NotApplicable(_)) => "not applicable".to_owned(),
             Ok(SourceAdmission::Admitted(source)) => format!(
                 "atoms {}\nselected {:?}",
@@ -131,7 +146,7 @@ fn observe(path: &Path) -> (Observed, Receipts) {
         Ok(prepared) => {
             receipts.evidence = evidence(&prepared);
             match prepared.ground() {
-                Err(failure) => format!("refused {}", failure.error()),
+                Err(failure) => refused(failure.error()),
                 Ok(admitted) => {
                     receipts.origins = Some(admitted.expansion_usage().origin_locations as u128);
                     grounded(&admitted)
@@ -143,7 +158,7 @@ fn observe(path: &Path) -> (Observed, Receipts) {
     observed.adaptive = match prepare(path) {
         Err(error) => format!("refused {error}"),
         Ok(prepared) => match prepared.ground_adaptive() {
-            Err(failure) => format!("refused {}", failure.error()),
+            Err(failure) => refused(failure.error()),
             Ok(FormulaMaterialization::Complete(admitted)) => grounded(&admitted),
             Ok(FormulaMaterialization::Terminal(owner)) => reconstructed(&owner),
         },

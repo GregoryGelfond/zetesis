@@ -17,9 +17,10 @@ fn run_variants(source: &str, reuse: bool) -> RoundRun {
     snapshot.publish(population(4, 1));
     snapshot.with(|rule, support, computation, counters| {
         let limits = FormulaLimits::default();
-        let mut variants =
-            crate::formula_support::delta::variants(rule, support, false, &limits, counters)
-                .unwrap();
+        let registration = super::registered(rule, support);
+        let mut variants = registration
+            .variants(0, rule, support, false, &limits, counters)
+            .unwrap();
         let start = counters.accounting.work;
         let initial_bytes = support.workspace_bytes();
         let mut preparation = None;
@@ -412,9 +413,10 @@ fn derive(source: &str, shared: bool) -> (BTreeSet<Atom>, u64) {
             let mut computation = Computation::new(&mut append, &support);
             let support = &support;
             let computation = &mut computation;
-            let mut variants =
-                crate::formula_support::delta::variants(rule, support, false, &limits, counters)
-                    .unwrap();
+            let registration = super::registered(rule, support);
+            let mut variants = registration
+                .variants(0, rule, support, false, &limits, counters)
+                .unwrap();
             let bytes = support.workspace_bytes();
             let mut budget = testing::budget();
             if shared {

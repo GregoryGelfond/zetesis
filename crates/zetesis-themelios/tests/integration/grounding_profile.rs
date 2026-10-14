@@ -4,6 +4,7 @@ mod constant_divisors;
 mod integer_comparisons;
 mod lending_rows;
 mod support_demand;
+mod unchanged_visits;
 
 use std::cell::{Cell, RefCell};
 use zetesis_reference_support::resource_limits;

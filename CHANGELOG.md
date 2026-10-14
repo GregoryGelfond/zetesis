@@ -82,6 +82,21 @@ Notable changes by release. Versions follow Semantic Versioning.
   until it is dropped. Grounding observers see one rule-instantiation phase per
   fact block, at its first statement, instead of one per fact;
   `TerminalFormula::deferred_templates()` still counts each deferred fact.
+- Support completion without a whole-program producer plan registers each
+  producer once per completion instead of classifying its rule on every visit.
+  A rich producer, one with a choice, disjunctive or conditional head or with an
+  aggregate, conditional or projection in its body, registers the distinct
+  signed predicates its body and head element conditions read, at every depth;
+  after the first round it is traversed only when one of them gained rows, and
+  a fact's rows wake it in the second round. The support catalog, the emitted
+  theory and the answers are unchanged. `GroundingWork` gains
+  `support_unchanged_visits`, the rich-producer visits that ended without a
+  traversal, which the statistics' grounding attribution reports. Receipts
+  measure the work performed: support production, join and head work fall with
+  the skipped traversals and the removed per-visit scan, each later visit of a
+  rich producer charges at most two units per read predicate for its test, and
+  support bytes rise by the registration's for the completion. A work or
+  support-storage ceiling can therefore be reached earlier or later than before.
 - Formula preparation grows the record of each analyzed statement's original
   statement geometrically, where it reserved exactly the next statement's slots,
   so a program of n statements reallocates it a logarithmic number of times

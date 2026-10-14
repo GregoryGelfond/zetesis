@@ -10,7 +10,11 @@ mod tests;
 
 mod wake;
 mod acyclic;
+mod registration;
 pub(crate) use acyclic::AcyclicPlan;
+pub(super) use registration::Registration;
+#[cfg(test)]
+pub(crate) use registration::testing;
 pub(super) use wake::Schedule;
 use wake::Wake;
 
@@ -28,10 +32,100 @@ use zetesis_core::{
 
 use super::delta::{self, Variants};
 use super::relations::Memory;
-use super::{Counters, Support};
+use super::{Counters, Support, SupportCatalog};
 use crate::formula_domains::PositiveSource;
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::{FormulaFailure, FormulaLimits};
+
+/// How a completion selects its producers and prepares their visits: the
+/// positive-flat plan wakes only the rules whose inputs changed; otherwise
+/// every rule is visited in every round, with its registration.
+pub(super) enum Producers<'source> {
+    Planned(ProducerPlan<'source>),
+    Registered(Registration<'source>),
+}
+
+impl<'source> Producers<'source> {
+    /// The plan when the source admits one, else every rule's registration.
+    pub(super) fn prepare(
+        prepared: &'source Prepared,
+        catalog: &SupportCatalog,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Self, FormulaFailure> {
+        match ProducerPlan::prepare(prepared, catalog, limits, counters, location)? {
+            Some(plan) => Ok(Self::Planned(plan)),
+            None => Self::registered(prepared, catalog, limits, counters, location),
+        }
+    }
+
+    /// Every rule's registration, admitted beside the catalog's bytes.
+    pub(super) fn registered(
+        prepared: &'source Prepared,
+        catalog: &SupportCatalog,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Self, FormulaFailure> {
+        let view = catalog.component_view(limits, counters, location)?;
+        let external =
+            catalog.bytes(location)? as u128 + counters.accounting.workspace.bytes() as u128;
+        Ok(Self::Registered(Registration::prepare(
+            prepared.rules_without_facts(),
+            view,
+            external,
+            limits,
+            counters,
+            location,
+        )?))
+    }
+
+    /// Retained bytes, counted as the catalog's prepared bytes.
+    pub(super) fn bytes(&self) -> usize {
+        match self {
+            Self::Planned(plan) => plan.bytes(),
+            Self::Registered(registration) => registration.bytes(),
+        }
+    }
+
+    pub(super) fn schedule(&self) -> Schedule<'_> {
+        match self {
+            Self::Planned(plan) => plan.schedule(),
+            Self::Registered(registration) => Schedule::all(registration.rules()),
+        }
+    }
+
+    pub(super) fn is_planned(&self) -> bool {
+        matches!(self, Self::Planned(_))
+    }
+
+    /// The plan, whose wake set each round advances.
+    pub(super) fn plan_mut(&mut self) -> Option<&mut ProducerPlan<'source>> {
+        match self {
+            Self::Planned(plan) => Some(plan),
+            Self::Registered(_) => None,
+        }
+    }
+
+    /// The variants of the producer at `index`, which must be `rule`.
+    pub(super) fn variants<'a, 'rows>(
+        &'a self,
+        index: usize,
+        rule: &'a RuleIr,
+        support: &'a Support<'rows>,
+        first: bool,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+    ) -> Result<Variants<'a, 'rows>, FormulaFailure> {
+        match self {
+            Self::Planned(plan) => plan.variants(index, rule, support, first, limits, counters),
+            Self::Registered(registration) => {
+                registration.variants(index, rule, support, first, limits, counters)
+            }
+        }
+    }
+}
 
 /// Original-rule slots remain distinct even when normalized source rules
 /// coalesce. Constraints have no possible-head producer. Every other admitted

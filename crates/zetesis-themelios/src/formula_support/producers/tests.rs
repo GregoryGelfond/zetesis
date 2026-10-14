@@ -39,7 +39,18 @@ fn atoms(prepared: Preparation, scheduled: bool) -> Vec<Atom> {
     } = prepared;
     let limits = FormulaLimits::default();
     let mut counters = Counters::resume(accounting, crate::grounding_observer::Work::default());
-    let selected = scheduled.then(|| plan(&prepared, &catalog));
+    let selected = if scheduled {
+        Producers::Planned(plan(&prepared, &catalog))
+    } else {
+        Producers::registered(
+            &prepared,
+            &catalog,
+            &limits,
+            &mut counters,
+            location(&prepared),
+        )
+        .unwrap()
+    };
     let catalog = complete(
         catalog,
         &prepared,
@@ -152,20 +163,33 @@ fn repeated_schedules_reuse_original_positive_occurrences() {
     let index = prepared.rules_without_facts().len() - 1;
     let rule = &prepared.rules_without_facts()[index];
     let storage = plan.inputs.as_ptr();
+    let registration = Registration::prepare(
+        prepared.rules_without_facts(),
+        support.components(),
+        0,
+        &limits,
+        &mut Counters::default(),
+        location(&prepared),
+    )
+    .unwrap();
     let mut planned = Counters::default();
-    let mut reference = Counters::default();
+    let mut registered = Counters::default();
     for _ in 0..8 {
         let cached = plan
             .variants(index, rule, &support, false, &limits, &mut planned)
             .unwrap();
-        let full = delta::variants(rule, &support, false, &limits, &mut reference).unwrap();
+        let recorded = registration
+            .variants(index, rule, &support, false, &limits, &mut registered)
+            .unwrap();
         assert_eq!(pivots(cached, &mut planned), vec![Some(0), Some(1)]);
-        assert_eq!(pivots(full, &mut reference), vec![Some(0), Some(1)]);
+        assert_eq!(pivots(recorded, &mut registered), vec![Some(0), Some(1)]);
         assert_eq!(plan.inputs.as_ptr(), storage);
     }
-    // Construction was separate. Each repeated call replaces the two-literal
-    // applicability scan with one checked original-owner lookup.
-    assert_eq!(reference.accounting.work - planned.accounting.work, 8);
+    // Construction was separate. Each repeated call takes the same recorded
+    // occurrences; the plan charges its checked original-owner lookup, while
+    // the registration's owner check is a pointer comparison covered by the
+    // visit's own unit.
+    assert_eq!(planned.accounting.work - registered.accounting.work, 8);
 }
 
 #[test]

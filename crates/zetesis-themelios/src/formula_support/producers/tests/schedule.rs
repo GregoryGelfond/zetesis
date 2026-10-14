@@ -8,7 +8,7 @@ use std::fmt::Write;
 use super::{atom, location, plan, prepare};
 use crate::formula::Preparation;
 use crate::formula_ir::HeadIr;
-use crate::formula_support::producers::ProducerPlan;
+use crate::formula_support::producers::{ProducerPlan, Producers};
 use crate::formula_support::{Counters, complete};
 use crate::grounding_observer::Profile;
 use crate::{
@@ -65,8 +65,8 @@ fn measure(
     let profile = Profile::new(Some(&observer));
     let mut counters = Counters::resume(accounting, profile.work());
     let catalog = profile.phase(GroundingPhase::SupportCompletion, None, || {
-        let plan = if scheduled {
-            ProducerPlan::prepare(
+        let producers = if scheduled {
+            Producers::prepare(
                 &prepared,
                 &catalog,
                 limits,
@@ -74,12 +74,18 @@ fn measure(
                 location(&prepared),
             )?
         } else {
-            None
+            Producers::registered(
+                &prepared,
+                &catalog,
+                limits,
+                &mut counters,
+                location(&prepared),
+            )?
         };
         complete(
             catalog,
             &prepared,
-            plan,
+            producers,
             None,
             &mut budget,
             WorkContext::new(limits, &mut counters, location(&prepared)),
@@ -154,12 +160,18 @@ fn affected_rounds_avoid_repeated_producer_visits() {
         reference.operations.binding_snapshots,
         scheduled.operations.binding_snapshots
     );
-    // Includes applicability, graph validation, all wake preparation and scans.
+    // Production work covers visits, their variants and schedule selection:
+    // the plan's 65 visits cost less than visiting every rule in every round.
+    // The plan's preparation and wake work lie outside that receipt. Since the
+    // full schedule takes each rule's registered occurrences instead of
+    // scanning its body on every visit, they cost about what the avoided
+    // visits do on this program, so total work is not compared.
     assert!(
-        scheduled.work < reference.work,
-        "scheduled={} full={}",
-        scheduled.work,
-        reference.work
+        scheduled.operations.support_production_work.unwrap()
+            < reference.operations.support_production_work.unwrap(),
+        "scheduled={:?} full={:?}",
+        scheduled.operations.support_production_work,
+        reference.operations.support_production_work
     );
     assert!(scheduled.operations.support_peak_bytes.unwrap() > 0);
 }
