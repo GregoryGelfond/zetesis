@@ -96,6 +96,23 @@ impl Fixture {
         })
     }
 
+    /// The comparison `left relation right` over this fixture's catalog,
+    /// compiled with its integer comparison form ([`comparison`]).
+    pub(crate) fn comparison(
+        &mut self,
+        left: Vec<crate::formula_ir::Operation>,
+        relation: themelios_program::program::Relation,
+        right: Vec<crate::formula_ir::Operation>,
+        location: ProgramSite,
+    ) -> crate::formula_ir::Comparison {
+        comparison(
+            &mut self.owner,
+            (left, relation, right),
+            &mut self.counters,
+            location,
+        )
+    }
+
     /// Admit a test pattern through the same authority as its eventual rows.
     pub(crate) fn pattern(
         &mut self,
@@ -119,6 +136,44 @@ impl Fixture {
         let mut computation = Computation::new(&mut append, &support);
         run(&support, &mut computation, &mut self.counters)
     }
+}
+
+/// The comparison `left relation right` over `catalog`, built as the compiler
+/// builds one: its component admission is opened, the compiler's one
+/// constructor compiles the literal with its integer comparison form, reading
+/// each constant from the catalog the general evaluator then reads, and the
+/// admission is finished. The literal has whatever form its operands' shape
+/// admits.
+pub(crate) fn comparison(
+    catalog: &mut SupportCatalog,
+    (left, relation, right): (
+        Vec<crate::formula_ir::Operation>,
+        themelios_program::program::Relation,
+        Vec<crate::formula_ir::Operation>,
+    ),
+    counters: &mut Counters,
+    location: ProgramSite,
+) -> crate::formula_ir::Comparison {
+    let limits = FormulaLimits::default();
+    let mut budget = Budget::new(ExpansionLimits::default(), usize::MAX);
+    let source = catalog
+        .component_admission(&limits, counters, location)
+        .unwrap();
+    let comparison = crate::formula_ir::testing::comparison(
+        (
+            crate::formula_ir::Expression::new(left),
+            relation,
+            crate::formula_ir::Expression::new(right),
+        ),
+        &source,
+        &limits,
+        counters,
+        &mut budget,
+        location,
+    )
+    .unwrap();
+    source.finish(&limits, counters, location).unwrap();
+    comparison
 }
 
 pub(crate) fn admit_pattern(

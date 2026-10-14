@@ -3,7 +3,7 @@
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
 
 use super::integer::WithoutForm;
-use super::{Expression, HeadIr, LiteralIr, ObjectiveIr, Projection, RuleIr};
+use super::{Comparison, HeadIr, LiteralIr, ObjectiveIr, Projection, RuleIr};
 
 /// How the comparison literals of a prepared program were compiled: with an
 /// integer comparison form, which decides a row with machine integers when the
@@ -11,38 +11,43 @@ use super::{Expression, HeadIr, LiteralIr, ObjectiveIr, Projection, RuleIr};
 ///
 /// Each comparison and argument check of the prepared program is counted once,
 /// in rule bodies, head and aggregate conditions, conditional alternatives,
-/// projections and objective conditions alike. A literal has a form when both
-/// its operands do; one without counts under its left operand's reason, or
-/// its right operand's when the left has a form. The counts describe
-/// compilation; they establish no verdict, and every literal decides the same
-/// truth value on every row with or without a form.
+/// projections and objective conditions alike. A literal without a form counts
+/// under the first failure the compiler met: the left operand's shape, the
+/// right operand's shape, then the constants, left operand before right;
+/// within an operand's shape, its node count before the first failing node.
+/// Equalities the binding planner turned into binders, and written constraints
+/// that constraint replacement dropped, were compiled and charged but are not
+/// literals of the prepared program, so they are not counted. The counts
+/// describe compilation; they establish no verdict, and every literal decides
+/// the same truth value on every row with or without a form.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct ComparisonForms {
-    /// Literals both of whose operands have a form.
+    /// Literals with a form.
     pub with_form: usize,
-    /// Literals with an operand of more than sixteen nodes, or with a variable
-    /// slot beyond the form's index width.
-    pub bound: usize,
+    /// Literals with an operand of more than sixteen nodes, the most an
+    /// operand's form evaluates in its fixed array of integers.
+    pub long_operand: usize,
+    /// Literals with a variable slot beyond 32 bits, reachable only when the
+    /// variables per template are configured above 2³².
+    pub wide_slot: usize,
     /// Literals with an operand that constructs a function or tuple term.
     pub constructor: usize,
     /// Literals with an operand constant that is not a number.
     pub nonnumeric_constant: usize,
     /// Literals with an operation whose argument names itself or a later node.
     pub argument_position: usize,
-    /// Literals with an operand the compiler built without compiling a form.
-    pub built_without_form: usize,
 }
 
 impl ComparisonForms {
     /// Literals without a form, for every reason.
     #[must_use]
     pub fn without_form(&self) -> usize {
-        self.bound
+        self.long_operand
+            + self.wide_slot
             + self.constructor
             + self.nonnumeric_constant
             + self.argument_position
-            + self.built_without_form
     }
 
     /// Count every comparison literal of a prepared program's rules,
@@ -80,8 +85,9 @@ impl ComparisonForms {
     fn literals(&mut self, literals: &[LiteralIr]) {
         for literal in literals {
             match literal {
-                LiteralIr::Compare(left, _, right) => self.comparison(left, right),
-                LiteralIr::ArgumentCheck { captured, value } => self.comparison(captured, value),
+                LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => {
+                    self.comparison(comparison);
+                }
                 LiteralIr::ProjectedAtom(_, projection) => self.projection(projection),
                 LiteralIr::Conditional(conditional) => {
                     self.literals(&conditional.condition);
@@ -126,14 +132,14 @@ impl ComparisonForms {
         }
     }
 
-    fn comparison(&mut self, left: &Expression, right: &Expression) {
-        let count = match left.integer().and(right.integer()) {
+    fn comparison(&mut self, comparison: &Comparison) {
+        let count = match comparison.form() {
             Ok(_) => &mut self.with_form,
-            Err(WithoutForm::Bound) => &mut self.bound,
+            Err(WithoutForm::LongOperand) => &mut self.long_operand,
+            Err(WithoutForm::WideSlot) => &mut self.wide_slot,
             Err(WithoutForm::Constructor) => &mut self.constructor,
             Err(WithoutForm::NonnumericConstant) => &mut self.nonnumeric_constant,
             Err(WithoutForm::ArgumentPosition) => &mut self.argument_position,
-            Err(WithoutForm::NotCompiled) => &mut self.built_without_form,
         };
         *count += 1;
     }

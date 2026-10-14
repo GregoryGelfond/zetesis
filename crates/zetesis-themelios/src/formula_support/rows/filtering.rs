@@ -385,16 +385,17 @@ fn rejected_rows_do_not_evaluate_partial_scalars() {
     let mut fixture = Fixture::from_atoms([atom("p", &[0])], location());
     let one = fixture.scalar(&Value::Number(1), location());
     let division = || {
-        Expression::new(vec![
+        vec![
             Operation::Constant(one),
             Operation::Variable(0),
             Operation::Binary(BinaryOp::Div, 0, 1),
-        ])
+        ]
     };
+    let comparison = fixture.comparison(division(), Relation::Eq, division(), location());
     let rule = rule(
         vec![
             pattern(&mut fixture, "p", &[0]),
-            LiteralIr::Compare(division(), Relation::Eq, division()),
+            LiteralIr::Compare(comparison),
         ],
         1,
     );
@@ -438,11 +439,9 @@ fn rejected_rows_do_not_evaluate_partial_scalars() {
 fn empty_positive_inputs_keep_their_scalar_row() {
     let mut fixture = Fixture::default();
     let one = fixture.scalar(&Value::Number(1), location());
-    let constant = || Expression::new(vec![Operation::Constant(one)]);
-    let rule = rule(
-        vec![LiteralIr::Compare(constant(), Relation::Eq, constant())],
-        0,
-    );
+    let constant = || vec![Operation::Constant(one)];
+    let comparison = fixture.comparison(constant(), Relation::Eq, constant(), location());
+    let rule = rule(vec![LiteralIr::Compare(comparison)], 0);
     let calls = Cell::new(0);
     let selection = Select(|_: zetesis_core::relation::Row<'_, '_>| {
         calls.set(calls.get() + 1);

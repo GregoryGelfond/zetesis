@@ -1,14 +1,17 @@
+use std::cell::Cell;
+
 use super::*;
 use crate::formula_ir::Operation;
 use crate::formula_support::Evaluation;
-use crate::formula_support::components::Scalar;
 use crate::formula_support::testing::{Fixture, binding};
-use crate::{FormulaLimits, FormulaResource, ProgramSite};
+use crate::grounding_observer::{GroundingOutcome, GroundingPhase, GroundingWork, Profile};
+use crate::{FormulaLimits, FormulaResource, GroundingObserver, ProgramSite};
 use proptest::prelude::*;
 use themelios_base::{
     source::SourceId,
     span::{ByteOffset, Span},
 };
+use themelios_program::program::Relation;
 use themelios_program::term::{BinaryOp, UnaryOp};
 use zetesis_core::Value;
 
@@ -30,41 +33,68 @@ enum Node {
     Binary(BinaryOp, usize, usize),
 }
 
-/// The operand the compiler builds over `nodes`, form included, with its
-/// constants admitted to the fixture for the general evaluator.
-fn expression(fixture: &mut Fixture, nodes: &[Node]) -> Expression {
-    let mut constants: Vec<(Scalar, Option<i32>)> = Vec::new();
-    let mut constant = |fixture: &mut Fixture, value: Value, number: Option<i32>| {
-        let scalar = fixture.scalar(&value, location());
-        constants.push((scalar, number));
-        Operation::Constant(scalar)
-    };
-    let nodes = nodes
+/// The operand nodes over `nodes`, their constants admitted to the fixture.
+fn operations(fixture: &mut Fixture, nodes: &[Node]) -> Vec<Operation> {
+    nodes
         .iter()
         .map(|node| match *node {
-            Node::Number(value) => constant(fixture, Value::Number(value), Some(value)),
-            Node::Symbol(name) => constant(fixture, Value::Symbol(name.into()), None),
+            Node::Number(value) => {
+                Operation::Constant(fixture.scalar(&Value::Number(value), location()))
+            }
+            Node::Symbol(name) => {
+                Operation::Constant(fixture.scalar(&Value::Symbol(name.into()), location()))
+            }
             Node::Variable(slot) => Operation::Variable(slot),
             Node::Unary(operator, argument) => Operation::Unary(operator, argument),
             Node::Absolute(argument) => Operation::Absolute(argument),
             Node::Binary(operator, left, right) => Operation::Binary(operator, left, right),
         })
-        .collect();
-    Expression::with_integer_form(nodes, |scalar| {
-        constants
-            .iter()
-            .find(|(constant, _)| *constant == scalar)
-            .and_then(|(_, number)| *number)
-    })
+        .collect()
 }
 
-/// One decision of a comparison and the general evaluator's verdict on the
-/// same binding.
-struct Decided {
+/// The literal `left relation right`, built by the compiler's constructor over
+/// the fixture's catalog: every immediate of its form is read from the
+/// catalog the general evaluator then reads.
+fn literal(fixture: &mut Fixture, left: &[Node], relation: Relation, right: &[Node]) -> Comparison {
+    let (left, right) = (operations(fixture, left), operations(fixture, right));
+    fixture.comparison(left, relation, right, location())
+}
+
+/// Records the work of the one phase a decision runs in.
+#[derive(Default)]
+struct Observer(Cell<Option<GroundingWork>>);
+impl GroundingObserver for Observer {
+    fn enter(&self) {}
+    fn exit(&self) {}
+    fn details_enabled(&self) -> bool {
+        true
+    }
+    fn phase_exit(
+        &self,
+        _: GroundingPhase,
+        _: Option<ProgramSite>,
+        _: GroundingOutcome,
+        work: GroundingWork,
+    ) {
+        self.0.set(Some(work));
+    }
+}
+
+/// One decision of a comparison, what it counted, and the general
+/// evaluator's verdict on the same binding.
+#[derive(Debug)]
+struct Outcome {
     /// The decision under the allowance.
     decision: Result<Option<bool>, FormulaFailure>,
-    /// Work the decision charged.
+    /// Work the decision counted.
     work: u64,
+    /// Expression evaluations it recorded as entered.
+    evaluations: u64,
+    /// Expression nodes it recorded as reached.
+    nodes: u64,
+    /// Rows it decided, and rows it declined.
+    rows_decided: u64,
+    rows_declined: u64,
     /// The general evaluator's verdict.
     general: General,
 }
@@ -87,25 +117,31 @@ fn decide(
     right: &[Node],
     values: &[Option<Value>],
     allowance: u64,
-) -> Decided {
+) -> Outcome {
     let mut fixture = Fixture::default();
-    let left = expression(&mut fixture, left);
-    let right = expression(&mut fixture, right);
+    let comparison = literal(&mut fixture, left, relation, right);
     fixture.with(location(), |_, computation, counters| {
         let source = binding(values, computation, counters, location());
+        let observer = Observer::default();
+        let profile = Profile::new(Some(&observer));
+        let previous = std::mem::replace(&mut counters.observed, profile.work());
         let before = counters.accounting.work;
         let bounded = FormulaLimits {
             max_work: before.saturating_add(allowance),
             ..FormulaLimits::default()
         };
-        let decision = super::decide(
-            ([&left, &right], relation),
-            &source,
-            Context::new(&*computation, &bounded, counters, location()),
-        );
+        let decision = profile.phase(GroundingPhase::RuleInstantiation, None, || {
+            super::decide(
+                &comparison,
+                &source,
+                Context::new(&*computation, &bounded, counters, location()),
+            )
+        });
         let work = counters.accounting.work - before;
+        counters.observed = previous;
+        let receipt = observer.0.get().unwrap();
         let general = match Evaluation::default().source_comparison(
-            ([&left, &right], relation),
+            comparison.operands(),
             &source,
             Context::new(computation, &FormulaLimits::default(), counters, location()),
         ) {
@@ -115,9 +151,13 @@ fn decide(
             }
             Err(error) => General::Refused(error.to_string()),
         };
-        Decided {
+        Outcome {
             decision,
             work,
+            evaluations: receipt.expression_evaluations.unwrap(),
+            nodes: receipt.expression_nodes.unwrap(),
+            rows_decided: receipt.integer_comparisons.unwrap(),
+            rows_declined: receipt.integer_comparison_declines.unwrap(),
             general,
         }
     })
@@ -133,7 +173,7 @@ fn numbers(values: &[i32]) -> Vec<Option<Value>> {
         .collect()
 }
 
-/// `X + 1 < Y`: four nodes and two variable steps, a constant of six.
+/// `X + 1 < Y`: four steps and two variable steps, a constant of six.
 fn successor_below() -> ([Node; 3], [Node; 1]) {
     ([X, Node::Number(1), Node::Binary(BinaryOp::Add, 0, 1)], [Y])
 }
@@ -149,41 +189,88 @@ fn refused_as_work(decision: &Result<Option<bool>, FormulaFailure>) -> bool {
 }
 
 #[test]
-fn a_decided_comparison_charges_its_constant() {
+fn a_decided_row_counts_its_constant_both_evaluations_and_every_step() {
     let (left, right) = successor_below();
     let decided = decide(&left, Relation::Lt, &right, &numbers(&[1, 3]), u64::MAX);
-    assert_eq!(decided.decision.unwrap(), Some(true));
-    assert_eq!(decided.work, 6);
+    assert_eq!(decided.decision.as_ref().unwrap(), &Some(true));
+    assert_eq!(
+        (decided.work, decided.evaluations, decided.nodes),
+        (6, 2, 4)
+    );
+    assert_eq!((decided.rows_decided, decided.rows_declined), (1, 0));
     assert_eq!(decided.general, General::Holds(true));
 }
 
 #[test]
-fn a_declined_attempt_charges_its_constant() {
+fn a_left_operand_decline_counts_only_its_first_step() {
+    // X is a symbol: the attempt stops at the left operand's first read, its
+    // two units, one evaluation entered and one step reached.
     let (left, right) = successor_below();
     let values = [Some(Value::Symbol("a".into())), Some(Value::Number(3))];
     let decided = decide(&left, Relation::Lt, &right, &values, u64::MAX);
-    assert_eq!(decided.decision.unwrap(), None);
-    assert_eq!(decided.work, 6);
+    assert_eq!(decided.decision.as_ref().unwrap(), &None);
+    assert_eq!(
+        (decided.work, decided.evaluations, decided.nodes),
+        (2, 1, 1)
+    );
+    assert_eq!((decided.rows_decided, decided.rows_declined), (0, 1));
 }
 
 #[test]
-fn the_charge_is_admitted_at_its_constant() {
+fn a_right_operand_decline_counts_the_left_operand_whole() {
+    // Y is a symbol: the left operand's three steps and four units are
+    // performed, then the right operand's read: two units, one step.
+    let (left, right) = successor_below();
+    let values = [Some(Value::Number(1)), Some(Value::Symbol("a".into()))];
+    let decided = decide(&left, Relation::Lt, &right, &values, u64::MAX);
+    assert_eq!(decided.decision.as_ref().unwrap(), &None);
+    assert_eq!(
+        (decided.work, decided.evaluations, decided.nodes),
+        (6, 2, 4)
+    );
+    assert_eq!((decided.rows_decided, decided.rows_declined), (0, 1));
+}
+
+#[test]
+fn a_failing_operation_counts_the_steps_up_to_it() {
+    // X + 1 overflows at the left operand's third step.
+    let (left, right) = successor_below();
+    let decided = decide(
+        &left,
+        Relation::Lt,
+        &right,
+        &numbers(&[i32::MAX, 3]),
+        u64::MAX,
+    );
+    assert_eq!(decided.decision.as_ref().unwrap(), &None);
+    assert_eq!(
+        (decided.work, decided.evaluations, decided.nodes),
+        (4, 1, 3)
+    );
+}
+
+#[test]
+fn the_check_admits_an_attempt_at_its_constant() {
     let (left, right) = successor_below();
     let decided = decide(&left, Relation::Lt, &right, &numbers(&[1, 3]), 6);
     assert_eq!(decided.decision.unwrap(), Some(true));
 }
 
 #[test]
-fn the_charge_is_refused_as_work_one_below_its_constant() {
+fn the_check_refuses_one_below_its_constant_counting_nothing() {
     let (left, right) = successor_below();
     let decided = decide(&left, Relation::Lt, &right, &numbers(&[1, 3]), 5);
     assert!(refused_as_work(&decided.decision), "{:?}", decided.decision);
+    assert_eq!(
+        (decided.work, decided.evaluations, decided.nodes),
+        (0, 0, 0)
+    );
 }
 
 #[test]
-fn a_declining_attempt_is_refused_before_it_evaluates() {
-    // The charge precedes the reads: a row that would decline is refused at
-    // the same allowance as one that would be decided.
+fn a_row_that_would_decline_is_checked_for_the_whole_constant() {
+    // The check precedes the reads: a row that would decline after two units
+    // is refused at the same allowance as one that would be decided.
     let (left, right) = successor_below();
     let values = [Some(Value::Symbol("a".into())), Some(Value::Number(3))];
     let decided = decide(&left, Relation::Lt, &right, &values, 5);
@@ -194,7 +281,7 @@ fn a_declining_attempt_is_refused_before_it_evaluates() {
 fn an_unbound_operand_declines_rather_than_failing() {
     let values = [Some(Value::Number(1)), None];
     let decided = decide(&[X], Relation::Lt, &[Y], &values, u64::MAX);
-    assert_eq!(decided.decision.unwrap(), None);
+    assert_eq!(decided.decision.as_ref().unwrap(), &None);
     // The general evaluator reports the unbound variable.
     assert_eq!(
         decided.general,
@@ -212,7 +299,7 @@ fn a_zero_divisor_declines_to_the_general_failure() {
         &numbers(&[4, 0]),
         u64::MAX,
     );
-    assert_eq!(decided.decision.unwrap(), None);
+    assert_eq!(decided.decision.as_ref().unwrap(), &None);
     assert_eq!(decided.general, General::Undefined);
 }
 
@@ -226,21 +313,19 @@ fn an_overflow_declines_to_the_general_failure() {
         &numbers(&[i32::MAX]),
         u64::MAX,
     );
-    assert_eq!(decided.decision.unwrap(), None);
+    assert_eq!(decided.decision.as_ref().unwrap(), &None);
     assert_eq!(decided.general, General::Undefined);
 }
 
 #[test]
-fn a_literal_without_a_form_is_left_to_the_general_path_uncharged() {
-    let decided = decide(
-        &[X],
-        Relation::Lt,
-        &[Node::Symbol("a")],
-        &numbers(&[1]),
-        u64::MAX,
+fn a_literal_without_a_form_is_left_to_the_general_path_unchecked() {
+    let decided = decide(&[X], Relation::Lt, &[Node::Symbol("a")], &numbers(&[1]), 0);
+    assert_eq!(decided.decision.as_ref().unwrap(), &None);
+    assert_eq!(
+        (decided.work, decided.evaluations, decided.nodes),
+        (0, 0, 0)
     );
-    assert_eq!(decided.decision.unwrap(), None);
-    assert_eq!(decided.work, 0);
+    assert_eq!((decided.rows_decided, decided.rows_declined), (0, 0));
     // Numbers precede constants in the ASP order.
     assert_eq!(decided.general, General::Holds(true));
 }
@@ -366,8 +451,8 @@ fn relation_strategy() -> impl Strategy<Value = Relation> {
     ]
 }
 
-/// The constant an attempt is charged: the nodes and variable steps of both
-/// operands.
+/// The constant an attempt is checked for: the steps and variable steps of
+/// both operands.
 fn constant(left: &[Node], right: &[Node]) -> u64 {
     left.iter()
         .chain(right)
@@ -394,15 +479,19 @@ proptest! {
         let integers = values.iter().all(|value| matches!(value, Value::Number(_)));
         let values: Vec<Option<Value>> = values.into_iter().map(Some).collect();
         let decided = decide(&left, relation, &right, &values, u64::MAX);
-        // Every attempt, decided or declined, is charged its constant.
-        prop_assert_eq!(decided.work, constant(&left, &right));
-        match decided.decision.unwrap() {
-            // A decision is the general evaluator's verdict.
-            Some(holds) => prop_assert_eq!(decided.general, General::Holds(holds)),
-            // Over integer values a tree's form declines exactly when the
-            // general evaluator fails.
-            None if integers => prop_assert_eq!(decided.general, General::Undefined),
-            None => {}
+        let constant = constant(&left, &right);
+        // A decision is the general evaluator's verdict, and its attempt
+        // performed every step of the form. A decline counts no more than the
+        // check admitted, and over integer values a tree's form declines
+        // exactly when the general evaluator fails.
+        if let Some(holds) = decided.decision.unwrap() {
+            prop_assert_eq!(decided.general, General::Holds(holds));
+            prop_assert_eq!(decided.work, constant);
+        } else {
+            prop_assert!(decided.work <= constant);
+            if integers {
+                prop_assert_eq!(decided.general, General::Undefined);
+            }
         }
     }
 }
@@ -413,8 +502,7 @@ fn a_frozen_decision_needs_no_admitted_operand_values() {
     // admitted only 1 and 3: the operand value 2 was never admitted.
     let mut fixture = Fixture::default();
     let (left, right) = successor_below();
-    let left = expression(&mut fixture, &left);
-    let right = expression(&mut fixture, &right);
+    let comparison = literal(&mut fixture, &left, Relation::Lt, &right);
     fixture.with(location(), |_, computation, counters| {
         for value in [1, 3] {
             computation
@@ -448,7 +536,7 @@ fn a_frozen_decision_needs_no_admitted_operand_values() {
         location(),
     );
     let decision = super::decide(
-        ([&left, &right], Relation::Lt),
+        &comparison,
         &source,
         Context::new(&computation, &limits, &mut counters, location()),
     );

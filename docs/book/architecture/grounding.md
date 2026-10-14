@@ -518,8 +518,11 @@ one closure share those ceilings; publishing a pass's receipt does not renew
 them. Checker preparation belongs to its first check's allowance.
 
 Checkers share a cumulative receipt, not a cumulative admission ceiling.
-Charges are admitted locally before their operations and published when
-preparation or a check returns, fails or unwinds, and when a checker drops.
+Each charge is checked against its ceiling, with cancellation polled, before its
+operations run, and counts locally: before them or, for an integer comparison
+form's attempt, after them as the work the attempt performed, within what the
+check admitted. Local counts are published when preparation or a check returns,
+fails or unwinds, and when a checker drops.
 In-flight charges may remain local; live receipt fields are independent,
 monotone lower bounds. Joined receipts are exact until their fields saturate.
 Zero work charges still poll cancellation. The final outcome joins workers
@@ -565,33 +568,45 @@ arithmetic. Workspace admission and node work remain charged. Constructing
 composite results can allocate. This storage schedule has a separate
 [preservation law](../lean/correspondence.md).
 
-A comparison whose operands are integer arithmetic of at most sixteen nodes is
-decided with an integer comparison form instead of this evaluator. The compiler
-builds each comparison operand's
+A comparison whose operands are integer arithmetic of at most sixteen nodes each
+is decided with an integer comparison form instead of this evaluator. The form
+belongs to the comparison literal: the compiler builds each comparison literal
+with its
 [form](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ir/integer.rs)
-once, with the prepared program: a variable keeps its slot, a numeric constant
-becomes its value and an operation keeps its argument positions, eight bytes per
-step. Compiling charges one expansion `TermWork` unit per step and the form's
-bytes as `ScalarBytes`. An operand with a constructor, a nonnumeric constant,
-more than sixteen nodes or an argument naming a later node has no form, and
-neither has its comparison. Joins borrow the literal's form, so a row's route is
-a function of the literal and the row's values alone: every join that decides
-the literal, in capture and in a frozen check alike, takes the same route on the
-same values. Every evaluation site tries the
+once, with the prepared program, through the one constructor of its
+[type](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ir/comparison.rs),
+which reads every constant itself. Both operands' nodes become its steps, eight
+bytes each: a variable keeps its slot, a numeric constant becomes its value and
+an operation keeps its argument positions. Compiling charges one expansion
+`TermWork` unit per step, the form's bytes as `ScalarBytes`, and five formula
+work units for each constant read. A literal whose operand has a constructor, a
+nonnumeric constant, more than sixteen nodes, a variable slot beyond 32 bits or
+an argument naming a later node has no form; it counts under the first of those
+the compiler meets, the left operand's shape before the right's and both shapes
+before the constants. Copies of a literal keep its form. Joins borrow the
+literal's form, so a row's route is a function of the literal and the row's
+values alone: every join that decides the literal, in capture and in a frozen
+check alike, takes the same route on the same values. Every evaluation site
+tries the
 [form](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/integer_comparisons.rs)
 first: the comparisons a join decides on its bound prefix, its complete-row
-filters and the checks of a row whose generator failed. On a row it admits one
-work charge of both forms' constant, one unit per node and per variable step,
-before evaluating; records its evaluations as entered and its nodes as admitted;
-reads the operands' variables; evaluates with the same checked operations in
-machine integers; and compares the two integers, which is the ASP order on
-numbers. It constructs no term and reads no projection. A row with a variable
-that is unbound, unavailable or not a number, or with a failing operation,
-declines after that charge, and this evaluator then decides it with its own
-charges, diagnostics and failure order. A comparison decided this way uses less
-work than the evaluator unless a projection would have answered it, and a row
-that declines is charged both, so a work ceiling can be reached earlier or later
-than before. The grounding counters `integer_comparisons` and
+filters and the checks of a row whose generator failed; domain narrowing,
+totality preparation and covered-projection domains never do. On a row the form
+checks its constant, one unit per step and per variable step of both operands,
+against the work ceiling, polling cancellation first, and counts nothing yet. It
+then reads the operands' variables, evaluates with the same checked operations
+in machine integers, and compares the two integers, which is the ASP order on
+numbers; it constructs no term and reads no projection. Afterwards it counts what
+it performed: the units of the steps it reached, the failing one included, one
+expression evaluation per operand it entered and one expression node per step it
+reached. A row with a variable that is unbound, unavailable or not a number, or
+with a failing operation, stops at that step and declines, and this evaluator
+then decides it with its own charges, diagnostics and failure order. A
+comparison decided this way uses less work than the evaluator unless a
+projection would have answered it, and a row that declines counts both its
+attempt and the evaluator, so a work ceiling can be reached earlier or later
+than before; support bytes fall where a number would have been newly
+constructed. The grounding counters `integer_comparisons` and
 `integer_comparison_declines` count decided and declined rows. The prepared and
 admitted formulas' `comparison_forms()` counts the program's comparison literals
 with a form, and without one by reason, once per literal; the statistics records

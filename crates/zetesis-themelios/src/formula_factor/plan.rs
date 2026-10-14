@@ -314,9 +314,9 @@ fn scope(
                 }
             }
         }
-        LiteralIr::Compare(left, _, right) => {
-            if !expression_scope(builder, rule, left, used, lease)?
-                || !expression_scope(builder, rule, right, used, lease)?
+        LiteralIr::Compare(comparison) => {
+            if !expression_scope(builder, rule, comparison.left(), used, lease)?
+                || !expression_scope(builder, rule, comparison.right(), used, lease)?
             {
                 return Ok(false);
             }
@@ -368,26 +368,18 @@ fn sort<T: Ord>(
     )
 }
 
+/// A copy of `expression`, charging the builder's work before each node.
 fn copy_expression(
     builder: &mut Builder<'_, '_, '_>,
     rule: &RuleIr,
     expression: &Expression,
 ) -> Result<Expression, FormulaFailure> {
-    let mut nodes = Vec::with_capacity(expression.nodes.len());
-    for operation in &expression.nodes {
-        builder.work(rule.location)?;
-        nodes.push(match *operation {
-            Operation::Constant(value) => Operation::Constant(value),
-            Operation::Constructor(ref constructor) => {
-                Operation::Constructor(constructor.copy(builder.budget, rule.location)?)
-            }
-            Operation::Variable(variable) => Operation::Variable(variable),
-            Operation::Unary(operator, value) => Operation::Unary(operator, value),
-            Operation::Binary(operator, left, right) => Operation::Binary(operator, left, right),
-            Operation::Absolute(value) => Operation::Absolute(value),
-        });
-    }
-    expression.copy_over(nodes, builder.budget, rule.location)
+    let (limits, counters) = (builder.limits, &mut builder.counters);
+    expression.copy(
+        || counters.work(limits, rule.location),
+        builder.budget,
+        rule.location,
+    )
 }
 
 fn copy_literal(
@@ -424,11 +416,14 @@ fn copy_literal(
                 },
             )
         }
-        LiteralIr::Compare(left, relation, right) => LiteralIr::Compare(
-            copy_expression(builder, rule, left)?,
-            *relation,
-            copy_expression(builder, rule, right)?,
-        ),
+        LiteralIr::Compare(comparison) => {
+            let (limits, counters) = (builder.limits, &mut builder.counters);
+            LiteralIr::Compare(comparison.copy(
+                || counters.work(limits, rule.location),
+                builder.budget,
+                rule.location,
+            )?)
+        }
         LiteralIr::TupleCompare(left, relation, right) => LiteralIr::TupleCompare(
             left.iter()
                 .map(|expression| copy_expression(builder, rule, expression))

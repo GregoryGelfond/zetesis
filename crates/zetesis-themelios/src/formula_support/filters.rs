@@ -55,9 +55,9 @@ impl Join<'_, '_> {
             {
                 continue;
             }
-            let result = if let Some((left, relation, right)) = comparison(literal) {
+            let result = if let Some(comparison) = comparison(literal) {
                 let decided = integer_comparisons::decide(
-                    ([left, right], relation),
+                    comparison,
                     &binding,
                     super::Context::new(&*computation, limits, counters, location),
                 )?;
@@ -66,7 +66,7 @@ impl Join<'_, '_> {
                 } else {
                     self.projections.compare(
                         index,
-                        ([left, right], relation),
+                        comparison.operands(),
                         &binding,
                         &mut self.evaluation,
                         super::Context::new(computation, limits, counters, location),
@@ -197,15 +197,16 @@ fn pending_check(
     counters: &mut Counters,
     location: ProgramSite,
 ) -> Result<bool, FormulaFailure> {
-    if let Some((left, relation, right)) = comparison(literal) {
+    if let Some(comparison) = comparison(literal) {
         // An unavailable generated input declines, like any unread slot.
         if let Some(holds) = integer_comparisons::decide(
-            ([left, right], relation),
+            comparison,
             binding,
             super::Context::new(&*computation, limits, counters, location),
         )? {
             return Ok(holds);
         }
+        let ([left, right], relation) = comparison.operands();
         let mut failures = Failures::default();
         let result = evaluation.source_partial(
             left,

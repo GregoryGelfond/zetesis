@@ -199,7 +199,8 @@ impl Context<'_, '_, '_> {
 
     fn scalar(&mut self, literal: &LiteralIr, binding: &Binding) -> Result<bool, FormulaFailure> {
         match literal {
-            LiteralIr::Compare(left, relation, right) => {
+            LiteralIr::Compare(comparison) => {
+                let ([left, right], relation) = comparison.operands();
                 let left = formula_support::expression(
                     left,
                     binding,
@@ -233,7 +234,7 @@ impl Context<'_, '_, '_> {
                 })?;
                 formula_support::compare(
                     left,
-                    *relation,
+                    relation,
                     right,
                     self.limits,
                     self.counters,

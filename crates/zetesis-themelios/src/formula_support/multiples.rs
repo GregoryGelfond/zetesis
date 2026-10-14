@@ -139,7 +139,10 @@ fn comparison(
     for literal in &rule.body {
         tick(context)?;
         match literal {
-            LiteralIr::Compare(left, Relation::Eq, right) if selected.is_none() => {
+            LiteralIr::Compare(comparison)
+                if selected.is_none() && comparison.relation() == Relation::Eq =>
+            {
+                let (left, right) = (comparison.left(), comparison.right());
                 selected = match remainder(left, right, context)? {
                     Some(found) => Some(found),
                     None => remainder(right, left, context)?,

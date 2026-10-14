@@ -240,7 +240,9 @@ impl Waiting {
         let mut waiting = space.reserve(capacity)?;
         for literal in literals {
             work(budget, 1, location)?;
-            let Some((left, _, right)) = comparison(literal) else {
+            let Some(([left, right], _)) =
+                comparison(literal).map(crate::formula_ir::Comparison::operands)
+            else {
                 continue;
             };
             work(
@@ -440,7 +442,9 @@ impl Decisions {
         let mut at = space.reserve(literals.len())?;
         for literal in literals {
             work(budget, 1, location)?;
-            let decision = if let Some((left, _, right)) = comparison(literal) {
+            let decision = if let Some(([left, right], _)) =
+                comparison(literal).map(crate::formula_ir::Comparison::operands)
+            {
                 work(
                     budget,
                     left.nodes.len() as u128 + right.nodes.len() as u128,

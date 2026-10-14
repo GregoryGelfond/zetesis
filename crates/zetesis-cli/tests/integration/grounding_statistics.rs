@@ -282,7 +282,7 @@ fn records_report_how_comparisons_were_compiled() {
     let records = std::str::from_utf8(&diagnostics).unwrap();
     assert!(
         records.contains(
-            "Comparisons: with_integer_form=1; bound=0; constructor=1; nonnumeric_constant=0; argument_position=0; built_without_form=0\n"
+            "Comparisons: with_form=1; long_operand=0; wide_slot=0; constructor=1; nonnumeric_constant=0; argument_position=0\n"
         ),
         "{records}"
     );

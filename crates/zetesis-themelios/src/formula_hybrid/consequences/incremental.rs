@@ -75,9 +75,9 @@ fn captured_rule(
         counters.work(limits, rule.location)?;
         let total = match literal {
             LiteralIr::Atom(..) | LiteralIr::PatternAtom(_) => true,
-            LiteralIr::Compare(left, _, right) => {
-                total_expression(left, limits, counters, rule.location)?
-                    && total_expression(right, limits, counters, rule.location)?
+            LiteralIr::Compare(comparison) => {
+                total_expression(comparison.left(), limits, counters, rule.location)?
+                    && total_expression(comparison.right(), limits, counters, rule.location)?
             }
             LiteralIr::TupleCompare(left, _, right) => {
                 let mut total = true;

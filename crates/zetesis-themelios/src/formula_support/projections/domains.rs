@@ -111,10 +111,13 @@ impl ProjectionValues<'_> {
             {
                 continue;
             }
-            let LiteralIr::Compare(left, Relation::Eq, right) = &literals[projection.literal]
-            else {
+            let LiteralIr::Compare(comparison) = &literals[projection.literal] else {
                 continue;
             };
+            let ([left, right], relation) = comparison.operands();
+            if relation != Relation::Eq {
+                continue;
+            }
             let other = 1 - projection.side;
             let expression = [left, right][other];
             let Some(wanted) = self.known(

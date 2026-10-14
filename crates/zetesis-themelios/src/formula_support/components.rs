@@ -339,6 +339,29 @@ impl Admission<'_> {
         scalar.get(view, limits, counters, location)
     }
 
+    /// The value of `scalar` when it is a number, and `None` otherwise: the
+    /// one read of a constant's number that the compiler, its binding guard
+    /// and integer comparison forms share. It binds the template components
+    /// and reads the scalar as [`Self::scalar_ref`] does, with the same work
+    /// charges.
+    pub(crate) fn scalar_number(
+        &self,
+        scalar: Scalar,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<Option<i32>, FormulaFailure> {
+        Ok(
+            match self
+                .scalar_ref(scalar, limits, counters, location)?
+                .descriptor()
+            {
+                ValueNodeRef::Number(number) => Some(number),
+                _ => None,
+            },
+        )
+    }
+
     pub(crate) fn constructor(
         &mut self,
         descriptor: ValueNodeRef<'_>,

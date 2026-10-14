@@ -210,11 +210,11 @@ impl Walk<'_, '_> {
     fn variables(&mut self, literal: &LiteralIr) -> Result<Vec<usize>, FormulaFailure> {
         Ok(match literal {
             LiteralIr::Atom(_, atom) => self.pattern_variables(*atom)?,
-            LiteralIr::Compare(left, _, right)
-            | LiteralIr::ArgumentCheck {
-                captured: left,
-                value: right,
-            } => left.inputs().chain(right.inputs()).collect(),
+            LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => comparison
+                .left()
+                .inputs()
+                .chain(comparison.right().inputs())
+                .collect(),
             LiteralIr::TupleCompare(left, _, right) => left
                 .iter()
                 .chain(right)

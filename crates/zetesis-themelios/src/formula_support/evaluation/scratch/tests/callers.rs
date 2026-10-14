@@ -23,6 +23,16 @@ fn increment(fixture: &mut Fixture, variable: usize) -> Expression {
         Operation::Binary(BinaryOp::Add, 0, 1),
     ])
 }
+/// `variable + 15` as seventeen nodes, one more than an integer comparison
+/// form admits, so a comparison of two keeps the general evaluator.
+fn long_increment(fixture: &mut Fixture, variable: usize) -> Vec<Operation> {
+    let mut nodes = vec![
+        Operation::Variable(variable),
+        Operation::Constant(fixture.scalar(&Value::Number(1), location())),
+    ];
+    nodes.extend((2..17).map(|node| Operation::Binary(BinaryOp::Add, node - 1, 1)));
+    nodes
+}
 
 #[test]
 fn final_filters_use_the_join_workspace() {
@@ -198,12 +208,26 @@ fn false_filters_do_not_hide_later_arithmetic_errors() {
 }
 #[test]
 fn stopped_filters_release_live_workspace_values() {
+    // The stop must fall inside the general evaluator, so the comparison has
+    // no integer comparison form: its operands are too long for one.
     let mut fixture = Fixture::default();
-    let literals = [LiteralIr::Compare(
-        increment(&mut fixture, 0),
+    let (left, right) = (
+        long_increment(&mut fixture, 0),
+        long_increment(&mut fixture, 0),
+    );
+    let literals = [LiteralIr::Compare(fixture.comparison(
+        left,
         Relation::Eq,
-        increment(&mut fixture, 0),
-    )];
+        right,
+        location(),
+    ))];
+    let LiteralIr::Compare(comparison) = &literals[0] else {
+        unreachable!("built as a comparison literal")
+    };
+    assert!(matches!(
+        comparison.form(),
+        Err(crate::formula_ir::testing::WithoutForm::LongOperand)
+    ));
     fixture.with(location(), |support, computation, counters| {
         let prefix = binding(&[], computation, counters, location());
         let limits = FormulaLimits::default();
@@ -292,11 +316,13 @@ fn generator_reads_refuse_absent_inputs() {
 #[test]
 fn component_rows_preserve_excluded_slots() {
     let mut fixture = Fixture::default();
-    let literals = [LiteralIr::Compare(
-        number(&mut fixture, 1),
+    let (left, right) = (number(&mut fixture, 1).nodes, number(&mut fixture, 1).nodes);
+    let literals = [LiteralIr::Compare(fixture.comparison(
+        left,
         Relation::Eq,
-        number(&mut fixture, 1),
-    )];
+        right,
+        location(),
+    ))];
     fixture.with(location(), |support, computation, counters| {
         let fixed = binding(
             &[Some(Value::Number(0)), None],

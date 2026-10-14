@@ -9,7 +9,7 @@ use crate::ProgramSite;
 use crate::formula_support::Context;
 use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Span};
-use themelios_program::program::{DefaultNegation, Relation as Comparison};
+use themelios_program::program::{DefaultNegation, Relation};
 use themelios_program::term::BinaryOp;
 use zetesis_core::relation::Limits;
 use zetesis_core::{
@@ -324,11 +324,15 @@ fn column_filters_retain_checked_binding_generation() {
                 Operation::Binary(BinaryOp::Mul, 0, 1),
             ]),
         },
-        LiteralIr::Compare(
-            Expression::new(vec![Operation::Variable(1)]),
-            Comparison::Gt,
-            number(&mut support, 10),
-        ),
+        LiteralIr::Compare({
+            let ten = number(&mut support, 10).nodes;
+            crate::formula_support::testing::comparison(
+                &mut support,
+                (vec![Operation::Variable(1)], Relation::Gt, ten),
+                &mut Counters::default(),
+                location(),
+            )
+        }),
     ];
     agree(&mut support, &literals, &[], 2, &[numbers(&[6, 12])]);
 }
@@ -343,7 +347,7 @@ fn column_filters_preserve_arithmetic_failures() {
         )),
         LiteralIr::TupleCompare(
             vec![number(&mut support, 0)],
-            Comparison::Eq,
+            Relation::Eq,
             vec![number(&mut support, 1)],
         ),
         LiteralIr::TupleCompare(
@@ -352,7 +356,7 @@ fn column_filters_preserve_arithmetic_failures() {
                 constant(&mut support, 0),
                 Operation::Binary(BinaryOp::Div, 0, 1),
             ])],
-            Comparison::Eq,
+            Relation::Eq,
             vec![number(&mut support, 0)],
         ),
     ];

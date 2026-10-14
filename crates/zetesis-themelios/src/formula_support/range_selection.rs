@@ -158,9 +158,13 @@ fn candidate<'a>(
     };
     for comparison in &rule.body {
         tick(context)?;
-        let LiteralIr::Compare(left, Relation::Eq, right) = comparison else {
+        let LiteralIr::Compare(comparison) = comparison else {
             continue;
         };
+        let ([left, right], relation) = comparison.operands();
+        if relation != Relation::Eq {
+            continue;
+        }
         for (expression, zero) in [(left, right), (right, left)] {
             if let Some((dividend, divisor)) = remainder(expression, zero, context)?
                 && dividend == target

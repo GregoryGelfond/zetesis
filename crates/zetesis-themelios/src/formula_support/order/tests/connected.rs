@@ -6,7 +6,7 @@ use std::{borrow::Cow, cell::Cell};
 use super::{atom, less, order};
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
-use crate::formula_ir::{Expression, LiteralIr, Operation};
+use crate::formula_ir::{LiteralIr, Operation};
 use crate::formula_support::{Computation, Context, Counters, Join, testing::Fixture};
 use crate::grounding_observer::{GroundingOutcome, GroundingPhase, GroundingWork, Profile};
 use crate::test_support::given_site;
@@ -38,6 +38,8 @@ struct Run {
     order: Vec<usize>,
     rows: u64,
     work: u64,
+    /// Rows an integer comparison form attempted and declined.
+    declines: u64,
 }
 
 fn execute(
@@ -102,11 +104,13 @@ fn execute(
             },
         );
         counters.observed = previous;
+        let receipt = observer.0.get().unwrap();
         Run {
             result,
             order: actual_order,
-            rows: observer.0.get().unwrap().join_rows.unwrap(),
+            rows: receipt.join_rows.unwrap(),
             work: counters.accounting.work - before,
+            declines: receipt.integer_comparison_declines.unwrap(),
         }
     })
 }
@@ -237,8 +241,8 @@ fn intervals() -> (Fixture, Vec<LiteralIr>, Vec<Vec<i32>>) {
         atom(&mut fixture, "end", &[0, 2]),
         atom(&mut fixture, "start", &[3, 4]),
         atom(&mut fixture, "end", &[3, 5]),
-        less(1, 5),
-        less(4, 2),
+        less(&mut fixture, 1, 5),
+        less(&mut fixture, 4, 2),
     ];
     let mut expected = Vec::new();
     for first in 0..2 {
@@ -425,25 +429,30 @@ fn arithmetic_fixture(operator: BinaryOp, left: i32, right: i32) -> (Fixture, Ve
         atom(&mut fixture, "p", &[0]),
         atom(&mut fixture, "q", &[1]),
         atom(&mut fixture, "edge", &[0, 2]),
-        LiteralIr::Compare(
-            Expression::new(vec![
+        LiteralIr::Compare(fixture.comparison(
+            vec![
                 Operation::Variable(0),
                 Operation::Variable(2),
                 Operation::Binary(operator, 0, 1),
-            ]),
+            ],
             Relation::Eq,
-            Expression::new(vec![Operation::Variable(1)]),
-        ),
+            vec![Operation::Variable(1)],
+            given_site(),
+        )),
     ];
     (fixture, literals)
 }
 
 #[test]
 fn connected_order_preserves_integer_overflow() {
+    // The comparison's form attempts the sum, declines at the overflow, and
+    // the general evaluator reports the failure.
     let (mut fixture, literals) = arithmetic_fixture(BinaryOp::Add, i32::MAX, 1);
     for permutation in [None, Some(&[0, 1, 2][..])] {
+        let run = execute(&mut fixture, &literals, 3, permutation);
+        assert!(run.declines > 0);
         assert!(matches!(
-            execute(&mut fixture, &literals, 3, permutation).result,
+            run.result,
             Err(FormulaFailure::Expansion(
                 crate::ExpansionFailure::Evaluation {
                     error: themelios_program::term::EvalError::Overflow,
@@ -456,10 +465,14 @@ fn connected_order_preserves_integer_overflow() {
 
 #[test]
 fn connected_order_preserves_undefined_division() {
+    // The comparison's form attempts the division, declines at the zero
+    // divisor, and the general evaluator reports the failure.
     let (mut fixture, literals) = arithmetic_fixture(BinaryOp::Div, 1, 0);
     for permutation in [None, Some(&[0, 1, 2][..])] {
+        let run = execute(&mut fixture, &literals, 3, permutation);
+        assert!(run.declines > 0);
         assert!(matches!(
-            execute(&mut fixture, &literals, 3, permutation).result,
+            run.result,
             Err(FormulaFailure::Expansion(
                 crate::ExpansionFailure::Evaluation {
                     error: themelios_program::term::EvalError::Undefined,

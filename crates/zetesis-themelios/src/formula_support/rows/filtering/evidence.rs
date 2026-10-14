@@ -226,19 +226,22 @@ fn failed_scalars_never_lend_positive_evidence() {
         for divisor in [0, 1] {
             let mut fixture = Fixture::from_atoms([atom("p", &[divisor])], location());
             let one = fixture.scalar(&Value::Number(1), location());
-            let expression = Expression::new(vec![
-                Operation::Constant(one),
-                Operation::Variable(0),
-                Operation::Binary(BinaryOp::Div, 0, 1),
-            ]);
+            // The comparison's form declines at the zero divisor, and the
+            // general evaluator then decides the row.
+            let comparison = fixture.comparison(
+                vec![
+                    Operation::Constant(one),
+                    Operation::Variable(0),
+                    Operation::Binary(BinaryOp::Div, 0, 1),
+                ],
+                Relation::Lt,
+                vec![Operation::Constant(one)],
+                location(),
+            );
             let rule = rule(
                 vec![
                     pattern(&mut fixture, "p", &[0]),
-                    LiteralIr::Compare(
-                        expression,
-                        Relation::Lt,
-                        Expression::new(vec![Operation::Constant(one)]),
-                    ),
+                    LiteralIr::Compare(comparison),
                 ],
                 1,
             );
@@ -619,11 +622,12 @@ fn an_unmapped_gap_retains_the_open_restriction() {
             pattern(&mut fixture, "b", &[2]),
         ];
         if compare {
-            body.push(LiteralIr::Compare(
-                Expression::new(vec![Operation::Variable(1)]),
+            body.push(LiteralIr::Compare(fixture.comparison(
+                vec![Operation::Variable(1)],
                 Relation::Neq,
-                Expression::new(vec![Operation::Variable(2)]),
-            ));
+                vec![Operation::Variable(2)],
+                location(),
+            )));
         }
         let rule = rule(body, 3);
         with_fixture(fixture, |support, computation, budget, counters| {

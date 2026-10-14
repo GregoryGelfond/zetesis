@@ -16,7 +16,7 @@ use std::mem::size_of;
 use std::ops::Range;
 
 use crate::formula_support::components::Pattern;
-use themelios_program::program::{DefaultNegation, Relation as Comparison};
+use themelios_program::program::{self, DefaultNegation};
 use themelios_program::symbol::{Sign as SourceSign, Symbol};
 use zetesis_core::catalog::TermAssignment;
 use zetesis_core::relation::{Failure, Relation};
@@ -47,7 +47,7 @@ struct Occurrence {
 /// A comparison that reads one variable alone, with that variable.
 struct Unary<'a> {
     left: &'a Expression,
-    relation: Comparison,
+    relation: program::Relation,
     right: &'a Expression,
     slot: usize,
 }
@@ -741,14 +741,15 @@ impl Drop for Guards<'_, '_> {
 /// read exactly one. A comparison over two variables, or over none, is
 /// decided in the join.
 fn unary(literal: &LiteralIr) -> Option<Unary<'_>> {
-    let LiteralIr::Compare(left, relation, right) = literal else {
+    let LiteralIr::Compare(comparison) = literal else {
         return None;
     };
+    let ([left, right], relation) = comparison.operands();
     let mut inputs = left.inputs().chain(right.inputs());
     let slot = inputs.next()?;
     inputs.all(|input| input == slot).then_some(Unary {
         left,
-        relation: *relation,
+        relation,
         right,
         slot,
     })

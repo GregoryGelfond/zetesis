@@ -106,24 +106,30 @@ Notable changes by release. Versions follow Semantic Versioning.
   bytes can exceed the slots in use by up to eight bytes per statement, so the
   scalar-byte ceiling can be reached that much earlier.
 - Comparisons of integer arithmetic are decided with machine integers. The
-  compiler compiles each comparison operand of at most sixteen nodes once, with
-  the prepared program, into an integer comparison form; on a row whose operand
-  values are numbers, the form compares two machine integers, constructing no
-  term and reading no projection, and every other row falls back to the
-  expression evaluator. Verdicts and answers are unchanged. Preparation's
-  expansion receipts rise by the forms' steps (`TermWork`) and their eight bytes
-  per step (`ScalarBytes`); every compiled expression is 24 bytes larger, which
-  the charges that count the size of compiled literals reflect. Grounding work
+  compiler builds each comparison literal whose operands have at most sixteen
+  nodes each with an integer comparison form, once, with the prepared program,
+  reading every constant itself; on a row whose operand values are numbers, the
+  form compares two machine integers, constructing no term and reading no
+  projection, and every other row falls back to the expression evaluator.
+  Verdicts and answers are unchanged. Preparation's expansion receipts rise by
+  the forms' steps (`TermWork`) and their eight bytes per step (`ScalarBytes`),
+  for every comparison literal the compiler builds, including equalities that
+  become bindings and written constraints that constraint replacement drops, and
+  its formula work rises by five units for each constant a form reads. A form's
+  attempt on a row is checked against the work ceiling for its whole constant
+  before it runs and counts the work it performed after it, so grounding work
   falls for comparisons a form decides, except where a unary projection used to
-  answer; a row that falls back is charged the form's constant as well as the
-  evaluator's work; support bytes fall where a number would have been newly
-  constructed. A work or expansion ceiling can therefore be reached earlier or
-  later than before. `GroundingWork` gains `integer_comparisons` and
-  `integer_comparison_declines`, the rows decided and declined, which the
-  statistics' grounding attribution reports. `ComparisonForms`, from
-  `comparison_forms()` on the prepared and admitted formulas, counts the
-  comparison literals with a form and without one by reason, and the statistics
-  records print it.
+  answer, and a row that falls back counts the work its attempt performed, after
+  that check, as well as the evaluator's work; support bytes fall where a number
+  would have been newly constructed. A work or expansion ceiling can therefore
+  be reached earlier or later than before. `GroundingWork` gains
+  `integer_comparisons` and `integer_comparison_declines`, the rows decided and
+  declined, which the statistics' grounding attribution reports.
+  `ComparisonForms`, from `comparison_forms()` on the prepared and admitted
+  formulas, counts the prepared program's comparison literals with a form
+  (`with_form`) and without one by reason (`long_operand`, `wide_slot`,
+  `constructor`, `nonnumeric_constant`, `argument_position`), and the
+  statistics records print it.
 - An aggregate assignment now proposes its carrier: the measure of every
   selection that contains its required tuples, those from an element whose
   condition has no atom of either sign, and lies within its possible ones.

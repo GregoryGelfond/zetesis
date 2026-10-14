@@ -657,12 +657,12 @@ impl<'a> SyntaxScan<'a, '_> {
         for literal in body {
             self.counters.work(self.limits, self.location)?;
             match literal {
-                LiteralIr::Compare(left, _, right)
-                | LiteralIr::ArgumentCheck {
-                    captured: left,
-                    value: right,
+                LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => {
+                    if self.expression(comparison.left())? || self.expression(comparison.right())? {
+                        return Ok(true);
+                    }
                 }
-                | LiteralIr::Range {
+                LiteralIr::Range {
                     lower: left,
                     upper: right,
                     ..

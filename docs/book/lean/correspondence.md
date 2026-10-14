@@ -2873,9 +2873,10 @@ caller obligation. The reset law neither establishes source-family exclusions
 nor permits an earlier final filter to hide an independently required check.
 An integer comparison form borrows no workspace. Its obligations are that its
 verdict equals the evaluator's on every row it decides, with every other row
-left to the evaluator, and that it charges its constant, one unit per node and
-per variable step, before it evaluates, whether it then decides or declines; no
-Lean law states them.
+left to the evaluator, and that an attempt is checked against the work ceiling
+for its constant, one unit per step and per variable step of both operands,
+before it evaluates, and counts after it the work it performed, never more than
+that constant; no Lean law states them.
 
 `EvaluationPrefix.remember_success_sound` states the invariant for retaining
 successful whole-expression results. It requires a pure partial evaluator and

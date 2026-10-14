@@ -68,7 +68,7 @@ impl<'join, 'a, 'source> Continuations<'join, 'a, 'source> {
         for (index, literal) in join.literals.iter().enumerate() {
             counters.work(limits, location)?;
             if join.plan.decisions.decides(index) {
-                let (left, _, right) = comparison(literal).expect("prefix comparison");
+                let ([left, right], _) = comparison(literal).expect("prefix comparison").operands();
                 for node in left.nodes.iter().chain(&right.nodes) {
                     counters.work(limits, location)?;
                     if !matches!(node, Operation::Constant(_) | Operation::Variable(_)) {

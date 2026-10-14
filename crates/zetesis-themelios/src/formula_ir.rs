@@ -13,10 +13,11 @@ mod objective_scope;
 
 mod domain;
 
+mod comparison;
+pub(crate) use comparison::Comparison;
 mod comparison_forms;
 pub use comparison_forms::ComparisonForms;
 mod integer;
-pub(crate) use integer::{IntegerOperand, WithoutForm};
 
 mod facts;
 
@@ -311,17 +312,22 @@ impl HeadElementKey {
         }
     }
 }
+/// The compiled operands of one written comparison step, before body
+/// placement makes them a comparison literal or the guard path a guard's
+/// test.
+pub(super) enum ComparisonParts {
+    Scalar(Expression, Relation, Expression),
+    Tuple(Vec<Expression>, Relation, Vec<Expression>),
+}
 pub(crate) enum LiteralIr {
     Atom(DefaultNegation, AtomPattern),
     PatternAtom(crate::formula_pattern::PatternAtom),
     ProjectedAtom(DefaultNegation, Projection),
-    Compare(Expression, Relation, Expression),
-    /// Equality between a captured positive subterm and its source expression.
-    /// This is always a consumer; neither side supplies a binding instruction.
-    ArgumentCheck {
-        captured: Expression,
-        value: Expression,
-    },
+    Compare(Comparison),
+    /// Equality between a captured positive subterm and its source expression:
+    /// the comparison `captured = value`, captured on the left. This is
+    /// always a consumer; neither side supplies a binding instruction.
+    ArgumentCheck(Comparison),
     TupleCompare(Vec<Expression>, Relation, Vec<Expression>),
     Guard(crate::formula_guard::Guard),
     /// The complement of an ordinary singleton comparison head. Its truth
@@ -435,69 +441,47 @@ pub(crate) enum AggregateKey {
     Tuple(Vec<CoreTerm>),
     Atom(AtomPattern),
 }
+/// An expression's nodes in evaluation order: each operation's arguments name
+/// earlier nodes. An expression carries no derived state, so its nodes may be
+/// read or rewritten freely; a comparison's integer form belongs to the
+/// comparison literal ([`Comparison`]).
 pub(crate) struct Expression {
     pub nodes: Vec<Operation>,
-    /// The expression compiled for machine integers, or why it has no such
-    /// form. Only the compiler's comparison operands have one
-    /// ([`Compiler::integer_expression`]).
-    integer: Result<IntegerOperand, WithoutForm>,
 }
 impl Expression {
-    /// An expression without an integer operand form: every construction but
-    /// the compiler's comparison operands.
     pub(crate) fn new(nodes: Vec<Operation>) -> Self {
-        Self {
-            nodes,
-            integer: Err(WithoutForm::NotCompiled),
-        }
+        Self { nodes }
     }
 
-    /// Its integer operand form, or why it has none.
-    pub(crate) fn integer(&self) -> Result<&IntegerOperand, WithoutForm> {
-        self.integer.as_ref().map_err(|reason| *reason)
-    }
-
-    /// A copy over `nodes`, which copy this expression's nodes one for one,
-    /// keeping its integer operand form. The form's copy is charged as
-    /// `ScalarBytes` before it is allocated.
+    /// A copy, node for node: `work` is charged before each node, and a
+    /// constructor node is copied through its own copy, which charges its
+    /// bytes as `ScalarBytes`.
     ///
     /// # Errors
-    /// The expansion budget's refusal of that charge.
-    pub(crate) fn copy_over(
+    /// `work`'s refusal, or the expansion budget's.
+    pub(crate) fn copy(
         &self,
-        nodes: Vec<Operation>,
+        mut work: impl FnMut() -> Result<(), FormulaFailure>,
         budget: &mut Budget,
         location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
-        let integer = match &self.integer {
-            Ok(form) => {
-                budget.charge(
-                    ExpansionResource::ScalarBytes,
-                    IntegerOperand::bytes(form.nodes()) as u128,
-                    location,
-                )?;
-                Ok(form.copy())
-            }
-            Err(reason) => Err(*reason),
-        };
-        Ok(Self { nodes, integer })
-    }
-
-    /// What [`Compiler::integer_expression`] builds over `nodes`, reading each
-    /// constant's numeric value through `number`, without its charges.
-    #[cfg(test)]
-    pub(crate) fn with_integer_form(
-        nodes: Vec<Operation>,
-        number: impl Fn(components::Scalar) -> Option<i32>,
-    ) -> Self {
-        let integer = integer::shape(&nodes).and_then(|()| {
-            let Ok(numbers) =
-                integer::numbers::<std::convert::Infallible>(&nodes, |scalar| Ok(number(scalar)));
-            numbers
-                .map(|numbers| IntegerOperand::new(&nodes, &numbers))
-                .ok_or(WithoutForm::NonnumericConstant)
-        });
-        Self { nodes, integer }
+        let mut nodes = Vec::with_capacity(self.nodes.len());
+        for operation in &self.nodes {
+            work()?;
+            nodes.push(match *operation {
+                Operation::Constant(value) => Operation::Constant(value),
+                Operation::Constructor(ref constructor) => {
+                    Operation::Constructor(constructor.copy(budget, location)?)
+                }
+                Operation::Variable(variable) => Operation::Variable(variable),
+                Operation::Unary(operator, value) => Operation::Unary(operator, value),
+                Operation::Binary(operator, left, right) => {
+                    Operation::Binary(operator, left, right)
+                }
+                Operation::Absolute(value) => Operation::Absolute(value),
+            });
+        }
+        Ok(Self { nodes })
     }
 
     /// Complete declared input occurrences; unrelated environment slots are never read.
@@ -1769,70 +1753,40 @@ impl Compiler<'_> {
         Ok(Self::scalar_expression(&CoreTerm::Constant(scalar)))
     }
 
+    /// The value of `scalar` when it is a number ([`components::Admission::scalar_number`]).
     pub(super) fn scalar_number(
         &mut self,
         scalar: components::Scalar,
     ) -> Result<Option<i32>, FormulaFailure> {
-        let value = self
-            .source
-            .scalar_ref(scalar, self.limits, self.counters, self.location)?;
-        Ok(match value.descriptor() {
-            zetesis_core::ValueNodeRef::Number(number) => Some(number),
-            _ => None,
-        })
+        self.source
+            .scalar_number(scalar, self.limits, self.counters, self.location)
     }
 
-    /// A comparison operand: an expression over `nodes`, with its integer
-    /// operand form when it has one ([`integer`]). Compiling a form charges
-    /// one `TermWork` unit per step before reading its constants' values, and
-    /// the form's bytes as `ScalarBytes` before allocating it; an expression
-    /// the shape rule excludes is charged nothing further.
-    pub(super) fn integer_expression(
+    /// The comparison `left relation right`, compiled with its integer
+    /// comparison form ([`comparison::compile`]).
+    fn compiled(
         &mut self,
-        nodes: Vec<Operation>,
-    ) -> Result<Expression, FormulaFailure> {
-        let integer = match integer::shape(&nodes) {
-            Ok(()) => self.integer_operand(&nodes)?,
-            Err(reason) => Err(reason),
-        };
-        Ok(Expression { nodes, integer })
+        parts: (Expression, Relation, Expression),
+    ) -> Result<Comparison, FormulaFailure> {
+        comparison::compile(
+            parts,
+            &self.source,
+            self.limits,
+            self.counters,
+            self.budget,
+            self.location,
+        )
     }
 
-    /// The form of `nodes`, which satisfy the shape rule, or
-    /// [`WithoutForm::NonnumericConstant`].
-    fn integer_operand(
-        &mut self,
-        nodes: &[Operation],
-    ) -> Result<Result<IntegerOperand, WithoutForm>, FormulaFailure> {
-        self.budget.charge(
-            ExpansionResource::TermWork,
-            nodes.len() as u128,
-            self.location,
-        )?;
-        let Some(numbers) = integer::numbers(nodes, |scalar| self.scalar_number(scalar))? else {
-            return Ok(Err(WithoutForm::NonnumericConstant));
-        };
-        self.budget.charge(
-            ExpansionResource::ScalarBytes,
-            IntegerOperand::bytes(nodes.len()) as u128,
-            self.location,
-        )?;
-        Ok(Ok(IntegerOperand::new(nodes, &numbers)))
-    }
-
-    /// The comparison literal `left relation right`, its operands compiled
-    /// with their integer operand forms.
+    /// The comparison literal `left relation right`, with its integer
+    /// comparison form.
     pub(super) fn compare(
         &mut self,
         left: Expression,
         relation: Relation,
         right: Expression,
     ) -> Result<LiteralIr, FormulaFailure> {
-        Ok(LiteralIr::Compare(
-            self.integer_expression(left.nodes)?,
-            relation,
-            self.integer_expression(right.nodes)?,
-        ))
+        Ok(LiteralIr::Compare(self.compiled((left, relation, right))?))
     }
 
     /// The equality that gives the data slot `target` its value, a
@@ -1856,10 +1810,11 @@ impl Compiler<'_> {
         captured: usize,
         value: Expression,
     ) -> Result<LiteralIr, FormulaFailure> {
-        Ok(LiteralIr::ArgumentCheck {
-            captured: self.integer_expression(vec![Operation::Variable(captured)])?,
-            value: self.integer_expression(value.nodes)?,
-        })
+        Ok(LiteralIr::ArgumentCheck(self.compiled((
+            Expression::new(vec![Operation::Variable(captured)]),
+            Relation::Eq,
+            value,
+        ))?))
     }
 }
 

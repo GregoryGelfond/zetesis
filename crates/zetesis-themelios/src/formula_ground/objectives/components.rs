@@ -21,7 +21,8 @@ struct Pattern {
     predicate: DeclaredPredicate,
     fields: Range<usize>,
 }
-struct Comparison {
+/// An equality, or a disequality, of two objective fields.
+struct FieldTest {
     equal: bool,
     left: usize,
     right: usize,
@@ -31,7 +32,7 @@ pub(super) struct Components {
     constants: Binding<'static>,
     fields: Buffer<Field>,
     patterns: Buffer<Pattern>,
-    comparisons: Buffer<Comparison>,
+    comparisons: Buffer<FieldTest>,
     scalars: usize,
 }
 impl Components {
@@ -121,7 +122,7 @@ impl Components {
         self.term(left, None, computation, limits, counters, location)?;
         self.term(right, None, computation, limits, counters, location)?;
         self.comparisons.push(
-            Comparison {
+            FieldTest {
                 equal: filter.is_equality(),
                 left: start,
                 right: start + 1,

@@ -67,13 +67,13 @@ impl FormulaInput {
         diagnostics.metadata(
             Label::Comparisons,
             format_args!(
-                "with_integer_form={}; bound={}; constructor={}; nonnumeric_constant={}; argument_position={}; built_without_form={}",
+                "with_form={}; long_operand={}; wide_slot={}; constructor={}; nonnumeric_constant={}; argument_position={}",
                 forms.with_form,
-                forms.bound,
+                forms.long_operand,
+                forms.wide_slot,
                 forms.constructor,
                 forms.nonnumeric_constant,
-                forms.argument_position,
-                forms.built_without_form
+                forms.argument_position
             ),
         )
     }

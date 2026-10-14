@@ -13,7 +13,9 @@ fn with_expressions(
                 .body
                 .iter()
                 .filter_map(|literal| match literal {
-                    LiteralIr::Compare(left, _, _) if left.inputs().count() > 1 => Some(left),
+                    LiteralIr::Compare(comparison) if comparison.left().inputs().count() > 1 => {
+                        Some(comparison.left())
+                    }
                     _ => None,
                 })
                 .collect();

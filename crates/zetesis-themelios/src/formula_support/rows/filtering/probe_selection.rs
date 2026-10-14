@@ -205,17 +205,20 @@ fn replay_keeps_scalar_overflow_visible() {
         let maximum = fixture.scalar(&Value::Number(i32::MAX), location());
         let zero = fixture.scalar(&Value::Number(0), location());
         let mut body = body(&mut fixture);
-        body.push(LiteralIr::Compare(
-            Expression::new(vec![
+        // The comparison's form declines at the overflow, and the general
+        // evaluator then reports it.
+        body.push(LiteralIr::Compare(fixture.comparison(
+            vec![
                 Operation::Constant(maximum),
                 Operation::Variable(1),
                 Operation::Variable(2),
                 Operation::Binary(BinaryOp::Mul, 1, 2),
                 Operation::Binary(BinaryOp::Add, 0, 3),
-            ]),
+            ],
             Relation::Gt,
-            Expression::new(vec![Operation::Constant(zero)]),
-        ));
+            vec![Operation::Constant(zero)],
+            location(),
+        )));
         let rule = rule(body, 3);
         let selection = Selection {
             select: |_: usize, row: zetesis_core::relation::Row<'_, '_>| {

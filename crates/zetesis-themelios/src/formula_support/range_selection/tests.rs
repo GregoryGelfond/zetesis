@@ -181,7 +181,10 @@ fn divisor_one_does_not_hide_a_selective_equality() {
         let limits = FormulaLimits::default();
         let mut context = Context::new(&*computation, &limits, counters, rule.location);
         for literal in &rule.body {
-            if let LiteralIr::Compare(left, Relation::Eq, right) = literal {
+            if let LiteralIr::Compare(comparison) = literal
+                && comparison.relation() == Relation::Eq
+            {
+                let (left, right) = (comparison.left(), comparison.right());
                 for (expression, zero) in [(left, right), (right, left)] {
                     if let Some((_, Divisor::Constant(divisor))) =
                         remainder(expression, zero, &mut context).unwrap()

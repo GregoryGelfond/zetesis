@@ -5,7 +5,7 @@ use themelios_program::program::{Arguments, Literal, LiteralInner, Relation};
 use themelios_program::term::{Term, Variable};
 
 use crate::diagnostic::unsupported;
-use crate::formula_ir::{Compiler, LiteralIr, Operation, Variables};
+use crate::formula_ir::{ComparisonParts, Compiler, LiteralIr, Operation, Variables};
 use crate::{FormulaFailure, ProfileFeature};
 
 impl Compiler<'_> {
@@ -36,8 +36,10 @@ impl Compiler<'_> {
             });
         }
         match self.comparison(left, relation, right, variables)? {
-            LiteralIr::Compare(left, relation, right) => self.compare(left, relation, right),
-            literal => Ok(literal),
+            ComparisonParts::Scalar(left, relation, right) => self.compare(left, relation, right),
+            ComparisonParts::Tuple(left, relation, right) => {
+                Ok(LiteralIr::TupleCompare(left, relation, right))
+            }
         }
     }
 

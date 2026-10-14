@@ -55,13 +55,9 @@ fn constraint(
             .work(context.work.limits, context.work.location)?;
         let safe = match literal {
             LiteralIr::Atom(..) | LiteralIr::PatternAtom(_) => true,
-            LiteralIr::Compare(left, _, right)
-            | LiteralIr::ArgumentCheck {
-                captured: left,
-                value: right,
-            } => {
-                expression(left, &mut has_divisor, context)?
-                    && expression(right, &mut has_divisor, context)?
+            LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => {
+                expression(comparison.left(), &mut has_divisor, context)?
+                    && expression(comparison.right(), &mut has_divisor, context)?
             }
             LiteralIr::TupleCompare(left, _, right) => {
                 expressions(left.iter().chain(right), &mut has_divisor, context)?

@@ -38,7 +38,9 @@ pub(in crate::formula_support) fn needed(literals: &[LiteralIr]) -> bool {
     let arithmetic = |expression: &Expression| expression.nodes.iter().any(numeric::arithmetic);
     crate::formula_support::family::partial(literals)
         || literals.iter().any(|literal| match literal {
-            LiteralIr::Compare(left, _, right) => arithmetic(left) || arithmetic(right),
+            LiteralIr::Compare(comparison) => {
+                arithmetic(comparison.left()) || arithmetic(comparison.right())
+            }
             LiteralIr::TupleCompare(left, _, right) => left.iter().chain(right).any(arithmetic),
             _ => false,
         })
@@ -56,9 +58,9 @@ pub(crate) fn supports_column_totality(
         counters.work(limits, rule.location)?;
         let expressions = match literal {
             LiteralIr::Atom(..) => continue,
-            LiteralIr::Compare(left, _, right) => std::slice::from_ref(left)
+            LiteralIr::Compare(comparison) => std::slice::from_ref(comparison.left())
                 .iter()
-                .chain(std::slice::from_ref(right)),
+                .chain(std::slice::from_ref(comparison.right())),
             LiteralIr::TupleCompare(left, _, right) => left.iter().chain(right),
             _ => return Ok(false),
         };
@@ -126,7 +128,8 @@ impl<'a> Projections<'a> {
         for (index, literal) in rule.body.iter().enumerate() {
             tick(&mut context)?;
             match literal {
-                LiteralIr::Compare(left, _, right) => {
+                LiteralIr::Compare(comparison) => {
+                    let ([left, right], _) = comparison.operands();
                     for (side, expression) in [left, right].into_iter().enumerate() {
                         if !self.total_expression(
                             (Some((index, side)), expression),
@@ -400,8 +403,8 @@ pub(in crate::formula_support) fn range_body(
     }
     for literal in &rule.body {
         tick(&mut context)?;
-        if let LiteralIr::Compare(left, _, right) = literal {
-            for expression in [left, right] {
+        if let LiteralIr::Compare(comparison) = literal {
+            for expression in [comparison.left(), comparison.right()] {
                 context.work.counters.charge_work(
                     expression.nodes.len() as u128,
                     context.work.limits,

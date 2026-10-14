@@ -7,7 +7,7 @@ mod connected;
 use super::arrange;
 use crate::ExpansionLimits;
 use crate::expansion::Budget;
-use crate::formula_ir::{Expression, LiteralIr, Operation};
+use crate::formula_ir::{LiteralIr, Operation};
 use crate::formula_support::testing::Fixture;
 use crate::formula_support::{PatternOccurrence, PositivePattern};
 
@@ -26,9 +26,13 @@ fn atom(fixture: &mut Fixture, name: &str, variables: &[usize]) -> LiteralIr {
     )
 }
 
-fn less(left: usize, right: usize) -> LiteralIr {
-    let variable = |variable| Expression::new(vec![Operation::Variable(variable)]);
-    LiteralIr::Compare(variable(left), Relation::Lt, variable(right))
+fn less(fixture: &mut Fixture, left: usize, right: usize) -> LiteralIr {
+    LiteralIr::Compare(fixture.comparison(
+        vec![Operation::Variable(left)],
+        Relation::Lt,
+        vec![Operation::Variable(right)],
+        given_site(),
+    ))
 }
 
 /// The predicate names of `literals` in the order `arrange` chooses, with
@@ -95,7 +99,7 @@ fn a_comparison_is_decided_before_an_unrelated_occurrence_of_the_same_size() {
         atom(&mut fixture, "dw", &[0]),
         atom(&mut fixture, "dx", &[1]),
         atom(&mut fixture, "dy", &[2]),
-        less(1, 2),
+        less(&mut fixture, 1, 2),
     ];
     assert_eq!(
         order(&mut fixture, &literals, &[40, 40, 40], 3),
@@ -109,7 +113,7 @@ fn ready_comparisons_precede_smaller_generators() {
     let literals = [
         atom(&mut fixture, "big", &[0]),
         atom(&mut fixture, "small", &[1]),
-        less(0, 0),
+        less(&mut fixture, 0, 0),
     ];
     assert_eq!(
         order(&mut fixture, &literals, &[100, 10], 2),
@@ -347,7 +351,7 @@ fn offered_counts_use_checked_predicate_text_comparison() {
 
 #[test]
 fn comparison_readiness_refuses_unpaid_variable_scans() {
-    let literals = [less(0, 1)];
+    let literals = [less(&mut Fixture::default(), 0, 1)];
     let mut complete = Budget::new(ExpansionLimits::default(), usize::MAX);
     super::Decisions::checked(
         &literals,

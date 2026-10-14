@@ -399,6 +399,36 @@ impl Counters {
             location,
         )
     }
+    /// The first half of a charge: poll cancellation and check `amount`
+    /// further units against the work ceiling, recording and counting
+    /// nothing. Work counted later through [`Self::count_work`], up to
+    /// `amount`, stays under the ceiling this check admitted.
+    #[inline]
+    pub(super) fn check_work(
+        &self,
+        amount: u128,
+        limits: &FormulaLimits,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        check_work(
+            self.accounting.work,
+            self.cancellation.as_ref(),
+            amount,
+            limits,
+            location,
+        )
+    }
+    /// The second half of a charge: record the local pending receipt and
+    /// count `amount` units, which a preceding [`Self::check_work`] for at
+    /// least `amount` admitted.
+    #[inline]
+    pub(super) fn count_work(&mut self, amount: u64) {
+        count_work(
+            &mut self.accounting.work,
+            self.accounting.allowance.as_mut(),
+            amount,
+        );
+    }
     pub(super) fn generated(
         &mut self,
         value: &zetesis_core::catalog::TermKey,
@@ -489,6 +519,25 @@ fn charge_work(
     limits: &FormulaLimits,
     location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
+    check_work(*work, cancellation, amount, limits, location)?;
+    count_work(
+        work,
+        allowance,
+        u64::try_from(amount).expect("charged work fits its u64 ceiling"),
+    );
+    Ok(())
+}
+
+/// A charge's check: poll cancellation, then check `work + amount` against
+/// the work ceiling.
+#[inline]
+fn check_work(
+    work: u64,
+    cancellation: Option<&zetesis_cpu::Cancellation>,
+    amount: u128,
+    limits: &FormulaLimits,
+    location: ProgramSite,
+) -> Result<(), FormulaFailure> {
     if let Some(cancellation) = cancellation
         && let Err(reason) = cancellation.poll()
     {
@@ -496,16 +545,23 @@ fn charge_work(
     }
     ceiling(
         FormulaResource::Work,
-        u128::from(*work) + amount,
+        u128::from(work) + amount,
         u128::from(limits.max_work),
         location,
-    )?;
-    let amount = u64::try_from(amount).expect("charged work fits its u64 ceiling");
+    )
+}
+
+/// A charge's count: record the local pending receipt, then count `amount`.
+#[inline]
+fn count_work(
+    work: &mut u64,
+    allowance: Option<&mut crate::constraint_allowance::Pending>,
+    amount: u64,
+) {
     if let Some(allowance) = allowance {
         allowance.work(amount);
     }
     *work += amount;
-    Ok(())
 }
 
 /// The failure of a charge stopped by cancellation or a deadline.
@@ -2819,13 +2875,14 @@ impl<'a, 'source> Join<'a, 'source> {
         let depth = self.depth;
         let mut passes = depth == 0 || self.verdicts[depth - 1];
         for index in self.plan.decisions.decided_at(depth) {
-            let (left, relation, right) =
+            let comparison =
                 comparison(&self.literals[index]).expect("a decided literal is a comparison");
             let decided = integer_comparisons::decide(
-                ([left, right], relation),
+                comparison,
                 &self.values,
                 Context::new(&*computation, limits, counters, location),
             )?;
+            let ([left, right], relation) = comparison.operands();
             let compared = if let Some(holds) = decided {
                 Ok(holds)
             } else if self.certified_total {
@@ -3005,11 +3062,12 @@ impl<'a, 'source> Join<'a, 'source> {
     }
 }
 
-/// Captured arguments reuse comparison evaluation, never binding inference.
-fn comparison(literal: &LiteralIr) -> Option<(&Expression, Relation, &Expression)> {
+/// The comparison a literal decides: a comparison literal or an argument
+/// check. Captured arguments reuse comparison evaluation, never binding
+/// inference.
+fn comparison(literal: &LiteralIr) -> Option<&crate::formula_ir::Comparison> {
     match literal {
-        LiteralIr::Compare(left, relation, right) => Some((left, *relation, right)),
-        LiteralIr::ArgumentCheck { captured, value } => Some((captured, Relation::Eq, value)),
+        LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => Some(comparison),
         _ => None,
     }
 }

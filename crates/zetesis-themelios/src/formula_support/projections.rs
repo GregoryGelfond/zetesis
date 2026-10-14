@@ -100,7 +100,9 @@ impl<'a> ProjectionValues<'a> {
         }
         for (literal, value) in literals.iter().enumerate() {
             tick(&mut context)?;
-            let Some((left, _, right)) = comparison(value) else {
+            let Some(([left, right], _)) =
+                comparison(value).map(crate::formula_ir::Comparison::operands)
+            else {
                 continue;
             };
             for (side, expression) in [left, right].into_iter().enumerate() {

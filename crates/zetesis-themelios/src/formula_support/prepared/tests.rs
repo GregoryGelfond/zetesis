@@ -1,6 +1,6 @@
 use super::*;
 use crate::ProgramSite;
-use crate::formula_ir::{Expression, HeadIr, LiteralIr, Operation};
+use crate::formula_ir::{HeadIr, LiteralIr, Operation};
 use crate::formula_support::testing::budget;
 use crate::formula_support::{CompletedCatalog, build, testing};
 use crate::{ConstraintAllowance, ConstraintCheckLimits, ExpansionLimits, FormulaResource};
@@ -29,7 +29,6 @@ fn fixture() -> (CompletedCatalog, RuleIr) {
             )
             .unwrap();
     }
-    let variable = |slot| Expression::new(vec![Operation::Variable(slot)]);
     let mut body: Vec<_> = [("p", 0), ("q", 1)]
         .into_iter()
         .map(|(name, slot)| {
@@ -45,7 +44,16 @@ fn fixture() -> (CompletedCatalog, RuleIr) {
             )
         })
         .collect();
-    body.push(LiteralIr::Compare(variable(0), Relation::Lt, variable(1)));
+    body.push(LiteralIr::Compare(testing::comparison(
+        &mut catalog,
+        (
+            vec![Operation::Variable(0)],
+            Relation::Lt,
+            vec![Operation::Variable(1)],
+        ),
+        &mut Counters::default(),
+        location,
+    )));
     let completed = build(
         catalog,
         &preparation.program,
