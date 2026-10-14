@@ -35,8 +35,8 @@ use zetesis_ferraris::AggregateExtremum;
 /// the carrier of the same required tuples over a support that contains this
 /// one, and a carrier only grows with its possible tuples, so the family has a
 /// root for every value proposed here. Charges work and storage as it reduces
-/// the tuples; refuses as the local joins, the endpoint guard and the carrier
-/// operations do, or on the aggregate-element ceiling per distinct tuple.
+/// the tuples; refuses as the local joins, the endpoint guard and [`carrier`]
+/// do, or on the aggregate-element ceiling per distinct tuple.
 pub(crate) fn values(
     aggregate: &AggregateIr,
     assignment: &Binding,
@@ -103,7 +103,7 @@ pub(crate) fn values(
     )
 }
 
-/// What an assignment's function reduces each of its tuples to, with the
+/// What an aggregate's function reduces each of its tuples to, with the
 /// function itself: a weight for `#count`, `#sum` and `#sum+`, the first value
 /// for `#min` and `#max`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -114,7 +114,8 @@ pub(crate) enum Kind {
 
 impl Kind {
     /// The kind of `function`: the one place an aggregate function is mapped
-    /// to the contributions its carrier reads.
+    /// to its contribution kind, which final grounding's coalescing and
+    /// nonbinding guards read as well as the carrier.
     pub(crate) fn of(function: AggregateFunction) -> Self {
         match function {
             AggregateFunction::Count => Self::Numeric(Numeric::Count),

@@ -810,7 +810,7 @@ The [arithmetic validation contracts](https://github.com/GregoryGelfond/zetesis/
 check defined complete families, incomplete joins, required failures and explicit
 clingo differences.
 
-There is also a conservative **zetesis extrema guard**: numeric values
+There is also a conservative **numeric endpoint guard**: numeric values
 `-2147483648` and `2147483647` are refused when reached as `#min`/`#max` bounds or
 the first component of a possible aggregate tuple, including assignment values.
 It does not ban these integers as ordinary data, later tuple-key components or
@@ -819,7 +819,7 @@ the comparison operator or recursion.
 
 The typed refusal is `AdmissionFailure::ExtremumEndpoint`, with the evaluated
 value and its source location. Its diagnostic code is `zetesis::extremum-endpoint`;
-the message names the numeric endpoint and the zetesis guard.
+the message names the numeric endpoint and the guard.
 
 This is an internal source-admission guard, not a themelios parser rejection.
 Separately, the pinned themelios program raiser cannot represent the unsigned
@@ -831,7 +831,7 @@ The guard protects unresolved correspondence between source extrema semantics
 and the native formula interpretation. It is not proof that every guarded input
 is undefined or a modeling error. The lower-level finite formula library can
 represent endpoint formulas. The
-[admission predicate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment.rs)
+[numeric endpoint guard](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment.rs)
 and [source regressions](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/extrema_source.rs)
 locate the current boundary.
 

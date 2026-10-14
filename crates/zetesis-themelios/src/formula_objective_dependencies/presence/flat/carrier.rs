@@ -122,9 +122,6 @@ fn complete<'ir>(
     possible: &Tuples<'ir>,
     context: &mut Context<'_, '_, '_>,
 ) -> Result<TermSelection, FormulaFailure> {
-    // The possible tuples outside the required ones, kept live with every other
-    // intermediate until the carrier's values are retained.
-    let optional;
     let contributions: Reduced = match Kind::of(function) {
         Kind::Numeric(function) => {
             let required_weights = weights(
@@ -133,7 +130,7 @@ fn complete<'ir>(
                 Entries::Unreserved,
                 context,
             )?;
-            optional = optional_tuples(required, possible, context)?;
+            let optional = optional_tuples(required, possible, context)?;
             let optional_weights = weights(
                 function,
                 optional.iter().copied(),
@@ -150,7 +147,7 @@ fn complete<'ir>(
         }
         Kind::Extremum(function) => {
             let required_firsts = firsts(required.values.iter().copied(), context)?;
-            optional = optional_tuples(required, possible, context)?;
+            let optional = optional_tuples(required, possible, context)?;
             let optional_firsts = firsts(optional.iter().copied(), context)?;
             Contributions::Extremum {
                 function,
