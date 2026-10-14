@@ -1,7 +1,10 @@
 //! The limit each typed resource is counted against, set by resource, for the
-//! families of limits held here.
+//! limits an admission takes.
 //!
-//! A refusal at a limit reports the resource it met. This view holds the
+//! A refusal at a limit reports the resource it met. The view holds a family
+//! of limits when a `zetesis-themelios` admission takes it, directly or nested
+//! in the limits it takes: the admission of a source, of a bundle or of a
+//! logical program, formula preparation and expansion included. Those are the
 //! formula and expansion resources; the input limits of a source or a bundle;
 //! the core admission resources of a source or a logical program, and the
 //! logical program resources; the observation and objective admission
@@ -10,14 +13,25 @@
 //! core admission limits, so those two formula resources are set through
 //! [`admission_formula`].
 //!
+//! The limits of other operations are outside the view, though their refusals
+//! report typed resources too: loading a bundle (`BundleLimits`), compiling a
+//! program's metadata through its own door (`MetadataLimits`), planning counts
+//! and objective bounds (`CountPlanLimits`, `ObjectiveBoundLimits`), and
+//! evaluating an admitted program's observations (`observation::Limits`, whose
+//! resources [`observation()`] refuses). No admission takes them, so a test
+//! sets them where it runs that operation, and a helper that sets one of them
+//! for one crate's tests stays in that crate's `tests/integration/support`.
+//!
 //! The view stands above `zetesis-themelios`, so it serves the tests that use
 //! that crate as a dependency, its own integration tests among them. A unit
 //! test of `zetesis-themelios` would link a second copy of the crate, and a
 //! test of a crate below it would make that crate depend on its own
-//! dependents. The tests of the crates that define these limits (the unit
+//! dependents, so the tests of the crates that define these limits (the unit
 //! tests of `zetesis-themelios`, and the tests of `zetesis-core`,
-//! `zetesis-ferraris` and `zetesis-objective`) name their own fields by
-//! decision: they establish each pairing this view restates.
+//! `zetesis-ferraris` and `zetesis-objective`) name the fields they set
+//! themselves. The view's own tests check that each resource it names has a
+//! field of its own; that the field is the one a refusal reports is checked
+//! only where a test the view serves meets that refusal.
 //!
 //! A test the view serves that sets one such limit, leaving the others at
 //! their defaults, names the resource; the field holding that limit is named

@@ -2,9 +2,8 @@
 //! or given limits, the native reference the zetesis workspace's tests compare
 //! with clingo (every answer set of a small program, found by checking each
 //! candidate against the reduct), preparation and hybrid grounding,
-//! source-bundle fixtures, and, by resource, the limits of the formula,
-//! expansion, input, core admission, logical program, observation admission
-//! and objective admission resources and of the aggregate ceilings.
+//! source-bundle fixtures, and, by the resource a refusal reports, the limits
+//! an admission takes ([`resource_limits`] states which).
 //!
 //! [`admit`] admits a source under given formula limits, the rest at their
 //! defaults, [`formula`] under the default limits throughout and [`normal`] on

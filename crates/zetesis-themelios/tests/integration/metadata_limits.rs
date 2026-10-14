@@ -4,6 +4,7 @@
 //! must preserve nested values and conditions; a refusal must retain its original
 //! location and the exact independently selected resource.
 
+use crate::support::metadata_resources;
 use zetesis_core::{Atom, Model, Predicate, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::resource_limits;
@@ -72,18 +73,6 @@ fn bounded_metadata_preserves_nested_conditions() {
     }
 }
 
-fn metadata_limit(resource: MetadataResource, limit: usize) -> MetadataLimits {
-    let mut limits = MetadataLimits::default();
-    match resource {
-        MetadataResource::Statements => limits.max_statements = limit,
-        MetadataResource::Nodes => limits.max_nodes = limit,
-        MetadataResource::Depth => limits.max_depth = limit,
-        MetadataResource::TextBytes => limits.max_text_bytes = limit,
-        MetadataResource::Origins => limits.max_origins = limit,
-    }
-    limits
-}
-
 #[test]
 fn every_incomplete_input_budget_refuses_the_policy() {
     let (source, program, location) = input();
@@ -98,7 +87,11 @@ fn every_incomplete_input_budget_refuses_the_policy() {
         let mut complete = false;
         // This is a finite fixture exploration ceiling, not a production limit.
         for limit in 0..=512 {
-            match SourceMetadata::compile(&program, metadata_limit(resource, limit), location) {
+            match SourceMetadata::compile(
+                &program,
+                metadata_resources::limits(resource, limit),
+                location,
+            ) {
                 Ok(actual) => {
                     assert!(limit > 0);
                     assert_eq!(actual, expected);
