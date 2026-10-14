@@ -308,16 +308,29 @@ pub(super) fn reserve<T>(
     }
     Ok(())
 }
+/// Reserve room for `additional` more cells in a buffer filled a few cells at
+/// a time. When the room is short, grow by at least the buffer's length, so
+/// filling it reallocates a logarithmic number of times rather than once per
+/// call. The charge covers every cell reserved, which can exceed the cells in
+/// use by up to the buffer's length.
+pub(super) fn reserve_amortized<T>(
+    buffer: &mut Vec<T>,
+    additional: usize,
+    budget: &mut Budget,
+    location: ProgramSite,
+) -> Result<(), FormulaFailure> {
+    if buffer.capacity() - buffer.len() < additional {
+        reserve(buffer, additional.max(buffer.len()), budget, location)?;
+    }
+    Ok(())
+}
 pub(super) fn push<T>(
     buffer: &mut Vec<T>,
     value: T,
     budget: &mut Budget,
     location: ProgramSite,
 ) -> Result<(), FormulaFailure> {
-    if buffer.len() == buffer.capacity() {
-        let additional = buffer.len().max(1);
-        reserve(buffer, additional, budget, location)?;
-    }
+    reserve_amortized(buffer, 1, budget, location)?;
     buffer.push(value);
     Ok(())
 }

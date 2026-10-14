@@ -54,6 +54,12 @@ Notable changes by release. Versions follow Semantic Versioning.
   observers see one rule-instantiation phase per fact product or run, at its
   first statement, instead of one per fact; `TerminalFormula::deferred_templates()`
   still counts each deferred fact.
+- Formula preparation grows the record of each analyzed statement's original
+  statement geometrically, where it reserved exactly the next statement's slots,
+  so a program of n statements reallocates it a logarithmic number of times
+  instead of n times. Expansion receipts count the slots reserved: their scalar
+  bytes can exceed the slots in use by up to eight bytes per statement, so the
+  scalar-byte ceiling can be reached that much earlier.
 - Comparisons of integer arithmetic are decided with machine integers. The
   compiler compiles each comparison operand of at most sixteen nodes once, with
   the prepared program, into an integer comparison form; on a row whose operand

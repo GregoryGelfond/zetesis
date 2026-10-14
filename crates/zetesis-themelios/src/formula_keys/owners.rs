@@ -35,7 +35,9 @@ pub(crate) struct Owners {
 
 /// Record the analyzed family just emitted by one original statement. Every
 /// original is recorded once; a repeated count of one must not be used to hide
-/// multiple emissions from the same source compilation.
+/// multiple emissions from the same source compilation. The owners grow
+/// geometrically, so recording a program's statements one by one reallocates
+/// them a logarithmic number of times.
 pub(crate) fn record(
     owners: &mut Vec<Option<StatementId>>,
     owner: StatementId,
@@ -43,7 +45,7 @@ pub(crate) fn record(
     budget: &mut Budget,
     site: ProgramSite,
 ) -> Result<(), FormulaFailure> {
-    crate::formula_pattern::reserve(owners, count, budget, site)?;
+    crate::formula_pattern::reserve_amortized(owners, count, budget, site)?;
     let identity = (count == 1).then_some(owner);
     owners.extend(std::iter::repeat_n(identity, count));
     Ok(())
@@ -160,6 +162,43 @@ mod tests {
                 assert_eq!(owners.at(index), None);
             }
         }
+    }
+
+    /// Record `statements` one-statement families, returning the owners, the
+    /// number of reallocations and the budget charged.
+    fn record_one_by_one(statements: usize) -> (Vec<Option<StatementId>>, usize, Budget) {
+        let site = ProgramSite::program();
+        let mut budget = Budget::new(ExpansionLimits::default(), 100);
+        let mut owners = Vec::new();
+        let mut reallocations = 0;
+        for index in 1..=statements {
+            let capacity = owners.capacity();
+            record(&mut owners, StatementId::new(index), 1, &mut budget, site).unwrap();
+            reallocations += usize::from(owners.capacity() != capacity);
+        }
+        (owners, reallocations, budget)
+    }
+
+    #[test]
+    fn recording_reallocates_owners_logarithmically() {
+        // One exact reservation per statement would reallocate, and copy, the
+        // owners once for every statement recorded.
+        let statements = 1024_usize;
+        let (_, reallocations, _) = record_one_by_one(statements);
+        assert!(
+            reallocations <= 1 + statements.ilog2() as usize,
+            "{reallocations} reallocations for {statements} statements",
+        );
+    }
+
+    #[test]
+    fn every_reserved_owner_slot_is_charged() {
+        let (owners, _, budget) = record_one_by_one(100);
+        assert!(owners.capacity() > owners.len());
+        assert_eq!(
+            budget.usage().scalar_bytes,
+            owners.capacity() * size_of::<Option<StatementId>>(),
+        );
     }
 
     fn compiled(text: &str, max_key_work: u64) -> crate::AdmittedFormula {
