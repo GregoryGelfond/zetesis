@@ -72,15 +72,28 @@ impl<'source> FactHead<'source> {
 pub(super) struct FirstRound<'items> {
     items: &'items Items,
     position: usize,
+    /// The rule the round visited last.
+    last_rule: Option<usize>,
 }
 
 impl<'items> FirstRound<'items> {
     pub(super) fn new(items: &'items Items) -> Self {
-        Self { items, position: 0 }
+        Self {
+            items,
+            position: 0,
+            last_rule: None,
+        }
     }
 
     /// Intern every block that stands before the rule `index`, and move past
     /// that rule.
+    ///
+    /// The round visits rules in ascending index order: every schedule visits
+    /// each of its selected rules once, in original order, whatever the
+    /// dependency, SCC or publication order (`producers/wake.rs`). `index`
+    /// must therefore exceed every index visited before; a smaller one lies
+    /// behind the cursor, and every remaining block would be interned before
+    /// it. Debug builds check this.
     pub(super) fn before_rule<'source>(
         &mut self,
         index: usize,
@@ -89,6 +102,7 @@ impl<'items> FirstRound<'items> {
         limits: &FormulaLimits,
         counters: &mut Counters,
     ) -> Result<(), FormulaFailure> {
+        self.enter_rule(index);
         while self.position < self.items.len() {
             let item = self.items.get(self.position);
             self.position += 1;
@@ -99,6 +113,17 @@ impl<'items> FirstRound<'items> {
             }
         }
         Ok(())
+    }
+
+    /// Record that the round visits the rule `index`, which must follow the
+    /// rule it visited last.
+    fn enter_rule(&mut self, index: usize) {
+        debug_assert!(
+            self.last_rule.is_none_or(|last| index > last),
+            "the first round visits rules in ascending order: {index} after {:?}",
+            self.last_rule
+        );
+        self.last_rule = Some(index);
     }
 
     /// Intern every block after the round's last visited rule.
@@ -132,6 +157,22 @@ fn intern<'source>(
         })?;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::FirstRound;
+    use crate::formula_facts::Items;
+
+    #[test]
+    #[cfg(debug_assertions)]
+    #[should_panic(expected = "the first round visits rules in ascending order")]
+    fn the_first_round_refuses_a_rule_behind_the_last() {
+        let items = Items::default();
+        let mut round = FirstRound::new(&items);
+        round.enter_rule(3);
+        round.enter_rule(2);
+    }
 }
 
 /// Each support round's published atoms, in publication order, recorded on
