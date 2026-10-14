@@ -608,3 +608,20 @@ fn a_definition_matched_only_by_an_earlier_rule_is_still_covered() {
     prepared.program.items_mut().remove_rule(second);
     assert_eq!(deferred(prepared), Some(1));
 }
+
+#[test]
+fn an_out_of_order_pool_of_fact_rows_still_corresponds() {
+    // The variable producers of d defer d(3;1;2)'s rows, which follow its
+    // alternatives' order while one origin's definitions follow program
+    // position: rows that miss their positional definition are checked
+    // against every definition.
+    let prepared = prepare("p(1). q(2). d(3;1;2). d(X):-p(X). d(X):-q(X).");
+    let Partition {
+        terminal: Some(definitions),
+        ..
+    } = partition(prepared).unwrap()
+    else {
+        panic!("every deferred row corresponds to its definition")
+    };
+    assert_eq!(definitions.deferred.occurrences(), 5);
+}
