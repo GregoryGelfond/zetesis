@@ -1,9 +1,13 @@
-//! Sinks that fail on purpose, for tests of output failure paths.
+//! Sinks that fail on purpose, and writers that record each write call, for
+//! tests of output failure paths and of how output is divided into calls.
 //!
-//! Each models one failure a destination can meet: a bounded destination that
-//! fills ([`BoundedWriter`], and [`BoundedText`] for text), a closed stream
-//! ([`Closed`]), and a failure at a chosen record ([`FailAt`]). A failing byte
-//! sink returns a broken pipe whose message a test can compare.
+//! Each failing sink models one failure a destination can meet: a bounded
+//! destination that fills ([`BoundedWriter`], and [`BoundedText`] for text), a
+//! closed stream ([`Closed`]), and a failure at a chosen record ([`FailAt`]). A
+//! failing byte sink returns a broken pipe whose message a test can compare.
+//! [`Chunks`] keeps each write call as one chunk, and [`ChunksFailingAt`] does
+//! so until the write carrying its marker, from which it fails as [`FailAt`]
+//! does.
 
 use std::fmt;
 use std::io::{self, Write};
@@ -118,6 +122,79 @@ impl Write for FailAt {
     }
 }
 
+/// A byte sink that accepts every write and keeps each write call's bytes as
+/// one chunk, in order.
+#[derive(Debug, Default)]
+pub struct Chunks {
+    chunks: Vec<Vec<u8>>,
+}
+
+impl Chunks {
+    /// A sink that has recorded nothing.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The chunks recorded so far, one per write call.
+    #[must_use]
+    pub fn chunks(&self) -> &[Vec<u8>] {
+        &self.chunks
+    }
+}
+
+impl Write for Chunks {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.chunks.push(bytes.to_vec());
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
+/// A byte sink that records each accepted write call as one chunk, as
+/// [`Chunks`] does, until a write contains its marker. It fails that write and
+/// every later one with a broken pipe ([`FAILED`]), as [`FailAt`] does, and
+/// records nothing more.
+///
+/// A test sees which writes a writer that depends on call boundaries accepted
+/// before the chosen record.
+#[derive(Debug)]
+pub struct ChunksFailingAt {
+    failing: FailAt,
+    accepted: Chunks,
+}
+
+impl ChunksFailingAt {
+    /// A sink failing from the first write containing `marker`.
+    #[must_use]
+    pub fn new(marker: &'static [u8]) -> Self {
+        Self {
+            failing: FailAt::new(marker),
+            accepted: Chunks::new(),
+        }
+    }
+
+    /// The chunks accepted before the first write containing the marker.
+    #[must_use]
+    pub fn chunks(&self) -> &[Vec<u8>] {
+        self.accepted.chunks()
+    }
+}
+
+impl Write for ChunksFailingAt {
+    fn write(&mut self, bytes: &[u8]) -> io::Result<usize> {
+        self.failing.write(bytes)?;
+        self.accepted.write(bytes)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
+
 /// A text sink that accepts at most a fixed number of bytes and keeps the
 /// text it accepted.
 ///
@@ -194,6 +271,25 @@ mod tests {
         assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
         assert_eq!(error.to_string(), FAILED);
         assert!(sink.write(b"later\n").is_err());
+    }
+
+    #[test]
+    fn a_chunk_recorder_keeps_each_write_as_one_chunk() {
+        let mut sink = Chunks::new();
+        sink.write_all(b"ab").unwrap();
+        sink.write_all(b"cd\n").unwrap();
+        assert_eq!(sink.chunks(), [b"ab".to_vec(), b"cd\n".to_vec()]);
+    }
+
+    #[test]
+    fn a_failing_chunk_recorder_keeps_the_chunks_before_its_marker() {
+        let mut sink = ChunksFailingAt::new(b"Statistics:");
+        sink.write_all(b"Answer: 1\n").unwrap();
+        let error = sink.write_all(b"Statistics: 1\n").unwrap_err();
+        assert_eq!(error.kind(), io::ErrorKind::BrokenPipe);
+        assert_eq!(error.to_string(), FAILED);
+        assert!(sink.write_all(b"later\n").is_err());
+        assert_eq!(sink.chunks(), [b"Answer: 1\n".to_vec()]);
     }
 
     #[test]
