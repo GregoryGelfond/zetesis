@@ -18,6 +18,9 @@ use zetesis_core::catalog::{TermKey, TermRef};
 
 use super::{Activity, Context, activity, assignment, transport};
 use crate::formula::ceiling;
+use crate::formula_assignment::{
+    Contributions, Kind, Numeric, Reduced, Sides, append, carrier, contribution,
+};
 use crate::formula_binding::Binding;
 use crate::formula_ir::{AggregateKey, LiteralIr, Prepared, RuleIr};
 use crate::formula_support::{Buffer, Computation, Counters, TermSelection};
@@ -105,61 +108,67 @@ enum Entries {
 }
 
 /// The carrier between the `required` and the `possible` tuples, from the
-/// shared carrier operation for what `function` reduces each tuple to: its
-/// weight for `#count`, `#sum` and `#sum+`, its first value for `#min` and
-/// `#max`. One match on `function` reduces both sides, the required tuples and
-/// then the possible ones outside them, so the two are of one kind; each
-/// retained value takes an entry. Optional keys are independent only in the
-/// source abstraction. Original eligibility remains responsible for their
-/// correlation in an interpretation.
+/// carrier operation the assignment proposal sites share, over what
+/// `function` reduces each tuple to: its weight for `#count`, `#sum` and
+/// `#sum+`, its first value for `#min` and `#max`. One match on the
+/// function's kind reduces both sides, the required tuples and then the
+/// possible ones outside them, so the two are of one kind; each retained value
+/// takes an entry. Optional keys are independent only in the source
+/// abstraction. Original eligibility remains responsible for their correlation
+/// in an interpretation.
 fn complete<'ir>(
     function: AggregateFunction,
     required: &Tuples<'ir>,
     possible: &Tuples<'ir>,
     context: &mut Context<'_, '_, '_>,
 ) -> Result<TermSelection, FormulaFailure> {
-    match function {
-        AggregateFunction::Count | AggregateFunction::Sum | AggregateFunction::SumPlus => {
+    // The possible tuples outside the required ones, kept live with every other
+    // intermediate until the carrier's values are retained.
+    let optional;
+    let contributions: Reduced = match Kind::of(function) {
+        Kind::Numeric(function) => {
             let required_weights = weights(
                 function,
                 required.values.iter().copied(),
                 Entries::Unreserved,
                 context,
             )?;
-            let optional = optional_tuples(required, possible, context)?;
+            optional = optional_tuples(required, possible, context)?;
             let optional_weights = weights(
                 function,
                 optional.iter().copied(),
                 Entries::Reserved,
                 context,
             )?;
-            let proposals = crate::formula_assignment::carrier(
+            Contributions::Numeric {
                 function,
-                required_weights.iter().copied(),
-                optional_weights.iter().copied(),
-                context.computation,
-                context.limits,
-                context.counters,
-                context.location,
-            )?;
-            retained(&proposals, context)
+                sides: Sides {
+                    required: required_weights,
+                    optional: optional_weights,
+                },
+            }
         }
-        AggregateFunction::Min | AggregateFunction::Max => {
+        Kind::Extremum(function) => {
             let required_firsts = firsts(required.values.iter().copied(), context)?;
-            let optional = optional_tuples(required, possible, context)?;
+            optional = optional_tuples(required, possible, context)?;
             let optional_firsts = firsts(optional.iter().copied(), context)?;
-            let proposals = crate::formula_assignment::extrema_carrier(
+            Contributions::Extremum {
                 function,
-                required_firsts.slots(),
-                optional_firsts.slots(),
-                context.computation,
-                context.limits,
-                context.counters,
-                context.location,
-            )?;
-            retained(&proposals, context)
+                sides: Sides {
+                    required: required_firsts,
+                    optional: optional_firsts,
+                },
+            }
         }
-    }
+    };
+    let proposals = carrier(
+        contributions.streams(),
+        context.computation,
+        context.limits,
+        context.counters,
+        context.location,
+    )?;
+    retained(&proposals, context)
 }
 
 /// The `possible` tuples outside the `required` ones, in order: an optional
@@ -192,7 +201,7 @@ fn optional_tuples<'ir>(
 /// Reduce `tuples` to their weights under `function`, each taking an entry
 /// when `entries` reserves them.
 fn weights<'a>(
-    function: AggregateFunction,
+    function: Numeric,
     tuples: impl Iterator<Item = &'a [Term]>,
     entries: Entries,
     context: &mut Context<'_, '_, '_>,
@@ -205,11 +214,7 @@ fn weights<'a>(
     )?;
     for tuple in tuples {
         context.inspect()?;
-        if let Some(weight) = crate::formula_assignment::contribution(
-            function,
-            first(tuple, context)?,
-            context.location,
-        )? {
+        if let Some(weight) = contribution(function, first(tuple, context)?) {
             if entries == Entries::Reserved {
                 context.reserve_entry()?;
             }
@@ -244,7 +249,7 @@ fn firsts<'a>(
             .read()
             .term_key(value)
             .map_err(|error| crate::formula_binding::assignment(error.into(), context.location))?;
-        crate::formula_assignment::append(
+        append(
             &mut values,
             &key,
             context.computation,
