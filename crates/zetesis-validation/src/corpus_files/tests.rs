@@ -25,7 +25,7 @@ fn nonportable_components_cannot_name_corpus_inputs() {
 }
 
 #[test]
-fn directories_cannot_supply_source_bytes() {
+fn a_directory_is_refused_as_not_a_regular_file() {
     let directory = tempfile::tempdir().unwrap();
     let error = Files::read(directory.path(), 1024, Resource::SourceBytes).unwrap_err();
     assert!(matches!(&error, Error::Irregular(path) if path == directory.path()));

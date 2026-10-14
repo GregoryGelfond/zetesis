@@ -14,13 +14,18 @@
 //! [`admission_formula`].
 //!
 //! The limits of other operations are outside the view, though their refusals
-//! report typed resources too: loading a bundle (`BundleLimits`), compiling a
-//! program's metadata through its own door (`MetadataLimits`), planning counts
-//! and objective bounds (`CountPlanLimits`, `ObjectiveBoundLimits`), and
-//! evaluating an admitted program's observations (`observation::Limits`, whose
-//! resources [`observation()`] refuses). No admission takes them, so a test
-//! sets them where it runs that operation, and a helper that sets one of them
-//! for one crate's tests stays in that crate's `tests/integration/support`.
+//! report typed resources too. Among them are loading a bundle
+//! (`BundleLimits`), compiling a program's metadata through its own door
+//! (`MetadataLimits`), planning counts and objective bounds (`CountPlanLimits`,
+//! `ObjectiveBoundLimits`, `ObjectivePlanLimits`), and evaluating an admitted
+//! program's observations (`observation::Limits`, and the constructed-symbol
+//! limits of `observation::ConstructionLimits`). Evaluation also reports
+//! `Nodes`, `Depth` and `Bytes` against its constructed-symbol limits, while the
+//! view pairs those three resources with their admission fields;
+//! [`observation()`] refuses the resources counted only while observations are
+//! evaluated. No admission takes these limits, so a test sets them where it runs
+//! that operation, and a helper that sets one of them for one crate's tests
+//! stays in that crate's `tests/integration/support`.
 //!
 //! The view stands above `zetesis-themelios`, so it serves the tests that use
 //! that crate as a dependency, its own integration tests among them. A unit
