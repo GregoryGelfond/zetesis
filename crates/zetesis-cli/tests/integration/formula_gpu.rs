@@ -571,9 +571,41 @@ mod physical {
             if batch.is_none() {
                 let text = String::from_utf8(diagnostics).unwrap();
                 assert!(text.contains("hybrid GPU propagation + exact CPU residual search"));
-                assert!(text.contains("GPU kernel timing=unavailable"));
+                assert_compute_timing(&stats, &text);
             }
         }
+    }
+
+    fn assert_compute_timing(stats: &zetesis_cli::FormulaExecutionStatistics, text: &str) {
+        let timing = &stats.gpu_compute_timing;
+        assert_ne!(
+            timing.status,
+            zetesis_backend::ComputeTimingStatus::NotRequested
+        );
+        assert!(!timing.overflowed);
+        assert_eq!(
+            timing.measured_batches + timing.unavailable_batches,
+            stats.gpu_batches
+        );
+        assert_eq!(timing.elapsed.is_some(), timing.measured_batches > 0);
+        if timing.status == zetesis_backend::ComputeTimingStatus::Unsupported {
+            assert_eq!(timing.measured_batches, 0);
+        }
+        let elapsed = timing.elapsed.map_or_else(
+            || "unavailable".to_owned(),
+            |duration| duration.as_nanos().to_string(),
+        );
+        let expected = format!(
+            "GPU compute passes: status={}; elapsed_ns={elapsed}; measured batches={}; unavailable batches={}; complete={}; host preparation, transfers and waits excluded",
+            timing.status.label(),
+            timing.measured_batches,
+            timing.unavailable_batches,
+            timing.is_complete(),
+        );
+        assert!(
+            text.lines().any(|line| line.trim_start() == expected),
+            "{text}"
+        );
     }
 
     #[test]
