@@ -5727,17 +5727,42 @@
     },
     {
       "file": "Zetesis/ProducerScheduling.lean",
-      "line": 41,
+      "line": 75,
+      "name": "Zetesis.ProducerScheduling.stable_of_reads_only"
+    },
+    {
+      "file": "Zetesis/ProducerScheduling.lean",
+      "line": 103,
+      "name": "Zetesis.ProducerScheduling.selective_step_exact_of_stable"
+    },
+    {
+      "file": "Zetesis/ProducerScheduling.lean",
+      "line": 133,
+      "name": "Zetesis.ProducerScheduling.empty_selection_closed_of_stable"
+    },
+    {
+      "file": "Zetesis/ProducerScheduling.lean",
+      "line": 171,
       "name": "Zetesis.ProducerScheduling.unaffected_body_old"
     },
     {
       "file": "Zetesis/ProducerScheduling.lean",
-      "line": 65,
+      "line": 189,
+      "name": "Zetesis.ProducerScheduling.proposeAll_rules"
+    },
+    {
+      "file": "Zetesis/ProducerScheduling.lean",
+      "line": 204,
+      "name": "Zetesis.ProducerScheduling.rule_stable"
+    },
+    {
+      "file": "Zetesis/ProducerScheduling.lean",
+      "line": 223,
       "name": "Zetesis.ProducerScheduling.selective_step_exact"
     },
     {
       "file": "Zetesis/ProducerScheduling.lean",
-      "line": 104,
+      "line": 245,
       "name": "Zetesis.ProducerScheduling.empty_selection_closed"
     },
     {
@@ -9123,7 +9148,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "a9d84eba7b848ec1c8c2088c0e8690ab1fd22efca3471486718c7d75183fcbcc",
+    "Audit.lean": "d0c9e3eaf7246269e5b43d5bc750b13050419a13fb3489b7ae1bd6648b972416",
     "Zetesis.lean": "2e2f2ccb2a9b8d979235c671cad5431b1930402cb17dd520c396b67b4b702abb",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
@@ -9252,7 +9277,7 @@
     "Zetesis/PartitionedScan.lean": "513fd9e0b5d9fad9eb89911aab621f11ba9a604ecc416c16d7f4c1e76ee3748e",
     "Zetesis/PositiveArguments.lean": "71e99535d01f24ecf2bc447153cbd48006231bab85babead9f982638e9735bd2",
     "Zetesis/PositiveTheory.lean": "f0168dab6f0bba3a7df30abe4130871d99fff83d1aa0b2c9879530422f0d8a7a",
-    "Zetesis/ProducerScheduling.lean": "2ebb6a591a9d6d22a5b43227e61c6a78c9bd2d7fc50b75c718fe1ce4ef1a6adb",
+    "Zetesis/ProducerScheduling.lean": "85cf9876accf61f23878866cc21be6ac6f0991fdaff97a98722e693f6c5a650f",
     "Zetesis/ProjectedAnswers.lean": "9c9662842e9cf0108a14d4dadaa0777f1019440ea483916e097311e300229a14",
     "Zetesis/ProjectedConditionals.lean": "a420d26c76215b77f75cf33831dce80055a5d6cdb448db53f83c8951bf06dc4b",
     "Zetesis/Propagation.lean": "fc62487ece686b02daf4f2b229e90b266e09e624f8236fc70076ac427a2a745b",

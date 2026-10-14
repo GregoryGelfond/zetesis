@@ -2683,6 +2683,17 @@ uses signed-predicate reverse postings and a packed wake set, and retains the
 existing first-new binding partitions. Complete source instantiation, exact
 postings, checked work/storage and all-success round publication are executable
 correspondences. Final constraints and answer-set membership remain separate.
+The general laws, `selective_step_exact_of_stable` and
+`empty_selection_closed_of_stable`, hold for any producer family whose unaffected
+producers are stable; `stable_of_reads_only` gives stability to a producer whose
+proposals depend only on the carrier's atoms with registered predicates, when the
+carrier grows. The rule-level laws above are their corollaries. Without a
+whole-program plan, the Rust registration supplies the read set of each rich
+producer: every atom occurrence in its body and head element conditions, at
+every depth. That the traversal reads nothing else, so that it satisfies
+`ReadsOnly` for its proposals united with the carrier, and that publication only
+appends, are executable correspondences checked by tests that omit each kind of
+read in turn.
 
 The Rust [support builder](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs)
 creates `CompletedCatalog` only after an admitted round establishes no new atom.

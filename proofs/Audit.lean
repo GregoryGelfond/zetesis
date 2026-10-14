@@ -1145,7 +1145,12 @@ import Zetesis
 #print axioms Zetesis.PositiveTheory.models_reduct_exact
 #print axioms Zetesis.PositiveTheory.stable_iff_least_constraints
 #print axioms Zetesis.PositiveTheory.failed_constraint_no_model
+#print axioms Zetesis.ProducerScheduling.stable_of_reads_only
+#print axioms Zetesis.ProducerScheduling.selective_step_exact_of_stable
+#print axioms Zetesis.ProducerScheduling.empty_selection_closed_of_stable
 #print axioms Zetesis.ProducerScheduling.unaffected_body_old
+#print axioms Zetesis.ProducerScheduling.proposeAll_rules
+#print axioms Zetesis.ProducerScheduling.rule_stable
 #print axioms Zetesis.ProducerScheduling.selective_step_exact
 #print axioms Zetesis.ProducerScheduling.empty_selection_closed
 #print axioms Zetesis.ProjectedAnswers.retain_covers

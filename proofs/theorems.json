@@ -5725,19 +5725,44 @@
     "line": 240
   },
   {
+    "name": "Zetesis.ProducerScheduling.stable_of_reads_only",
+    "file": "Zetesis/ProducerScheduling.lean",
+    "line": 75
+  },
+  {
+    "name": "Zetesis.ProducerScheduling.selective_step_exact_of_stable",
+    "file": "Zetesis/ProducerScheduling.lean",
+    "line": 103
+  },
+  {
+    "name": "Zetesis.ProducerScheduling.empty_selection_closed_of_stable",
+    "file": "Zetesis/ProducerScheduling.lean",
+    "line": 133
+  },
+  {
     "name": "Zetesis.ProducerScheduling.unaffected_body_old",
     "file": "Zetesis/ProducerScheduling.lean",
-    "line": 41
+    "line": 171
+  },
+  {
+    "name": "Zetesis.ProducerScheduling.proposeAll_rules",
+    "file": "Zetesis/ProducerScheduling.lean",
+    "line": 189
+  },
+  {
+    "name": "Zetesis.ProducerScheduling.rule_stable",
+    "file": "Zetesis/ProducerScheduling.lean",
+    "line": 204
   },
   {
     "name": "Zetesis.ProducerScheduling.selective_step_exact",
     "file": "Zetesis/ProducerScheduling.lean",
-    "line": 65
+    "line": 223
   },
   {
     "name": "Zetesis.ProducerScheduling.empty_selection_closed",
     "file": "Zetesis/ProducerScheduling.lean",
-    "line": 104
+    "line": 245
   },
   {
     "name": "Zetesis.ProjectedAnswers.retain_covers",
