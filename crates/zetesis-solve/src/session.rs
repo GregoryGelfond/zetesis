@@ -87,10 +87,10 @@ impl<'a> PreparedInput<'a> {
     /// definitions. Each verified base answer is reconstructed before a full
     /// answer can be published. An eager base runs under automatic grounding;
     /// a hybrid base (from lazy materialization) runs under automatic or lazy
-    /// grounding, on the CPU backend only, its constraints checked before
-    /// reconstruction. An eager request never acquires terminal meaning. Explicit projection and
-    /// objectives are outside this profile. No admission or execution occurs in
-    /// this borrow.
+    /// grounding with the selected backend. Its streamed constraints are checked
+    /// on the host before reconstruction. An eager request never acquires
+    /// terminal meaning. Explicit projection and objectives are outside this
+    /// profile. No admission or execution occurs in this borrow.
     #[must_use]
     pub fn terminal(owner: &'a zetesis_themelios::TerminalFormula) -> Self {
         Self {
@@ -101,9 +101,10 @@ impl<'a> PreparedInput<'a> {
     }
 
     /// Borrow a coherent producer theory and its admitted streamed constraints.
-    /// No grounding or solving occurs here. The CPU backend supports lazy and
-    /// automatic grounding. Objectives are scored only after complete original
-    /// constraint acceptance. Device checking is outside this hybrid profile.
+    /// No grounding or solving occurs here. Lazy and automatic grounding use the
+    /// selected backend for the producer core. Streamed constraints are checked
+    /// on the host; objectives are scored only after complete original constraint
+    /// acceptance.
     #[must_use]
     pub fn hybrid(owner: &'a zetesis_themelios::HybridFormula) -> Self {
         Self {
