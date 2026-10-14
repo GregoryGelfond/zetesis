@@ -21,7 +21,10 @@
 
 use std::collections::BTreeSet;
 
-use zetesis_core::{Program, TemplateRef, TemplateTerm, catalog::PredicateRef};
+use zetesis_core::{
+    DomainPositions, Program, TemplateRef, TemplateTerm,
+    catalog::{PredicateRef, TermRef},
+};
 
 use super::Work;
 use crate::Stop;
@@ -61,13 +64,16 @@ impl ArgumentBounds {
 }
 
 /// Infer the bounds of the program's predicates, charging the given work;
-/// the width ceiling is `max_values`, an argument wider than it unknown.
+/// the width ceiling is `max_values`, an argument wider than it unknown. A
+/// constant head term's position is read from `positions` when it names it,
+/// and found by the domain's content search otherwise.
 ///
 /// # Errors
 /// Returns the stop when the inference exceeds the work's ceiling or its
 /// control stops it.
 pub(super) fn infer(
     program: &Program,
+    positions: Option<&DomainPositions<'_>>,
     max_values: usize,
     work: &mut Work<'_>,
 ) -> Result<ArgumentBounds, Stop> {
@@ -80,6 +86,36 @@ pub(super) fn infer(
                 .collect()
         })
         .collect();
+    // A constant head term contributes the same position on every pass, so
+    // it is added once, before the fixed point. Every contribution only adds
+    // values or turns an argument unknown, so the order in which they are
+    // added does not change the least fixed point the passes reach.
+    for template in program.templates() {
+        let Some(head) = template.head() else {
+            continue;
+        };
+        if !head
+            .terms()
+            .iter()
+            .any(|term| matches!(term, TemplateTerm::Constant(_)))
+        {
+            continue;
+        }
+        let target = table(program, head.predicate(), work)?;
+        for (index, term) in head.terms().iter().enumerate() {
+            let TemplateTerm::Constant(value) = term else {
+                continue;
+            };
+            work.tick()?;
+            let position = domain_position(program, positions, value, work)?;
+            widen(
+                &mut growing[target][index],
+                Growing::Finite(BTreeSet::from([position])),
+                max_values,
+                work,
+            )?;
+        }
+    }
     // Each pass adds values or turns an argument unknown, never the
     // reverse, and the values come from the program's constants, so the
     // passes end when one changes nothing.
@@ -89,18 +125,20 @@ pub(super) fn infer(
             let Some(head) = template.head() else {
                 continue;
             };
+            if !head
+                .terms()
+                .iter()
+                .any(|term| matches!(term, TemplateTerm::Variable(_)))
+            {
+                continue;
+            }
             let target = table(program, head.predicate(), work)?;
             for (index, term) in head.terms().iter().enumerate() {
-                work.tick()?;
-                let contribution = match term {
-                    TemplateTerm::Constant(value) => Growing::Finite(BTreeSet::from([program
-                        .domain()
-                        .binary_search_with(value, || work.tick())?
-                        .map_err(|_| Stop::InvalidProgram)?])),
-                    TemplateTerm::Variable(variable) => {
-                        variable_bound(program, template, variable, &growing, work)?
-                    }
+                let TemplateTerm::Variable(variable) = term else {
+                    continue;
                 };
+                work.tick()?;
+                let contribution = variable_bound(program, template, variable, &growing, work)?;
                 changed |= widen(&mut growing[target][index], contribution, max_values, work)?;
             }
         }
@@ -158,6 +196,26 @@ fn variable_bound(
         }
     }
     Ok(bound.map_or(Growing::Unknown, Growing::Finite))
+}
+
+/// The domain position of a program constant: two charged steps when the
+/// table names it, the domain's content search otherwise.
+pub(super) fn domain_position(
+    program: &Program,
+    positions: Option<&DomainPositions<'_>>,
+    value: TermRef<'_>,
+    work: &mut Work<'_>,
+) -> Result<usize, Stop> {
+    if let Some(positions) = positions {
+        work.charge(2)?;
+        if let Some(position) = positions.position(value) {
+            return Ok(position);
+        }
+    }
+    program
+        .domain()
+        .binary_search_with(value, || work.tick())?
+        .map_err(|_| Stop::InvalidProgram)
 }
 
 fn table(

@@ -1,9 +1,9 @@
 //! Immutable query dimensions and reference-free candidate workspaces.
 
-use std::{mem::size_of, sync::Arc};
+use std::{mem::size_of, num::NonZeroU32, sync::Arc};
 
 use zetesis_core::{
-    Program, SeedView,
+    DomainPositions, Program, SeedView,
     catalog::{PredicateRef, TermRef},
 };
 
@@ -29,8 +29,9 @@ pub struct PreparationLimits {
     /// rank each constant argument once in its inferred bound.
     pub max_work: u64,
     /// Named immutable preparation bytes, excluding the shared source
-    /// program: what preparation retains, admitted once it is built. The
-    /// inference's working value sets are transient and outside it.
+    /// program: what preparation retains, admitted once it is built, and the
+    /// domain position table while preparation reads it. The inference's
+    /// working value sets are transient and outside it.
     pub max_bytes: usize,
     /// The most tuples a dense relation may index: a predicate whose bounded
     /// arguments admit more keeps its tree. Zero keeps every tree. A dense
@@ -227,7 +228,9 @@ impl PreparedQueries {
                 }
             }
         }
-        let bounds = argument_bounds::infer(program, max_dense_atoms, work)?;
+        let live = size_of::<Self>() as u128 + rules.bytes().ok_or(Stop::StorageLimit)?;
+        let (positions, table_bytes) = domain_positions(program, live, work)?;
+        let bounds = argument_bounds::infer(program, positions.as_ref(), max_dense_atoms, work)?;
         let mut layouts = Layouts::default();
         for predicate in program.predicates() {
             work.tick()?;
@@ -245,7 +248,14 @@ impl PreparedQueries {
             .and_then(|bytes| bytes.checked_add(size_of::<Self>() as u128))
             .and_then(|bytes| bytes.checked_add(size_of::<Layouts>() as u128))
             .ok_or(Stop::StorageLimit)?;
-        let heads = Heads::prepare(program, &layouts, base, work)?;
+        let heads = Heads::prepare(
+            program,
+            &layouts,
+            positions.as_ref(),
+            base.checked_add(table_bytes).ok_or(Stop::StorageLimit)?,
+            work,
+        )?;
+        drop(positions);
         let retained_bytes = base.checked_add(heads.bytes()).ok_or(Stop::StorageLimit)?;
         storage::admit(work, retained_bytes)?;
         storage::record(work, retained_bytes)?;
@@ -614,6 +624,28 @@ pub(super) fn assignment<'source>(
     storage::admit(work, live)?;
     storage::record(work, live)?;
     Ok((values, live - base))
+}
+
+/// The domain position table, preparation scratch: admitted with the `live`
+/// structures while argument bounds and head coordinates read it, and released
+/// before anything is retained. Its build is one pass over the catalog's terms
+/// and one write per domain value, charged before it runs. With the table, its
+/// reserved bytes; none for a domain too large for one.
+fn domain_positions<'p>(
+    program: &'p Program,
+    mut live: u128,
+    work: &mut Work<'_>,
+) -> Result<(Option<DomainPositions<'p>>, u128), Stop> {
+    let mut table_bytes = 0;
+    let positions = DomainPositions::build(program, |slots| {
+        work.charge(slots)?;
+        work.charge(program.domain().len())?;
+        let mut table = Vec::new();
+        reserve(&mut table, slots, &mut live, work)?;
+        table_bytes = table.capacity() as u128 * size_of::<Option<NonZeroU32>>() as u128;
+        Ok(table)
+    })?;
+    Ok((positions, table_bytes))
 }
 
 // Admit the conservative old+replacement overlap before reservation; read back

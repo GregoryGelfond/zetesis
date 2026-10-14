@@ -10,7 +10,9 @@ use crate::{AtomIter, Template, TemplateCatalog};
 use std::ops::Range;
 
 mod admission;
+mod positions;
 mod views;
+pub use positions::DomainPositions;
 pub use views::{
     Domain, FilterRef, Filters, PatternRef, PatternTerms, Patterns, Predicates, TemplateRef,
     TemplateTerm, Templates,

@@ -38,6 +38,17 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- CPU oracle preparation reads each program constant's domain position by
+  identity, from a table of four bytes per catalog term, instead of searching
+  the domain by content: argument bounds add each constant head term once,
+  before their fixed point, instead of on every pass, and ground head
+  coordinates rank values by their positions. The bounds, coordinates and
+  answers are unchanged, and preparation work falls. The table counts against
+  preparation's live storage while preparation reads it, so a preparation within
+  that margin of `PreparationLimits::max_bytes` is now refused there, and the
+  limit's documentation says so; what preparation retains is unchanged. The
+  zetesis-core `DomainPositions`, its `build` and its `position` are public
+  additions.
 - Each execution-detail record (metadata, information and execution
   observations, and the `test` workflow's lines when the `zetesis` command
   runs it) is rendered whole and handed to the diagnostics writer in one

@@ -153,6 +153,11 @@ impl<'a> Read<'a> {
     pub(crate) fn contains_term(self, id: TermId) -> bool {
         (id.0 as usize) < self.counts().terms
     }
+    /// The terms this read resolves, so that the terms below it are exactly
+    /// the identifiers `0..term_count()`.
+    pub(crate) fn term_count(self) -> usize {
+        self.counts().terms
+    }
     pub(crate) fn contains_text(self, id: TextId) -> bool {
         (id.0 as usize) < self.counts().texts
     }

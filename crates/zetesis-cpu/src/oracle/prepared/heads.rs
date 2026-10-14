@@ -7,11 +7,11 @@
 
 use std::mem::size_of;
 
-use zetesis_core::{Program, TemplateTerm};
+use zetesis_core::{DomainPositions, Program, TemplateTerm};
 
 use super::{Layouts, Stop, Work, reserve};
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Coordinate {
     slot: usize,
     position: usize,
@@ -24,9 +24,13 @@ struct Coordinate {
 pub(in crate::oracle) struct Heads(Vec<Option<Coordinate>>);
 
 impl Heads {
+    /// Rank each ground head on its predicate's dense layout, by identity when
+    /// preparation holds the domain position table. `base` is the live
+    /// storage already admitted, the table's included while it is read.
     pub(super) fn prepare(
         program: &Program,
         layouts: &Layouts,
+        positions: Option<&DomainPositions<'_>>,
         base: u128,
         work: &mut Work<'_>,
     ) -> Result<Self, Stop> {
@@ -49,9 +53,13 @@ impl Heads {
                             TemplateTerm::Constant(value) => Some(value),
                             TemplateTerm::Variable(_) => None,
                         });
-                        layout
-                            .position_of(values, work)?
-                            .map(|position| Coordinate { slot, position })
+                        match positions {
+                            Some(positions) => {
+                                layout.position_by_identity(values, positions, work)?
+                            }
+                            None => layout.position_of(values, work)?,
+                        }
+                        .map(|position| Coordinate { slot, position })
                     }
                     _ => None,
                 }
@@ -65,6 +73,15 @@ impl Heads {
 
     pub(super) fn bytes(&self) -> u128 {
         self.0.capacity() as u128 * size_of::<Option<Coordinate>>() as u128
+    }
+
+    /// Each template's coordinate as its slot and position, for comparison.
+    #[cfg(test)]
+    pub(super) fn coordinates(&self) -> Vec<Option<(usize, usize)>> {
+        self.0
+            .iter()
+            .map(|coordinate| coordinate.map(|Coordinate { slot, position }| (slot, position)))
+            .collect()
     }
 
     /// A prepared position belongs only to the template's own dense slot.

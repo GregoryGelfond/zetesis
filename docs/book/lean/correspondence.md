@@ -1072,6 +1072,17 @@ remain Rust obligations. Regressions compare ordinary ranking with prepared
 coordinates, alternate preparations with different inferred axes and retain
 earlier interpretations across those calls.
 
+Preparation reads a constant's domain position through a domain position table
+of one slot per catalog term: each domain value's slot names its domain
+position, and every other term's slot is empty. An empty slot, a term the
+program's read cannot name, or an absent table falls back to the domain's
+content search, which decides presence and rank. The argument bounds and the
+ground-head ranks it yields are therefore those of the content search. As for
+the append dictionary's inverse below, the table's invariant, its build over
+the canonically ordered domain and its fallback are executable obligations; no
+new Lean law is claimed, and the closure's own ranking keeps its checked
+canonical comparisons.
+
 The objective consumers use `AtomLookup` over immutable model selections or an
 `AtomIndex` over the original catalog. The index owns permutations of row IDs,
 not additional atoms; a `CatalogIndex`, which hybrid constraint checkers of one

@@ -31,6 +31,7 @@ mod count_head_activity;
 mod count_heads;
 mod count_plans;
 mod dense_relations;
+mod domain_positions;
 mod disjunction;
 mod domain_guards;
 mod evaluated_heads;

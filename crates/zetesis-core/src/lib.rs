@@ -65,8 +65,9 @@ pub use model::{
     ModelOrder, ModelPublication, ModelPublicationFailure,
 };
 pub use program::{
-    AdmissionError, AdmissionLimits, AdmissionResource, Domain, FilterRef, Filters, PatternRef,
-    PatternTerms, Patterns, Predicates, Program, TemplateRef, TemplateTerm, Templates,
+    AdmissionError, AdmissionLimits, AdmissionResource, Domain, DomainPositions, FilterRef,
+    Filters, PatternRef, PatternTerms, Patterns, Predicates, Program, TemplateRef, TemplateTerm,
+    Templates,
 };
 pub use template::{
     AtomPattern, Filter, InstantiationError, Template, TemplateCatalog, TemplateCatalogBuilder,
