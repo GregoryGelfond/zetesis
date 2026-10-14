@@ -29,7 +29,12 @@ fn program(choice: bool) -> Program {
             vec![],
         ));
     }
-    Program::new(templates, AdmissionLimits::default()).unwrap()
+    Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn checked_prefix<'a>(

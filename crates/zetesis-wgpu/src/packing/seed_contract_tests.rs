@@ -22,7 +22,12 @@ fn graph(atoms: Vec<Atom>) -> GroundProgram {
             Template::new(Some(pattern.clone()), vec![], vec![pattern], vec![], vec![])
         })
         .collect();
-    let program = Program::new(templates, AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     GroundProgram::compile(&program, StaticLimits::default()).unwrap()
 }
 fn plan(graph: &GroundProgram, worlds: usize) -> BatchPlan {

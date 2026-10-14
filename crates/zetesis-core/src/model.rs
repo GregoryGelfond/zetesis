@@ -498,6 +498,19 @@ pub enum ModelError {
     /// Input, selection or prepared-order metadata reservation failed.
     Allocation,
 }
+impl ModelError {
+    /// Whether construction refused a resource, independently of model shape
+    /// and catalog identity. A nested catalog cause keeps its classification.
+    #[must_use]
+    pub const fn is_resource_refusal(&self) -> bool {
+        match self {
+            Self::Bytes { .. } | Self::Allocation => true,
+            Self::Catalog(error) => error.is_resource_refusal(),
+            Self::Order { .. } | Self::Position { .. } => false,
+        }
+    }
+}
+
 impl fmt::Display for ModelError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

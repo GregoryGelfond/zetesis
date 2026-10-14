@@ -30,7 +30,8 @@ fn long_increment(fixture: &mut Fixture, variable: usize) -> Vec<Operation> {
         Operation::Variable(variable),
         Operation::Constant(fixture.scalar(&Value::Number(1), location())),
     ];
-    nodes.extend((2..17).map(|node| Operation::Binary(BinaryOp::Add, node - 1, 1)));
+    nodes.push(Operation::Binary(BinaryOp::Add, 0, 1));
+    nodes.extend((3..17).map(|node| Operation::Binary(BinaryOp::Add, node - 1, 1)));
     nodes
 }
 
@@ -209,12 +210,11 @@ fn false_filters_do_not_hide_later_arithmetic_errors() {
 #[test]
 fn stopped_filters_release_live_workspace_values() {
     // The stop must fall inside the general evaluator, so the comparison has
-    // no integer comparison form: its operands are too long for one.
+    // no integer comparison form: its left operand is too long for one.
     let mut fixture = Fixture::default();
-    let (left, right) = (
-        long_increment(&mut fixture, 0),
-        long_increment(&mut fixture, 0),
-    );
+    let left = long_increment(&mut fixture, 0);
+    // At the binding X = 3 below, the long operand must evaluate to 18.
+    let right = number(&mut fixture, 18).nodes;
     let literals = [LiteralIr::Compare(fixture.comparison(
         left,
         Relation::Eq,

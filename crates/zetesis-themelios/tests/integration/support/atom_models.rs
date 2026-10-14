@@ -33,16 +33,9 @@ pub(crate) fn atom(source: &str) -> Atom {
     // atoms are never split at whitespace or compared through display filters.
     let input = admit(format!("{source}."), AdmissionOptions::default())
         .expect("campaign atoms belong to the scalar profile");
-    assert_eq!(input.program().templates().len(), 1);
-    ground_atom(
-        input
-            .program()
-            .templates()
-            .at(0)
-            .unwrap()
-            .head()
-            .expect("ground atom"),
-    )
+    assert_eq!(input.program().facts().len(), 1);
+    assert!(input.program().templates().is_empty());
+    ground_atom(input.program().facts().at(0).unwrap().pattern())
 }
 
 /// The atom an admitted fact's ground head denotes.

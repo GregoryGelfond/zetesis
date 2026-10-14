@@ -26,10 +26,8 @@ fn extended_agree(text: &str, limits: &ExpansionLimits) -> usize {
     match (&kept, &reference) {
         (Ok(kept), Ok(reference)) => {
             assert!(
-                kept.program()
-                    .templates()
-                    .iter()
-                    .eq(reference.program().templates().iter()),
+                zetesis_test_support::programs::rules(kept.program())
+                    .eq(zetesis_test_support::programs::rules(reference.program())),
                 "{text} under {limits:?}: templates differ",
             );
             assert_eq!(
@@ -37,6 +35,7 @@ fn extended_agree(text: &str, limits: &ExpansionLimits) -> usize {
                 reference.template_origins(),
                 "{text}"
             );
+            assert_eq!(kept.fact_origins(), reference.fact_origins(), "{text}");
             assert_eq!(
                 kept.expansion_usage(),
                 reference.expansion_usage(),

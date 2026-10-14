@@ -18,7 +18,7 @@ use crate::formula_binding::Binding;
 use crate::formula_ir::{AggregateIr, AggregateKey};
 use crate::formula_support::components::Term;
 use crate::formula_support::{
-    Buffer, Computation, Context, Counters, GroundingWork, Join, Support, TermSelection,
+    Buffer, Computation, Context, Counters, GroundingWork, Ir, Join, Support, TermSelection,
 };
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 use themelios_program::program::AggregateFunction;
@@ -37,10 +37,10 @@ use zetesis_ferraris::AggregateExtremum;
 /// root for every value proposed here. Charges work and storage as it reduces
 /// the tuples; refuses as the local joins, the endpoint guard and [`carrier`]
 /// do, or on the aggregate-element ceiling per distinct tuple.
-pub(crate) fn values(
-    aggregate: &AggregateIr,
+pub(crate) fn values<'a, 'source: 'a>(
+    aggregate: Ir<'a, 'source, AggregateIr>,
     assignment: &Binding,
-    support: &Support,
+    support: &Support<'source>,
     budget: &mut Budget,
     context: Context<'_, &mut Computation<'_, '_>>,
 ) -> Result<Binding<'static>, FormulaFailure> {
@@ -54,9 +54,12 @@ pub(crate) fn values(
     // The tuples with an occurrence from an element whose condition the local
     // join decides: present in every interpretation for this binding.
     let mut required_tuples = TermSelection::new(computation, limits, counters, location)?;
-    for element in &aggregate.elements {
-        let mut local = Join::new(
-            &element.condition,
+    for element in aggregate
+        .map(|aggregate| aggregate.elements.as_slice())
+        .iter()
+    {
+        let mut local = Join::local(
+            element.map(|element| element.condition.as_slice()),
             assignment,
             element.variables,
             support,

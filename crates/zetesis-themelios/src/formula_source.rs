@@ -8,7 +8,7 @@
 use crate::formula::Preparation;
 use crate::formula_owner::Owner;
 use crate::formula_source_activity::{self, Exact};
-use crate::formula_support::{AcyclicPlan, Computation, Counters, GroundingWork, Publication};
+use crate::formula_support::{AcyclicPlan, Computation, GroundingWork, Publication};
 use crate::grounding_observer::Profile;
 use crate::{FormulaFailure, GroundingObserver, SourceBundle, SourceMetadata};
 use std::{fmt, sync::Arc};
@@ -132,15 +132,32 @@ impl AcyclicSource {
     }
 
     /// Analysis of the exact normalized source used by the class certificate.
+    /// If preparation has not needed the complete normalized input, the first
+    /// full inspection constructs and retains it and its analysis. Later calls
+    /// borrow that shared result. Preparation's summary has the same dependency
+    /// graph and class verdicts; full inspection pays canonical ingestion and
+    /// analysis work and full-program storage, without an expansion charge.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
-        &self.0.evaluation.analysis
+        self.0
+            .evaluation
+            .analyzed
+            .full_analysis(&self.0.evaluation.analysis)
+    }
+
+    /// Structural classes of the retained source analysis. This view does not
+    /// require constructing the full analyzed program. Consult
+    /// [`Self::analysis_basis`] before using a verdict as a source property.
+    #[must_use]
+    pub fn source_classes(&self) -> &themelios_analysis::classify::Classes {
+        self.0.evaluation.analysis.classes()
     }
 
     /// Exact pool-free normalized source analyzed before admission.
+    /// Shares the complete view and its construction cost with [`Self::source_analysis`].
     #[must_use]
     pub fn analyzed_program(&self) -> &Program {
-        &self.0.evaluation.analyzed
+        self.0.evaluation.analyzed.full_program()
     }
 
     /// This subject is admitted only from complete normalized-program analysis.
@@ -175,7 +192,7 @@ pub(crate) struct Evaluated {
     statistics: SourceEvaluationStatistics,
     expansion: crate::ExpansionUsage,
     analysis: themelios_analysis::Analysis,
-    analyzed: Program,
+    analyzed: crate::formula_analysis::Summary,
     keyed_constraints: usize,
     key_analysis: crate::KeyAnalysis,
 }
@@ -186,20 +203,20 @@ pub(crate) struct Evaluated {
 pub(crate) fn classify(
     preparation: &mut Preparation,
 ) -> Result<Option<AcyclicPlan>, FormulaFailure> {
-    let mut counters = Counters::resume(
-        std::mem::take(&mut preparation.accounting),
+    preparation.accounting.controlled::<_, FormulaFailure>(
+        preparation.budget.cancellation(),
         crate::grounding_observer::Work::default(),
-    )
-    .with_cancellation(preparation.budget.cancellation());
-    let result = AcyclicPlan::prepare(
-        &preparation.program,
-        &preparation.catalog,
-        &preparation.limits,
-        &mut counters,
         preparation.location,
-    );
-    preparation.accounting = counters.into_accounting();
-    result
+        |counters| {
+            AcyclicPlan::prepare(
+                &preparation.program,
+                &preparation.catalog,
+                &preparation.limits,
+                counters,
+                preparation.location,
+            )
+        },
+    )
 }
 
 pub(crate) fn evaluate(
@@ -210,92 +227,99 @@ pub(crate) fn evaluate(
     let Preparation {
         program,
         catalog,
-        accounting,
+        mut accounting,
         mut budget,
         limits,
         options,
         location,
     } = preparation;
     let profile = Profile::new(observer);
-    let mut counters =
-        Counters::resume(accounting, profile.work()).with_cancellation(budget.cancellation());
-    counters.work(&limits, location)?;
-    if !plan.authenticates(&catalog) {
-        return Err(FormulaFailure::SupportRelation {
-            error: zetesis_core::relation::Failure::Owner,
-            location,
-        });
-    }
-    let (mut catalog, domains) = crate::formula_ground::complete_support(
-        &program,
-        catalog,
-        options.domains,
-        &mut budget,
-        &profile,
-        GroundingWork::new(&limits, &mut counters, location),
-    )?;
-    // Complete-domain analysis may assist support; exact activity always reads
-    // the complete original rows and does not depend on an optional guard.
-    drop(domains);
-    let (exact, warnings) = {
-        let (completed, mut append) = catalog.split(&limits, &mut counters, location)?;
-        let queries = completed.queries(options.joins, &limits, &counters, location)?;
-        let mut computation = Computation::new(&mut append, queries.support());
-        let warnings = profile.phase(crate::GroundingPhase::SupportCompletion, None, || {
-            crate::formula_ground::arithmetic::prepare(
+    let cancellation = budget.cancellation().cloned();
+    accounting.controlled::<_, FormulaFailure>(
+        cancellation.as_ref(),
+        profile.work(),
+        location,
+        |counters| {
+            counters.work(&limits, location)?;
+            if !plan.authenticates(&catalog) {
+                return Err(FormulaFailure::SupportRelation {
+                    error: zetesis_core::relation::Failure::Owner,
+                    location,
+                });
+            }
+            let (mut catalog, domains) = crate::formula_ground::complete_support(
                 &program,
-                queries.support(),
-                &mut computation,
-                &limits,
+                catalog,
+                options.domains,
                 &mut budget,
-                &mut counters,
-            )
-        })?;
-        let exact = formula_source_activity::evaluate_acyclic(
-            &plan,
-            &program,
-            queries.support(),
-            &profile,
-            &mut formula_source_activity::Context {
-                computation: &mut computation,
-                limits: &limits,
-                budget: &mut budget,
-                counters: &mut counters,
-                location,
-            },
-        )?;
-        (exact, warnings)
-    };
-    let Exact {
-        atoms,
-        selected,
-        consistent,
-        lease,
-    } = exact;
-    let mut publication = Publication::new(&mut catalog, &counters, location)?;
-    publication.observe_peak(size_of::<Admitted>() as u128, &limits, &counters, location)?;
-    let atoms = publication.atoms(atoms, &limits, &mut counters, location)?;
-    publication.retain(lease, &limits, &counters, location)?;
-    counters.work(&limits, location)?;
-    let statistics = SourceEvaluationStatistics {
-        work: counters.accounting.work,
-        substitutions: counters.accounting.substitutions,
-    };
-    // All surviving maps have been admitted while their source and scratch
-    // coexist. The immutable output keeps the shared canonical payload only.
-    drop(publication);
-    drop(plan);
-    Ok(Evaluated {
-        atoms,
-        selected: consistent.then_some(selected),
-        warnings: warnings.into_values(),
-        statistics,
-        expansion: budget.usage(),
-        analysis: program.analysis,
-        analyzed: program.analyzed,
-        keyed_constraints: program.keyed_constraints,
-        key_analysis: program.key_analysis,
-    })
+                &profile,
+                GroundingWork::new(&limits, counters, location),
+            )?;
+            // Complete-domain analysis may assist support; exact activity always reads
+            // the complete original rows and does not depend on an optional guard.
+            drop(domains);
+            let (exact, warnings) = {
+                let (completed, mut append) = catalog.split(&limits, counters, location)?;
+                let queries = completed.queries(options.joins, &limits, counters, location)?;
+                let mut computation = Computation::new(&mut append, queries.support());
+                let warnings =
+                    profile.phase(crate::GroundingPhase::SupportCompletion, None, || {
+                        crate::formula_ground::arithmetic::prepare(
+                            &program,
+                            queries.support(),
+                            &mut computation,
+                            &limits,
+                            &mut budget,
+                            counters,
+                        )
+                    })?;
+                let exact = formula_source_activity::evaluate_acyclic(
+                    &plan,
+                    &program,
+                    queries.support(),
+                    &profile,
+                    &mut formula_source_activity::Context {
+                        computation: &mut computation,
+                        limits: &limits,
+                        budget: &mut budget,
+                        counters,
+                        location,
+                    },
+                )?;
+                (exact, warnings)
+            };
+            let Exact {
+                atoms,
+                selected,
+                consistent,
+                lease,
+            } = exact;
+            let mut publication = Publication::new(&mut catalog, counters, location)?;
+            publication.observe_peak(size_of::<Admitted>() as u128, &limits, counters, location)?;
+            let atoms = publication.atoms(atoms, &limits, counters, location)?;
+            publication.retain(lease, &limits, counters, location)?;
+            counters.work(&limits, location)?;
+            let statistics = SourceEvaluationStatistics {
+                work: counters.accounting.work,
+                substitutions: counters.accounting.substitutions,
+            };
+            // All surviving maps have been admitted while their source and scratch
+            // coexist. The immutable output keeps the shared canonical payload only.
+            drop(publication);
+            drop(plan);
+            Ok(Evaluated {
+                atoms,
+                selected: consistent.then_some(selected),
+                warnings: warnings.into_values(),
+                statistics,
+                expansion: budget.usage(),
+                analysis: program.analysis,
+                analyzed: program.analyzed,
+                keyed_constraints: program.keyed_constraints,
+                key_analysis: program.key_analysis,
+            })
+        },
+    )
 }
 
 #[cfg(test)]

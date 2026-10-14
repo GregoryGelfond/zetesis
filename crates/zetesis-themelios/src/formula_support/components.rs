@@ -26,6 +26,47 @@ use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Scalar(usize);
+/// A nonempty sequence of scalar occurrence coordinates, certified as each
+/// admitted coordinate is appended. These are positions in this preparation's
+/// `TemplateComponents`, not canonical value identities. Equal numbers can have
+/// different positions, and an intervening occurrence prevents coalescing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct ScalarSpan {
+    first: Scalar,
+    len: usize,
+}
+
+impl ScalarSpan {
+    /// A span containing the one coordinate actually returned by admission.
+    pub(crate) fn new(first: Scalar) -> Self {
+        Self { first, len: 1 }
+    }
+
+    /// Extend only when `next` is the next occurrence coordinate. Overflow or
+    /// a gap leaves the span unchanged; the caller must start another segment.
+    pub(crate) fn append(&mut self, next: Scalar) -> bool {
+        if self.first.0.checked_add(self.len) != Some(next.0) {
+            return false;
+        }
+        let Some(len) = self.len.checked_add(1) else {
+            return false;
+        };
+        self.len = len;
+        true
+    }
+
+    /// The number of coordinates whose admission was observed.
+    pub(crate) fn len(self) -> usize {
+        self.len
+    }
+
+    /// The admitted coordinate at `offset`, without constructing a value.
+    pub(crate) fn get(self, offset: usize) -> Scalar {
+        assert!(offset < self.len, "an offset into a certified scalar span");
+        Scalar(self.first.0 + offset)
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct Constructor(usize);
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -463,6 +504,14 @@ impl Admission<'_> {
 }
 
 impl Scalar {
+    /// Resolve this private occurrence through its authenticated component view.
+    /// The caller owns work accounting for the lookup.
+    pub(crate) fn resolve(self, view: TemplateComponentsRef<'_>) -> Option<TermRef<'_>> {
+        match view.term(self.0) {
+            Some(TemplateTerm::Constant(value)) => Some(value),
+            _ => None,
+        }
+    }
     pub(crate) fn get<'a>(
         self,
         view: TemplateComponentsRef<'a>,
@@ -471,10 +520,7 @@ impl Scalar {
         location: ProgramSite,
     ) -> Result<TermRef<'a>, FormulaFailure> {
         counters.work(limits, location)?;
-        match view.term(self.0) {
-            Some(TemplateTerm::Constant(value)) => Ok(value),
-            _ => Err(missing(location)),
-        }
+        self.resolve(view).ok_or_else(|| missing(location))
     }
 }
 impl Constructor {

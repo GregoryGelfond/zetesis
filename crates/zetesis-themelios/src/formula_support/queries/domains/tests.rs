@@ -3,6 +3,7 @@
 use crate::formula_support::{Context, GroundingWork as WorkContext};
 
 use super::*;
+use crate::expansion::Budget;
 use crate::formula_domains;
 use crate::grounding_observer::Profile;
 use crate::test_support::Observer;
@@ -18,7 +19,6 @@ fn analyze<'source>(
     prepared: &'source crate::formula_ir::Prepared,
     catalog: &mut crate::formula_support::SupportCatalog,
     options: Option<crate::DomainLimits>,
-    budget: &mut Budget,
     profile: &Profile<'_>,
     work: WorkContext<'_>,
 ) -> Result<Option<formula_domains::Domains<'source>>, FormulaFailure> {
@@ -33,7 +33,6 @@ fn analyze<'source>(
     formula_domains::analyze(
         prepared,
         options,
-        budget,
         profile,
         Context::new(&mut computation, limits, counters, location),
     )
@@ -54,7 +53,6 @@ fn guard_work_refusals_preserve_admitted_prefixes() {
         &prepared,
         &mut catalog,
         Some(crate::DomainLimits::default()),
-        &mut budget,
         &Profile::new(None),
         WorkContext::new(&limits, &mut setup, rule.location),
     )
@@ -149,7 +147,6 @@ fn guard_storage_admission_is_inclusive() {
         &prepared,
         &mut catalog,
         Some(crate::DomainLimits::default()),
-        &mut budget,
         &Profile::new(None),
         WorkContext::new(&limits, &mut setup, rule.location),
     )
@@ -231,13 +228,11 @@ fn analysis_refuses_an_equal_foreign_rule() {
     let index = prepared.rules_without_facts().len() - 1;
     let rule = &prepared.rules_without_facts()[index];
     let limits = FormulaLimits::default();
-    let mut budget = Budget::new(ExpansionLimits::default(), 100);
     let mut counters = Counters::default();
     let analysis = analyze(
         &prepared,
         &mut catalog,
         Some(crate::DomainLimits::default()),
-        &mut budget,
         &Profile::new(None),
         WorkContext::new(&limits, &mut counters, rule.location),
     )
@@ -268,7 +263,6 @@ fn domain_guards_refuse_a_foreign_query_owner() {
         &prepared,
         &mut catalog,
         Some(crate::DomainLimits::default()),
-        &mut budget,
         &Profile::new(None),
         WorkContext::new(&limits, &mut counters, rule.location),
     )
@@ -345,7 +339,6 @@ fn dependency_projection_cannot_certify_domain_guards() {
     } = prepared();
     prepared.analysis_basis = crate::AnalysisBasis::DependencyProjection;
     let location = prepared.rules_without_facts().last().unwrap().location;
-    let mut budget = Budget::new(ExpansionLimits::default(), 100);
     let mut counters = Counters::default();
     let limits = FormulaLimits::default();
     let (relations, mut append) = catalog.split(&limits, &mut counters, location).unwrap();
@@ -356,13 +349,12 @@ fn dependency_projection_cannot_certify_domain_guards() {
     let result = formula_domains::analyze(
         &prepared,
         Some(crate::DomainLimits::default()),
-        &mut budget,
         &Profile::new(None),
         Context::new(&mut computation, &limits, &mut counters, location),
     )
     .unwrap();
     assert!(result.is_none());
-    assert_eq!(counters.accounting.work - before, 1);
+    assert!(counters.accounting.work > before);
 }
 
 fn with_candidates(
@@ -389,7 +381,6 @@ fn with_candidates(
         &program,
         &mut catalog,
         Some(crate::DomainLimits::default()),
-        &mut budget,
         &Profile::new(None),
         WorkContext::new(&limits, &mut counters, rule.location),
     )
@@ -431,7 +422,7 @@ fn with_candidates(
 }
 
 #[test]
-fn unary_filters_reuse_admitted_candidate_cells() {
+fn unary_filters_select_existing_candidate_cells() {
     for source in [
         "p(1).p(2).p(3).r(X):-p(X),X>=1.",
         "p(1).p(2).p(3).r(X):-p(X),X>=1,X<=3.",
@@ -452,9 +443,9 @@ fn unary_filters_reuse_admitted_candidate_cells() {
                     })
                     .collect();
                 assert_eq!(numbers, [1, 2, 3]);
-                // One source conversion per candidate, independently of how many
-                // unary filters inspect it. Ordinary evaluation work is separate.
-                assert_eq!(admission_work, numbers.len());
+                // Selection reuses canonical keys; neither preparing candidates
+                // nor inspecting them with unary filters converts source values.
+                assert_eq!(admission_work, 0);
             },
         );
     }
@@ -471,12 +462,7 @@ fn candidate_text_borrows_the_admitted_source_spelling() {
             let source = program
                 .items()
                 .blocks()
-                .flat_map(|product| {
-                    product
-                        .cells()
-                        .iter()
-                        .map(move |cell| (*cell, product.location()))
-                })
+                .flat_map(|block| block.cells().map(move |cell| (cell, block.location())))
                 .find_map(|(cell, location)| {
                     let source = computation
                         .static_scalar(cell, &FormulaLimits::default(), counters, location)

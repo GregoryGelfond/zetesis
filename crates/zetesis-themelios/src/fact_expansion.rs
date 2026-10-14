@@ -1,13 +1,12 @@
 //! Checked finite fact products; no rule binding enumeration occurs here.
 //!
 //! Logical expansion limits still count the complete family. Only its compact
-//! scalar/range columns remain live; callers consume one head at a time through
-//! their existing admission owners. No successful partial program is published.
+//! scalar/range columns remain live; admission owners consume their products
+//! directly. No successful partial program is published.
 
 use crate::ProgramSite;
 use themelios_program::program::{Atom, DefaultNegation, Head, LiteralInner, Statement};
 use themelios_program::provenance::WithProvenance;
-use zetesis_core::AtomPattern;
 
 use crate::ExpansionFailure;
 use crate::expansion::Budget;
@@ -17,54 +16,28 @@ mod product;
 use product::Product;
 
 /// One fully checked family, in alternative order and last-argument-fastest
-/// product order. An error fuses the cursor; the enclosing compilation refuses
-/// the input rather than publishing or retrying its accepted prefix.
+/// product order. The enclosing compilation refuses a failed transfer rather
+/// than publishing its accepted prefix.
 #[derive(Debug)]
 pub(crate) struct Facts {
     products: Vec<Product>,
-    product: usize,
-    remaining: usize,
-    stopped: bool,
+    rows: usize,
 }
 
 impl Facts {
     pub(crate) fn len(&self) -> usize {
-        self.remaining
+        self.rows
     }
 
-    /// The checked products in alternative order, read without advancing the
-    /// cursor: the fact arena admits each product's columns once.
+    /// The checked products in alternative order; each admission owner reads
+    /// the compact columns once.
     pub(crate) fn products(&self) -> impl Iterator<Item = ProductView<'_>> {
         self.products.iter().map(|product| ProductView { product })
-    }
-
-    pub(crate) fn next(
-        &mut self,
-        budget: &Budget,
-        location: ProgramSite,
-    ) -> Result<Option<AtomPattern>, ExpansionFailure> {
-        if self.stopped || self.remaining == 0 {
-            return Ok(None);
-        }
-        let product = &mut self.products[self.product];
-        match product.next(budget, location) {
-            Ok(head) => {
-                self.remaining -= 1;
-                if product.is_empty() {
-                    self.product += 1;
-                }
-                Ok(Some(head))
-            }
-            Err(error) => {
-                self.stopped = true;
-                Err(error)
-            }
-        }
     }
 }
 
 /// One checked product of a family: its predicate, its columns and its row
-/// count, in the order [`Facts::next`] emits its rows (last argument fastest).
+/// count, with the last argument varying fastest in the Cartesian product.
 #[derive(Clone, Copy)]
 pub(crate) struct ProductView<'a> {
     product: &'a Product,
@@ -120,9 +93,7 @@ pub(crate) fn facts(
     };
     let mut facts = Facts {
         products: Vec::new(),
-        product: 0,
-        remaining: 0,
-        stopped: false,
+        rows: 0,
     };
     let mut logical_bytes = 0;
     for arguments in atom.alternatives() {
@@ -131,7 +102,7 @@ pub(crate) fn facts(
         {
             reserve(&mut facts.products, 1, budget, location)?;
             // The cumulative Templates charge already fits a usize ceiling.
-            facts.remaining += product.len();
+            facts.rows += product.len();
             facts.products.push(product);
         }
     }
@@ -166,5 +137,7 @@ fn reserved<T>(
     Ok(values)
 }
 
+#[cfg(test)]
+mod testing;
 #[cfg(test)]
 mod tests;

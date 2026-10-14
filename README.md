@@ -3,7 +3,7 @@
 ζήτησις, *inquiry* — an answer-set solver in Rust.
 
 [![CI](https://github.com/GregoryGelfond/zetesis/actions/workflows/checks.yml/badge.svg?branch=main)](https://github.com/GregoryGelfond/zetesis/actions/workflows/checks.yml)
-[![Source release: v0.5.0](https://img.shields.io/badge/source-v0.5.0-blue?style=flat-square)](https://github.com/GregoryGelfond/zetesis/releases/tag/v0.5.0)
+[![Source release: v0.6.0](https://img.shields.io/badge/source-v0.6.0-blue?style=flat-square)](https://github.com/GregoryGelfond/zetesis/releases/tag/v0.6.0)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
 [![Line coverage: 92.88% (portable)](https://img.shields.io/badge/coverage-92.88%25%20%28portable%29-brightgreen?style=flat-square)](https://gregorygelfond.github.io/zetesis/book/reference/coverage-0.5.0.html)
@@ -83,16 +83,26 @@ all tied optima; without it, the default displays one optimum.
 
 ## Common options
 
+Everyday options select answers, output and resources. Use `--help` for the
+common controls and `--help-all` for advanced execution options.
+
 | Option | Purpose |
 | --- | --- |
 | `--all` | Find every answer, or every tied optimum for a program with objectives. |
+| `--count` | Print only the complete number of answer sets, or all optimal ties. |
 | `--answers N` | Select up to N answers. |
-| `--threads N` | Set the host thread count. |
+| `--backend cpu\|gpu` | Choose CPU (the default) or GPU execution. |
+| `--threads N` | Set the host thread count; the default uses available parallelism. |
 | `--grounder eager\|lazy` | Request a grounding mode. |
 | `--json` | Write machine-readable results to stdout. |
 | `--stats` | Write statistics to stderr. |
 | `--time-limit 60s` | Set a cooperative deadline. |
 | `--memory 4GiB` | Set the allowance for named storage capacities. |
+
+`zetesis solve program.lp --count` prints one integer after exhaustive search.
+It counts full answer sets independently of `#show` and `#project`; interrupted
+search publishes no partial total. It cannot be combined with `--answers`,
+`--all`, `--models` or `--json`; `--stats` still writes to stderr.
 
 Execution defaults to CPU and uses lazy grounding where supported. For formula
 programs, automatic grounding can defer eligible definitions until their answers
@@ -107,35 +117,47 @@ A stopped search is incomplete; it does not prove unsatisfiability or optimality
 The time and memory options are not hard process-time or RSS caps.
 Human output shows the answers, result, model count and basic grounding/solving
 times. `--stats` adds detailed tables; diagnostics go to stderr.
-See `zetesis help solve`, or add `--advanced` for all execution and output options.
+See `zetesis help solve`, or `zetesis solve --help-all` for all execution and
+output options.
 
 ## Performance at a glance
 
-CPU measurements on an Apple M4 Pro compare zetesis
-with **14 threads** against clingo 5.8.2 with
-**one thread**. Automatic grounding was eager on these cases.
-Both enumerate every answer or every tied optimum. Each value
-is the median of three complete command-line runs, including startup, parsing,
-grounding, solving and captured output; zetesis statistics are enabled.
+Measurements of the release candidate on an Apple M4 Pro compare zetesis with
+**14 threads** against clingo 5.8.2 with **one thread**, enumerating all answers
+or all tied optima. Automatic grounding was eager on these cases. Each zetesis time averages
+two campaign medians of three runs; clingo averages four. Times include startup,
+input, grounding, solving and captured output; zetesis statistics are enabled.
 
-| Workload | zetesis | clingo | Comparison |
+The examples below cover all six corpus families and all six queens encodings.
+“Close” means within 3%; wins and losses use the same descriptive band.
+
+| Workload | zetesis (ms) | clingo (ms) | vs clingo |
 | --- | ---: | ---: | --- |
-| [Task allocation, larger instance](examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 30.54 ms | 197.88 ms | zetesis 6.48× faster |
-| [Eight queens, variant 2](examples/correctness/standalone/n-queens/variant-02.lp) | 29.42 ms | 128.31 ms | zetesis 4.36× faster |
-| [SEND + MORE = MONEY](examples/correctness/standalone/send-money/send-money.lp) | 13.86 ms | 12.21 ms | clingo 1.14× faster |
-| [Eight queens, variant 1](examples/correctness/standalone/n-queens/variant-01.lp) | 10.80 ms | 6.21 ms | clingo 1.74× faster |
-| **All 94 programs: sum of per-case medians** | **755.324 ms** | **830.639 ms** | **zetesis 1.10× faster on the sum** |
+| [Equality/generalized TSP, basic](examples/correctness/scenarios/equality-generalized-tsp/01-basic.lp) | 4.769 | 4.840 | Close |
+| [Shortest path, basic](examples/correctness/scenarios/shortest-path/variant-01/01-basic.lp) | 3.920 | 4.802 | zetesis 1.22× faster |
+| [Shortest path, layered with order and budget](examples/correctness/scenarios/shortest-path/variant-04/06-layered-dag-ordering-cap.lp) | 6.227 | 6.229 | Close |
+| [Task allocation, larger mix](examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 27.993 | 184.992 | zetesis 6.61× faster |
+| [Traveling salesman, three depots](examples/correctness/scenarios/traveling-salesman/variant-03/05-larger-three-depots.lp) | 4.704 | 4.798 | Close |
+| [Traveling salesman, windows and revisits](examples/correctness/scenarios/traveling-salesman/variant-05/05-three-depots-mixed.lp) | 6.221 | 5.180 | clingo 1.20× faster |
+| [Eight queens, variant 1](examples/correctness/standalone/n-queens/variant-01.lp) | 4.681 | 5.936 | zetesis 1.27× faster |
+| [Eight queens, variant 2](examples/correctness/standalone/n-queens/variant-02.lp) | 32.069 | 120.441 | zetesis 3.76× faster |
+| [Eight queens, variant 3](examples/correctness/standalone/n-queens/variant-03.lp) | 6.311 | 6.298 | Close |
+| [Eight queens, variant 4](examples/correctness/standalone/n-queens/variant-04.lp) | 6.264 | 5.963 | clingo 1.05× faster |
+| [Eight queens, variant 5](examples/correctness/standalone/n-queens/variant-05.lp) | 7.808 | 6.291 | clingo 1.24× faster |
+| [Eight queens, variant 6](examples/correctness/standalone/n-queens/variant-06.lp) | 7.754 | 6.277 | clingo 1.24× faster |
+| [SEND + MORE = MONEY](examples/correctness/standalone/send-money/send-money.lp) | 9.334 | 12.373 | zetesis 1.33× faster |
+| **All 94 programs: sum of per-case estimates** | **499.265** | **811.996** | **zetesis 1.63× faster on the sum** |
 
-zetesis is faster on **4 of 94 cases**; clingo is faster on 90. A few
-substantial wins reduce the total; most cases favor clingo. The total sums
-individual medians and is not one timed combined run. All cases completed and
-agreed on shown answers and costs, including optimum ties.
-
-These observations depend on the workload and machine; three repetitions do
-not establish a general speedup. clingo's parallel modes and GPU performance
-are outside this comparison. The [complete results](https://gregorygelfond.github.io/zetesis/book/reference/cpu-corpus-20261010.html)
-retain all 94 cases, the measured binary/source identities, limits and
-reproduction commands.
+Across all 94 cases, zetesis is faster on **48**, within 3% on **32**, and
+slower on **14**. Of the 32 close cases, **31 favor zetesis**: it has the lower
+measured time on **79 of 94 programs**. All cases completed and agreed on shown answers and costs,
+including optimum ties. In the same comparison, released 0.5.0 won on 4 cases;
+the candidate reduces zetesis's summed time by **36%**. The total sums per-case
+estimates; it is not one timed combined run.
+The [complete 14 October results](https://gregorygelfond.github.io/zetesis/book/reference/cpu-corpus-20261014.html)
+include every case, one- and fourteen-thread profiles, the released 0.5.0
+comparison, memory, identities, limits and reproduction commands. GPU execution
+and clingo's parallel modes are outside this comparison.
 
 ## Use from Rust
 

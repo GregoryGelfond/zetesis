@@ -7,11 +7,11 @@ use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::formula_support::{Context, Continuations, Join, Row, Support};
 use themelios_program::program::DefaultNegation;
 
-pub(crate) fn rule<'a>(
-    builder: &mut Builder<'_, '_, '_>,
+pub(crate) fn rule<'a, 'source>(
+    builder: &mut Builder<'_, '_, 'source>,
     rule: &'a RuleIr,
     join: &mut Join<'a, '_>,
-    support: &Support<'_>,
+    support: &Support<'source>,
 ) -> Result<bool, FormulaFailure> {
     #[cfg(test)]
     if !super::testing::enabled() {
@@ -23,7 +23,7 @@ pub(crate) fn rule<'a>(
         Context::new(
             &*builder.computation,
             builder.limits,
-            &mut builder.counters,
+            builder.counters,
             rule.location,
         ),
     )?
@@ -35,7 +35,7 @@ pub(crate) fn rule<'a>(
         Context::new(
             &mut *builder.computation,
             builder.limits,
-            &mut builder.counters,
+            builder.counters,
             rule.location,
         ),
     )? {
@@ -50,7 +50,7 @@ pub(crate) fn rule<'a>(
                     Context::new(
                         &mut *builder.computation,
                         builder.limits,
-                        &mut builder.counters,
+                        builder.counters,
                         rule.location,
                     ),
                 )?
@@ -64,7 +64,7 @@ pub(crate) fn rule<'a>(
             Context::new(
                 &mut *builder.computation,
                 builder.limits,
-                &mut builder.counters,
+                builder.counters,
                 rule.location,
             ),
         )? {
@@ -82,10 +82,10 @@ pub(crate) fn rule<'a>(
 
 /// A selected row has completed body selection and head arithmetic. Its logical
 /// aggregate and negative conditions are still formulas, not a truth certificate.
-fn next_selected(
-    builder: &mut Builder<'_, '_, '_>,
+fn next_selected<'source>(
+    builder: &mut Builder<'_, '_, 'source>,
     rule: &RuleIr,
-    support: &Support<'_>,
+    support: &Support<'source>,
     rows: &mut Continuations<'_, '_, '_>,
 ) -> Result<Option<Row<'static>>, FormulaFailure> {
     while let Some(row) = rows.next(
@@ -93,7 +93,7 @@ fn next_selected(
         Context::new(
             &mut *builder.computation,
             builder.limits,
-            &mut builder.counters,
+            builder.counters,
             rule.location,
         ),
     )? {
@@ -109,10 +109,10 @@ fn positive(literal: &LiteralIr) -> bool {
     matches!(literal, LiteralIr::Atom(DefaultNegation::None, _))
 }
 
-fn witness(
-    builder: &mut Builder<'_, '_, '_>,
+fn witness<'source>(
+    builder: &mut Builder<'_, '_, 'source>,
     rule: &RuleIr,
-    support: &Support<'_>,
+    support: &Support<'source>,
     binding: &Binding<'_>,
 ) -> Result<usize, FormulaFailure> {
     #[cfg(test)]
@@ -125,10 +125,10 @@ fn witness(
     )
 }
 
-fn emit(
-    builder: &mut Builder<'_, '_, '_>,
+fn emit<'source>(
+    builder: &mut Builder<'_, '_, 'source>,
     rule: &RuleIr,
-    support: &Support<'_>,
+    support: &Support<'source>,
     binding: &Binding<'_>,
     alternatives: usize,
 ) -> Result<(), FormulaFailure> {

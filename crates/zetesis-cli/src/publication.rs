@@ -11,8 +11,8 @@ use crate::phase_timing::Recorder;
 use crate::presentation::Diagnostics;
 use crate::view::configuration::{Configuration, Observer};
 use crate::{
-    AnswerRenderer, PreparedInput, PublicationConfig, PublicationFailure, PublicationView, Session,
-    SummaryDelivery, SummaryStage,
+    AnswerRenderer, PreparedInput, PublicationConfig, PublicationFailure, PublicationMode,
+    PublicationView, Session, SummaryDelivery, SummaryStage,
 };
 
 pub(crate) fn solve(
@@ -38,7 +38,9 @@ pub(crate) fn solve(
     );
     let mut request =
         Session::builder(input, config.solve, cancellation.clone()).measurements(phases);
-    if input
+    if config.mode == PublicationMode::Count {
+        request = request.counting();
+    } else if input
         .projection()
         .is_some_and(zetesis_themelios::PreparedProjection::is_explicit)
     {
@@ -66,6 +68,7 @@ pub(crate) fn solve(
         ));
         progress.apply(session.progress());
         match next {
+            Some(Ok(_)) if config.mode == PublicationMode::Count => {}
             Some(Ok(answer)) => {
                 let result = phases.measure(SolvePhase::ObservationOutput, || {
                     display.write(
@@ -89,6 +92,39 @@ pub(crate) fn solve(
         }
     }
     complete(renderer, diagnostics, progress, phases)
+}
+
+/// Counting has no partial stdout record; make an unavailable total explicit
+/// on diagnostics even when ordinary informational records are quiet. This
+/// also handles admission's early-control Progress before a session existed.
+pub(crate) fn count_stop(
+    result: Result<Progress, PublicationFailure>,
+    diagnostics: &mut Diagnostics<impl Write>,
+) -> Result<Progress, PublicationFailure> {
+    let progress = result?;
+    let written = if let Some(stop) = &progress.stop {
+        diagnostics.diagnostic(&format_args!("answer count unavailable: {}", stop.reason()))
+    } else if progress
+        .semantic()
+        .and_then(crate::SemanticOutcome::complete_answer_count)
+        .is_none()
+    {
+        if let Some(reason) = progress
+            .semantic()
+            .and_then(crate::SemanticOutcome::interruption)
+        {
+            diagnostics.diagnostic(&format_args!("answer count unavailable: {reason}"))
+        } else {
+            diagnostics
+                .diagnostic(&"answer count unavailable: search did not establish complete coverage")
+        }
+    } else {
+        return Ok(progress);
+    };
+    match written {
+        Ok(()) => Ok(progress),
+        Err(error) => Err(progress.fail(error.into())),
+    }
 }
 
 fn complete(

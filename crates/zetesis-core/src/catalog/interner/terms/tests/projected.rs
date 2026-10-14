@@ -507,6 +507,7 @@ fn admitted_program() -> (crate::Program, crate::Atom) {
             vec![],
             vec![],
         )],
+        crate::FactTables::default(),
         crate::AdmissionLimits::default(),
     )
     .unwrap();

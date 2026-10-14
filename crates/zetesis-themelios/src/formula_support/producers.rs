@@ -165,7 +165,7 @@ fn input_capacity(
 ) -> Result<usize, FormulaFailure> {
     let mut input_count = 0_usize;
     // The plan has no slot for facts: support completion interns every fact
-    // product in its first round, and a fact has no input to wake it again.
+    // block in its first round, and a fact has no input to wake it again.
     for rule in prepared.rules_without_facts() {
         counters.work(limits, rule.location)?;
         if matches!(rule.head, HeadIr::Normal(Some(_))) {

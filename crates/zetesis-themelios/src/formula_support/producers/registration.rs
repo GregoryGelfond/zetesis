@@ -12,7 +12,7 @@
 //! rows is not traversed. Every relation it reads is then the one its last
 //! traversal read, and support membership only grows, so another traversal
 //! would follow the same plan over the same rows and derive only heads already
-//! supported. Facts have no producer slot: a fact product enters support in the
+//! supported. Facts have no producer slot: a fact block enters support in the
 //! first round, and its rows wake a reading rich producer in the second.
 
 #[cfg(test)]
@@ -183,9 +183,11 @@ impl<'source> Registration<'source> {
                 let traversed = first
                     || every_round_traversed()
                     || affected(&self.reads[reads.clone()], rule, support, limits, counters)?;
-                if !traversed {
-                    counters.record(Event::SupportUnchangedVisit);
-                }
+                counters.record(if traversed {
+                    Event::SupportRichTraversal
+                } else {
+                    Event::SupportUnchangedVisit
+                });
                 Ok(delta::traversal(rule, support, traversed))
             }
             Producer::Constraint => Err(invalid(Failure::Owner, rule.location)),

@@ -418,9 +418,11 @@ fn conditional_value_alternatives_cannot_bind_source_names() {
 
 #[test]
 fn local_value_owners_respect_each_expansion_ceiling() {
-    for source in [
-        "{d(1);d(2)}.q:-f(X)=f(1..2):d(X).",
-        "{p(f(1));p(f(2))}.q:-2{p(f(1..2))}2.",
+    // The conditional owns separate condition and generated-value frames; the
+    // aggregate has one local frame and retains an exact cross-run ceiling.
+    for (source, distinct_local_frames) in [
+        ("{d(1);d(2)}.q:-f(X)=f(1..2):d(X).", true),
+        ("{p(f(1));p(f(2))}.q:-2{p(f(1..2))}2.", false),
     ] {
         let expected = native(&formula(source));
         for resource in [
@@ -428,6 +430,19 @@ fn local_value_owners_respect_each_expansion_ceiling() {
             ExpansionResource::Values,
             ExpansionResource::ScalarBytes,
         ] {
+            if resource == ExpansionResource::TermWork && distinct_local_frames {
+                crate::support::thresholds::bounded_term_work(
+                    |limit| {
+                        limited(
+                            source,
+                            resource_limits::expansion(resource, limit),
+                            &FormulaLimits::default(),
+                        )
+                    },
+                    |actual| assert_eq!(native(actual), expected, "{source}"),
+                );
+                continue;
+            }
             let exact = first_success(resource_limits::expansion_default(resource), |limit| {
                 limited(
                     source,

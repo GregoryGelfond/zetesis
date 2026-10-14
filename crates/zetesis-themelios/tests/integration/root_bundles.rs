@@ -65,9 +65,9 @@ fn ordered_occurrences_and_shared_includes_keep_unique_original_sources() {
         ExpansionLimits::default(),
     )
     .expect("exact root and include spellings are included once");
-    assert_eq!(admitted.program().templates().len(), 2);
+    assert_eq!(admitted.program().facts().len(), 2);
     let owners: Vec<_> = admitted
-        .template_origins()
+        .fact_origins()
         .iter()
         .flatten()
         .map(|location| location.source)
@@ -88,10 +88,10 @@ fn later_roots_supply_global_constants_without_flattening_evidence() {
         ExpansionLimits::default(),
     )
     .unwrap();
-    assert_eq!(admitted.program().templates().len(), 2);
+    assert_eq!(admitted.program().facts().len(), 2);
     assert!(
         admitted
-            .template_origins()
+            .fact_origins()
             .iter()
             .flatten()
             .all(|origin| origin.source == SourceId::new(0))
@@ -258,7 +258,7 @@ fn cwd_resolution_is_captured_before_loading_and_retained_for_admission() {
             ExpansionLimits::default(),
         )
         .unwrap();
-        assert_eq!(admitted.program().templates().len(), 4);
+        assert_eq!(admitted.program().facts().len(), 4);
         return;
     }
     let fixture = Fixture::new();

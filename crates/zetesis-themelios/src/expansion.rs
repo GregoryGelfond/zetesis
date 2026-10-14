@@ -42,6 +42,10 @@ pub struct ExpansionLimits {
     /// inequalities and endpoint arrays before allocation.
     /// Analyzed-statement ownership additionally reserves statement-ID slots and
     /// named lookup-map payload; it does not copy original statement content.
+    /// Compact analysis additionally reserves source-recipe columns, canonical
+    /// fact locators and evidence lists, and temporary borrowed resolvers. A
+    /// preparation trigger for the full analyzed program charges its logical
+    /// carrier-vector reservation once, independent of prior public inspection.
     /// Ordinary aggregate, choice and conditional scope clones remain
     /// excluded, as do other AST carriers, provenance and allocator overhead.
     /// Original input structure remains bounded separately by admission options.

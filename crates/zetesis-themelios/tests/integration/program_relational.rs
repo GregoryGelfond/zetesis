@@ -261,7 +261,7 @@ fn show_failure_keeps_its_unfiltered_statement_identity() {
 }
 
 #[test]
-fn expanded_templates_retain_original_evidence() {
+fn expanded_rules_retain_original_evidence() {
     let positive = Statement::from(Rule::fact(atom("p", [interval()])));
     let mut negative = atom("p", [1.into()]);
     negative.sign = Sign::Negative;
@@ -274,13 +274,21 @@ fn expanded_templates_retain_original_evidence() {
     let input = prepare_program_relational(Arc::clone(&program), answers()).unwrap();
     let originals = program.statements().collect::<Vec<_>>();
     assert!(std::ptr::eq(input.original_program(), program.as_ref()));
-    let mut positive_templates = 0;
+    let mut positive_facts = 0;
     let mut coherence = 0;
     for (template, sites) in input
         .program()
         .templates()
         .iter()
         .zip(input.template_sites())
+        .chain(
+            input
+                .program()
+                .facts()
+                .iter()
+                .map(zetesis_core::FactRef::as_template)
+                .zip(input.fact_sites()),
+        )
     {
         let subjects = sites
             .iter()
@@ -293,7 +301,7 @@ fn expanded_templates_retain_original_evidence() {
             assert_eq!(subjects, [&positive, &negative].into());
             coherence += 1;
         } else if subjects == [&positive].into() {
-            positive_templates += 1;
+            positive_facts += 1;
         } else {
             assert_eq!(subjects, [&negative].into());
         }
@@ -302,7 +310,8 @@ fn expanded_templates_retain_original_evidence() {
         input.template_sites().len(),
         input.program().templates().len()
     );
-    assert_eq!(positive_templates, 2);
+    assert_eq!(input.fact_sites().len(), input.program().facts().len());
+    assert_eq!(positive_facts, 2);
     assert_eq!(coherence, 1);
 }
 

@@ -80,6 +80,25 @@ fn with_fixture<T>(
     })
 }
 
+/// Keep the work of one filtered traversal, including its final failure.
+fn with_observed_fixture<T>(
+    fixture: Fixture,
+    consume: impl FnOnce(&Support<'_>, &mut Computation<'_, '_>, &mut Budget, &mut Counters) -> T,
+) -> (T, crate::GroundingWork) {
+    with_fixture(fixture, |support, computation, budget, counters| {
+        let observer = crate::test_support::Observer::default();
+        let profile = crate::grounding_observer::Profile::new(Some(&observer));
+        let previous = std::mem::replace(&mut counters.observed, profile.work());
+        let result = profile
+            .phase(crate::GroundingPhase::RuleInstantiation, None, || {
+                Ok::<_, std::convert::Infallible>(consume(support, computation, budget, counters))
+            })
+            .unwrap();
+        counters.observed = previous;
+        (result, observer.0.get())
+    })
+}
+
 struct Select<F>(F);
 
 impl<F> RowFilter for Select<F>
@@ -607,7 +626,7 @@ fn filter_cancellation_stops_before_binding() {
             ),
         )
         .unwrap();
-        counters.cancellation = Some(cancellation.clone());
+        counters.attach_test_control(&cancellation);
         let result = rows
             .next_row(
                 computation,

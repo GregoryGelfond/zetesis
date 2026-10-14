@@ -6,9 +6,9 @@ use themelios_program::program::Program;
 use zetesis_cpu::Cancellation;
 use zetesis_solve::PreparedInput;
 use zetesis_themelios::{
-    FormulaFailure, FormulaPurpose, PreparedRelational, ProgramFormulaOptions,
-    ProgramRelationalOptions, SourceMetadata, prepare_program_formula_with,
-    prepare_program_relational,
+    AutomaticAdmission, AutomaticAdmissionFailure, FormulaFailure, FormulaPurpose,
+    PreparedRelational, ProgramFormulaOptions, SourceMetadata, prepare_program_automatic,
+    prepare_program_formula_with,
 };
 
 use crate::{Config, Grounder};
@@ -26,37 +26,27 @@ impl Prepared {
         cancellation: &Cancellation,
     ) -> Result<Self, FormulaFailure> {
         let resources = config.resources();
-        let formula = resources.formula_limits();
-        if config.grounder == Grounder::Lazy {
-            let relational = prepare_program_relational(
-                Arc::clone(&original),
-                ProgramRelationalOptions {
-                    admission: resources.program_admission_options(),
-                    expansion: resources.expansion_limits(),
-                    observation: formula.observation,
-                    metadata_storage: formula.metadata_storage,
-                    purpose: FormulaPurpose::AnswerSets,
-                    cancellation: Some(cancellation.clone()),
-                },
-            );
-            match relational {
-                Ok(relational) => return Ok(Self::Relational(Box::new(relational))),
-                // Only a construct the relational profile lacks moves the
-                // program to lazy formula grounding, as the CLI's does.
-                Err(failure) if outside_relational_profile(&failure) => {}
-                Err(failure) => return Err(failure),
+        let options = ProgramFormulaOptions {
+            admission: resources.program_admission_options(),
+            expansion: resources.expansion_limits(),
+            formula: resources.formula_limits(),
+            purpose: FormulaPurpose::AnswerSets,
+            cancellation: Some(cancellation.clone()),
+        };
+        let prepared = if config.grounder == Grounder::Lazy {
+            match prepare_program_automatic(original, options) {
+                Ok(AutomaticAdmission::Extended(relational)) => {
+                    return Ok(Self::Relational(Box::new(relational)));
+                }
+                Ok(AutomaticAdmission::Formula(prepared)) => prepared,
+                Err(
+                    AutomaticAdmissionFailure::Extended(error)
+                    | AutomaticAdmissionFailure::Formula(error),
+                ) => return Err(error),
             }
-        }
-        let prepared = prepare_program_formula_with(
-            original,
-            ProgramFormulaOptions {
-                admission: resources.program_admission_options(),
-                expansion: resources.expansion_limits(),
-                formula,
-                purpose: FormulaPurpose::AnswerSets,
-                cancellation: Some(cancellation.clone()),
-            },
-        )?;
+        } else {
+            prepare_program_formula_with(original, options)?
+        };
         zetesis_solve::prepare_formula_execution(prepared, &config.session(), None)
             .map(Self::Execution)
     }
@@ -74,11 +64,6 @@ impl Prepared {
             Self::Execution(prepared) => prepared.metadata(),
         }
     }
-}
-
-/// Whether relational preparation refused only a construct its profile lacks.
-fn outside_relational_profile(failure: &FormulaFailure) -> bool {
-    matches!(failure.cause(), FormulaFailure::Expansion(error) if error.needs_formula_admission())
 }
 
 #[cfg(test)]

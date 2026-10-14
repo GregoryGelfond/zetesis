@@ -122,40 +122,76 @@ fn an_empty_operand_counts_as_long() {
 fn a_slot_beyond_u32_has_no_form() {
     let slot = usize::try_from(u64::from(u32::MAX) + 1).unwrap();
     with_compiler(ExpansionLimits::default(), |compiler| {
-        let comparison = compared(compiler, vec![Operation::Variable(slot)], vec![X]);
-        assert_eq!(reason(&comparison), Some(WithoutForm::WideSlot));
+        for on_right in [false, true] {
+            let wide = vec![Operation::Variable(slot)];
+            let (left, right) = if on_right {
+                (vec![X], wide)
+            } else {
+                (wide, vec![X])
+            };
+            assert_eq!(
+                reason(&compared(compiler, left, right)),
+                Some(WithoutForm::WideSlot)
+            );
+        }
     });
 }
 
 #[test]
 fn a_constructor_operand_has_no_form() {
     with_compiler(ExpansionLimits::default(), |compiler| {
-        let constructor = constructor(compiler);
-        let comparison = compared(compiler, vec![X, constructor], vec![Y]);
-        assert_eq!(reason(&comparison), Some(WithoutForm::Constructor));
+        for on_right in [false, true] {
+            let nodes = vec![X, constructor(compiler)];
+            let (left, right) = if on_right {
+                (vec![Y], nodes)
+            } else {
+                (nodes, vec![Y])
+            };
+            assert_eq!(
+                reason(&compared(compiler, left, right)),
+                Some(WithoutForm::Constructor)
+            );
+        }
     });
 }
 
 #[test]
 fn a_forward_or_self_argument_has_no_form() {
     with_compiler(ExpansionLimits::default(), |compiler| {
-        let forward = compared(compiler, vec![Operation::Absolute(1), X], vec![Y]);
-        assert_eq!(reason(&forward), Some(WithoutForm::ArgumentPosition));
-        let itself = compared(
-            compiler,
-            vec![Y],
-            vec![X, Operation::Binary(BinaryOp::Add, 0, 1)],
-        );
-        assert_eq!(reason(&itself), Some(WithoutForm::ArgumentPosition));
+        for on_right in [false, true] {
+            for nodes in [
+                vec![Operation::Absolute(1), X],
+                vec![X, Operation::Binary(BinaryOp::Add, 0, 1)],
+            ] {
+                let (left, right) = if on_right {
+                    (vec![Y], nodes)
+                } else {
+                    (nodes, vec![Y])
+                };
+                assert_eq!(
+                    reason(&compared(compiler, left, right)),
+                    Some(WithoutForm::ArgumentPosition)
+                );
+            }
+        }
     });
 }
 
 #[test]
 fn a_nonnumeric_constant_has_no_form() {
     with_compiler(ExpansionLimits::default(), |compiler| {
-        let symbol = symbol(compiler);
-        let comparison = compared(compiler, vec![X], vec![symbol]);
-        assert_eq!(reason(&comparison), Some(WithoutForm::NonnumericConstant));
+        for on_right in [false, true] {
+            let nodes = vec![symbol(compiler)];
+            let (left, right) = if on_right {
+                (vec![X], nodes)
+            } else {
+                (nodes, vec![X])
+            };
+            assert_eq!(
+                reason(&compared(compiler, left, right)),
+                Some(WithoutForm::NonnumericConstant)
+            );
+        }
     });
 }
 
@@ -204,6 +240,43 @@ fn each_constant_read_charges_five_work_units() {
         compared(compiler, left, right);
         assert_eq!(compiler.counters.accounting.work - work, 10);
     });
+}
+
+#[test]
+fn constant_reads_stop_at_the_work_ceiling() {
+    let run = |allowance| {
+        with_compiler(ExpansionLimits::default(), |compiler| {
+            let (left, right) = (successor(compiler), product(compiler));
+            let before = compiler.counters.accounting.work;
+            let limits = crate::FormulaLimits {
+                max_work: before + allowance,
+                ..*compiler.limits
+            };
+            let result = crate::formula_ir::comparison::compile(
+                (Expression::new(left), Relation::Eq, Expression::new(right)),
+                &compiler.source,
+                &limits,
+                compiler.counters,
+                compiler.budget,
+                compiler.location,
+            );
+            (result, compiler.counters.accounting.work - before)
+        })
+    };
+    // Both operands have one constant: five work units per constant.
+    let minimum =
+        zetesis_test_support::thresholds::first_success(10, |allowance| run(allowance).0.is_ok());
+    assert_eq!(minimum, 10);
+    assert_eq!(run(minimum).1, minimum);
+    let (refused, work) = run(minimum - 1);
+    assert!(matches!(
+        refused,
+        Err(crate::FormulaFailure::Limit {
+            resource: crate::FormulaResource::Work,
+            ..
+        })
+    ));
+    assert_eq!(work, minimum - 1);
 }
 
 #[test]
@@ -299,7 +372,7 @@ fn the_constant_charge_counts_steps_and_variable_steps() {
         let comparison = compared(compiler, left, right);
         let form = comparison.form().unwrap();
         // Eight steps, three of them variables.
-        assert_eq!((form.steps(), form.charge()), (8, 11));
+        assert_eq!((form.steps(), form.constant()), (8, 11));
     });
 }
 

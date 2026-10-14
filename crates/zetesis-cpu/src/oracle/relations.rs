@@ -603,10 +603,13 @@ impl Catalogs {
             storage::admit(work, self.total_bytes())?;
             return storage::record(work, self.total_bytes());
         }
-        let authority =
-            AtomInterner::for_program(program, work.limits.max_closure_bytes).map_err(|error| {
-                storage::atom_failure(zetesis_core::atom_interner::Failure::Catalog(error))
-            })?;
+        let authority = match program.fact_catalog() {
+            Some(base) => AtomInterner::for_closed_catalog(base, work.limits.max_closure_bytes),
+            None => AtomInterner::for_program(program, work.limits.max_closure_bytes),
+        }
+        .map_err(|error| {
+            storage::atom_failure(zetesis_core::atom_interner::Failure::Catalog(error))
+        })?;
         self.authority = Some(authority);
         self.program = Some(program.clone());
         let live = self.total_bytes();
@@ -664,6 +667,19 @@ impl Catalogs {
                 .authority
                 .as_ref()
                 .map_or(0, AtomInterner::storage_bytes)
+    }
+    /// Actual immutable fact base supplied to this workspace's descendant.
+    /// This excludes vocabulary (its existing collective policy is unchanged),
+    /// every workspace-owned index, directory and inline handle.
+    pub(super) fn shared_fact_bytes(&self) -> u128 {
+        self.authority.as_ref().map_or(0, |authority| {
+            let shared = authority.shared_closed_catalog_bytes();
+            if shared == 0 {
+                0
+            } else {
+                shared - authority.shared_vocabulary_bytes()
+            }
+        })
     }
     pub(super) fn set_overhead(&mut self, bytes: u128, work: &mut Work<'_>) -> Result<(), Stop> {
         let total = self

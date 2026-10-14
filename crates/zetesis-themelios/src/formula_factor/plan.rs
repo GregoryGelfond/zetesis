@@ -42,7 +42,7 @@ fn lease(
         0,
         bytes,
         builder.limits,
-        &builder.counters,
+        builder.counters,
         rule.location,
     )?;
     Ok(lease)
@@ -71,7 +71,7 @@ fn push<T>(
         Context::new(
             &*builder.computation,
             builder.limits,
-            &mut builder.counters,
+            builder.counters,
             rule.location,
         ),
     )?;
@@ -143,7 +143,7 @@ pub(super) fn components(
                 let pattern = builder.computation.static_pattern(
                     *pattern,
                     builder.limits,
-                    &mut builder.counters,
+                    builder.counters,
                     rule.location,
                 )?;
                 for variable in pattern.terms().variables() {
@@ -296,7 +296,7 @@ fn scope(
             let pattern = builder.computation.static_pattern(
                 *pattern,
                 builder.limits,
-                &mut builder.counters,
+                builder.counters,
                 rule.location,
             )?;
             for variable in pattern.terms().variables() {
@@ -359,11 +359,7 @@ fn sort<T: Ord>(
 ) -> Result<(), FormulaFailure> {
     crate::formula_support::sort::by(
         values,
-        crate::formula_support::GroundingWork::new(
-            builder.limits,
-            &mut builder.counters,
-            rule.location,
-        ),
+        crate::formula_support::GroundingWork::new(builder.limits, builder.counters, rule.location),
         |left, right, _| Ok(left.cmp(right)),
     )
 }

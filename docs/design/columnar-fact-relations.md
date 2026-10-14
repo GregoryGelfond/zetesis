@@ -15,10 +15,10 @@ Paths are under `crates/zetesis-themelios/src/` unless another root is named.
 |---|---|
 | Stage 1: the formula route stops building a rule per fact (fact blocks, typed `items()`, private rule storage) | Implemented |
 | The owner record's geometric growth (`reserve_amortized`), found by the heap profile | Implemented |
-| Stage 1's conforming change: interval segments, column-major runs, the cell encoding behind a row accessor | Decided; open; lands before Stage 2 |
+| Stage 1's conforming change: interval segments, column-major runs, the cell encoding behind a row accessor | Implemented; acceptance pending |
 | Stage 1's acceptance run on the reviewed commits | Owed |
-| Stage 2: analysis inputs without a statement per fact | Designed; open |
-| Stage 3a: the lazy route's core program keeps facts as tables, representation (A) | Designed; open; its prerequisite, the fact path's position table, is implemented |
+| Stage 2: analysis inputs without a statement per fact | Implemented; combined acceptance pending |
+| Stage 3a: the lazy route's core program keeps facts as tables, representation (A) | Implemented; combined acceptance pending |
 | Stage 3b: the program's facts bound in the closure | Needs its own design |
 | Stage 4: the ground program's facts as a fixed-true set | Needs its own design |
 
@@ -66,8 +66,17 @@ bootstrap round and by its source scan.
 | Stage 3 | yes | — | — |
 | Stage 4 | — | — | yes |
 
-Facts that keep a function, tuple or arithmetic subterm after normalization are generated facts and stay rules on
-every stage.
+A closed function or tuple value is ordinary fact data. In the source representation, `Symbol::Function` and
+`Symbol::Tuple` are closed values; a `SourceTerm::Symbolic` containing either is a scalar fact argument. Stage 3a
+stores every closed structured fact accepted by the relational door as table data, including closed function/tuple
+term forms that the strict door converts under its existing policy.
+
+The formula route separately tests for constructor or operator **expressions** remaining after normalization:
+`SourceTerm::Function`, `Tuple`, unary/binary operations and absolute-value expressions retain the generated-rule
+path. A constructor containing an interval, such as the head of `p(f(1..3)).`, needs that scoped generation. This
+expression test does not inspect inside a closed `Symbol` value and does not make a closed value such as `f(1)` a
+generator. Arithmetic already evaluated to a closed value follows the fact path; unresolved expressions retain the
+route's existing generation or refusal policy.
 
 ### What already exists
 
@@ -98,12 +107,13 @@ Facts held as typed columns are the input several other designs want:
 
 Every consumer that visits the prepared rules in order visits **items** in the same order. An item is a rule or a
 **fact block**: one predicate's block of fact rows, standing exactly where those facts' rules stood, its rows in
-expansion order (alternatives in order, last argument fastest). A fact block has one of two layouts:
+expansion order (alternatives in order, last argument fastest). A statement with one argument alternative of one row
+supplies a run row; every other argument alternative becomes a product. A fact block has one of two layouts:
 
 - a **product**: the facts of one argument alternative of one source statement. A statement whose alternatives differ
   in predicate or arity, such as `p(1;a,b).`, contributes one block per product, so every block has one predicate, as
   the acyclic plan's key of component rank and position requires;
-- a **run**: consecutive one-row fact statements of one predicate, the common instance-file shape. Its rows keep their
+- a **run**: consecutive eligible fact statements of one predicate, the common instance-file shape. Its rows keep their
   order, but item-level counts change: grounding observers see one rule-instantiation phase per block, not per fact.
 
 Wherever the code discovers, stages, interns or emits a fact rule's head, the block's row is discovered, staged,
@@ -116,32 +126,57 @@ The type is `FactBlock` (`formula_facts.rs`), reached through `Item::Facts`.
 - **The fact arena.** Facts travel from expansion into both routes in one columnar form, in shared vectors reserved
   fallibly and leased like the compiler's other storage, with no record per fact. A product is a predicate admitted
   once, a range of columns and a row count; each column is a range of segments, each segment a scalar cell or an `i32`
-  interval. On the formula route a scalar cell is the value's admitted scalar key, admitted once per distinct value; on
-  the lazy route it is the closed `Value` the core program interns.
+  interval. On the formula route a scalar cell is an admitted occurrence coordinate in the preparation's
+  `TemplateComponents`, which resolves to a canonical value; equal values can have different occurrence coordinates.
+  On the planned lazy-route form it is the closed `Value` the core program interns.
 - **Runs** store one column of cells per argument plus each row's evidence range, so a row of a unary run costs one
   cell and one range.
 - **Families.** A family is the facts of one statement: a range of products and a range of evidence. Its origins are
   stored once, where each fact rule used to clone them. A family records its statement, and the retained source
   program holds that statement's carrier; a fact statement's normalized provenance is the stamp of that carrier, so it
   can be re-derived exactly without a copy per family.
-- **Access.** `rows()` borrows a block and yields each row into fixed scratch. Admitted keys are `Copy` and interval
-  cells yield numbers, so nothing is cloned or allocated per row, and a block can be iterated any number of times.
+- **Access.** `rows()` borrows a block. Its `Row::cells()` yields opaque, `Copy` scalar occurrence coordinates in
+  argument order, hiding the stored segment or run-column encoding. `Scalar::get(TemplateComponentsRef<'source>,
+  limits, counters, location)` resolves each coordinate to a borrowed `TermRef<'source>` from that same preparation.
+  The existing readers use this resolver; no owned `Value` is reconstructed per row, and a block can be iterated
+  any number of times.
 - **Items on the formula route.** The prepared rules are private storage, reached through `Prepared::items()`, the
   typed traversal (`Item::Rule` or `Item::Facts`), and `rules_without_facts()`, a separately named view for readers
   that provably never see facts, each use carrying its reason. Making the field private turned the compile errors into
   the complete reader inventory.
 
-**Stage 1 as implemented departs from this form in two ways**, and the arena is conformed before Stage 2:
+**Stage 1's conforming representation.** Each integer segment stores its first number, an expanded column end,
+and a checked span of source-component coordinates. Admission still calls `root_scalar` for every expanded column
+value, in the established order: each column's first value in argument order, the predicate, then the remaining
+values of each column in reverse argument order. All root-domain admissions, scalar occurrences, work charges and
+polls remain in that sequence. Only after receiving a coordinate does the compiler try to extend its current segment.
+Both the number and the occurrence coordinate must be consecutive; a gap in either starts a new segment. No property
+of canonical IDs is inferred from numeric adjacency. In particular, the first value of an earlier column is normally
+separated from its tail by later columns' first values, so one source interval can occupy two segments.
 
-- interval values are admitted as scalar cells, one 8-byte cell per value, so that the vocabulary grows exactly as it
-  grew one fact rule at a time;
-- runs are stored row-major, because a run grows by appending one row per statement.
+Product scratch retains column descriptors, first-row coordinates and segments instead of an expanded coordinate slot
+per value. An interval of K values therefore removes O(K) arena and scratch coordinate storage in favor of O(segments).
+It **does not remove** the canonical vocabulary, scalar occurrences in `TemplateComponents`, root-domain entries, or
+their admissions. These still grow with the distinct values or admitted occurrences. Stage 1 does not claim that the
+whole preparation of `p(0..K-1)` uses constant memory.
 
-So `p(0..K-1)` holds K cells where the design holds one segment, and a numeric read of a column costs O(cells). The
-conforming change keeps the vocabulary order, since admission order and storage are separate: an interval is stored as
-one segment while each value is admitted when a row first reaches it, and a run appends one cell to each column
-vector. The cell encoding is then confined behind a row accessor, so readers stop depending on it. Output stays
-byte-identical.
+A product row computes each column's mixed-radix offset, locates its segment by binary search, then selects the
+certified occurrence coordinate. Reading a cell costs O(log segments) plus the existing borrowed scalar resolution;
+reading every integer remains O(K), with no per-row value construction. Positive-source validation keeps its logical
+cell order and work charges. A future numeric analysis can read segments directly under its own design.
+
+Runs hold one growable scalar vector per argument and one evidence end per row. Appending a row reserves all argument
+buffers before publishing any cell or row. The arena's one lease counts the outer headers and every nested capacity;
+each replacement admits the old and new capacities together, geometrically when that fits and exactly otherwise.
+A refusal can leave reserved capacity, including empty new column headers, but no partial row; the lease continues
+to cover every retained buffer. Splitting reserves all destination headers and column buffers before moving any item,
+then copies segments, columns and evidence without allocation. The original arena keeps its buffers and lease until
+it is dropped, so copied storage is counted on both sides while both owners live.
+
+Compact intervals reduce arena storage; segment descriptors and column-buffer headers can increase it for short
+products or runs. Expansion `ScalarBytes` changes with the compact scratch capacities. `SupportBytes` can move in
+either direction, including at replacement peaks; tight storage limits can therefore refuse earlier or later. This
+conformance does not claim identical storage receipts or establish its performance acceptance without measurements.
 
 **The forms converge.** The arena is the transport between expansion and the routes. On the formula route the support
 `relation::Catalog` is the one per-fact representation through grounding, a fact row interned into it in round 1.
@@ -161,13 +196,27 @@ objective forwarding definitions count facts as competing producers.
 `analyzed_program()` and `source_analysis()` keep describing the full program. The analysis preparation runs uses a
 summary, and the full analyzed program is built from the families only when it is needed.
 
-**1. The summary.** It keeps every non-fact analyzed statement, in order, plus one representative fact statement per
-fact signature (its first fact in source order). A layout records, in compile order, the runs of non-fact statements
-and the elided fact families; `replace_constraints` filters and appends the layout as it does the statement list
-today. The two programs are two types: `Summary`, the summarized program with its layout, which preparation analyzes
-and from which `Owners` are collected; and `FullProgram`, the rebuilt program the public accessors return.
-`ask_all` and `specialize` take `(&Summary, &Owners)`, since their statement loops index owners by position, so the
-program each pass iterates is checked where it compiles.
+**1. The summary.** It keeps every analyzed carrier compiled outside the fact arena plus the first fact of each
+signed signature. Canonical collection combines these carriers and records two distinct identities: rewrite
+eligibility in `Owners`, and the last original source statement contributing each real carrier. Representatives have
+no real-carrier identity. The latter sidecar survives a content collision even when that collision makes a rewrite
+ineligible. `replace_constraints` removes the asked originals and appends its one compilation's replacement carriers.
+`Summary` owns this state and the exact reconstruction recipe; `FullProgram` owns the complete program and its analysis.
+`ask_all` and `specialize` take `(&Summary, &Owners)`, so their positional statement and owner inputs cannot disagree.
+
+The fact recipe records products as mixed-radix column segments: an integer interval or a leaf ordinal in the already
+validated source carrier. Unchanged carriers borrow the retained `Arc<Program>` by original statement identity;
+rewritten carriers retain the one normalized singleton program already produced by compilation. `Families::read`
+creates a temporary resolver borrowing these atoms and symbols. It never normalizes again, exports a core value or
+admits a symbol. This recipe serves exact source inspection; execution and numeric analysis still read the fact arena
+through its actual catalog coordinates.
+
+A canonical locator sequence merges all content-equal arena facts in themelios statement order, retaining contributing
+family identities for merged root provenance. These are locators and evidence, not copied argument rows. The original
+occurrence counts, scalar admissions, origins and item order stay separate and unchanged. Building the sequence takes
+one bounded lookup per original row, O(R log U) comparisons for R occurrences and U distinct arena facts; comparisons
+read the argument columns. It retains O(U + E) locators and additional family evidence E. Compact intervals therefore
+remove expanded analysis statements, not all per-row metadata or the existing admitted vocabulary.
 
 **Why the summary's analysis is the full program's.** zetesis reads the dependency graph's predicates, edges and
 components, and the program classes (horn, normality, stratification) that order certificate attempts. A fact adds its
@@ -181,27 +230,31 @@ bump re-runs it.
 `AcyclicSource` each return the full program and its analysis, built at the first call and cached in a once-initialized
 cell inside the owner's shared state.
 
-- *Built from* the retained source program, the families and the post-replacement layout: each non-fact statement from
-  the summary, each family row through `formula_analysis::fact` with its provenance re-derived by the stamp, ingested by
-  `SourceProgram::of_nodes` so content-equal statements merge as now, then `Analysis::of`. The output is today's
-  analyzed program at every level.
-- *Built in preparation only for partition-eligible grounding programs*, the one preparation reader that needs it (the
-  terminal partition). There it is built once, after constraint replacement, charged to preparation's budget as today's
-  construction is, and moved into the owner's cell. Replacement runs once, on the summary: it drops the asked
-  statements from the layout by identity and appends its one compile's replacements, so the layout describes today's
-  post-replacement program and nothing is compiled twice.
-- *Cost.* O(facts × arity) at the first call, then the full program's space for the owner's lifetime; today that space
-  is paid on every run.
-- *Failure.* The accessors stay infallible. Preparation performs every check the per-fact construction would make:
-  `AnalysisNodes` and `AnalysisEdges` against full counts (rows × the row's node count per product; facts add no
-  edges), and the structured-value bridge once per distinct value. The rebuild can then fail only at the
-  infallible-allocation boundary today's construction already has.
-- *Budget.* The on-demand rebuild charges no budget: preparation's budget has been reported, and the work is bounded by
-  ceilings admitted at preparation (`Templates`, `Values`, `ScalarBytes`, and the analysis ceilings on full counts).
-- *Documentation.* The accessors' comments state the first call's cost and that preparation analyzed the summary,
-  whose graph and classes equal the full program's. `Debug` on the formula owners prints the summary's statement count and the
-  families' row count, builds nothing, and does not depend on whether an accessor has run. The manual's statement that
-  `source_analysis()` describes exactly the value `analyzed_program()` exposes still holds.
+- *Built from* the prevalidated source recipe and the post-replacement real carriers. A merge walk compares virtual
+  facts with real carriers in themelios canonical content order. Equal carriers union root provenance; the later
+  original carrier supplies nested evidence, matching themelios ingestion. Each fact clones validated `Symbol`
+  leaves or constructs an already-bounded integer, with constructed child provenance. `Program::of_nodes` and
+  `Analysis::of` then produce the exact complete view. No fallible bridge or normalization replay is deferred.
+- *Built in preparation only for partition-eligible grounding programs*, after constraint replacement. The terminal
+  partition's eligibility check is the explicit trigger. It reads the complete program, retains the complete original
+  analysis and moves that view into the terminal owner; the selected base already has a complete analyzed program.
+  Both public accessors share the same once-initialized view and reuse a preparation-built view.
+- *Cost.* The first construction copies the full normalized statements and fact values, ingests them canonically and
+  computes their full analysis. Its work includes upstream ingestion and analysis; it is not merely a linear row walk.
+  The complete program and analysis then remain for the owner's lifetime. Summary preparation keeps the graph and class
+  analysis without these expanded statements.
+- *Failure.* The accessors stay infallible and retain the upstream ordinary allocation boundary. Preparation checks
+  `AnalysisNodes` and `AnalysisEdges` in the exact full canonical statement sequence, after content deduplication and
+  provenance union. The original row-occurrence allowances are checked separately during compilation. Typed source
+  conversion and admission have already succeeded before a recipe is retained.
+- *Budget.* Public inspection charges no budget. A later preparation trigger still performs the same logical atom,
+  resolver and full-carrier reservation charges, independent of whether public inspection populated the cache. The
+  trigger marker is recorded only after success; subsequent preparation use reuses that admitted view. Fresh
+  preparation reconstruction reserves authored vectors fallibly and polls between entries, while upstream AST
+  cloning/ingestion/analysis retains its ordinary allocation boundary.
+- *Documentation.* The accessors describe first-call construction and retention. `source_classes()` reads the summary's
+  equal class verdicts without rebuilding. `Debug` prints summary and canonical/original fact counts, builds nothing,
+  and does not depend on whether an accessor ran. `source_analysis()` still describes exactly `analyzed_program()`.
 
 **3. Internal readers move to the summary.**
 
@@ -232,20 +285,24 @@ cell inside the owner's shared state.
   reader and the partition is unchanged. Stage 2 saves nothing retained there; a terminal analysis that reads facts from
   the arena is a later step with its own differential.
 
-**One reader of facts in preparation: `PreparationFacts`.** Preparation owns one value every pass that reads facts reads
-through, so the class that pays is the set of its callers, which the compiler lists. It holds the summary, its layout,
-the families and the retained source program, and, once built, the fact atoms, the `FactIndex` over them and the full
-program. It replaces `FixedFacts` (`formula_rewrite.rs`).
+**One fact input in preparation: `PreparationFacts`.** The post-compilation `Summary` owns its source recipe,
+canonical locators and eventual full view. The replacement-planning scope owns one `PreparationFacts` borrowing that
+summary and lazily owning canonical fact atoms. `FixedFacts` borrows this outer owner and caches `FactIndex` over its
+atoms, avoiding self-referential storage. Both are dropped after key analysis and specialization, before replacement.
 
-- *Triggers.* `fact_index(work)` builds the fact atoms from the families' rows on its first call, then
-  `FactIndex::read_parts`; later calls borrow the index. Its callers are key analysis once it finds a keyed relation and
-  specialization at its first qualifying anchor. `full_program(budget)` builds the full program from the
-  post-replacement layout; its caller is the terminal partition.
-- *Charges.* The fact atoms at the per-fact preflight's rates (`TermWork`, `ScalarBytes`) to preparation's expansion
-  budget; the full program as today's construction is charged; `read_parts`' steps under `KeyWork`.
-- *Refusals.* A key-work stop keeps today's mapping at each call site (`KeyAnalysis::Stopped`; `Failure::Optional` in
-  specialization). An expansion-budget refusal while building the fact atoms or the full program refuses preparation
-  at either call site and is never absorbed as a stop. The two outcomes are distinct types in the reader's result.
+- *Triggers.* The first qualifying key or specialization request builds the canonical atom sequence and then calls
+  `FactIndex::read_parts`; subsequent requests reuse atoms and a completed index. This sequence includes generated
+  facts from real analysis carriers as well as arena facts, deduplicated and interleaved in full program order. Every
+  remaining producer is supplied separately once; representatives never stand in for the complete population.
+- *Charges.* Atom construction uses the per-fact structural rates (`TermWork`, name `ScalarBytes`) plus named resolver
+  and vector reservations; `read_parts` retains one `KeyWork` step per canonical statement. The exact analysis
+  preflight still charges its canonical structural scan. A terminal trigger additionally reserves the complete
+  carrier vector by one deterministic logical charge, even if inspection has already allocated it. Requested
+  authored-vector growth is admitted before allocation; AST/provenance and upstream allocator overhead remain outside
+  that named-payload allowance.
+- *Refusals.* A key-work stop retains `KeyAnalysis::Stopped` or specialization's `Failure::Optional`. An expansion
+  refusal constructing complete fact input or the terminal view refuses preparation. It is a distinct result variant,
+  never absorbed as an optional stop. A stopped index publishes no partial index; already-built atoms may be reused.
 
 ### Stage 3a: the lazy route's core program keeps facts as tables
 
@@ -267,7 +324,9 @@ before it; `FactTables::default()` is no facts.
     `-p(1). p(X) :- q(X). q(1).` or `p(1). -p(X) :- q(X). q(1).` would lose its constraint, and the lazy route, which
     runs no other coherence check, would admit `{p(1), -p(1)}`. It charges one `TermWork` unit per block;
   - the count checks (`check_core_limits`, and `admit_program`'s `max_templates` pre-check) count templates and fact
-    rows and refuse at today's statement, reporting a template index or a fact-row locator;
+    rows and refuse at today's statement. Coherence and native admission can report a classified template index or
+    fact-row locator. The typed door's count pre-check refuses before inspecting the next statement and therefore
+    reports no native index; it retains that original borrowed statement and the existing resource precedence;
   - statement identities derive from the item's position in the sequence, so every `ProgramSite` after the first fact
     keeps today's identity;
   - the evidence builders produce `template_origins()`, `fact_origins()`, `fact_sites()`, `template_statements()` and
@@ -286,9 +345,11 @@ occurrence list in program order. Every part exists in `zetesis-core` and the fo
 writer over the program's vocabulary (as `AtomInterner::for_program` builds one), the consuming close
 (`AtomInterner::into_closed_with`), and descendants that start empty over the closed base without copying
 (`AtomInterner::for_closed_catalog`). Each component has a reader: row membership gives admission's deduplication and
-the restrictions reader's uniqueness; the dictionary gives argument bounds and head coordinates once per distinct
-value; equality-identifier columns give head coordinates per row and the compounding designs their columns; ordered
-runs give the restrictions reader its canonical order without a sort. The store's bytes fall under
+the restrictions reader's uniqueness; the column reader seeds argument bounds once before variable propagation, with
+repeated values coalesced by the existing finite-domain set; equality-identifier columns remain available to
+subsequent consumers. Ground-head coordinates are retained per original occurrence. Ordered runs expose canonical
+rows without a new sort. The restriction reader preserves original occurrence accounting through the mixed-rule
+scan and the existing coordinate deduplication path. The store's bytes fall under
 `AdmissionLimits::max_bytes`; the writer is given the remainder plus the vocabulary's bytes, so the vocabulary is
 counted once. A program without facts has no store: `Program::fact_catalog()` returns `None`, and its workspaces bind
 exactly as today.
@@ -296,10 +357,11 @@ exactly as today.
 **Whole-program traversal.** `Program::rules()` yields templates and fact rows in program order, and
 `Program::is_empty()` means no rules of either kind. With `templates()` removed during the change, every call site
 fails to compile and is assigned to `rules()` or `templates()` with its reason. Readers of facts: closure emptiness
-(`is_empty()`), bootstrap (iterates `rules()`), argument bounds (a fact column's distinct positions added once before
-the fixed point), head coordinates (a fact row's dense coordinate from its columns' positions),
-`unconditional_facts` in `crates/zetesis-cpu/src/oracle/restrictions.rs` (fact rows read once from the catalogs in
-canonical order and merged with the template facts it still deduplicates), the host source scan and eager grounding
+(`is_empty()`), bootstrap (iterates `rules()`), argument bounds (each canonical fact column is visited once before
+the fixed point, with every cell charged and repeated positions coalesced), head coordinates (a fact occurrence's
+dense coordinate from its canonical arguments), `unconditional_facts` in
+`crates/zetesis-cpu/src/oracle/restrictions.rs` (original fact occurrences follow the same checked coordinate and
+deduplication path as explicit template facts, preserving their resource counts and refusal order), the host source scan and eager grounding
 (fact rows at their positions). Rule indexes, join dimensions, world workspace depth, constraint restrictions and block
 steps read templates only.
 
@@ -332,15 +394,19 @@ program's fact store through an explicit, additive `Program::fact_catalog()` and
   store as it already includes the shared vocabulary; `max_closure_bytes` is checked against it, so a workspace whose
   allowance is below the store's bytes refuses at bind. The batch cache's `retained` and `admit`, and
   `QueryStatistics::retained_bytes`, are collective and subtract the store's rows and index
-  (`shared_closed_catalog_bytes() − shared_vocabulary_bytes()`) from every workspace after the first, so the store is
-  counted once and the vocabulary as today.
+  (`shared_closed_catalog_bytes() − shared_vocabulary_bytes()`) from each workspace's inclusive receipt and count
+  those preparation-owned allocations once in the shared cache, including while workspaces are still unbound.
+  Vocabulary accounting stays as today.
 
 **Public contracts and migration** (CHANGELOG): `Program::new(templates, FactTables::default(), limits)`; `templates()`
 lists the non-fact templates on every door; `rules()` and `is_empty()`; `fact_origins()`, `fact_sites()` and
 `AdmittedProgram::fact_statements()`, parallel to the fact rows; `Program::fact_catalog()`; `max_templates` documented
 as bounding "source-normalized rules: templates and fact rows" (the count is today's on every program the extended
 route builds); a fact-row locator on `AdmissionError` beside `template_index()`, which each door maps through its own
-fact evidence; `Program::storage_bytes()` counting the template catalog, metadata and the store's rows and index; and
+fact evidence; canonical failures use one inline cause plus
+`AdmissionOrigin::{Program, Template, Fact}` rather than separate payload variants, and
+`Canonical::origin` replaces its former `template` field without allocating to report a refusal;
+`Program::storage_bytes()` counting the template catalog, metadata and the store's rows and index; and
 the two retained-bytes receipts as above. The template-order accessors stay parallel to `templates()`. Stage 3 changes
 what the device routes receive and is qualified by `scripts/check.sh hardware` on each backend.
 
@@ -381,12 +447,13 @@ output is byte-identical wherever today's is deterministic.
 **Stage 2.** The summary's graph and classes equal the full program's by the structural argument, pinned by the
 differential. `FactIndex::read_parts` over the summary's non-fact statements and the families' fact atoms is the index
 `read` builds over the full program: the same producers mark the same signatures, the same heads set the same opacity,
-and each signature's tuples are its facts' arguments in program order. Key analysis reads producer counts only to ask
+and each signature's tuples are its facts' arguments in full canonical program order, including generated facts. Key analysis reads producer counts only to ask
 whether a choice head has exactly one producer; a signature with facts has at least one producer in both programs, so
 the answer is equal. Wherever both programs' passes complete, the same keys are found and the same constraints asked
 and rewritten. Where a ceiling binds, the summary's loops spend less and can reach further, and every rewrite is sound
-by its module's argument, so answer families are kept. The rebuild produces today's post-replacement statements in
-order, with the same provenance by the stamp formula and the same ingestion.
+by its module's argument, so answer families are kept. The rebuild produces the same post-replacement statements in
+order, with the same root unions and later-carrier nested provenance. Canonical unique analysis counts never replace
+original fact-occurrence accounting.
 
 **Stage 3a.** A fact column's argument-bound contribution is constant across fixed-point passes, so adding it first
 gives the same least fixed point; a value's domain position by identity equals the content search's result, since
@@ -407,7 +474,7 @@ now rewrite more constraints, and on byte-identical output where its passes comp
   ceilings on full counts, `max_templates`, `max_domain_values` on templates and fact rows together, the coherence
   constraints and the per-statement counts.
 - *Removed.* A refusal that came only from skipped machinery's own charges can occur later or not at all: rule objects
-  and their `Origins` charge, pattern rows and joins (Stage 1); the per-fact analysis preflight and owners (Stage 2);
+  and their `Origins` charge, pattern rows and joins (Stage 1); expanded analysis carriers and their owners (Stage 2);
   per-template preparation and core admission bytes (Stage 3a).
 - *Added.* Stage 3a's fact store, charged under `max_bytes` at core admission, where today atom storage is charged to
   the closure allowance at the first check.
@@ -422,18 +489,20 @@ Work receipts measure the work performed; every public receipt that moves, by di
 
 - **Stage 1 (implemented).** `Origins` falls by each fact's origins count (a fact was charged twice). Formula work
   counters fall by the skipped visits, variant lists, joins, plans, binding storage and attempts. `SupportBytes` falls
-  by the pattern rows and rises by the arena's lease (statement evidence at 24 B per site, cells and run ends, a 64-byte
-  record and a 24-byte column per argument per block), each growth admitted per block before allocation. By
-  deterministic receipts the largest support peak rises on 82 of 133 programs (those with few facts per block, at most
-  5.5%, median 1.9%), falls on 35 (every fact shape, 3.2% on `wide` to 20.3% on `frange`) and is equal on 16. Grounding
-  observers see one rule-instantiation phase per block.
-- **Stage 2.** The analysis preflight's per-fact `TermWork` and `ScalarBytes` are charged only where per-fact
-  statements are built inside preparation, so they fall elsewhere; `AnalysisNodes` and `AnalysisEdges` are unchanged;
-  owner charges fall to the summary's statements; `PreparationFacts`' fact atoms are charged where key analysis or
-  specialization reads facts, never more than today's per-fact statements; `TermWork` falls by `ask_under`'s unit and
-  specialization's steps per elided statement; the key-work stop points are reached later or not at all, and where a
-  ceiling binds today, `key_analysis()`, `keyed_constraints()` and the rewritten constraints can grow. Elided statements
-  are not charged to keep receipts equal: that would charge work not performed.
+  by the pattern rows and rises by the arena's lease (statement evidence, product segments and columns, block
+  records, run-column headers and cells, and run ends), each growth admitted before allocation. Before the conforming
+  representation, deterministic receipts showed the largest support peak rising on 82 of 133 programs (those with few
+  facts per block, at most 5.5%, median 1.9%), falling on 35 (every fact shape, 3.2% on `wide` to 20.3% on `frange`) and
+  equal on 16. Those figures do not qualify the new layout. Its compact scratch changes expansion `ScalarBytes`,
+  while all scalar admissions and their work remain. Grounding observers see one rule-instantiation phase per block.
+- **Stage 2.** `AnalysisNodes` and `AnalysisEdges` use the complete deduplicated canonical statement sequence, and its
+  structural `TermWork` and signature `ScalarBytes` preflight remains. Owner work applies to summary carriers.
+  Source recipes, canonical locators, evidence-family lists and temporary resolvers add named storage reservations and
+  one canonical lookup per original fact occurrence. Fact atoms are constructed only for a qualifying key or
+  specialization read, and full carriers only for terminal analysis or public inspection. A preparation full-view
+  trigger reserves its logical carrier capacity regardless of prior inspection. `ask_under` and specialization skip
+  elided carriers, so their work stops can occur later; every resulting rewrite retains its existing soundness argument.
+  These allowances describe the implemented operations, not a promise that every program's total receipt decreases.
 - **Stage 3a.** `max_templates`' count is unchanged. `Program::storage_bytes()` loses the template structures (about
   390 B per fact) and gains the store's rows and index (about 105–175 B per distinct fact), so the `max_bytes` boundary
   moves later. Core admission work rises by each distinct fact atom's interning, which moves there from every
@@ -475,6 +544,12 @@ fixtures are small-K files in the oracle campaign's fixture module.
 - **Stage 1 differential** (existing): support contents and row order, per-round deltas, activity cells, source
   eligibility, the builder's atoms, nodes, roots, origins and producers, and terminal selection agree with the rule
   path; `--all` output is byte-identical at one worker.
+- **Stage 1 representation.** Checked spans reject numeric and occurrence-coordinate gaps; mixed-radix rows resolve
+  to the same borrowed values, including signed integer endpoints; wide intervals keep constant segment capacity;
+  run columns reproduce logical row order. An explicit scalar/predicate admission sequence matches the compact
+  compiler's coordinates and work. Every outer and nested reservation failure publishes no partial row; retained
+  capacities equal their lease. Split copies preserve scalar coordinates and evidence, reserve their summed outer
+  storage and individual column buffers before moving, and allocate nothing while copying.
 - **Stage 2 differential.** The summary's and the full program's dependency graphs, construct scans and `classes()`
   are equal; `source_classes()` equals `source_analysis().classes()`; `FactIndex::read_parts` equals `FactIndex::read`,
   tuples, opacity and key-work steps alike; the rebuilt `analyzed_program()` equals today's at every nesting level,
@@ -588,20 +663,15 @@ from 296 KB to 40 KB at 64,000 facts.
     stays a later step.
 13. The per-fact memory that belongs to themelios is reported upstream.
 
-## Open review items
+## Remaining acceptance items
 
-1. `FactIndex::read_parts` over the families reads a different program from `read` over the full program, which is
-   deduplicated and in canonical content order. Have `PreparationFacts` produce the canonical fact sequence once, for
-   every consumer, and state its cost.
-2. The on-demand rebuild has no named resolver from the arena's cells to the values it rebuilds; name it, with its
-   lifetime.
-3. Give the full program one decidable trigger, name its owner across the preparation and materialization boundary,
-   and state what the terminal owner's analysis reads.
-4. One canonical fact sequence should serve the three consumers (`FactIndex`, the rebuild and the terminal partition),
-   with the reader's lifecycle stated once.
-5. State the conforming change's cost model: readers of interval values, the growth of column-major runs, and the
-   direction of the support-storage charge.
-6. "Product" names two different things in this design; give each its own name.
-7. The keyed measurement shape, as written, never reaches the fact read; replace it with one that does, and check its
-   route.
-8. Name the commit Stage 1's acceptance run measures, and verify every cited site at the branch head.
+The Stage 2 canonical reader, source resolver, full-view trigger and ownership are specified above and pinned by the
+focused differentials. Passing those checks establishes representation behavior, not performance acceptance.
+
+1. Measure the conforming representation against the cost model: interval readers, column-major growth, summary and
+   canonical-locator storage, transient fact atoms, and the direction of support and expansion charges. The structural
+   memory bound alone is not performance acceptance; the earlier Stage 2 time estimate omitted its retained exact
+   structural preflight and new locator work.
+2. "Product" names two different things in this design; give each its own name.
+3. The keyed measurement shape must actually reach the fact read; record its route and reader reach.
+4. Name the commit Stage 1's acceptance run measures, and verify every cited site at the branch head.

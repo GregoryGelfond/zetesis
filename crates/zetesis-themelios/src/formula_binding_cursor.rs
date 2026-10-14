@@ -9,7 +9,7 @@
 mod tests;
 
 use crate::ProgramSite;
-use crate::formula_support::{Context, GroundingWork};
+use crate::formula_support::{Context, GroundingWork, Ir};
 use std::ops::{Range, RangeInclusive};
 use zetesis_core::ValueNodeRef;
 use zetesis_core::catalog::TermKey;
@@ -39,8 +39,8 @@ enum State {
         pending: bool,
     },
 }
-struct Generator<'a> {
-    literal: &'a LiteralIr,
+struct Generator<'a, 'source> {
+    literal: Ir<'a, 'source, LiteralIr>,
     required: Option<&'a [usize]>,
 }
 enum Alternative {
@@ -50,7 +50,7 @@ enum Alternative {
 }
 
 pub(super) struct Cursor<'a, 'source> {
-    generators: Vec<Generator<'a>>,
+    generators: Vec<Generator<'a, 'source>>,
     states: Vec<State>,
     value_frames: usize,
     values: Binding<'static>,
@@ -80,13 +80,14 @@ pub(super) fn target(literal: &LiteralIr) -> Option<usize> {
 
 impl<'a, 'source> Cursor<'a, 'source> {
     pub(crate) fn new(
-        literals: &'a [LiteralIr],
+        literals: impl Into<Ir<'a, 'source, [LiteralIr]>>,
         values: Binding<'static>,
         support: &'a Support<'source>,
         plan: Option<&'a crate::formula_assignment_plan::Plan>,
         targets: Range<usize>,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
+        let literals = literals.into();
         let Context {
             computation,
             work:
@@ -161,7 +162,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
     /// Preserve the plan order, or the scalar-before-aggregate fallback order.
     fn admit_generators(
         &mut self,
-        literals: &'a [LiteralIr],
+        literals: Ir<'a, 'source, [LiteralIr]>,
         plan: Option<&'a crate::formula_assignment_plan::Plan>,
         targets: &Range<usize>,
         context: Context<'_, &Computation<'_, '_>>,
@@ -181,8 +182,8 @@ impl<'a, 'source> Cursor<'a, 'source> {
                 if targets.contains(&step.produced) {
                     self.generator(
                         Generator {
-                            literal: &literals[step.literal],
-                            required: Some(step.required(literals)),
+                            literal: literals.map(|items| &items[step.literal]),
+                            required: Some(step.required(literals.get())),
                         },
                         computation,
                         limits,
@@ -192,12 +193,12 @@ impl<'a, 'source> Cursor<'a, 'source> {
                 }
             }
         } else {
-            for literal in literals {
+            for literal in literals.iter() {
                 counters.work(limits, location)?;
                 if matches!(
-                    literal,
+                    literal.get(),
                     LiteralIr::Bind { .. } | LiteralIr::Range { binder: true, .. }
-                ) && target(literal).is_some_and(|target| targets.contains(&target))
+                ) && target(literal.get()).is_some_and(|target| targets.contains(&target))
                 {
                     self.generator(
                         Generator {
@@ -211,9 +212,9 @@ impl<'a, 'source> Cursor<'a, 'source> {
                     )?;
                 }
             }
-            for literal in literals {
+            for literal in literals.iter() {
                 counters.work(limits, location)?;
-                if let LiteralIr::Aggregate(aggregate) = literal
+                if let LiteralIr::Aggregate(aggregate) = literal.get()
                     && aggregate
                         .binding
                         .is_some_and(|target| targets.contains(&target))
@@ -239,19 +240,19 @@ impl<'a, 'source> Cursor<'a, 'source> {
     }
     fn bytes(&self) -> usize {
         Self::header()
-            + self.generators.capacity() * size_of::<Generator<'_>>()
+            + self.generators.capacity() * size_of::<Generator<'_, '_>>()
             + self.states.capacity() * size_of::<State>()
             - self.value_frames * size_of::<Binding<'static>>()
     }
     fn generator(
         &mut self,
-        value: Generator<'a>,
+        value: Generator<'a, 'source>,
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
-        let other = self.bytes() - self.generators.capacity() * size_of::<Generator<'_>>();
+        let other = self.bytes() - self.generators.capacity() * size_of::<Generator<'_, '_>>();
         crate::formula_support::reserve(
             &mut self.generators,
             1,
@@ -499,7 +500,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
                 for generator in &self.generators {
                     counters.work(limits, location)?;
                     self.values.key(
-                        target(generator.literal).expect("generator target"),
+                        target(generator.literal.get()).expect("generator target"),
                         location,
                     )?;
                 }
@@ -583,7 +584,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
                 }
             }
         };
-        let target = target(self.generators[self.depth].literal).expect("generator target");
+        let target = target(self.generators[self.depth].literal.get()).expect("generator target");
         match alternative {
             Alternative::Value(value) => {
                 self.invalidate_dependents(target, limits, counters, location)?;
@@ -636,7 +637,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<State, FormulaFailure> {
-        match self.generators[self.depth].literal {
+        match self.generators[self.depth].literal.get() {
             LiteralIr::Bind { value, .. } => {
                 let value =
                     self.expression(value, evaluation, computation, limits, counters, location)?;
@@ -680,7 +681,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
                 )?;
                 if let (Some(selection), Some(bounds)) = (self.range_selection, range.as_ref())
                     && let Some((factors, divisor)) = selection.factors(
-                        self.generators[self.depth].literal,
+                        self.generators[self.depth].literal.get(),
                         bounds,
                         &self.values,
                         Context::new(&*computation, limits, counters, location),
@@ -690,7 +691,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
                 }
                 Ok(State::Range(range))
             }
-            LiteralIr::Aggregate(aggregate) => {
+            LiteralIr::Aggregate(_) => {
                 if self.missing_inputs(
                     self.generators[self.depth]
                         .required
@@ -704,7 +705,12 @@ impl<'a, 'source> Cursor<'a, 'source> {
                     return Ok(State::Unavailable { pending: true });
                 }
                 let values = crate::formula_assignment::values(
-                    aggregate,
+                    self.generators[self.depth].literal.map(|literal| {
+                        let LiteralIr::Aggregate(aggregate) = literal else {
+                            unreachable!("aggregate generator")
+                        };
+                        aggregate
+                    }),
                     &self.values,
                     self.support,
                     budget,
@@ -770,7 +776,7 @@ impl<'a, 'source> Cursor<'a, 'source> {
             let mut inherited = false;
             for (generator, state) in self.generators[..self.depth].iter().zip(&self.states) {
                 counters.work(limits, location)?;
-                if target(generator.literal) == Some(variable)
+                if target(generator.literal.get()) == Some(variable)
                     && matches!(state, State::Unavailable { .. })
                 {
                     inherited = true;

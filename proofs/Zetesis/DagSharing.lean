@@ -400,4 +400,36 @@ theorem exact_choice_graph_sharing :
     (shareInto [] repeatedChoice).aliases = [0, 1, 2, 3, 0, 2, 3] := by
   decide
 
+/-- Appending nodes cannot displace the first exact match in the old prefix.
+Induction follows lookup: a matching head ends the search; otherwise the same
+property holds in the tail and the result advances by one. -/
+theorem findNode_stable_under_extension [DecidableEq α] (node : Node α)
+    (table suffix : List (Node α)) (index : Nat)
+    (found : findNode node table = some index) :
+    findNode node (table ++ suffix) = some index := by
+  induction table generalizing index with
+  | nil => simp [findNode] at found
+  | cons head tail ih =>
+    by_cases same : node = head
+    · simp [findNode, same] at found ⊢
+      exact found
+    · simp only [findNode, same, ↓reduceIte] at found
+      cases selected : findNode node tail with
+      | none => simp [selected] at found
+      | some previous =>
+        have shifted : previous + 1 = index := by simpa [selected] using found
+        simp only [List.cons_append, findNode, same, ↓reduceIte,
+          ih previous selected, Option.map_some, Nat.succ_eq_add_one, shifted]
+
+/-- An existing node keeps its index after an append-only table extension.
+Interning returns the whole extended table unchanged and the same first
+position. Exact syntax, rather than logical equivalence, is the key. Runtime
+cache validity still requires the same table owner and no rollback past it. -/
+theorem intern_stable_under_extension [DecidableEq α] (node : Node α)
+    (table suffix : List (Node α)) (member : node ∈ table) :
+    intern (table ++ suffix) node = (table ++ suffix, (intern table node).2) := by
+  obtain ⟨index, found⟩ := findNode_complete node table member
+  have preserved := findNode_stable_under_extension node table suffix index found
+  simp only [intern, found, preserved]
+
 end Zetesis.DagSharing

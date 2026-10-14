@@ -12,9 +12,9 @@ use zetesis_cpu::{Cancellation, Stop};
 fn with_atom<T>(
     value: Option<Value>,
     limits: &FormulaLimits,
-    action: impl FnOnce(
-        &mut Builder<'_, '_, '_>,
-        &Support<'_>,
+    action: impl for<'source> FnOnce(
+        &mut Builder<'_, '_, 'source>,
+        &Support<'source>,
         &Binding<'_>,
         crate::formula_support::components::Pattern,
     ) -> T,
@@ -26,9 +26,9 @@ fn with_arguments<T>(
     value: Option<Value>,
     arguments: Vec<Term>,
     limits: &FormulaLimits,
-    action: impl FnOnce(
-        &mut Builder<'_, '_, '_>,
-        &Support<'_>,
+    action: impl for<'source> FnOnce(
+        &mut Builder<'_, '_, 'source>,
+        &Support<'source>,
         &Binding<'_>,
         crate::formula_support::components::Pattern,
     ) -> T,
@@ -229,8 +229,8 @@ fn rejected_flat_rows_preserve_cancellation() {
         &FormulaLimits::default(),
         |builder, support, row, pattern| {
             let cancellation = Cancellation::default();
-            builder.counters =
-                std::mem::take(&mut builder.counters).with_cancellation(Some(&cancellation));
+            *builder.counters =
+                std::mem::take(builder.counters).with_cancellation(Some(&cancellation));
             cancellation.cancel();
             let failure = builder
                 .validate_body(

@@ -84,7 +84,7 @@ pub(super) fn campaign(
         },
         tool: request.tool.clone(),
         manifest_sha256: examples::MANIFEST_SHA256,
-        manifest_scope: "correctness_catalog_context; authored_and_generated_workloads_retain_independent_source_and_contract_identities",
+        manifest_scope: "correctness_catalog_context; authored_generated_and_external_bundle_workloads_retain_independent_source_and_contract_identities",
         plan: RecordedPlan {
             plan: request.plan.clone(),
             reference_policy: request.reference.map(|reference| reference.policy).into(),
@@ -199,7 +199,7 @@ fn seal_inputs(
         sealed.extend(
             workloads
                 .iter()
-                .filter_map(Workload::authored_seal)
+                .flat_map(Workload::independent_seals)
                 .cloned(),
         );
     }
@@ -300,6 +300,10 @@ fn prepare<'a>(
                 "explicit workloads repeat a content identity",
             ));
         }
+        workload.validate_bundle_campaign(
+            request.reference.is_some(),
+            request.plan.memory_runs() > 0,
+        )?;
         workload.validate(corpus, request.limits)?;
         metadata = metadata
             .checked_add(workload.metadata_bytes)
@@ -320,7 +324,7 @@ fn prepare<'a>(
         .try_reserve_exact(workloads.len())
         .map_err(|_| Error::Configuration("workload population allocation failed"))?;
     for (position, workload) in workloads.iter().enumerate() {
-        let input = if workload.is_generated() || workload.is_authored() {
+        let input = if workload.is_generated() || workload.is_authored() || workload.is_bundle() {
             Input::Independent(workload)
         } else {
             Input::Corpus {
@@ -367,6 +371,17 @@ fn materialize(
             &directory.join(&case.directory),
             request.limits.corpus.source_bytes,
         )?);
+    }
+    // Check after every workload has been copied: a later sibling can otherwise
+    // create a cwd-relative shadow that was absent during an earlier copy.
+    for case in cases {
+        case.input
+            .workload()
+            .ok_or(Error::Configuration("mixed workload preparation"))?
+            .validate_bundle_directory(
+                &directory.join(&case.directory),
+                request.plan.memory_runs() > 0,
+            )?;
     }
     Ok(sealed)
 }

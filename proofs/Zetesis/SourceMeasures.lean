@@ -350,4 +350,163 @@ theorem required_count_carrier_membership [DecidableEq K] (required possible : L
     rw [total, requiredPart.length_eq, optionalPart.length_eq, List.length_take]
     omega
 
+/-- An extremum precedes each of its selected values. The comparison law
+covers minimum and maximum by reversing the supplied order. -/
+theorem extremum_dominates_member (before : V → V → Bool) (empty : V)
+    (dominates : V → V → Prop)
+    (reflexive : ∀ value, dominates value value)
+    (selection : ∀ bound left right,
+      dominates (ValueExtrema.choose before left right) bound ↔
+        dominates left bound ∨ dominates right bound)
+    (value : K → V) (keys : List K) (key : K) (member : key ∈ keys) :
+    dominates (AggregateInvariants.extremum before empty value keys) (value key) := by
+  cases selected : ValueExtrema.extreme before (keys.map value) with
+  | none =>
+    have absent : keys.map value = [] :=
+      (ValueExtrema.extreme_none_iff before (keys.map value)).mp selected
+    have present : value key ∈ keys.map value := List.mem_map.mpr ⟨key, member, rfl⟩
+    simp [absent] at present
+  | some result =>
+    have bounded : dominates result (value key) :=
+      (ValueExtrema.selected_predicate before (fun item => dominates item (value key))
+        (selection (value key)) (keys.map value) result selected).mpr
+        ⟨value key, List.mem_map.mpr ⟨key, member, rfl⟩, reflexive (value key)⟩
+    simpa [AggregateInvariants.extremum, selected, ValueExtrema.encode] using bounded
+
+/-- A selection containing every required key has an extremum preceding the
+required extremum. The empty endpoint follows every value in this order. -/
+theorem extremum_dominates_required (before : V → V → Bool) (empty : V)
+    (dominates : V → V → Prop)
+    (reflexive : ∀ value, dominates value value)
+    (selection : ∀ bound left right,
+      dominates (ValueExtrema.choose before left right) bound ↔
+        dominates left bound ∨ dominates right bound)
+    (empty_bound : ∀ value, dominates value empty)
+    (value : K → V) (required actual : List K) (mandatory : required ⊆ actual) :
+    dominates (AggregateInvariants.extremum before empty value actual)
+      (AggregateInvariants.extremum before empty value required) := by
+  cases selected : ValueExtrema.extreme before (required.map value) with
+  | none =>
+    simpa [AggregateInvariants.extremum, selected, ValueExtrema.encode] using
+      empty_bound (AggregateInvariants.extremum before empty value actual)
+  | some result =>
+    obtain ⟨key, member, same⟩ := List.mem_map.mp
+      (ValueExtrema.extreme_some_mem before (required.map value) result selected)
+    have bounded : dominates (AggregateInvariants.extremum before empty value actual)
+        (value key) := extremum_dominates_member before empty dominates reflexive selection
+      value actual key (mandatory member)
+    simpa [AggregateInvariants.extremum, selected, ValueExtrema.encode, same] using bounded
+
+/-- The extremum carrier consists of the required extremum and the optional
+values strictly preceding it. For minimum, preceding means less than; for
+maximum, greater than. The supplied order laws and explicit empty endpoint
+cover both, including an empty required family. Equal values on distinct keys
+need not be coalesced for this idempotent reduction.
+
+Soundness: a legal selection precedes the required result. A different result
+is a selected value, and cannot come from a required key. Completeness: select
+just the required keys for their result, or add one optional key preceding it.
+All required values then follow that key, so adding them cannot change it.
+
+This is a source carrier, not the set of realized answer-set measures. Correlated
+conditions remain in the original aggregate. Concrete ASP comparison, required
+key classification and Rust carrier construction are separate obligations. -/
+theorem required_extremum_carrier_membership [DecidableEq K]
+    (before : V → V → Bool) (empty : V) (dominates : V → V → Prop)
+    (reflexive : ∀ value, dominates value value)
+    (antisymmetric : ∀ left right,
+      dominates left right → dominates right left → left = right)
+    (transitive : ∀ first second third,
+      dominates first second → dominates second third → dominates first third)
+    (selection : ∀ bound left right,
+      dominates (ValueExtrema.choose before left right) bound ↔
+        dominates left bound ∨ dominates right bound)
+    (empty_bound : ∀ value, dominates value empty)
+    (value : K → V) (required possible : List K) (included : required ⊆ possible)
+    (result : V) :
+    result ∈ carrier required possible
+        (AggregateInvariants.extremum before empty value) ↔
+      result = AggregateInvariants.extremum before empty value required ∨
+        ∃ key ∈ possible, key ∉ required ∧ result = value key ∧
+          dominates (value key) (AggregateInvariants.extremum before empty value required) ∧
+          value key ≠ AggregateInvariants.extremum before empty value required := by
+  classical
+  let measure := AggregateInvariants.extremum before empty value
+  rw [carrier_membership]
+  constructor
+  · rintro ⟨actual, ⟨inside, mandatory⟩, measured⟩
+    by_cases same : result = measure required
+    · exact Or.inl same
+    · have bounded : dominates result (measure required) := by
+        rw [← measured]
+        exact extremum_dominates_required before empty dominates reflexive selection empty_bound
+          value required actual mandatory
+      have witness : ∃ key ∈ actual, value key = result := by
+        cases selected : ValueExtrema.extreme before (actual.map value) with
+        | none =>
+          have absent : actual.map value = [] :=
+            (ValueExtrema.extreme_none_iff before (actual.map value)).mp selected
+          have actualEmpty : actual = [] := List.map_eq_nil_iff.mp absent
+          have requiredEmpty : required = [] := List.eq_nil_of_subset_nil (actualEmpty ▸ mandatory)
+          subst actual
+          subst required
+          exact False.elim (same measured.symm)
+        | some found =>
+          obtain ⟨key, member, denotation⟩ := List.mem_map.mp
+            (ValueExtrema.extreme_some_mem before (actual.map value) found selected)
+          have foundResult : found = result := by
+            simpa [measure, AggregateInvariants.extremum, selected, ValueExtrema.encode] using measured
+          exact ⟨key, member, denotation.trans foundResult⟩
+      obtain ⟨key, member, denotation⟩ := witness
+      have optional : key ∉ required := by
+        intro fixed
+        have reverse : dominates (measure required) result := by
+          rw [← denotation]
+          exact extremum_dominates_member before empty dominates reflexive selection
+            value required key fixed
+        exact same (antisymmetric _ _ bounded reverse)
+      exact Or.inr ⟨key, inside.subset member, optional, denotation.symm,
+        denotation ▸ bounded, denotation ▸ same⟩
+  · intro proposed
+    rcases proposed with same | ⟨key, member, _, same, precedes, _⟩
+    · let actual := possible.filter (fun key => decide (key ∈ required))
+      have mandatory : required ⊆ actual := by
+        intro key fixed
+        exact List.mem_filter.mpr ⟨included fixed, by simp [fixed]⟩
+      have covered : ∀ key ∈ actual, key ∈ required := by
+        intro key chosen
+        exact of_decide_eq_true (List.mem_filter.mp chosen).2
+      have unchanged : measure actual = measure required :=
+        AggregateInvariants.extremum_invariant before empty dominates reflexive antisymmetric
+          selection empty_bound value required actual required
+          (fun _ fixed => mandatory fixed) covered
+          (fun _ fixed absent => False.elim (absent fixed))
+      exact ⟨actual, ⟨List.filter_sublist, mandatory⟩, unchanged.trans same.symm⟩
+    · let actual := possible.filter (fun other => decide (other ∈ required ∨ other = key))
+      have mandatory : required ⊆ actual := by
+        intro other fixed
+        exact List.mem_filter.mpr ⟨included fixed, by simp [fixed]⟩
+      have picked : key ∈ actual := List.mem_filter.mpr ⟨member, by simp⟩
+      have bounds : ∀ other ∈ actual, dominates (value key) (value other) := by
+        intro other chosen
+        have selected : other ∈ required ∨ other = key :=
+          of_decide_eq_true (List.mem_filter.mp chosen).2
+        rcases selected with fixed | rfl
+        · exact transitive _ _ _ precedes
+            (extremum_dominates_member before empty dominates reflexive selection
+              value required other fixed)
+        · exact reflexive (value other)
+      have unchanged : measure actual = measure [key] :=
+        AggregateInvariants.extremum_invariant before empty dominates reflexive antisymmetric
+          selection empty_bound value [key] actual actual
+          (by intro other fixed; simpa using List.mem_singleton.mp fixed ▸ picked)
+          (fun _ chosen => chosen)
+          (by intro other chosen _; simpa [AggregateInvariants.extremum, ValueExtrema.extreme,
+                ValueExtrema.encode] using bounds other chosen)
+      have measured : measure actual = result := by
+        simpa [measure, AggregateInvariants.extremum, ValueExtrema.extreme,
+          ValueExtrema.encode, same] using unchanged
+      exact ⟨actual, ⟨List.filter_sublist, mandatory⟩, measured⟩
+
+
 end Zetesis.SourceMeasures

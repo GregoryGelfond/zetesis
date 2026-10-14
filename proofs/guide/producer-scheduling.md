@@ -57,10 +57,37 @@ Richer source visits every producer each round, through the
 A rich producer registers its read set: every atom occurrence in its body and
 head element conditions, at every depth. After the first round it is traversed
 only when one of those predicates gained rows, which is the general law's
-selection. Its traversal reads the relations of those predicates and the
-membership of heads it would derive; pruning by membership drops only heads the
-carrier holds, so its proposals united with the carrier satisfy `ReadsOnly`.
-Publication only appends, which is the growth premise.
+selection.
+
+For the correspondence, let `Q(p, C)` be producer `p`'s possible heads over the
+fixed round snapshot `C`, before pruning heads already supported. The proposal
+function supplied to `ReadsOnly` is `Q`: equal registered relations must give
+equal unpruned proposals. The Rust traversal also tests membership in published
+or pending support. Let `H` be that accumulated head set before a traversal,
+containing `C`, and `A(p, C, H)` the proposals it retains on successful completion.
+The separate pruning obligation is
+
+```text
+H ∪ A(p, C, H) = H ∪ Q(p, C).
+```
+
+It requires that the traversal introduce no head outside `Q(p, C)` and that
+every omitted proposal already belong to `H` or be retained during that
+traversal. Applying this equality to each successful selected traversal gives
+the selected inflationary step. The general scheduling law applies to `Q`,
+under its read-set, growth, wake-coverage and old-head-history premises, and
+equates that step with the full one. Publication only appends, supplying the
+growth premise. Neither `A` nor a union with the carrier is asserted to satisfy
+`ReadsOnly`: membership pruning can read head predicates outside the registered
+relations, and the carrier itself can differ on those predicates.
+
+Read-set completeness and the pruning equality remain Rust correspondence
+obligations. The registration's
+[differential tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/producers/registration/tests.rs)
+compare the atoms published in each round, the emitted theory, objectives and
+warnings with a reference that traverses every rich producer in every round,
+and assert that the selective run skipped visits. They provide evidence on
+those fixtures; they do not prove either obligation for every source program.
 
 Remaining correspondence obligations include faithful source-to-ground
 instances, signed signature matching, complete reverse postings, stable original

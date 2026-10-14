@@ -104,20 +104,15 @@ fn with_guards<T>(
                 .node(Node::Implies(tail, first), location())
                 .unwrap();
         }
-        let mut elements = Buffer::new(
-            builder.computation,
-            limits,
-            &mut builder.counters,
-            location(),
-        )
-        .unwrap();
+        let mut elements =
+            Buffer::new(builder.computation, limits, builder.counters, location()).unwrap();
         for (weight, condition) in weights.into_iter().zip([first, second]) {
             elements
                 .push(
                     AggregateElement { weight, condition },
                     builder.computation,
                     limits,
-                    &mut builder.counters,
+                    builder.counters,
                     location(),
                 )
                 .unwrap();
@@ -679,8 +674,8 @@ fn guard_family_uses_preparation_control() {
                 panic!("the numeric family uses native aggregate compilation");
             };
             let cancellation = Cancellation::default();
-            builder.counters =
-                std::mem::take(&mut builder.counters).with_cancellation(Some(&cancellation));
+            *builder.counters =
+                std::mem::take(builder.counters).with_cancellation(Some(&cancellation));
             let before = copy(&builder.nodes);
             cancellation.cancel();
             let guards = numeric(&[(Relation::Ge, Value::Number(1))]);
@@ -708,8 +703,8 @@ fn signed_aggregate_uses_the_preparation_token() {
                 panic!("signed contributions use numeric compilation");
             };
             let cancellation = Cancellation::default();
-            builder.counters =
-                std::mem::take(&mut builder.counters).with_cancellation(Some(&cancellation));
+            *builder.counters =
+                std::mem::take(builder.counters).with_cancellation(Some(&cancellation));
             let before = copy(&builder.nodes);
             cancellation.cancel();
             let error = builder
@@ -739,13 +734,13 @@ fn extrema_use_the_preparation_token() {
                 binding,
                 builder.computation,
                 builder.limits,
-                &mut builder.counters,
+                builder.counters,
                 location(),
             )
             .unwrap();
             let cancellation = Cancellation::default();
-            builder.counters =
-                std::mem::take(&mut builder.counters).with_cancellation(Some(&cancellation));
+            *builder.counters =
+                std::mem::take(builder.counters).with_cancellation(Some(&cancellation));
             let before = copy(&builder.nodes);
             cancellation.cancel();
             for kind in [AggregateExtremum::Min, AggregateExtremum::Max] {

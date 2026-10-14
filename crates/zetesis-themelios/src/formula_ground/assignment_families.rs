@@ -143,11 +143,11 @@ fn projected_families_keep_outer_arithmetic_diagnostics() {
     assert_eq!(shared.to_string(), prior.to_string());
 }
 
-fn family_population(
+fn family_population<'source>(
     aggregate: &AggregateIr,
-    support: &Support<'_>,
+    support: &Support<'source>,
     budget: &mut Budget,
-    context: Context<'_, &mut Computation<'_, '_>>,
+    context: Context<'_, &mut Computation<'_, 'source>>,
 ) -> (usize, usize) {
     let Context {
         computation,
@@ -179,11 +179,9 @@ fn family_population(
     .unwrap();
     builder.initialize(location).unwrap();
     builder
-        .assignment_aggregate(aggregate, target, &binding, support, location)
+        .assignment_aggregate(aggregate.into(), target, &binding, support, location)
         .unwrap();
-    let result = (builder.cached_elements, builder.cached_roots);
-    *counters = builder.counters;
-    result
+    (builder.cached_elements, builder.cached_roots)
 }
 
 #[test]

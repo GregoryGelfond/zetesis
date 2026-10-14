@@ -32,7 +32,12 @@ fn independent(nodes: i32) -> Program {
             vec![],
         ));
     }
-    Program::new(templates, AdmissionLimits::default()).unwrap()
+    Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -253,7 +258,12 @@ fn preparation_is_borrowed_only_after_narrowing() {
 
 #[test]
 fn an_empty_gate_carrier_retains_no_queries() {
-    let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let mut candidates = Candidates::new(
         &program,
         CandidateLimits::default(),

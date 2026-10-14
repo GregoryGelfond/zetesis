@@ -126,6 +126,7 @@ mod tests {
                     Template::new(Some(atom.clone()), vec![], vec![atom], vec![], vec![])
                 })
                 .collect(),
+            crate::FactTables::default(),
             AdmissionLimits::default(),
         )
         .unwrap()

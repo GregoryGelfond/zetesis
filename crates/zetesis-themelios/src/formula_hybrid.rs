@@ -204,15 +204,34 @@ impl HybridFormula {
     }
 
     /// Analysis of the original source projection, not a certificate for the core.
+    /// If preparation has not needed the complete normalized input, the first
+    /// full inspection constructs and retains it and its analysis. Later calls
+    /// borrow that shared result. Preparation's summary has the same dependency
+    /// graph and class verdicts; full inspection pays canonical ingestion and
+    /// analysis work and full-program storage, without an expansion charge.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
-        &self.0.core.0.compiled.analysis
+        self.0
+            .core
+            .0
+            .compiled
+            .analyzed
+            .full_analysis(&self.0.core.0.compiled.analysis)
+    }
+
+    /// Structural classes of the retained source analysis. This view does not
+    /// require constructing the full analyzed program. Consult
+    /// [`Self::analysis_basis`] before using a verdict as a source property.
+    #[must_use]
+    pub fn source_classes(&self) -> &themelios_analysis::classify::Classes {
+        self.0.core.0.compiled.analysis.classes()
     }
 
     /// Source program to which the retained analysis applies.
+    /// Shares the complete view and its construction cost with [`Self::source_analysis`].
     #[must_use]
     pub fn analyzed_program(&self) -> &Program {
-        &self.0.core.0.compiled.analyzed
+        self.0.core.0.compiled.analyzed.full_program()
     }
 
     /// Whether the analyzed source is exact or a dependency projection.
@@ -347,7 +366,17 @@ impl StreamedCore {
     /// Analysis of the program this core was admitted for.
     #[must_use]
     pub fn analysis(&self) -> &themelios_analysis::Analysis {
-        &self.0.compiled.analysis
+        self.0
+            .compiled
+            .analyzed
+            .full_analysis(&self.0.compiled.analysis)
+    }
+
+    /// Structural classes of the source this core was admitted for, without
+    /// requiring its full analyzed program. Consult [`Self::analysis_basis`].
+    #[must_use]
+    pub fn source_classes(&self) -> &themelios_analysis::classify::Classes {
+        self.0.compiled.analysis.classes()
     }
 
     /// Semantic status of that analysis input.
@@ -398,7 +427,7 @@ impl StreamedCore {
         &self,
         limits: ConstraintCheckLimits,
     ) -> Result<ConstraintChecker<'_>, ConstraintCheckFailure> {
-        self.prepare_checker(limits, Counters::default(), None)
+        self.prepare_checker(limits, None, None)
     }
 
     /// Prepare an independent checker whose charges share `allowance` with all
@@ -416,62 +445,70 @@ impl StreamedCore {
         allowance: &ConstraintAllowance,
         cancellation: &Cancellation,
     ) -> Result<ConstraintChecker<'_>, ConstraintCheckFailure> {
-        cancellation.poll().map_err(|stop| ConstraintCheckFailure {
-            cause: ConstraintCheckCause::Stopped(stop),
-            statistics: ConstraintCheckStatistics::default(),
-        })?;
-        let limits = allowance.limits();
-        let checker = self.prepare_checker(
-            limits,
-            Counters::with_allowance(allowance.clone(), cancellation),
+        self.prepare_checker(
+            allowance.limits(),
             Some(allowance.clone()),
-        )?;
-        cancellation.poll().map_err(|stop| ConstraintCheckFailure {
-            cause: ConstraintCheckCause::Stopped(stop),
-            statistics: checker.statistics(),
-        })?;
-        Ok(checker)
+            Some(cancellation),
+        )
     }
 
     fn prepare_checker(
         &self,
         limits: ConstraintCheckLimits,
-        mut counters: Counters,
         allowance: Option<ConstraintAllowance>,
+        cancellation: Option<&Cancellation>,
     ) -> Result<ConstraintChecker<'_>, ConstraintCheckFailure> {
-        let prepared = if let Some(constraints) = &self.0.constraints {
-            let mut formula_limits = constraints.limits;
-            formula_limits.max_work = limits.max_work;
-            formula_limits.max_substitutions = limits.max_substitutions;
-            let completed = constraints
-                .support
-                .snapshot(&formula_limits, &mut counters, constraints.location)
-                .map_err(|error| ConstraintCheckFailure {
-                    cause: ConstraintCheckCause::Source(Box::new(
-                        self.0.source.retain_failure(error),
-                    )),
-                    statistics: ConstraintCheckStatistics {
-                        work: counters.accounting.work,
-                        substitutions: counters.accounting.substitutions,
-                        scalar_bytes: 0,
-                    },
-                })?;
-            Some(PreparedConstraints {
-                source: constraints,
-                completed,
-                limits: formula_limits,
-                index: None,
-                rows: None,
-                plans: Vec::new(),
-                predicates: Vec::new(),
-                shared_incremental: &self.0.incremental,
-                incremental_plan: None,
-                incremental: None,
-                incremental_eligible: None,
-            })
-        } else {
-            None
-        };
+        let mut accounting = allowance
+            .as_ref()
+            .map_or_else(Accounting::default, |allowance| {
+                Accounting::with_allowance(allowance.clone())
+            });
+        let location = self
+            .0
+            .constraints
+            .as_ref()
+            .map_or(ProgramSite::program(), |source| source.location);
+        let prepared = accounting.controlled::<_, ConstraintCheckFailure>(
+            cancellation,
+            crate::grounding_observer::Work::default(),
+            location,
+            |counters| {
+                let prepared = if let Some(constraints) = &self.0.constraints {
+                    let mut formula_limits = constraints.limits;
+                    formula_limits.max_work = limits.max_work;
+                    formula_limits.max_substitutions = limits.max_substitutions;
+                    let completed = constraints
+                        .support
+                        .snapshot(&formula_limits, counters, constraints.location)
+                        .map_err(|error| ConstraintCheckFailure {
+                            cause: ConstraintCheckCause::Source(Box::new(
+                                self.0.source.retain_failure(error),
+                            )),
+                            statistics: ConstraintCheckStatistics {
+                                work: counters.accounting.work,
+                                substitutions: counters.accounting.substitutions,
+                                scalar_bytes: 0,
+                            },
+                        })?;
+                    Some(PreparedConstraints {
+                        source: constraints,
+                        completed,
+                        limits: formula_limits,
+                        index: None,
+                        rows: None,
+                        plans: Vec::new(),
+                        predicates: Vec::new(),
+                        shared_incremental: &self.0.incremental,
+                        incremental_plan: None,
+                        incremental: None,
+                        incremental_eligible: None,
+                    })
+                } else {
+                    None
+                };
+                Ok(prepared)
+            },
+        )?;
         Ok(ConstraintChecker {
             owner: self,
             prepared,
@@ -481,7 +518,7 @@ impl StreamedCore {
             settled: (0, 0),
             settled_scalar_bytes: 0,
             consequence_active: false,
-            accounting: counters.into_accounting(),
+            accounting,
         })
     }
 }
@@ -1060,10 +1097,11 @@ impl ConstraintChecker<'_> {
         }
         let start = self.prepare_pass(cancellation);
         let result = self.authenticate(candidate).and_then(|()| {
-            cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
-            let verdict = self
-                .accounting
-                .with_cancellation(cancellation, |counters| {
+            self.accounting.controlled::<_, ConstraintCheckCause>(
+                Some(cancellation),
+                crate::grounding_observer::Work::default(),
+                ProgramSite::program(),
+                |counters| {
                     if let Some(prepared) = &mut self.prepared {
                         prepared.prepare_selection(self.owner, counters)?;
                     }
@@ -1072,9 +1110,8 @@ impl ConstraintChecker<'_> {
                             Self::scan(self.prepared.as_mut(), budget, counters, candidate)
                         })
                         .map_err(|error| ConstraintCheckCause::Source(Box::new(error)))
-                })?;
-            cancellation.poll().map_err(ConstraintCheckCause::Stopped)?;
-            Ok(verdict)
+                },
+            )
         });
         let statistics = self.statistics();
         self.finish_check();

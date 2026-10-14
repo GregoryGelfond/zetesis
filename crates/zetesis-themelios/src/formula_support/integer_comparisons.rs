@@ -2,9 +2,14 @@
 //! comparison form, compiled once with the prepared program, is decided on a
 //! row with machine integers.
 //!
-//! Every evaluation site of a comparison literal tries this decision first:
-//! the join's decided prefix comparisons, its complete-row filters and the
-//! rejected-cursor checks. On a row the decision checks the form's constant,
+//! The join's decided prefix comparisons, its complete-row filters and the
+//! rejected-cursor checks try this decision first, in append and frozen
+//! computations alike. Factored component joins use the same sites and their
+//! copied literals' forms in append computations. Domain narrowing and
+//! totality preparation keep the general evaluator; covered-projection domains
+//! compare stored results without evaluating expressions. None tries a form.
+//!
+//! On a row the decision checks the form's constant,
 //! `nodes + variable steps` of both operands, against the work ceiling,
 //! polling cancellation first, without counting it. It then attempts the
 //! form: it reads each variable its operands name and evaluates both operands
@@ -61,7 +66,7 @@ pub(super) fn decide(
                 location,
             },
     } = context;
-    counters.check_work(u128::from(form.charge()), limits, location)?;
+    counters.check_work(u128::from(form.constant()), limits, location)?;
     let read = computation.read();
     let attempt = form.attempt(|slot| {
         let term = binding.read_with(slot, read, location, || Ok(())).ok()?;
@@ -71,7 +76,7 @@ pub(super) fn decide(
         }
     });
     debug_assert!(
-        attempt.units <= form.charge(),
+        attempt.units <= form.constant(),
         "an attempt performs at most the constant its check admitted"
     );
     for _ in 0..attempt.entered {

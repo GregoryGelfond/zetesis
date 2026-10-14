@@ -12,7 +12,8 @@ use crate::support::interpretations::stable_models as expected;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Engagement,
-    Incomplete, Limits, RegionFrontierStatistics, SearchLimits, SearchMethod, StableModels,
+    Incomplete, Limits, RegionFrontierStatistics, RegionWalkEngagement, SearchLimits, SearchMethod,
+    StableModels,
 };
 use zetesis_test_support::counts::nonzero;
 
@@ -28,8 +29,7 @@ fn proposed(theory: &Theory, limits: Limits) -> StableModels {
         .unwrap()
 }
 
-#[test]
-fn shared_indexes_preserve_non_tight_answer_families() {
+fn cyclic_choices() -> Theory {
     let choices = choice_theories::choices(3);
     let mut nodes = choices.nodes().to_vec();
     let mut roots = choices.roots().to_vec();
@@ -41,7 +41,12 @@ fn shared_indexes_preserve_non_tight_answer_families() {
         Node::implies(left + 1, left),
     ]);
     roots.extend([left + 2, left + 3]);
-    let theory = theory(5, nodes, roots);
+    theory(5, nodes, roots)
+}
+
+#[test]
+fn shared_indexes_preserve_non_tight_answer_families() {
+    let theory = cyclic_choices();
     assert!(matches!(
         zetesis_ferraris::TightPlan::compile(
             &theory,
@@ -88,6 +93,18 @@ fn shared_indexes_preserve_non_tight_answer_families() {
         assert_eq!(answers.len(), expected.len());
         assert_eq!(answers.into_iter().collect::<BTreeSet<_>>(), expected);
         let actual = native.statistics();
+        let record = actual.regions.unwrap().workers.unwrap().engagement;
+        match engagement {
+            Engagement::Immediate => assert!(
+                matches!(record, RegionWalkEngagement::Engaged { launched, .. } if launched == workers),
+                "{record:?}"
+            ),
+            Engagement::After(Duration::MAX) => assert!(
+                matches!(record, RegionWalkEngagement::Unengaged { .. }),
+                "{record:?}"
+            ),
+            _ => unreachable!("the fixture selects immediate or never engagement"),
+        }
         assert_eq!(actual.countermodel_queries, reference.countermodel_queries);
         assert_eq!(actual.countermodels, reference.countermodels);
         // Each query starts with private fresh knowledge. Scheduling neither

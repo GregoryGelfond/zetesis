@@ -1,7 +1,7 @@
-//! Several workers walking the region tree return exactly the stable
-//! models one worker returns, once each, in an order that is the
-//! schedule's and not a property of the result; a restriction narrows what
-//! the workers have not yet visited; a shared ceiling stops them all.
+//! A coordinator-first region walk returns exactly the scalar walk's stable
+//! models, once each. Their order is the scalar walk's until engagement and
+//! the schedule's afterwards; restrictions narrow the remaining frontier,
+//! and the coordinator and workers share one ceiling.
 
 use crate::support::choice_theories;
 use crate::support::formula_theories as theories;
@@ -354,10 +354,14 @@ fn an_unengaged_walk_reports_the_scalar_walks_receipts() {
                 );
             }
         }
-        let expected: BTreeSet<Vec<usize>> = family(&mut scalar).into_iter().collect();
+        let expected = family(&mut scalar);
         let found = family(&mut walk);
-        assert_eq!(found.iter().cloned().collect::<BTreeSet<_>>(), expected);
-        assert_eq!(found.len(), expected.len(), "each model once");
+        assert_eq!(found, expected, "the scalar walk's model sequence");
+        assert_eq!(
+            found.iter().collect::<BTreeSet<_>>().len(),
+            found.len(),
+            "each model once"
+        );
         assert!(scalar.exhausted() && walk.exhausted());
         assert_route(&walk, unengaged, 4);
         let (one, coordinator) = (scalar.statistics(), walk.statistics());
@@ -386,9 +390,9 @@ fn an_unengaged_walk_reports_the_scalar_walks_receipts() {
 }
 
 #[test]
-fn region_workers_report_their_largest_countermodel_workspace() {
-    // Each worker retains its own countermodel workspace; the receipt is the
-    // largest any one of them retained, as the scalar walk's is its one's.
+fn region_workers_report_nonzero_countermodel_workspace() {
+    // A parallel walk that ran countermodel queries must retain their peak
+    // workspace receipt when its worker reports are merged.
     let mut parallel = engaged(&mixed(), 4, Limits::default());
     family(&mut parallel);
     assert_route(&parallel, Engagement::Immediate, 4);
@@ -429,8 +433,8 @@ fn a_determined_candidate_run_never_begins_the_walk() {
 #[test]
 fn one_worker_returns_the_scalar_walks_sequence() {
     // The sequence, not only the family: the scalar walk returns the models
-    // in the tree's order, cut branch first, which the parallel walk does
-    // not promise.
+    // in the tree's order, cut branch first. A multi-worker walk keeps that
+    // order only until engagement.
     let theory = mixed();
     let mut one = StableModels::with_region_workers(
         &theory,
@@ -791,6 +795,9 @@ fn certificate_configuration_precedes_region_candidates() {
         );
         assert!(after.statistics().certified.is_none());
         assert_eq!(family(&mut after).len(), 3);
+        if worker_count > 1 {
+            assert_route(&after, engagement, worker_count);
+        }
     }
 }
 

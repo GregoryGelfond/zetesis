@@ -10,6 +10,7 @@ use themelios_base::source::SourceId;
 use themelios_base::span::{ByteOffset, Span};
 use themelios_program::term::EvalError;
 use zetesis_core::{Atom, Term};
+use zetesis_test_support::programs::rules;
 use zetesis_themelios::{
     AdmissionFailure, AdmissionOptions, Admitted, ExpansionFailure, ExpansionLimits,
     ExpansionResource, ExpansionUsage, InputLimit, ProfileFeature, admit, admit_extended,
@@ -25,10 +26,7 @@ fn extended(text: &str) -> Admitted {
 }
 
 fn ground_heads(input: &Admitted) -> BTreeSet<Atom> {
-    input
-        .program()
-        .templates()
-        .iter()
+    rules(input.program())
         .map(|template| {
             assert!(template.positive().is_empty());
             assert!(template.gate_true().is_empty());
@@ -64,11 +62,10 @@ fn checked_ground_arithmetic_matches_explicit_scalars() {
     assert_eq!(
         minimum
             .program()
-            .templates()
+            .facts()
             .at(0)
             .unwrap()
-            .head()
-            .expect("head")
+            .pattern()
             .terms()
             .iter()
             .collect::<Vec<_>>(),
@@ -157,17 +154,11 @@ fn scalar_normalization_preserves_relational_bindings_and_frozen_gates() {
     )
     .expect("explicit S0 program");
     assert_eq!(
-        expanded.program().templates().len(),
-        explicit.program().templates().len()
+        expanded.program().rules().len(),
+        explicit.program().rules().len()
     );
-    for template in expanded.program().templates() {
-        assert!(
-            explicit
-                .program()
-                .templates()
-                .iter()
-                .any(|other| other == template)
-        );
+    for template in rules(expanded.program()) {
+        assert!(rules(explicit.program()).any(|other| other == template));
     }
 }
 
@@ -178,8 +169,9 @@ fn expansion_retains_original_rule_spans_and_source_bytes() {
     let input = admit_extended(text.to_owned(), options, ExpansionLimits::default())
         .expect("located expansion");
     assert_eq!(input.source().text(), text);
-    assert_eq!(input.program().templates().len(), 2);
-    for origins in input.template_origins() {
+    assert_eq!(input.program().facts().len(), 2);
+    assert!(input.program().templates().is_empty());
+    for origins in input.fact_origins() {
         assert_eq!(
             origins.len(),
             2,
@@ -440,7 +432,7 @@ fn valid_closed_structures_do_not_make_an_empty_fact_product_nonempty() {
             ExpansionLimits::default(),
         )
         .unwrap();
-        assert!(input.program().templates().is_empty());
+        assert!(input.program().is_empty());
         assert_eq!(input.source().text(), source);
     }
 }
@@ -539,10 +531,11 @@ fn plain_rules_compile_as_their_explicit_s0_admission_does() {
     let explicit = admit(text.to_owned(), AdmissionOptions::default()).expect("S0");
     let expanded = extended(text);
     assert_eq!(
-        expanded.program().templates().iter().collect::<Vec<_>>(),
-        explicit.program().templates().iter().collect::<Vec<_>>()
+        rules(expanded.program()).collect::<Vec<_>>(),
+        rules(explicit.program()).collect::<Vec<_>>()
     );
     assert_eq!(expanded.template_origins(), explicit.template_origins());
+    assert_eq!(expanded.fact_origins(), explicit.fact_origins());
 }
 
 #[test]

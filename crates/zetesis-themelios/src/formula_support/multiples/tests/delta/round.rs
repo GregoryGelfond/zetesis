@@ -214,12 +214,12 @@ fn cancelled_borrow_retains_the_preparation_for_retry() {
             let limits = FormulaLimits::default();
             let cancellation = zetesis_cpu::Cancellation::default();
             cancellation.cancel();
-            counters.cancellation = Some(cancellation);
+            counters.attach_test_control(&cancellation);
             assert!(matches!(
                 preparation.rows(variant, None, &mut testing::budget(), Context::new(computation, &limits, counters, rule.location)),
                 Err(FormulaFailure::Interrupted { reason: zetesis_cpu::Stop::Cancelled, location }) if location == rule.location
             ));
-            counters.cancellation = None;
+            counters.detach_test_control();
             let mut join = preparation
                 .rows(
                     variant,
@@ -394,6 +394,19 @@ fn a_stopped_borrow_publishes_no_selected_cursor() {
     );
 }
 
+fn assert_only_numeric_cache_remains(support: &Support<'_>, initial: usize) {
+    let retained = support.numeric_index_bytes();
+    assert!(
+        retained > 0,
+        "production retains its numeric snapshot certificate"
+    );
+    assert_eq!(
+        support.workspace_bytes(),
+        initial + retained,
+        "only the exact numeric cache survives the last cursor"
+    );
+}
+
 fn derive(source: &str, shared: bool) -> (BTreeSet<Atom>, u64) {
     let mut snapshot = Snapshot::new(source);
     snapshot.publish(population(3, 0));
@@ -409,6 +422,8 @@ fn derive(source: &str, shared: bool) -> (BTreeSet<Atom>, u64) {
             Support::indexed(&relations, &limits, &snapshot.counters, snapshot.location).unwrap();
         let rule = super::super::rule(&snapshot.program);
         let counters = &mut snapshot.counters;
+        let workspace = support.workspace().clone();
+        let initial_workspace_bytes = workspace.bytes();
         {
             let mut computation = Computation::new(&mut append, &support);
             let support = &support;
@@ -458,9 +473,14 @@ fn derive(source: &str, shared: bool) -> (BTreeSet<Atom>, u64) {
                     .unwrap();
                 }
             }
-            assert_eq!(support.workspace_bytes(), bytes);
+            assert_only_numeric_cache_remains(support, bytes);
         }
         drop(support);
+        assert_eq!(
+            workspace.bytes(),
+            initial_workspace_bytes,
+            "dropping the snapshot releases the numeric cache and all cursor leases"
+        );
         // The real round boundary orders pending discoveries only after every
         // cursor releases its snapshot, then catalog publication admits them.
         assert!(

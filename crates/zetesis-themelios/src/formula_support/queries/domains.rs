@@ -11,27 +11,24 @@ use crate::formula_support::{Context, GroundingWork};
 #[cfg(test)]
 mod tests;
 
-use std::collections::BTreeSet;
 use std::mem::size_of;
 use std::ops::Range;
 
+use crate::formula_domains::numeric_ir::Analysis;
 use crate::formula_support::components::Pattern;
 use themelios_program::program::{self, DefaultNegation};
-use themelios_program::symbol::{Sign as SourceSign, Symbol};
-use zetesis_core::catalog::TermAssignment;
+use zetesis_core::TemplateTerm as Term;
+use zetesis_core::catalog::{CatalogRead, TermAssignment, TermKey};
 use zetesis_core::relation::{Failure, Relation};
-use zetesis_core::{Sign, TemplateTerm as Term};
-use zetesis_domain::{Analysis, Domain};
 
 use super::super::evaluation::Evaluation;
 use super::{Counters, Event, FormulaFailure, FormulaLimits, ProgramSite, Support};
-use crate::expansion::Budget;
+use crate::ExpansionFailure;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{Expression, LiteralIr, RuleIr};
 use crate::formula_support::Computation;
-use crate::{ExpansionFailure, ExpansionResource};
 
-type Symbols<'a> = Vec<&'a Symbol>;
+type Keys<'a> = Vec<(zetesis_domain::numeric::ConstantId, &'a TermKey)>;
 
 /// One variable argument of a positive body atom: where it occurs, the
 /// variable it names, and the size of the argument's finite domain when the
@@ -74,8 +71,8 @@ pub(crate) struct Guards<'a, 'source> {
 /// snapshot and the final one. Metadata retains one scoped ID per candidate
 /// value of each variable of each rule, with checked work before keeping each
 /// cell. The work ceiling bounds this metadata; as before, it is kept for the
-/// whole grounding outside the support allowance. Canonical typed payload is
-/// admitted once through the source computation and uses the support allowance.
+/// whole grounding outside the support allowance. The candidates select existing canonical term identities; no payload is
+/// exported or admitted again.
 pub(crate) struct Candidates {
     /// Selected cells for each variable; `None` means unrestricted and an empty
     /// range means no candidate remains. Range order has no ASP ordering role.
@@ -90,7 +87,6 @@ impl Candidates {
         analysis: &Analysis<'_>,
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
     ) -> Result<Self, FormulaFailure> {
         let mut by_variable = Vec::new();
@@ -126,10 +122,12 @@ impl Candidates {
                     analysis,
                     description.predicate(),
                     column,
+                    computation.read(),
                     limits,
                     counters,
                     rule.location,
                 )?;
+                let width = domain.as_ref().map(ExactSizeIterator::len);
                 let variable_candidates =
                     by_variable
                         .get_mut(slot)
@@ -149,7 +147,7 @@ impl Candidates {
                     pattern: *pattern,
                     column,
                     slot,
-                    width: domain.map(BTreeSet::len),
+                    width,
                 });
             }
         }
@@ -158,7 +156,6 @@ impl Candidates {
             occurrences,
             computation,
             limits,
-            budget,
             counters,
             rule.location,
         )?;
@@ -166,20 +163,18 @@ impl Candidates {
         Ok(candidates)
     }
 
-    /// Replace the analysis's temporary borrowed-symbol sets with one scoped
-    /// canonical selection. The positive-flat certificate excludes constructors
-    /// with children; each borrowed descriptor names exactly one admitted root.
+    /// Retain the already canonical values as one scoped selection. No logical
+    /// value is exported, reconstructed or interned again.
     fn admit(
-        symbols: Vec<Option<Symbols<'_>>>,
+        keys: Vec<Option<Keys<'_>>>,
         occurrences: Vec<Occurrence>,
         computation: &mut Computation<'_, '_>,
         limits: &FormulaLimits,
-        budget: &mut Budget,
         counters: &mut Counters,
         location: ProgramSite,
     ) -> Result<Self, FormulaFailure> {
         let mut count = 0_usize;
-        for selected in &symbols {
+        for selected in &keys {
             counters.work(limits, location)?;
             count = count
                 .checked_add(selected.as_ref().map_or(0, Vec::len))
@@ -187,7 +182,7 @@ impl Candidates {
         }
         let mut by_variable = Vec::new();
         by_variable
-            .try_reserve_exact(symbols.len())
+            .try_reserve_exact(keys.len())
             .map_err(|_| failure(Failure::Allocation, location))?;
         let mut values = computation.read().assignment();
         // Candidate metadata deliberately retains its existing work-bounded
@@ -195,31 +190,18 @@ impl Candidates {
         values
             .resize_with(count, usize::MAX, || counters.work(limits, location))
             .map_err(|error| crate::formula_binding::failure(error, location))?;
-        let empty = computation.read().assignment();
         let mut end = 0;
-        for selected in symbols {
+        for selected in keys {
             counters.work(limits, location)?;
             let Some(selected) = selected else {
                 by_variable.push(None);
                 continue;
             };
             let start = end;
-            for symbol in selected {
-                counters.charge_work(1 + atomic_bytes(symbol) as u128, limits, location)?;
-                budget.charge(ExpansionResource::TermWork, 1, location)?;
-                let key = computation.construct(
-                    crate::structural_value::view(symbol),
-                    empty.as_slice(),
-                    &[],
-                    zetesis_core::catalog::Limits {
-                        max_nodes: 1,
-                        max_depth: 1,
-                        max_bytes: usize::MAX,
-                    },
-                    GroundingWork::new(limits, counters, location),
-                )?;
+            for (_, key) in selected {
+                counters.work(limits, location)?;
                 values
-                    .set_with(end, &key, || counters.work(limits, location))
+                    .set_with(end, key, || counters.work(limits, location))
                     .map_err(|error| crate::formula_binding::failure(error, location))?;
                 end += 1;
             }
@@ -306,9 +288,9 @@ impl Candidates {
 }
 
 /// Intersect a variable's candidates with one more argument domain, in place.
-fn meet<'p>(
-    target: &mut Option<Symbols<'p>>,
-    source: &BTreeSet<&'p Symbol>,
+fn meet<'a>(
+    target: &mut Option<Keys<'a>>,
+    source: impl ExactSizeIterator<Item = (zetesis_domain::numeric::ConstantId, &'a TermKey)>,
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: ProgramSite,
@@ -318,19 +300,21 @@ fn meet<'p>(
         values
             .try_reserve_exact(source.len())
             .map_err(|_| failure(Failure::Allocation, location))?;
-        for &value in source {
+        for value in source {
             counters.work(limits, location)?;
             values.push(value);
         }
         *target = Some(values);
         return Ok(());
     };
-    let mut other = source.iter().copied().peekable();
+    let mut other = source.peekable();
     let mut kept = 0;
     for index in 0..values.len() {
         while let Some(&right) = other.peek() {
-            compare_work(values[index], right, limits, counters, location)?;
-            match values[index].cmp(right) {
+            counters.work(limits, location)?;
+            // Both sets belong to this analysis; registration coordinates are
+            // a common total order without another logical-value comparison.
+            match values[index].0.cmp(&right.0) {
                 std::cmp::Ordering::Less => break,
                 std::cmp::Ordering::Equal => {
                     counters.work(limits, location)?;
@@ -543,6 +527,7 @@ impl<'a, 'source> Guards<'a, 'source> {
             })?;
             let outer = self.support.live_bytes() - relation.storage().retained_bytes;
             let base = counters.accounting.work;
+            counters.poll(self.rule.location)?;
             let attempt = relation.query_attempt(
                 &[(column, value)],
                 zetesis_core::relation::Limits {
@@ -553,7 +538,7 @@ impl<'a, 'source> Guards<'a, 'source> {
                     max_work: limits.max_work - counters.accounting.work,
                 },
             );
-            counters.charge_work(attempt.work, limits, self.rule.location)?;
+            counters.absorb(attempt.work, limits, self.rule.location)?;
             counters.record(Event::SupportPeakBytes(
                 outer as u128 + attempt.peak_bytes as u128,
             ));
@@ -755,58 +740,22 @@ fn unary(literal: &LiteralIr) -> Option<Unary<'_>> {
     })
 }
 
-fn argument<'a, 'p>(
-    analysis: &'a Analysis<'p>,
+fn argument<'a>(
+    analysis: &'a Analysis<'_>,
     predicate: zetesis_core::catalog::PredicateRef<'_>,
     column: usize,
+    read: CatalogRead<'_>,
     limits: &FormulaLimits,
     counters: &mut Counters,
     location: ProgramSite,
-) -> Result<Option<&'a BTreeSet<&'p Symbol>>, FormulaFailure> {
-    for (signature, index, argument) in analysis.arguments() {
-        counters.charge_work(
-            1 + signature.name.as_str().len() as u128 + predicate.name().len() as u128,
-            limits,
-            location,
-        )?;
-        let sign = match predicate.sign() {
-            Sign::Positive => SourceSign::Positive,
-            Sign::Negative => SourceSign::Negative,
-        };
-        if index == column
-            && signature.sign == sign
-            && signature.arity as usize == predicate.arity()
-            && signature.name.as_str() == predicate.name()
-        {
-            return Ok(match argument.domain() {
-                Domain::Unknown => None,
-                Domain::Finite(values) => Some(values),
-            });
-        }
-    }
-    Ok(None)
-}
-
-fn atomic_bytes(symbol: &Symbol) -> usize {
-    match symbol {
-        Symbol::String(text) => text.len(),
-        Symbol::Function { name, .. } => name.as_str().len(),
-        _ => 0,
-    }
-}
-
-fn compare_work(
-    left: &Symbol,
-    right: &Symbol,
-    limits: &FormulaLimits,
-    counters: &mut Counters,
-    location: ProgramSite,
-) -> Result<(), FormulaFailure> {
-    counters.charge_work(
-        1 + atomic_bytes(left) as u128 + atomic_bytes(right) as u128,
-        limits,
-        location,
-    )
+) -> Result<
+    Option<
+        impl ExactSizeIterator<Item = (zetesis_domain::numeric::ConstantId, &'a TermKey)> + use<'a>,
+    >,
+    FormulaFailure,
+> {
+    let argument = analysis.argument(predicate, column, read, limits, counters, location)?;
+    Ok(argument.and_then(|argument| analysis.values.entries(argument)))
 }
 
 fn failure(error: Failure, location: ProgramSite) -> FormulaFailure {

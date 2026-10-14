@@ -5,8 +5,8 @@ use std::io;
 
 use clap::Parser;
 use zetesis_cli::{
-    Completion, Interruption, Options, RunError, SolvePhase, StatisticsView, run_detailed,
-    run_detailed_with_diagnostics, run_with_diagnostics,
+    Completion, GroundingPhase, Interruption, Options, RunError, SolvePhase, StatisticsView,
+    run_detailed, run_detailed_with_diagnostics, run_with_diagnostics,
 };
 use zetesis_cpu::Cancellation;
 use zetesis_test_support::io::{BoundedWriter, FAILED, FailAt};
@@ -215,6 +215,47 @@ fn early_primary_source_error_survives_secondary_statistics_failure_and_legacy_m
     )
     .unwrap_err();
     assert!(matches!(original, RunError::FormulaAdmission(_)));
+}
+
+#[test]
+fn refused_bundle_preparation_does_not_attempt_materialization() {
+    let fixture = zetesis_reference_support::BundleFixture::new();
+    fixture.write("entry.lp", "p(X).");
+    let bundle = zetesis_themelios::SourceBundle::load(
+        fixture.path("entry.lp"),
+        zetesis_themelios::BundleLimits::default(),
+    )
+    .unwrap();
+    let mut options = options("countermodel");
+    options.stats = true;
+    options.statistics_view = StatisticsView::Records;
+    let mut output = Vec::new();
+    let failure = zetesis_cli::run_bundle_detailed_with_diagnostics(
+        bundle,
+        &options,
+        &mut output,
+        &mut Vec::new(),
+        &Cancellation::default(),
+    )
+    .unwrap_err();
+    assert!(matches!(
+        *failure.cause,
+        RunError::FormulaBundleAdmission(_)
+    ));
+    assert!(failure.partial_report.is_none());
+    let timing = failure.phase_timings.unwrap();
+    assert_eq!(
+        timing
+            .get(SolvePhase::AdmissionMaterialization)
+            .unwrap()
+            .calls,
+        1
+    );
+    for phase in GroundingPhase::ALL {
+        assert!(timing.grounding.get(phase).is_none());
+    }
+    assert!(timing.get(SolvePhase::ExecutionSetup).is_none());
+    assert!(!std::str::from_utf8(&output).unwrap().contains("Answer:"));
 }
 
 #[test]

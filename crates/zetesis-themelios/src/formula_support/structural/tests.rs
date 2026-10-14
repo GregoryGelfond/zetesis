@@ -511,7 +511,7 @@ fn query_envelope(
         if cancelled {
             let cancellation = zetesis_cpu::Cancellation::default();
             cancellation.cancel();
-            counters.cancellation = Some(cancellation);
+            counters.attach_test_control(&cancellation);
         }
         let observer = Observer::default();
         let profile = Profile::new(Some(&observer));
@@ -528,7 +528,7 @@ fn query_envelope(
             })
         });
         counters.observed = previous;
-        counters.cancellation = None;
+        counters.detach_test_control();
         assert_eq!(
             join.values
                 .read(slot, computation.read(), location)

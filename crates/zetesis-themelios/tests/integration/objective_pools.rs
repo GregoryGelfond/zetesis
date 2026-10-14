@@ -317,6 +317,13 @@ fn projected_source_payload_has_independent_limits() {
                 FormulaLimits::default(),
             )
         };
+        if resource == ExpansionResource::TermWork {
+            let expected = source_cases::cases(CASES)[0].records.clone();
+            crate::support::thresholds::bounded_term_work(attempt, |actual| {
+                assert_eq!(reference::exhaustive(actual), expected);
+            });
+            continue;
+        }
         let upper = first_success(resource_limits::expansion_default(resource), |middle| {
             attempt(middle).is_ok()
         });

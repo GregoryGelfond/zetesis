@@ -134,9 +134,14 @@ pub struct GroundingWork {
     pub support_publication_work: Option<u64>,
     /// Support rounds admitted by the existing round ceiling.
     pub support_rounds: Option<u64>,
-    /// Original producer occurrences entered for variant traversal, after an
-    /// admitted work tick. A later failure retains the entered occurrence.
+    /// Original producer occurrences visited after an admitted work tick,
+    /// including rich visits skipped by registration. A later failure retains
+    /// the entered occurrence.
     pub support_producer_visits: Option<u64>,
+    /// Rich-producer visits selected for traversal, including the first round.
+    /// A subset of producer visits, disjoint from unchanged visits; a later
+    /// failure retains the selected traversal. Zero on the positive-flat plan.
+    pub support_rich_traversals: Option<u64>,
     /// Rich-producer visits after the first round that ended at the
     /// registration's test: no predicate the producer reads gained rows, so
     /// it was not traversed. Always zero on the positive-flat plan's schedule,
@@ -145,6 +150,16 @@ pub struct GroundingWork {
     /// Growing support/query snapshot attempts entered after an admitted work
     /// tick. Counts attempts, including a later allocation or query refusal.
     pub support_snapshot_preparations: Option<u64>,
+    /// Local join construction attempts, including empty/temporary frames,
+    /// prefix-pattern fallbacks and attempts which later refuse.
+    pub local_plan_requests: Option<u64>,
+    /// Local plans successfully inserted into their snapshot table.
+    /// A subset of requests, disjoint from reuses.
+    pub local_plan_preparations: Option<u64>,
+    /// Requests which successfully matched an existing frame and bound pattern.
+    /// A subset of requests, disjoint from preparations; includes a later
+    /// failure while allocating or traversing the join itself.
+    pub local_plan_reuses: Option<u64>,
     /// New support atoms inserted while publishing a support round.
     pub support_atoms: Option<u64>,
     /// Column/row associations inserted into support indices, including rebuilds.
@@ -210,6 +225,27 @@ pub struct GroundingWork {
     /// back to the general evaluator: an unread or nonnumeric operand value,
     /// or a failing operation.
     pub integer_comparison_declines: Option<u64>,
+    /// Nonempty expression indexes successfully checked, sorted and published for one relation snapshot.
+    pub numeric_index_builds: Option<u64>,
+    /// Expression-index attempts cached as unavailable after a nonnumeric input or checked scalar failure; interrupted attempts are not declines.
+    pub numeric_index_declines: Option<u64>,
+    /// Completed integer-column ordering probes, including empty unions, in
+    /// eager emission or possible-head production. Family evidence is excluded.
+    pub range_probes: Option<u64>,
+    /// Source-ordered range-union rows visited before matching and residual
+    /// comparisons, already clipped to the occurrence's first-new interval.
+    pub range_probe_rows: Option<u64>,
+    /// Completed expression-equality lookups, including empty postings, in certified integer indexes.
+    pub expression_key_probes: Option<u64>,
+    /// Expression-key posting rows visited by a join, before its unchanged matcher and residual comparisons.
+    pub expression_key_rows: Option<u64>,
+    /// Planned positive body atoms successfully named from held join rows by ordinary rule
+    /// emission or streamed capture, including unchanged-prefix reuses. The
+    /// producer's earlier row route and nested element joins are excluded.
+    pub row_atoms: Option<u64>,
+    /// Subset of `row_atoms` named from a current unchanged-prefix node. Each
+    /// successful reuse skips one catalog lookup and one atomic node lookup.
+    pub row_atom_reuses: Option<u64>,
     /// Fully instantiated atom identities presented to the formula atom catalog.
     pub atom_lookups: Option<u64>,
     /// New atom identities inserted into the formula atom catalog.
@@ -234,8 +270,12 @@ impl Default for GroundingWork {
             support_publication_work: Some(0),
             support_rounds: Some(0),
             support_producer_visits: Some(0),
+            support_rich_traversals: Some(0),
             support_unchanged_visits: Some(0),
             support_snapshot_preparations: Some(0),
+            local_plan_requests: Some(0),
+            local_plan_preparations: Some(0),
+            local_plan_reuses: Some(0),
             support_atoms: Some(0),
             support_index_entries: Some(0),
             join_probes: Some(0),
@@ -261,6 +301,14 @@ impl Default for GroundingWork {
             expression_nodes: Some(0),
             integer_comparisons: Some(0),
             integer_comparison_declines: Some(0),
+            numeric_index_builds: Some(0),
+            numeric_index_declines: Some(0),
+            range_probes: Some(0),
+            range_probe_rows: Some(0),
+            expression_key_probes: Some(0),
+            expression_key_rows: Some(0),
+            row_atoms: Some(0),
+            row_atom_reuses: Some(0),
             atom_lookups: Some(0),
             atoms_inserted: Some(0),
             node_lookups: Some(0),
@@ -281,8 +329,12 @@ pub(crate) enum Event {
     SupportPublicationWork(u64),
     SupportRound,
     SupportProducerVisit,
+    SupportRichTraversal,
     SupportUnchangedVisit,
     SupportSnapshotPreparation,
+    LocalPlanRequest,
+    LocalPlanPreparation,
+    LocalPlanReuse,
     SupportAtom,
     SupportIndexEntry,
     JoinProbe,
@@ -308,6 +360,14 @@ pub(crate) enum Event {
     ExpressionNode,
     IntegerComparison,
     IntegerComparisonDeclined,
+    NumericIndexBuild,
+    NumericIndexDeclined,
+    RangeProbe,
+    RangeProbeRow,
+    ExpressionKeyProbe,
+    ExpressionKeyRow,
+    RowAtom,
+    RowAtomReuse,
     AtomLookup,
     AtomInserted,
     NodeLookup,
@@ -349,6 +409,10 @@ impl GroundingWork {
                 self.support_producer_visits,
                 other.support_producer_visits,
             ),
+            support_rich_traversals: sum(
+                self.support_rich_traversals,
+                other.support_rich_traversals,
+            ),
             support_unchanged_visits: sum(
                 self.support_unchanged_visits,
                 other.support_unchanged_visits,
@@ -357,6 +421,12 @@ impl GroundingWork {
                 self.support_snapshot_preparations,
                 other.support_snapshot_preparations,
             ),
+            local_plan_requests: sum(self.local_plan_requests, other.local_plan_requests),
+            local_plan_preparations: sum(
+                self.local_plan_preparations,
+                other.local_plan_preparations,
+            ),
+            local_plan_reuses: sum(self.local_plan_reuses, other.local_plan_reuses),
             support_atoms: sum(self.support_atoms, other.support_atoms),
             support_index_entries: sum(self.support_index_entries, other.support_index_entries),
             join_probes: sum(self.join_probes, other.join_probes),
@@ -391,6 +461,14 @@ impl GroundingWork {
                 self.integer_comparison_declines,
                 other.integer_comparison_declines,
             ),
+            numeric_index_builds: sum(self.numeric_index_builds, other.numeric_index_builds),
+            numeric_index_declines: sum(self.numeric_index_declines, other.numeric_index_declines),
+            range_probes: sum(self.range_probes, other.range_probes),
+            range_probe_rows: sum(self.range_probe_rows, other.range_probe_rows),
+            expression_key_probes: sum(self.expression_key_probes, other.expression_key_probes),
+            expression_key_rows: sum(self.expression_key_rows, other.expression_key_rows),
+            row_atoms: sum(self.row_atoms, other.row_atoms),
+            row_atom_reuses: sum(self.row_atom_reuses, other.row_atom_reuses),
             atom_lookups: sum(self.atom_lookups, other.atom_lookups),
             atoms_inserted: sum(self.atoms_inserted, other.atoms_inserted),
             node_lookups: sum(self.node_lookups, other.node_lookups),
@@ -429,8 +507,12 @@ impl GroundingWork {
             Event::SupportPublicationWork(_) => &mut self.support_publication_work,
             Event::SupportRound => &mut self.support_rounds,
             Event::SupportProducerVisit => &mut self.support_producer_visits,
+            Event::SupportRichTraversal => &mut self.support_rich_traversals,
             Event::SupportUnchangedVisit => &mut self.support_unchanged_visits,
             Event::SupportSnapshotPreparation => &mut self.support_snapshot_preparations,
+            Event::LocalPlanRequest => &mut self.local_plan_requests,
+            Event::LocalPlanPreparation => &mut self.local_plan_preparations,
+            Event::LocalPlanReuse => &mut self.local_plan_reuses,
             Event::SupportAtom => &mut self.support_atoms,
             Event::SupportIndexEntry => &mut self.support_index_entries,
             Event::JoinProbe => &mut self.join_probes,
@@ -456,6 +538,14 @@ impl GroundingWork {
             Event::ExpressionNode => &mut self.expression_nodes,
             Event::IntegerComparison => &mut self.integer_comparisons,
             Event::IntegerComparisonDeclined => &mut self.integer_comparison_declines,
+            Event::NumericIndexBuild => &mut self.numeric_index_builds,
+            Event::NumericIndexDeclined => &mut self.numeric_index_declines,
+            Event::RangeProbe => &mut self.range_probes,
+            Event::RangeProbeRow => &mut self.range_probe_rows,
+            Event::ExpressionKeyProbe => &mut self.expression_key_probes,
+            Event::ExpressionKeyRow => &mut self.expression_key_rows,
+            Event::RowAtom => &mut self.row_atoms,
+            Event::RowAtomReuse => &mut self.row_atom_reuses,
             Event::AtomLookup => &mut self.atom_lookups,
             Event::AtomInserted => &mut self.atoms_inserted,
             Event::NodeLookup => &mut self.node_lookups,
@@ -494,7 +584,7 @@ pub(crate) struct Profile<'a> {
 
 impl<'a> Profile<'a> {
     pub(crate) fn new(observer: Option<&'a dyn GroundingObserver>) -> Self {
-        let source_observer = observer;
+        let source_observer = observer.filter(|observer| observer.domain_diagnostics_enabled());
         let observer = observer.filter(|observer| observer.details_enabled());
         let work = Work(observer.map(|_| Rc::new(RefCell::new(GroundingWork::default()))));
         Self {
@@ -502,6 +592,10 @@ impl<'a> Profile<'a> {
             source_observer,
             work,
         }
+    }
+
+    pub(crate) fn domain_diagnostics_enabled(&self) -> bool {
+        self.source_observer.is_some()
     }
 
     pub(crate) fn domain_analysis(&self, observation: super::DomainObservation<'_, '_>) {

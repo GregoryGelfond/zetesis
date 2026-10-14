@@ -93,6 +93,43 @@ fn a_constructor_operand_leaves_the_literal_without_a_form() {
 }
 
 #[test]
+fn a_long_source_operand_keeps_the_general_evaluator() {
+    // Nine variables and eight additions exceed the sixteen-node form.
+    let source = "p(1). r(X) :- p(X), X+X+X+X+X+X+X+X+X > 0.";
+    let receipts = receipts(source);
+    assert_eq!(receipts.forms.long_operand, 1, "{receipts:?}");
+    assert_eq!(receipts.forms.without_form(), 1, "{receipts:?}");
+    assert_eq!((receipts.decided, receipts.declined), (0, 0));
+    assert_eq!(answers(source), one_answer(&["p(1)", "r(1)"]));
+}
+
+#[test]
+fn factored_components_decide_their_copied_comparisons() {
+    // Factoring admits comparisons of variables and constants; arithmetic
+    // expressions retain the complete join and would not test copied forms.
+    let source = "a(1..2). b(1..2). h :- a(X), X<3, b(Y), Y<3.";
+    let observer = Observer::default();
+    let admitted = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap();
+    let records = observer.records.borrow();
+    let total = |field: fn(&super::Record) -> Option<u64>| -> u64 {
+        records
+            .iter()
+            .filter(|record| record.phase == zetesis_themelios::GroundingPhase::RuleInstantiation)
+            .map(|record| field(record).unwrap())
+            .sum()
+    };
+    // Two two-row components, rather than the six visits of a Cartesian join.
+    // Only final instantiation can count the copies, not support production.
+    assert_eq!(total(|record| record.work.join_rows), 4);
+    assert_eq!(total(|record| record.work.integer_comparisons), 4);
+    assert_eq!(total(|record| record.work.integer_comparison_declines), 0);
+    assert_eq!(
+        exhaustive(&admitted),
+        one_answer(&["a(1)", "a(2)", "b(1)", "b(2)", "h"])
+    );
+}
+
+#[test]
 fn argument_checks_are_decided_by_their_forms() {
     // The computed argument of p(X+1) is captured and checked for equality.
     let source = "q(1..3). p(2..3). r(X) :- q(X), p(X+1).";

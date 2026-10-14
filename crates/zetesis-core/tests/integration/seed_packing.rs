@@ -17,6 +17,7 @@ fn program(count: usize) -> Program {
                 Template::new(Some(p.clone()), vec![], vec![p], vec![], vec![])
             })
             .collect(),
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap()

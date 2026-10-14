@@ -126,6 +126,7 @@ impl Workload {
             amended,
             generated: None,
             authored: Some(Authored { source: seal }),
+            bundle: None,
             metadata_bytes: budget.metadata,
             source_bytes: budget.sources,
         })
@@ -186,7 +187,7 @@ impl Workload {
     }
 }
 
-fn read(seal: &FileSeal, limit: usize) -> Result<String, Error> {
+pub(super) fn read(seal: &FileSeal, limit: usize) -> Result<String, Error> {
     let bytes = examples::Files::read(seal.requested(), limit, examples::Resource::SourceBytes)
         .map_err(Error::Corpus)?;
     examples::Files::digest("authored source", &bytes, seal.sha256()).map_err(Error::Corpus)?;
@@ -195,7 +196,10 @@ fn read(seal: &FileSeal, limit: usize) -> Result<String, Error> {
 
 // A fixed-capacity slice writer refuses excess bytes before extending storage.
 // The same shared Contract serialization supplies both identity and retention bounds.
-fn contract_bytes(contract: &examples::Contract, limit: usize) -> Result<Vec<u8>, Error> {
+pub(super) fn contract_bytes(
+    contract: &examples::Contract,
+    limit: usize,
+) -> Result<Vec<u8>, Error> {
     let mut bytes = super::reserve(limit)?;
     bytes.resize(limit, 0);
     let mut remaining = bytes.as_mut_slice();

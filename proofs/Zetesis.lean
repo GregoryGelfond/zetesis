@@ -70,6 +70,7 @@ import Zetesis.ProjectedConditionals
 import Zetesis.SingletonHeads
 import Zetesis.ConstructorPatterns
 import Zetesis.ScalarArithmetic
+import Zetesis.RemainderIntervals
 import Zetesis.ArithmeticFamilies
 import Zetesis.GateProjection
 import Zetesis.PositiveArguments
@@ -183,3 +184,5 @@ import Zetesis.RequiredChoiceCosts
 
 import Zetesis.ThresholdPropagation
 import Zetesis.ThresholdResidues
+
+import Zetesis.ChargeCadence

@@ -670,6 +670,16 @@ and slot identity under the same fixed per-invocation observation contract.
 This correspondence does not extend to concurrent atomic behavior, Rust borrow
 lifetimes, timers or eventual response to changing control flags.
 
+[`ChargeCadence`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ChargeCadence.lean)
+models a charge as a half-open range of zero-based operation numbers.
+`dueRule_iff` equates the remainder-based decision with the presence of a
+period boundary. `observes_next_multiple` proves that a sequence reaching the
+next boundary observes there or earlier, fewer than one positive period of
+charged operations away. Zero charges admit nothing. The Rust `poll_due`
+operation uses the same rule with period 256; machine-width correspondence,
+actual observations, exit settlement and concurrent control remain separate
+obligations. This is no bound on elapsed time or unmetered work.
+
 ## Iteration and completed search decisions
 
 `Refinement.PackedWordIterator` connects individual checked half-word reads to
@@ -1482,7 +1492,10 @@ and active reservations without counting shared headers twice.
 [`StorageOwners.shared_idle_active_within_limit`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/StorageOwners.lean)
 sums explicit shared and idle bounds with an active bound of
 `max(retained, allowance)` per owner. The batch maps `allowance` to the scalar
-limit minus the prepared queries' retained bytes, after checked subtraction. The
+limit minus the prepared queries' retained bytes and its shared closed fact
+rows/index subtotal, after checked subtraction. That fact subtotal is counted
+once in the shared component; each workspace still admits its full fact base
+independently. Vocabulary retains its existing per-workspace accounting. The
 separately allocated query-owner header enters the shared component once; its
 remaining immutable payload has a separate preparation ceiling. An empty
 batch reserves only retained storage. The consumer must account for every named
@@ -1498,7 +1511,19 @@ insertion IDs. `DeltaRounds.coverage_of_first_delta` requires a correspondence
 between those IDs and complete body bindings. `delta_step_exact` then preserves
 the complete inflationary step when old consequences are already present;
 `latched_constraints_exact` additionally requires exact prior constraint history.
-Bootstrap handles zero-positive rules and constraints. These premises explain
+Bootstrap handles zero-positive rules and constraints. Explicit core fact tables
+represent the same zero-positive headed occurrences: `Program::rules()` must
+preserve their signed atoms, duplicate occurrences and anchors, and the borrowed
+`FactRef::as_template()` must denote that head with empty bodies and filters.
+The oracle emits these heads through the same binding and `record_head` path;
+incremental indexes contain only templates, since a fact reads no predicate.
+`delta_step_exact` therefore uses the same old-consequence premise after
+bootstrap. The shared closed store supplies identity only; each workspace starts
+with empty discovery and truth. Full/delta, dense/tree, source-order and reuse
+tests exercise these obligations, but do not prove the Rust interning,
+occurrence mapping, allocation ledger or lifetime implementation.
+
+These premises explain
 why the final no-change round can combine its selected scans with completed
 history instead of revisiting every old binding. They do not certify the Rust
 matcher, cache boundaries, failure cleanup or shared-world/device schedules.
@@ -2216,7 +2241,11 @@ construction has its finite-input and reservation-contract proof above.
 compilations. Its obligation is the inductive one in `DagSharing.WellFormed.snoc`:
 a previously admitted prefix remains unchanged, and each additional node names
 only earlier children. `DagSharing.stored_meaning` then explains why extending
-the table cannot change a prior formula's meaning. The Rust owner must keep
+the table cannot change a prior formula's meaning.
+`DagSharing.intern_stable_under_extension` additionally keeps an existing
+node's exact index under append-only extension. A runtime cached node therefore
+needs the same owner and an unchanged prefix; a cache cannot survive a rollback
+past its entry merely because its atom still exists. The Rust owner must keep
 that paired prefix immutable and check every replacement suffix. Rollback and
 detachment restore the checkpoint's validation frontier and numeric validation
 evidence, as well as every owned arena length: an unchecked raw span can
@@ -2708,10 +2737,28 @@ proposals depend only on the carrier's atoms with registered predicates, when th
 carrier grows. The rule-level laws above are their corollaries. Without a
 whole-program plan, the Rust registration supplies the read set of each rich
 producer: every atom occurrence in its body and head element conditions, at
-every depth. That the traversal reads nothing else, so that it satisfies
-`ReadsOnly` for its proposals united with the carrier, and that publication only
-appends, are executable correspondences checked by tests that omit each kind of
-read in turn.
+every depth. The proposal function intended to instantiate `ReadsOnly` is
+`Q(p, C)`, the possible heads of producer `p` over the fixed round snapshot `C`
+before pruning heads already supported. Equal registered relations must give
+equal `Q` values. The Rust traversal additionally reads published or pending
+head membership. If `H` is that accumulated head set before the traversal,
+containing `C`, and `A(p, C, H)` its retained proposals on successful completion,
+the separate correspondence is `H ∪ A(p, C, H) = H ∪ Q(p, C)`. It requires that
+the traversal introduce no head outside `Q` and omit only heads already in `H`
+or retained during the traversal. Composing that equality over selected
+traversals gives the inflationary step to which the scheduling law applies with
+`Q`. Neither the membership-pruned proposals nor their union with the carrier
+is asserted to satisfy `ReadsOnly`.
+
+Read-set completeness for `Q`, the pruning equality, complete bootstrap and
+old-head history, and append-only publication remain executable obligations.
+The registration's
+[differential tests](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/producers/registration/tests.rs)
+compare per-round atom publication, emitted theory, objectives and warnings
+with a reference that traverses every rich producer in every round, and assert
+that visits were skipped. This checks the selected fixtures, not a Rust
+refinement proof. The [scheduling guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/producer-scheduling.md)
+states the proposal and pruning obligations together.
 
 The Rust [support builder](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support.rs)
 creates `CompletedCatalog` only after an admitted round establishes no new atom.
@@ -2836,11 +2883,16 @@ seeded sorted merging and packed reachability, not a proof of Rust shifts, word
 boundaries, sorted output, checked `i32` arithmetic or resource behavior. Callers
 still coalesce complete ASP tuple keys before supplying contributions; correlated
 conditions can leave carrier values unrealizable, and the original aggregate
-equality retains those conditions. The ordered-extremum form for `#min` and
-`#max` with required keys is not yet stated; their proposals are checked against
-exhaustive reduct enumeration and clingo in the aggregate campaign, whose
-sources reach both cases of that form: the required extremum alone, and optional
-values strictly before it.
+equality retains those conditions.
+[`SourceMeasures.required_extremum_carrier_membership`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/SourceMeasures.lean)
+states the ordered-extremum form for required keys: the carrier consists of
+the required extremum and optional values strictly preceding it. Reversing
+the supplied order covers both `#min` and `#max`; explicit order laws and
+an empty endpoint are premises. The law does not require distinct measured
+values, since extremum reduction is idempotent. Concrete ASP term comparison,
+required-key classification, Rust construction and bounded failure behavior
+remain separate obligations. The aggregate comparison campaign checks both
+the required result alone and strictly preceding optional values.
 
 [`IntegerEnvelopes`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/IntegerEnvelopes.lean)
 proves directed bound coverage and integer floor/ceiling laws.
@@ -2923,6 +2975,29 @@ the ordered raw positive-match family may shrink. Every residual comparison and
 ordinary tuple match remains in place. Canonical input/result alignment, exact
 reader ownership, prefix coverage publication and charged temporary domain
 storage remain Rust obligations, with no refinement claim.
+
+The shared numeric analyzer lowers prepared producers and compact fact columns
+into one conservative fixed-point computation. Its source wrapper uses that same
+engine. Argument unions must include every producer; local choice and conditional
+frames must remain separate; mixed logical values do not become integers through
+comparison alone. Finite-set intersections use identities from one analysis,
+never a presumed ASP ordering. Outward widening, a complete synchronous narrowing
+pass and opaque-expression treatment must preserve every possible produced value.
+These are currently Rust obligations, exercised by source and prepared-IR tests;
+the existing `DomainBindings` laws do not prove this concrete analyzer sound.
+Stopped analysis publishes no usable domains. The separate positive-flat guard
+certificate remains required before any binding is excluded.
+
+The neutral analyzer can also certify requested integer expressions over a
+rule's complete-binding domains. It checks every intermediate, including both
+children of correlated expressions; produced-only bounds and later guards do
+not establish totality. The prepared-IR observer reports these certificates and
+separated comparisons for the exact borrowed rule occurrence. Its census is
+diagnostic: it does not remove literals or bypass arithmetic-family admission.
+[`RemainderIntervals`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RemainderIntervals.lean)
+proves the signed variable-divisor envelope and the corresponding scalar fault
+conditions. Analyzer soundness, occurrence mapping and the certificate walk
+remain Rust correspondence obligations.
 
 The optional Rust
 [finite totality certificate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/projections/totality.rs)

@@ -24,9 +24,9 @@ pub(crate) fn limited(
 }
 
 /// The least ceiling at which `run` admits `bounded`, searched from
-/// `default`, the resource's default limit: admission is monotone in each
-/// isolated resource ceiling, and every lower ceiling the search tries is
-/// refused as `refused` accepts. The least ceiling admits the formula the
+/// `default`, the resource's default limit. Callers must use a resource whose
+/// required charge is stable across runs. Every lower ceiling the search tries
+/// is refused as `refused` accepts. The least ceiling admits the formula the
 /// default limits admit.
 pub(crate) fn inclusive_ceiling(
     bounded: &str,
@@ -45,12 +45,11 @@ pub(crate) fn inclusive_ceiling(
     least
 }
 
-/// The least term-work ceiling that admits `bounded`, refused below it for
-/// its term work.
-pub(crate) fn term_work_ceiling(bounded: &str) -> u64 {
-    inclusive_ceiling(
-        bounded,
-        resource_limits::expansion_default(ExpansionResource::TermWork),
+/// Check bounded term-work admissions across fresh local-frame owners, returning
+/// the generous run's actual work receipt, not a cross-owner minimum ceiling.
+pub(crate) fn term_work_admissions(bounded: &str) -> u64 {
+    let expected = native(&formula(bounded));
+    super::thresholds::bounded_term_work(
         |cap| {
             limited(
                 bounded,
@@ -58,15 +57,7 @@ pub(crate) fn term_work_ceiling(bounded: &str) -> u64 {
                 &FormulaLimits::default(),
             )
         },
-        |error| {
-            matches!(
-                error,
-                FormulaFailure::Expansion(ExpansionFailure::Limit {
-                    resource: ExpansionResource::TermWork,
-                    ..
-                })
-            )
-        },
+        |actual| assert_eq!(native(actual), expected),
     )
 }
 

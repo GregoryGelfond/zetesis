@@ -2,6 +2,11 @@
 
 use std::collections::BTreeMap;
 
+mod classified;
+pub(crate) use classified::{
+    Admitted as CompiledProgram, Compiled, Item, Occurrence, Rule as CompiledRule,
+};
+
 use themelios_base::span::Location;
 use themelios_program::program::{
     Arguments, Atom, BodyElement, DefaultNegation, Head, Literal, LiteralInner,
@@ -19,15 +24,12 @@ fn unsupported(feature: ProfileFeature) -> CompilationFailure {
     CompilationFailure::Profile(feature)
 }
 
-type CompiledProgram = (Vec<Template>, Vec<Vec<Location>>);
-
 pub(crate) fn program(
     source: &SourceProgram,
     fallback: impl Into<ProgramSite>,
-) -> Result<CompiledProgram, AdmissionFailure> {
+) -> Result<Compiled<Location>, AdmissionFailure> {
     let fallback = fallback.into();
-    let mut templates = Vec::new();
-    let mut origins = Vec::new();
+    let mut compiled = Compiled::default();
     for part in source.parts() {
         if part.key().name.as_str() != "base" || !part.key().formals.is_empty() {
             return Err(crate::diagnostic::unsupported(
@@ -44,30 +46,62 @@ pub(crate) fn program(
                     Origin::Constructed | Origin::Transformed(_) => None,
                 })
                 .collect();
-            let location = fallback.with_statement(StatementId::new(templates.len()));
+            let location = fallback.with_statement(StatementId::new(compiled.len()));
             let location = locations
                 .first()
                 .map_or(location, |origin| location.with_location(*origin));
-            templates.push(statement(carrier, location)?);
-            origins.push(locations);
+            compiled
+                .push(statement(carrier, location)?, locations)
+                .map_err(|error| AdmissionFailure::Core { error, location })?;
         }
     }
-    Ok((templates, origins))
+    Ok(compiled)
 }
 
 /// Compile the rule one statement must be; `location` locates its refusal.
 pub(crate) fn statement(
     carrier: &WithProvenance<Statement>,
     location: impl Into<ProgramSite>,
-) -> Result<Template, AdmissionFailure> {
+) -> Result<CompiledRule, AdmissionFailure> {
     checked_statement(carrier.get()).map_err(|error| error.at(location))
 }
 
-pub(crate) fn checked_statement(source: &Statement) -> Result<Template, CompilationFailure> {
+pub(crate) fn checked_statement(source: &Statement) -> Result<CompiledRule, CompilationFailure> {
+    if let Some(atom) = fact(source) {
+        let Arguments::Single(arguments) = &atom.arguments else {
+            return Err(unsupported(ProfileFeature::PooledArguments));
+        };
+        let predicate = Predicate::with_sign(
+            atom.name.as_str(),
+            arguments.len(),
+            crate::coherence::core_sign(atom.sign),
+        )
+        .map_err(CompilationFailure::Construction)?;
+        let mut variables = Variables::default();
+        let values = arguments
+            .iter()
+            .map(|argument| match term(argument, &mut variables)? {
+                Term::Constant(value) => Ok(value),
+                Term::Variable(_) => unreachable!("closed fact classification"),
+            })
+            .collect::<Result<_, _>>()?;
+        return Ok(CompiledRule::Fact { predicate, values });
+    }
     let Statement::Rule(source_rule) = source else {
         return Err(unsupported(ProfileFeature::Statement));
     };
-    rule(source_rule)
+    rule(source_rule).map(CompiledRule::Template)
+}
+
+/// The shared source classification: positive, empty-body heads with no
+/// variables. Scalar conversion still validates the strict door's term policy.
+pub(crate) fn fact(source: &Statement) -> Option<&Atom> {
+    crate::fact_expansion::fact_atom(source).filter(|atom| {
+        !atom
+            .argument_terms()
+            .flat_map(SourceTerm::subterms)
+            .any(|term| matches!(term, SourceTerm::Variable(_)))
+    })
 }
 
 #[derive(Default)]

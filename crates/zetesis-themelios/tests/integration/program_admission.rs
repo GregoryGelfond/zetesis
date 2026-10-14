@@ -73,7 +73,11 @@ fn constructed_symbols_keep_their_types() {
 fn typed_evidence_borrows_the_original_statements() {
     let program = raised(SOURCE);
     let admitted = admit_program(&program, ProgramAdmissionOptions::default()).unwrap();
-    for evidence in admitted.template_statements() {
+    for evidence in admitted
+        .template_statements()
+        .iter()
+        .chain(admitted.fact_statements())
+    {
         for &statement in evidence {
             assert!(
                 program
@@ -92,7 +96,7 @@ fn coherence_constraints_keep_both_logical_origins() {
     assert_eq!(evidence.len(), 2);
     assert_ne!(evidence[0], evidence[1]);
     assert_eq!(
-        admitted.program().templates().len(),
+        admitted.program().rules().len(),
         program.statements().count() + 1
     );
 }

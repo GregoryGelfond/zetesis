@@ -205,6 +205,7 @@ mod tests {
                 vec![],
                 vec![],
             )],
+            crate::FactTables::default(),
             AdmissionLimits::default(),
         )
         .unwrap();
@@ -235,6 +236,7 @@ mod tests {
                 vec![],
                 vec![],
             )],
+            crate::FactTables::default(),
             AdmissionLimits::default(),
         )
         .unwrap();

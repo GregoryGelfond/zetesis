@@ -695,40 +695,16 @@ fn witness_projection_obeys_the_byte_ceiling() {
 #[test]
 fn anonymous_inspections_obey_the_term_work_ceiling() {
     let source = format!("q:-not p({}_{}):#true.", "f(".repeat(16), ")".repeat(16));
-    let cap = first_success(
-        resource_limits::expansion_default(ExpansionResource::TermWork),
+    let expected = native(&formula("q."));
+    crate::support::thresholds::bounded_term_work(
         |cap| {
             limited(
                 &source,
                 resource_limits::expansion(ExpansionResource::TermWork, cap),
                 &FormulaLimits::default(),
             )
-            .is_ok()
         },
-    );
-    assert!(matches!(
-        limited(
-            &source,
-            resource_limits::expansion(ExpansionResource::TermWork, cap - 1),
-            &FormulaLimits::default()
-        ),
-        Err(FormulaFailure::Expansion(
-            zetesis_themelios::ExpansionFailure::Limit {
-                resource: zetesis_themelios::ExpansionResource::TermWork,
-                ..
-            }
-        ))
-    ));
-    assert_eq!(
-        native(
-            &limited(
-                &source,
-                resource_limits::expansion(ExpansionResource::TermWork, cap),
-                &FormulaLimits::default()
-            )
-            .unwrap()
-        ),
-        native(&formula("q."))
+        |actual| assert_eq!(native(actual), expected),
     );
 }
 
@@ -830,27 +806,18 @@ fn consequent_byte_limit_is_inclusive() {
 }
 
 #[test]
-fn consequent_term_work_limit_is_inclusive() {
-    let run = |cap| {
-        limited(
-            BOUNDED,
-            resource_limits::expansion(ExpansionResource::TermWork, cap),
-            &FormulaLimits::default(),
-        )
-    };
-    let cap = first_success(
-        resource_limits::expansion_default(ExpansionResource::TermWork),
-        |cap| run(cap).is_ok(),
+fn consequent_term_work_admissions_obey_their_limits() {
+    let expected = native(&formula(BOUNDED));
+    crate::support::thresholds::bounded_term_work(
+        |cap| {
+            limited(
+                BOUNDED,
+                resource_limits::expansion(ExpansionResource::TermWork, cap),
+                &FormulaLimits::default(),
+            )
+        },
+        |actual| assert_eq!(native(actual), expected),
     );
-    assert!(matches!(
-        run(cap - 1),
-        Err(FormulaFailure::Expansion(
-            zetesis_themelios::ExpansionFailure::Limit {
-                resource: zetesis_themelios::ExpansionResource::TermWork,
-                ..
-            }
-        ))
-    ));
 }
 
 #[test]

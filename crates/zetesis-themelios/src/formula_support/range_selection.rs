@@ -72,7 +72,7 @@ impl<'a> Join<'a, '_> {
         {
             return Ok(false);
         }
-        if !std::ptr::eq(self.literals, rule.body.as_slice()) {
+        if !std::ptr::eq(self.literals.get(), rule.body.as_slice()) {
             return Err(FormulaFailure::SupportRelation {
                 error: zetesis_core::relation::Failure::Owner,
                 location: rule.location,

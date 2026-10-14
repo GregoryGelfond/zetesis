@@ -18,10 +18,15 @@ pub use slot::{CancellationRun, CancellationSlot, CancellationSlotError};
 /// `POLL_INTERVAL - 1` further operations can follow a requested stop.
 pub const POLL_INTERVAL: u64 = 256;
 
-/// Whether `charged` operations complete a run of [`POLL_INTERVAL`], so that
-/// the next operation starts a new run and observes the flags first.
-const fn at_poll_boundary(charged: u64) -> bool {
-    charged.is_multiple_of(POLL_INTERVAL)
+/// Whether admitting `amount` operations after `charged` contains an
+/// observation boundary. Operation numbers are zero-based multiples of
+/// [`POLL_INTERVAL`]. A zero amount admits nothing and is never due.
+/// Computes no counter sum, so the decision cannot overflow. This is a count
+/// boundary; it makes no promise about wall-clock latency or unmetered work.
+#[must_use]
+pub const fn poll_due(charged: u64, amount: u64) -> bool {
+    let offset = charged % POLL_INTERVAL;
+    amount != 0 && (offset == 0 || POLL_INTERVAL - offset < amount)
 }
 
 /// Why a metered computation could not charge another operation.
@@ -100,7 +105,7 @@ fn metered_charge(
     limit: u64,
     poll: impl Fn() -> Result<(), Stop>,
 ) -> Result<(), ChargeError> {
-    if at_poll_boundary(*charged) {
+    if poll_due(*charged, 1) {
         poll().map_err(ChargeError::Stopped)?;
     }
     if *charged >= limit {
@@ -524,6 +529,36 @@ mod tests {
     use super::*;
     use std::sync::mpsc;
     use std::time::Duration;
+
+    #[test]
+    fn charge_ranges_observe_exactly_the_contained_boundaries() {
+        for charged in 0..1024 {
+            for amount in 0..=1024 {
+                let boundary = u128::from(charged).div_ceil(u128::from(POLL_INTERVAL))
+                    * u128::from(POLL_INTERVAL);
+                assert_eq!(
+                    poll_due(charged, amount),
+                    boundary < u128::from(charged) + u128::from(amount),
+                    "charged={charged}, amount={amount}"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn boundary_decisions_do_not_overflow_at_the_counter_limit() {
+        for charged in [0, 1, u64::MAX - 256, u64::MAX - 1, u64::MAX] {
+            for amount in [0, 1, 255, 256, 257, u64::MAX] {
+                let boundary = u128::from(charged).div_ceil(u128::from(POLL_INTERVAL))
+                    * u128::from(POLL_INTERVAL);
+                assert_eq!(
+                    poll_due(charged, amount),
+                    boundary < u128::from(charged) + u128::from(amount),
+                    "charged={charged}, amount={amount}"
+                );
+            }
+        }
+    }
 
     fn wait_for_expiry(cancellation: &Cancellation) {
         let deadline = &cancellation.deadline.as_ref().unwrap().deadline;

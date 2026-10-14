@@ -147,7 +147,7 @@ fn solve_command(legacy: bool) -> Command {
                 .long("answers")
                 .value_name("N")
                 .value_parser(clap::value_parser!(NonZeroUsize))
-                .conflicts_with_all(["all", "models"])
+                .conflicts_with_all(["all", "models", "count"])
                 .help_heading("Answers")
                 .help("Display at most N answer sets [default: 1]")
                 .long_help("Display at most N answer sets (default: 1). Without objectives, stop after this many answers. Optimization still seeks a proved optimum, then displays up to N tied optima; an interrupted run may report unproved incumbents."),
@@ -156,7 +156,7 @@ fn solve_command(legacy: bool) -> Command {
             Arg::new("all")
                 .long("all")
                 .action(ArgAction::SetTrue)
-                .conflicts_with_all(["answers", "models"])
+                .conflicts_with_all(["answers", "models", "count"])
                 .help_heading("Answers")
                 .help("Enumerate all answer sets, or all tied optima when optimizing"),
         )
@@ -184,7 +184,7 @@ fn solve_argument(argument: Arg) -> Arg {
             .alias("memory-budget")
             .help_heading("Limits"),
         "time_limit" => argument.help_heading("Limits"),
-        "stats" | "json" | "color" => argument.help_heading("Output"),
+        "stats" | "json" | "count" | "color" => argument.help_heading("Output"),
         "input" | "additional_inputs" => argument,
         "help" | "help-all" => argument.help_heading("Help"),
         _ => argument.help_heading("Advanced controls"),

@@ -250,17 +250,10 @@ fn construction_work_substitutions_and_nodes_fail_at_exact_boundaries() {
             &FormulaLimits::default(),
         )
     };
-    let threshold = first_success(
-        resource_limits::expansion_default(ExpansionResource::TermWork),
-        |limit| attempt(limit).is_ok(),
-    );
-    assert!(matches!(
-        attempt(threshold - 1),
-        Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
-            resource: ExpansionResource::TermWork,
-            ..
-        }))
-    ));
+    let expected = complete(&admit(source, &FormulaLimits::default()).unwrap());
+    crate::support::thresholds::bounded_term_work(attempt, |actual| {
+        assert_eq!(complete(actual), expected);
+    });
     let admitted = admit(source, &FormulaLimits::default()).unwrap();
     let nodes = u64::try_from(admitted.theory().nodes().len()).unwrap();
     let limits = |maximum| resource_limits::formula(FormulaResource::Nodes, maximum);

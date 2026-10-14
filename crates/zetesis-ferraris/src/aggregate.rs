@@ -190,6 +190,27 @@ pub enum AggregateErrorKind {
     ArithmeticOverflow,
 }
 
+impl AggregateErrorKind {
+    /// Whether translation refused a finite resource or allocation. An existing
+    /// control cause uses the CPU owner’s resource classification.
+    #[must_use]
+    pub fn is_resource_refusal(self) -> bool {
+        match self {
+            Self::Control(stop) => zetesis_cpu::Refusal::is_resource_refusal(&stop),
+            Self::ElementLimit
+            | Self::GuardLimit
+            | Self::NodeLimit
+            | Self::OperandLimit
+            | Self::WorkLimit
+            | Self::StateLimit
+            | Self::SubsetLimit
+            | Self::Allocation
+            | Self::ArithmeticOverflow => true,
+            Self::InvalidPrefix { .. } | Self::InvalidCondition { .. } => false,
+        }
+    }
+}
+
 /// A refusal with partial accounting; both input formula buffers remain intact.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct AggregateError {

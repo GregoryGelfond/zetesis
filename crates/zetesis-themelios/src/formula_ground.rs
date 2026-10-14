@@ -12,6 +12,8 @@ mod cache;
 mod canonical_suffix;
 mod extremum_guards;
 mod metadata;
+mod matched_nodes;
+use matched_nodes::MatchedNodes;
 mod nodes;
 mod producer;
 mod projection;
@@ -28,6 +30,7 @@ mod fact_declines;
 #[cfg(test)]
 mod constants;
 
+use crate::formula_support::Ir;
 use crate::formula_support::family::Warnings;
 use crate::formula_support::{Context, GroundingWork};
 
@@ -58,7 +61,7 @@ use crate::formula_ir::{
 };
 use crate::formula_support::{self, Buffer, Computation, Counters, Join, Support, TermTable};
 use crate::grounding_observer::{Event, Profile};
-use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
+use crate::{ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, GroundingPhase};
 
 /// Canonical Boolean nodes established by `Builder::initialize`.
 /// Falsum is bottom; verum is the implication from bottom to itself.
@@ -103,6 +106,19 @@ impl Schedule<'_> {
             }
             Self::Eager(_) | Self::Hybrid => Keep::Release,
         }
+    }
+
+    /// Transfer only the eligible constraints into a retained hybrid owner.
+    fn take_streamed_rules(
+        self,
+        prepared: &mut crate::formula_ir::Prepared,
+        instances: u64,
+    ) -> Option<(Vec<RuleIr>, u64)> {
+        matches!(self, Self::HybridRetained).then(|| {
+            let mut rules = prepared.take_rules_without_facts();
+            rules.retain(crate::formula_hybrid::eligible);
+            (rules, instances)
+        })
     }
 
     fn retain_constraints(
@@ -166,8 +182,6 @@ fn ground_with_schedule(
     observer: Option<&dyn crate::GroundingObserver>,
     schedule: Schedule<'_>,
 ) -> Result<Grounded, FormulaFailure> {
-    use crate::GroundingPhase;
-
     let cancellation = preparation.budget.cancellation().cloned();
     crate::formula::poll_control(cancellation.as_ref(), preparation.location)?;
     let profile = Profile::new(observer);
@@ -241,7 +255,7 @@ struct Instantiation {
     objective_origins: Vec<Vec<ProgramSite>>,
     analysis_basis: crate::AnalysisBasis,
     analysis: themelios_analysis::Analysis,
-    analyzed: themelios_program::program::Program,
+    analyzed: crate::formula_analysis::Summary,
     objective_declarations: Vec<ProgramSite>,
     warnings: Vec<crate::FormulaWarning>,
     constraints: Option<crate::formula_hybrid::Constraints>,
@@ -253,12 +267,10 @@ fn instantiate(
     profile: &Profile<'_>,
     schedule: Schedule<'_>,
 ) -> Result<Instantiation, FormulaFailure> {
-    use crate::GroundingPhase;
-
     let crate::formula::Preparation {
         program: mut prepared,
         catalog: source_catalog,
-        accounting,
+        mut accounting,
         budget: mut expansion_budget,
         limits,
         location,
@@ -266,38 +278,45 @@ fn instantiate(
     } = preparation;
     let limits = &limits;
     let budget = &mut expansion_budget;
-    let mut counters =
-        Counters::resume(accounting, profile.work()).with_cancellation(budget.cancellation());
-    let (mut catalog, domains) = complete_support(
-        &prepared,
-        source_catalog,
-        options.domains,
-        budget,
-        profile,
-        GroundingWork::new(limits, &mut counters, location),
+    let cancellation = budget.cancellation().cloned();
+    let published = accounting.controlled::<_, FormulaFailure>(
+        cancellation.as_ref(),
+        profile.work(),
+        location,
+        |counters| {
+            let (mut catalog, domains) = complete_support(
+                &prepared,
+                source_catalog,
+                options.domains,
+                budget,
+                profile,
+                GroundingWork::new(limits, counters, location),
+            )?;
+            let pending = {
+                let (completed, mut append) =
+                    profile.phase(GroundingPhase::SupportCompletion, None, || {
+                        catalog.split(limits, counters, location)
+                    })?;
+                let queries = profile.phase(GroundingPhase::SupportCompletion, None, || {
+                    completed.queries(options.joins, limits, counters, location)
+                })?;
+                let mut computation = Computation::new(&mut append, queries.support());
+                emit(
+                    &prepared,
+                    &queries,
+                    domains.as_ref(),
+                    profile,
+                    schedule,
+                    budget,
+                    Context::new(&mut computation, limits, counters, location),
+                )?
+            };
+            drop(domains);
+            // Streaming keeps constraints alone, and a fact is never one.
+            let keep = schedule.keep(prepared.rules_without_facts());
+            pending.publish(catalog, limits, location, keep, counters)
+        },
     )?;
-    let pending = {
-        let (completed, mut append) =
-            profile.phase(GroundingPhase::SupportCompletion, None, || {
-                catalog.split(limits, &mut counters, location)
-            })?;
-        let queries = profile.phase(GroundingPhase::SupportCompletion, None, || {
-            completed.queries(options.joins, limits, &counters, location)
-        })?;
-        let mut computation = Computation::new(&mut append, queries.support());
-        emit(
-            &prepared,
-            &queries,
-            domains.as_ref(),
-            profile,
-            schedule,
-            budget,
-            Context::new(&mut computation, limits, &mut counters, location),
-        )?
-    };
-    drop(domains);
-    // Streaming keeps constraints alone, and a fact is never one.
-    let keep = schedule.keep(prepared.rules_without_facts());
     let PublishedEmission {
         projection,
         emission,
@@ -305,12 +324,12 @@ fn instantiate(
         objective_origins,
         warnings,
         streamed_instances,
-        retained_account,
+        retained_storage,
         streamed,
         catalog: open,
-    } = pending.publish(catalog, limits, location, keep)?;
+    } = published;
     let expansion = budget.usage();
-    let (constraints, retained) = if let Some((accounting, output_storage)) = retained_account {
+    let (constraints, retained) = if let Some(output_storage) = retained_storage {
         (
             None,
             Some(RetainedState {
@@ -318,11 +337,7 @@ fn instantiate(
                 accounting,
                 budget: expansion_budget,
                 output_storage,
-                streamed: matches!(schedule, Schedule::HybridRetained).then(|| {
-                    let mut rules = prepared.take_rules_without_facts();
-                    rules.retain(crate::formula_hybrid::eligible);
-                    (rules, streamed_instances)
-                }),
+                streamed: schedule.take_streamed_rules(&mut prepared, streamed_instances),
             }),
         )
     } else {
@@ -384,7 +399,6 @@ pub(crate) fn complete_support<'source>(
             crate::formula_domains::analyze(
                 prepared,
                 options,
-                budget,
                 profile,
                 Context::new(&mut computation, limits, counters, location),
             )
@@ -415,11 +429,10 @@ struct PendingEmission {
     emission: Emission<formula_support::SourceSelection>,
     warnings: Warnings,
     streamed_instances: u64,
-    counters: Counters,
 }
 
 fn emit<'source>(
-    prepared: &crate::formula_ir::Prepared,
+    prepared: &'source crate::formula_ir::Prepared,
     queries: &formula_support::CompletedQueries<'source>,
     domains: Option<&crate::formula_domains::Domains<'_>>,
     profile: &Profile<'_>,
@@ -427,7 +440,6 @@ fn emit<'source>(
     budget: &mut Budget,
     context: Context<'_, &mut Computation<'_, 'source>>,
 ) -> Result<PendingEmission, FormulaFailure> {
-    use crate::GroundingPhase;
     let Context {
         computation,
         work:
@@ -491,19 +503,18 @@ fn emit<'source>(
     })?;
     let streamed_instances =
         builder.instantiate_items(prepared.items(), domains, support, profile, schedule)?;
-    let (emission, counters) = builder.finish(profile, location)?;
+    let emission = builder.finish(profile, location)?;
     Ok(PendingEmission {
         projection,
         objectives,
         emission,
         warnings,
         streamed_instances,
-        counters,
     })
 }
 
 struct PublishedEmission {
-    retained_account: Option<(formula_support::Accounting, formula_support::StorageLease)>,
+    retained_storage: Option<formula_support::StorageLease>,
     streamed: Option<formula_support::StreamedSupport>,
     /// The open catalog, returned only to a retained schedule.
     catalog: Option<formula_support::CompletedCatalog>,
@@ -525,6 +536,7 @@ impl PendingEmission {
         limits: &FormulaLimits,
         location: ProgramSite,
         keep: Keep<'_>,
+        counters: &mut Counters,
     ) -> Result<PublishedEmission, FormulaFailure> {
         let Self {
             projection,
@@ -532,19 +544,18 @@ impl PendingEmission {
             emission,
             warnings,
             streamed_instances,
-            mut counters,
         } = self;
-        let mut publication = formula_support::Publication::new(&mut catalog, &counters, location)?;
-        let projection = projection.publish(&mut publication, limits, &mut counters, location)?;
+        let mut publication = formula_support::Publication::new(&mut catalog, counters, location)?;
+        let projection = projection.publish(&mut publication, limits, counters, location)?;
         let Emission {
             atoms,
             admission,
             origins,
             count_plan,
         } = emission;
-        let atoms = publication.atoms(atoms, limits, &mut counters, location)?;
+        let atoms = publication.atoms(atoms, limits, counters, location)?;
         let (objectives, objective_origins) =
-            objectives.publish(&atoms, &mut publication, limits, &mut counters, location)?;
+            objectives.publish(&atoms, &mut publication, limits, counters, location)?;
         let emission = Emission {
             atoms,
             admission,
@@ -553,33 +564,32 @@ impl PendingEmission {
         };
         let mut streamed = None;
         let mut open = None;
-        let retained_account = if matches!(keep, Keep::Retain) {
+        let retained_storage = if matches!(keep, Keep::Retain) {
             let external = publication.source_bytes(location)?;
             let mut output_storage = publication.into_lease(location)?;
             RetainedGrounding::admit_envelope(
                 &mut output_storage,
                 external,
-                &counters,
+                counters,
                 limits,
                 location,
             )?;
             open = Some(catalog);
-            Some((counters.into_accounting(), output_storage))
+            Some(output_storage)
         } else {
-            // Preserve the ordinary publication boundary: both coordinator and
-            // history drop here, before later theory validation.
+            // Publication releases its coordinator before the controlled exit;
+            // the same account remains live until that exit is settled.
             drop(publication);
             if let Keep::Stream(rules) = keep {
                 streamed = Some(catalog.into_streamed(
                     rules,
-                    formula_support::GroundingWork::new(limits, &mut counters, location),
+                    formula_support::GroundingWork::new(limits, counters, location),
                 )?);
             }
-            drop(counters);
             None
         };
         Ok(PublishedEmission {
-            retained_account,
+            retained_storage,
             streamed,
             catalog: open,
             projection,
@@ -614,7 +624,7 @@ pub(super) struct Builder<'a, 'terms, 'source> {
     node_indices: nodes::Index,
     roots: Vec<usize>,
     origins: Vec<Vec<ProgramSite>>,
-    pub(super) counters: Counters,
+    pub(super) counters: &'a mut Counters,
     origin_count: usize,
     aggregate_cache: Contexts<CachedAggregate>,
     cached_elements: usize,
@@ -664,12 +674,12 @@ enum AssignmentElements<'a> {
     Numeric(Numeric, &'a [AggregateElement]),
     Extrema(AggregateExtremum, &'a [ExtremumElement]),
 }
-impl Builder<'_, '_, '_> {
+impl<'source> Builder<'_, '_, 'source> {
     fn instantiate_items(
         &mut self,
-        items: &crate::formula_facts::Items,
+        items: &'source crate::formula_facts::Items,
         domains: Option<&crate::formula_domains::Domains<'_>>,
-        support: &Support<'_>,
+        support: &Support<'source>,
         profile: &Profile<'_>,
         schedule: Schedule<'_>,
     ) -> Result<u64, FormulaFailure> {
@@ -685,7 +695,7 @@ impl Builder<'_, '_, '_> {
                         {
                             self.capture_constraint(rule, support, &mut streamed_instances)
                         } else {
-                            self.instantiate_rule(rule, index, domains, support)
+                            self.instantiate_rule(rule, index, domains, support, schedule)
                         }
                     },
                 )?,
@@ -710,7 +720,7 @@ impl Builder<'_, '_, '_> {
             block,
             self.computation,
             self.limits,
-            &mut self.counters,
+            self.counters,
             block.location(),
         )?;
         for row in block.rows() {
@@ -718,7 +728,7 @@ impl Builder<'_, '_, '_> {
             // The row's step, and its head atom's, as for a fact rule's row.
             self.work(location)?;
             self.work(location)?;
-            let atom = head.atom(row, self.computation, self.limits, &mut self.counters)?;
+            let atom = head.atom(row, self.computation, self.limits, self.counters)?;
             let atom = self.atom_identity(&atom, location)?;
             let formula = self.node(Node::Implies(VERUM, atom), location)?;
             self.root_at(formula, Cow::Borrowed(row.evidence()), location)?;
@@ -732,28 +742,27 @@ impl Builder<'_, '_, '_> {
     /// and support guards, including falsity for atoms with no producer.
     fn capture_constraint(
         &mut self,
-        rule: &RuleIr,
-        support: &Support<'_>,
+        rule: &'source RuleIr,
+        support: &Support<'source>,
         instances: &mut u64,
     ) -> Result<(), FormulaFailure> {
         let mut join = Join::rule(
-            rule,
+            Ir::Source(rule),
             support,
             self.computation,
             self.limits,
             self.budget,
-            &mut self.counters,
+            self.counters,
         )?;
         // The same complete-column attempt precedes frozen checker scans.
         // Admit even speculative successful values here: a covering column can
         // include rows excluded by another argument of this source pattern.
-        join.select_total_body(rule, self.computation, self.limits, &mut self.counters)?;
-        while let Some(row) = join.next_row(
-            self.computation,
-            self.limits,
+        join.select_total_body(rule, self.computation, self.limits, self.counters)?;
+        self.retain_matched_rows(&mut join, rule.location)?;
+        let mut matched = None;
+        while let Some(row) = join.next_matched_row(
             self.budget,
-            &mut self.counters,
-            rule.location,
+            Context::new(self.computation, self.limits, self.counters, rule.location),
         )? {
             if !row.passes {
                 // The completed join and source-family admission already
@@ -768,13 +777,20 @@ impl Builder<'_, '_, '_> {
             }
             // Every retained count is bounded by the charged substitution cap.
             *instances += 1;
-            for literal in &rule.body {
+            let view = self.matched_view(&mut matched, row.witnesses.as_ref(), rule)?;
+            for (index, literal) in rule.body.iter().enumerate() {
                 let pattern = match literal {
                     LiteralIr::Atom(_, pattern) => pattern,
                     LiteralIr::PatternAtom(pattern) => &pattern.atom,
                     _ => continue,
                 };
-                self.atom(*pattern, &row.values, rule.location)?;
+                let named = match (&mut matched, view) {
+                    (Some(nodes), Some(view)) => nodes.literal(index, view, self, rule.location)?,
+                    _ => None,
+                };
+                if named.is_none() {
+                    self.atom(*pattern, &row.values, rule.location)?;
+                }
             }
         }
         Ok(())
@@ -782,10 +798,11 @@ impl Builder<'_, '_, '_> {
 
     fn instantiate_rule(
         &mut self,
-        rule: &RuleIr,
+        rule: &'source RuleIr,
         index: usize,
         domains: Option<&crate::formula_domains::Domains<'_>>,
-        support: &Support,
+        support: &Support<'source>,
+        schedule: Schedule<'_>,
     ) -> Result<(), FormulaFailure> {
         if crate::formula_factor::rule(self, rule, support)? {
             return Ok(());
@@ -796,37 +813,40 @@ impl Builder<'_, '_, '_> {
                 domains.for_rule(index, rule)?,
                 self.computation,
                 self.limits,
-                &mut self.counters,
+                self.counters,
             )?
         } else {
             None
         };
         let mut outer = Join::domain_rule(
-            rule,
+            Ir::Source(rule),
             support,
             guards.as_ref(),
             self.computation,
             self.limits,
             self.budget,
-            &mut self.counters,
+            self.counters,
         )?;
-        outer.select_total_body(rule, self.computation, self.limits, &mut self.counters)?;
+        outer.select_total_body(rule, self.computation, self.limits, self.counters)?;
+        if matches!(schedule, Schedule::Eager(_)) {
+            outer.select_numeric_probes(rule, self.limits, self.counters)?;
+        }
         if crate::formula_factor::continuations(self, rule, &mut outer, support)? {
             return Ok(());
         }
         if producer::rule(self, rule, &mut outer)? {
             return Ok(());
         }
-        outer.select_range_multiples(rule, self.computation, self.limits, &mut self.counters)?;
-        while let Some(row) = outer.next_row(
-            self.computation,
-            self.limits,
+        outer.select_range_multiples(rule, self.computation, self.limits, self.counters)?;
+        self.retain_matched_rows(&mut outer, rule.location)?;
+        let mut matched = None;
+        while let Some(row) = outer.next_matched_row(
             self.budget,
-            &mut self.counters,
-            rule.location,
+            Context::new(self.computation, self.limits, self.counters, rule.location),
         )? {
             if row.passes {
-                self.rule(rule, &row.values, support)?;
+                let view = self.matched_view(&mut matched, row.witnesses.as_ref(), rule)?;
+                self.rule(rule, &row.values, support, matched.as_mut().zip(view))?;
             } else {
                 self.validate_body(&rule.body, &row.values, support, rule.location)?;
             }
@@ -834,11 +854,51 @@ impl Builder<'_, '_, '_> {
         Ok(())
     }
 
-    fn empty<'a, 'terms, 'source>(
+    fn retain_matched_rows(
+        &mut self,
+        join: &mut Join<'_, '_>,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        #[cfg(test)]
+        if !matched_nodes::testing::enabled() {
+            return Ok(());
+        }
+        join.retain_witnesses(Context::new(
+            self.computation,
+            self.limits,
+            self.counters,
+            location,
+        ))
+    }
+
+    /// Lazily create the cache only when a passing completion holds a row.
+    /// Its owner stays within this one rule/consumer's append-only node prefix.
+    fn matched_view<'row, 'view>(
+        &mut self,
+        nodes: &mut Option<MatchedNodes>,
+        view: Option<&'view formula_support::witnesses::WitnessRow<'row, 'source>>,
+        rule: &RuleIr,
+    ) -> Result<Option<&'view formula_support::witnesses::WitnessRow<'row, 'source>>, FormulaFailure>
+    {
+        let Some(view) = view.filter(|view| !view.rows.is_empty()) else {
+            return Ok(None);
+        };
+        if nodes.is_none() {
+            *nodes = Some(MatchedNodes::for_body(
+                view,
+                rule.body.len(),
+                self,
+                rule.location,
+            )?);
+        }
+        Ok(Some(view))
+    }
+
+    fn empty<'a, 'terms>(
         computation: &'a mut Computation<'terms, 'source>,
         limits: &'a FormulaLimits,
         budget: &'a mut Budget,
-        counters: &mut Counters,
+        counters: &'a mut Counters,
         purpose: Purpose,
         count_plan: Option<crate::formula_count_plan::Collector>,
         location: ProgramSite,
@@ -860,7 +920,7 @@ impl Builder<'_, '_, '_> {
             node_indices: nodes::Index::default(),
             roots: Vec::new(),
             origins: Vec::new(),
-            counters: std::mem::take(counters),
+            counters,
             origin_count: 0,
             aggregate_cache,
             cached_elements: 0,
@@ -917,9 +977,7 @@ impl Builder<'_, '_, '_> {
         mut self,
         profile: &Profile<'_>,
         location: ProgramSite,
-    ) -> Result<(Emission<formula_support::SourceSelection>, Counters), FormulaFailure> {
-        use crate::GroundingPhase;
-
+    ) -> Result<Emission<formula_support::SourceSelection>, FormulaFailure> {
         profile.phase(GroundingPhase::Coherence, None, || self.coherence())?;
         profile.phase(GroundingPhase::SupportGuards, None, || {
             self.support_guards()
@@ -932,15 +990,12 @@ impl Builder<'_, '_, '_> {
                 .prepare_admission(self.catalog.len(), self.roots, self.limits.theory);
         self.counters
             .charge_work(admission.work(), self.limits, location)?;
-        Ok((
-            Emission {
-                atoms: self.catalog.into_selection(),
-                admission,
-                origins: self.origins,
-                count_plan: self.count_plan,
-            },
-            self.counters,
-        ))
+        Ok(Emission {
+            atoms: self.catalog.into_selection(),
+            admission,
+            origins: self.origins,
+            count_plan: self.count_plan,
+        })
     }
 
     // Only the completed atom catalog establishes which opposite tuples can
@@ -951,7 +1006,7 @@ impl Builder<'_, '_, '_> {
             let atom = self.catalog.get(
                 index,
                 self.computation,
-                &mut self.counters,
+                self.counters,
                 self.limits,
                 location,
             )?;
@@ -963,7 +1018,7 @@ impl Builder<'_, '_, '_> {
                 index,
                 zetesis_core::Sign::Positive,
                 self.computation,
-                &mut self.counters,
+                self.counters,
                 self.limits,
                 location,
             )? {
@@ -1071,13 +1126,13 @@ impl Builder<'_, '_, '_> {
             let keep = value != identity && previous != Some(value);
             if selected.is_none() && (!keep || value != original) {
                 let mut prefix =
-                    Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+                    Buffer::new(self.computation, self.limits, self.counters, location)?;
                 for &prior in &values[..position] {
                     prefix.push(
                         prior,
                         self.computation,
                         self.limits,
-                        &mut self.counters,
+                        self.counters,
                         location,
                     )?;
                 }
@@ -1088,7 +1143,7 @@ impl Builder<'_, '_, '_> {
                     value,
                     self.computation,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     location,
                 )?;
             }
@@ -1161,15 +1216,19 @@ impl Builder<'_, '_, '_> {
         self.work(location)?;
         let pattern =
             self.computation
-                .static_pattern(pattern, self.limits, &mut self.counters, location)?;
-        let atom = self.computation.atom(
-            pattern,
-            assignment,
-            self.limits,
-            &mut self.counters,
-            location,
-        )?;
+                .static_pattern(pattern, self.limits, self.counters, location)?;
+        let atom =
+            self.computation
+                .atom(pattern, assignment, self.limits, self.counters, location)?;
         self.atom_identity(&atom, location)
+    }
+
+    fn matched_atom(
+        &mut self,
+        row: zetesis_core::relation::Row<'_, '_>,
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
+        self.atom_ref(row.atom(), location)
     }
 
     fn atom_ref(
@@ -1180,7 +1239,7 @@ impl Builder<'_, '_, '_> {
         self.work(location)?;
         let atom = self
             .computation
-            .atom_ref(atom, self.limits, &mut self.counters, location)?;
+            .atom_ref(atom, self.limits, self.counters, location)?;
         self.atom_identity(&atom, location)
     }
 
@@ -1190,9 +1249,9 @@ impl Builder<'_, '_, '_> {
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         self.counters.record(Event::AtomLookup);
-        if let Some(index) =
-            self.catalog
-                .position(atom, &mut self.counters, self.limits, location)?
+        if let Some(index) = self
+            .catalog
+            .position(atom, self.counters, self.limits, location)?
         {
             return self.node(Node::Atom(index), location);
         }
@@ -1211,15 +1270,14 @@ impl Builder<'_, '_, '_> {
             atom,
             bound,
             self.computation,
-            &mut self.counters,
+            self.counters,
             self.limits,
             location,
         )?;
         debug_assert!(inserted, "exclusive emission selection");
         self.counters.record(Event::AtomInserted);
         if matches!(self.purpose, Purpose::Theory) {
-            self.metadata
-                .atom(location, &mut self.counters, self.limits)?;
+            self.metadata.atom(location, self.counters, self.limits)?;
         }
         self.node(Node::Atom(index), location)
     }
@@ -1232,7 +1290,7 @@ impl Builder<'_, '_, '_> {
         &mut self,
         literals: &[LiteralIr],
         binding: &Binding,
-        support: &Support<'_>,
+        support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         if self.validate_flat_body(literals, binding, location)? {
@@ -1242,7 +1300,7 @@ impl Builder<'_, '_, '_> {
             computation: self.computation,
             limits: self.limits,
             budget: self.budget,
-            counters: &mut self.counters,
+            counters: self.counters,
             location,
         };
         scoped_body::validate_with_purpose(
@@ -1259,12 +1317,49 @@ impl Builder<'_, '_, '_> {
         literals: impl IntoIterator<Item = &'literal LiteralIr>,
         assignment: &Binding,
         location: ProgramSite,
-        support: &Support,
+        support: &Support<'source>,
+    ) -> Result<usize, FormulaFailure> {
+        self.body_ir(
+            literals.into_iter().map(Ir::Temporary),
+            assignment,
+            location,
+            support,
+        )
+    }
+
+    pub(super) fn body_ir<'literal>(
+        &mut self,
+        literals: impl IntoIterator<Item = Ir<'literal, 'source, LiteralIr>>,
+        assignment: &Binding,
+        location: ProgramSite,
+        support: &Support<'source>,
+    ) -> Result<usize, FormulaFailure> {
+        self.body_matched(literals, assignment, location, support, None)
+    }
+
+    fn body_matched<'literal>(
+        &mut self,
+        literals: impl IntoIterator<Item = Ir<'literal, 'source, LiteralIr>>,
+        assignment: &Binding,
+        location: ProgramSite,
+        support: &Support<'source>,
+        mut matched: Option<(
+            &mut MatchedNodes,
+            &formula_support::witnesses::WitnessRow<'_, 'source>,
+        )>,
     ) -> Result<usize, FormulaFailure> {
         let mut result = VERUM;
-        for literal in literals {
+        for (index, source_literal) in literals.into_iter().enumerate() {
+            let literal = source_literal.get();
+            let named = match &mut matched {
+                Some((nodes, row)) => nodes.literal(index, row, self, location)?,
+                None => None,
+            };
             if let LiteralIr::Atom(negation, pattern) = literal {
-                let mut atom = self.atom(*pattern, assignment, location)?;
+                let mut atom = match named {
+                    Some(node) => node,
+                    None => self.atom(*pattern, assignment, location)?,
+                };
                 if *negation != DefaultNegation::None {
                     atom = self.neg(atom, location)?;
                 }
@@ -1273,16 +1368,49 @@ impl Builder<'_, '_, '_> {
                 }
                 result = self.and(result, atom, location)?;
             } else if let LiteralIr::PatternAtom(pattern) = literal {
-                let atom = self.atom(pattern.atom, assignment, location)?;
+                let atom = match named {
+                    Some(node) => node,
+                    None => self.atom(pattern.atom, assignment, location)?,
+                };
                 result = self.and(result, atom, location)?;
-            } else if let LiteralIr::Aggregate(aggregate) = literal {
-                let aggregate = self.aggregate(aggregate, assignment, support, location)?;
+            } else if let LiteralIr::Aggregate(_) = literal {
+                let aggregate = self.aggregate(
+                    source_literal.map(|literal| {
+                        let LiteralIr::Aggregate(value) = literal else {
+                            unreachable!("selected aggregate")
+                        };
+                        value
+                    }),
+                    assignment,
+                    support,
+                    location,
+                )?;
                 result = self.and(result, aggregate, location)?;
-            } else if let LiteralIr::Conditional(conditional) = literal {
-                let conditional = self.conditional(conditional, assignment, support, location)?;
+            } else if let LiteralIr::Conditional(_) = literal {
+                let conditional = self.conditional(
+                    source_literal.map(|literal| {
+                        let LiteralIr::Conditional(value) = literal else {
+                            unreachable!("selected conditional")
+                        };
+                        value
+                    }),
+                    assignment,
+                    support,
+                    location,
+                )?;
                 result = self.and(result, conditional, location)?;
-            } else if let LiteralIr::ProjectedAtom(negation, projection) = literal {
-                let mut projected = self.project(projection, assignment, support, location)?;
+            } else if let LiteralIr::ProjectedAtom(negation, _) = literal {
+                let mut projected = self.project(
+                    source_literal.map(|literal| {
+                        let LiteralIr::ProjectedAtom(_, value) = literal else {
+                            unreachable!("selected projection")
+                        };
+                        value
+                    }),
+                    assignment,
+                    support,
+                    location,
+                )?;
                 projected = self.neg(projected, location)?;
                 if *negation == DefaultNegation::NotNot {
                     projected = self.neg(projected, location)?;
@@ -1294,46 +1422,46 @@ impl Builder<'_, '_, '_> {
     }
     pub(super) fn project(
         &mut self,
-        projection: &Projection,
+        projection: Ir<'_, 'source, Projection>,
         assignment: &Binding,
-        support: &Support,
+        support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
-        match projection {
+        match projection.get() {
             Projection::Arguments { predicate, terms } => {
                 let predicate = self.computation.static_predicate(
                     *predicate,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     location,
                 )?;
                 self.project_arguments(predicate, terms, assignment, support, location)
             }
             Projection::Witnesses {
                 atom,
-                bindings,
+                bindings: _,
                 variables,
                 inputs,
             } => {
-                let mut rows = Join::new(
-                    bindings,
+                let mut rows = Join::local(
+                    projection.map(|projection| {
+                        let Projection::Witnesses { bindings, .. } = projection else {
+                            unreachable!("witness projection")
+                        };
+                        bindings.as_slice()
+                    }),
                     &assignment.prefix(*inputs),
                     *variables,
                     support,
                     self.budget,
-                    Context::new(
-                        &*self.computation,
-                        self.limits,
-                        &mut self.counters,
-                        location,
-                    ),
+                    Context::new(&*self.computation, self.limits, self.counters, location),
                 )?;
                 let mut result = FALSUM;
                 while let Some(row) = rows.next(
                     self.computation,
                     self.limits,
                     self.budget,
-                    &mut self.counters,
+                    self.counters,
                     location,
                 )? {
                     self.work(location)?;
@@ -1350,7 +1478,7 @@ impl Builder<'_, '_, '_> {
         predicate: zetesis_core::catalog::PredicateRef<'_>,
         terms: &[Option<components::Term>],
         assignment: &Binding,
-        support: &Support,
+        support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         let mut result = FALSUM;
@@ -1364,7 +1492,7 @@ impl Builder<'_, '_, '_> {
                     let term = self.computation.static_term(
                         *term,
                         self.limits,
-                        &mut self.counters,
+                        self.counters,
                         location,
                     )?;
                     let expected = assignment.resolve(term, self.computation.read(), location)?;
@@ -1401,16 +1529,21 @@ impl Builder<'_, '_, '_> {
 
     fn rule(
         &mut self,
-        rule: &RuleIr,
+        rule: &'source RuleIr,
         assignment: &Binding,
-        support: &Support,
+        support: &Support<'source>,
+        matched: Option<(
+            &mut MatchedNodes,
+            &formula_support::witnesses::WitnessRow<'_, 'source>,
+        )>,
     ) -> Result<(), FormulaFailure> {
         self.work(rule.location)?;
-        let body = self.body(
-            &rule.body,
+        let body = self.body_matched(
+            Ir::Source(rule.body.as_slice()).iter(),
             &rule.body_binding(assignment),
             rule.location,
             support,
+            matched,
         )?;
         if body == FALSUM {
             return Ok(());
@@ -1428,7 +1561,7 @@ impl Builder<'_, '_, '_> {
                 }
                 for element in elements {
                     let mut local = Join::local_head(
-                        &element.condition,
+                        Ir::Source(element.condition.as_slice()),
                         &assignment.prefix(element.outer_variables),
                         element.body_variables..element.variables,
                         support,
@@ -1436,7 +1569,7 @@ impl Builder<'_, '_, '_> {
                         Context::new(
                             &*self.computation,
                             self.limits,
-                            &mut self.counters,
+                            self.counters,
                             rule.location,
                         ),
                     )?;
@@ -1444,7 +1577,7 @@ impl Builder<'_, '_, '_> {
                         self.computation,
                         self.limits,
                         self.budget,
-                        &mut self.counters,
+                        self.counters,
                         rule.location,
                     )? {
                         count += 1;
@@ -1454,8 +1587,8 @@ impl Builder<'_, '_, '_> {
                             self.limits.max_disjunction_elements as u128,
                             rule.location,
                         )?;
-                        let condition = self.body(
-                            &element.condition,
+                        let condition = self.body_ir(
+                            Ir::Source(element.condition.as_slice()).iter(),
                             &binding.prefix(element.body_variables),
                             rule.location,
                             support,
@@ -1479,18 +1612,10 @@ impl Builder<'_, '_, '_> {
         assignment: &Binding,
         rule: &RuleIr,
     ) -> Result<(), FormulaFailure> {
-        let mut literals = Buffer::new(
-            self.computation,
-            self.limits,
-            &mut self.counters,
-            rule.location,
-        )?;
-        let mut distinct = CoordinateMap::new(
-            self.computation,
-            self.limits,
-            &mut self.counters,
-            rule.location,
-        )?;
+        let mut literals =
+            Buffer::new(self.computation, self.limits, self.counters, rule.location)?;
+        let mut distinct =
+            CoordinateMap::new(self.computation, self.limits, self.counters, rule.location)?;
         for head in heads {
             let (literal, atom) = self.head_literal(head, assignment, rule.location)?;
             if distinct
@@ -1504,7 +1629,7 @@ impl Builder<'_, '_, '_> {
                     Context::new(
                         &*self.computation,
                         self.limits,
-                        &mut self.counters,
+                        self.counters,
                         rule.location,
                     ),
                 )?
@@ -1514,7 +1639,7 @@ impl Builder<'_, '_, '_> {
                     literal,
                     self.computation,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     rule.location,
                 )?;
                 // Necessary support is the original body for each head,
@@ -1576,7 +1701,7 @@ impl Builder<'_, '_, '_> {
             unreachable!("head is an atom");
         };
         self.metadata
-            .producer(atom, antecedent, &mut self.counters, self.limits, location)?;
+            .producer(atom, antecedent, self.counters, self.limits, location)?;
         self.record_origins(atom, origins)
     }
     fn head_origins(&mut self, head: usize, rule: &RuleIr) -> Result<(), FormulaFailure> {
@@ -1592,30 +1717,30 @@ impl Builder<'_, '_, '_> {
     ) -> Result<(), FormulaFailure> {
         for &location in origins {
             self.metadata
-                .origin(atom, location, self.budget, &mut self.counters, self.limits)?;
+                .origin(atom, location, self.budget, self.counters, self.limits)?;
         }
         Ok(())
     }
     fn choice(
         &mut self,
-        rule: &RuleIr,
-        group: &ChoiceIr,
+        rule: &'source RuleIr,
+        group: &'source ChoiceIr,
         body: usize,
         assignment: &Binding,
-        support: &Support,
+        support: &Support<'source>,
     ) -> Result<(), FormulaFailure> {
         let ChoiceIr {
             measure, guards, ..
         } = group;
         let keys = crate::formula_head_aggregate::validate_group(
-            group,
+            Ir::Source(group),
             assignment,
             support,
             self.budget,
             Context::new(
                 &mut *self.computation,
                 self.limits,
-                &mut self.counters,
+                self.counters,
                 rule.location,
             ),
         )?;
@@ -1646,7 +1771,7 @@ impl Builder<'_, '_, '_> {
                 activity.len(),
                 self.computation,
                 self.limits,
-                &mut self.counters,
+                self.counters,
                 rule.location,
             )?;
             for entry in activity.iter() {
@@ -1664,7 +1789,7 @@ impl Builder<'_, '_, '_> {
                         Context::new(
                             &*self.computation,
                             self.limits,
-                            &mut self.counters,
+                            self.counters,
                             rule.location,
                         ),
                     )?;
@@ -1744,36 +1869,36 @@ impl Builder<'_, '_, '_> {
 
     fn head_group(
         &mut self,
-        group: &ChoiceIr,
+        group: &'source ChoiceIr,
         assignment: &Binding,
-        support: &Support,
-        rule: &RuleIr,
+        support: &Support<'source>,
+        rule: &'source RuleIr,
     ) -> Result<HeadGroup, FormulaFailure> {
         let mut result = HeadGroup {
             eligible: CoordinateMap::new(
                 self.computation,
                 self.limits,
-                &mut self.counters,
+                self.counters,
                 rule.location,
             )?,
             activity: CoordinateMap::new(
                 self.computation,
                 self.limits,
-                &mut self.counters,
+                self.counters,
                 rule.location,
             )?,
         };
         let elements = &group.elements;
         for element in elements {
             let mut local = Join::element(
-                element,
+                Ir::Source(element),
                 assignment,
                 support,
                 self.budget,
                 Context::new(
                     &*self.computation,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     rule.location,
                 ),
             )?;
@@ -1781,11 +1906,11 @@ impl Builder<'_, '_, '_> {
                 self.computation,
                 self.limits,
                 self.budget,
-                &mut self.counters,
+                self.counters,
                 rule.location,
             )? {
-                let condition = self.body(
-                    &element.condition,
+                let condition = self.body_ir(
+                    Ir::Source(element.condition.as_slice()).iter(),
                     &element.body_binding(&binding),
                     rule.location,
                     support,
@@ -1849,7 +1974,7 @@ impl Builder<'_, '_, '_> {
                         &atom,
                         self.computation,
                         self.limits,
-                        &mut self.counters,
+                        self.counters,
                         rule.location,
                     )?
                     .unwrap_or(FALSUM);
@@ -1861,7 +1986,7 @@ impl Builder<'_, '_, '_> {
                     Context::new(
                         &*self.computation,
                         self.limits,
-                        &mut self.counters,
+                        self.counters,
                         rule.location,
                     ),
                 )?;
@@ -1881,13 +2006,7 @@ impl Builder<'_, '_, '_> {
     ) -> Result<(), FormulaFailure> {
         let previous = group
             .activity
-            .find(
-                &key,
-                self.computation,
-                self.limits,
-                &mut self.counters,
-                location,
-            )?
+            .find(&key, self.computation, self.limits, self.counters, location)?
             .unwrap_or(FALSUM);
         let activity = self.or(previous, selected, location)?;
         group.activity.insert(
@@ -1897,12 +2016,7 @@ impl Builder<'_, '_, '_> {
                 FormulaResource::AggregateElements,
                 self.limits.aggregate.max_elements,
             )),
-            Context::new(
-                &*self.computation,
-                self.limits,
-                &mut self.counters,
-                location,
-            ),
+            Context::new(&*self.computation, self.limits, self.counters, location),
         )?;
         Ok(())
     }
@@ -1918,7 +2032,7 @@ impl Builder<'_, '_, '_> {
             assignment,
             self.computation,
             self.limits,
-            &mut self.counters,
+            self.counters,
             location,
         )?;
         self.term(&tuple, location)
@@ -1930,7 +2044,7 @@ impl Builder<'_, '_, '_> {
             None,
             self.computation,
             self.limits,
-            &mut self.counters,
+            self.counters,
             location,
         )
     }
@@ -2086,12 +2200,12 @@ enum Measure {
     Extremum(usize),
 }
 
-impl Builder<'_, '_, '_> {
+impl<'source> Builder<'_, '_, 'source> {
     fn aggregate(
         &mut self,
-        aggregate: &AggregateIr,
+        aggregate: Ir<'_, 'source, AggregateIr>,
         assignment: &Binding,
-        support: &Support,
+        support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         if let Some(target) = aggregate.binding {
@@ -2115,10 +2229,10 @@ impl Builder<'_, '_, '_> {
     }
     fn cached_aggregate(
         &mut self,
-        aggregate: &AggregateIr,
+        aggregate: Ir<'_, 'source, AggregateIr>,
         key: &Buffer<Option<usize>>,
         assignment: &Binding,
-        support: &Support,
+        support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         if let Some(slot) = self.aggregate_cache.find(
@@ -2126,7 +2240,7 @@ impl Builder<'_, '_, '_> {
             key,
             self.computation,
             self.limits,
-            &mut self.counters,
+            self.counters,
             location,
         )? {
             return Ok(slot);
@@ -2157,12 +2271,7 @@ impl Builder<'_, '_, '_> {
                 required,
                 roots: None,
             },
-            Context::new(
-                &*self.computation,
-                self.limits,
-                &mut self.counters,
-                location,
-            ),
+            Context::new(&*self.computation, self.limits, self.counters, location),
         )?;
         if slot == next {
             self.cached_elements += count;
@@ -2171,10 +2280,10 @@ impl Builder<'_, '_, '_> {
     }
     fn assignment_aggregate(
         &mut self,
-        aggregate: &AggregateIr,
+        aggregate: Ir<'_, 'source, AggregateIr>,
         target: usize,
         assignment: &Binding,
-        support: &Support,
+        support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<usize, FormulaFailure> {
         let key = self.cache_key(&aggregate.family_inputs, assignment, location)?;
@@ -2210,18 +2319,12 @@ impl Builder<'_, '_, '_> {
                 &target_value,
                 self.computation,
                 self.limits,
-                &mut self.counters,
+                self.counters,
                 location,
             )?
             .expect("the complete final-U tuple set covers every assignment proposal");
         Ok(roots
-            .find(
-                &key,
-                self.computation,
-                self.limits,
-                &mut self.counters,
-                location,
-            )?
+            .find(&key, self.computation, self.limits, self.counters, location)?
             .expect("the complete family has a root for every assignment proposal"))
     }
     fn assignment_family(
@@ -2247,13 +2350,12 @@ impl Builder<'_, '_, '_> {
             self.limits.max_aggregate_cache_roots as u128,
             location,
         )?;
-        let mut roots =
-            CoordinateMap::new(self.computation, self.limits, &mut self.counters, location)?;
+        let mut roots = CoordinateMap::new(self.computation, self.limits, self.counters, location)?;
         roots.reserve(
             values.len(),
             self.computation,
             self.limits,
-            &mut self.counters,
+            self.counters,
             location,
         )?;
         match elements {
@@ -2278,12 +2380,7 @@ impl Builder<'_, '_, '_> {
                         value,
                         remap(*root, first, canonical.slice()),
                         None,
-                        Context::new(
-                            &*self.computation,
-                            self.limits,
-                            &mut self.counters,
-                            location,
-                        ),
+                        Context::new(&*self.computation, self.limits, self.counters, location),
                     )?;
                 }
             }
@@ -2297,12 +2394,12 @@ impl Builder<'_, '_, '_> {
         values: &Binding,
         location: ProgramSite,
     ) -> Result<Buffer<NumericGuard>, FormulaFailure> {
-        let mut guards = Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+        let mut guards = Buffer::new(self.computation, self.limits, self.counters, location)?;
         guards.reserve(
             values.len(),
             self.computation,
             self.limits,
-            &mut self.counters,
+            self.counters,
             location,
         )?;
         for slot in 0..values.len() {
@@ -2320,7 +2417,7 @@ impl Builder<'_, '_, '_> {
                 },
                 self.computation,
                 self.limits,
-                &mut self.counters,
+                self.counters,
                 location,
             )?;
         }
@@ -2355,24 +2452,14 @@ impl Builder<'_, '_, '_> {
                     },
                     self.computation,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     location,
                 )
             }
             AssignmentElements::Extrema(function, elements) => {
                 let mut firsts = Sides {
-                    required: Binding::new(
-                        self.computation,
-                        self.limits,
-                        &mut self.counters,
-                        location,
-                    )?,
-                    optional: Binding::new(
-                        self.computation,
-                        self.limits,
-                        &mut self.counters,
-                        location,
-                    )?,
+                    required: Binding::new(self.computation, self.limits, self.counters, location)?,
+                    optional: Binding::new(self.computation, self.limits, self.counters, location)?,
                 };
                 for (element, &required) in elements.iter().zip(flags.iter()) {
                     self.work(location)?;
@@ -2382,7 +2469,7 @@ impl Builder<'_, '_, '_> {
                         &key,
                         self.computation,
                         self.limits,
-                        &mut self.counters,
+                        self.counters,
                         location,
                     )?;
                 }
@@ -2394,7 +2481,7 @@ impl Builder<'_, '_, '_> {
                     contributions.streams(),
                     self.computation,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     location,
                 )
             }
@@ -2407,13 +2494,13 @@ impl Builder<'_, '_, '_> {
         location: ProgramSite,
     ) -> Result<Buffer<Option<usize>>, FormulaFailure> {
         let count = inputs.len();
-        let mut outer = Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+        let mut outer = Buffer::new(self.computation, self.limits, self.counters, location)?;
         outer.resize(
             count,
             None,
             self.computation,
             self.limits,
-            &mut self.counters,
+            self.counters,
             location,
         )?;
         // Equal projected coordinates give the same complete tuple set and
@@ -2434,9 +2521,9 @@ impl Builder<'_, '_, '_> {
     }
     fn aggregate_elements(
         &mut self,
-        aggregate: &AggregateIr,
+        aggregate: Ir<'_, 'source, AggregateIr>,
         assignment: &Binding,
-        support: &Support,
+        support: &Support<'source>,
         location: ProgramSite,
     ) -> Result<Coalesced, FormulaFailure> {
         let kind = Kind::of(aggregate.function);
@@ -2444,7 +2531,7 @@ impl Builder<'_, '_, '_> {
         let mut grouped = CoordinateMap::<GroundKey, (Measure, usize)>::new(
             self.computation,
             self.limits,
-            &mut self.counters,
+            self.counters,
             location,
         )?;
         // On the assignment path only: the keys with an occurrence from an
@@ -2457,45 +2544,42 @@ impl Builder<'_, '_, '_> {
                 CoordinateMap::<GroundKey, ()>::new(
                     self.computation,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     location,
                 )
             })
             .transpose()?;
-        for element in &aggregate.elements {
-            let mut local = Join::new(
-                &element.condition,
+        for element in aggregate
+            .map(|aggregate| aggregate.elements.as_slice())
+            .iter()
+        {
+            let mut local = Join::local(
+                element.map(|element| element.condition.as_slice()),
                 assignment,
                 element.variables,
                 support,
                 self.budget,
-                Context::new(
-                    &*self.computation,
-                    self.limits,
-                    &mut self.counters,
-                    location,
-                ),
+                Context::new(&*self.computation, self.limits, self.counters, location),
             )?;
             while let Some(binding) = local.next(
                 self.computation,
                 self.limits,
                 self.budget,
-                &mut self.counters,
+                self.counters,
                 location,
             )? {
                 let key = self.aggregate_key(&element.key, &binding, location)?;
                 let Some(weight) = self.measure(kind, key, location)? else {
                     continue;
                 };
-                let condition = self.body(&element.condition, &binding, location, support)?;
+                let condition = self.body_ir(
+                    element.map(|element| element.condition.as_slice()).iter(),
+                    &binding,
+                    location,
+                    support,
+                )?;
                 let previous = grouped
-                    .find(
-                        &key,
-                        self.computation,
-                        self.limits,
-                        &mut self.counters,
-                        location,
-                    )?
+                    .find(&key, self.computation, self.limits, self.counters, location)?
                     .map_or(FALSUM, |(_, condition)| condition);
                 let condition = self.or(previous, condition, location)?;
                 grouped.insert(
@@ -2505,12 +2589,7 @@ impl Builder<'_, '_, '_> {
                         FormulaResource::AggregateElements,
                         self.limits.aggregate.max_elements,
                     )),
-                    Context::new(
-                        &*self.computation,
-                        self.limits,
-                        &mut self.counters,
-                        location,
-                    ),
+                    Context::new(&*self.computation, self.limits, self.counters, location),
                 )?;
                 if let Some(required) = required.as_mut().filter(|_| element.required) {
                     required.insert(
@@ -2520,12 +2599,7 @@ impl Builder<'_, '_, '_> {
                             FormulaResource::AggregateElements,
                             self.limits.aggregate.max_elements,
                         )),
-                        Context::new(
-                            &*self.computation,
-                            self.limits,
-                            &mut self.counters,
-                            location,
-                        ),
+                        Context::new(&*self.computation, self.limits, self.counters, location),
                     )?;
                 }
             }
@@ -2585,22 +2659,17 @@ impl Builder<'_, '_, '_> {
             grouped,
             &self.terms,
             &self.aggregate_atoms,
-            Context::new(
-                &*self.computation,
-                self.limits,
-                &mut self.counters,
-                location,
-            ),
+            Context::new(&*self.computation, self.limits, self.counters, location),
         )?;
         let required = required
             .map(|required| -> Result<_, FormulaFailure> {
                 let mut flags =
-                    Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+                    Buffer::new(self.computation, self.limits, self.counters, location)?;
                 flags.reserve(
                     grouped.len(),
                     self.computation,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     location,
                 )?;
                 for entry in grouped.iter() {
@@ -2609,14 +2678,14 @@ impl Builder<'_, '_, '_> {
                         &entry.0,
                         self.computation,
                         self.limits,
-                        &mut self.counters,
+                        self.counters,
                         location,
                     )?;
                     flags.push(
                         found.is_some(),
                         self.computation,
                         self.limits,
-                        &mut self.counters,
+                        self.counters,
                         location,
                     )?;
                 }
@@ -2624,13 +2693,12 @@ impl Builder<'_, '_, '_> {
             })
             .transpose()?;
         if is_extremum {
-            let mut elements =
-                Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+            let mut elements = Buffer::new(self.computation, self.limits, self.counters, location)?;
             elements.reserve(
                 grouped.len(),
                 self.computation,
                 self.limits,
-                &mut self.counters,
+                self.counters,
                 location,
             )?;
             for entry in grouped.iter() {
@@ -2643,20 +2711,19 @@ impl Builder<'_, '_, '_> {
                     ExtremumElement { value, condition },
                     self.computation,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     location,
                 )?;
             }
             self.work(location)?;
             return Ok((GroundAggregate::Extrema(Arc::new(elements)), required));
         }
-        let mut elements =
-            Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+        let mut elements = Buffer::new(self.computation, self.limits, self.counters, location)?;
         elements.reserve(
             grouped.len(),
             self.computation,
             self.limits,
-            &mut self.counters,
+            self.counters,
             location,
         )?;
         for entry in grouped.iter() {
@@ -2669,7 +2736,7 @@ impl Builder<'_, '_, '_> {
                 AggregateElement { weight, condition },
                 self.computation,
                 self.limits,
-                &mut self.counters,
+                self.counters,
                 location,
             )?;
         }
@@ -2690,14 +2757,14 @@ impl Builder<'_, '_, '_> {
                 let pattern = self.computation.static_pattern(
                     *pattern,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     location,
                 )?;
                 let atom = self.computation.atom(
                     pattern,
                     assignment,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     location,
                 )?;
                 let (position, _) = self.aggregate_atoms.insert(
@@ -2705,7 +2772,7 @@ impl Builder<'_, '_, '_> {
                     (FormulaResource::Atoms, self.limits.theory.max_atoms),
                     self.computation,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     location,
                 )?;
                 Ok(GroundKey::Atom(position))
@@ -2761,7 +2828,7 @@ impl Builder<'_, '_, '_> {
                 assignment,
                 self.computation,
                 self.limits,
-                &mut self.counters,
+                self.counters,
                 location,
             )?;
             if let Some(kind) = kind {
@@ -2790,7 +2857,7 @@ impl Builder<'_, '_, '_> {
                     )
                 })?,
                 self.limits,
-                &mut self.counters,
+                self.counters,
                 location,
             )? {
                 NumericComparison::Threshold(bound) => bound,
@@ -2895,12 +2962,12 @@ impl Builder<'_, '_, '_> {
             limits,
             &cancellation,
         );
-        let build = Self::record_aggregate(&mut self.counters, compiled, location)?;
+        let build = Self::record_aggregate(self.counters, compiled, location)?;
         let appended = appended::detach(
             transaction,
             self.computation,
             self.limits,
-            &mut self.counters,
+            self.counters,
             location,
         )?;
         let canonical = self.intern_appended(&appended.suffix, location)?;
@@ -2945,12 +3012,12 @@ impl Builder<'_, '_, '_> {
             limits,
             &cancellation,
         );
-        let build = Self::record_aggregate(&mut self.counters, result, location)?;
+        let build = Self::record_aggregate(self.counters, result, location)?;
         let appended = appended::detach(
             transaction,
             self.computation,
             self.limits,
-            &mut self.counters,
+            self.counters,
             location,
         )?;
         let canonical = self.intern_appended(&appended.suffix, location)?;

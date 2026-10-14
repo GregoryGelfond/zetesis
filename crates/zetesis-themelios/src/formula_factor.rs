@@ -19,10 +19,10 @@ use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
 use crate::formula_support::{Context, Join, Support};
 
 /// Return false only when the original complete-join path should be used.
-pub(super) fn rule(
-    builder: &mut Builder<'_, '_, '_>,
+pub(super) fn rule<'source>(
+    builder: &mut Builder<'_, '_, 'source>,
     rule: &RuleIr,
-    support: &Support,
+    support: &Support<'source>,
 ) -> Result<bool, FormulaFailure> {
     let HeadIr::Normal(head) = &rule.head else {
         return Ok(false);
@@ -32,7 +32,7 @@ pub(super) fn rule(
             builder.computation.static_pattern(
                 head,
                 builder.limits,
-                &mut builder.counters,
+                builder.counters,
                 rule.location,
             )
         })
@@ -105,7 +105,7 @@ fn head_binding(
                         variable,
                         &key,
                         builder.limits,
-                        &mut builder.counters,
+                        builder.counters,
                         rule.location,
                     )?;
                 }
@@ -122,23 +122,23 @@ fn fixed_frame(
     let mut fixed = Binding::new(
         builder.computation,
         builder.limits,
-        &mut builder.counters,
+        builder.counters,
         rule.location,
     )?;
     fixed.extend_scope(
         rule.variables,
         builder.computation,
         builder.limits,
-        &mut builder.counters,
+        builder.counters,
         rule.location,
     )?;
     Ok(fixed)
 }
 
-fn emit(
-    builder: &mut Builder<'_, '_, '_>,
+fn emit<'source>(
+    builder: &mut Builder<'_, '_, 'source>,
     rule: &RuleIr,
-    support: &Support,
+    support: &Support<'source>,
     components: &plan::Plan,
     fixed: &Binding,
 ) -> Result<(), FormulaFailure> {
@@ -155,7 +155,7 @@ fn emit(
             Context::new(
                 &*builder.computation,
                 builder.limits,
-                &mut builder.counters,
+                builder.counters,
                 rule.location,
             ),
         )?;
@@ -163,7 +163,7 @@ fn emit(
             builder.computation,
             builder.limits,
             builder.budget,
-            &mut builder.counters,
+            builder.counters,
             rule.location,
         )? {
             let conjunction =

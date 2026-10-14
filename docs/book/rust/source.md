@@ -182,18 +182,28 @@ run protocol.
 For an owned relational input with display metadata, use
 `prepare_program_relational(Arc<Program>, ProgramRelationalOptions)` and lend
 its result through `PreparedInput::relational`. The same admitted program can
-run with `Grounder::Lazy` or `Grounder::Eager`. Preparation expands finite facts
-and compiles templates; lazy execution still performs variable joins during
+run with `Grounder::Lazy` or `Grounder::Eager`. Preparation admits finite facts
+into the native fact store and compiles the remaining templates; lazy execution still performs variable joins during
 candidate checking. This reuses the extended relational compiler, including
 scalar constants, finite fact expansion and signed coherence.
 
-The owner retains the original program, template statement identities and
-compiled `#show` queries together. `FormulaPurpose::AnswerSets` has the same
+The owner retains the original program, template and fact statement identities,
+and compiled `#show` queries together. `template_sites()` follows the native
+`templates()` sequence; `fact_sites()` follows `facts()`, including duplicate
+occurrences and every row of an expanded family. `FormulaPurpose::AnswerSets` has the same
 meaning here as in formula preparation: objectives and `#project` are excluded
 before evaluation, while structural input limits still apply. Preparation shares
 one expansion allowance and optional cancellation token across normalization and
 observation preparation. Pass that token to the session to preserve the same
 deadline through solving.
+
+`prepare_program_automatic(program, ProgramFormulaOptions)` makes the extended-to-formula
+choice in the library when that choice is wanted. Its `AutomaticAdmission` result
+retains the accepted owner and original `Arc`; its failure names the selected
+profile. Both attempts use the supplied admission, expansion, declaration-purpose
+and cancellation settings, and both derive observation and metadata-storage
+limits from `options.formula`. Formula domain analysis remains opt-in. The engine
+uses this entry only for its existing lazy-grounder relational-first policy.
 
 This relational profile remains narrower than the formula profile. General
 disjunction, bounded choices and aggregates are explicit refusals; preparation
@@ -271,7 +281,9 @@ formula profile.
 
 `ProgramAdmissionOptions` bounds cumulative logical nodes and UTF-8 name/string
 bytes, nesting depth including symbol interiors, and canonical body elements
-per rule. Its `core_limits` separately governs native template admission.
+per rule. Its `core_limits` separately governs native admission; `max_templates`
+counts templates and fact occurrences together, and `max_domain_values` bounds
+their combined domain.
 The borrowed traversal checks each rule before compilation, uses an iterative
 cursor over term and symbol interiors, and returns a typed `ProgramLimit` on
 refusal. S0 admission borrows statement evidence and does not traverse or count
@@ -283,11 +295,37 @@ set collection. Those checks cannot be recovered from a logical program.
 
 The returned `AdmittedProgram::program()` supplies the native program for
 `PreparedInput::program`. `template_statements()` borrows the original statement
-carriers in native template order; generated coherence constraints retain both
-introducing statements. `ProgramAdmissionFailure` similarly borrows the actual
+carriers in native template order; `fact_statements()` borrows them in native
+fact-occurrence order. Generated coherence constraints retain both introducing
+statements, whether their signed signatures came from facts or templates.
+`ProgramAdmissionFailure` similarly borrows the actual
 statement or part associated with a refusal and invents no source coordinate.
 `into_program()` releases this evidence borrow and returns the independently
 owned native program. Admission itself performs no grounding or answer search.
+
+All four relational doors (`admit`, `admit_extended`, `admit_program` and
+`prepare_program_relational`) use the same fact classification: an empty-body
+rule with a positive atom head and closed arguments becomes a fact occurrence.
+Strong negation remains part of the predicate's identity. Choices and other
+rules remain templates. `Program::rules()` traverses both streams in their
+original normalized order; `Program::is_empty()` checks both. Use `templates()`
+only when the operation concerns templates, such as indexing variable joins.
+
+Evidence accessors stay parallel to their own streams:
+
+| Owner | Template evidence | Fact-occurrence evidence |
+| --- | --- | --- |
+| `Admitted`, `AdmittedBundle` | `template_origins()` | `fact_origins()` |
+| `PreparedRelational` | `template_sites()` | `fact_sites()` |
+| `AdmittedProgram` | `template_statements()` | `fact_statements()` |
+
+A fact-specific native refusal exposes `AdmissionError::fact_index()`; each door
+maps it through its fact evidence. `template_index()` applies only to templates.
+The strict typed door's rule-count pre-check runs before classifying the next
+statement: it reports no native index and retains the original statement subject.
+Direct native callers pass `Program::new(templates, facts, limits)`, using
+`FactTables::default()` when they have no explicit facts. Native admission does
+not reclassify caller-supplied templates.
 
 These examples construct `p :- not q.` and `q :- not p.` and print their two
 canonical answer sets, `{p}` and `{q}`. The macro keeps the rules in ASP form:
@@ -614,13 +652,48 @@ undefined arithmetic, syntax and resource refusals are not permissions to retry.
 recovers both it and the parsed owner. The String-taking convenience functions
 preserve their existing result and error types.
 
-The automatic CLI route uses this same ownership transfer. It neither clones
-the entire stdin buffer nor reparses it on profile retry. The owner retains
-O(source bytes + syntax nodes) storage; a failed attempt boxes that owner once.
-Each attempt still checks its profile and performs any required raising and
-normalization. Source options remain fixed; supplied expansion and formula
-limits apply to the requested attempt. Formula grounding consumes the resulting
-preparation's remaining budget as before.
+For the same choice through one library operation, use
+`ParsedSource::admit_automatic_with_cancellation`. Its `AutomaticAdmission`
+result names the accepted profile; `AutomaticAdmissionFailure` preserves the
+selected refusal and exposes `interruption()` for cancellation and deadlines.
+The library switches profiles only for `needs_formula_admission()`, preserving
+input and resource refusals. For example:
+
+```rust
+# extern crate zetesis_themelios;
+# extern crate zetesis_cpu;
+use zetesis_cpu::Cancellation;
+use zetesis_themelios::{
+    AdmissionOptions, AutomaticAdmission, ExpansionLimits, FormulaLimits, ParsedSource,
+};
+let source = ParsedSource::new("1{a;b}1.".into(), AdmissionOptions::default())?;
+let admitted = source.admit_automatic_with_cancellation(
+    ExpansionLimits::default(), FormulaLimits::default(), &Cancellation::default(),
+)?;
+let AutomaticAdmission::Formula(prepared) = admitted else {
+    panic!("the bounded choice requires the formula profile");
+};
+assert_eq!(prepared.ground()?.atoms().len(), 2);
+# Ok::<(), Box<dyn std::error::Error>>(())
+```
+
+`admit_bundle_automatic_with_cancellation` makes the same choice for an original
+`SourceBundle`. The CLI uses these operations when its configuration permits
+formula execution, retaining its policy refusal where an extended refusal first
+requires formulas. Explicit closure and countermodel requests retain their
+selected profiles.
+
+The automatic source doors retain O(source bytes + syntax nodes) input storage
+and never clone the entire stdin buffer or reparse it on retry. When extended
+compilation reaches a formula-eligible refusal after the complete source checks,
+one shared traversal records both profile verdicts and one occurrence raise
+supplies both attempts. The handoff is used only when all formula profile
+verdicts passed; earlier refusals use the ordinary formula checks. Formula
+metadata refusals and objective checks keep their original order. Both attempts
+retain the same control token and independent per-attempt expansion allowances;
+the removed inspections and raising carried no expansion charges. Deferred
+formula materialization consumes its preparation's remaining budget. Library
+domain analysis stays an explicit `with_domain_analysis` opt-in.
 
 Configure eager support storage through `FormulaLimits::max_support_bytes`
 before preparation. The default is 128 MiB for the support authority's canonical
@@ -654,7 +727,7 @@ does not launch ordinary Rayon or GPU grounding; later answer-set execution has
 its own policy. See [finite-table selection](finite-tables.md) for the ownership,
 applicability and proof boundaries.
 
-## Optional domains during final instantiation
+## Optional numeric analysis and domain guards
 
 `PreparedFormula::with_domain_analysis(Some(DomainLimits { .. }))` requests
 necessary argument-domain guards; `None` is the library default. Bundle
@@ -662,20 +735,21 @@ preparation has the same method. The ordinary command requests the analysis
 with its default limits. This is separate from choosing `Indexed` or `Table`
 joins, and adds no language construct or CLI flag.
 
-The consumer checks the exact normalized whole program and its original rule
-occurrences. The initial profile permits ordinary positive flat rules and
-constraints, whole named variables, atomic numbers, strings, positive nullary
-symbols, infimum and supremum, and body comparisons. It excludes arithmetic in
-rule atoms, generators, negative rule-body literals, structured terms,
-anonymous/local scopes in rules and richer heads. `NormalizedProgram` is necessary; a dependency projection never supplies
-narrowing. Inapplicability keeps the existing complete path and does not create
-a new source refusal.
+The shared numeric engine reads every prepared producer and compact fact column.
+It retains conservative argument bounds, finite sets of existing canonical terms,
+and producer sites. Choice and conditional elements have separate local frames;
+default-negated atoms supply no binding evidence. Unsupported transfers widen
+the affected output instead of discarding its producer. This analysis does not
+reconstruct the expanded source `Program`.
 
-Objectives may accompany eligible rules without disabling their domain guards.
-The analysis still receives the complete normalized Program, and objective
-declarations introduce no producer domains. Objective joins and scoring remain
-unchanged; this does not permit richer rule heads or local scopes in rules.
-Objective-local conditions keep their existing scopes and execution.
+The guard consumer has a separate, narrower applicability certificate: ordinary
+positive flat rules and constraints, whole named variables, atomic logical values
+and body comparisons. Arithmetic in rule atoms, generators, negative body literals,
+structured terms, local scopes and richer heads remain outside that consumer.
+`NormalizedProgram` is required; dependency projections cannot certify guards.
+Unsupported profiles retain complete grounding without a new refusal.
+Objectives do not disable otherwise eligible guards and introduce no producer
+domains. Objective joins, scoring and local scopes retain their existing paths.
 
 Finite argument domains constrain each rule's variable occurrences, in every
 possible-support completion round and in final instantiation. Their intersection, less every value a
@@ -685,12 +759,14 @@ opening deeper probes; the candidates are prepared once per rule with the
 analysis, and a guard is prepared only where they are fewer than the
 argument's domain. The surviving rows keep the existing matcher, original
 positions and source origins. Objective and factorized component joins retain
-their existing paths. Global Unknown or Stopped analysis supplies
+their existing paths. A stopped analysis supplies
 no guards. An individually Unknown argument is unrestricted; other finite
 arguments may still contribute restrictions.
 
-Preparation admits the selected domain values once into the source vocabulary.
-Each rule retains scoped term IDs and a range for each variable; an absent
+Preparation selects existing canonical values without exporting, copying or
+interning their payload again. Finite intersections use coordinates belonging to
+one analysis, not ASP term order. Each rule retains scoped term IDs and a range
+for each variable; an absent
 range is unrestricted, while an empty range is a known empty domain. Unary
 comparisons reuse those IDs. Each completion snapshot resolves the surviving
 values into its own relation dictionaries, whose local IDs are not source term
@@ -720,22 +796,36 @@ cargo test --locked -p zetesis-themelios --example book-domain-grounding
 cargo run --locked -p zetesis-themelios --example book-domain-grounding
 ```
 
-`DomainObservation` also distinguishes Disabled and Inapplicable. An Analyzed
-callback borrows the exact owner's status, context, argument domains and logical
-statistics; retaining a result requires copying the specific owned information
-the caller needs. Detailed work reports include applicability, analysis and guard
+`GroundingObserver::domain_diagnostics_enabled()` controls the typed domain callback, integer-certificate requests
+and census preparation. It defaults to true to preserve existing diagnostic observers and is independent of
+`details_enabled()`. Without an observer, or when one declines diagnostics, the requested numeric analysis and finite
+guards still run. Timing observers decline diagnostics they do not consume. Diagnostic work is charged only when
+requested, so preparation receipts and resource cutoffs can differ from an attempt that requests the census.
+
+`DomainObservation` distinguishes Disabled from Analyzed. The latter supplies a
+borrowed `NumericAnalysis` view: `analysis()` exposes bounds, finite-value keys,
+producer sites and logical statistics; `catalog()` resolves those keys through
+their canonical owner. `arguments()` supplies signed predicates and argument
+coordinates. `census()` reports argument and rule populations, requested integer
+certificates and separated comparisons. `rules()` lends reports tied to original
+compiled occurrences, with whole-body totality distinct from individual operand
+bounds. A stopped analysis has no census or rule reports; a completed empty one
+has zero counts. These diagnostics do not authorize pruning or establish that a
+binding exists. Retain only the owned information needed beyond the callback.
+Detailed work reports include applicability, analysis and guard
 preparation, even on a failed or stopped prefix. A completed analysis-attempt
 phase can have used conservative fallback; it does not imply FixedPoint.
 
 Analyzer `DomainLimits` bound logical populations and inspected source/symbol
 bytes. Actual work, including stopped work, consumes the original cumulative
-formula budget. The analyzer uses bounded standard collections with no
-fallible-allocation or caller-control API; its heap is outside
-`FormulaLimits::max_support_bytes`. The guard/query lease separately accounts
+formula budget. The neutral engine reports allocation and owner failures explicitly; a logical
+analysis limit discards partial domains and retains complete grounding. Its heap
+is bounded by logical populations, outside `FormulaLimits::max_support_bytes`. The guard/query lease separately accounts
 its named headers, scratch, dictionary IDs and actual vector capacity; candidate
 terms remain borrowed from their canonical owner. These capacities are counted
-beside support, table indices and live masks. These contracts give neither a
-hard allocator/RSS limit nor cancellation/deadline polling. Guard preparation
+beside support, table indices and live masks. Control is observed before and after analysis; its internal work is bounded by
+the supplied logical allowance. These contracts give no hard allocator/RSS limit
+or internal deadline-polling guarantee. Guard preparation
 and membership costs may outweigh avoided probes. See
 [finite-domain ownership and proof boundaries](finite-tables.md#optional-argument-domain-guards)
 for the exact named-capacity scope and preservation premises.
@@ -923,7 +1013,16 @@ steps.
 
 The analysis accessors are part of the prepared solver input's inspection
 contract. `source_analysis()` describes exactly the value exposed by
-`analyzed_program()`. Read `analysis_basis()` before interpreting its properties:
+`analyzed_program()`. Formula preparation uses a compact input with the same dependency
+graph and class verdicts. `source_classes()` reads those verdicts without constructing
+the full normalized input. The first call to either full accessor constructs and
+retains that input and its analysis, including all facts, unless terminal preparation
+has already needed them; later calls borrow the cached result. This costs full-program
+storage and canonical ingestion/analysis work. Public inspection adds no expansion
+charge. A subsequent terminal preparation trigger still checks its own full-view
+allowances independently of that inspection history.
+
+Read `analysis_basis()` before interpreting its properties:
 
 | Basis | Meaning of the retained program |
 | --- | --- |

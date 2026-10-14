@@ -149,13 +149,14 @@ impl std::error::Error for ProgramAdmissionFailure<'_> {
     }
 }
 
-/// Checked relational templates and their original logical statements.
+/// Checked relational rules and their original logical statements.
 /// Compilation does not copy the caller's program. Consuming `into_program`
 /// releases the provenance borrow and leaves an independently owned native value.
 #[derive(Debug)]
 pub struct AdmittedProgram<'a> {
     program: Program,
     statements: Vec<Vec<&'a WithProvenance<Statement>>>,
+    fact_statements: Vec<Vec<&'a WithProvenance<Statement>>>,
 }
 
 impl<'a> AdmittedProgram<'a> {
@@ -170,6 +171,13 @@ impl<'a> AdmittedProgram<'a> {
     #[must_use]
     pub fn template_statements(&self) -> &[Vec<&'a WithProvenance<Statement>>] {
         &self.statements
+    }
+
+    /// Original statements parallel to native fact occurrences. Repeated
+    /// occurrences retain their evidence even when their atom is shared.
+    #[must_use]
+    pub fn fact_statements(&self) -> &[Vec<&'a WithProvenance<Statement>>] {
+        &self.fact_statements
     }
 
     /// Release the input borrow while retaining the checked native program.
@@ -207,8 +215,7 @@ pub fn admit_program(
         body_elements: options.max_body_elements,
         text_bytes: options.max_text_bytes,
     });
-    let mut templates = Vec::new();
-    let mut statements = Vec::new();
+    let mut compiled = crate::compile::Compiled::default();
     for part in source.parts() {
         if part.key().name.as_str() != "base" || !part.key().formals.is_empty() {
             return Err(ProgramAdmissionFailure {
@@ -220,16 +227,20 @@ pub fn admit_program(
         }
         for carrier in part.statements() {
             let subject = ProgramSubject::Statement(carrier);
-            if templates.len() >= options.core_limits.max_templates {
-                return Err(core_failure(
-                    AdmissionError::LimitExceeded {
-                        resource: zetesis_core::AdmissionResource::Templates,
-                        limit: options.core_limits.max_templates,
-                        actual: templates.len().saturating_add(1),
-                        template: Some(templates.len()),
-                    },
-                    Some(carrier),
-                ));
+            if compiled.len() >= options.core_limits.max_templates {
+                let resource = zetesis_core::AdmissionResource::Templates;
+                let limit = options.core_limits.max_templates;
+                let actual = compiled.len().saturating_add(1);
+                // This boundary refuses before traversing or classifying the
+                // next statement. Its source identity is known; its native
+                // template/fact position is deliberately not invented.
+                let error = AdmissionError::LimitExceeded {
+                    resource,
+                    limit,
+                    actual,
+                    template: None,
+                };
+                return Err(core_failure(error, Some(carrier)));
             }
             if let Statement::Rule(rule) = carrier.get() {
                 budget
@@ -239,33 +250,30 @@ pub fn admit_program(
                         kind: ProgramFailureKind::Limit(error),
                     })?;
             }
-            let template = crate::compile::checked_statement(carrier.get()).map_err(|error| {
+            let rule = crate::compile::checked_statement(carrier.get()).map_err(|error| {
                 ProgramAdmissionFailure {
                     subject,
                     kind: ProgramFailureKind::Compilation(error),
                 }
             })?;
-            templates.push(template);
-            statements.push(vec![carrier]);
+            compiled
+                .push(rule, vec![carrier])
+                .map_err(|error| core_failure(error, Some(carrier)))?;
         }
     }
     crate::coherence::append_with(
-        &mut templates,
-        &mut statements,
+        &mut compiled,
         options.core_limits,
         |_, _, _| Ok(()),
         |error, origins| core_failure(error, origins.first().copied()),
     )?;
-    let program = Program::new(templates, options.core_limits).map_err(|error| {
-        let statement = error
-            .template_index()
-            .and_then(|index| statements.get(index))
-            .and_then(|origins| origins.first().copied());
-        core_failure(error, statement)
+    let compiled = compiled.admit(options.core_limits, |error, origins| {
+        core_failure(error, origins.first().copied())
     })?;
     Ok(AdmittedProgram {
-        program,
-        statements,
+        program: compiled.program,
+        statements: compiled.template_origins,
+        fact_statements: compiled.fact_origins,
     })
 }
 

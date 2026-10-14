@@ -13,6 +13,7 @@ use zetesis_core::relation::Row as MatchedRow;
 use super::{
     AtomPattern, Computation, Context, Counters, Event, FormulaFailure, FormulaLimits, HeadIr,
     Join, LiteralIr, Ownership, PatternOccurrence, Resolution, RowHead, reserve,
+    rows::{Advance, Frame},
 };
 use crate::expansion::Budget;
 use crate::formula_ir::RuleIr;
@@ -43,14 +44,31 @@ impl<'source> Witnesses<'source> {
     }
 }
 
-/// The exact ordered row occurrences of a selected complete binding. The join
-/// cannot advance while this loan remains in use.
+/// Exact ordered rows still held for a passing completed binding. A lent frame
+/// retains every planned depth; an owned generated/head frame has already
+/// undone its deepest depth. The join cannot advance while this loan is used.
+/// `unchanged` counts the prefix untouched since the previous passing lend;
+/// rejected completions never reset that count.
 pub(crate) struct WitnessRow<'row, 'source> {
     pub(crate) rows: &'row [MatchedRow<'source, 'source>],
     pub(crate) unchanged: usize,
     pub(super) patterns: &'row [PatternOccurrence<'row>],
     pub(super) support: &'row super::Support<'source>,
     pub(super) resolutions: &'row [Resolution<'source>],
+}
+
+impl WitnessRow<'_, '_> {
+    pub(crate) fn sources(&self) -> impl ExactSizeIterator<Item = usize> + '_ {
+        self.patterns.iter().map(|pattern| pattern.source)
+    }
+}
+
+/// A completion consumed before the join advances. Owned continuation adapters
+/// deliberately return no witness view: the record belongs to this traversal.
+pub(crate) struct MatchedBinding<'row, 'source> {
+    pub(crate) values: crate::formula_binding::Binding<'row>,
+    pub(crate) passes: bool,
+    pub(crate) witnesses: Option<WitnessRow<'row, 'source>>,
 }
 
 /// Only total flat positive bodies share this traversal. In particular, a
@@ -90,8 +108,6 @@ impl<'source> Join<'_, 'source> {
                     location,
                 },
         } = context;
-        debug_assert!(!self.generated && self.head_slots.is_empty());
-        debug_assert_eq!(self.plan.patterns.len(), self.literals.len());
         let other =
             self.storage_bytes() - self.witnesses.as_ref().map_or(0, Witnesses::capacity_bytes);
         let witnesses = self.witnesses.get_or_insert_with(|| Witnesses {
@@ -110,6 +126,43 @@ impl<'source> Join<'_, 'source> {
         )?;
         self.lease.observe(self.storage_bytes(), location)?;
         Ok(())
+    }
+
+    /// Lend the record only at a passing completion, retaining the ordinary
+    /// rejected-row validation path and the owned completion's immediate undo.
+    pub(crate) fn next_matched_row(
+        &mut self,
+        budget: &mut Budget,
+        context: Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<Option<MatchedBinding<'_, 'source>>, FormulaFailure> {
+        let Some(row) = self.next_staged(Ownership::Lend, None, Advance::Base, budget, context)?
+        else {
+            return Ok(None);
+        };
+        let witnesses = if row.passes {
+            self.witnesses.as_mut().map(|witnesses| {
+                let expected = match &row.frame {
+                    Frame::Current => self.plan.patterns.len(),
+                    Frame::Owned(_) => self.plan.patterns.len().saturating_sub(1),
+                };
+                debug_assert_eq!(witnesses.rows.len(), expected);
+                let unchanged = std::mem::replace(&mut witnesses.unchanged, witnesses.rows.len());
+                WitnessRow {
+                    rows: &witnesses.rows,
+                    unchanged,
+                    patterns: &self.plan.patterns,
+                    resolutions: &self.resolutions,
+                    support: self.support,
+                }
+            })
+        } else {
+            None
+        };
+        Ok(Some(MatchedBinding {
+            values: row.frame.into_binding(&self.values),
+            passes: row.passes,
+            witnesses,
+        }))
     }
 
     /// `projected` is present only for support production. Formula emission
@@ -153,6 +206,8 @@ pub(super) fn derive(
     let Some(pattern) = eligible(rule, limits, counters)? else {
         return Ok(false);
     };
+    debug_assert!(!outer.generated && outer.head_slots.is_empty());
+    debug_assert_eq!(outer.plan.patterns.len(), outer.literals.len());
     outer.retain_witnesses(Context::new(computation, limits, counters, rule.location))?;
     let mut head = None;
     while let Some(row) = counters.observe_work(Event::SupportJoinWork, |counters| {

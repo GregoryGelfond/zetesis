@@ -80,12 +80,7 @@ impl Builder<'_, '_, '_> {
                 value,
                 root,
                 None,
-                Context::new(
-                    &*self.computation,
-                    self.limits,
-                    &mut self.counters,
-                    location,
-                ),
+                Context::new(&*self.computation, self.limits, self.counters, location),
             )?;
         }
         Ok(())
@@ -139,12 +134,7 @@ impl Builder<'_, '_, '_> {
                 elements,
                 &self.terms,
                 values,
-                Context::new(
-                    &*self.computation,
-                    self.limits,
-                    &mut self.counters,
-                    location,
-                ),
+                Context::new(&*self.computation, self.limits, self.counters, location),
             )?;
             let available = self
                 .computation
@@ -181,7 +171,7 @@ impl Builder<'_, '_, '_> {
                 &storage,
                 attempt.auxiliary_peak_bytes,
                 self.limits,
-                &self.counters,
+                self.counters,
                 location,
             );
             // Observe capacity on either outcome. A resource observation must
@@ -196,7 +186,7 @@ impl Builder<'_, '_, '_> {
                 0,
                 size_of::<Vec<usize>>(),
                 self.limits,
-                &self.counters,
+                self.counters,
                 location,
             )?;
             (transaction, build)
@@ -205,7 +195,7 @@ impl Builder<'_, '_, '_> {
             transaction,
             self.computation,
             self.limits,
-            &mut self.counters,
+            self.counters,
             location,
         )?;
         Ok(GuardFamily::new(build, appended, storage))

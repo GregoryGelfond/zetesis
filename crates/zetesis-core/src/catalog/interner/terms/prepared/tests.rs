@@ -221,6 +221,7 @@ fn prepared_owner_is_stricter_than_shared_vocabulary() {
             vec![],
             vec![],
         )],
+        crate::FactTables::default(),
         crate::AdmissionLimits::default(),
     )
     .unwrap();
@@ -494,6 +495,7 @@ fn prepared_empty_patterns_authenticate_assignments() {
             vec![],
             vec![],
         )],
+        crate::FactTables::default(),
         crate::AdmissionLimits::default(),
     )
     .unwrap();

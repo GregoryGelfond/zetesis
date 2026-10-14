@@ -7,7 +7,8 @@
 //! named executable into a profile's output when a test asks; it fails a
 //! numbered build of the run on request. The stand-in `install` runs the
 //! host's own and fails writing a named file on request. The stand-in `uname`
-//! reports Linux unless a test names Darwin. The SHA-256 tool and the file
+//! reports Linux unless a test names Darwin, and can remove a staged file
+//! immediately before its load commands are inspected. The SHA-256 tool and the file
 //! utilities are the host's. On macOS the guard's tests name Darwin and have
 //! the stand-in `cargo` copy system executables, which the host's own
 //! `/usr/bin/otool` reads.
@@ -67,7 +68,13 @@ done
 
 const RUSTC: &str = "#!/bin/sh\nprintf '%s\\n' 'rustc 1.97.1' 'host: test-host'\n";
 
-const UNAME: &str = "#!/bin/sh\nprintf '%s\\n' \"${INSTALL_TEST_SYSTEM:-Linux}\"\n";
+const UNAME: &str = r#"#!/bin/sh
+set -eu
+if [ -n "${INSTALL_TEST_REMOVE_BEFORE_INSPECTION:-}" ]; then
+    rm -- "$INSTALL_TEST_REMOVE_BEFORE_INSPECTION"
+fi
+printf '%s\n' "${INSTALL_TEST_SYSTEM:-Linux}"
+"#;
 
 const INSTALL: &str = r#"#!/bin/sh
 for last in "$@"; do :; done
@@ -435,8 +442,8 @@ fn a_failure_placing_the_sibling_leaves_the_previous_install_working() {
     assert_eq!(installer.identities(), expected);
 }
 
-/// A macOS install whose builds are the system executables `full` and
-/// `front`, read by the real load-command guard.
+/// A macOS install whose builds copy `full` and `front`, read by the real
+/// load-command guard.
 #[cfg(target_os = "macos")]
 fn macos(installer: &Installer, full: &str, front: &str) -> Output {
     installer.run(
@@ -475,8 +482,8 @@ fn a_macos_install_takes_a_front_without_frameworks_beside_a_sibling_with_them()
 #[test]
 #[cfg(target_os = "macos")]
 fn a_gpu_build_without_frameworks_stops_a_macos_install() {
-    // The control: either the reading is broken or the GPU build no longer
-    // needs a front, and the refusal says both.
+    // The control was read successfully but no longer establishes the need
+    // for a front.
     let installer = Installer::new();
     installer.install("a");
     let previous = installer.files();
@@ -484,10 +491,44 @@ fn a_gpu_build_without_frameworks_stops_a_macos_install() {
     assert!(!output.status.success());
     let refusal = String::from_utf8_lossy(&output.stderr);
     assert!(
-        refusal.contains("either otool could not read them, or the GPU build no longer links"),
+        refusal.contains("Found no framework in the load commands of the GPU build"),
         "{refusal}"
     );
     assert_eq!(installer.files(), previous);
+}
+
+#[test]
+#[cfg(target_os = "macos")]
+fn unreadable_load_commands_preserve_the_previous_install() {
+    for (relative, build) in [("sibling/zetesis", "GPU build"), ("zetesis", "CPU front")] {
+        let installer = Installer::new();
+        installer.install("a");
+        let previous = installer.files();
+        // otool accepts a non-object file with status zero. Remove a staged
+        // executable after both builds instead, to exercise an actual failed
+        // inspection without changing the installer or replacing otool.
+        let missing = installer.root().join("target/install-stage").join(relative);
+        let output = installer.run(
+            "b",
+            &[],
+            &[
+                ("INSTALL_TEST_SYSTEM", "Darwin"),
+                ("INSTALL_TEST_FULL_BINARY", FRAMEWORKS),
+                ("INSTALL_TEST_FRONT_BINARY", NO_FRAMEWORK),
+                (
+                    "INSTALL_TEST_REMOVE_BEFORE_INSPECTION",
+                    missing.to_str().unwrap(),
+                ),
+            ],
+        );
+        assert!(!output.status.success(), "{build}");
+        let refusal = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            refusal.contains(&format!("Could not read the {build} load commands")),
+            "{refusal}"
+        );
+        assert_eq!(installer.files(), previous, "{build}");
+    }
 }
 
 #[test]

@@ -266,7 +266,12 @@ fn changing_layout_program() -> (Program, Model) {
         vec![],
     ));
     (
-        Program::new(templates, AdmissionLimits::default()).unwrap(),
+        Program::new(
+            templates,
+            zetesis_core::FactTables::default(),
+            AdmissionLimits::default(),
+        )
+        .unwrap(),
         Model::new(facts).unwrap(),
     )
 }

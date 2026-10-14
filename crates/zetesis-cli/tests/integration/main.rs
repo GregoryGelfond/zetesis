@@ -19,6 +19,7 @@ mod comparison_sources;
 mod contribution_sessions;
 mod correctness_answers;
 mod count_objective_sessions;
+mod counting;
 mod deadline;
 mod diagnostic_control;
 mod diagnostic_locations;

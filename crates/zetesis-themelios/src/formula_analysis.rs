@@ -5,12 +5,22 @@
 //! with long predicate names can otherwise have a large byte footprint. These
 //! are logical admission allowances, not allocator or peak-RSS measurements.
 
+pub(crate) mod summary;
+mod facts;
+pub(crate) use facts::{Checked, Families};
+pub(crate) use summary::Summary;
+
 use crate::ProgramSite;
-use themelios_program::program::{Arguments, Atom, Body, Program, Rule, Statement};
+use themelios_program::program::{Arguments, Atom, Program, Statement};
+#[cfg(test)]
+use themelios_program::program::{Body, Rule};
 use themelios_program::provenance::{Provenance, WithProvenance};
-use themelios_program::symbol::{Name, Sign, Signature, Symbol};
+use themelios_program::symbol::Signature;
+#[cfg(test)]
+use themelios_program::symbol::{Name, Sign, Symbol};
 use themelios_program::term::Term;
 use themelios_program::transform::Visit;
+#[cfg(test)]
 use zetesis_core::{AtomPattern, Value};
 
 use crate::diagnostic::unsupported;
@@ -24,6 +34,7 @@ use crate::{
 /// statement's. The caller bounds fact count, scalar expansion and provenance
 /// before calling. Only the statement keeps parsed origins; synthesized
 /// children truthfully have constructed provenance.
+#[cfg(test)]
 pub(crate) fn fact(
     pattern: &AtomPattern,
     provenance: &Provenance,
@@ -89,9 +100,37 @@ pub(crate) fn analyze(
     budget: &mut Budget,
     fallback: ProgramSite,
 ) -> Result<themelios_analysis::Analysis, FormulaFailure> {
-    let mut nodes = 0_u128;
-    let mut edges = 0_u128;
+    let mut preflight = Preflight::default();
     for source in program.statements() {
+        preflight.statement(source, limits, budget, fallback)?;
+    }
+    // Analysis::of internally unpools. The visitor above independently certifies
+    // that neither term pools nor pooled atom argument lists reach that operation.
+    // Retain the exact upstream facts. The pinned tier does not classify clingo
+    // aggregate equality guards as binders; its safety reading can therefore be
+    // narrower than our separately checked source profile. Source admission's
+    // own scope/binder checks precede this helper and remain authoritative.
+    // Neither a favorable verdict nor Unknown disables grounding ceilings.
+    budget.poll(fallback)?;
+    let analysis = themelios_analysis::Analysis::of(program);
+    budget.poll(fallback)?;
+    Ok(analysis)
+}
+
+#[derive(Default)]
+pub(super) struct Preflight {
+    nodes: u128,
+    edges: u128,
+}
+
+impl Preflight {
+    pub(super) fn statement(
+        &mut self,
+        source: &WithProvenance<Statement>,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        fallback: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
         let location = extended::origin(source, fallback);
         // The analyzed projection contains rules and optimization observations.
         // Weak constraints have no heads, hence create no dependency edges.
@@ -108,10 +147,10 @@ pub(crate) fn analyze(
         if scan.pooled {
             return Err(unsupported(ProfileFeature::AnalysisPool, location).into());
         }
-        nodes = nodes.saturating_add(scan.nodes).saturating_add(1);
+        self.nodes = self.nodes.saturating_add(scan.nodes).saturating_add(1);
         ceiling(
             FormulaResource::AnalysisNodes,
-            nodes,
+            self.nodes,
             limits.max_analysis_nodes as u128,
             location,
         )?;
@@ -134,10 +173,10 @@ pub(crate) fn analyze(
             let (dependencies, dependency_bytes) =
                 signature_sizes(rule.body_signatures().map(|(_, signature)| signature));
             let added = heads.saturating_mul(dependencies);
-            edges = edges.saturating_add(added);
+            self.edges = self.edges.saturating_add(added);
             ceiling(
                 FormulaResource::AnalysisEdges,
-                edges,
+                self.edges,
                 limits.max_analysis_edges as u128,
                 location,
             )?;
@@ -149,18 +188,54 @@ pub(crate) fn analyze(
                 .saturating_add(dependency_bytes.saturating_mul(heads));
             budget.charge(ExpansionResource::ScalarBytes, payload, location)?;
         }
+        Ok(())
     }
-    // Analysis::of internally unpools. The visitor above independently certifies
-    // that neither term pools nor pooled atom argument lists reach that operation.
-    // Retain the exact upstream facts. The pinned tier does not classify clingo
-    // aggregate equality guards as binders; its safety reading can therefore be
-    // narrower than our separately checked source profile. Source admission's
-    // own scope/binder checks precede this helper and remain authoritative.
-    // Neither a favorable verdict nor Unknown disables grounding ceilings.
-    budget.poll(fallback)?;
-    let analysis = themelios_analysis::Analysis::of(program);
-    budget.poll(fallback)?;
-    Ok(analysis)
+
+    /// The exact structural preflight of a positive symbolic fact: one atom,
+    /// one `Term::Symbolic` per argument, one outer statement and no edge. Nested
+    /// `Symbol` payload is one term node, as in the existing `PoolFree` visitor.
+    pub(super) fn fact(
+        &mut self,
+        arity: usize,
+        name_bytes: usize,
+        provenance: &Provenance,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        fallback: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let location = provenance
+            .origins()
+            .find_map(|origin| match origin {
+                themelios_program::provenance::Origin::Parsed(location) => {
+                    Some(fallback.with_location(*location))
+                }
+                _ => None,
+            })
+            .unwrap_or(fallback);
+        let added = arity as u128 + 2;
+        self.nodes = self.nodes.saturating_add(added);
+        ceiling(
+            FormulaResource::AnalysisNodes,
+            self.nodes,
+            limits.max_analysis_nodes as u128,
+            location,
+        )?;
+        budget.charge(ExpansionResource::TermWork, added, location)?;
+        budget.charge(
+            ExpansionResource::ScalarBytes,
+            (name_bytes as u128).saturating_mul(2),
+            location,
+        )?;
+        ceiling(
+            FormulaResource::AnalysisEdges,
+            self.edges,
+            limits.max_analysis_edges as u128,
+            location,
+        )?;
+        budget.charge(ExpansionResource::TermWork, 0, location)?;
+        budget.charge(ExpansionResource::ScalarBytes, 0, location)?;
+        Ok(())
+    }
 }
 
 fn signature_sizes(signatures: impl Iterator<Item = Signature>) -> (u128, u128) {
@@ -401,3 +476,6 @@ mod tests {
         ));
     }
 }
+
+#[cfg(test)]
+mod summary_tests;

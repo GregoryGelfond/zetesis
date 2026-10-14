@@ -37,7 +37,12 @@ fn rule(
 }
 
 fn compile(templates: Vec<Template>) -> GroundProgram {
-    let program = Program::new(templates, AdmissionLimits::default()).expect("admitted fixture");
+    let program = Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .expect("admitted fixture");
     GroundProgram::compile(&program, StaticLimits::default())
         .expect("small explicit static fixture")
 }

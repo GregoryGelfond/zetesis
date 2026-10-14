@@ -35,7 +35,12 @@ fn program() -> Program {
             vec![],
         )
     });
-    Program::new(templates.into(), AdmissionLimits::default()).unwrap()
+    Program::new(
+        templates.into(),
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn limits() -> Limits {
@@ -157,6 +162,7 @@ fn carrier_atom_views_agree_with_their_logical_atoms() {
             )
         }))
         .collect(),
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();

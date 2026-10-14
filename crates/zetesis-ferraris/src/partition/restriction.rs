@@ -3,8 +3,8 @@
 use std::fmt;
 
 use crate::{
-    AdmissionLimits, AggregateComparison, AggregateElement, AggregateError, AggregateErrorKind,
-    AggregateLimits, FormulaNodes, NodeView, Theory,
+    AdmissionLimits, AggregateComparison, AggregateElement, AggregateError, AggregateLimits,
+    FormulaNodes, NodeView, Theory,
 };
 use zetesis_cpu::{Cancellation, ChargeError, Meter, Refusal, Stop};
 
@@ -68,20 +68,7 @@ impl Refusal for RestrictionErrorKind {
             | Self::Elements
             | Self::Work
             | Self::Overflow => true,
-            Self::Aggregate(error) => match error.kind() {
-                AggregateErrorKind::Control(stop) => stop.is_resource_refusal(),
-                AggregateErrorKind::InvalidPrefix { .. }
-                | AggregateErrorKind::InvalidCondition { .. } => false,
-                AggregateErrorKind::ElementLimit
-                | AggregateErrorKind::GuardLimit
-                | AggregateErrorKind::NodeLimit
-                | AggregateErrorKind::OperandLimit
-                | AggregateErrorKind::WorkLimit
-                | AggregateErrorKind::StateLimit
-                | AggregateErrorKind::SubsetLimit
-                | AggregateErrorKind::Allocation
-                | AggregateErrorKind::ArithmeticOverflow => true,
-            },
+            Self::Aggregate(error) => error.kind().is_resource_refusal(),
             Self::Theory(error) => error.is_resource_refusal(),
             Self::Stopped(stop) => stop.is_resource_refusal(),
         }

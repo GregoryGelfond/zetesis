@@ -424,8 +424,8 @@ fn witness_captures_obey_the_variable_ceiling() {
 const BOUNDED: &str = "{p(f(1,2));p(f(2,4));p(f(3,4))}.q:-p(f(X,X+1)):#true.";
 
 #[test]
-fn source_work_limit_is_inclusive() {
-    println!("term_work={}", witnesses::term_work_ceiling(BOUNDED));
+fn source_work_admissions_obey_their_limits() {
+    println!("term_work={}", witnesses::term_work_admissions(BOUNDED));
 }
 
 #[test]

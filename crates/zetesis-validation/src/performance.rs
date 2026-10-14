@@ -18,6 +18,7 @@ mod config;
 pub mod families;
 pub mod matrix;
 pub mod command;
+pub mod bundles;
 pub mod series;
 pub mod scalability;
 mod record;

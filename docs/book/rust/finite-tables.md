@@ -196,33 +196,35 @@ do not establish a speedup for zetesis.
 Prepared formula and bundle values also expose
 `with_domain_analysis(Some(DomainLimits { .. }))`; `None` is the library
 default and turns the attempt off, and the ordinary command requests the
-attempt with its default limits. This option adds a final-instantiation
-consumer for the exact normalized whole program. It is independent of
+attempt with its default limits. This option requests shared numeric analysis over all prepared producers and
+compact fact columns, followed by eligible rule guards. It is independent of
 `Indexed` or `Table` row selection and has no CLI flag.
 
 The initial profile admits ordinary positive flat rules and constraints over
 whole named variables, atomic logical values and body comparisons. It excludes
 arithmetic in atoms, generators, negative body literals, structured terms,
-local scopes and richer heads from the complete attempt. A dependency projection cannot qualify.
-Unsupported profiles use the existing complete path; they receive no new
-language refusal. A global Unknown or Stopped analysis supplies no narrowing.
+local scopes and richer heads from the guard consumer. Static analysis still
+includes their producers conservatively. A dependency projection cannot qualify
+for guards. Unsupported profiles use complete grounding without a new refusal.
+A stopped analysis supplies no narrowing.
 An individually Unknown argument supplies no restriction.
 
 For each eligible final rule, the consumer intersects the finite domains of
 all positive argument occurrences naming one variable and removes every value a
 comparison over that variable alone is defined and false at; a value the
 comparison cannot evaluate stays, so the join reaches it. A guard is prepared
-only where the candidates are fewer than the argument's domain. Borrowed source
-values are resolved through the completed support owner's existing equality
-dictionary; no second dictionary assigns IDs. A row failing a necessary domain is rejected
+only where the candidates are fewer than the argument's domain. Finite sets intersect by identities local to the shared analysis. Selected
+canonical term keys are then resolved through each support snapshot's existing
+relation dictionaries; payloads are neither exported nor interned again. A row failing a necessary domain is rejected
 before binding copies and deeper probes, in every support-completion round
 and in final instantiation. Surviving rows keep their original positions,
 matcher and emission order. Objective joins and existing factorized rule
 plans retain their existing paths. The analyzer is an
 upper-bound producer, not a candidate-truth or answer-set certificate.
 
-`DomainObservation` exposes Disabled, Inapplicable or the actual borrowed
-`Analysis`, including its owner, status, context and logical statistics. Detailed
+`DomainObservation` exposes Disabled or an actual borrowed `NumericAnalysis`,
+including canonical key resolution, producer sites, bounds and logical statistics.
+This observation does not claim that the narrower guard consumer is applicable. Detailed
 observation emits a sequential `domain_analysis` phase only when requested.
 `domain_prepare_work` includes charged applicability, analysis and guard
 preparation, including a stopped or failed prefix. `domain_guard_rows`,
@@ -234,10 +236,8 @@ and `table_rows`; avoided deeper work appears in the existing probe counts.
 
 Analyzer populations and inspected source bytes have separate finite
 `DomainLimits`. Its admitted work is capped by and charged to the remaining
-cumulative formula work budget, with no refund on Stopped. It uses bounded
-standard collections and has no fallible-allocation or caller-control API.
-This is an uninterruptible operation under the existing eager contract, not a
-new cancellation/deadline guarantee. Its heap is outside `max_support_bytes`.
+cumulative formula work budget, with no refund on Stopped. Allocation and owner failures are explicit. Control is observed before and after
+the bounded operation; internal work does not add a deadline-polling guarantee. Its heap is outside `max_support_bytes`.
 Rule guards separately charge their named headers, preparation scratch,
 dictionary IDs and actual vector capacities beside retained support, table
 indices and live masks. Candidate terms remain borrowed canonical references.

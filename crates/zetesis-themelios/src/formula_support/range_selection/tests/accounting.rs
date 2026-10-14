@@ -69,7 +69,7 @@ fn cancelled_preparation_keeps_the_ordinary_owner() {
     attempt(|join, rule, computation, counters| {
         let cancellation = Cancellation::default();
         cancellation.cancel();
-        counters.cancellation = Some(cancellation);
+        counters.attach_test_control(&cancellation);
         let live = join.support.live_bytes();
         assert!(matches!(
             join.select_range_multiples(rule, computation, &FormulaLimits::default(), counters),
@@ -80,7 +80,7 @@ fn cancelled_preparation_keeps_the_ordinary_owner() {
         ));
         assert!(join.range_selection.is_none());
         assert_eq!(join.support.live_bytes(), live);
-        counters.cancellation = None;
+        counters.detach_test_control();
         assert!(
             join.select_range_multiples(rule, computation, &FormulaLimits::default(), counters)
                 .unwrap()

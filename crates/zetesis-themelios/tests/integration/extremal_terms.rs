@@ -17,11 +17,10 @@ fn extremal_atom_arguments_retain_typed_values() {
     assert_eq!(
         input
             .program()
-            .templates()
+            .facts()
             .at(0)
             .unwrap()
-            .head()
-            .unwrap()
+            .pattern()
             .terms()
             .iter()
             .collect::<Vec<_>>(),

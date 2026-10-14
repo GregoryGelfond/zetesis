@@ -23,6 +23,7 @@ use crate::grounding_observer::Event;
 use crate::{FormulaFailure, FormulaLimits, FormulaResource, JoinStrategy};
 
 mod domains;
+pub(super) mod expression_keys;
 pub(crate) use domains::{Candidates, Guards};
 
 /// Query state is separate from both the catalog and its immutable row views.
@@ -32,6 +33,8 @@ pub(crate) use domains::{Candidates, Guards};
 pub(crate) struct Support<'source> {
     relations: &'source Relations<'source>,
     tables: OnceCell<TableWorkspace<'source>>,
+    expression_keys: expression_keys::Workspace<'source>,
+    local_plans: OnceCell<super::local_plans::Table<'source>>,
     table_strategy: bool,
     live: Cell<usize>,
     entries: Cell<usize>,
@@ -109,10 +112,35 @@ impl<'source> Support<'source> {
             relations,
             workspace: counters.accounting.workspace.clone(),
             tables: OnceCell::new(),
+            expression_keys: expression_keys::Workspace::default(),
+            local_plans: OnceCell::new(),
             table_strategy: strategy == JoinStrategy::Table,
             live: Cell::new(bytes),
             entries: Cell::new(relations.entries),
         })
+    }
+
+    pub(super) fn local_plan(
+        &self,
+        literals: &'source [crate::formula_ir::LiteralIr],
+        prefix: &crate::formula_binding::Binding,
+        variables: usize,
+        budget: &mut crate::expansion::Budget,
+        context: super::Context<'_, &super::Computation<'_, '_>>,
+    ) -> Result<Option<std::rc::Rc<super::order::Plan<'source>>>, FormulaFailure> {
+        // Authenticate before a hit can publish a reuse receipt or skip the
+        // reservations that also check leases on the preparation path.
+        if !self.workspace().owns(&context.computation.lease()) {
+            return Err(crate::formula_binding::assignment(
+                zetesis_core::catalog::AssignmentError::Read(
+                    zetesis_core::catalog::ReadError::ForeignCatalog,
+                ),
+                context.work.location,
+            ));
+        }
+        self.local_plans
+            .get_or_init(|| super::local_plans::Table::new(&self.workspace))
+            .plan(literals, prefix, variables, self, budget, context)
     }
 
     pub(crate) fn contains(

@@ -16,11 +16,11 @@ struct Capture {
 
 fn capture(limits: &FormulaLimits) -> Capture {
     let mut prepared = prepare("closed(7). d(2). d(X):-p(X). p(1). z:-p(1).");
-    let source = prepared.program.analyzed.clone();
+    let source = prepared.program.analyzed.full_program().clone();
     let rules = prepared.program.rules_without_facts().as_ptr();
     let expansion = prepared.budget.usage();
     let analysis = zetesis_domain::terminal::analyze(
-        &prepared.program.analyzed,
+        prepared.program.analyzed.full_program(),
         zetesis_domain::Limits::default(),
     );
     let observer = Observer::default();
@@ -60,7 +60,7 @@ fn capture(limits: &FormulaLimits) -> Capture {
     // its result is consumed. A partly refined mask never rewrites its owners.
     assert_eq!(context.counters.workspace_bytes(), workspace);
     assert_eq!(prepared.program.rules_without_facts().as_ptr(), rules);
-    assert_eq!(prepared.program.analyzed, source);
+    assert_eq!(*prepared.program.analyzed.full_program(), source);
     assert_eq!(prepared.budget.usage(), expansion);
     Capture {
         result,

@@ -266,8 +266,8 @@ fn a_digit_produced_by_a_rule_keeps_the_written_column() {
 fn a_stopped_key_analysis_leaves_every_constraint_written_and_is_reported() {
     // Three steps read three statements and no key: the analysis stops, the
     // constraint is grounded as written, the admission succeeds and the
-    // answer sets are those of the asked form. The three steps are charged
-    // to the term work: against no step at all the receipt differs by three.
+    // answer sets are those of the asked form. The exact three-step charge is
+    // checked on preparation receipts before local-frame lookup begins.
     let written = format!("{CHOICES} :- assign(a,X), assign(b,Y), X != Y + 1.");
     let under = |max_key_work| admit(&written, &key_work(max_key_work)).unwrap();
     let stopped = under(3);
@@ -277,10 +277,10 @@ fn a_stopped_key_analysis_leaves_every_constraint_written_and_is_reported() {
     assert_eq!(complete.keyed_constraints(), 1);
     assert_eq!(complete.key_analysis(), KeyAnalysis::Complete);
     assert_eq!(stable(&stopped), stable(&complete));
-    assert_eq!(
-        stopped.expansion_usage().term_work,
-        under(0).expansion_usage().term_work + 3
-    );
+    let unstarted = under(0);
+    assert_eq!(unstarted.keyed_constraints(), 0);
+    assert!(matches!(unstarted.key_analysis(), KeyAnalysis::Stopped(stop) if stop.limit == 0));
+    assert_eq!(stable(&unstarted), stable(&complete));
 }
 
 #[test]

@@ -28,7 +28,7 @@ impl Families {
             None,
             builder.computation,
             builder.limits,
-            &mut builder.counters,
+            builder.counters,
             location,
         )?;
         next.resize(
@@ -36,7 +36,7 @@ impl Families {
             None,
             builder.computation,
             builder.limits,
-            &mut builder.counters,
+            builder.counters,
             location,
         )?;
         mapped.resize(
@@ -44,7 +44,7 @@ impl Families {
             None,
             builder.computation,
             builder.limits,
-            &mut builder.counters,
+            builder.counters,
             location,
         )?;
         for (ordinal, node) in suffix.parts().nodes().iter().enumerate().rev() {
@@ -103,7 +103,7 @@ impl Families {
                 nodes::Entry::new(rule),
                 builder.computation,
                 builder.limits,
-                &mut builder.counters,
+                builder.counters,
                 location,
             )?;
             cursor = self.next.slice()[position];
@@ -135,7 +135,7 @@ impl Families {
                 remap(condition, suffix.first(), canonical),
                 builder.computation,
                 builder.limits,
-                &mut builder.counters,
+                builder.counters,
                 location,
             )?;
         }
@@ -224,7 +224,7 @@ fn buffer<T>(
     Buffer::new(
         builder.computation,
         builder.limits,
-        &mut builder.counters,
+        builder.counters,
         location,
     )
 }
@@ -241,7 +241,7 @@ fn filled<T: Copy>(
         value,
         builder.computation,
         builder.limits,
-        &mut builder.counters,
+        builder.counters,
         location,
     )?;
     Ok(values)
@@ -291,7 +291,7 @@ impl Builder<'_, '_, '_> {
                 index,
                 self.computation,
                 self.limits,
-                &mut self.counters,
+                self.counters,
                 location,
             )?;
         }

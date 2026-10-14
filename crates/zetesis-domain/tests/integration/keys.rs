@@ -2,7 +2,9 @@
 
 use crate::support::signatures::signature;
 use themelios_base::source::{Source, SourceId};
-use themelios_program::program::{Arguments, Atom, Program};
+use themelios_program::program::{
+    Arguments, Atom, DefaultNegation, Head, LiteralInner, Program, Statement,
+};
 use themelios_program::raise::raise;
 use themelios_program::symbol::{Name, Sign, Signature, Symbol, VarName};
 use themelios_syntax::{dialect::Dialect, parse::parse};
@@ -316,4 +318,120 @@ fn a_tuple_query_refuses_before_spending_an_unavailable_step() {
         1
     );
     assert_eq!(query.steps(), 0);
+}
+
+/// Partition the actual canonical source without changing its tuple order.
+fn fact_head(statement: &Statement) -> Option<&Atom> {
+    let Statement::Rule(rule) = statement else {
+        return None;
+    };
+    if rule.body().get().elements().next().is_some() {
+        return None;
+    }
+    let Head::Literal(literal) = rule.head().get() else {
+        return None;
+    };
+    if literal.negation != DefaultNegation::None {
+        return None;
+    }
+    let LiteralInner::Atom(atom) = &literal.inner else {
+        return None;
+    };
+    Some(atom.get())
+}
+
+fn read_parts<'p>(
+    program: &'p Program,
+    work: &mut KeyWork,
+) -> Result<FactIndex<'p>, zetesis_domain::Stop> {
+    FactIndex::read_parts(
+        program
+            .statements()
+            .map(themelios_program::WithProvenance::get)
+            .filter(|statement| fact_head(statement).is_none()),
+        program
+            .statements()
+            .filter_map(|carrier| fact_head(carrier.get())),
+        work,
+    )
+}
+
+#[test]
+fn fact_parts_preserve_all_producer_verdicts_tuple_order_and_read_work() {
+    for text in [
+        "digit(2). digit(0;1;2). digit(2). r(1,9). r(2,8).",
+        "digit(2). digit(D):-span(D). span(0;1).",
+        "digit(2). {digit(1)}.",
+        "digit(2). digit(1);other.",
+        "digit(2). not digit(1).",
+        "digit(2). #external digit(3).",
+        "digit(2). q(1). 1 = #count { X : q(X) }.",
+        "-digit(2). digit(3). r(1,9).",
+        "digit(2). digit(0..1).",
+        "ready. :- absent.",
+    ] {
+        let program = source(text);
+        let mut expected_work = KeyWork::new(1_000);
+        let mut actual_work = KeyWork::new(1_000);
+        let expected = FactIndex::read(&program, &mut expected_work).unwrap();
+        let actual = read_parts(&program, &mut actual_work).unwrap();
+        assert_eq!(actual_work.steps(), expected_work.steps(), "{text}");
+        for signature in [
+            signature("digit", 1),
+            Signature {
+                sign: Sign::Negative,
+                ..signature("digit", 1)
+            },
+            signature("r", 2),
+            signature("ready", 0),
+            signature("absent", 1),
+        ] {
+            assert_eq!(
+                actual.tuples(&signature, &mut actual_work),
+                expected.tuples(&signature, &mut expected_work),
+                "{text}"
+            );
+            assert_eq!(
+                actual.values(&signature, 0, &mut actual_work),
+                expected.values(&signature, 0, &mut expected_work),
+                "{text}"
+            );
+            assert_eq!(actual_work.steps(), expected_work.steps(), "{text}");
+        }
+    }
+}
+
+#[test]
+fn fact_parts_refuse_at_every_insufficient_read_allowance() {
+    let program = source("digit(0). digit(1). r(1,9). {digit(2)}. #external q. ");
+    let count = u64::try_from(program.statements().count()).unwrap();
+    for limit in 0..count {
+        let mut expected_work = KeyWork::new(limit);
+        let mut actual_work = KeyWork::new(limit);
+        let expected = FactIndex::read(&program, &mut expected_work).unwrap_err();
+        let actual = read_parts(&program, &mut actual_work).unwrap_err();
+        assert_eq!(actual, expected);
+        assert_eq!(actual_work.steps(), expected_work.steps());
+    }
+    assert!(read_parts(&program, &mut KeyWork::new(count)).is_ok());
+}
+
+#[test]
+fn fact_parts_borrow_supplied_tuples_without_copying() {
+    let program = source("r(1,9). r(2,8). ");
+    let expected: Vec<_> = program
+        .statements()
+        .filter_map(|carrier| fact_head(carrier.get()))
+        .flat_map(Atom::alternatives)
+        .collect();
+    let mut work = KeyWork::new(100);
+    let index = read_parts(&program, &mut work).unwrap();
+    let actual = index
+        .tuples(&signature("r", 2), &mut work)
+        .unwrap()
+        .unwrap();
+    assert_eq!(actual.len(), expected.len());
+    for (&actual, expected) in actual.iter().zip(expected) {
+        assert!(std::ptr::eq(actual, expected));
+    }
 }

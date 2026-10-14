@@ -298,8 +298,13 @@ complete bounded graph. This is useful when repeated candidate checks amortize
 its construction. `GroundProgram::compile` is the operation that creates this
 graph; constructing a `Program` or `Seed` does not silently invoke it.
 
-**Lazy** relational execution retains source templates and streams relevant
-instances during positive inference. It can avoid storing the complete ground
+**Lazy** relational execution retains non-fact templates and a canonical fact
+store, then streams relevant instances during positive inference. Source admission
+classifies closed positive facts once and records their positions among the
+templates. Both eager grounding and lazy source scans read `Program::rules()`,
+so duplicate occurrences and their order survive the separate storage. Signed
+coherence reads both streams and keeps the evidence for both introducing
+signatures. Template indexes and join dimensions remain template-only. It can avoid storing the complete ground
 program. Candidate generation still owes coverage of all relevant gate choices,
 and each completed closure owes coverage of all instances enabled in its final
 snapshot. Laziness moves and limits materialization; it does not remove these
@@ -518,14 +523,23 @@ one closure share those ceilings; publishing a pass's receipt does not renew
 them. Checker preparation belongs to its first check's allowance.
 
 Checkers share a cumulative receipt, not a cumulative admission ceiling.
-Each charge is checked against its ceiling, with cancellation polled, before its
-operations run, and counts locally: before them or, for an integer comparison
+Each charge is checked against its ceiling before its operations run. Cancellation
+is observed at entry, at each charged range containing a multiple of 256, before
+a refused work charge, and at exit. The account counts locally: before them or, for an integer comparison
 form's attempt, after them as the work the attempt performed, within what the
 check admitted. Local counts are published when preparation or a check returns,
 fails or unwinds, and when a checker drops.
 In-flight charges may remain local; live receipt fields are independent,
 monotone lower bounds. Joined receipts are exact until their fields saturate.
-Zero work charges still poll cancellation. The final outcome joins workers
+Zero work charges admit and observe nothing; explicit observations precede
+multi-element work without an internal control hook. Nested completed work is
+absorbed into the same receipt before a due observation. At the controlled exit,
+a stop observed there outranks a resource refusal at that refusal's own site and
+inside its original-program envelope; shape, identity and arithmetic failures
+retain their meaning. Terminal partition includes deferred-storage observation,
+and terminal admission includes its final generated-value and storage ceilings.
+Theory validation remains outside this account. A stop arriving after the exit
+poll is left to a later caller observation. The final outcome joins workers
 before publishing settled receipts. Region attempts and refutations remain
 distinct from core answers checked, original answers accepted and
 frozen-reduct work.
@@ -579,21 +593,35 @@ which reads every constant itself. Both operands' nodes become its steps, eight
 bytes each: a variable keeps its slot, a numeric constant becomes its value and
 an operation keeps its argument positions. Compiling charges one expansion
 `TermWork` unit per step, the form's bytes as `ScalarBytes`, and five formula
-work units for each constant read. A literal whose operand has a constructor, a
-nonnumeric constant, more than sixteen nodes, a variable slot beyond 32 bits or
-an argument naming a later node has no form; it counts under the first of those
-the compiler meets, the left operand's shape before the right's and both shapes
-before the constants. Copies of a literal keep its form. Joins borrow the
-literal's form, so a row's route is a function of the literal and the row's
-values alone: every join that decides the literal, in capture and in a frozen
-check alike, takes the same route on the same values. Every evaluation site
-tries the
+work units for each constant read. A literal without a form is counted under
+one reason, with the statistics record's spelling: `long_operand` (more than
+sixteen nodes), `wide_slot` (a variable slot beyond 32 bits), `constructor`
+(a function or tuple construction), `nonnumeric_constant`, or
+`argument_position` (an argument naming itself or a later node). The compiler
+checks the left operand's shape before the right's and both shapes before the
+constants; within a shape it checks node count before nodes in order. Copies
+of a literal keep its form. Joins borrow the literal's form, so each site takes
+the same route on the same literal and values in capture and in a frozen check.
+
+The append computation can admit operand values; a frozen computation can only
+read already admitted ones. The evaluation sites use the
 [form](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/integer_comparisons.rs)
-first: the comparisons a join decides on its bound prefix, its complete-row
-filters and the checks of a row whose generator failed; domain narrowing,
-totality preparation and covered-projection domains never do. On a row the form
-checks its constant, one unit per step and per variable step of both operands,
-against the work ceiling, polling cancellation first, and counts nothing yet. It
+as follows:
+
+| Site | Computations | Route |
+| --- | --- | --- |
+| `Join::filter_prefix`, decided prefix comparisons | Append and frozen | Form first, evaluator if it declines or is absent |
+| `Join::filters`, complete-row filters | Append and frozen | Form first, evaluator if it declines or is absent |
+| `pending_check`, checks after a generator fails | Append and frozen | Form first, evaluator if it declines or is absent |
+| Factored component joins | Append only | The same join sites, with copied forms |
+| Domain narrowing | Append only | Evaluator; never tries a form |
+| Totality preparation | Append and frozen, over completed columns | Evaluator; never tries a form |
+| Covered-projection domains | Append and frozen | Equality of stored results; evaluates no expression and never tries a form |
+
+On a row the form checks its constant, one unit per step and per variable step
+of both operands,
+against the work ceiling, applying the charged-range cadence and observing before
+a work refusal, and counts nothing yet. It
 then reads the operands' variables, evaluates with the same checked operations
 in machine integers, and compares the two integers, which is the ASP order on
 numbers; it constructs no term and reads no projection. Afterwards it counts what
@@ -612,6 +640,61 @@ admitted formulas' `comparison_forms()` counts the program's comparison literals
 with a form, and without one by reason, once per literal; the statistics records
 print it. A hybrid check's joins decide comparisons the same way but are not
 observed by the grounding counters.
+
+Support rounds and eager emission of a flat normal rule can use checked numeric
+probes. At the occurrence that decides a comparison, one operand must use only
+that occurrence's columns and the other must already be bound. Equality accepts
+a checked expression of columns; ordering accepts one column. An ordinary
+bound-column posting takes precedence, followed by expression equality, then
+ordering. The snapshot's query owner checks the key on every source row with the
+scalar operations above. Only an entirely numeric, defined result publishes an
+index; a nonnumeric value or arithmetic failure records an unavailable index for
+that descriptor and snapshot. The general traversal retains its mixed-term
+ordering and arithmetic diagnostics. A relational guard such as `X > 5` supplies
+no integer premise.
+
+One index keeps `(integer key, source row)` entries in that order. Equality lends
+a matching posting in source order. Ordering finds the numeric bounds, clips
+those entries to the occurrence's source interval, and sorts the surviving
+source IDs before visiting them. Both queries keep the ordinary matcher and the
+original comparison. Each support-round occurrence keeps its first-new delta
+interval: earlier occurrences read old rows, the pivot new rows, and later
+occurrences all rows. Queries share one snapshot certificate across variants;
+no tuple payload or canonical term is copied.
+
+For `n` rows and `m` expression nodes the first build uses
+`O(n*m + n*log(n))` work and `O(n+m)` storage. Equality uses `O(log(n))` lookup
+work and constant query storage. An ordering query with `k` numeric candidates
+and `s` rows inside its source interval uses `O(log(n) + k + s*log(s))` work and
+`O(s)` transient leased storage. Even a nonselective ordering query pays this
+cost. Descriptor matching scans retained indexes and compares column mappings;
+the bound operand is evaluated on each queried prefix. Builds and queries use
+the existing work, support-byte and support-index-entry limits. Resource and
+cancellation failures propagate; they never publish a partial certificate or
+become an arithmetic decline. Workspace and relation ownership are checked
+before a cached result is used.
+
+Arithmetic admission is not a blanket totality premise: constraints with only
+literal nonzero divisors may defer fatal checks to emission. A skipped row has a
+defined false plan-decided comparison, so an independent arithmetic failure on
+that same substitution is excluded by the ordinary complete-row policy. Matching
+rows still reach every residual check and retain its failures. Tuple comparisons
+and default-negated atoms supply no additional exclusion premise.
+
+The gate covers flat normal bodies with atom, comparison and tuple comparison
+literals and no generated head arguments. Generated bindings and structural or
+nested scopes retain their existing traversal. Family evidence never enables
+numeric probes: it retains every false row. Direct-source exact activity,
+retained emission, hybrid capture and model checks also keep their previous
+traversal, though their support completion can use the support-round route above.
+The [numeric-domain design](../../design/numeric-argument-domains.md) states the
+failure inventory and deferred coverage.
+`numeric_index_builds` counts published certificates, `numeric_index_declines`
+counts cached data declines, and `expression_key_probes` and `range_probes` count
+completed queries including empty results. `expression_key_rows` and
+`range_probe_rows` count rows actually visited after the delta cut and before the
+matcher. These receipts describe execution; they do not establish a performance
+gain or a proved Rust refinement.
 
 A positive body is joined in an order chosen once per join, before a row is
 read, from what the body says: each relation's size, the variables each
@@ -986,11 +1069,12 @@ constraints not yet asked as written.
 A fact is a rule with an empty body: its reduct with respect to any candidate is
 itself, so every answer set contains it. The formula route compiles a fact
 statement into the [fact arena](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_facts.rs)
-instead of into one such rule per fact. Each argument alternative of the
-statement becomes a product: its predicate admitted once, each column's values
+instead of into one such rule per fact. A statement with one argument
+alternative of one row supplies a run row; consecutive such statements of one
+predicate share a run stored by column. Every other argument alternative
+becomes a product. Its predicate is admitted once, each column's values are
 admitted once in the order the rows first reach them, and the statement's
-evidence stored once. Consecutive one-row statements of one predicate share a
-run, stored row by row. Each product, and each run, is one item of the prepared
+evidence is stored once. Each product, and each run, is one item of the prepared
 program, a fact block. Facts that keep a function, tuple or arithmetic subterm
 after normalization stay rules.
 
@@ -1016,8 +1100,12 @@ attempts for facts are not charged; and the arena's storage, which replaces the
 facts' pattern rows, counts against `max_support_bytes`. Each growth of the
 arena is admitted before it is allocated, with its whole replacement (the old
 and the new capacity together) counted, and grows geometrically only when that
-replacement fits. The scratch a fact block is laid out in is charged to the
-expansion's scalar bytes as it grows. When adaptive materialization defers fact
+replacement fits. Compilation lays out one argument alternative at a time in
+reused scratch: column descriptors, first-value coordinates and scalar/interval
+segments. Its growth is charged to the expansion's scalar bytes. Initial
+reservations depend on arity and source segment count, not expanded interval
+width; gaps in admitted coordinates can require additional segments. A run's
+rows do not accumulate in this scratch. When adaptive materialization defers fact
 blocks, both sides of the move are reserved and admitted before anything moves;
 the deferred blocks are copies, and the base keeps their storage, leased, until
 it is dropped. Grounding observers see one rule-instantiation phase per fact
@@ -1114,9 +1202,10 @@ posting visits and packed-set reads/writes are also charged. Temporary graph met
 the plan is released before completed support is returned. These
 checks qualify support scheduling, not satisfiability, unique-answer claims or
 source-to-Rust semantic refinement. Richer programs keep the existing schedule.
-`GroundingWork.support_producer_visits` counts charged entries into actual rule
-variant traversal; `support_unchanged_visits` counts the rich-producer visits
-that ended at the registration's test below, without a traversal;
+`GroundingWork.support_producer_visits` counts charged producer visits, including
+those skipped by registration. Its disjoint subsets `support_rich_traversals`
+and `support_unchanged_visits` count rich visits selected for traversal (including
+the first round) and those skipped because no registered input changed;
 `support_snapshot_preparations` counts charged growing
 snapshot attempts, including attempts that subsequently fail. These optional
 fields do not retroactively turn missing historical observations into zeros.
@@ -1275,8 +1364,35 @@ out atoms outside that carrier. [SourceSupport](../lean/theorems.md) and the
 state this premise explicitly; successful Rust completion is not a proof of the
 source-to-reduct correspondence.
 
-Ordinary normal rules with at least two flat positive body atoms can reuse
-their [matched rows](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/witnesses.rs).
+Ordinary rule emission and streamed constraint capture name planned positive
+body atoms from the join's held [matched rows](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/witnesses.rs).
+The same `Witnesses` record serves support production and the producer route.
+Only a passing completion lends the record and resets its unchanged-prefix
+count. A lent completion holds every planned depth; a generated or head-slot
+completion already undid its deepest depth, whose literal keeps the general
+naming path. Owned continuation adapters carry no view.
+
+`Builder::matched_atom` imports the row's canonical atom identity at the same
+literal position where general naming would project the tuple. One
+`MatchedNodes` owner per rule and consumer retains nodes by join depth and, when
+needed, a literal-to-depth inverse. It reuses only populated depths inside the
+reported unchanged prefix. That cache stays current within the same traversal
+and Builder; aggregate transactions append and detach only their own suffix,
+leaving previously interned atomic nodes intact. Negative literals, unheld
+positive depths, factoring and nested element joins keep their existing path.
+
+The public `row_atoms` count records successful ordinary-emission/capture
+naming through held rows; `row_atom_reuses` counts its unchanged-prefix subset.
+The earlier producer route is excluded from both. In successful complete
+comparisons with the same producer and factoring policies, each such reuse
+removes one `atom_lookups` and one `node_lookups` operation. Added witness,
+cache and inverse storage is leased; pushes, undo, initialization, lookup and
+stores consume their actual work. An explicit work or support-byte bound can
+therefore stop at a different point. An identity memo remains staged after
+measurement; see [body-atom identity](../../design/body-atom-identity.md).
+
+Ordinary normal rules with at least two flat positive body atoms additionally
+share head projection and balanced subformulas through their [matched rows](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/witnesses.rs).
 The join lends the exact relation occurrences and identifies the prefix left
 unchanged by its last advance. A prepared head projects arguments from those
 rows into the existing canonical atom store. Repeated variables, constants and
@@ -1302,15 +1418,19 @@ entries on insertion, giving quadratic total movement in the worst insertion
 order. Key reads, searches, movement, retained capacity and replacement peaks
 consume the existing work and storage allowances; reuse still checks
 cancellation. Arithmetic, default negation and local generators retain their
-existing construction path.
+existing construction path beyond the held positive-row naming above. The producer's shared node-cache owner retains its existing work units and leaves compiled groups unrecorded.
 
 These are representation and execution changes, not an inference that possible
 support is true. All producer conditions and source origins remain represented.
 Finite conjunction and frozen-reduct laws justify regrouping; the join's exact
 row identity and complete producer coverage are separate implementation
-obligations. Semantic differential tests check both original truth and frozen
-truth for arbitrary interpretations. They do not establish a source-to-Rust
-formal refinement.
+obligations. The `DagSharing.intern_stable_under_extension` list-model law
+supports reuse of an earlier interned node; exact matching, generator safety,
+passing-lend reset and cache currency remain Rust obligations. Differential
+tests compare catalog order, node identities, roots and origins, including
+out-of-order and owned completions. Producer tests also check original and
+frozen truth for arbitrary interpretations. These tests do not establish a
+source-to-Rust formal refinement.
 
 Formula nodes use an exact-key index with the shared deterministic word hash. The separate
 node sequence establishes dense IDs and output order; hash-table iteration never
@@ -1391,21 +1511,23 @@ rows possible-support completion and final instantiation read, never the
 original formula/reduct semantics. The source guide provides a
 [checked on/off example](../rust/source.md#optional-domains-during-final-instantiation).
 
-The private applicability check covers the exact normalized whole source and
-its original positive flat rule occurrences, body comparisons included. It
-excludes computed or generated terms in rule atoms, negative rule-body literals,
-structural/local scopes in rules and richer producers; a favorable dependency
-projection cannot qualify. The analyzer borrows that
-same immutable Program until final instantiation ends. Normalized statement
-deduplication does not merge the rule occurrences or their provenance.
+Numeric analysis reads all prepared producers and compact fact columns through
+their canonical owners, without reconstructing the expanded source `Program`.
+Finite guards have a separate applicability check over the exact normalized
+source and its original positive flat rule occurrences, body comparisons
+included. That guard profile excludes computed or generated terms in rule atoms,
+negative rule-body literals, structural/local scopes in rules and richer
+producers; a favorable dependency projection cannot qualify. Guard candidates
+retain canonical value IDs and borrow the prepared rule occurrences through
+final instantiation. Normalized statement deduplication does not merge those
+occurrences or their provenance.
 
 Objective declarations may accompany those rules. They rank answer sets and do
-not produce argument values, so the domain analysis ignores their restrictions
-while retaining the complete normalized source. Guards narrow only rule joins;
-objective grounding, arithmetic checks, tuple identity and scoring keep their
-existing paths. This permission does not extend the profile to choice or
-aggregate producers. Producer scheduling retains its separate applicability
-conditions.
+not produce argument values, so the domain analysis ignores their restrictions.
+Guards narrow only rule joins; objective grounding, arithmetic checks, tuple
+identity and scoring keep their existing paths. The guard profile still excludes
+choice and aggregate producers. Producer scheduling retains its separate
+applicability conditions.
 
 The source analyzer intersects the positive argument domains binding one head
 variable within each producer, then unions the results of alternative producers.
@@ -1428,16 +1550,16 @@ are prepared once per rule, with the analysis; a guard resolves them into a
 snapshot's dictionary, for every completion round and the final one, and
 only where the candidates are fewer than the argument's domain, since a
 relation offers no value outside it. Unknown contributes no
-restriction. A global Unknown/Stopped analysis or an inapplicable program
-keeps complete fallback. These are upper bounds on source bindings, not facts
-about candidate truth or answer-set membership.
+restriction. A stopped analysis or an inapplicable guard profile keeps complete
+fallback. These are upper bounds on source bindings, not facts about candidate
+truth or answer-set membership.
 
-The guard builder retains borrowed source symbols for the meets, converts one
-atomic value at a time through the existing compiler, and resolves it through
-the completed support owner's sole equality dictionary. It retains only IDs and
-original rule/row/column ownership. Both join strategies offer their original
-rows to the same guard before binding and deeper probes. An Indexed posting can
-include rows that fail another bound column; Table intersects its equalities
+The guard builder intersects finite values by coordinates in one analysis,
+retains their existing canonical term IDs, and resolves them through each support
+snapshot's equality dictionaries. It exports and re-admits no term payload.
+Candidates retain their original rule/row/column ownership. Both join strategies
+offer their original rows to the same guard before binding and deeper probes. An
+Indexed posting can include rows that fail another bound column; Table intersects its equalities
 before offering rows. Thus offered-row and guard-rejection counts need not
 match across strategies, even when complete bindings do.
 

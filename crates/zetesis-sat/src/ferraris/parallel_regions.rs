@@ -21,10 +21,10 @@
 //! does, by the class certificate when one applies and else by the
 //! proper-subset query as a region tree; a stable model is sent to the
 //! enumeration. The regions partition the candidate space exactly
-//! (`Cube.split_partition`, `Cube.split_disjoint` of `Search.lean`), so no leaf
-//! is visited by two workers and every leaf by one, whatever the interleaving;
-//! the order in which models arrive is the schedule's and is not a property of
-//! the result, and no two runs promise the same order.
+//! (`Cube.split_partition`, `Cube.split_disjoint` of `Search.lean`), so every
+//! leaf is visited once, by the coordinator or a worker, whatever the
+//! interleaving. Before engagement models arrive in the scalar walk's order;
+//! afterwards their order is the schedule's and is not a property of the result.
 //!
 //! A restriction added while the workers run narrows the regions not yet
 //! visited: each worker reads the restrictions before a narrowing, and a
@@ -117,9 +117,9 @@ const ENGAGEMENT_COST_PER_WORKER: Duration = Duration::from_micros(20);
 /// verifies. Its workers start once the walk has run for its engagement delay,
 /// measured in wall time from the walk's beginning. The caller's own time
 /// between pulls counts toward the delay, so a caller doing heavy work per model
-/// can carry a walk past it. The delay is checked between the coordinator's
-/// steps, so the workers can start up to one step's duration after it has
-/// passed. A walk that ends within its delay starts no thread.
+/// can carry a walk past it. The delay is checked on each pull and between
+/// the coordinator's steps. A step in progress or time between pulls can
+/// postpone engagement. A walk that ends within its delay starts no thread.
 ///
 /// The answer family is the same under every engagement; what differs is the
 /// order in which models arrive, the threads started and the time taken.
@@ -128,8 +128,9 @@ const ENGAGEMENT_COST_PER_WORKER: Duration = Duration::from_micros(20);
 pub enum Engagement {
     /// The default delay, `w × c` for `w` configured workers, where `c` is the
     /// measured wall cost of engaging one region worker on the reference host,
-    /// recorded in the repository's observation records. Against `Immediate`, a
-    /// walk that engages finishes at most about its delay plus one step later.
+    /// recorded in the repository's observation records. The delay governs
+    /// engagement; it does not bound elapsed-time differences between
+    /// independently scheduled runs.
     #[default]
     AfterStartCost,
     /// No delay: the walk begins and starts every worker at the first pull,
@@ -975,7 +976,7 @@ impl ParallelRegions {
         certificate: Option<&Arc<Certification>>,
         timed: bool,
         budget: &mut Budget<'_>,
-        deadline_passed: &mut dyn FnMut(Instant) -> bool,
+        deadline_passed: &mut impl FnMut(Instant) -> bool,
     ) -> Result<Option<Interpretation>, Incomplete> {
         if self.exhausted {
             return Ok(None);
@@ -1041,8 +1042,8 @@ impl ParallelRegions {
         Ok(())
     }
 
-    /// Begin the walk at the first pull: poll cancellation, leaving the walk
-    /// unbegun on cancellation; synchronize the budget and install the
+    /// Begin the walk at the first pull: poll cancellation and refuse a closed
+    /// walk, leaving it unbegun in either case; synchronize the budget and install the
     /// certificate and the timing flag, while no other party holds the shared
     /// structure; record the beginning and the deadline; and create the
     /// coordinator's retained state unless the delay is zero. A timing enable
@@ -1054,6 +1055,12 @@ impl ParallelRegions {
         budget: &mut Budget<'_>,
     ) -> Result<(), Incomplete> {
         budget.cancellation.poll()?;
+        if self.shared.termination.is_closed() {
+            return Err(self
+                .shared
+                .stopped()
+                .unwrap_or(Incomplete::ClosedEnumerator));
+        }
         let shared = Arc::get_mut(&mut self.shared).ok_or(Incomplete::InvalidWitness)?;
         shared.budget = SharedBudget::new(shared.limits.search, budget.statistics);
         // The certificate is shared read-only; the Arc is cloned into the
@@ -1091,7 +1098,7 @@ impl ParallelRegions {
         &mut self,
         index: &Arc<IndexedTheory>,
         budget: &mut Budget<'_>,
-        deadline_passed: &mut dyn FnMut(Instant) -> bool,
+        deadline_passed: &mut impl FnMut(Instant) -> bool,
     ) -> Result<Coordinated, Incomplete> {
         let WalkRecord::Unengaged {
             since, deadline, ..
@@ -1394,7 +1401,7 @@ fn coordinate<'a>(
     original: &IndexedTheory,
     caller: &Cancellation,
     deadline: Option<Instant>,
-    deadline_passed: &mut dyn FnMut(Instant) -> bool,
+    deadline_passed: &mut impl FnMut(Instant) -> bool,
     merged: &mut Statistics,
 ) -> (Exit, bool, Result<(), Incomplete>) {
     let mut lease: Option<WorkLease<'a>> = None;

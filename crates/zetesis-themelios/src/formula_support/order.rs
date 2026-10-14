@@ -450,15 +450,7 @@ impl Decisions {
                     left.nodes.len() as u128 + right.nodes.len() as u128,
                     location,
                 )?;
-                left.inputs()
-                    .chain(right.inputs())
-                    .try_fold(0, |depth, variable| {
-                        bound_at
-                            .get(variable)
-                            .copied()
-                            .flatten()
-                            .map(|at| depth.max(at))
-                    })
+                comparison_depth([left, right], &bound_at)
             } else {
                 None
             };
@@ -500,6 +492,23 @@ impl Decisions {
     pub(super) fn certifies(&self, depth: usize) -> bool {
         !self.on_completion && self.last <= Some(depth)
     }
+}
+
+/// Readiness shared by join decisions and diagnostic numeric reports. The
+/// caller charges the complete operand-node scan before this pure fold.
+pub(crate) fn comparison_depth(
+    [left, right]: [&crate::formula_ir::Expression; 2],
+    bound_at: &[Option<usize>],
+) -> Option<usize> {
+    left.inputs()
+        .chain(right.inputs())
+        .try_fold(0, |depth, variable| {
+            bound_at
+                .get(variable)
+                .copied()
+                .flatten()
+                .map(|at| depth.max(at))
+        })
 }
 
 /// A variable outside the frame is a head or generator slot the positive

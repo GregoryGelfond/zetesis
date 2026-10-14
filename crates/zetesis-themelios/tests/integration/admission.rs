@@ -68,14 +68,7 @@ fn constraints_share_gates_and_scalar_filters() {
 #[test]
 fn scalar_values_keep_their_types_and_decode_strings() {
     let input = accepted("p(a, \"a\", 12, -7, \"a\\\"b\").");
-    let terms = input
-        .program()
-        .templates()
-        .at(0)
-        .unwrap()
-        .head()
-        .expect("fact head")
-        .terms();
+    let terms = input.program().facts().at(0).unwrap().pattern().terms();
     assert_eq!(
         terms.iter().collect::<Vec<_>>(),
         [
@@ -420,8 +413,9 @@ fn syntax_refusal_preserves_dependency_diagnostics_and_source_identity() {
 #[test]
 fn merged_rules_retain_all_source_origins() {
     let input = accepted("p(a). p(a).");
-    assert_eq!(input.program().templates().len(), 1);
-    assert_eq!(input.template_origins()[0].len(), 2);
+    assert!(input.program().templates().is_empty());
+    assert_eq!(input.program().facts().len(), 1);
+    assert_eq!(input.fact_origins()[0].len(), 2);
     assert_eq!(input.source().text(), "p(a). p(a).");
 }
 
@@ -461,10 +455,10 @@ fn extended_admission_reports_the_expansion_it_used() {
     let usage = admitted.expansion_usage();
     assert!(usage.term_work > 0);
     assert!(usage.term_work <= limits.max_term_work);
-    assert!(usage.templates >= admitted.program().templates().len());
+    assert!(usage.templates >= admitted.program().rules().len());
     assert!(usage.templates <= limits.max_templates);
     assert!(usage.values >= 3);
-    assert!(usage.origin_locations >= admitted.program().templates().len());
+    assert!(usage.origin_locations >= admitted.program().rules().len());
 }
 
 #[test]

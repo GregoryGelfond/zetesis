@@ -7,19 +7,18 @@ use crate::ProgramSite;
 pub(crate) use profile::{Event, Profile, Work};
 pub use profile::{GroundingOutcome, GroundingPhase, GroundingWork};
 
-/// Outcome of the optional finite-domain attempt over the exact normalized
-/// source owner. This synchronous borrowed view cannot outlive that attempt.
-/// Completed analysis is an upper bound, not a source or answer-set certificate.
+/// Outcome of optional numeric analysis over all prepared producers and compact
+/// fact columns. This synchronous borrowed view cannot outlive the attempt.
+/// Argument bounds establish neither truth nor answer-set membership.
 #[derive(Clone, Copy, Debug)]
 pub enum DomainObservation<'a, 'source> {
     /// No domain analysis was requested.
     Disabled,
-    /// The complete normalized source/IR profile was not applicable.
-    Inapplicable,
-    /// Actual analysis, including its exact owner, status, context and logical
-    /// statistics. Unknown/Stopped supplies no narrowing. Retaining consumers
-    /// copy the specific owned status/statistics they need during the callback.
-    Analyzed(&'a zetesis_domain::Analysis<'source>),
+    /// Actual analysis with its canonical reader, status, producer sites and
+    /// logical statistics and diagnostic expression/body census. A stopped
+    /// analysis publishes no usable bounds or census. Reports never authorize
+    /// pruning, family admission, or answer-set membership.
+    Analyzed(crate::NumericAnalysis<'a, 'source>),
 }
 
 /// Observe formula materialization or certified exact source evaluation.
@@ -53,9 +52,25 @@ pub trait GroundingObserver {
         let _ = base;
     }
 
+    /// Request numeric certificates, their census and the domain callback.
+    ///
+    /// The default preserves existing diagnostic observers. Returning false
+    /// skips these diagnostic requests and [`Self::domain_analysis`], including
+    /// its [`DomainObservation::Disabled`] observation. It does not disable the shared numeric analysis
+    /// or finite-domain guards selected by `with_domain_analysis`.
+    ///
+    /// Sampled when each grounding profile is created, independently of
+    /// [`Self::details_enabled`]. An absent observer requests no diagnostics. Diagnostic
+    /// work consumes the same cumulative preparation limits as other analysis.
+    /// Observers delegating the domain callback can delegate this request too.
+    fn domain_diagnostics_enabled(&self) -> bool {
+        true
+    }
+
     /// Observe the actual optional domain attempt before final rule guards.
-    /// Called synchronously, independently of detailed work-counter opt-in.
-    /// A prior grounding failure may prevent the attempt and this callback.
+    /// Called synchronously when [`Self::domain_diagnostics_enabled`] permits it,
+    /// independently of detailed work-counter opt-in. A prior grounding failure
+    /// may prevent the attempt and this callback.
     fn domain_analysis(&self, _observation: DomainObservation<'_, '_>) {}
 
     /// Begin one coarse phase after its counter bank has been reset.

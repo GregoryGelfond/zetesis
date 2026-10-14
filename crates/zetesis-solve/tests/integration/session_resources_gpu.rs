@@ -257,6 +257,10 @@ fn independent_closures(resources: &ExecutionResources, device: GpuApi) {
     let first = normal(NORMAL_NUMBER);
     let second = normal(NORMAL_STRING);
     assert!(!first.program().same_instance(second.program()));
+    for owner in [&first, &second] {
+        assert_eq!(owner.program().facts().len(), 2);
+        assert!(owner.program().fact_catalog().is_some());
+    }
     for profile in [Profile::Eager, Profile::Lazy] {
         let subject = Subject::Program(first.program().clone());
         let mut limited = config(device.backend(), profile);

@@ -192,3 +192,38 @@ fn a_lowering_refused_at_its_own_ceiling_stays_below_the_limit() {
         7 + members.len() as u64 + limits.aggregate.max_work
     );
 }
+
+#[test]
+fn aggregate_owner_classification_agrees_with_restriction() {
+    use crate::{AggregateError, AggregateStatistics};
+    let resources = [
+        AggregateErrorKind::ElementLimit,
+        AggregateErrorKind::GuardLimit,
+        AggregateErrorKind::NodeLimit,
+        AggregateErrorKind::OperandLimit,
+        AggregateErrorKind::WorkLimit,
+        AggregateErrorKind::StateLimit,
+        AggregateErrorKind::SubsetLimit,
+        AggregateErrorKind::Allocation,
+        AggregateErrorKind::ArithmeticOverflow,
+        AggregateErrorKind::Control(Stop::Allocation),
+    ];
+    let shapes = [
+        AggregateErrorKind::InvalidPrefix { node: 0 },
+        AggregateErrorKind::InvalidCondition { element: 0 },
+        AggregateErrorKind::Control(Stop::Cancelled),
+    ];
+    for (population, resource) in [(resources.as_slice(), true), (shapes.as_slice(), false)] {
+        for &kind in population {
+            assert_eq!(kind.is_resource_refusal(), resource);
+            let error = AggregateError {
+                kind,
+                statistics: AggregateStatistics::default(),
+            };
+            assert_eq!(
+                RestrictionErrorKind::Aggregate(error).is_resource_refusal(),
+                resource
+            );
+        }
+    }
+}

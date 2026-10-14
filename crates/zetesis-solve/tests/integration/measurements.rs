@@ -571,3 +571,15 @@ fn stages_only_lazy_grounding_remains_interleaved() {
     assert!(stages.get(SolveStage::Grounding).is_none());
     assert!(stages.get(SolveStage::Solving).is_some());
 }
+
+#[test]
+fn timing_observers_decline_unused_numeric_diagnostics() {
+    for owner in [
+        SolveMeasurements::new(true),
+        SolveMeasurements::stages_only(),
+    ] {
+        let observer = owner.grounding_observer().unwrap();
+        assert!(!observer.domain_diagnostics_enabled());
+        assert_eq!(observer.details_enabled(), owner.details_enabled());
+    }
+}

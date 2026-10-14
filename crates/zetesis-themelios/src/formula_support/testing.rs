@@ -125,7 +125,11 @@ impl Fixture {
     pub(crate) fn with<T>(
         &mut self,
         location: ProgramSite,
-        run: impl FnOnce(&Support<'_>, &mut Computation<'_, '_>, &mut Counters) -> T,
+        run: impl for<'source> FnOnce(
+            &Support<'source>,
+            &mut Computation<'_, 'source>,
+            &mut Counters,
+        ) -> T,
     ) -> T {
         let limits = FormulaLimits::default();
         let (relations, mut append) = self
@@ -253,7 +257,7 @@ pub(crate) fn prepare(text: &str) -> crate::formula::Preparation {
 pub(crate) fn with_completed_source(
     text: &str,
     run: impl for<'source> FnOnce(
-        &crate::formula_ir::Prepared,
+        &'source crate::formula_ir::Prepared,
         &Support<'source>,
         &mut Computation<'_, 'source>,
         &mut Counters,
@@ -306,7 +310,10 @@ fn prepare_into(
         catalog,
         work: super::GroundingWork::new(&FormulaLimits::default(), counters, location),
     }
-    .prepare(&raised, metadata.project_selection().clone())
+    .prepare(
+        &std::sync::Arc::new(raised),
+        metadata.project_selection().clone(),
+    )
     .unwrap();
     (prepared, location)
 }
@@ -320,4 +327,10 @@ pub(crate) fn budget() -> Budget {
 /// `values` as number values.
 pub(crate) fn numbers(values: &[i32]) -> Vec<Value> {
     values.iter().map(|&value| Value::Number(value)).collect()
+}
+
+/// Inspect the current source authority plus workspace in storage-owner tests.
+/// Tests taking differences must leave canonical storage unchanged between reads.
+pub(crate) fn live_bytes(support: &Support<'_>) -> usize {
+    support.live_bytes()
 }

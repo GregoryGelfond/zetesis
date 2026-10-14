@@ -144,6 +144,7 @@ fn independent_tuple_writers_share_term_translation() {
     .unwrap();
     let program = Program::new(
         vec![Template::new(Some(pattern), vec![], vec![], vec![], vec![])],
+        crate::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();

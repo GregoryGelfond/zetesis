@@ -67,8 +67,12 @@ pub(crate) fn program(family: Family, consequences: usize) -> GroundProgram {
         vec![],
         vec![],
     ));
-    let program =
-        Program::new(templates, AdmissionLimits::default()).expect("the fixture program is safe");
+    let program = Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .expect("the fixture program is safe");
     GroundProgram::compile(
         &program,
         StaticLimits {

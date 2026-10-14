@@ -6,7 +6,7 @@ use super::{Compiler, Counters, components};
 use crate::expansion::Budget;
 use crate::fact_expansion::{Cell, Facts, ProductView};
 use crate::formula::ceiling;
-use crate::formula_facts::{Growth, Items, LeasedReserve};
+use crate::formula_facts::{FactArena, Items, LeasedReserve, ProductColumn, Segment};
 use crate::formula_support::components::Scalar;
 use crate::formula_support::{StorageLease, growth_target};
 use crate::{FormulaFailure, FormulaLimits, FormulaResource, ProgramSite};
@@ -62,11 +62,11 @@ impl Compiler<'_> {
             // the vocabulary grows as it grew one fact rule at a time: the first
             // row's values, its predicate, then each later column value, last
             // column first, as the rows advance.
-            for (column, &start) in product.columns().zip(&scratch.starts) {
+            for (column, first_cell) in product.columns().zip(&mut scratch.first) {
                 let first = Values::new(column)
                     .next()
                     .expect("a product column has a value");
-                scratch.admitted[start] = Some(self.cell(first)?);
+                *first_cell = Some(self.cell(first)?);
             }
             let predicate = match open {
                 Some((_, predicate)) => predicate,
@@ -75,28 +75,39 @@ impl Compiler<'_> {
                         .predicate(source.into(), self.limits, self.counters, location)?
                 }
             };
-            for (column, &start) in product.columns().rev().zip(scratch.starts.iter().rev()) {
-                for (offset, value) in Values::new(column).enumerate().skip(1) {
+            // The first value of each column is already admitted. Record it
+            // before that column's tail, without admitting it a second time.
+            // A component gap caused by another column's first value is kept
+            // as a segment boundary; numeric adjacency alone proves nothing
+            // about occurrence coordinates.
+            let mut stride = 1_usize;
+            for (index, column) in (0..scratch.columns.len())
+                .rev()
+                .zip(product.columns().rev())
+            {
+                let start = scratch.segments.len();
+                let mut values = Values::new(column);
+                let first = values.next().expect("a product column has a value");
+                let scalar = scratch.first[index].expect("the first value is admitted");
+                scratch.push(start, 0, first, scalar, self.budget, location)?;
+                let mut width = 1;
+                for value in values {
                     self.budget.poll(location)?;
-                    scratch.admitted[start + offset] = Some(self.cell(value)?);
+                    let scalar = self.cell(value)?;
+                    scratch.push(start, width, value, scalar, self.budget, location)?;
+                    width += 1;
                 }
+                scratch.columns[index] =
+                    ProductColumn::new(start..scratch.segments.len(), width, stride);
+                stride = stride.saturating_mul(width);
             }
-            let mut growth = Growth {
-                cells: scratch.admitted.len(),
-                ..Growth::default()
-            };
-            if evidence.is_none() {
-                growth.evidence = origins.len();
-            }
-            if open.is_some() {
-                growth.ends = 1;
-            } else if run {
-                growth.blocks = 1;
-                growth.ends = 1;
-            } else {
-                growth.blocks = 1;
-                growth.columns = scratch.starts.len();
-            }
+            let growth = FactArena::growth(
+                &scratch.columns,
+                &scratch.segments,
+                evidence.is_none().then_some(origins),
+                run,
+                open.is_some(),
+            );
             let mut room = ArenaGrowth {
                 source: &self.source,
                 limits: self.limits,
@@ -106,25 +117,28 @@ impl Compiler<'_> {
             items
                 .arena()
                 .reserve(growth, || self.source.lease(), &mut room)?;
+            let columns = if run {
+                Some(items.arena().reserve_row(
+                    open.map(|(block, _)| block),
+                    source.arity(),
+                    &mut room,
+                )?)
+            } else {
+                None
+            };
             let arena = items.arena();
             let evidence = evidence.get_or_insert_with(|| arena.store_evidence(origins));
-            let first = arena.cell_count();
-            for cell in scratch.admitted.drain(..) {
-                arena.push_cell(cell.expect("every column value is admitted"));
-            }
-            if let Some((block, _)) = open {
-                arena.extend_run(block, evidence);
-                continue;
-            }
-            let block = if run {
-                let block = arena.push_run(predicate, source.arity(), evidence);
+            let block = if let Some(columns) = columns {
+                arena.push_row(columns.clone(), &scratch.first);
+                if let Some((block, _)) = open {
+                    arena.extend_run(block, evidence);
+                    continue;
+                }
+                let block = arena.push_run(predicate, columns, evidence);
                 arena.open(source.clone(), block);
                 block
             } else {
-                for start in &mut scratch.starts {
-                    *start += first;
-                }
-                arena.push_product(predicate, &scratch.starts, evidence)
+                arena.push_product(predicate, &scratch.columns, &scratch.segments, evidence)
             };
             items.note_block(block);
         }
@@ -247,47 +261,70 @@ impl<'a, I: Iterator<Item = Cell<'a>>> Iterator for Values<'a, I> {
     }
 }
 
-/// Compilation scratch reused across fact statements: one product's column
-/// starts and its admitted cells, in column order.
+/// One product's column descriptors, first admitted coordinates, and compact
+/// segments. The first-row coordinates must survive until the predicate is
+/// admitted; the remaining values then arrive in reverse column order.
 #[derive(Default)]
 pub(super) struct Scratch {
-    starts: Vec<usize>,
-    admitted: Vec<Option<Scalar>>,
+    columns: Vec<ProductColumn>,
+    first: Vec<Option<Scalar>>,
+    segments: Vec<Segment>,
 }
 
 impl Scratch {
-    /// Lay out `product`'s columns: each column's start among its cells, and an
-    /// empty slot per cell. The scratch is charged to the expansion's scalar
-    /// bytes as it is reserved, as the compiler's other buffers are; it is
-    /// reused across statements, so only its growth is charged.
+    /// Reserve scratch by source segments and arity, not interval width. An
+    /// interval's first value may be separated from its tail by other columns'
+    /// first occurrences, so allow one extra segment per column. Unexpected
+    /// coordinate gaps grow this buffer through the same charged allocator.
+    /// Buffers are reused across statements and only growth is charged.
     fn layout(
         &mut self,
         product: ProductView<'_>,
         budget: &mut Budget,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
-        self.starts.clear();
-        self.admitted.clear();
-        crate::formula_pattern::reserve_amortized(
-            &mut self.starts,
-            product.columns().count(),
-            budget,
-            location,
-        )?;
-        let mut total = 0_usize;
-        for column in product.columns() {
-            self.starts.push(total);
-            for cell in column {
-                total = total.saturating_add(match cell {
-                    Cell::Scalar(_) => 1,
-                    Cell::Interval(range) => {
-                        usize::try_from(crate::integer_range::width(&range)).unwrap_or(usize::MAX)
-                    }
-                });
-            }
+        self.columns.clear();
+        self.first.clear();
+        self.segments.clear();
+        let arity = product.columns().count();
+        crate::formula_pattern::reserve_amortized(&mut self.columns, arity, budget, location)?;
+        crate::formula_pattern::reserve_amortized(&mut self.first, arity, budget, location)?;
+        let segments = product
+            .columns()
+            .fold(arity, |total, column| total.saturating_add(column.count()));
+        crate::formula_pattern::reserve_amortized(&mut self.segments, segments, budget, location)?;
+        self.columns.resize(arity, ProductColumn::new(0..0, 0, 0));
+        self.first.resize(arity, None);
+        Ok(())
+    }
+
+    /// Record one already admitted value. Only an integer following another
+    /// integer in this column can extend a segment, and only after both its
+    /// value and actual occurrence coordinate have passed the adjacency check.
+    fn push(
+        &mut self,
+        start: usize,
+        position: usize,
+        value: Column<'_>,
+        scalar: Scalar,
+        budget: &mut Budget,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        if let Column::Number(number) = value
+            && self.segments.len() > start
+            && self
+                .segments
+                .last_mut()
+                .expect("this column has a segment")
+                .append(number, scalar)
+        {
+            return Ok(());
         }
-        crate::formula_pattern::reserve_amortized(&mut self.admitted, total, budget, location)?;
-        self.admitted.resize(total, None);
+        crate::formula_pattern::reserve_amortized(&mut self.segments, 1, budget, location)?;
+        self.segments.push(match value {
+            Column::Value(_) => Segment::scalar(position, scalar),
+            Column::Number(number) => Segment::integer(position, number, scalar),
+        });
         Ok(())
     }
 }
@@ -330,7 +367,7 @@ mod tests {
 
     use super::{ArenaGrowth, Scratch};
     use crate::expansion::Budget;
-    use crate::formula_facts::{FactArena, Growth};
+    use crate::formula_facts::{FactArena, Growth, Items, ProductColumn, Segment};
     use crate::formula_ir::Compiler;
     use crate::formula_ir::testing::with_compiler;
     use crate::formula_support::components::Scalar;
@@ -364,7 +401,8 @@ mod tests {
             .unwrap();
         let mut budget = Budget::new(ExpansionLimits::default(), 100);
         let mut scratch = Scratch::default();
-        let charged = size_of::<usize>() + 10 * size_of::<Option<Scalar>>();
+        let charged =
+            size_of::<ProductColumn>() + size_of::<Option<Scalar>>() + 2 * size_of::<Segment>();
         scratch
             .layout(wide.products().next().unwrap(), &mut budget, location)
             .unwrap();
@@ -374,6 +412,64 @@ mod tests {
             .layout(narrow.products().next().unwrap(), &mut budget, location)
             .unwrap();
         assert_eq!(budget.usage().scalar_bytes, charged);
+    }
+
+    #[test]
+    fn compact_products_keep_actual_scalar_admission_order_and_work() {
+        let location = ProgramSite::statement(StatementId::new(0), None);
+        let statement = WithProvenance::constructed(
+            Rule::fact(Atom::new(
+                Name::new("p").unwrap(),
+                [4, 3].map(|upper| Term::Interval {
+                    lower: Box::new(1.into()),
+                    upper: Box::new(upper.into()),
+                }),
+            ))
+            .into(),
+        );
+        let mut expansion = Budget::new(ExpansionLimits::default(), 100);
+        let facts = crate::fact_expansion::facts(&statement, &mut expansion, location)
+            .unwrap()
+            .unwrap();
+        let reference = with_compiler(ExpansionLimits::default(), |compiler| {
+            let number = zetesis_core::Value::Number;
+            let mut left = vec![compiler.root_scalar(&number(1)).unwrap()];
+            let mut right = vec![compiler.root_scalar(&number(1)).unwrap()];
+            let source = facts.products().next().unwrap().predicate();
+            let predicate = compiler
+                .source
+                .predicate(
+                    source.into(),
+                    compiler.limits,
+                    compiler.counters,
+                    compiler.location,
+                )
+                .unwrap();
+            for value in 2..=3 {
+                right.push(compiler.root_scalar(&number(value)).unwrap());
+            }
+            for value in 2..=4 {
+                left.push(compiler.root_scalar(&number(value)).unwrap());
+            }
+            let rows: Vec<_> = left
+                .into_iter()
+                .flat_map(|left| right.iter().map(move |&right| vec![left, right]))
+                .collect();
+            (predicate, rows, compiler.counters.accounting.work)
+        });
+        let actual = with_compiler(ExpansionLimits::default(), |compiler| {
+            let mut items = Items::default();
+            compiler
+                .facts(&facts, &[location], &mut items, &mut Scratch::default())
+                .unwrap();
+            let block = items.blocks().next().unwrap();
+            let rows: Vec<_> = block
+                .rows()
+                .map(|row| row.cells().collect::<Vec<_>>())
+                .collect();
+            (block.predicate(), rows, compiler.counters.accounting.work)
+        });
+        assert_eq!(actual, reference);
     }
 
     /// Limits that leave the fact arena `bytes` of support storage beside
@@ -403,10 +499,7 @@ mod tests {
                 counters: compiler.counters,
                 location: compiler.location,
             };
-            let growth = Growth {
-                cells: 1024,
-                ..Growth::default()
-            };
+            let growth = Growth::segments(1024);
             let refused = arena.reserve(growth, || compiler.source.lease(), &mut room);
             assert!(matches!(
                 refused,
@@ -421,10 +514,9 @@ mod tests {
 
     #[test]
     fn arena_growth_takes_exact_room_when_only_that_fits() {
-        // Four cells grow to five: doubling to eight would hold the old four
-        // and the new eight at once, twelve cells, past an allowance of ten,
-        // where the exact five with the old four, nine, fit.
-        let cell = size_of::<Scalar>();
+        // Four segments grow to five: doubling holds twelve at replacement,
+        // past the allowance of ten; exact growth holds nine and fits.
+        let cell = size_of::<Segment>();
         with_compiler(ExpansionLimits::default(), |compiler| {
             let one = compiler
                 .root_scalar(&zetesis_core::Value::Number(1))
@@ -437,18 +529,12 @@ mod tests {
                 counters: compiler.counters,
                 location: compiler.location,
             };
-            let cells = |cells| Growth {
-                cells,
-                ..Growth::default()
-            };
             arena
-                .reserve(cells(4), || compiler.source.lease(), &mut room)
+                .reserve(Growth::segments(4), || compiler.source.lease(), &mut room)
                 .unwrap();
-            for _ in 0..4 {
-                arena.push_cell(one);
-            }
+            arena.fill_segments_for_test(Segment::scalar(0, one), 4);
             arena
-                .reserve(cells(1), || compiler.source.lease(), &mut room)
+                .reserve(Growth::segments(1), || compiler.source.lease(), &mut room)
                 .unwrap();
             assert_eq!(arena.retained_bytes(), 5 * cell);
         });

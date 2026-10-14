@@ -44,7 +44,7 @@ fn with_cursor<T>(
             )
             .unwrap();
         let mut cursor = Cursor::new(
-            &rule.body,
+            Ir::Source(rule.body.as_slice()),
             values,
             support,
             rule.bindings.as_ref(),
@@ -95,7 +95,7 @@ fn rows(source: &str, conservative: bool) -> (Rows, u64) {
                         .generators
                         .iter()
                         .map(|generator| {
-                            let variable = target(generator.literal).unwrap();
+                            let variable = target(generator.literal.get()).unwrap();
                             let ValueNodeRef::Number(value) = binding
                                 .read(variable, computation.read(), location)
                                 .unwrap()
@@ -254,7 +254,7 @@ fn unplanned_consumers_are_invalidated() {
         cursor.depth = 0;
         cursor
             .invalidate_dependents(
-                target(cursor.generators[0].literal).unwrap(),
+                target(cursor.generators[0].literal.get()).unwrap(),
                 limits,
                 counters,
                 location,

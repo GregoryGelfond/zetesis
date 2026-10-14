@@ -284,13 +284,19 @@ fn exact_domain_ceilings_empty_intervals_and_retry_preserve_results() {
 #[test]
 fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
     let source = "{p(X):0<X,X<3}.q:-p(Y):not not (Y,1)=(2,1).";
+    // Preparation owns finite binding planning. Grounding additionally charges
+    // a local-plan table whose address ordering belongs to each prepared owner.
+    let prepare = |limit| {
+        zetesis_themelios::prepare_formula(
+            source.into(),
+            admission::options(SOURCE),
+            resource_limits::expansion(ExpansionResource::TermWork, limit),
+            FormulaLimits::default(),
+        )
+    };
     let lower = first_success(
         resource_limits::expansion_default(ExpansionResource::TermWork),
-        |limit| match input_with(
-            source,
-            resource_limits::expansion(ExpansionResource::TermWork, limit),
-            &FormulaLimits::default(),
-        ) {
+        |limit| match prepare(limit) {
             Ok(_) => true,
             Err(FormulaFailure::Expansion(ExpansionFailure::Limit {
                 resource: ExpansionResource::TermWork,
@@ -299,22 +305,15 @@ fn planner_work_refusal_is_transactional_at_the_exact_ceiling() {
             Err(error) => panic!("unexpected refusal: {error}"),
         },
     );
-    let error = input_with(
-        source,
-        resource_limits::expansion(ExpansionResource::TermWork, lower - 1),
-        &FormulaLimits::default(),
-    )
-    .unwrap_err();
+    let error = prepare(lower - 1).unwrap_err();
     assert!(
         matches!(error, FormulaFailure::Expansion(ExpansionFailure::Limit { resource: ExpansionResource::TermWork, limit, observed, location }) if limit == u128::from(lower - 1) && observed > limit && location.location().expect("parsed source").source == SOURCE)
     );
-    let program = input_with(
-        source,
-        resource_limits::expansion(ExpansionResource::TermWork, lower),
-        &FormulaLimits::default(),
-    )
-    .unwrap();
-    assert_eq!(native(&program), exhaustive(&input("{p(1);p(2)}.q:-p(2).")));
+    prepare(lower).unwrap();
+    assert_eq!(
+        native(&input(source)),
+        exhaustive(&input("{p(1);p(2)}.q:-p(2)."))
+    );
 }
 
 #[test]

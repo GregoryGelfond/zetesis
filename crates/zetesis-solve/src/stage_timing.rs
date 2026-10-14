@@ -34,6 +34,9 @@ impl zetesis_themelios::GroundingObserver for Observer<'_> {
     fn details_enabled(&self) -> bool {
         self.grounding.is_some()
     }
+    fn domain_diagnostics_enabled(&self) -> bool {
+        false
+    }
     fn terminal_definitions(&self, base: zetesis_themelios::BaseKind) {
         self.recorder.mark_terminal_definitions(mark(base));
     }

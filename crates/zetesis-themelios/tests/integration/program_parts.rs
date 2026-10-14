@@ -79,8 +79,8 @@ fn scalar_admission_preserves_explicit_base_rules() {
         )
         .unwrap();
         assert_eq!(
-            direct.program().templates().iter().collect::<Vec<_>>(),
-            extended.program().templates().iter().collect::<Vec<_>>()
+            zetesis_test_support::programs::rules(direct.program()).collect::<Vec<_>>(),
+            zetesis_test_support::programs::rules(extended.program()).collect::<Vec<_>>()
         );
         assert_eq!(direct.source().text(), source);
     }

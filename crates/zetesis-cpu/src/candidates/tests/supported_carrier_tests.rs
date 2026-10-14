@@ -35,7 +35,12 @@ fn sparse() -> Program {
             vec![],
         ));
     }
-    Program::new(templates, AdmissionLimits::default()).unwrap()
+    Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 /// Independent p(value) :- not not p(value) choices leave the supported
@@ -53,7 +58,12 @@ fn independent_choices(values: &[i32], domain: std::ops::Range<i32>) -> Program 
             Template::new(Some(pattern("d", &[value])), vec![], vec![], vec![], vec![])
         }),
     );
-    Program::new(templates, AdmissionLimits::default()).unwrap()
+    Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn expected_choices(values: &[i32]) -> Vec<Vec<Atom>> {

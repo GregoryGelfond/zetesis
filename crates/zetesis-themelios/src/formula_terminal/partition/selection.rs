@@ -238,6 +238,10 @@ fn correspond(
             }
         }
     }
+    #[cfg(test)]
+    if matches!(occurrence, Occurrence::Row(..)) {
+        ROW_FALLBACKS.with(|count| count.set(count.get() + 1));
+    }
     let mut matched = false;
     for (position, definition) in defined.all.iter().enumerate() {
         context.work()?;
@@ -247,4 +251,24 @@ fn correspond(
         }
     }
     Ok(matched)
+}
+
+#[cfg(test)]
+thread_local! {
+    static ROW_FALLBACKS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// Count fact rows that reach the exhaustive correspondence search, restoring
+/// the previous thread-local count on return or unwind.
+#[cfg(test)]
+pub(super) fn count_row_fallbacks<T>(body: impl FnOnce() -> T) -> (T, usize) {
+    struct Restore(usize);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            ROW_FALLBACKS.with(|count| count.set(self.0));
+        }
+    }
+    let _restore = Restore(ROW_FALLBACKS.with(|count| count.replace(0)));
+    let result = body();
+    (result, ROW_FALLBACKS.with(std::cell::Cell::get))
 }

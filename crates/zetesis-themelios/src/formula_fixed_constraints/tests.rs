@@ -160,7 +160,7 @@ fn cancellation_is_a_typed_refusal() {
     let mut facts = FixedFacts::new(&program);
     assert!(matches!(
         specialize(
-            &program,
+            &crate::formula_analysis::Summary::complete(program.clone()),
             &owners,
             &mut facts,
             &mut budget,
@@ -185,7 +185,7 @@ fn family_byte_refusal_retains_the_original() {
     let mut facts = FixedFacts::new(&program);
     assert!(
         specialize(
-            &program,
+            &crate::formula_analysis::Summary::complete(program.clone()),
             &owners,
             &mut facts,
             &mut budget,
@@ -281,7 +281,7 @@ fn merged_original_owners_prevent_replacement() {
     let mut facts = FixedFacts::new(&program);
     assert!(
         specialize(
-            &program,
+            &crate::formula_analysis::Summary::complete(program.clone()),
             &owners,
             &mut facts,
             &mut budget,
@@ -299,7 +299,7 @@ fn ineligible_anchor_shapes_leave_facts_unread() {
     let (program, owners) = owned(&program(source), &mut budget);
     let mut facts = FixedFacts::new(&program);
     specialize(
-        &program,
+        &crate::formula_analysis::Summary::complete(program.clone()),
         &owners,
         &mut facts,
         &mut budget,
@@ -309,7 +309,9 @@ fn ineligible_anchor_shapes_leave_facts_unread() {
     // Reading after the pass still spends the complete program reading. This
     // would spend zero if any impossible anchor had prepared the shared index.
     let mut reading = KeyWork::new(POLICY.work);
-    facts.read(&mut reading).unwrap();
+    facts
+        .read(&mut reading, &mut budget, ProgramSite::program())
+        .unwrap();
     assert_eq!(
         u128::from(reading.steps()),
         program.statements().count() as u128

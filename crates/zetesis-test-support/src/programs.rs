@@ -1,9 +1,22 @@
 //! Builders of small test atoms and programs.
 
+pub mod fact_tables;
+
 use zetesis_core::{
-    AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, Sign, Template, Term, Value,
-    ValueLimits, ValueNode,
+    AdmissionLimits, Atom, AtomPattern, Model, Predicate, Program, RuleRef, Sign, Template,
+    TemplateRef, Term, Value, ValueLimits, ValueNode,
 };
+
+/// Every admitted rule in order, including closed facts, as borrowed templates.
+/// Tests comparing admission routes use the complete logical sequence even when
+/// one route stores facts separately from its explicit templates.
+#[must_use]
+pub fn rules(program: &Program) -> impl ExactSizeIterator<Item = TemplateRef<'_>> {
+    program.rules().map(|rule| match rule {
+        RuleRef::Template { template, .. } => template,
+        RuleRef::Fact(fact) => fact.as_template(),
+    })
+}
 
 /// The atom `name(values…)`, whose arity is the number of values.
 ///
@@ -139,7 +152,12 @@ pub fn fact(name: &str, values: Vec<Term>) -> Template {
 /// Panics if the templates are not a safe, finite program.
 #[must_use]
 pub fn program(templates: Vec<Template>) -> Program {
-    Program::new(templates, AdmissionLimits::default()).expect("safe finite test program")
+    Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .expect("safe finite test program")
 }
 
 #[cfg(test)]

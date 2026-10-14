@@ -88,7 +88,7 @@ fn pool_alternatives_keep_distinct_plan_occurrences() {
     let plan = plan(prepared, &owner.catalog);
     let rules = prepared.rules_without_facts();
     assert_eq!(rules.len(), 2);
-    assert_eq!(prepared.analyzed.statements().count(), 2);
+    assert_eq!(prepared.analyzed.full_program().statements().count(), 2);
     assert_eq!(plan.rules.len(), 2);
     for (index, rule) in rules.iter().enumerate() {
         assert!(plan.source.contains(index, rule));

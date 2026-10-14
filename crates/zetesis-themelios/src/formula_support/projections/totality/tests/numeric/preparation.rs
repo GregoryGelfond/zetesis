@@ -160,7 +160,7 @@ fn cancelled_hull_reuse_cannot_certify_an_expression() {
         );
         let cancellation = zetesis_cpu::Cancellation::default();
         cancellation.cancel();
-        counters.cancellation = Some(cancellation);
+        counters.attach_test_control(&cancellation);
         assert!(matches!(
             total(&mut preparation, second, computation, counters, &limits, rule.location),
             Err(FormulaFailure::Interrupted { reason: zetesis_cpu::Stop::Cancelled, location })

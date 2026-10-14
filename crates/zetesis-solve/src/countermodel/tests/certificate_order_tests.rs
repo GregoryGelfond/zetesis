@@ -9,7 +9,7 @@ fn complete_horn_source_prefers_positive_checking() {
     let owner = admitted("p. q :- p.");
     assert_eq!(owner.analysis_basis(), AnalysisBasis::NormalizedProgram);
     assert_eq!(
-        certificate_order(owner.source_analysis(), owner.analysis_basis()),
+        certificate_order(owner.source_classes(), owner.analysis_basis()),
         CertificateOrder::PositiveFirst,
     );
 }
@@ -20,7 +20,7 @@ fn dependency_projection_does_not_select_positive_first() {
     // The same Horn verdict cannot authorize a source-class shortcut when
     // its stated subject is only a dependency projection.
     assert_eq!(
-        certificate_order(owner.source_analysis(), AnalysisBasis::DependencyProjection),
+        certificate_order(owner.source_classes(), AnalysisBasis::DependencyProjection),
         CertificateOrder::TightFirst,
     );
 }
@@ -29,7 +29,7 @@ fn dependency_projection_does_not_select_positive_first() {
 fn choice_source_keeps_tight_first() {
     let owner = admitted("{p}.");
     assert_eq!(
-        certificate_order(owner.source_analysis(), owner.analysis_basis()),
+        certificate_order(owner.source_classes(), owner.analysis_basis()),
         CertificateOrder::TightFirst,
     );
 }
@@ -38,7 +38,7 @@ fn choice_source_keeps_tight_first() {
 fn complete_stratified_source_prefers_direct_evaluation() {
     let owner = admitted(include_str!("../../../tests/fixtures/stratified/cycle.lp"));
     assert_eq!(
-        certificate_order(owner.source_analysis(), owner.analysis_basis()),
+        certificate_order(owner.source_classes(), owner.analysis_basis()),
         CertificateOrder::StratifiedFirst
     );
 }
@@ -47,7 +47,7 @@ fn complete_stratified_source_prefers_direct_evaluation() {
 fn dependency_projection_does_not_select_stratified_first() {
     let owner = admitted(include_str!("../../../tests/fixtures/stratified/cycle.lp"));
     assert_eq!(
-        certificate_order(owner.source_analysis(), AnalysisBasis::DependencyProjection),
+        certificate_order(owner.source_classes(), AnalysisBasis::DependencyProjection),
         CertificateOrder::TightFirst
     );
 }

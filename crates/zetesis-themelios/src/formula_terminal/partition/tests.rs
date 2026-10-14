@@ -38,7 +38,10 @@ fn prepare(text: &str) -> crate::formula::Preparation {
         catalog: &mut catalog,
         work: GroundingWork::new(&limits, &mut counters, location),
     }
-    .prepare(raised.program(), metadata.project_selection().clone())
+    .prepare(
+        &std::sync::Arc::new(raised.program().clone()),
+        metadata.project_selection().clone(),
+    )
     .unwrap();
     crate::formula::Preparation {
         catalog,
@@ -105,7 +108,12 @@ fn pattern(
 #[test]
 fn all_terminal_producers_move_into_the_deferred_program() {
     let prepared = prepare("p(1). q(2). d(X):-p(X). d(X):-q(X).");
-    let original_count = prepared.program.analyzed.statements().count();
+    let original_count = prepared
+        .program
+        .analyzed
+        .full_program()
+        .statements()
+        .count();
     let Partition {
         base,
         terminal:
@@ -123,7 +131,7 @@ fn all_terminal_producers_move_into_the_deferred_program() {
     assert_eq!(base.program.items().len(), 2);
     assert!(base.program.rules_without_facts().is_empty());
     assert_eq!(original.program.statements().count(), original_count);
-    assert_eq!(base.program.analyzed.statements().count(), 2);
+    assert_eq!(base.program.analyzed.full_program().statements().count(), 2);
     assert_eq!(
         deferred_storage.bytes() as u128,
         super::deferred_bytes(&deferred)
@@ -133,7 +141,12 @@ fn all_terminal_producers_move_into_the_deferred_program() {
 #[test]
 fn coalesced_source_carriers_cover_every_ir_occurrence() {
     let mut prepared = prepare("p(1). d(X):-p(X).");
-    let source_count = prepared.program.analyzed.statements().count();
+    let source_count = prepared
+        .program
+        .analyzed
+        .full_program()
+        .statements()
+        .count();
     let rule = selected_rule(&mut prepared);
     let HeadIr::Normal(head) = rule.head else {
         panic!("normal fixture")
@@ -357,7 +370,7 @@ fn support_storage_refusal_is_not_optional_fallback() {
 #[test]
 fn typed_closed_compounds_remain_in_the_base() {
     let prepared = prepare("d(f(7,(a,\"a\",-g))). d(f(#inf,(#sup,g(1,2)))).");
-    let original = prepared.program.analyzed.clone();
+    let original = prepared.program.analyzed.full_program().clone();
     let Partition {
         base,
         terminal: None,
@@ -369,7 +382,7 @@ fn typed_closed_compounds_remain_in_the_base() {
     assert!(base.program.rules_without_facts().is_empty());
     assert_eq!(base.program.items().len(), 1);
     assert_eq!(base.program.items().occurrences(), 2);
-    assert_eq!(base.program.analyzed, original);
+    assert_eq!(*base.program.analyzed.full_program(), original);
 }
 
 #[test]
@@ -395,7 +408,15 @@ fn nested_constant_type_mismatches_prevent_partition() {
         // Replace one fact rule's head by the other's, in the reference path.
         let mut prepared = crate::formula_ir::testing::with_facts_as_rules(|| prepare(&text));
         assert_eq!(prepared.program.rules_without_facts().len(), 4);
-        assert_eq!(prepared.program.analyzed.statements().count(), 4);
+        assert_eq!(
+            prepared
+                .program
+                .analyzed
+                .full_program()
+                .statements()
+                .count(),
+            4
+        );
         let mut counters = Counters::default();
         let components = prepared
             .catalog
@@ -439,7 +460,7 @@ fn nested_constant_type_mismatches_prevent_partition() {
         // The same replacement in the fact arena: the two d statements are one
         // run, whose first row now holds the second row's value.
         let mut prepared = prepare(&text);
-        let cells = prepared.program.items_mut().cells_mut();
+        let cells = prepared.program.items_mut().first_run_column_mut();
         cells[0] = cells[1];
         assert!(
             matches!(
@@ -646,8 +667,8 @@ fn a_split_reserves_the_sum_of_what_moves_into_each_vector() {
         shape(prepared.program.items()),
         [Some(3), Some(1), Some(1), None, Some(3), None]
     );
-    // Move d(1;2)'s two products, e's rule and f's run: their cells sum to
-    // five, past any one block's three.
+    // Move d(1;2)'s two products, e's rule and f's run: two product
+    // segments and a run column of three cells.
     let selected = [0, 1, 1, 1, 1, 0];
     let counters = Counters::default();
     let (mut moved_lease, mut kept_lease) = (counters.lease(), counters.lease());
@@ -657,12 +678,11 @@ fn a_split_reserves_the_sum_of_what_moves_into_each_vector() {
         .items()
         .reserve_split(&selected, &mut recorded, &mut moved_lease, &mut kept_lease)
         .unwrap();
-    // Moved rules and items; the moved arena's blocks, cells, columns,
-    // evidence (each product's statement evidence, and each run row's) and
-    // run ends; the kept rules and items.
-    assert_eq!(recorded.0, [1, 4, 3, 5, 2, 5, 3, 1, 2]);
+    // Moved rules and items; blocks, segments, product columns, run-column
+    // headers, evidence and ends; the run column's cells; kept rules and items.
+    assert_eq!(recorded.0, [1, 4, 3, 2, 2, 1, 5, 3, 3, 1, 2]);
     let deferred = prepared.program.split_items(&selected, room);
-    assert_eq!(deferred.spare_room(), [0; 7]);
+    assert_eq!(deferred.spare_room(), [0; 9]);
     assert_eq!(prepared.program.items().spare_room()[..2], [0, 0]);
     assert_eq!(shape(&deferred), [Some(1), Some(1), None, Some(3)]);
     assert_eq!(shape(prepared.program.items()), [Some(3), None]);
@@ -702,10 +722,12 @@ fn an_out_of_order_pool_of_fact_rows_still_corresponds() {
     // position: rows that miss their positional definition are checked
     // against every definition.
     let prepared = prepare("p(1). q(2). d(3;1;2). d(X):-p(X). d(X):-q(X).");
+    let (partitioned, fallbacks) = super::selection::count_row_fallbacks(|| partition(prepared));
+    assert!(fallbacks > 0, "the pool must exercise fact-row fallback");
     let Partition {
         terminal: Some(definitions),
         ..
-    } = partition(prepared).unwrap()
+    } = partitioned.unwrap()
     else {
         panic!("every deferred row corresponds to its definition")
     };

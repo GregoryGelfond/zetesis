@@ -276,12 +276,10 @@ impl<'a> TerminalReconstruction<'a> {
             return Err(ReconstructionError::Failed);
         }
         self.failed = true;
-        self.attempts = self.attempts.checked_add(1).ok_or_else(|| {
-            self.owner
-                .0
-                .source
-                .retain_failure(super::storage::overflow(self.owner.0.extension.location))
-        })?;
+        let attempt = self.attempts.checked_add(1);
+        if let Some(attempt) = attempt {
+            self.attempts = attempt;
+        }
         let owner = self.owner;
         let prepared = &owner.0.extension;
         // Each answer starts from admission's history under its own allowance.
@@ -294,9 +292,15 @@ impl<'a> TerminalReconstruction<'a> {
             ..prepared.limits
         };
         let mut accounting = prepared.baseline.start();
-        let result = accounting.with_cancellation(cancellation, |counters| {
-            extend(owner, &mut self.plan, model, counters, &limits)
-        });
+        let result = accounting.controlled::<_, ReconstructionError>(
+            Some(cancellation),
+            crate::grounding_observer::Work::default(),
+            prepared.location,
+            |counters| {
+                attempt.ok_or_else(|| super::storage::overflow(prepared.location))?;
+                extend(owner, &mut self.plan, model, counters, &limits)
+            },
+        );
         self.latest = ReconstructionCharges {
             work: accounting.work,
             substitutions: accounting.substitutions,

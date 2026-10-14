@@ -42,10 +42,6 @@ impl<'source> PositiveSource<'source> {
         applicable(prepared, components, limits, counters, location)
     }
 
-    pub(crate) fn prepared(&self) -> &'source Prepared {
-        self.prepared
-    }
-
     pub(crate) fn has_objectives(&self) -> bool {
         self.objectives
     }
@@ -75,7 +71,7 @@ fn applicable<'source>(
     // Check every source carrier as well as every compiled rule. These lists
     // need not have equal lengths: source deduplication does not erase the IR's
     // original occurrence/provenance population.
-    for part in prepared.analyzed.parts() {
+    for part in prepared.analyzed.program().parts() {
         counters.work(limits, location)?;
         if part.key().name.as_str() != "base" || !part.key().formals.is_empty() {
             return Ok(None);
@@ -116,7 +112,7 @@ fn applicable<'source>(
     // each admitted cell is checked once, for all the rows that select it.
     for block in prepared.items().blocks() {
         let location = block.location();
-        for &cell in block.cells() {
+        for cell in block.cells() {
             counters.work(limits, location)?;
             if !flat_constant(cell, components, limits, counters, location)? {
                 return Ok(None);

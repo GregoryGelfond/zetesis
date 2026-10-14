@@ -121,11 +121,19 @@ else
     # in this otherwise glue script, so the GPU build's are read first as its
     # control, since that build links Metal at launch.
     if [ "$(uname -s)" = Darwin ]; then
-        if ! /usr/bin/otool -L "$stage/sibling/zetesis" | grep -q '\.framework/'; then
-            printf '%s\n' 'Found no framework in the load commands of the GPU build: either otool could not read them, or the GPU build no longer links a framework at launch and the CPU front may no longer be needed; not installing.' >&2
+        if ! gpu_load_commands=$(/usr/bin/otool -L "$stage/sibling/zetesis"); then
+            printf '%s\n' 'Could not read the GPU build load commands; not installing.' >&2
             exit 1
         fi
-        if /usr/bin/otool -L "$stage/zetesis" | grep -q '\.framework/'; then
+        if ! printf '%s\n' "$gpu_load_commands" | grep -q '\.framework/'; then
+            printf '%s\n' 'Found no framework in the load commands of the GPU build: the GPU build no longer links a framework at launch and the CPU front may no longer be needed; not installing.' >&2
+            exit 1
+        fi
+        if ! front_load_commands=$(/usr/bin/otool -L "$stage/zetesis"); then
+            printf '%s\n' 'Could not read the CPU front load commands; not installing.' >&2
+            exit 1
+        fi
+        if printf '%s\n' "$front_load_commands" | grep -q '\.framework/'; then
             printf '%s\n' 'The CPU front links a framework, so it would start like the GPU build; not installing.' >&2
             exit 1
         fi

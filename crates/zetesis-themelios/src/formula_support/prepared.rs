@@ -192,7 +192,10 @@ impl<'source> PreparedRule<'source> {
         limits: &FormulaLimits,
         budget: &mut Budget,
         counters: &mut Counters,
-    ) -> Result<FilteredRows<'a, 'queries>, FormulaFailure> {
+    ) -> Result<FilteredRows<'a, 'queries>, FormulaFailure>
+    where
+        'source: 'queries,
+    {
         if !self.completion.same(queries.completion) {
             return Err(FormulaFailure::SupportRelation {
                 error: zetesis_core::relation::Failure::Owner,
@@ -200,7 +203,7 @@ impl<'source> PreparedRule<'source> {
             });
         }
         Join::filtered_rule(
-            self.rule,
+            super::Ir::Source(self.rule),
             queries.support(),
             filter,
             Some(self),

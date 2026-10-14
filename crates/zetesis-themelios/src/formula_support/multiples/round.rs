@@ -10,11 +10,11 @@ use crate::FormulaFailure;
 use crate::expansion::Budget;
 use crate::formula_ir::RuleIr;
 use crate::formula_support::{
-    Computation, Context, Join, StorageLease, Support, delta, projections, queries,
+    Computation, Context, Ir, Join, StorageLease, Support, delta, projections, queries,
 };
 
 pub(in crate::formula_support) struct RoundPreparation<'rule, 'source> {
-    rule: &'rule RuleIr,
+    rule: Ir<'rule, 'source, RuleIr>,
     support: &'rule Support<'source>,
     values: projections::ProjectionValues<'rule>,
     lease: StorageLease,
@@ -26,13 +26,15 @@ impl<'rule, 'source> RoundPreparation<'rule, 'source> {
     /// only its additional header, including the optional slot's padding.
     /// Refusal publishes no owner and releases the consumed cursor normally.
     pub(in crate::formula_support) fn retain(
-        rule: &'rule RuleIr,
+        rule: impl Into<Ir<'rule, 'source, RuleIr>>,
         join: Join<'rule, 'source>,
         context: Context<'_, &Computation<'_, '_>>,
     ) -> Result<Self, FormulaFailure> {
+        let source_rule = rule.into();
+        let rule = source_rule.get();
         let Context { computation, work } = context;
         work.counters.work(work.limits, rule.location)?;
-        if !std::ptr::eq(join.literals, rule.body.as_slice())
+        if !std::ptr::eq(join.literals.get(), rule.body.as_slice())
             || join.delta.is_none()
             || join.source_evidence
             || join.certified_total
@@ -61,7 +63,7 @@ impl<'rule, 'source> RoundPreparation<'rule, 'source> {
             rule.location,
         )?;
         Ok(Self {
-            rule,
+            rule: source_rule,
             support: join.support,
             values,
             lease,

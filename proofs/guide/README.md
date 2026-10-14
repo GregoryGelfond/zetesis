@@ -92,7 +92,8 @@ and theorem hypotheses are authoritative; prose is a reading aid.
 | Can a retained zero-cost priority change optimality? | `ObjectivePriorities.zero_slot_comparison` and `zero_slot_optima` preserve ranking and all optimal answer sets when an always-zero slot is inserted at a fixed position. Whether a source row is always inactive remains a separate coverage and evaluation obligation. |
 | How does an objective node table compute original truth? | [Reading the condition-table correspondence](objective-condition-table.md) follows the prefix invariant, backward-reference admission and last-node result. The mathematical representation law does not verify Rust indexing or source eligibility. |
 | When do required tuples determine an aggregate's value? | [AggregateInvariants](../Zetesis/AggregateInvariants.lean) separates required, possible and actual tuple carriers. Optional zero contributions preserve sums; optional dominated values preserve extrema with explicit empty endpoints. The priority corollary retains complete eligibility and the same-row numeric-weight witness. |
-| What changes when a source measure can take several values? | [SourceMeasures](../Zetesis/SourceMeasures.lean) enumerates every selection between required and possible keys, proves actual-value coverage and singleton compatibility, and filters complete objective rows without confusing source presence with answer activity. |
+| When must a charged operation observe control? | [ChargeCadence](../Zetesis/ChargeCadence.lean) proves the range decision and next-boundary coverage for a positive period; clocks, concurrent flags and runtime settlement remain separate. |
+| What changes when a source measure can take several values? | [SourceMeasures](../Zetesis/SourceMeasures.lean) enumerates every selection between required and possible keys, proves actual-value coverage, singleton compatibility and the required-key count, sum and extremum forms, and filters complete objective rows without confusing source presence with answer activity. |
 | How do equality columns preserve complete tuple matches? | [Typed relation columns](column-relations.md) explains dictionary round trips, correlated reconstruction, ordered selection and exact snapshot applicability. |
 | Can table selection preserve positive source bindings? | [The binding-family argument](table-bindings.md) composes flat matcher necessity, exact row selection and finite joins while retaining each source/row occurrence and resulting binding. Completed support and fallible execution remain separate obligations. |
 | May a join discard a locally matching row that cannot finish? | [Necessary domains and complete bindings](domain-bindings.md) requires conservative argument coverage and preserves the ordered complete continuations, including repeated results. Analyzer soundness and concrete scheduling remain separate obligations. |
@@ -119,6 +120,11 @@ The execution extensions connect these paths to [signed singleton heads](../Zete
 [checked scalar plans](../Zetesis/ScalarArithmetic.lean) and
 [finite gate projection](../Zetesis/GateProjection.lean). Each module states its
 unproved implementation correspondence explicitly.
+
+[Signed remainder intervals](../Zetesis/RemainderIntervals.lean) bound truncating
+remainder when both operands range over intervals. The separate checked law
+retains division-by-zero and machine-overflow exclusions; it does not establish
+that a source analysis supplied sound operand bounds.
 
 [Consuming positive arguments](../Zetesis/PositiveArguments.lean) extend the
 finite-value path: exact checks filter supplied support rows without creating

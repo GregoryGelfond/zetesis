@@ -3,11 +3,12 @@
 //! A fact statement `p(t₁, …, tₙ).` expands to one product per argument
 //! alternative (`fact_expansion`). Compilation stores the facts in the fact
 //! arena instead of building a rule with an empty body for each of its rows:
-//! a block's predicate is admitted once, its cells hold admitted scalar keys,
+//! a block's predicate is admitted once, its cells select admitted occurrences,
 //! and the statement's evidence is stored once. A fact block is one item in one
-//! of two layouts: a product, the Cartesian product of one statement
-//! alternative's columns, or a run, consecutive one-row statements of one
-//! predicate stored row by row with one evidence range per statement.
+//! of two layouts. A statement with one argument alternative of one row supplies
+//! a run row; consecutive such statements of one predicate share a run, stored
+//! by column with one evidence range per statement. Every other argument
+//! alternative becomes a product, the Cartesian product of its columns.
 //!
 //! Readers traverse the prepared program as [`Item`]s: a rule, or a fact block
 //! standing exactly where its fact rules stood, its rows in expansion order
@@ -18,17 +19,21 @@
 //! item: it keeps its statements' rows in order, and a reader that counts items
 //! counts it once.
 //!
-//! Storage is O(admitted cells + evidence + blocks). Every vector of an arena
+//! Product columns retain scalars and integer segments; an integer segment
+//! records its numeric start and a certified consecutive span of scalar
+//! occurrence coordinates. It compresses this arena, not the source vocabulary
+//! or its scalar occurrences. Runs retain one scalar buffer per column.
+//! Storage is O(segments + run cells + evidence + blocks + columns). Every vector of an arena
 //! grows only through a caller's [`LeasedReserve`], which admits the growth
 //! before it is allocated; filling reserved room allocates nothing. Reading a
 //! row allocates nothing: a product's cell is selected from its column by the
-//! row's mixed-radix position.
+//! row's mixed-radix position and a binary search of its column's segments.
 
 use std::ops::Range;
 
 use crate::formula_ir::RuleIr;
 use crate::formula_support::StorageLease;
-use crate::formula_support::components::{Predicate, Scalar};
+use crate::formula_support::components::{Predicate, Scalar, ScalarSpan};
 use crate::{FormulaFailure, ProgramSite};
 
 /// One position of the item sequence.
@@ -252,6 +257,18 @@ impl Items {
         room.reserve_leased(&mut split.moved.rules, moving_rules, moved_lease)?;
         room.reserve_leased(&mut split.moved.order, moving, moved_lease)?;
         split.moved.facts.reserve_in(growth, room, moved_lease)?;
+        for (slot, flag) in self.order.iter().zip(selected) {
+            if let (Slot::Facts(block), true) = (*slot, *flag != 0)
+                && let Layout::Run { columns, .. } = &self.facts.blocks[block].layout
+            {
+                split.moved.facts.reserve_new_run(
+                    columns.len(),
+                    self.facts.blocks[block].rows,
+                    room,
+                    moved_lease,
+                )?;
+            }
+        }
         room.reserve_leased(
             &mut split.kept_rules,
             self.rules.len() - moving_rules,
@@ -282,6 +299,7 @@ impl Items {
         // Rule slots name the rules in their stored order (the type's
         // invariant), so the k-th rule slot takes the k-th rule.
         let mut rules = std::mem::take(&mut self.rules).into_iter();
+        let mut run_column = 0;
         for (&slot, flag) in self.order.iter().zip(selected) {
             match (slot, *flag != 0) {
                 (Slot::Rule(_), true) => {
@@ -296,7 +314,8 @@ impl Items {
                 }
                 (Slot::Facts(block), true) => {
                     push_reserved(&mut moved.order, Slot::Facts(moved.facts.blocks.len()));
-                    self.facts.copy_block(block, &mut moved.facts);
+                    self.facts
+                        .copy_block(block, &mut moved.facts, &mut run_column);
                 }
                 (Slot::Facts(block), false) => push_reserved(&mut kept_order, Slot::Facts(block)),
             }
@@ -322,17 +341,23 @@ impl Items {
             + self.facts.retained_bytes() as u128
     }
 
-    /// Each vector's unused capacity: the rules, the items, and the arena's
-    /// blocks, cells, columns, evidence and ends.
+    /// Unused room in the rules, items, blocks, segments, product columns,
+    /// run-column headers, run-column cells (summed), evidence and ends.
     #[cfg(test)]
-    pub(crate) fn spare_room(&self) -> [usize; 7] {
+    pub(crate) fn spare_room(&self) -> [usize; 9] {
         let facts = &self.facts;
         [
             self.rules.capacity() - self.rules.len(),
             self.order.capacity() - self.order.len(),
             facts.blocks.capacity() - facts.blocks.len(),
-            facts.cells.capacity() - facts.cells.len(),
+            facts.segments.capacity() - facts.segments.len(),
             facts.columns.capacity() - facts.columns.len(),
+            facts.run_columns.capacity() - facts.run_columns.len(),
+            facts
+                .run_columns
+                .iter()
+                .map(|column| column.capacity() - column.len())
+                .sum(),
             facts.evidence.capacity() - facts.evidence.len(),
             facts.ends.capacity() - facts.ends.len(),
         ]
@@ -344,10 +369,10 @@ impl Items {
         (self.facts.leased_bytes(), self.facts.retained_bytes())
     }
 
-    /// Every admitted cell of the arena, for tests that edit a fact.
+    /// The first run's first column, for tests that replace one fact value.
     #[cfg(test)]
-    pub(crate) fn cells_mut(&mut self) -> &mut [Scalar] {
-        &mut self.facts.cells
+    pub(crate) fn first_run_column_mut(&mut self) -> &mut [Scalar] {
+        &mut self.facts.run_columns[0]
     }
 
     /// Remove the rule at `index` and its item.
@@ -388,21 +413,33 @@ fn extend_reserved<T: Clone>(values: &mut Vec<T>, slice: &[T]) {
 }
 
 /// What a statement adds to an arena, or a split moves into one: entries per
-/// vector.
+/// vector. Each run column's cell capacity is reserved separately under the
+/// same lease, after all column headers have room.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct Growth {
-    pub(crate) blocks: usize,
-    pub(crate) cells: usize,
-    pub(crate) columns: usize,
-    pub(crate) evidence: usize,
-    pub(crate) ends: usize,
+    blocks: usize,
+    segments: usize,
+    columns: usize,
+    run_columns: usize,
+    evidence: usize,
+    ends: usize,
 }
 
 impl Growth {
+    /// A segment-only reservation for tests of the arena's storage allowance.
+    #[cfg(test)]
+    pub(crate) fn segments(segments: usize) -> Self {
+        Self {
+            segments,
+            ..Self::default()
+        }
+    }
+
     fn add(&mut self, other: Self) {
         self.blocks += other.blocks;
-        self.cells += other.cells;
+        self.segments += other.segments;
         self.columns += other.columns;
+        self.run_columns += other.run_columns;
         self.evidence += other.evidence;
         self.ends += other.ends;
     }
@@ -412,16 +449,17 @@ impl Growth {
 #[derive(Default)]
 pub(crate) struct FactArena {
     blocks: Vec<Block>,
-    /// Admitted cells: each product column's values, and each run's rows
-    /// row-major.
-    cells: Vec<Scalar>,
-    /// Product columns.
-    columns: Vec<Column>,
+    /// Product column segments, with admitted scalar occurrence coordinates.
+    segments: Vec<Segment>,
+    /// Product columns, in argument order within each block.
+    columns: Vec<ProductColumn>,
+    /// Each run's argument columns; one admitted occurrence per row per column.
+    run_columns: Vec<Vec<Scalar>>,
     /// Statement evidence: once per statement of a product, once per run row.
     evidence: Vec<ProgramSite>,
     /// Each run row's evidence end, an offset into `evidence`.
     ends: Vec<usize>,
-    /// The arena's retained bytes in the compiler's support workspace.
+    /// All vector headers and buffers above, including nested run-column buffers.
     lease: Option<StorageLease>,
     /// During compilation, the last run and its source predicate: a further
     /// one-row statement of that predicate continues it while it is the last item.
@@ -442,22 +480,113 @@ enum Layout {
         columns: Range<usize>,
         evidence: Range<usize>,
     },
-    /// Rows stored row-major from `cells`. Row `i`'s evidence ends at
-    /// `ends[ends + i]` and begins where the previous row's ended, or at
-    /// `evidence` for the first row.
+    /// One buffer per argument. Row `i`'s evidence ends at `ends[ends + i]`
+    /// and begins where the previous row's ended, or at `evidence` initially.
     Run {
-        cells: usize,
+        columns: Range<usize>,
         ends: usize,
         evidence: usize,
     },
 }
 
-/// One product column: its admitted cells, in emission order, and the number of
-/// rows that pass before it advances.
-#[derive(Clone)]
-struct Column {
-    cells: Range<usize>,
+/// One product column: its segment range, expanded width, and the number of
+/// rows that pass before it advances. The segments need not lie in argument
+/// order in their buffer: compilation admits later columns first.
+#[derive(Clone, Debug)]
+pub(crate) struct ProductColumn {
+    segments: Range<usize>,
+    width: usize,
     stride: usize,
+}
+
+impl ProductColumn {
+    /// A column over complete, consecutive segments in its scratch buffer.
+    pub(crate) fn new(segments: Range<usize>, width: usize, stride: usize) -> Self {
+        Self {
+            segments,
+            width,
+            stride,
+        }
+    }
+
+    fn cell(&self, segments: &[Segment], offset: usize) -> Scalar {
+        let segments = &segments[self.segments.clone()];
+        let segment = &segments[segments.partition_point(|segment| segment.end <= offset)];
+        segment.get(offset - (segment.end - segment.len()))
+    }
+}
+
+/// One source scalar, or consecutive integers whose actual admitted occurrence
+/// coordinates were also consecutive. `end` is its exclusive expanded position
+/// within its column, so rows locate segments without expanding them.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Segment {
+    end: usize,
+    values: ColumnSegment,
+}
+
+/// One compact column segment. Scalars and spans are occurrence coordinates in
+/// this preparation's source components, never canonical value identifiers.
+/// An integer segment certifies both its consecutive numbers and its admitted
+/// consecutive coordinates; readers resolve only the coordinates they need.
+#[derive(Clone, Copy, Debug)]
+pub(crate) enum ColumnSegment {
+    Scalar(Scalar),
+    Integers { first: i32, scalars: ScalarSpan },
+}
+
+impl Segment {
+    /// One scalar at its expanded column position.
+    pub(crate) fn scalar(position: usize, scalar: Scalar) -> Self {
+        Self {
+            end: position + 1,
+            values: ColumnSegment::Scalar(scalar),
+        }
+    }
+
+    /// The first admitted number of an integer segment.
+    pub(crate) fn integer(position: usize, number: i32, scalar: Scalar) -> Self {
+        Self {
+            end: position + 1,
+            values: ColumnSegment::Integers {
+                first: number,
+                scalars: ScalarSpan::new(scalar),
+            },
+        }
+    }
+
+    /// Coalesce only consecutive numbers and consecutive observed coordinates.
+    /// A repeated value or an occurrence-coordinate gap starts a new segment.
+    pub(crate) fn append(&mut self, number: i32, scalar: Scalar) -> bool {
+        let ColumnSegment::Integers { first, scalars } = &mut self.values else {
+            return false;
+        };
+        let next = i64::try_from(scalars.len())
+            .ok()
+            .and_then(|width| i64::from(*first).checked_add(width));
+        if next != Some(i64::from(number)) || !scalars.append(scalar) {
+            return false;
+        }
+        self.end += 1;
+        true
+    }
+
+    fn len(self) -> usize {
+        match self.values {
+            ColumnSegment::Scalar(_) => 1,
+            ColumnSegment::Integers { scalars, .. } => scalars.len(),
+        }
+    }
+
+    fn get(self, offset: usize) -> Scalar {
+        match self.values {
+            ColumnSegment::Scalar(scalar) => {
+                debug_assert_eq!(offset, 0);
+                scalar
+            }
+            ColumnSegment::Integers { scalars, .. } => scalars.get(offset),
+        }
+    }
 }
 
 /// A statement's evidence in the arena, shared by the blocks it expands to.
@@ -465,6 +594,29 @@ struct Column {
 pub(crate) struct Evidence(Range<usize>);
 
 impl FactArena {
+    /// What one compiled argument alternative adds to the arena, in constant
+    /// time from its layout scratch and any statement evidence not yet stored.
+    /// A run row needs an end; a product needs columns. Continuing the last
+    /// run needs no new block. The compiler decides which layout it appends;
+    /// only the arena translates that decision into vector growth.
+    pub(crate) fn growth(
+        columns: &[ProductColumn],
+        segments: &[Segment],
+        new_evidence: Option<&[ProgramSite]>,
+        run: bool,
+        continuing: bool,
+    ) -> Growth {
+        debug_assert!(!continuing || run, "only a run can be continued");
+        Growth {
+            blocks: usize::from(!continuing),
+            segments: if run { 0 } else { segments.len() },
+            columns: if run { 0 } else { columns.len() },
+            run_columns: if run && !continuing { columns.len() } else { 0 },
+            evidence: new_evidence.map_or(0, <[ProgramSite]>::len),
+            ends: usize::from(run),
+        }
+    }
+
     /// Reserve `growth` under the arena's lease, installed by `install` on
     /// first use, admitting each vector's growth before it is allocated.
     ///
@@ -490,10 +642,67 @@ impl FactArena {
         lease: &mut StorageLease,
     ) -> Result<(), FormulaFailure> {
         room.reserve_leased(&mut self.blocks, growth.blocks, lease)?;
-        room.reserve_leased(&mut self.cells, growth.cells, lease)?;
+        room.reserve_leased(&mut self.segments, growth.segments, lease)?;
         room.reserve_leased(&mut self.columns, growth.columns, lease)?;
+        room.reserve_leased(&mut self.run_columns, growth.run_columns, lease)?;
         room.reserve_leased(&mut self.evidence, growth.evidence, lease)?;
         room.reserve_leased(&mut self.ends, growth.ends, lease)
+    }
+
+    /// Reserve every argument buffer before publishing a run row. On failure
+    /// no row is appended; any successfully reserved buffers stay in the arena
+    /// under its restored lease, including new empty column headers.
+    pub(crate) fn reserve_row(
+        &mut self,
+        existing: Option<usize>,
+        arity: usize,
+        room: &mut impl LeasedReserve,
+    ) -> Result<Range<usize>, FormulaFailure> {
+        let mut lease = self.lease.take().expect("arena growth installed its lease");
+        let result = match existing {
+            Some(block) => {
+                let Layout::Run { columns, .. } = &self.blocks[block].layout else {
+                    unreachable!("only an open run can be continued")
+                };
+                let columns = columns.clone();
+                self.reserve_run_cells(columns.clone(), 1, room, &mut lease)
+                    .map(|()| columns)
+            }
+            None => self.reserve_new_run(arity, 1, room, &mut lease),
+        };
+        self.lease = Some(lease);
+        result
+    }
+
+    /// Append empty headers in already reserved room, then reserve all their
+    /// cells. Keeping the headers on failure keeps each buffer owned and leased.
+    fn reserve_new_run(
+        &mut self,
+        arity: usize,
+        rows: usize,
+        room: &mut impl LeasedReserve,
+        lease: &mut StorageLease,
+    ) -> Result<Range<usize>, FormulaFailure> {
+        let first = self.run_columns.len();
+        for _ in 0..arity {
+            push_reserved(&mut self.run_columns, Vec::new());
+        }
+        let columns = first..self.run_columns.len();
+        self.reserve_run_cells(columns.clone(), rows, room, lease)?;
+        Ok(columns)
+    }
+
+    fn reserve_run_cells(
+        &mut self,
+        columns: Range<usize>,
+        rows: usize,
+        room: &mut impl LeasedReserve,
+        lease: &mut StorageLease,
+    ) -> Result<(), FormulaFailure> {
+        for column in &mut self.run_columns[columns] {
+            room.reserve_leased(column, rows, lease)?;
+        }
+        Ok(())
     }
 
     /// Store a statement's evidence once for the blocks it expands to, in
@@ -504,51 +713,47 @@ impl FactArena {
         Evidence(start..self.evidence.len())
     }
 
-    /// Append one admitted cell to the block under construction, in reserved
-    /// room.
-    pub(crate) fn push_cell(&mut self, cell: Scalar) {
-        push_reserved(&mut self.cells, cell);
+    /// Fill reserved segments for tests of exact replacement growth.
+    #[cfg(test)]
+    pub(crate) fn fill_segments_for_test(&mut self, segment: Segment, count: usize) {
+        for _ in 0..count {
+            push_reserved(&mut self.segments, segment);
+        }
     }
 
-    /// The number of admitted cells so far, the start of the next column or row.
-    pub(crate) fn cell_count(&self) -> usize {
-        self.cells.len()
-    }
-
-    /// Start a product of `predicate`, in reserved room, over the columns
-    /// whose cells begin at each of `starts` and run to the next start, the
-    /// last one to the current cell count. The product has as many rows as the
-    /// columns' widths multiply to, and its rows share `evidence`.
+    /// Store a product's columns and segments in reserved room. A column's
+    /// segment coordinates are translated; scalar coordinates still refer to
+    /// the same preparation's source components.
     pub(crate) fn push_product(
         &mut self,
         predicate: Predicate,
-        starts: &[usize],
+        columns: &[ProductColumn],
+        segments: &[Segment],
         evidence: &Evidence,
     ) -> usize {
+        let segment_start = self.segments.len();
+        extend_reserved(&mut self.segments, segments);
         let first = self.columns.len();
-        // Last column fastest: a column advances once every row of the
-        // columns after it has passed.
-        let mut stride = 1_usize;
-        let mut end = self.cells.len();
-        for &start in starts.iter().rev() {
+        for column in columns {
             push_reserved(
                 &mut self.columns,
-                Column {
-                    cells: start..end,
-                    stride,
+                ProductColumn {
+                    segments: segment_start + column.segments.start
+                        ..segment_start + column.segments.end,
+                    width: column.width,
+                    stride: column.stride,
                 },
             );
-            stride = stride.saturating_mul(end - start);
-            end = start;
         }
-        self.columns[first..].reverse();
         let block = self.blocks.len();
         push_reserved(
             &mut self.blocks,
             Block {
                 predicate,
-                arity: starts.len(),
-                rows: stride,
+                arity: columns.len(),
+                rows: columns
+                    .first()
+                    .map_or(1, |column| column.width.saturating_mul(column.stride)),
                 layout: Layout::Product {
                     columns: first..self.columns.len(),
                     evidence: evidence.0.clone(),
@@ -558,12 +763,19 @@ impl FactArena {
         block
     }
 
-    /// Start a run of `predicate`, in reserved room, whose first row is the
-    /// `arity` cells pushed last, with `evidence`.
+    /// Append one row to the already reserved argument buffers.
+    pub(crate) fn push_row(&mut self, columns: Range<usize>, cells: &[Option<Scalar>]) {
+        debug_assert_eq!(columns.len(), cells.len());
+        for (column, cell) in self.run_columns[columns].iter_mut().zip(cells) {
+            push_reserved(column, cell.expect("every first-row value is admitted"));
+        }
+    }
+
+    /// Start a run over the columns whose first row was just appended.
     pub(crate) fn push_run(
         &mut self,
         predicate: Predicate,
-        arity: usize,
+        columns: Range<usize>,
         evidence: &Evidence,
     ) -> usize {
         let block = self.blocks.len();
@@ -571,10 +783,10 @@ impl FactArena {
             &mut self.blocks,
             Block {
                 predicate,
-                arity,
+                arity: columns.len(),
                 rows: 1,
                 layout: Layout::Run {
-                    cells: self.cells.len() - arity,
+                    columns,
                     ends: self.ends.len(),
                     evidence: evidence.0.start,
                 },
@@ -614,8 +826,14 @@ impl FactArena {
     /// The retained capacities of the arena's vectors.
     pub(crate) fn retained_bytes(&self) -> usize {
         self.blocks.capacity() * size_of::<Block>()
-            + self.cells.capacity() * size_of::<Scalar>()
-            + self.columns.capacity() * size_of::<Column>()
+            + self.segments.capacity() * size_of::<Segment>()
+            + self.columns.capacity() * size_of::<ProductColumn>()
+            + self.run_columns.capacity() * size_of::<Vec<Scalar>>()
+            + self
+                .run_columns
+                .iter()
+                .map(|column| column.capacity() * size_of::<Scalar>())
+                .sum::<usize>()
             + self.evidence.capacity() * size_of::<ProgramSite>()
             + self.ends.capacity() * size_of::<usize>()
     }
@@ -631,15 +849,19 @@ impl FactArena {
         let source = FactBlock { arena: self, block };
         let mut growth = Growth {
             blocks: 1,
-            cells: source.cells().len(),
             ..Growth::default()
         };
         match &self.blocks[block].layout {
             Layout::Product { columns, evidence } => {
                 growth.columns = columns.len();
+                growth.segments = self.columns[columns.clone()]
+                    .iter()
+                    .map(|column| column.segments.len())
+                    .sum();
                 growth.evidence = evidence.len();
             }
-            Layout::Run { .. } => {
+            Layout::Run { columns, .. } => {
+                growth.run_columns = columns.len();
                 growth.ends = self.blocks[block].rows;
                 growth.evidence = source.rows().map(|row| row.evidence().len()).sum();
             }
@@ -649,20 +871,23 @@ impl FactArena {
 
     /// Append a copy of `block` to `target`, in the room its
     /// [`Self::footprint`] reserved there.
-    fn copy_block(&self, block: usize, target: &mut Self) {
+    fn copy_block(&self, block: usize, target: &mut Self, run_column: &mut usize) {
         let source = &self.blocks[block];
         let facts = FactBlock { arena: self, block };
-        let cells = target.cells.len();
-        extend_reserved(&mut target.cells, facts.cells());
         let layout = match &source.layout {
             Layout::Product { columns, evidence } => {
                 let first = target.columns.len();
                 for column in &self.columns[columns.clone()] {
-                    let start = cells + (column.cells.start - facts.cells_start());
+                    let start = target.segments.len();
+                    extend_reserved(
+                        &mut target.segments,
+                        &self.segments[column.segments.clone()],
+                    );
                     push_reserved(
                         &mut target.columns,
-                        Column {
-                            cells: start..start + column.cells.len(),
+                        ProductColumn {
+                            segments: start..target.segments.len(),
+                            width: column.width,
                             stride: column.stride,
                         },
                     );
@@ -674,7 +899,12 @@ impl FactArena {
                     evidence: start..target.evidence.len(),
                 }
             }
-            Layout::Run { .. } => {
+            Layout::Run { columns, .. } => {
+                let first = *run_column;
+                for column in &self.run_columns[columns.clone()] {
+                    extend_reserved(&mut target.run_columns[*run_column], column);
+                    *run_column += 1;
+                }
                 let ends = target.ends.len();
                 let evidence = target.evidence.len();
                 for row in facts.rows() {
@@ -682,7 +912,7 @@ impl FactArena {
                     push_reserved(&mut target.ends, target.evidence.len());
                 }
                 Layout::Run {
-                    cells,
+                    columns: first..*run_column,
                     ends,
                     evidence,
                 }
@@ -738,33 +968,76 @@ impl<'a> FactBlock<'a> {
             .location()
     }
 
-    fn cells_start(self) -> usize {
-        match &self.block().layout {
-            Layout::Product { columns, .. } => self
-                .arena
-                .columns
-                .get(columns.start)
-                .map_or(self.arena.cells.len(), |column| column.cells.start),
-            Layout::Run { cells, .. } => *cells,
-        }
+    /// Every admitted cell in the previous logical traversal order: columns
+    /// in argument order for a product, rows in emission order for a run.
+    /// Expanding a certified span produces only occurrence coordinates, with
+    /// no allocation or owned value reconstruction.
+    pub(crate) fn cells(self) -> impl Iterator<Item = Scalar> + use<'a> {
+        let product = matches!(self.block().layout, Layout::Product { .. });
+        let products = self
+            .columns()
+            .take(if product { self.arity() } else { 0 })
+            .flat_map(FactColumn::segments)
+            .flat_map(|segment| {
+                let (scalar, span) = match segment {
+                    ColumnSegment::Scalar(scalar) => (Some(scalar), None),
+                    ColumnSegment::Integers { scalars, .. } => (None, Some(scalars)),
+                };
+                scalar.into_iter().chain(
+                    span.into_iter()
+                        .flat_map(|span| (0..span.len()).map(move |offset| span.get(offset))),
+                )
+            });
+        let runs = (0..if product { 0 } else { self.len() })
+            .flat_map(move |index| Row { facts: self, index }.cells());
+        products.chain(runs)
     }
 
-    /// Every admitted cell of the block: each product column's distinct
-    /// values, or each run row's cells.
-    pub(crate) fn cells(self) -> &'a [Scalar] {
-        let start = self.cells_start();
-        let end = match &self.block().layout {
-            Layout::Product { columns, .. } => self.arena.columns[columns.clone()]
-                .last()
-                .map_or(start, |column| column.cells.end),
-            Layout::Run { cells, .. } => cells + self.block().rows * self.block().arity,
-        };
-        &self.arena.cells[start..end]
+    /// Argument columns in argument order, without Cartesian row expansion.
+    /// Product columns contain compact integer spans and scalar cells; run
+    /// columns contain their existing cells in row order. Reading allocates
+    /// nothing. The caller owns cancellation and work for the segments read.
+    pub(crate) fn columns(self) -> impl ExactSizeIterator<Item = FactColumn<'a>> + use<'a> {
+        (0..self.arity()).map(move |argument| FactColumn {
+            facts: self,
+            argument,
+        })
     }
 
     /// The rows in expansion order.
     pub(crate) fn rows(self) -> impl Iterator<Item = Row<'a>> + use<'a> {
         (0..self.len()).map(move |index| Row { facts: self, index })
+    }
+}
+
+/// One borrowed argument column, over its arena's original admitted cells.
+#[derive(Clone, Copy)]
+pub(crate) struct FactColumn<'a> {
+    facts: FactBlock<'a>,
+    argument: usize,
+}
+
+impl<'a> FactColumn<'a> {
+    /// Compact product segments, or the run's scalar occurrences, in column
+    /// order. An interval's last number is `first + scalars.len() - 1`, within
+    /// i32 by construction. Its coordinates resolve only against the owning
+    /// preparation's `TemplateComponentsRef`; no canonical-ID adjacency is assumed.
+    pub(crate) fn segments(self) -> impl Iterator<Item = ColumnSegment> + use<'a> {
+        let arena = self.facts.arena;
+        let (segments, scalars) = match &self.facts.block().layout {
+            Layout::Product { columns, .. } => {
+                let column = &arena.columns[columns.start + self.argument];
+                (&arena.segments[column.segments.clone()], &[][..])
+            }
+            Layout::Run { columns, .. } => (
+                &[][..],
+                arena.run_columns[columns.start + self.argument].as_slice(),
+            ),
+        };
+        segments
+            .iter()
+            .map(|segment| segment.values)
+            .chain(scalars.iter().copied().map(ColumnSegment::Scalar))
     }
 }
 
@@ -784,10 +1057,9 @@ impl<'a> Row<'a> {
         (0..block.arity).map(move |column| match &block.layout {
             Layout::Product { columns, .. } => {
                 let column = &arena.columns[columns.start + column];
-                let width = column.cells.len();
-                arena.cells[column.cells.start + (index / column.stride) % width]
+                column.cell(&arena.segments, (index / column.stride) % column.width)
             }
-            Layout::Run { cells, .. } => arena.cells[cells + index * block.arity + column],
+            Layout::Run { columns, .. } => arena.run_columns[columns.start + column][index],
         })
     }
 
@@ -816,3 +1088,6 @@ impl<'a> Row<'a> {
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod representation_tests;

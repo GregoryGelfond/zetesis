@@ -67,7 +67,7 @@ pub(crate) struct IntegerComparison {
     /// The position of the right operand's first step.
     split: u8,
     /// One unit per step and one per variable step, of both operands.
-    charge: u8,
+    constant: u8,
 }
 
 /// What one attempt of a form performed on a row.
@@ -81,7 +81,7 @@ pub(crate) struct Attempt {
     /// The steps it reached, the failing one included.
     pub(crate) steps: u8,
     /// The work those steps cost: one unit per step and one per variable
-    /// read. Never more than [`IntegerComparison::charge`].
+    /// read. Never more than [`IntegerComparison::constant`].
     pub(crate) units: u8,
 }
 
@@ -118,7 +118,7 @@ impl IntegerComparison {
             .count();
         Self {
             split: u8::try_from(left.len()).expect("an operand has at most MAX_NODES steps"),
-            charge: u8::try_from(steps.len() + variables)
+            constant: u8::try_from(steps.len() + variables)
                 .expect("two operands have at most 2·MAX_NODES steps"),
             steps,
         }
@@ -129,7 +129,7 @@ impl IntegerComparison {
         Self {
             steps: self.steps.clone(),
             split: self.split,
-            charge: self.charge,
+            constant: self.constant,
         }
     }
 
@@ -141,8 +141,8 @@ impl IntegerComparison {
     /// The work an attempt is checked for before it runs: one unit per step
     /// and one per variable read, of both operands. An attempt performs at
     /// most this much.
-    pub(crate) fn charge(&self) -> u8 {
-        self.charge
+    pub(crate) fn constant(&self) -> u8 {
+        self.constant
     }
 
     /// Attempt the form on a row, reading each variable's slot through

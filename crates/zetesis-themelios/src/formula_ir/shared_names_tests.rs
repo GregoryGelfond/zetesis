@@ -35,7 +35,10 @@ fn objective_scopes_share_canonical_predicate_text() {
         catalog: &mut catalog,
         work: GroundingWork::new(&FormulaLimits::default(), &mut counters, location),
     }
-    .prepare(raised.program(), metadata.project_selection().clone())
+    .prepare(
+        &std::sync::Arc::new(raised.program().clone()),
+        metadata.project_selection().clone(),
+    )
     .unwrap();
     let limits = FormulaLimits::default();
     let location = ProgramSite::source(themelios_base::span::Location {

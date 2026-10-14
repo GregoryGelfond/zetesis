@@ -208,7 +208,7 @@ fn cancelled_leaf_dispatch_cannot_return_a_value() {
             let expressions = leaves();
             let cancellation = zetesis_cpu::Cancellation::default();
             cancellation.cancel();
-            counters.cancellation = Some(cancellation);
+            counters.attach_test_control(&cancellation);
             assert!(matches!(
                 projections.compare(
                     0,

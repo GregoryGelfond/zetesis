@@ -207,7 +207,7 @@ fn core_shape_and_program_limits_remain_actionable_through_source_admission() {
         admit(source.to_owned(), options())
             .unwrap()
             .program()
-            .templates()
+            .facts()
             .len(),
         2
     );
@@ -457,7 +457,8 @@ fn bundled_admission_keeps_the_catalog_after_failure_and_moves_program_identity_
     let identity = admitted.program().clone();
     let program = admitted.into_program();
     assert!(program.same_instance(&identity));
-    assert_eq!(program.templates().len(), 2);
+    assert_eq!(program.facts().len(), 2);
+    assert!(program.templates().is_empty());
     fixture.close();
 }
 

@@ -168,7 +168,7 @@ impl<'a> PreparedInput<'a> {
                 keyed_constraints: owner.keyed_constraints(),
                 key_analysis: owner.key_analysis(),
                 certificate_order: crate::countermodel::certificate_order(
-                    owner.source_analysis(),
+                    owner.source_classes(),
                     owner.analysis_basis(),
                 ),
             }),
@@ -189,7 +189,7 @@ impl<'a> PreparedInput<'a> {
                 keyed_constraints: owner.keyed_constraints(),
                 key_analysis: owner.key_analysis(),
                 certificate_order: crate::countermodel::certificate_order(
-                    owner.source_analysis(),
+                    owner.source_classes(),
                     owner.analysis_basis(),
                 ),
             }),
@@ -415,15 +415,31 @@ pub struct SessionBuilder<'a> {
     resources: ExecutionResources,
     measurements: Option<crate::SolveMeasurements>,
     projection: Option<crate::ProjectionLimits>,
+    counting: bool,
 }
 
 impl<'a> SessionBuilder<'a> {
+    /// Request exhaustive counting of the selected full answer-set family.
+    /// At start, this clears projection and replaces the model limit using the
+    /// final answer selection, regardless of builder call order. Ordinary answers
+    /// stream until exhaustion, while optimization retains at most one model
+    /// and counts all ties with the existing checked incumbent counter. All
+    /// resource and control limits still apply. Drain the session and read
+    /// [`SemanticOutcome::complete_answer_count`] from its outcome; a stopped
+    /// session has no total. A projection request is ignored in counting mode.
+    #[must_use]
+    pub const fn counting(mut self) -> Self {
+        self.counting = true;
+        self
+    }
+
     /// Return one full answer-set representative per source `#project` key.
     /// Objective selection happens first. This changes enumeration identity,
     /// not membership, scoring or the atoms retained in each representative.
     /// `config.models` counts representatives; zero requests all classes.
     /// Construction only records the request. Starting requires a completed
     /// explicit projection domain; history limits are independent of search.
+    /// Counting mode ignores this request and keeps full answer identities.
     #[must_use]
     pub const fn projected(mut self, limits: crate::ProjectionLimits) -> Self {
         self.projection = Some(limits);
@@ -542,6 +558,14 @@ impl<'a> SessionBuilder<'a> {
         let phases = self
             .measurements
             .unwrap_or_else(|| crate::SolveMeasurements::new(self.config.stats));
+        let selection = self.input.selection(self.selection);
+        if self.counting {
+            self.projection = None;
+            self.config.models = match selection {
+                AnswerSelection::All => 0,
+                AnswerSelection::Optimal => 1,
+            };
+        }
         let projected_limit = self.config.models;
         let projection = self
             .projection
@@ -571,7 +595,7 @@ impl<'a> SessionBuilder<'a> {
             self.config,
             &self.cancellation,
             phases.recorder(),
-            self.input.selection(self.selection),
+            selection,
             &self.resources,
             observations,
         );
@@ -654,6 +678,7 @@ impl<'a> Session<'a> {
             resources: ExecutionResources::default(),
             measurements: None,
             projection: None,
+            counting: false,
         }
     }
 

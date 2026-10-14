@@ -65,7 +65,12 @@ fn fixture() -> Fixture {
         vec![],
         vec![],
     ));
-    let program = Program::new(templates, AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let index = GateIndex::new(&program).unwrap();
     let mut root: Vec<_> = queries
         .iter()

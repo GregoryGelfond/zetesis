@@ -54,7 +54,7 @@ use zetesis_core::catalog::TermKey;
 pub(crate) struct Prepared {
     pub analysis: themelios_analysis::Analysis,
     pub analysis_basis: crate::AnalysisBasis,
-    pub analyzed: SourceProgram,
+    pub analyzed: crate::formula_analysis::Summary,
     /// The rules and fact blocks, reached through [`Self::items`] or, by a
     /// reader that never sees facts, [`Self::rules_without_facts`].
     items: crate::formula_facts::Items,
@@ -552,7 +552,7 @@ pub(crate) struct PreparationContext<'a> {
 impl PreparationContext<'_> {
     pub(crate) fn prepare(
         self,
-        source: &SourceProgram,
+        source: &std::sync::Arc<SourceProgram>,
         project_selection: crate::ProjectSelection,
     ) -> Result<Prepared, FormulaFailure> {
         let Self {
@@ -582,27 +582,29 @@ impl PreparationContext<'_> {
             location: fallback,
         };
         let emitted_owners = compiler.compile_program(source, &constants, &mut parts, fallback)?;
-        let (mut analyzed, owners) = crate::formula_keys::owners::Owners::collect(
+        let (mut analyzed, owners) = crate::formula_analysis::Summary::collect(
+            std::sync::Arc::clone(source),
             std::mem::take(&mut parts.analyzed),
             emitted_owners,
+            std::mem::take(&mut parts.analysis_sources),
+            std::mem::take(&mut parts.fact_families),
             compiler.budget,
             fallback,
         )?;
         let (replacements, keyed_constraints, key_analysis) =
             plan_constraint_replacements(&mut compiler, &analyzed, &owners, fallback)?;
         if !replacements.is_empty() {
-            analyzed = replace_constraints(
+            replace_constraints(
                 &mut compiler,
                 &constants,
                 &mut parts,
-                &analyzed,
+                &mut analyzed,
                 &owners,
                 replacements,
                 fallback,
             )?;
         }
-        let analysis =
-            crate::formula_analysis::analyze(&analyzed, limits, compiler.budget, fallback)?;
+        let analysis = analyzed.analyze(limits, compiler.budget, fallback)?;
         let components = compiler
             .source
             .components(limits, compiler.counters, fallback)?;
@@ -655,7 +657,7 @@ impl PreparationContext<'_> {
 /// analyzed program, sharing its lazy all-producer fact certificate.
 fn plan_constraint_replacements(
     compiler: &mut Compiler<'_>,
-    analyzed: &SourceProgram,
+    analyzed: &crate::formula_analysis::Summary,
     owners: &crate::formula_keys::owners::Owners,
     site: ProgramSite,
 ) -> Result<
@@ -666,7 +668,8 @@ fn plan_constraint_replacements(
     ),
     FormulaFailure,
 > {
-    let mut facts = crate::formula_rewrite::FixedFacts::new(analyzed);
+    let reader = crate::formula_analysis::summary::PreparationFacts::new(analyzed);
+    let mut facts = crate::formula_rewrite::FixedFacts::summary(&reader);
     let asked = crate::formula_keys::ask_all(
         analyzed,
         owners,
@@ -709,8 +712,10 @@ fn plan_constraint_replacements(
 struct Parts {
     items: crate::formula_facts::Items,
     fact_scratch: facts::Scratch,
+    fact_families: crate::formula_analysis::Families,
     projection: Vec<RuleIr>,
     analyzed: Vec<WithProvenance<Statement>>,
+    analysis_sources: Vec<StatementId>,
     pool_projection_nodes: u128,
     objectives: Vec<ObjectiveIr>,
     objective_declarations: Vec<ProgramSite>,
@@ -726,19 +731,27 @@ fn replace_constraints(
     compiler: &mut Compiler<'_>,
     constants: &BTreeMap<String, Symbol>,
     parts: &mut Parts,
-    analyzed: &SourceProgram,
+    analyzed: &mut crate::formula_analysis::Summary,
     owners: &crate::formula_keys::owners::Owners,
     asked: crate::formula_rewrite::Replacements,
     fallback: ProgramSite,
-) -> Result<SourceProgram, FormulaFailure> {
+) -> Result<(), FormulaFailure> {
     // Replacements are constraints, so no fact block is owned by an asked
-    // statement: the products stay, and the replacements' rules follow.
+    // statement: the fact blocks stay, and the replacements' rules follow.
     parts.items.retain_rules(|rule| {
         rule.location
             .statement_id()
             .is_none_or(|owner| !asked.contains_key(&owner))
     });
+    let mut retained_flags = Vec::new();
+    crate::formula_pattern::reserve(
+        &mut retained_flags,
+        analyzed.program().statements().count(),
+        compiler.budget,
+        fallback,
+    )?;
     parts.analyzed = analyzed
+        .program()
         .statements()
         .enumerate()
         .filter(|(index, _)| {
@@ -746,7 +759,10 @@ fn replace_constraints(
                 .at(*index)
                 .is_none_or(|owner| !asked.contains_key(&owner))
         })
-        .map(|(_, carrier)| carrier.clone())
+        .map(|(index, carrier)| {
+            retained_flags.push(analyzed.source_at(index));
+            carrier.clone()
+        })
         .collect();
     for (owner, replacement) in asked {
         let crate::formula_rewrite::Replacement {
@@ -760,10 +776,27 @@ fn replace_constraints(
         for rule in rules {
             let carrier =
                 WithProvenance::new(Statement::Rule(rule), provenance.clone().merge(tag.clone()));
+            let start = parts.analyzed.len();
             compiler.compile(&carrier, constants, parts, fallback.with_statement(owner))?;
+            crate::formula_pattern::reserve_amortized(
+                &mut retained_flags,
+                parts.analyzed.len() - start,
+                compiler.budget,
+                fallback,
+            )?;
+            retained_flags.extend(std::iter::repeat_n(
+                Some(owner),
+                parts.analyzed.len() - start,
+            ));
         }
     }
-    Ok(SourceProgram::of_nodes(std::mem::take(&mut parts.analyzed)))
+    analyzed.replace(
+        std::mem::take(&mut parts.analyzed),
+        retained_flags,
+        compiler.budget,
+        fallback,
+    )?;
+    Ok(())
 }
 
 fn validate_objectives(
@@ -989,6 +1022,16 @@ impl Compiler<'_> {
             let site = fallback.with_statement(owner);
             let start = parts.analyzed.len();
             self.compile(carrier, constants, parts, site)?;
+            let emitted = parts.analyzed.len() - start;
+            crate::formula_pattern::reserve_amortized(
+                &mut parts.analysis_sources,
+                emitted,
+                self.budget,
+                site,
+            )?;
+            parts
+                .analysis_sources
+                .extend(std::iter::repeat_n(owner, emitted));
             crate::formula_keys::owners::record(
                 &mut emitted_owners,
                 owner,
@@ -1010,12 +1053,17 @@ impl Compiler<'_> {
         fallback: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.location = extended::origin(carrier, fallback);
-        let rewritten;
+        let kept = self.keeps_fact(carrier, constants)?;
+        let rewritten = if kept {
+            None
+        } else {
+            Some(self.normalize_statement(carrier, constants)?)
+        };
         let stamped;
-        let (statement, provenance) = if self.keeps_fact(carrier, constants)? {
-            // The rewrite would hand back this statement's content and stamp
-            // its carrier; its analyzed facts take that stamp, and nothing reads
-            // the nested carriers it would rebuild.
+        let (statement, provenance) = if let Some(rewritten) = &rewritten {
+            let statement = rewritten.statements().next().expect("rewrite keeps a rule");
+            (statement, statement.provenance())
+        } else {
             stamped = carrier
                 .provenance()
                 .clone()
@@ -1023,10 +1071,6 @@ impl Compiler<'_> {
                     FORMULA_TRANSFORM,
                 ))));
             (carrier, &stamped)
-        } else {
-            rewritten = self.normalize_statement(carrier, constants)?;
-            let statement = rewritten.statements().next().expect("rewrite keeps a rule");
-            (statement, statement.provenance())
         };
         let origins = extended::program_sites(carrier, self.location);
         if self.project_statement(
@@ -1047,7 +1091,7 @@ impl Compiler<'_> {
             parts.analyzed.extend(observation);
             return Ok(());
         }
-        if let Some(mut facts) = if generated_fact(statement.get()) {
+        if let Some(facts) = if generated_fact(statement.get()) {
             None
         } else {
             fact_expansion::facts(statement, self.budget, self.location)?
@@ -1059,6 +1103,7 @@ impl Compiler<'_> {
             )?;
             #[cfg(test)]
             if facts::testing::facts_as_rules() {
+                let mut facts = facts.into_rows();
                 while let Some(head) = facts.next(self.budget, self.location)? {
                     parts.analyzed.push(crate::formula_analysis::fact(
                         &head,
@@ -1071,12 +1116,22 @@ impl Compiler<'_> {
                 return Ok(());
             }
             self.facts(&facts, &origins, &mut parts.items, &mut parts.fact_scratch)?;
-            while let Some(head) = facts.next(self.budget, self.location)? {
-                parts.analyzed.push(crate::formula_analysis::fact(
-                    &head,
+            if facts.len() != 0 {
+                let family = parts.fact_families.record(
+                    fact_expansion::fact_atom(statement.get()).expect("accepted fact family"),
                     provenance,
-                    self.location,
-                )?);
+                    fallback
+                        .statement_id()
+                        .expect("source compilation assigns statement identity"),
+                    facts.len(),
+                    &mut crate::formula_analysis::Checked {
+                        budget: self.budget,
+                        site: self.location,
+                    },
+                )?;
+                if let Some(rewritten) = rewritten {
+                    parts.fact_families.normalized(family, rewritten);
+                }
             }
         } else {
             self.source_rules(

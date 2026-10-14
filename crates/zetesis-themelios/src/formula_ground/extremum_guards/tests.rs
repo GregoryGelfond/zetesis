@@ -65,7 +65,7 @@ fn zero_states_selects_scalar_before_preparation() {
             let mut roots = CoordinateMap::new(
                 builder.computation,
                 builder.limits,
-                &mut builder.counters,
+                builder.counters,
                 location(),
             )
             .unwrap();

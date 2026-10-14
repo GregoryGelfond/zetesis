@@ -274,8 +274,9 @@ checker)` uses it for independent exact residual checks. Proposal generation,
 the supplied checker, objective feedback and publication remain on the calling
 thread. `next_batch` uses a bounded single-worker executor. With native parallel
 region search, workers decide their own leaves and the CLI pulls their answers
-individually. Otherwise CPU CLI execution uses its scalar cursor by default;
-`--completion-workers 2` (or another value above one) selects reusable batched
+individually. Otherwise CPU CLI execution uses its scalar cursor; the shared
+resource policy keeps residual completion at one worker. Library callers can
+set `SolveConfig::completion_workers` above one to select reusable batched
 completion. GPU formula batches use this same executor for exact residual checks.
 
 Each worker receives only the immutable original theory, its matching candidate,

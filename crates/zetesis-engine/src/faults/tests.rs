@@ -181,3 +181,70 @@ fn batch_preparation_cancellation_is_a_conclusion() {
         Ok(Conclusion::Interrupted)
     );
 }
+
+#[test]
+fn model_and_catalog_owners_preserve_adapter_classification() {
+    use zetesis_core::{ModelError, catalog::Error};
+    for (catalog, resource) in [
+        (Error::Allocation, true),
+        (Error::IdExhausted, true),
+        (Error::Shape, false),
+        (Error::FrozenVocabulary, false),
+    ] {
+        assert_eq!(catalog.is_resource_refusal(), resource);
+        assert_eq!(
+            matches!(super::catalog_class(&catalog), super::Class::Resource),
+            resource
+        );
+        let model = ModelError::Catalog(catalog);
+        assert_eq!(model.is_resource_refusal(), resource);
+        assert_eq!(
+            matches!(super::model_class(&model), super::Class::Resource),
+            resource
+        );
+    }
+}
+
+#[test]
+fn fact_arity_refusals_are_resource_faults() {
+    use zetesis_core::{AdmissionError, AdmissionLimits, AdmissionResource};
+    use zetesis_themelios::{ProgramAdmissionOptions, ProgramFailureKind, admit_program};
+
+    let original = themelios_macros::program! { p(1, 2). };
+    let native = admit_program(
+        &original,
+        ProgramAdmissionOptions {
+            core_limits: AdmissionLimits {
+                max_predicate_arity: 1,
+                ..Default::default()
+            },
+            ..Default::default()
+        },
+    )
+    .unwrap_err();
+    // Prove this reached table-fact admission, rather than an earlier whole-input
+    // ceiling or the template-only refusal the engine already classifies.
+    assert!(matches!(
+        &native.kind,
+        ProgramFailureKind::Core(AdmissionError::FactLimitExceeded {
+            resource: AdmissionResource::PredicateArity,
+            limit: 1,
+            actual: 2,
+            fact: 0,
+        })
+    ));
+    let fault = admission(native);
+    assert_eq!(fault.locus(), Locus::Resource);
+    assert!(!fault.is_backend_bug());
+    assert!(matches!(
+        fault.source().unwrap().downcast_ref::<ProgramFailureKind>(),
+        Some(ProgramFailureKind::Core(
+            AdmissionError::FactLimitExceeded {
+                resource: AdmissionResource::PredicateArity,
+                limit: 1,
+                actual: 2,
+                fact: 0,
+            }
+        ))
+    ));
+}

@@ -77,7 +77,7 @@ pub struct PreparationStatistics {
 /// over every head term whose passes are bounded by the values admitted;
 /// plans the block steps, at most the square of the largest template's terms
 /// for each template; and ranks ground heads once in those layouts, retaining
-/// one optional coordinate per template. The dimensions bound the assignment,
+/// one optional coordinate per template or original fact occurrence. The dimensions bound the assignment,
 /// cursor and undo buffers actually used by [`Self::check_view`]. They are not a class
 /// certificate or semantic index.
 pub struct PreparedQueries {
@@ -463,7 +463,7 @@ impl PreparedQueries {
             .and_then(|bytes| bytes.checked_add(retained))
             .ok_or(Stop::StorageLimit)?;
         workspace.catalogs.set_overhead(overhead, work)?;
-        if self.program.templates().is_empty() {
+        if self.program.is_empty() {
             return Ok(super::CompletedClosure {
                 atoms: zetesis_core::Model::default(),
                 constraint_violated: false,
@@ -525,8 +525,13 @@ impl ClosureWorkspace {
         (size_of::<Self>() - size_of::<Catalogs>()) as u128
     }
 
+    /// Deductible only by the cache that owns this workspace's exact Program.
+    pub(crate) fn shared_fact_bytes(&self) -> u128 {
+        self.catalogs.shared_fact_bytes()
+    }
+
     /// Named retained capacity, including the canonical authority's shared
-    /// frozen vocabulary, owner headers and reusable predicate/index storage.
+    /// frozen vocabulary and fact base, owner headers and reusable predicate/index storage.
     /// Other source/preparation storage, separately retained result metadata,
     /// tree-container/allocator overhead and Arc counters are excluded.
     /// This is not a process-memory ceiling.
@@ -683,3 +688,6 @@ mod tests;
 
 #[cfg(test)]
 mod delta_tests;
+
+#[cfg(test)]
+mod fact_tests;

@@ -26,6 +26,8 @@ use crate::{
 /// Everything both paths must agree on, rendered for comparison.
 #[derive(Debug, Default, PartialEq, Eq)]
 struct Observed {
+    /// Exact normalized source, all nested evidence, graph and class verdicts.
+    analysis: String,
     /// Exact source evaluation: support rounds, atoms and selection.
     source: String,
     /// Full grounding: support rounds and the admitted theory.
@@ -111,7 +113,7 @@ fn reconstructed(owner: &crate::TerminalFormula) -> String {
 }
 
 /// A refusal's text. A work ceiling's crossing amount is the work charged up
-/// to the operation that crossed it, which fact products and fact rules charge
+/// to the operation that crossed it, which fact blocks and fact rules charge
 /// differently by design; of a work refusal only the resource and its limit
 /// are compared.
 fn refused(error: &crate::FormulaFailure) -> String {
@@ -144,6 +146,16 @@ fn observe(path: &Path) -> (Observed, Receipts) {
     let (ground, published) = rounds::capture(|| match prepare(path) {
         Err(error) => format!("refused {error}"),
         Ok(prepared) => {
+            let summary = &prepared.preparation().program.analysis;
+            let full = prepared.source_analysis();
+            assert_eq!(
+                summary.dependencies(),
+                full.dependencies(),
+                "{}",
+                path.display()
+            );
+            assert_eq!(summary.classes(), full.classes(), "{}", path.display());
+            observed.analysis = format!("{:?}\n{:?}", prepared.analyzed_program(), full);
             receipts.evidence = evidence(&prepared);
             match prepared.ground() {
                 Err(failure) => refused(failure.error()),
@@ -176,7 +188,7 @@ fn evidence(prepared: &crate::PreparedFormulaBundle) -> u128 {
         .iter()
         .map(|item| match item {
             Item::Rule(..) => 0,
-            Item::Facts(product) => product.rows().map(|row| row.evidence().len() as u128).sum(),
+            Item::Facts(block) => block.rows().map(|row| row.evidence().len() as u128).sum(),
         })
         .sum()
 }
@@ -186,6 +198,7 @@ fn agree(path: &Path) -> u128 {
     let (reference, rule_receipts) = with_facts_as_rules(|| observe(path));
     let (actual, receipts) = observe(path);
     assert_eq!(rule_receipts.evidence, 0, "{}", path.display());
+    assert_eq!(actual.analysis, reference.analysis, "{}", path.display());
     assert_eq!(actual.source, reference.source, "{}", path.display());
     assert_eq!(actual.ground, reference.ground, "{}", path.display());
     assert_eq!(actual.adaptive, reference.adaptive, "{}", path.display());
@@ -374,7 +387,7 @@ fn a_run_holds_consecutive_one_row_statements_of_one_predicate() {
         "q(1). p(1). p(2). p(3). p(4;5). r(X) :- p(X).",
     );
     let prepared = prepare(&path).unwrap();
-    let products: Vec<_> = prepared
+    let blocks: Vec<_> = prepared
         .preparation()
         .program
         .items()
@@ -383,7 +396,7 @@ fn a_run_holds_consecutive_one_row_statements_of_one_predicate() {
         .collect();
     // p(1), p(2) and p(3) share a run; p(4;5) is two argument alternatives,
     // a product each; q(1) starts a run of its own.
-    assert_eq!(products, [3, 1, 1, 1]);
+    assert_eq!(blocks, [3, 1, 1, 1]);
 }
 
 #[test]
@@ -399,7 +412,7 @@ fn a_product_admits_each_column_value_once() {
         .next()
         .unwrap();
     assert_eq!(product.len(), 12);
-    assert_eq!(product.cells().len(), 7);
+    assert_eq!(product.cells().count(), 7);
 }
 
 /// The positive-source certificate's verdict, from the compiled program.

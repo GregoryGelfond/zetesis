@@ -41,8 +41,9 @@ mod view;
 use driver::fixture as publication_fixture;
 
 pub use view::{
-    AnswerRenderer, AnswerView, BackendView, ConfigurationView, GroundingDisplay, HumanRenderer,
-    JsonRenderer, PublicationConfig, PublicationView, SummaryDelivery, SummaryStage,
+    AnswerRenderer, AnswerView, BackendView, ConfigurationView, CountRenderer, GroundingDisplay,
+    HumanRenderer, JsonRenderer, PublicationConfig, PublicationMode, PublicationView,
+    SummaryDelivery, SummaryStage,
 };
 
 pub use devices::devices;

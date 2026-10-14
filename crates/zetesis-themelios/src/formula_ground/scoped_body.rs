@@ -27,37 +27,37 @@ pub(super) struct ValidatedBody {
     root: usize,
 }
 
-pub(super) fn validate(
+pub(super) fn validate<'source>(
     literals: &[LiteralIr],
     binding: &Binding,
-    support: &Support<'_>,
-    context: &mut Context<'_, '_, '_>,
+    support: &Support<'source>,
+    context: &mut Context<'_, '_, 'source>,
 ) -> Result<ValidatedBody, FormulaFailure> {
     validate_with_purpose(literals, binding, support, context, Purpose::Objective)
 }
 
 /// Source activity uses the same complete scoped lowering as original-model
 /// queries, with theory scratch ceilings and no retained query publication.
-pub(crate) fn source_activity(
+pub(crate) fn source_activity<'source>(
     literals: &[LiteralIr],
     binding: &Binding,
-    support: &Support<'_>,
+    support: &Support<'source>,
     eligibility: &SourceEligibility,
-    context: &mut Context<'_, '_, '_>,
+    context: &mut Context<'_, '_, 'source>,
 ) -> Result<Activity, FormulaFailure> {
     validate_with_purpose(literals, binding, support, context, Purpose::Validation)?
         .source_activity(eligibility, context)
 }
 
-pub(super) fn validate_with_purpose(
+pub(super) fn validate_with_purpose<'source>(
     literals: &[LiteralIr],
     binding: &Binding,
-    support: &Support<'_>,
-    context: &mut Context<'_, '_, '_>,
+    support: &Support<'source>,
+    context: &mut Context<'_, '_, 'source>,
     purpose: Purpose,
 ) -> Result<ValidatedBody, FormulaFailure> {
-    // Empty validates its catalog before transferring the cumulative counters;
-    // every later Result path returns those counters to the caller unchanged.
+    // The builder borrows the cumulative account through every outcome,
+    // including an unwind during scoped lowering.
     let mut builder = Builder::empty(
         context.computation,
         context.limits,
@@ -71,7 +71,6 @@ pub(super) fn validate_with_purpose(
         builder.initialize(context.location)?;
         builder.body(literals, binding, context.location, support)
     })();
-    *context.counters = builder.counters;
     let root = result?;
     Ok(ValidatedBody {
         atoms: builder.catalog,

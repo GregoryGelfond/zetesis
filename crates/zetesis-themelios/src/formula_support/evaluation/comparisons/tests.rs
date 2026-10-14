@@ -282,7 +282,7 @@ fn cancellation_precedes_borrowed_variable_lookup() {
         let source = binding(&[], computation, counters, location());
         let cancellation = zetesis_cpu::Cancellation::default();
         cancellation.cancel();
-        counters.cancellation = Some(cancellation);
+        counters.attach_test_control(&cancellation);
         let expression = Expression::new(vec![Operation::Variable(usize::MAX)]);
         let result = Evaluation::default().source_comparison(
             ([&expression, &expression], Relation::Eq),

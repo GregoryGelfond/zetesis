@@ -89,7 +89,12 @@ fn template(names: &[&str]) -> Template {
 }
 
 fn program() -> Program {
-    Program::new(vec![template(&["a", "b", "c"])], AdmissionLimits::default()).unwrap()
+    Program::new(
+        vec![template(&["a", "b", "c"])],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn catalog() -> Catalog {
@@ -286,7 +291,12 @@ fn predicate_signs_have_distinct_membership_rows() {
         vec![],
         vec![],
     );
-    let program = Program::new(vec![rule], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![rule],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let cancellation = Cancellation::default();
     let mut work = Work::source(&cancellation, u64::MAX);
     let mut snapshot = snapshot(&program, &catalog, &[1, 2], 1, 2, usize::MAX, &mut work).unwrap();

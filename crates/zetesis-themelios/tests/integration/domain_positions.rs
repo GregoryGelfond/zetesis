@@ -8,7 +8,7 @@ use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
 use zetesis_core::{DomainPositions, TemplateTerm};
-use zetesis_test_support::repository;
+use zetesis_test_support::{programs::rules, repository};
 use zetesis_themelios::{AdmissionOptions, ExpansionLimits, admit_extended};
 
 fn programs(directory: &Path, found: &mut Vec<PathBuf>) {
@@ -47,7 +47,7 @@ fn agrees(text: String, name: &str) -> bool {
         let value = domain.at(index).unwrap();
         assert_eq!(positions.position(value), Some(index), "{name}");
     }
-    for template in program.templates() {
+    for template in rules(program) {
         let Some(head) = template.head() else {
             continue;
         };

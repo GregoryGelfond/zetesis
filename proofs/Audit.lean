@@ -214,6 +214,13 @@ import Zetesis
 #print axioms Zetesis.CertifiedExecution.unsupported_requires_completion
 #print axioms Zetesis.CertifiedExecution.fallback_quota_is_cumulative
 #print axioms Zetesis.CertifiedExecution.restricted_result_original
+#print axioms Zetesis.ChargeCadence.pollDue_zero
+#print axioms Zetesis.ChargeCadence.fewer_than_interval
+#print axioms Zetesis.ChargeCadence.distance_reaches_boundary
+#print axioms Zetesis.ChargeCadence.distance_minimal
+#print axioms Zetesis.ChargeCadence.dueRule_iff
+#print axioms Zetesis.ChargeCadence.observes_covered_boundary
+#print axioms Zetesis.ChargeCadence.observes_next_multiple
 #print axioms Zetesis.ChoiceConsumers.original_bounds
 #print axioms Zetesis.ChoiceConsumers.rejected_frozen
 #print axioms Zetesis.ChoiceConsumers.unrealized_frozen
@@ -409,6 +416,8 @@ import Zetesis
 #print axioms Zetesis.DagSharing.findNode_complete
 #print axioms Zetesis.DagSharing.intern_existing_reuses
 #print axioms Zetesis.DagSharing.exact_choice_graph_sharing
+#print axioms Zetesis.DagSharing.findNode_stable_under_extension
+#print axioms Zetesis.DagSharing.intern_stable_under_extension
 #print axioms Zetesis.DeltaJoins.first_true
 #print axioms Zetesis.DeltaJoins.partition_complete
 #print axioms Zetesis.DeltaJoins.partition_disjoint
@@ -1256,6 +1265,10 @@ import Zetesis
 #print axioms Zetesis.RegionBounds.narrowing_exact
 #print axioms Zetesis.RelationExtension.reconstruction_preserved
 #print axioms Zetesis.RelationExtension.acceptance_preserved
+#print axioms Zetesis.NumericDomains.endpoint_magnitude
+#print axioms Zetesis.NumericDomains.remainder_dividend_envelope
+#print axioms Zetesis.NumericDomains.remainder_interval
+#print axioms Zetesis.NumericDomains.checked_remainder_interval
 #print axioms Zetesis.RequiredChoiceCosts.sum_nonnegative
 #print axioms Zetesis.RequiredChoiceCosts.member_le_sum
 #print axioms Zetesis.RequiredChoiceCosts.group_floor_le
@@ -1397,6 +1410,9 @@ import Zetesis
 #print axioms Zetesis.SourceMeasures.assembled_split
 #print axioms Zetesis.SourceMeasures.required_sum_carrier_membership
 #print axioms Zetesis.SourceMeasures.required_count_carrier_membership
+#print axioms Zetesis.SourceMeasures.extremum_dominates_member
+#print axioms Zetesis.SourceMeasures.extremum_dominates_required
+#print axioms Zetesis.SourceMeasures.required_extremum_carrier_membership
 #print axioms Zetesis.SourceSupport.unchanged_round_closed
 #print axioms Zetesis.SourceSupport.stages_inside_closed
 #print axioms Zetesis.SourceSupport.stable_inside_closed

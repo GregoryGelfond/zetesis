@@ -2,7 +2,7 @@
 
 use themelios_program::program::Atom;
 use themelios_program::term::Term as SourceTerm;
-use zetesis_core::{AtomPattern, Predicate, Template, Term, Value};
+use zetesis_core::{Predicate, Template, Term, Value};
 
 use super::{
     columns::{self, Column},
@@ -15,7 +15,7 @@ use crate::{AdmissionFailure, ExpansionFailure, ExpansionResource, ProgramSite};
 pub(super) struct Product {
     predicate: Predicate,
     columns: Vec<Column>,
-    remaining: usize,
+    rows: usize,
 }
 
 impl Product {
@@ -87,14 +87,14 @@ impl Product {
         let mut product = Self {
             predicate,
             columns,
-            remaining: usize::try_from(count).expect("Templates charge has a usize ceiling"),
+            rows: usize::try_from(count).expect("Templates charge has a usize ceiling"),
         };
         product.charge_copies(copied_bytes, budget, location)?;
         Ok(Some(product))
     }
 
     pub(super) fn len(&self) -> usize {
-        self.remaining
+        self.rows
     }
 
     pub(super) fn predicate(&self) -> &Predicate {
@@ -103,10 +103,6 @@ impl Product {
 
     pub(super) fn columns(&self) -> &[Column] {
         &self.columns
-    }
-
-    pub(super) fn is_empty(&self) -> bool {
-        self.remaining == 0
     }
 
     /// Every scalar occurrence is selected count / column.width times. When
@@ -122,7 +118,7 @@ impl Product {
         if bytes <= budget.remaining_scalar_bytes() {
             return budget.charge(ExpansionResource::ScalarBytes, bytes, location);
         }
-        for _ in 0..self.remaining {
+        for _ in 0..self.rows {
             budget.poll(location)?;
             for column in &self.columns {
                 budget.charge(
@@ -134,24 +130,6 @@ impl Product {
             self.advance(budget, location)?;
         }
         unreachable!("complete copy traffic exceeded the remaining allowance")
-    }
-
-    pub(super) fn next(
-        &mut self,
-        budget: &Budget,
-        location: ProgramSite,
-    ) -> Result<AtomPattern, ExpansionFailure> {
-        budget.poll(location)?;
-        let mut terms = reserved(self.columns.len(), budget, location)?;
-        for column in &self.columns {
-            budget.poll(location)?;
-            terms.push(Term::Constant(column.value()));
-        }
-        let head = AtomPattern::new(self.predicate.clone(), terms)
-            .map_err(|error| AdmissionFailure::Construction { error, location })?;
-        self.advance(budget, location)?;
-        self.remaining -= 1;
-        Ok(head)
     }
 
     fn advance(&mut self, budget: &Budget, location: ProgramSite) -> Result<(), ExpansionFailure> {

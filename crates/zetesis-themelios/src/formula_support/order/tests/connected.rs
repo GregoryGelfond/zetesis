@@ -1,7 +1,7 @@
 //! Scheduling changes are checked against complete joins under every finite
 //! permutation, while receipts distinguish the selected production order.
 
-use std::{borrow::Cow, cell::Cell};
+use std::cell::Cell;
 
 use super::{atom, less, order};
 use crate::expansion::Budget;
@@ -96,7 +96,7 @@ fn execute(
                     &prefix,
                     variables,
                     support,
-                    Cow::Owned(plan),
+                    crate::formula_support::JoinPlan::Owned(plan),
                     None,
                     Context::new(computation, &limits, counters, given_site()),
                 )?;

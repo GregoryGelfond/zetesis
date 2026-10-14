@@ -203,6 +203,27 @@ impl SemanticOutcome {
         self.verified
     }
 
+    /// Exact size of the requested full answer-set family after exhaustion.
+    /// Optimal selection counts every optimal tie, including unretained ties;
+    /// all-answer selection counts full identities, even with projection.
+    /// Incomplete or absent coverage returns None, never a partial total.
+    /// Engine counters are checked or bounded by checked candidate counts.
+    #[must_use]
+    pub const fn complete_answer_count(&self) -> Option<u64> {
+        if !matches!(self.search_state, Some(SearchState::Exhausted)) {
+            return None;
+        }
+        match self.selection {
+            Some(AnswerSelection::All) => Some(self.verified),
+            Some(AnswerSelection::Optimal) => match &self.optimization {
+                Some(best) => Some(best.tied_models),
+                None if self.verified == 0 => Some(0),
+                None => None,
+            },
+            None => None,
+        }
+    }
+
     /// Verified models whose objective evaluation completed.
     #[must_use]
     pub const fn scored_models(&self) -> u64 {
@@ -269,5 +290,38 @@ impl SemanticOutcome {
     #[must_use]
     pub const fn unsatisfiable(&self) -> bool {
         matches!(self.search_state, Some(SearchState::Exhausted)) && self.verified == 0
+    }
+}
+
+#[cfg(test)]
+mod count_tests {
+    use super::*;
+
+    #[test]
+    fn complete_count_needs_exhaustion_and_a_selected_family() {
+        let mut outcome = SemanticOutcome::interrupted_before_start(Interruption::Preparation(
+            zetesis_cpu::Stop::Cancelled,
+        ));
+        outcome.verified = 7;
+        outcome.selection = Some(AnswerSelection::All);
+        assert_eq!(outcome.complete_answer_count(), None);
+        outcome.search_state = Some(SearchState::RequestedModels);
+        assert_eq!(outcome.complete_answer_count(), None);
+        outcome.search_state = Some(SearchState::Exhausted);
+        assert_eq!(outcome.complete_answer_count(), Some(7));
+        outcome.selection = None;
+        assert_eq!(outcome.complete_answer_count(), None);
+    }
+
+    #[test]
+    fn an_absent_incumbent_only_counts_as_zero_for_empty_complete_search() {
+        let mut outcome = SemanticOutcome::interrupted_before_start(Interruption::Preparation(
+            zetesis_cpu::Stop::Cancelled,
+        ));
+        outcome.selection = Some(AnswerSelection::Optimal);
+        outcome.search_state = Some(SearchState::Exhausted);
+        assert_eq!(outcome.complete_answer_count(), Some(0));
+        outcome.verified = 1;
+        assert_eq!(outcome.complete_answer_count(), None);
     }
 }

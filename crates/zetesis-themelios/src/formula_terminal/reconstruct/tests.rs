@@ -74,9 +74,12 @@ fn a_reused_plan_is_charged_before_opening_a_writer() {
     };
     let mut accounting = prepared.baseline.start();
     let failure = accounting
-        .with_cancellation(&Cancellation::default(), |counters| {
-            extend(&owner, &mut plan, &model, counters, &limits)
-        })
+        .controlled(
+            Some(&Cancellation::default()),
+            crate::grounding_observer::Work::default(),
+            prepared.location,
+            |counters| extend(&owner, &mut plan, &model, counters, &limits),
+        )
         .unwrap_err();
     assert!(matches!(
         failure,

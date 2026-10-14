@@ -23,7 +23,12 @@ fn program() -> Program {
         .map(|rule| rule.head().unwrap().clone())
         .collect();
     rules.push(Template::new(None, positive, vec![], vec![], vec![]));
-    Program::new(rules, AdmissionLimits::default()).unwrap()
+    Program::new(
+        rules,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn candidates(source: &Program, limits: CandidateLimits) -> Candidates<'_> {

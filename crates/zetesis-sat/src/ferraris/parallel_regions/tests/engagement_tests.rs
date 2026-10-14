@@ -573,6 +573,55 @@ fn a_recorded_stop_is_returned_on_every_later_pull() {
 }
 
 #[test]
+fn a_closed_unbegun_walk_refuses_pulls_without_beginning() {
+    for engagement in [Engagement::Immediate, NEVER] {
+        let (mut search, index) = walk(&tautologies(3), engagement);
+        search.stop().unwrap();
+        assert_unbegun_refusal(&mut search, &index, Incomplete::ClosedEnumerator);
+    }
+}
+
+#[test]
+fn an_unbegun_walk_preserves_its_recorded_stop() {
+    for engagement in [Engagement::Immediate, NEVER] {
+        let (mut search, index) = walk(&tautologies(3), engagement);
+        search.shared.stop(Incomplete::WorkLimit);
+        assert_eq!(search.stop(), Err(Incomplete::WorkLimit));
+        assert_unbegun_refusal(&mut search, &index, Incomplete::WorkLimit);
+    }
+}
+
+/// A refused pull must leave a closed, unbegun walk's record and resources
+/// unchanged, including when pulled again.
+fn assert_unbegun_refusal(
+    search: &mut ParallelRegions,
+    index: &Arc<IndexedTheory>,
+    expected: Incomplete,
+) {
+    let cancellation = search.shared.cancellation.clone();
+    let mut budget = caller(search, &cancellation);
+    let statistics = search.statistics();
+    let charged = budget.statistics;
+    assert_eq!(
+        statistics.workers.unwrap().engagement,
+        RegionWalkEngagement::NotBegun
+    );
+    for _ in 0..2 {
+        assert_eq!(
+            search.propose(index, None, false, &mut budget).err(),
+            Some(expected)
+        );
+        assert_eq!(search.statistics(), statistics);
+        assert_eq!(budget.statistics, charged);
+        assert!(search.coordinator.is_none());
+        assert!(search.handles.is_empty());
+        assert!(search.sender.is_none() && search.receiver.is_none());
+        assert!(frontier_released(search));
+        assert!(!search.exhausted);
+    }
+}
+
+#[test]
 fn a_closed_walk_returns_its_recorded_stop_in_both_states() {
     for engagement in [LATE, Engagement::Immediate] {
         let (mut search, index) = ceiling(engagement);
@@ -935,6 +984,31 @@ fn the_default_delay_is_the_engagement_cost_per_configured_worker() {
         Some(ENGAGEMENT_COST_PER_WORKER * 4)
     );
     assert_eq!(statistics.engagement, RegionWalkEngagement::NotBegun);
+}
+
+#[test]
+fn engagement_states_keep_their_machine_identifiers() {
+    for (state, expected) in [
+        (RegionWalkEngagement::NotBegun, "not_begun"),
+        (
+            RegionWalkEngagement::Unengaged {
+                elapsed: Duration::ZERO,
+                walking: Duration::ZERO,
+            },
+            "unengaged",
+        ),
+        (
+            RegionWalkEngagement::Engaged {
+                after: Duration::ZERO,
+                walking: Duration::ZERO,
+                launched: 2,
+                spawn: Duration::ZERO,
+            },
+            "engaged",
+        ),
+    ] {
+        assert_eq!(state.label(), expected);
+    }
 }
 
 #[test]

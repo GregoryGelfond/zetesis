@@ -1,7 +1,7 @@
 # zetesis-core contract
 
-This std-only crate owns symbolic keys, admitted relational templates, sparse
-complete candidates, and explicitly eager static lowering. It has no parser,
+This std-only crate owns symbolic keys, admitted relational templates and explicit
+facts, sparse complete candidates, and explicitly eager static lowering. It has no parser,
 Rayon, GPU, learning, filesystem, or process dependency. All public types are
 re-exported at `zetesis_core`.
 
@@ -40,7 +40,7 @@ Their fields are private. `Term::{Variable(usize), Constant(Value)}` and
 
 ```text
 Template::new(head, positive, gate_true, gate_false, filters) -> Template
-Program::new(Vec<Template>, AdmissionLimits) -> Result<Program, AdmissionError>
+Program::new(Vec<Template>, FactTables, AdmissionLimits) -> Result<Program, AdmissionError>
 ```
 
 The optional head distinguishes constraints. Ordinary positive antecedents read
@@ -50,15 +50,25 @@ Filters require exact typed value equality/inequality. `Template::head`,
 immutable views. `AtomPattern::instantiate` and `Filter::evaluate` resolve a
 complete variable assignment and return the missing variable ID on failure.
 
-Admission preserves template order and duplicates, collects values from every
-pattern and filter, and requires variable IDs to be exactly `0..variable_count`
-within each template. Every used variable must occur in an ordinary positive
-pattern. A comparison or gate does not establish variable safety. Admission
-limits bound templates, arity, variables, positive antecedents, and domain values.
-`AdmissionError::template_index()` locates a template-level error for adapters.
+Pass `FactTables::default()` when supplying only templates. Explicit facts use
+`FactTables::push_row` or `push_product`; each block's anchor is the number of
+preceding templates. `Program::rules()` merges both input sequences in order,
+including duplicate occurrences. `templates()` reads only the supplied templates;
+`facts()` reads original fact occurrences, and `fact_relations()` reads distinct
+rows in the shared closed fact store. Admission does not reclassify caller-supplied
+body-free templates.
 
-The domain is exactly the constants supplied in these templates. Nullary atoms
-exist even when that domain is empty; positive-arity carriers are then empty.
+Admission preserves template order and duplicates, collects values from every
+pattern, filter and explicit fact, and requires variable IDs to be exactly
+`0..variable_count` within each template. Every used variable must occur in an ordinary positive
+pattern. A comparison or gate does not establish variable safety. Admission
+limits bound original rule occurrences, arity, variables, positive antecedents,
+and domain values. `AdmissionError::template_index()` locates a template-level
+error; `fact_index()` locates an explicit fact-occurrence error for adapters.
+
+The domain is exactly the constant roots supplied in templates and explicit facts;
+structural subterms do not independently enter it. Nullary atoms exist even when
+that domain is empty; positive-arity carriers are then empty.
 An adapter wanting an additional domain constant must supply it through its
 normalized program. Parser syntax, source integer folding, source choice
 lowering, provenance, and source-language preservation remain adapter concerns.

@@ -5,7 +5,12 @@ use super::*;
 
 #[test]
 fn cancelled_materialization_does_not_count_an_emitted_candidate() {
-    let program = Program::new(vec![], zetesis_core::AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        zetesis_core::AdmissionLimits::default(),
+    )
+    .unwrap();
     let cancellation = Cancellation::default();
     let mut candidates =
         Candidates::new(&program, CandidateLimits::default(), cancellation.clone());
@@ -26,7 +31,12 @@ fn cancelled_materialization_does_not_count_an_emitted_candidate() {
 #[test]
 fn an_exhausted_enumeration_stays_exhausted() {
     // The empty program has one candidate, the empty interpretation.
-    let program = Program::new(vec![], zetesis_core::AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        zetesis_core::AdmissionLimits::default(),
+    )
+    .unwrap();
     let mut candidates = Candidates::new(
         &program,
         CandidateLimits::default(),

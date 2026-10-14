@@ -49,6 +49,7 @@
 # Performance and testing
 
 - [Performance results](reference/performance.md)
+  - [CPU corpus comparison, 14 October 2026](reference/cpu-corpus-20261014.md)
   - [CPU corpus comparison, 10 October 2026](reference/cpu-corpus-20261010.md)
   - [CPU corpus comparison, 7 October 2026](reference/cpu-corpus-20261007.md)
   - [Reusing grounding and formula preparation](reference/foundation-reuse.md)

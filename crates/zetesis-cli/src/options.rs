@@ -102,6 +102,13 @@ pub struct Options {
     /// Stream a versioned JSON document with full models, shown channels and coverage.
     #[arg(long)]
     pub json: bool,
+    /// Print only the complete number of answer sets, or all optimal ties.
+    ///
+    /// Counts full answer identities independently of #show and #project.
+    /// Interrupted or failed searches print no count. Accept the total only on
+    /// successful exit; output can fail after writing bytes. Statistics remain on stderr.
+    #[arg(long, conflicts_with_all = ["json", "models"])]
+    pub count: bool,
     /// Style human headings and solve metadata.
     ///
     /// Auto follows each stream's terminal capability, `NO_COLOR` and `TERM`.

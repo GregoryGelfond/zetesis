@@ -717,15 +717,31 @@ impl AdmittedFormula {
     /// Structural facts about [`Self::analyzed_program`]. Consult
     /// [`Self::analysis_basis`]: a dependency projection does not certify source
     /// safety or class membership. Unknown never removes runtime ceilings.
+    /// If preparation has not needed the complete normalized input, the first
+    /// full inspection constructs and retains it and its analysis. Later calls
+    /// borrow that shared result. Preparation's summary has the same dependency
+    /// graph and class verdicts; full inspection pays canonical ingestion and
+    /// analysis work and full-program storage, without an expansion charge.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
-        &self.compiled.analysis
+        self.compiled
+            .analyzed
+            .full_analysis(&self.compiled.analysis)
+    }
+
+    /// Structural classes of the retained source analysis. This view does not
+    /// require constructing the full analyzed program. Consult
+    /// [`Self::analysis_basis`] before using a verdict as a source property.
+    #[must_use]
+    pub fn source_classes(&self) -> &themelios_analysis::classify::Classes {
+        self.compiled.analysis.classes()
     }
     /// Bounded, pool-free analysis input retaining available provenance. Consult
     /// [`Self::analysis_basis`] before interpreting its structural verdicts.
+    /// Shares the complete view and its construction cost with [`Self::source_analysis`].
     #[must_use]
     pub fn analyzed_program(&self) -> &SourceProgram {
-        &self.compiled.analyzed
+        self.compiled.analyzed.full_program()
     }
 
     /// Meaning of the retained analysis input. Dependency projections do not
@@ -866,15 +882,31 @@ impl AdmittedFormulaBundle {
     /// Structural facts about [`Self::analyzed_program`]. Consult
     /// [`Self::analysis_basis`]: a dependency projection does not certify source
     /// safety or class membership. Unknown never removes runtime ceilings.
+    /// If preparation has not needed the complete normalized input, the first
+    /// full inspection constructs and retains it and its analysis. Later calls
+    /// borrow that shared result. Preparation's summary has the same dependency
+    /// graph and class verdicts; full inspection pays canonical ingestion and
+    /// analysis work and full-program storage, without an expansion charge.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
-        &self.compiled.analysis
+        self.compiled
+            .analyzed
+            .full_analysis(&self.compiled.analysis)
+    }
+
+    /// Structural classes of the retained source analysis. This view does not
+    /// require constructing the full analyzed program. Consult
+    /// [`Self::analysis_basis`] before using a verdict as a source property.
+    #[must_use]
+    pub fn source_classes(&self) -> &themelios_analysis::classify::Classes {
+        self.compiled.analysis.classes()
     }
     /// Bounded, pool-free analysis input retaining available provenance. Consult
     /// [`Self::analysis_basis`] before interpreting its structural verdicts.
+    /// Shares the complete view and its construction cost with [`Self::source_analysis`].
     #[must_use]
     pub fn analyzed_program(&self) -> &SourceProgram {
-        &self.compiled.analyzed
+        self.compiled.analyzed.full_program()
     }
 
     /// Meaning of the retained analysis input. Dependency projections do not
@@ -1039,7 +1071,7 @@ pub(crate) struct Compiled {
     pub projection: crate::PreparedProjection,
     pub analysis_basis: AnalysisBasis,
     pub analysis: themelios_analysis::Analysis,
-    pub analyzed: SourceProgram,
+    pub analyzed: crate::formula_analysis::Summary,
     pub theory: Theory,
     pub count_plan: crate::formula_count_plan::Outcome,
     pub required_choices: Option<crate::RequiredChoices>,
@@ -1331,7 +1363,17 @@ pub(crate) fn prepare_parsed(
     limits: &FormulaLimits,
     cancellation: Option<zetesis_cpu::Cancellation>,
 ) -> Result<PreparedFormula, SourceFailure<FormulaFailure>> {
-    match prepare_source(&source, expansion, limits, cancellation) {
+    prepare_parsed_reusing(source, expansion, limits, cancellation, None)
+}
+
+pub(crate) fn prepare_parsed_reusing(
+    source: ParsedSource,
+    expansion: ExpansionLimits,
+    limits: &FormulaLimits,
+    cancellation: Option<zetesis_cpu::Cancellation>,
+    handoff: Option<crate::automatic::handoff::Handoff>,
+) -> Result<PreparedFormula, SourceFailure<FormulaFailure>> {
+    match prepare_source(&source, expansion, limits, cancellation, handoff) {
         Ok((preparation, metadata, program)) => Ok(PreparedFormula::new(
             preparation,
             Owner::single(program, source.into_source()),
@@ -1346,7 +1388,10 @@ fn prepare_source(
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
     cancellation: Option<zetesis_cpu::Cancellation>,
+    handoff: Option<crate::automatic::handoff::Handoff>,
 ) -> Result<(Preparation, SourceMetadata, Arc<SourceProgram>), FormulaFailure> {
+    #[cfg(test)]
+    crate::automatic::testing::note_formula_attempt();
     let parsed = source.parsed();
     let options = source.options();
     let location = ProgramSite::source(themelios_base::span::Location {
@@ -1356,13 +1401,20 @@ fn prepare_source(
     let budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates)
         .with_cancellation(cancellation);
     budget.poll(location)?;
-    profile::check_formula(parsed, options, false)?;
-    extended::check_definitions_in(parsed, expansion, &mut BTreeMap::new())?;
-    metadata::check_count(parsed, expansion, &mut 0)?;
+    if handoff.is_none() {
+        profile::check_formula(parsed, options, false)?;
+        extended::check_definitions_in(parsed, expansion, &mut BTreeMap::new())?;
+        metadata::check_count(parsed, expansion, &mut 0)?;
+    }
     formula_ir::check_objectives(parsed, limits, &mut 0)?;
-    let mut metadata = metadata::Builder::new(limits.metadata_storage);
+    let (mut metadata, replay) = crate::automatic::handoff::split(handoff, limits.metadata_storage);
     budget.poll(location)?;
-    let raised = Arc::new(crate::formula_raise::raise(parsed, &mut metadata)?);
+    let raised = if let Some(mut replay) = replay {
+        replay.metadata_at(0)?;
+        replay.program
+    } else {
+        Arc::new(crate::formula_raise::raise(parsed, &mut metadata)?)
+    };
     budget.poll(location)?;
     let (preparation, metadata) =
         prepare(&raised, options.into(), budget, limits, location, metadata)?;
@@ -1445,7 +1497,18 @@ fn prepare_bundle_with_control(
     limits: &FormulaLimits,
     cancellation: Option<zetesis_cpu::Cancellation>,
 ) -> Result<PreparedFormulaBundle, FormulaBundleFailure> {
-    match prepare_bundle(&bundle, options, expansion, limits, cancellation) {
+    prepare_bundle_reusing(bundle, options, expansion, limits, cancellation, None)
+}
+
+pub(crate) fn prepare_bundle_reusing(
+    bundle: SourceBundle,
+    options: BundleAdmissionOptions,
+    expansion: ExpansionLimits,
+    limits: &FormulaLimits,
+    cancellation: Option<zetesis_cpu::Cancellation>,
+    handoff: Option<crate::automatic::handoff::Handoff>,
+) -> Result<PreparedFormulaBundle, FormulaBundleFailure> {
+    match prepare_bundle(&bundle, options, expansion, limits, cancellation, handoff) {
         Ok((preparation, metadata, program)) => Ok(PreparedFormulaBundle::new(
             preparation,
             Owner::bundle(program, bundle),
@@ -1464,7 +1527,10 @@ fn prepare_bundle(
     expansion: ExpansionLimits,
     limits: &FormulaLimits,
     cancellation: Option<zetesis_cpu::Cancellation>,
+    handoff: Option<crate::automatic::handoff::Handoff>,
 ) -> Result<(Preparation, SourceMetadata, Arc<SourceProgram>), FormulaFailure> {
+    #[cfg(test)]
+    crate::automatic::testing::note_formula_attempt();
     let budget = crate::expansion::Budget::new(expansion, options.core_limits.max_templates)
         .with_cancellation(cancellation);
     budget.poll(ProgramSite::program())?;
@@ -1473,10 +1539,11 @@ fn prepare_bundle(
     let mut definitions = BTreeMap::new();
     let mut metadata_count = 0;
     let mut objective_count = 0;
-    let mut metadata = metadata::Builder::new(limits.metadata_storage);
+    let (mut metadata, mut replay) =
+        crate::automatic::handoff::split(handoff, limits.metadata_storage);
     let mut statements = Vec::new();
     let mut visited = 0;
-    for source in bundle.sources() {
+    for (index, source) in bundle.sources().iter().enumerate() {
         let site = ProgramSite::source(themelios_base::span::Location {
             source: source.id(),
             span: source.source().span(),
@@ -1490,19 +1557,30 @@ fn prepare_bundle(
             max_body_elements: options.max_body_elements,
             core_limits: options.core_limits,
         };
-        visited += profile::check_formula(source.parsed(), local, true)?;
-        extended::check_definitions_in(source.parsed(), expansion, &mut definitions)?;
-        metadata::check_count(source.parsed(), expansion, &mut metadata_count)?;
+        if let Some(replay) = &replay {
+            visited += replay.nodes[index];
+        } else {
+            visited += profile::check_formula(source.parsed(), local, true)?;
+            extended::check_definitions_in(source.parsed(), expansion, &mut definitions)?;
+            metadata::check_count(source.parsed(), expansion, &mut metadata_count)?;
+        }
         formula_ir::check_objectives(source.parsed(), limits, &mut objective_count)?;
         budget.poll(site)?;
-        let raised = crate::formula_raise::raise(source.parsed(), &mut metadata)?;
+        let raised = if let Some(replay) = &mut replay {
+            replay.metadata_at(index)?;
+            None
+        } else {
+            Some(crate::formula_raise::raise(source.parsed(), &mut metadata)?)
+        };
         budget.poll(site)?;
-        statements.extend(
-            raised
-                .statements()
-                .filter(|carrier| !matches!(carrier.get(), Statement::Include(_)))
-                .cloned(),
-        );
+        if let Some(raised) = raised {
+            statements.extend(
+                raised
+                    .statements()
+                    .filter(|carrier| !matches!(carrier.get(), Statement::Include(_)))
+                    .cloned(),
+            );
+        }
     }
     let entry = bundle
         .get(bundle.entry())
@@ -1511,14 +1589,17 @@ fn prepare_bundle(
         source: entry.id(),
         span: entry.source().span(),
     });
-    let program = Arc::new(SourceProgram::of_nodes(statements));
+    let program = replay.map_or_else(
+        || Arc::new(SourceProgram::of_nodes(statements)),
+        |replay| replay.program,
+    );
     let (preparation, metadata) =
         prepare(&program, options.into(), budget, limits, location, metadata)?;
     Ok((preparation, metadata, program))
 }
 
 fn prepare(
-    source: &SourceProgram,
+    source: &Arc<SourceProgram>,
     options: formula_ir::CompilationOptions,
     mut budget: crate::expansion::Budget,
     limits: &FormulaLimits,
@@ -1528,16 +1609,22 @@ fn prepare(
     metadata.compile_observations(source, options, limits.observation, &mut budget, location)?;
     let metadata = metadata.finish(location)?;
     let mut catalog = crate::formula_support::SupportCatalog::default();
-    let mut counters =
-        crate::formula_support::Counters::default().with_cancellation(budget.cancellation());
-    let prepared = formula_ir::PreparationContext {
-        options,
-        budget: &mut budget,
-        catalog: &mut catalog,
-        work: crate::formula_support::GroundingWork::new(limits, &mut counters, location),
-    }
-    .prepare(source, metadata.project_selection().clone())?;
-    let accounting = counters.into_accounting();
+    let mut accounting = crate::formula_support::Accounting::default();
+    let cancellation = budget.cancellation().cloned();
+    let prepared = accounting.controlled::<_, FormulaFailure>(
+        cancellation.as_ref(),
+        crate::grounding_observer::Work::default(),
+        location,
+        |counters| {
+            formula_ir::PreparationContext {
+                options,
+                budget: &mut budget,
+                catalog: &mut catalog,
+                work: crate::formula_support::GroundingWork::new(limits, counters, location),
+            }
+            .prepare(source, metadata.project_selection().clone())
+        },
+    )?;
     budget.poll(location)?;
     Ok((
         Preparation::new(prepared, catalog, accounting, budget, limits, location),

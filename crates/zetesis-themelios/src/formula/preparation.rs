@@ -74,12 +74,18 @@ impl fmt::Debug for PreparedFormula {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PreparedFormula")
             .field("source", &self.source)
-            .field("analyzed_program", self.analyzed_program())
+            .field("analysis_summary", &self.preparation.program.analyzed)
             .finish_non_exhaustive()
     }
 }
 
 impl PreparedFormula {
+    /// The preparation, for tests that compare admission receipts and options.
+    #[cfg(test)]
+    pub(crate) fn preparation(&self) -> &Preparation {
+        &self.preparation
+    }
+
     pub(super) fn new(preparation: Preparation, source: Owner, metadata: SourceMetadata) -> Self {
         Self {
             preparation,
@@ -91,17 +97,34 @@ impl PreparedFormula {
     /// Structural facts about exactly [`Self::analyzed_program`]. Unknown verdicts
     /// establish neither nonmembership in a class nor a grounder requirement.
     /// Consult [`Self::analysis_basis`] before interpreting these as source facts.
+    /// If preparation has not needed the complete normalized input, the first
+    /// full inspection constructs and retains it and its analysis. Later calls
+    /// borrow that shared result. Preparation's summary has the same dependency
+    /// graph and class verdicts; full inspection pays canonical ingestion and
+    /// analysis work and full-program storage, without an expansion charge.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
-        &self.preparation.program.analysis
+        self.preparation
+            .program
+            .analyzed
+            .full_analysis(&self.preparation.program.analysis)
+    }
+
+    /// Structural classes of the retained source analysis. This view does not
+    /// require constructing the full analyzed program. Consult
+    /// [`Self::analysis_basis`] before using a verdict as a source property.
+    #[must_use]
+    pub fn source_classes(&self) -> &themelios_analysis::classify::Classes {
+        self.preparation.program.analysis.classes()
     }
 
     /// Bounded, pool-free analysis input retaining available provenance. Its semantic
     /// status is identified by [`Self::analysis_basis`].
     /// Metadata and subsequently generated support/coherence formulas are separate.
+    /// Shares the complete view and its construction cost with [`Self::source_analysis`].
     #[must_use]
     pub fn analyzed_program(&self) -> &Program {
-        &self.preparation.program.analyzed
+        self.preparation.program.analyzed.full_program()
     }
 
     /// Meaning of the retained analysis input. A dependency projection is not
@@ -146,17 +169,20 @@ impl PreparedFormula {
         self
     }
 
-    /// Attempt finite-domain guards during final instantiation of an exact
-    /// normalized positive flat program. Disabled by default. Inapplicable,
-    /// Unknown or Stopped analysis leaves the complete join unchanged.
+    /// Attempt numeric analysis over all prepared producers and compact facts.
+    /// Disabled by default. Finite-domain guards retain their exact normalized
+    /// positive-flat scope; unavailable bounds leave the complete join unchanged.
     ///
-    /// The analysis borrows this exact normalized source and keeps its logical
-    /// population limits separate from support/guard capacity. Its work and all
-    /// bridge/guard work consume the original cumulative formula budget.
-    /// Analysis uses bounded infallible collections and has no internal control
-    /// hook. A configured preparation token is polled around that bounded call;
-    /// it does not provide a hard real-time deadline or allocator/RSS bound.
-    /// Observers receive the typed analysis outcome.
+    /// The analysis borrows this preparation's canonical terms and keeps its
+    /// logical population limits separate from support/guard capacity. Its work
+    /// and all bridge/guard work consume the original cumulative formula budget.
+    /// Allocation and owner failures remain explicit. A configured preparation
+    /// token is polled around the bounded analysis; this is not a hard real-time
+    /// deadline or allocator/RSS bound.
+    ///
+    /// Observers request certificates and a typed census through
+    /// [`GroundingObserver::domain_diagnostics_enabled`]. Without that request,
+    /// shared analysis and finite guards still run without diagnostic work.
     #[must_use]
     pub const fn with_domain_analysis(mut self, limits: Option<crate::DomainLimits>) -> Self {
         self.preparation.options.domains = limits;
@@ -401,7 +427,7 @@ impl fmt::Debug for PreparedFormulaBundle {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("PreparedFormulaBundle")
             .field("bundle", &self.bundle())
-            .field("analyzed_program", self.analyzed_program())
+            .field("analysis_summary", &self.preparation.program.analyzed)
             .finish_non_exhaustive()
     }
 }
@@ -538,16 +564,33 @@ impl PreparedFormulaBundle {
     /// Structural facts about exactly [`Self::analyzed_program`], not a guarantee
     /// that grounding succeeds or that lazy formula execution is implemented.
     /// Consult [`Self::analysis_basis`] before interpreting these as source facts.
+    /// If preparation has not needed the complete normalized input, the first
+    /// full inspection constructs and retains it and its analysis. Later calls
+    /// borrow that shared result. Preparation's summary has the same dependency
+    /// graph and class verdicts; full inspection pays canonical ingestion and
+    /// analysis work and full-program storage, without an expansion charge.
     #[must_use]
     pub fn source_analysis(&self) -> &themelios_analysis::Analysis {
-        &self.preparation.program.analysis
+        self.preparation
+            .program
+            .analyzed
+            .full_analysis(&self.preparation.program.analysis)
+    }
+
+    /// Structural classes of the retained source analysis. This view does not
+    /// require constructing the full analyzed program. Consult
+    /// [`Self::analysis_basis`] before using a verdict as a source property.
+    #[must_use]
+    pub fn source_classes(&self) -> &themelios_analysis::classify::Classes {
+        self.preparation.program.analysis.classes()
     }
 
     /// Bounded, pool-free combined analysis input retaining available provenance;
     /// consult [`Self::analysis_basis`] before interpreting its verdicts.
+    /// Shares the complete view and its construction cost with [`Self::source_analysis`].
     #[must_use]
     pub fn analyzed_program(&self) -> &Program {
-        &self.preparation.program.analyzed
+        self.preparation.program.analyzed.full_program()
     }
 
     /// Meaning of the retained analysis input. A dependency projection is not

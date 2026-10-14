@@ -367,7 +367,7 @@ fn retained_domains_avoid_repeated_preparation_work() {
             &Binding::new(&computation, &limits, &mut counters, rule.location).unwrap(),
             rule.variables,
             queries.support(),
-            std::borrow::Cow::Borrowed(&prepared.plan),
+            crate::formula_support::JoinPlan::Borrowed(&prepared.plan),
             None,
             Context::new(&computation, &limits, &mut counters, rule.location),
         )

@@ -470,8 +470,8 @@ allowances, not instruction counts or process RSS.
 
 A refused key is not returned, earlier representatives remain valid, and the failure retains
 original verification evidence. Cancellation and history exhaustion never prove
-unsatisfiability. The CLI requests projection when the source declares
-`#project`; its JSON outcome includes the separate projection receipt.
+unsatisfiability. Except with `--count`, the CLI requests projection when the
+source declares `#project`; its JSON outcome includes the separate projection receipt.
 That receipt describes enumeration through the session. External rendering or
 writer delivery can still fail after the session returns a representative.
 

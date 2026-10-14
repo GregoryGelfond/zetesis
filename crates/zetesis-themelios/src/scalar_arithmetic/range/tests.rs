@@ -1,4 +1,5 @@
 use super::*;
+use themelios_program::term::BinaryOp;
 
 #[test]
 fn literal_transfers_enclose_checked_scalar_results() {
@@ -18,7 +19,7 @@ fn literal_transfers_enclose_checked_scalar_results() {
                         let actual = crate::scalar_arithmetic::binary(operator, value, literal)
                             .expect("bounded scalar arithmetic");
                         assert!(
-                            result.low <= i64::from(actual) && i64::from(actual) <= result.high,
+                            result.bounds().0 <= actual && actual <= result.bounds().1,
                             "{lower}..={upper} {operator:?} {literal}: {actual}"
                         );
                     }
@@ -71,8 +72,7 @@ fn variable_transfers_enclose_checked_scalar_results() {
                                 let actual =
                                     crate::scalar_arithmetic::binary(operator, x, y).unwrap();
                                 assert!(
-                                    bound.low <= i64::from(actual)
-                                        && i64::from(actual) <= bound.high,
+                                    bound.bounds().0 <= actual && actual <= bound.bounds().1,
                                     "{left_low}..={left_high} {operator:?} {right_low}..={right_high}: {actual}"
                                 );
                             }
@@ -82,4 +82,31 @@ fn variable_transfers_enclose_checked_scalar_results() {
             }
         }
     }
+}
+
+#[test]
+fn absolute_transfers_enclose_every_checked_result() {
+    for low in -10..=10 {
+        for high in low..=10 {
+            let range = Range::new(low, high).unwrap().absolute().unwrap();
+            for value in low..=high {
+                let absolute = crate::scalar_arithmetic::absolute(value).unwrap();
+                let (lower, upper) = range.bounds();
+                assert!(lower <= absolute && absolute <= upper);
+            }
+        }
+    }
+}
+
+#[test]
+fn absolute_declines_the_unrepresentable_endpoint() {
+    assert_eq!(Range::new(i32::MIN, 1).unwrap().absolute(), None);
+    assert_eq!(
+        Range::new(i32::MIN + 1, 0)
+            .unwrap()
+            .absolute()
+            .unwrap()
+            .bounds(),
+        (0, i32::MAX)
+    );
 }

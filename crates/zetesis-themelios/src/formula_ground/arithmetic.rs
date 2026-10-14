@@ -24,7 +24,7 @@ use crate::formula_binding::Binding;
 use crate::formula_conditional_ir::{Consequent, ConsequentOperand};
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, Projection, RuleIr};
 use crate::formula_support::family::{Evidence, Warnings};
-use crate::formula_support::{Computation, Counters, Join, Support};
+use crate::formula_support::{Computation, Counters, Ir, Join, Support};
 use crate::{FormulaFailure, FormulaLimits};
 
 #[derive(Clone, Copy)]
@@ -37,9 +37,9 @@ enum Continue<'a> {
 
 struct Frame<'a, 'source> {
     join: Join<'a, 'source>,
-    body: &'a [LiteralIr],
+    body: &'source [LiteralIr],
     body_variables: usize,
-    continuation: Continue<'a>,
+    continuation: Continue<'source>,
     location: ProgramSite,
     root: bool,
 }
@@ -63,9 +63,9 @@ struct Scan<'a, 'source, 'context, 'compute> {
     stack: Vec<Task<'a, 'source>>,
 }
 
-pub(crate) fn prepare<'a, 'source>(
-    prepared: &'a Prepared,
-    support: &'a Support<'source>,
+pub(crate) fn prepare<'source>(
+    prepared: &'source Prepared,
+    support: &Support<'source>,
     computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
     budget: &mut Budget,
@@ -94,7 +94,7 @@ pub(crate) fn prepare<'a, 'source>(
             stack: Vec::new(),
         };
         let join = Join::rule(
-            rule,
+            Ir::Source(rule),
             support,
             scan.computation,
             limits,
@@ -135,9 +135,9 @@ pub(crate) fn prepare<'a, 'source>(
 }
 
 /// Original sites whose complete family still needs explicit evidence.
-fn affected<'a, 'source>(
-    prepared: &'a Prepared,
-    support: &'a Support<'source>,
+fn affected<'source>(
+    prepared: &'source Prepared,
+    support: &Support<'source>,
     computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
     budget: &mut Budget,
@@ -202,10 +202,10 @@ fn earlier_partial(
 
 /// Objective rows use the same independent nested-scope evidence before their
 /// priority, weight and tuple expressions complete the enclosing family.
-pub(super) fn body<'a, 'source>(
-    literals: &'a [LiteralIr],
+pub(super) fn body<'source>(
+    literals: &'source [LiteralIr],
     binding: &Binding,
-    support: &'a Support<'source>,
+    support: &Support<'source>,
     budget: &mut Budget,
     warnings: &mut Warnings,
     context: Context<'_, &mut Computation<'_, 'source>>,
@@ -279,10 +279,10 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
 
     fn local(
         &mut self,
-        body: &'a [LiteralIr],
+        body: &'source [LiteralIr],
         binding: &Binding,
         variables: usize,
-        continuation: Continue<'a>,
+        continuation: Continue<'source>,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.local_fragment(body, binding, variables, continuation, location, None)
@@ -290,15 +290,15 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
 
     fn local_fragment(
         &mut self,
-        body: &'a [LiteralIr],
+        body: &'source [LiteralIr],
         binding: &Binding,
         variables: usize,
-        continuation: Continue<'a>,
+        continuation: Continue<'source>,
         location: ProgramSite,
         destination: Option<usize>,
     ) -> Result<(), FormulaFailure> {
-        let mut join = Join::new(
-            body,
+        let mut join = Join::local(
+            Ir::Source(body),
             binding,
             variables,
             self.support,
@@ -377,7 +377,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
 
     fn children(
         &mut self,
-        body: &'a [LiteralIr],
+        body: &'source [LiteralIr],
         binding: &Binding,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
@@ -435,7 +435,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
 
     fn projection(
         &mut self,
-        projection: &'a Projection,
+        projection: &'source Projection,
         binding: &Binding,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
@@ -459,7 +459,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
 
     fn continue_with(
         &mut self,
-        continuation: Continue<'a>,
+        continuation: Continue<'source>,
         binding: &Binding,
         location: ProgramSite,
         destination: usize,
@@ -488,8 +488,8 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
             }
             Continue::Consequent(Consequent::Guards(alternatives)) => {
                 for alternative in alternatives {
-                    let mut join = Join::new(
-                        &alternative.bindings,
+                    let mut join = Join::local(
+                        Ir::Source(alternative.bindings.as_slice()),
                         binding,
                         alternative.variables,
                         self.support,
@@ -516,7 +516,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
 
     fn head(
         &mut self,
-        head: &'a HeadIr,
+        head: &'source HeadIr,
         binding: &Binding,
         location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
@@ -529,7 +529,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
                     let group = self.group(location)?;
                     for element in elements {
                         let join = Join::element(
-                            element,
+                            Ir::Source(element),
                             binding,
                             self.support,
                             self.budget,
@@ -554,7 +554,7 @@ impl<'a, 'source> Scan<'a, 'source, '_, '_> {
                     let group = self.group(location)?;
                     for element in elements {
                         let join = Join::local_head(
-                            &element.condition,
+                            Ir::Source(element.condition.as_slice()),
                             &binding.prefix(element.outer_variables),
                             element.body_variables..element.variables,
                             self.support,

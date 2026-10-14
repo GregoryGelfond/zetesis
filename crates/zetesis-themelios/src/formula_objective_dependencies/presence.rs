@@ -13,6 +13,7 @@
 //! eligible. A failed applied refinement still propagates its resource or value
 //! error. The implicit empty endpoint is not a contributing tuple.
 
+use crate::formula_support::Ir;
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::formula_support::components::Term;
@@ -227,8 +228,8 @@ pub(super) fn required(
 }
 
 pub(crate) fn check<'source>(
-    prepared: &Prepared,
-    support: &Support,
+    prepared: &'source Prepared,
+    support: &Support<'source>,
     computation: &mut Computation<'_, 'source>,
     limits: &FormulaLimits,
     budget: &mut Budget,
@@ -248,7 +249,14 @@ pub(crate) fn check<'source>(
             if !prepared.objective_extrema.contains(&aggregate.id) {
                 continue;
             }
-            let mut outer = Join::rule(rule, support, computation, limits, budget, counters)?;
+            let mut outer = Join::rule(
+                Ir::Source(rule),
+                support,
+                computation,
+                limits,
+                budget,
+                counters,
+            )?;
             while let Some(binding) =
                 outer.next(computation, limits, budget, counters, rule.location)?
             {
@@ -368,10 +376,10 @@ fn certify_priorities<'source>(
 /// so class inspection needs no tuple store or alternate coalescing algorithm.
 /// Each completed rule binding is inspected independently; all repeated join
 /// work and leased binding metadata remain charged through the finite budgets.
-fn mixed(
-    aggregate: &AggregateIr,
+fn mixed<'source>(
+    aggregate: &'source AggregateIr,
     binding: &Binding,
-    support: &Support,
+    support: &Support<'source>,
     budget: &mut Budget,
     context: crate::formula_support::Context<'_, &mut Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
@@ -388,8 +396,8 @@ fn mixed(
             unreachable!("extrema assignments use complete tuples")
         };
         let first = tuple.first().expect("admitted nonempty extrema tuple");
-        let mut local = Join::new(
-            &element.condition,
+        let mut local = Join::local(
+            Ir::Source(element.condition.as_slice()),
             binding,
             element.variables,
             support,

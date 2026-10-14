@@ -543,7 +543,7 @@ fn retained_hit_refusal(refusal: Refusal) {
             Refusal::Cancellation => {
                 let cancelled = zetesis_cpu::Cancellation::default();
                 cancelled.cancel();
-                counters.cancellation = Some(cancelled);
+                counters.attach_test_control(&cancelled);
                 limits
             }
             Refusal::Storage => FormulaLimits {
@@ -572,7 +572,7 @@ fn retained_hit_refusal(refusal: Refusal) {
                 })
             )),
         }
-        counters.cancellation = None;
+        counters.detach_test_control();
         scratch.clear();
         let ((), hits) = reuse_scoped(true, || {
             assert!(
@@ -629,7 +629,7 @@ fn query_attempt(
     if cancelled {
         let token = zetesis_cpu::Cancellation::default();
         token.cancel();
-        counters.cancellation = Some(token);
+        counters.attach_test_control(&token);
     }
     let observer = Observer::default();
     let profile = Profile::new(Some(&observer));
@@ -639,7 +639,7 @@ fn query_attempt(
             .map(|row| row.is_some_and(|row| row.passes))
     });
     counters.observed = previous;
-    counters.cancellation = None;
+    counters.detach_test_control();
     assert_eq!(join.lease.bytes(), join.storage_bytes());
     assert!(join.pattern_captures.is_empty());
     cleared(&join);

@@ -281,6 +281,16 @@ mod campaigns {
         assert_eq!(failure["kind"], "scalability_publication");
     }
 
+    fn json_publication_refused(stderr: &str) -> bool {
+        stderr.lines().any(|line| {
+            matches!(
+                line,
+                "zetesis: model JSON view refused: Bytes"
+                    | "zetesis: secondary output: model JSON view refused: Bytes"
+            )
+        })
+    }
+
     #[test]
     fn compact_conformance_retains_memory_refusal_diagnostics() {
         use std::os::unix::fs::PermissionsExt;
@@ -328,8 +338,9 @@ mod campaigns {
         assert_eq!(native.len(), 20);
         // Other workloads can fail to publish their larger diagnostic footer.
         // That remains an invalid report, never a qualified memory refusal.
-        // Require retained evidence of this exact publication cause; malformed
-        // reports without that cause still fail with their case identity.
+        // Publication can be the primary failure after a completed solve or
+        // secondary to an earlier refusal. Require this exact retained cause;
+        // malformed reports without it still fail with their case identity.
         for (index, check) in &native {
             if check["decision"] == "invalid_report" {
                 let retained = &evidence["report"]["samples"][*index];
@@ -339,7 +350,7 @@ mod campaigns {
                     .expect_err("an incomplete diagnostic cannot be valid JSON");
                 assert!(error.is_eof(), "{check}: {error}; stderr: {stderr}");
                 assert!(
-                    stderr.contains("secondary output: model JSON view refused: Bytes"),
+                    json_publication_refused(stderr),
                     "{check}; stderr: {stderr}"
                 );
                 assert_eq!(check["detail"], retained["detail"], "{check}");

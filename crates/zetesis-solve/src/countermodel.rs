@@ -24,11 +24,10 @@ pub(crate) struct Input<'a> {
 }
 
 pub(crate) fn certificate_order(
-    analysis: &zetesis_themelios::analysis::Analysis,
+    classes: &zetesis_themelios::analysis::classify::Classes,
     basis: zetesis_themelios::AnalysisBasis,
 ) -> zetesis_sat::CertificateOrder {
     use zetesis_themelios::analysis::classify::{HornKind, Normality, Stratification};
-    let classes = analysis.classes();
     if basis == zetesis_themelios::AnalysisBasis::NormalizedProgram
         && matches!(classes.horn(), HornKind::Horn)
     {

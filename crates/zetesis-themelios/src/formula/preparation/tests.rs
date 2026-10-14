@@ -340,3 +340,34 @@ fn acyclic_order_cannot_cross_an_independently_prepared_source_owner() {
         })
     ));
 }
+
+#[test]
+fn stopped_key_analysis_charges_exact_preparation_work() {
+    let source = "letter(a;b;c). digit(0..9). carry_value(0;1). idx(1). \
+        1 { assign(L,D) : digit(D) } 1 :- letter(L). \
+        1 { carry(I,V) : carry_value(V) } 1 :- idx(I). \
+        :- assign(a,X), assign(b,Y), X != Y + 1.";
+    let under = |max_key_work| {
+        prepare_formula(
+            source.into(),
+            AdmissionOptions::default(),
+            ExpansionLimits::default(),
+            FormulaLimits {
+                max_key_work,
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    };
+    let (unstarted, stopped) = (under(0), under(3));
+    for (prepared, limit) in [(&unstarted, 0), (&stopped, 3)] {
+        assert_eq!(prepared.preparation.program.keyed_constraints, 0);
+        assert!(matches!(prepared.preparation.program.key_analysis,
+            crate::KeyAnalysis::Stopped(stop) if stop.limit == limit));
+    }
+    assert_eq!(
+        stopped.preparation.budget.usage().term_work,
+        unstarted.preparation.budget.usage().term_work + 3,
+    );
+    assert_eq!(stopped.analyzed_program(), unstarted.analyzed_program());
+}

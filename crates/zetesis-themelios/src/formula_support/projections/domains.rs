@@ -59,7 +59,7 @@ impl<'a, 'source> Join<'a, 'source> {
             return Ok(None);
         };
         let Some(domains) = self.projections.domains(
-            self.literals,
+            self.literals.get(),
             flat,
             &self.values,
             Context::new(

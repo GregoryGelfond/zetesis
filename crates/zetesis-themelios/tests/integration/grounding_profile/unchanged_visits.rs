@@ -70,3 +70,36 @@ fn a_rich_producer_over_a_growing_predicate_is_unaffected_only_in_the_final_roun
         .count();
     assert_eq!(picks, 4);
 }
+
+#[test]
+fn an_input_free_rich_producer_traverses_only_in_the_first_round() {
+    let observer = Observer::default();
+    let admitted = compile(
+        "{a}. s(0). s(Y) :- s(X), X < 3, Y = X + 1.",
+        &FormulaLimits::default(),
+        Some(&observer),
+    )
+    .unwrap();
+    assert!(
+        admitted
+            .atoms()
+            .iter()
+            .any(|atom| atom.predicate().name() == "a")
+    );
+    let work = observer
+        .records
+        .borrow()
+        .iter()
+        .fold(super::GroundingWork::default(), |total, record| {
+            total.checked_sum(record.work)
+        });
+    assert_eq!(work.support_rich_traversals, Some(1));
+    assert_eq!(
+        work.support_unchanged_visits,
+        work.support_rounds.map(|rounds| rounds - 1)
+    );
+    assert!(
+        work.support_producer_visits.unwrap()
+            >= work.support_rich_traversals.unwrap() + work.support_unchanged_visits.unwrap()
+    );
+}

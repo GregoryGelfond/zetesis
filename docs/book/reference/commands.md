@@ -86,6 +86,24 @@ answers appear before a finite display limit; it preserves the complete family
 when enumeration finishes. Use one thread or sort complete results when order
 matters. The reduct remains the criterion for accepting an answer.
 
+To publish only the total, use `--count`. It prints one decimal integer and a
+newline after complete search: the number of full answer sets, or all tied
+optimal answer sets when an objective is present. `#show` and `#project` do not
+merge these identities. An inconsistent program prints `0`; the empty program
+has one empty answer set and prints `1`.
+
+```sh
+zetesis solve program.lp --count
+```
+
+Counting skips display-term evaluation and projection history. It streams
+ordinary answers and retains at most one optimal representative while counting
+all optimal ties. Resource limits still apply. An interrupted or failed search
+prints no count and reports the reason on stderr with a nonzero exit status.
+An output failure can occur after bytes have been written; consumers must check
+the exit status before accepting the total. `--count` cannot be combined with `--answers`, `--all`,
+`--models` or `--json`. `--stats` remains available on stderr.
+
 ## Choose execution and limits
 
 | Option | Default and meaning |

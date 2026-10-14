@@ -66,14 +66,10 @@ fn expected_model(facts: &str) -> BTreeSet<Atom> {
     )
     .expect("expected scalar facts")
     .program()
-    .templates()
+    .facts()
     .iter()
-    .map(|template| {
-        template
-            .head()
-            .expect("fact head")
-            .key(&[] as &[zetesis_core::catalog::TermRef<'_>])
-            .expect("ground head")
+    .map(|fact| {
+        fact.atom()
             .to_atom(ValueLimits::default())
             .expect("external comparison identity")
     })

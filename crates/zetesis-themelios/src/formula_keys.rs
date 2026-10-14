@@ -118,7 +118,7 @@ enum Outcome {
 /// Returns the budget refusal when the inspection of a statement exhausts
 /// the term work.
 pub(crate) fn ask_all(
-    analyzed: &SourceProgram,
+    analyzed: &crate::formula_analysis::Summary,
     owners: &owners::Owners,
     limits: &FormulaLimits,
     budget: &mut Budget,
@@ -128,7 +128,14 @@ pub(crate) fn ask_all(
     // The shared key-work ceiling bounds the analysis between control polls.
     budget.poll(location)?;
     let mut work = KeyWork::new(limits.max_key_work.min(budget.remaining_term_work()));
-    let asked = ask_under(analyzed, owners, &mut work, budget, location, facts);
+    let asked = ask_under(
+        analyzed.program(),
+        owners,
+        &mut work,
+        budget,
+        location,
+        facts,
+    );
     budget.charge(
         ExpansionResource::TermWork,
         u128::from(work.steps()),
@@ -162,9 +169,10 @@ fn ask_under(
     let keys: BTreeMap<&Signature, &KeyedRelation<'_>> =
         keys.iter().map(|key| (key.signature(), key)).collect();
     // Every question about facts below is answered from one reading.
-    let facts = match facts.read(work) {
+    let facts = match facts.read(work, budget, location) {
         Ok(facts) => facts,
-        Err(stop) => {
+        Err(crate::formula_rewrite::FactFailure::Source(error)) => return Err(error),
+        Err(crate::formula_rewrite::FactFailure::Stopped(stop)) => {
             asked.analysis = KeyAnalysis::Stopped(stop);
             return Ok(asked);
         }

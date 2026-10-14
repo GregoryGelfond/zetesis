@@ -221,7 +221,11 @@ fn unconditional_facts(
     work: &mut Work<'_>,
 ) -> Result<Vec<CarrierAtom>, Stop> {
     let mut facts: Vec<CarrierAtom> = Vec::new();
-    for template in program.templates() {
+    for rule in program.rules() {
+        let template = match rule {
+            zetesis_core::RuleRef::Template { template, .. } => template,
+            zetesis_core::RuleRef::Fact(fact) => fact.as_template(),
+        };
         work.tick()?;
         if template.positive().is_empty()
             && template.gate_true().is_empty()

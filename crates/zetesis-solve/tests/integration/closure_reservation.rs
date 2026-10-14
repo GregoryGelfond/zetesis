@@ -30,6 +30,7 @@ fn program() -> Program {
     };
     Program::new(
         ["a", "b", "c", "d", "e"].map(choice).to_vec(),
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap()

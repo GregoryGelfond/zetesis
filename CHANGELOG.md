@@ -6,281 +6,82 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
-- The default install (`scripts/install.sh`) builds zetesis twice. The
-  `zetesis` you run is built without the GPU stack, so CPU runs start without
-  loading it, and it hands each request that needs a GPU (a GPU backend, or
-  `zetesis devices`) to the GPU-capable build installed beside it in
-  `zetesis-libexec`, which takes over the same process. A front that cannot run
-  that build fails with the new kind `gpu_executable_unavailable`; JSON
-  statistics and the record view now name the executable that did the work
-  (`executable`). The installer finishes every build before replacing anything,
-  replaces each executable by rename, with the `zetesis` you run last, and
-  reports an old GPU build it cannot remove instead of failing, in a default or
-  a CPU-only install.
-- Backend checks, benchmark campaigns and the selected clingo comparison seal
-  the executable their runs name as having done the work when it is not the
-  one they invoked, as after a hand-off, and record it beside the invoked one
-  (`executed`, `executed_after`); a run naming a third executable, or unable to
-  name its own, is refused. A named path is resolved through links before it
-  is compared, so a run naming either executable through a link names that
-  executable; a relative path counts as unable to name its own and is refused.
-- Prime-sieve and subset-sum examples in the maintained correctness and scaling
-  comparisons, with complete-answer checks against clingo.
-- `Cancellation::metered` runs a metered computation with a `Meter`, which holds
-  the computation's local work limit, and settles its outcome where it returns.
-  With `ChargeError`, the `Refusal` classification and `POLL_INTERVAL`, it gives
-  metered computations one rule for charging work, observing control and letting
-  a requested stop take precedence over resource refusals. A nested metered
-  computation charges the enclosing meter; `Meter::remaining` and `Meter::absorb`
-  count the reported work of a nested operation that meters itself another way,
-  up to the limit when it overran its allowance.
-  The error type of each metered operation implements `Refusal`.
+- `zetesis solve --count` prints the complete answer-set count, or the number of
+  optimal ties. It ignores `#show` and `#project` and prints no total if the
+  search is interrupted. See [answer selection](docs/book/reference/commands.md#select-answers).
+- The default installer supplies a CPU executable and a separate GPU executable.
+  GPU requests transfer to the latter; statistics identify the executable that
+  ran. See [installation](INSTALL.md#what-gets-installed).
+- Benchmark campaigns can use declared external source bundles, preserving their
+  original files and include graph and checking complete results against clingo.
+  See [external bundles](docs/book/reference/benchmarking.md#declared-external-bundles).
 
 ### Changed
 
-- CPU oracle preparation reads each program constant's domain position by
-  identity, from a table of four bytes per catalog term, instead of searching
-  the domain by content: argument bounds add each constant head term once,
-  before their fixed point, instead of on every pass, and ground head
-  coordinates rank values by their positions. The bounds, coordinates and
-  answers are unchanged, and preparation work falls. The table counts against
-  preparation's live storage while preparation reads it, so a preparation within
-  that margin of `PreparationLimits::max_bytes` is now refused there, and the
-  limit's documentation says so; what preparation retains is unchanged. The
-  zetesis-core `DomainPositions`, its `build` and its `position` are public
-  additions.
-- Each execution-detail record (metadata, information and execution
-  observations, and the `test` workflow's lines when the `zetesis` command
-  runs it) is rendered whole and handed to the diagnostics writer in one
-  `write_all` call, where it took one write per formatted fragment; on
-  unbuffered standard error that was one system call per fragment. A styled
-  source diagnostic takes one call for its heading, one per rendered line and
-  one for its closing newline. These units, and a plain source diagnostic's
-  final newline, reach the writer's `write_all` rather than its `write_fmt`; a
-  plain source diagnostic otherwise writes as before, and the statistics
-  report is still one call. The bytes are unchanged, and a writer that fails
-  at a byte position fails at the same byte. A writer that fails by the
-  content of a call, such as `zetesis_test_support::io::FailAt`, now fails at
-  whole units: a whole record, or a whole styled heading, line or closing
-  newline. A record or statistics report whose formatting fails while the
-  writer did not returns an `Other` error, and writes nothing of the unit,
-  where the standard library panicked.
-- The formula route holds facts in fact blocks instead of building a rule with
-  an empty body for each fact. Each argument alternative of a fact statement is
-  stored as one product, its predicate admitted once, each column value admitted
-  once and the statement's evidence stored once; consecutive one-row statements
-  of a predicate share a run, stored row by row. Each product, and each run, is
-  one fact block, standing where its fact rules stood. Support completion
-  interns the rows in its first round where their rules stood, exact activity
-  stages them required, and emission asserts each with its own root, producer
-  and origins, without a join or any join-path attempt. Answers, theories, atom
-  order and output are unchanged. Receipts measure the work performed:
-  `expansion_usage()` reports each fact's origins once, where the fact's rule
-  charged them a second time for its own vector, and its scalar bytes count the
-  scratch a block is laid out in as that grows (eight bytes per column and
-  sixteen per cell of the widest block so far); grounding work falls by the
-  facts' support visits, joins and attempts, and
-  `GroundingWork.support_producer_visits` no longer counts facts. Support bytes
-  fall by the facts' pattern rows and rise by the fact storage, each growth of
-  which is admitted before it is allocated, with its whole replacement counted.
-  The largest support peak falls on fact-heavy programs (by 3 to 20% on
-  2,000-fact shapes) and rises on programs with few facts per block, where the
-  blocks' entries and columns and the storage's growth slack exceed the pattern
-  rows they replace (by at most 5.5% on the maintained examples, median 1.9%). A
-  work or origin ceiling can therefore be reached later than before, and a
-  support-storage ceiling earlier or later. When adaptive grounding defers fact
-  blocks, both sides of the move are reserved and admitted before anything
-  moves, one work unit for each vector reserved, and the move allocates nothing;
-  the deferred blocks are copies, and the base keeps their storage, leased,
-  until it is dropped. Grounding observers see one rule-instantiation phase per
-  fact block, at its first statement, instead of one per fact;
-  `TerminalFormula::deferred_templates()` still counts each deferred fact.
-- Support completion without a whole-program producer plan registers each
-  producer once per completion instead of classifying its rule on every visit.
-  A rich producer, one with a choice, disjunctive or conditional head or with an
-  aggregate, conditional or projection in its body, registers the distinct
-  signed predicates its body and head element conditions read, at every depth;
-  after the first round it is traversed only when one of them gained rows, and
-  a fact's rows wake it in the second round. The support catalog, the emitted
-  theory and the answers are unchanged. `GroundingWork` gains
-  `support_unchanged_visits`, the rich-producer visits that ended without a
-  traversal, which the statistics' grounding attribution reports. Receipts
-  measure the work performed: support production, join and head work fall with
-  the skipped traversals and the removed per-visit scan, each later visit of a
-  rich producer charges at most two units per read predicate for its test, and
-  support bytes rise by the registration's for the completion. A work or
-  support-storage ceiling can therefore be reached earlier or later than before.
-- Formula preparation grows the record of each analyzed statement's original
-  statement geometrically, where it reserved exactly the next statement's slots,
-  so a program of n statements reallocates it a logarithmic number of times
-  instead of n times. Expansion receipts count the slots reserved: their scalar
-  bytes can exceed the slots in use by up to eight bytes per statement, so the
-  scalar-byte ceiling can be reached that much earlier.
-- Comparisons of integer arithmetic are decided with machine integers. The
-  compiler builds each comparison literal whose operands have at most sixteen
-  nodes each with an integer comparison form, once, with the prepared program,
-  reading every constant itself; on a row whose operand values are numbers, the
-  form compares two machine integers, constructing no term and reading no
-  projection, and every other row falls back to the expression evaluator.
-  Verdicts and answers are unchanged. Preparation's expansion receipts rise by
-  the forms' steps (`TermWork`) and their eight bytes per step (`ScalarBytes`),
-  for every comparison literal the compiler builds, including equalities that
-  become bindings and written constraints that constraint replacement drops, and
-  its formula work rises by five units for each constant a form reads. A form's
-  attempt on a row is checked against the work ceiling for its whole constant
-  before it runs and counts the work it performed after it, so grounding work
-  falls for comparisons a form decides, except where a unary projection used to
-  answer, and a row that falls back counts the work its attempt performed, after
-  that check, as well as the evaluator's work; support bytes fall where a number
-  would have been newly constructed. A work or expansion ceiling can therefore
-  be reached earlier or later than before. `GroundingWork` gains
-  `integer_comparisons` and `integer_comparison_declines`, the rows decided and
-  declined, which the statistics' grounding attribution reports.
-  `ComparisonForms`, from `comparison_forms()` on the prepared and admitted
-  formulas, counts the prepared program's comparison literals with a form
-  (`with_form`) and without one by reason (`long_operand`, `wide_slot`,
-  `constructor`, `nonnumeric_constant`, `argument_position`), and the
-  statistics records print it.
-- An aggregate assignment now proposes its carrier: the measure of every
-  selection that contains its required tuples, those from an element whose
-  condition has no atom of either sign, and lies within its possible ones.
-  Admission's arithmetic family follows the carrier, in the assignment's own
-  rule and in every rule that reads its heads. Programs that were refused only
-  for a proposal outside the carrier are now admitted, such as
-  `p(M+1) :- M = #min{1; 5}.`, which answers `p(2)`;
-  warnings that came only from proposals outside the carrier are gone; and a
-  family whose every carrier value divides by zero is now refused, such as
-  `q(Y) :- N = #count{1}, Y = 1/(N-1).` The carrier can still hold values no
-  answer set realizes: `{p}. q(Y) :- N = #count{1 : p; 1 : not p}, Y = 1/(N-1).`
-  substitutes `N = 0` and keeps its warning. A sum is refused exactly when one of
-  its carrier values leaves the 32-bit range, whatever the order of its weights.
-  Answer sets are unchanged. On the maintained nested
-  Mastermind workload, grounding keeps 654 possible atoms instead of 5,162.
-- The refusal of a `#min` or `#max` endpoint value names the guard as the manual
-  and the code do: "is excluded by the numeric endpoint guard", where it said
-  "the zetesis endpoint guard". Its diagnostic code,
-  `zetesis::extremum-endpoint`, is unchanged.
-- Read the host's memory on macOS with one `sysctlbyname` call for `hw.memsize`
-  instead of running `/usr/sbin/sysctl`, so no invocation starts a child
-  process. It is the one foreign call in zetesis's own source, named in the
-  authored-lints audit.
-- The default memory allowance is half of the memory available to the process:
-  physical memory, or on Linux the memory limit of its control group when that
-  is lower, as inside a container. It no longer rises to two gibibytes on a host
-  or container with less than four; two gibibytes remains the default when the
-  host does not report its memory. The record view of `--stats` (with `--json`,
-  or from a legacy invocation) reports the memory available to the process, and
-  `--memory` is listed under `--help-all`, where its default is stated as this
-  rule.
-- The everyday help offers `--backend cpu` or `gpu`, where `gpu` takes the
-  platform's native API; the full help (`--help-all`) lists every value with its
-  meaning, `metal` and `vulkan` included. Every spelling is still accepted.
-- Reuse aggregate bounds when one native contribution row extends another,
-  preserving answer sets while narrowing candidates before reduct checking.
-- Share native min/max rows across comparisons and retain deductions across shared
-  Boolean conditions, with corresponding Lean laws.
-- Reuse numeric row evaluations and checked domain bounds, and stop propagation
-  scans and notifications once their result is settled.
-- Use divisibility to narrow eligible numeric joins and reject unreachable
-  aggregate sums, retaining checked arithmetic and complete answer sets.
-- Evaluate eligible acyclic normal programs during automatic CPU preparation;
-  repeated sessions reuse the result without constructing a formula theory.
-- Stream range facts into admission and reuse borrowed term comparisons in
-  grounding filters, reducing temporary storage and repeated lookup.
-- Skip the search for native aggregate rows from Boolean conditions that cannot
-  reach one, reducing candidate narrowing work without changing its deductions.
-- Keep reads of atoms, implications and two-operand connectives inline in formula
-  evaluation and narrowing, restoring the speed of complete candidate checks.
-- Observe cancellation and deadlines once per 256 charged operations, instead of
-  at every node, in formula evaluation, membership certificates, support and
-  partition construction and static closure checks. A requested stop still takes
-  precedence over every resource refusal, which each operation settles at its
-  exit; coarse operations still poll each step.
-- A CPU tight certificate check updates the worker's retained evaluation of its
-  previous candidate, re-evaluating only the formula nodes whose inputs changed,
-  instead of evaluating the whole theory for every candidate; a large change,
-  another theory, or a check after one refused or stopped during its evaluation
-  still evaluates completely.
-  Verdicts and their witnesses equal a complete evaluation's, and a Lean law
-  proves the node-table update rule. `TightPlan::check_work_bound` bounds every
-  check on either route; a reused `TightWorkspace`'s work and logical bytes now
-  depend on the candidate it checked before. A certified run's checking and
-  search work therefore depend on the order in which its workers check
-  candidates: they differ between worker counts and, with several workers,
-  between runs, and under a binding cumulative work ceiling whether such a run
-  completes can differ between runs. `TightPlan::prepare_updates` builds
-  the reverse index the update needs, only when its work and byte allowances
-  cover the build, and the plan's construction work, construction bytes and
-  resident bytes include it.
-- Split candidate regions on atoms generated by choice rules before atoms they
-  derive, in every theory. Programs whose answers come from choices decide them
-  first and settle the rest by propagation, which can sharply reduce the regions
-  an optimization visits; answers and optima are unchanged.
-- `Knowledge::preferred_atom_reserved` takes the `ChoiceHeads` that rank first;
-  pass an empty `ChoiceHeads` for the previous ranking. Producer extraction
-  reports the heads of every theory's atomic choice roots in
-  `Extraction::choice_heads`, and `OriginalSubject::with_choices` gives a
-  self-selecting narrowing the same ranking; `OriginalSubject::theory` and
-  `OriginalSubject::choices` read the subject's parts.
-- A parallel region walk begins on the calling thread and starts its workers
-  once it has run, in wall time since it began, longer than starting them
-  costs: twenty microseconds per configured worker, the cost measured on the
-  reference host and recorded in the observation records. A walk that ends
-  sooner starts no thread, and its models arrive in the scalar walk's order.
-  `Engagement` selects another delay through
-  `StableModels::with_region_workers_engaging`; `Engagement::Immediate` starts
-  the workers at the first pull, as before. The region statistics report the
-  workers configured, the engagement delay, and whether the walk engaged: not
-  begun, unengaged (on the calling thread) or engaged. The CLI writes them as
-  `statistics.search.candidate_regions.workers` and as a `workers:` line under
-  the candidate regions, and its `Parallel regions` line now reads "up to N
-  workers, started once the walk outlasts their start".
+- Everyday help presents the common CPU/GPU choices; `--help-all` retains the full
+  reference, including Metal and Vulkan. The default memory allowance is half the
+  memory available to the process, including a lower Linux container limit;
+  two gibibytes remains the fallback when that information is unavailable.
+- Aggregate assignments use the values their required and possible tuples can
+  produce when checking arithmetic admission. This admits programs such as
+  `p(M+1) :- M = #min{1; 5}.` and refuses families whose arithmetic is undefined
+  for every proposed value. See [numeric boundaries](docs/book/reference/language.md#numeric-boundaries-and-refusal-meaning).
+- Ordinary CPU solving uses shared native operations for `#count`, nonnegative
+  `#sum`, `#min` and `#max` comparisons, reusing contributions and deductions
+  across eligible shared Boolean conditions. See [aggregate representation](docs/book/architecture/alignment.md#ordered-comparisons-and-objective-reductions).
+- Grounding reuses fact tables, join plans, body atoms and aggregate bounds, skips
+  unchanged producer traversals, and uses checked integer comparisons and indexed
+  arithmetic filters. Source identities and arithmetic failures are preserved.
+  See [grounding](docs/book/architecture/grounding.md).
+- Numeric analysis shares one engine across source and prepared input, with
+  argument bounds and an optional diagnostic census. The census does not enable
+  further pruning. See [numeric analysis and domain guards](docs/book/rust/source.md#optional-numeric-analysis-and-domain-guards).
+- CPU candidate checks reuse prior evaluations, candidate search prefers atoms
+  from choice heads, and parallel region walks delay starting their workers.
+  Eligible acyclic normal programs can be evaluated during preparation.
+  Answer sets and optima are unchanged; search order and bounded work can differ.
+  See [membership plans](docs/book/rust/sessions.md#formula-membership-plans) and
+  [parallel walks](crates/zetesis-sat/README.md#walking-the-tree-with-several-workers).
+- Metered operations check cancellation at entry, exit, resource refusals and
+  256-unit work boundaries. Work and storage receipts reflect the new execution
+  routes, so resource ceilings can be reached at different points. See
+  [resource contracts](docs/book/rust/outcomes.md#resource-contracts).
+- The recorded 94-program CPU comparison shows 36% lower summed command time
+  than 0.5.0 at fourteen threads, and lower measured time than clingo on 79
+  programs. See the [measurements and method](docs/book/reference/cpu-corpus-20261014.md).
 
 ### Fixed
 
-- A parallel region walk reports the largest countermodel workspace any one of
-  its workers retained as `ReductStatistics::peak_workspace_bytes`, which it
-  reported as zero.
+- Closed region walks remain closed on later pulls without starting workers.
+- Parallel region statistics report retained countermodel workspace peaks.
+- The macOS installer preserves the previous installation if inspection of a new
+  executable fails.
 
 ### Compatibility
 
-- `RegionSearchStatistics` has a new `workers` field and, like the new
-  `RegionWorkerStatistics`, is `#[non_exhaustive]`: build it with
-  `Default::default()` and read its fields. The record's state is the new
-  `#[non_exhaustive]` enum `RegionWalkEngagement`, and the new
-  `#[non_exhaustive]` `Engagement` and the constructor
-  `StableModels::with_region_workers_engaging` select when the workers start.
-- Exhaustive Rust matches on `zetesis_cli::RunError` must handle the new
-  `GpuExecutableUnavailable` variant, and those on
-  `zetesis_validation::performance::matrix::Decision` its new
-  `GpuExecutableUnavailable` disposition.
-- `zetesis_validation::curated::Error` and `zetesis_validation::examples::Error`
-  refuse a file under the root they read that is not a regular file with the
-  new `Irregular` variant, naming its resolved path, where they reported it
-  under `Path` as a path not confined to that root. Exhaustive matches must
-  handle the variant.
-- Removed public items that nothing in the workspace called:
-  `GpuOracle::new_metal`, `GpuTightOracle::new_metal`,
-  `GpuFormulaOracle::new_metal` and `GpuFormulaOracle::new_metal_with_projection`
-  in `zetesis-wgpu` (`new_selected`, or `new_selected_with_projection` for the
-  projected constructor, with `GpuSelection { api: GpuApi::Metal }`, does the
-  same); `CatalogRead::constructor_of_predicate` in `zetesis-core`;
-  and `FormulaParts::extremum_row` and
-  `Narrower::extremum_witness_preparation_work` in `zetesis-ferraris`.
-- Made crate-private, since only their own crate used them:
-  `RunFailure::into_cause` (`zetesis-cli`); `AtomKey::compare_ref`,
-  `AtomRef::compare_key_with`, `Model::selection_payload_bytes` and
-  `Predicate::shares_name` (`zetesis-core`); `CONSTRAINT_HEAD` and
-  `InstanceAtomIter` (`zetesis-cpu`); `OutputLimits::for_resources`
-  (`zetesis-engine`); `FormulaView::try_to_parts` (`zetesis-ferraris`);
-  `is_record` (`zetesis-maintenance`); `CompletionExecutor::DEFAULT_SCRATCH_BYTES`
-  and `ReductPreparationLimits::DEFAULT_BYTES` (`zetesis-sat`);
-  `SourceBundle::working_directory`, `Encoded::into_text`,
-  `ProgramSite::with_location` and `ProgramSite::with_statement`
-  (`zetesis-themelios`); `Contract::with_witnesses`, `Contract::optimal_family`,
-  `Capture::stderr_text` and `process::invoke_supervised_with_cancellation`
-  (`zetesis-validation`); and `GpuLazyOracle::check_batch_with_source` and
-  `GpuTightOracle::from_context_with_support` (`zetesis-wgpu`).
+- `Program::new` now takes `FactTables`; `rules()` includes facts, while
+  `templates()` contains only explicit templates. `AdmissionError::Canonical`
+  replaces `template` with `origin: AdmissionOrigin`, and matches must handle
+  `FactLimitExceeded`. See [explicit facts](docs/book/rust/parallel.md#construct-templates-and-explicit-facts).
+- `DomainObservation::Analyzed` carries `NumericAnalysis`; `Inapplicable` is
+  removed. Use `analysis()`, `catalog()` and `arguments()` to read the new view.
+  Observers can decline census work with `domain_diagnostics_enabled()`, whose
+  default preserves existing callbacks. See [domain observation](docs/book/rust/source.md#optional-numeric-analysis-and-domain-guards).
+- `Knowledge::preferred_atom_reserved` takes `ChoiceHeads`; pass an empty value
+  for the previous ranking. `RegionSearchStatistics` gains `workers` and is
+  non-exhaustive; construct it through `Default`. New worker and engagement
+  records are also non-exhaustive.
+- Exhaustive matches must handle `RunError::GpuExecutableUnavailable`, the
+  corresponding benchmark `Decision`, and `curated::Error::Irregular` and
+  `examples::Error::Irregular` in `zetesis-validation`.
+- Removed the GPU `new_metal` constructors and
+  `GpuFormulaOracle::new_metal_with_projection`. Use `new_selected` or
+  `new_selected_with_projection` with `GpuSelection { api: GpuApi::Metal }`.
+  Other removed/private helpers and the new numeric `NodeView` and admission
+  error variants are listed in the [library migration guide](docs/book/rust/libraries.md#migrating-from-050).
+- Diagnostic bytes are unchanged, but injected writers now receive complete
+  records and styled diagnostic lines through `write_all`. A record or statistics
+  report whose formatting fails returns an I/O error instead of panicking.
 
 ## 0.5.0 — 2026-10-10
 

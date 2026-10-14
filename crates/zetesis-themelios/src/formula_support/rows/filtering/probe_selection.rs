@@ -232,27 +232,30 @@ fn replay_keeps_scalar_overflow_visible() {
             single_open: false,
             visits: Cell::new(0),
         };
-        with_fixture(fixture, |support, computation, budget, counters| {
-            let limits = FormulaLimits::default();
-            let mut rows = Join::filtered_rule(
-                &rule,
-                support,
-                Some(&selection),
-                None,
-                budget,
-                Context::new(computation, &limits, counters, location()),
-            )
-            .unwrap();
-            let mut results = Vec::new();
-            let failure = loop {
-                match rows.next_row(computation, &limits, budget, counters, location()) {
-                    Ok(Some(row)) => results.push(exported(&row.values, computation)),
-                    Ok(None) => panic!("the overflowing admitted row must be evaluated"),
-                    Err(error) => break format!("{error:?}"),
-                }
-            };
-            (results, failure)
-        })
+        let (result, work) =
+            with_observed_fixture(fixture, |support, computation, budget, counters| {
+                let limits = FormulaLimits::default();
+                let mut rows = Join::filtered_rule(
+                    &rule,
+                    support,
+                    Some(&selection),
+                    None,
+                    budget,
+                    Context::new(computation, &limits, counters, location()),
+                )
+                .unwrap();
+                let mut results = Vec::new();
+                let failure = loop {
+                    match rows.next_row(computation, &limits, budget, counters, location()) {
+                        Ok(Some(row)) => results.push(exported(&row.values, computation)),
+                        Ok(None) => panic!("the overflowing admitted row must be evaluated"),
+                        Err(error) => break format!("{error:?}"),
+                    }
+                };
+                (results, failure)
+            });
+        assert!(work.integer_comparison_declines.unwrap() > 0);
+        result
     };
     let reference = run(false);
     assert!(reference.1.contains("Overflow"));

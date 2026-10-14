@@ -141,10 +141,11 @@ lookup consume grounding work; the byte ceiling is not a process-memory measurem
 
 Prepared formula and bundle values can additionally request
 `with_domain_analysis(Some(DomainLimits { .. }))`, disabled by default. The
-analysis retains the exact normalized program and requires its logical rules to
-be positive and flat. Objectives may accompany those rules: they produce no
-argument values, and their grounding, arithmetic and scoring remain separate.
-Unsupported rule profiles, Unknown and Stopped retain complete fallback. Where it
+shared analysis reads canonical terms, compact fact columns and every compiled
+producer. It computes conservative finite sets and numeric bounds without
+materializing an expanded source program. The guard consumer separately requires
+positive flat rules; objectives do not disable otherwise eligible guards.
+Unsupported guard profiles and stopped analysis retain complete grounding. Where it
 prepares candidates, a rule's variable is narrowed to the meet of its
 argument domains less the values a comparison over that variable alone
 excludes, decided before any row is read, and the guards apply in every
@@ -156,10 +157,10 @@ excludes its substitution, the join criterion places bound occurrences and
 decided comparisons before generators, and a constraint over a keyed value
 is asked as the one atom its key admits, counted by `keyed_constraints` on
 the admitted value; a key with an anonymous position is left as written.
-Analyzer logical populations and bounded standard allocations are separate from
-named support/guard byte accounting; actual analysis and guard work consume the
-original cumulative formula budget. No new cancellation, allocator or RSS cap
-is implied. `DomainObservation` and grounding counters report the actual attempt.
+The neutral engine reports allocation and owner failures explicitly. Its logical
+populations remain separate from support/guard byte accounting; actual analysis
+and guard work consume the cumulative formula budget. Control is observed before
+and after analysis, without an internal polling or RSS-bound claim. `DomainObservation` and grounding counters report the actual attempt.
 See [optional domain guards](../../docs/book/rust/finite-tables.md#optional-argument-domain-guards)
 for applicability, accounting, observation and proof boundaries.
 

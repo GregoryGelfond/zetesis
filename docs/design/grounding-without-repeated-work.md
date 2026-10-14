@@ -10,9 +10,9 @@ and the emitted theory exactly; the [grounding chapter](../book/architecture/gro
 | Part | Status |
 |---|---|
 | Stage 1: one registration per producer, prepared once; an unaffected rich producer is not traversed | Implemented, with the receipt `support_unchanged_visits` |
-| Stage 1's receipt `support_rich_traversals` | Decided; not yet implemented (Open review items) |
-| Stage 2: one plan per local-join site per snapshot, owned by the snapshot, consulted only through `Join::local` | Designed; open |
-| Stage 2's receipts `local_plan_preparations` and `local_plan_reuses` | Decided with stage 2 |
+| Stage 1's receipt `support_rich_traversals` | Implemented; counts actual rich traversals, including the first round |
+| Stage 2: one plan per local frame per snapshot, owned by the snapshot, consulted only through `Join::local` | Implemented; acceptance measurements remain open |
+| Stage 2's receipts `local_plan_requests`, `local_plan_preparations` and `local_plan_reuses` | Implemented; preparations and reuses are disjoint subsets of requests |
 | Stage 3: share a rich producer's traversal between support and emission | Roadmap |
 | Stage 4: one ordered pass on the direct route | Roadmap |
 
@@ -90,9 +90,12 @@ The premise the code must keep is that `R(r)` covers every relation (a) lists; t
 abstract proposal function; `selective_step_exact_of_stable` and `empty_selection_closed_of_stable` add a stability
 premise (an unaffected producer proposes nothing over the current carrier it did not propose over the old one);
 `stable_of_reads_only` proves stability for a producer whose proposals depend only on the carrier's restriction to its
-registered predicates, when the carrier grows. The earlier theorems keep their statements as corollaries. Rust supplies
-the instance: the read set is the registration, snapshots grow because publication only appends, and the reads-only
-property is the correspondence obligation above.
+registered predicates, when the carrier grows. The earlier theorems keep their statements as corollaries.
+The Rust correspondence remains an obligation. Its abstract proposal function must be the complete set of heads
+before membership pruning, not the carrier unioned with those heads. The registration must cover every relation
+that function reads. Separately, pruning against published and pending heads must preserve their union with the
+proposals. Publication grows the carrier. The [correspondence guide](../../proofs/guide/producer-scheduling.md)
+states these obligations; differential tests compare the implementation with full traversal but do not prove them.
 
 **Accounting** (work receipts measure the work performed):
 
@@ -102,7 +105,8 @@ property is the correspondence obligation above.
 | `support_join_work`, `support_head_work`, `join_rows`, `binding_snapshots` | Fall with skipped traversals | — |
 | `support_producer_visits` | Unchanged (every visit is recorded before the variants) | — |
 | `support_unchanged_visits` | Rich-producer visits that ended at the test | — |
-| `local_plan_preparations`, `local_plan_reuses` | — | Plans built and inserted by `Join::local`; joins over an entry |
+| `support_rich_traversals` | Rich-producer visits that traversed, including round 1; disjoint from unchanged visits | — |
+| `local_plan_requests`, `local_plan_preparations`, `local_plan_reuses` | — | Local constructor attempts; inserted plans and existing-entry hits are disjoint subsets |
 | Expansion `TermWork` | Falls with skipped traversals | Falls by `Plan::new`'s charges per reuse; rises by lookups and insertions |
 | `support_peak_bytes` | Rises by at most the registration; falls where a skipped traversal set the peak | Rises by at most the plan table |
 | Work and byte ceilings | Either direction under explicit limits; no refused↔completed flip at the default limits | The same |
@@ -118,50 +122,76 @@ bytes unchanged. End to end at one worker on a quiet host: nested Mastermind −
 about −12%, sudoku −7%. Answers and text output are identical on the corpus, scalability and example programs, also
 with the formula route forced.
 
-## Stage 2 (open): one plan per local-join site per snapshot
+## Stage 2: one plan per local frame per snapshot
 
-**The plan's inputs.** `order::Plan::new` reads the literal slice, the prefix's length and bound slots, the variable
-count, the snapshot's component view, and each positive pattern's relation row counts (local joins take the full
-variant, no pivot). Within one snapshot the row counts do not change: a support round derives into its pending delta
-and publishes only at the round's end, and the completed support is immutable. So within one snapshot a plan is a
-function of the slice's contents, the variable count and the bound-slot pattern.
+The implementation is present; the release measurements below remain its acceptance gate. A **call site** is a
+constructor invocation in the code; a **frame** is one live nonempty literal slice. Several call sites can use the
+same frame, and share its first admitted plan within one snapshot.
 
-**Owner and lifetime.** The snapshot owns the plans: `Support` (`formula_support/queries.rs`) gains a second lazily
-created workspace beside its shared table indices, dropped with the snapshot at the end of each round and after
-emission. A plan therefore cannot outlive the snapshot it was planned against.
+**Exact inputs.** `order::Plan::new` reads the literal contents, variable count, prefix length and every bound bit,
+the snapshot's component view, relation row counts, and pivot. Local joins always use full rows (`pivot = None`).
+The key borrows the literal slice for the snapshot lifetime and compares address, length and variable count; the
+entry additionally matches the original prefix length and every bit. Actual bound values, caller location, head
+staging and later query strategy are not successful-plan inputs. Plan construction still diagnoses unsafe prefix
+slots before publication. New planner inputs must be added to this contract and its identity tests.
 
-**Served sites.** Local joins get their own constructor, `Join::local`, which consults the table; `Join::element` and
-`Join::local_head` build through it, and nine sites that build local joins with `Join::new` today switch to it (in
-support: assignment values; in emission: projection witnesses, aggregate elements, conditional literals; arithmetic
-admission's local joins; objective presence's local join). `Join::new` never consults the table, so outer rule joins,
-outer variants, prepared rules, objective joins and the factoring component join (which re-decides its plan through
-`owned_plan`) keep building their own plans.
+**Owner and invalidation.** `Support` owns a lazy plan table beside its relation-table workspace. A support round
+reads its immutable relations while writing discoveries to a separate pending delta. Each published round creates
+another `Support`, with an empty plan table; completed queries similarly create and drop their own table. Source
+components and offered row counts cannot change within that owner. No process-global cache, completion token or
+cross-worker table is involved.
 
-**Key and entries.** The key is the borrowed slice itself (`&'source [LiteralIr]`, by address and length) with the
-variable count; an entry records the bound-slot pattern its plan was built for. Empty frames bypass the table. A site
-has at most one entry per snapshot; a binding with another pattern builds an owned plan and leaves the entry. A join
-holds a counted reference (`Rc`) to a shared plan, which makes `Support` neither `Send` nor `Sync`, so the table cannot
-cross a thread. The table's cell is borrowed only for a lookup or insertion, so a nested local join can fill it while
-earlier plans are lent. A failing plan is never inserted; its failure is raised at its first binding.
+**Whole lifetime path.** The borrowed `Ir::Source` carrier preserves the snapshot-lived source IR through source
+rule constructors, `Join.literals`, each binding cursor's generators, aggregate assignment values and their element
+conditions. `Ir::map` preserves that lifetime when selecting nested IR. Source emission carries the same borrow
+through aggregate, projection-witness and conditional lowering. `Ir::Temporary` uses the identical lowering and
+fresh-plan construction for temporary factored IR and scoped scratch whose input does not promise the snapshot
+lifetime. Converting an ordinary reference into the carrier chooses Temporary; inserting a Source key requires the
+longer borrow explicitly. No IR payload is copied for the cache.
 
-**Account.** The table charges the expansion budget's `TermWork`, as `Plan::new` does: one unit per search step, per
-bound slot compared and per entry moved on insertion. Retained plans and the entry array join the snapshot's live bytes
-and are admitted against `max_support_bytes` when inserted.
+A live join holds an `Rc` to its immutable plan and borrows the `Support` that owns the table. This lets nested local
+joins fill the table while earlier plans are live. The cell is borrowed only for lookup/insertion, never during plan
+construction or traversal. `Rc` makes `Support` neither `Send` nor `Sync`. Worker checkers retain `CompletedSupport`
+and prepared outer plans; they construct query workspaces locally for a check. A shared local plan is never
+re-decided: the factoring component constructor keeps an owned plan.
 
-**Correctness.** A shared plan yields the same traversal, rows and order as a fresh one, and an entry is used only
-when the slice, the variable count and the pattern all match, within the snapshot that owns the table.
+**Served sites.** `Join::local` is the only constructor that consults the table. `Join::element` and `Join::local_head`
+forward to it. Explicit source carriers serve support's conditional/choice heads, keyed-group validation and nested
+assignment values; source emission's projection witnesses, aggregate elements and conditional literals; arithmetic
+admission's local fragments and heads; source activity's choice elements; and objective presence's local elements.
+Empty frames and temporary carriers bypass the table. A frame/variable-count pair with another prefix shape builds
+an owned plan without replacing the first entry. Outer rule/variant/objective plans and prepared outer plans never
+consult the table themselves, even when their nested source assignments do.
 
-**The alternative considered.** Preparing each element's plan once per visit (in support) or once per rule (in
-emission) and passing it to its sites: no key, lookup or retained table, but a plan handoff along about a dozen call
-paths, each resting on its own caller. The snapshot table was chosen: one entry point and one test surface, with its
-invariants held by types.
+**Work and storage.** The address-sorted entry vector has `O(log F + P)` lookup and `O(F + P)` insertion work, for
+`F` recorded frame/variable pairs and `P` prefix slots. Expansion `TermWork` counts actual binary-search comparisons,
+prefix-length/bit inspections, copied prefix bits and entries shifted on insertion. Existing fallible reservation
+also charges its actual allocation/copy work to the ordinary workspace account. Pointer ordering can therefore
+change planning charges with heap layout; this is an explicit limitation for bounded runs, not a claim of stable
+work totals across allocators. A successful plan's row order is unchanged. Default-limit refusal identity remains
+an acceptance check. Exact work-boundary tests therefore retain one borrowed frame owner while resetting the table
+and budget; source preparation has its own exact boundary before any local table is used. Compiled frame IDs are
+a follow-up option if measurements justify making local-plan lookup work independent of heap layout; changing to
+linear lookup would discard the current lookup bound.
 
-**Tests.** For every served site of the maintained programs, a shared plan equals a fresh one and a join over it yields
-the same rows in the same order; a differing pattern builds its own plan; a failing plan is not inserted; a nested local
-join fills the table while an earlier plan is lent; an entry made in round `i` is absent in round `i+1`; an empty frame
-makes no entry; the component, objective and outer joins never consult the table; a test-only counter of found entries
-asserts the route independently of the public receipts; the table's bytes appear in `support_peak_bytes`, and a ceiling
-just below them refuses at insertion with `SupportBytes`.
+The snapshot's existing workspace lease counts entry-array capacity, bound-bit payload and one `Rc` allocation per
+plan (count words, plan header and its vector capacities). Shared joins charge their handle in their own header but
+no second plan payload. Planner scratch is checked before each allocation; a completed unpublished plan stays
+accounted while its entry is reserved. Refusal inserts nothing and releases that unpublished storage. Requested
+capacity is not reported as allocated peak. The table releases its receipt with the snapshot.
+
+**Reach and reference.** `local_plan_requests` counts every local constructor attempt, including empty/temporary
+frames, prefix-shape fallbacks and later refusals. `local_plan_preparations` counts successful insertions;
+`local_plan_reuses` counts matches to existing entries. Preparations and reuses are disjoint subsets of requests;
+a reuse still counts when later join setup or traversal fails. Requests are the denominator, not an estimate of
+saved setup time: `Join::with_plan` continues to build independent binding/traversal state.
+
+The scoped test reference disables only local-plan sharing, restores on unwind, and is confined to its thread. A
+separate test instrument records the file/line of hits, including nested assignment-cursor hits. Focused tests
+compare exact support catalog order and theory nodes/operands/roots with that reference, full binding order and
+comparison readiness, exact key/prefix identity, nested insertion, empty/outer bypass, failure publication and
+one-entry storage refusal. Acceptance must additionally exercise every served site and the whole maintained corpus
+at one and fourteen workers; focused tests alone do not establish that coverage or a speedup.
 
 ## Stages 3 and 4 (roadmap)
 
@@ -189,7 +219,7 @@ first:
    and optimality verdicts); in-process, the support catalog and emitted theory identical.
 2. **No refusal flip** at the default limits; a flip under another profile reported with both work totals.
 3. **Estimates held to account** by the reach report (rounds, unchanged visits and rich traversals for stage 1; plans
-   prepared and reused for stage 2).
+   requested, prepared and reused for stage 2).
 4. **Whole-run gain:** end-to-end time falls with separated ranges (hyperfine, 25 runs, alternating) in every cell whose
    estimate is at least 3% of the run.
 5. **No regression** above 3% with separated ranges in any grounding A/B, end-to-end or corpus cell.
@@ -215,15 +245,7 @@ first:
 
 ## Open review items
 
-- Implement `support_rich_traversals` (stage 1's decided receipt), and bind stage 1's evidence to the implementing
-  commits.
-- Stage 2: separate call site from frame (state the policy when one frame is planned from several call sites), key
-  entries on exactly what `Plan::new` reads, and give stage 2's reach report a denominator.
-- Hold, or guard with a check, the premise that the key covers every planner input.
-- Keying by address makes the binary search's charges depend on heap layout: make the charges independent of layout,
-  or state and accept the dependence; state the per-snapshot complexity and argue the structure.
-- State the whole lifetime path of the snapshot-owned table, including the support path and the binding cursor, or
-  drop assignment values from the served sites; restate the edits and type-held invariants against that path.
-- Restate stage 1's correspondence obligation as its two parts (the read set covers the traversal's reads; pruning
-  removes only heads already in the carrier).
-- Give stage 2 an in-process reference and identity tests, and name the instrument for its per-site proposition.
+- Bind stage 1's evidence to the implementing commits.
+- Bind stage 2's full-site/reference tests, default-limit checks, reach denominator and release timing evidence to
+  the exact candidate and baseline sources/binaries. Its implementation and focused tests are not performance
+  acceptance by themselves.

@@ -213,7 +213,16 @@ fn interrupted_factoring_never_publishes_a_theory() {
         let (result, counts) = route::controlled(true, Some((point, 2, cancellation)), || {
             ground(preparation, None, None)
         });
-        assert!(matches!(result, Err(FormulaFailure::Interrupted { .. })));
+        // Scalar expansion may observe the token before the next accounting
+        // boundary. Its located interruption remains the original typed cause.
+        let Err(error) = result else {
+            panic!("cancelled factoring publishes no theory");
+        };
+        assert_eq!(
+            error.interruption(),
+            Some(zetesis_cpu::Stop::Cancelled),
+            "{error:?}"
+        );
         assert_eq!(counts.runs, 1);
     }
 }

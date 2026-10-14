@@ -63,6 +63,7 @@ enum PatternSource<'a> {
     Ingress(&'a AtomPattern),
     Admitted(Read<'a>, &'a PatternData),
     Parts(PredicateRef<'a>, &'a [TemplateTerm<'a>]),
+    Fact(crate::catalog::AtomRef<'a>),
 }
 impl<'a> From<&'a AtomPattern> for PatternRef<'a> {
     fn from(pattern: &'a AtomPattern) -> Self {
@@ -70,6 +71,9 @@ impl<'a> From<&'a AtomPattern> for PatternRef<'a> {
     }
 }
 impl<'a> PatternRef<'a> {
+    pub(crate) fn fact(atom: crate::catalog::AtomRef<'a>) -> Self {
+        Self(PatternSource::Fact(atom))
+    }
     /// Borrow an arity-checked signature and ordered argument descriptions.
     /// Variable slots remain local; constants borrow their existing owners.
     ///
@@ -91,7 +95,7 @@ impl<'a> PatternRef<'a> {
     pub(crate) fn admitted_parts(self) -> Option<(Read<'a>, &'a PatternData)> {
         match self.0 {
             PatternSource::Admitted(read, pattern) => Some((read, pattern)),
-            PatternSource::Ingress(_) | PatternSource::Parts(_, _) => None,
+            PatternSource::Ingress(_) | PatternSource::Parts(_, _) | PatternSource::Fact(_) => None,
         }
     }
 
@@ -105,6 +109,7 @@ impl<'a> PatternRef<'a> {
         match self.0 {
             PatternSource::Ingress(pattern) => pattern.predicate().into(),
             PatternSource::Parts(predicate, _) => predicate,
+            PatternSource::Fact(atom) => atom.predicate(),
             PatternSource::Admitted(program, pattern) => {
                 catalog::predicate(program, pattern.predicate)
             }
@@ -116,6 +121,11 @@ impl<'a> PatternRef<'a> {
         match self.0 {
             PatternSource::Ingress(pattern) => PatternTerms(TermsSource::Ingress(pattern.terms())),
             PatternSource::Parts(_, terms) => PatternTerms(TermsSource::Borrowed(terms)),
+            PatternSource::Fact(atom) => PatternTerms(TermsSource::Fact {
+                values: atom.arguments(),
+                start: 0,
+                len: atom.arguments().len(),
+            }),
             PatternSource::Admitted(program, pattern) => {
                 PatternTerms(TermsSource::Admitted(program, &pattern.terms))
             }
@@ -141,6 +151,7 @@ pub struct TemplateRef<'a>(TemplateSource<'a>);
 enum TemplateSource<'a> {
     Ingress(&'a Template),
     Admitted(&'a ProgramData, &'a TemplateData),
+    Fact(crate::catalog::AtomRef<'a>),
     Partition {
         head: Option<PatternRef<'a>>,
         positive: Patterns<'a>,
@@ -156,6 +167,9 @@ impl<'a> From<&'a Template> for TemplateRef<'a> {
     }
 }
 impl<'a> TemplateRef<'a> {
+    pub(crate) fn fact(atom: crate::catalog::AtomRef<'a>) -> Self {
+        Self(TemplateSource::Fact(atom))
+    }
     /// Borrow a query-specific partition of positive and true-gate patterns.
     /// The head, false gates, filters and admitted variable coordinates remain
     /// those of this template. The supplied patterns must use those coordinates.
@@ -180,6 +194,7 @@ impl<'a> TemplateRef<'a> {
     pub fn head(self) -> Option<PatternRef<'a>> {
         match self.0 {
             TemplateSource::Partition { head, .. } => head,
+            TemplateSource::Fact(atom) => Some(PatternRef::fact(atom)),
             TemplateSource::Ingress(template) => template.head().map(PatternRef::from),
             TemplateSource::Admitted(program, template) => template
                 .head
@@ -194,6 +209,7 @@ impl<'a> TemplateRef<'a> {
     pub fn positive(self) -> Patterns<'a> {
         match self.0 {
             TemplateSource::Partition { positive, .. } => positive,
+            TemplateSource::Fact(_) => Patterns(PatternsSource::Ingress(&[])),
             TemplateSource::Ingress(template) => {
                 Patterns(PatternsSource::Ingress(template.positive()))
             }
@@ -207,6 +223,7 @@ impl<'a> TemplateRef<'a> {
     pub fn gate_true(self) -> Patterns<'a> {
         match self.0 {
             TemplateSource::Partition { gate_true, .. } => gate_true,
+            TemplateSource::Fact(_) => Patterns(PatternsSource::Ingress(&[])),
             TemplateSource::Ingress(template) => {
                 Patterns(PatternsSource::Ingress(template.gate_true()))
             }
@@ -220,6 +237,7 @@ impl<'a> TemplateRef<'a> {
     pub fn gate_false(self) -> Patterns<'a> {
         match self.0 {
             TemplateSource::Partition { gate_false, .. } => gate_false,
+            TemplateSource::Fact(_) => Patterns(PatternsSource::Ingress(&[])),
             TemplateSource::Ingress(template) => {
                 Patterns(PatternsSource::Ingress(template.gate_false()))
             }
@@ -233,6 +251,7 @@ impl<'a> TemplateRef<'a> {
     pub fn filters(self) -> Filters<'a> {
         match self.0 {
             TemplateSource::Partition { filters, .. } => filters,
+            TemplateSource::Fact(_) => Filters(FiltersSource::Ingress(&[])),
             TemplateSource::Ingress(template) => {
                 Filters(FiltersSource::Ingress(template.filters()))
             }
@@ -246,6 +265,7 @@ impl<'a> TemplateRef<'a> {
     pub fn variable_count(self) -> usize {
         match self.0 {
             TemplateSource::Partition { variable_count, .. } => variable_count,
+            TemplateSource::Fact(_) => 0,
             TemplateSource::Ingress(template) => template.variable_count(),
             TemplateSource::Admitted(_, template) => template.variable_count,
         }
@@ -338,6 +358,11 @@ enum TermsSource<'a> {
     Borrowed(&'a [TemplateTerm<'a>]),
     Ingress(&'a [Term]),
     Admitted(Read<'a>, &'a [TermData]),
+    Fact {
+        values: crate::catalog::Arguments<'a>,
+        start: usize,
+        len: usize,
+    },
 }
 impl<'a> PatternTerms<'a> {
     /// Borrow a contiguous range of scalar fields, preserving the same owner.
@@ -345,6 +370,15 @@ impl<'a> PatternTerms<'a> {
     #[must_use]
     pub fn slice(self, range: Range<usize>) -> Option<Self> {
         match self.0 {
+            TermsSource::Fact { values, start, len } => {
+                (range.start <= range.end && range.end <= len).then(|| {
+                    Self(TermsSource::Fact {
+                        values,
+                        start: start + range.start,
+                        len: range.end - range.start,
+                    })
+                })
+            }
             TermsSource::Borrowed(terms) => terms
                 .get(range)
                 .map(|terms| Self(TermsSource::Borrowed(terms))),
@@ -363,6 +397,7 @@ impl<'a> PatternTerms<'a> {
     /// metadata only; constants do not read their canonical payload.
     pub fn variables(self) -> impl Iterator<Item = usize> + 'a {
         (0..self.len()).filter_map(move |index| match self.0 {
+            TermsSource::Fact { .. } => None,
             TermsSource::Borrowed(terms) => match terms[index] {
                 TemplateTerm::Variable(variable) => Some(variable),
                 TemplateTerm::Constant(_) => None,
@@ -381,6 +416,7 @@ impl<'a> PatternTerms<'a> {
     #[must_use]
     pub fn len(self) -> usize {
         match self.0 {
+            TermsSource::Fact { len, .. } => len,
             TermsSource::Borrowed(terms) => terms.len(),
             TermsSource::Ingress(terms) => terms.len(),
             TermsSource::Admitted(_, terms) => terms.len(),
@@ -390,6 +426,13 @@ impl<'a> PatternTerms<'a> {
     #[must_use]
     pub fn at(self, index: usize) -> Option<TemplateTerm<'a>> {
         match self.0 {
+            TermsSource::Fact { values, start, len } => {
+                if index < len {
+                    values.at(start + index).map(TemplateTerm::Constant)
+                } else {
+                    None
+                }
+            }
             TermsSource::Borrowed(terms) => terms.get(index).copied(),
             TermsSource::Ingress(terms) => terms.get(index).map(TemplateTerm::from),
             TermsSource::Admitted(program, terms) => terms

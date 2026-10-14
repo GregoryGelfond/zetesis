@@ -15,7 +15,7 @@ Paths are under `crates/zetesis-sat/src/ferraris/` unless another root is named.
 |---|---|
 | The coordinator-first walk, its record, the engagement operation, the retained coordinator state, the public API, the CLI's record, documentation and tests | Implemented |
 | The provisional engagement constant, 20 µs per worker, with its record | Implemented; M1 replaces the value |
-| Revisions to statements and tests the coordinator phase affects | Open (Open review items) |
+| Revisions to statements and tests the coordinator phase affects | Partly implemented; remaining sweep in Open review items |
 | The measurement protocol M1–M6 and the acceptance (M5) | Open |
 
 Answer identity has been checked on 108 programs (the 94 corpus cells, the scalability programs and the top-level
@@ -169,7 +169,8 @@ remaining frontier, so worker 0 continues the depth-first walk and the others st
 beginning, the first pull, after the enumeration's original index is built. The caller's time between pulls counts: it
 is time no worker overlaps in the coordinator phase, and counting it bounds the overlap forgone by `D`. The deadline is
 checked on entry to each pull and after each step that returned no model; a step is never interrupted, so engagement
-is at most one step late.
+can be delayed by a step already in progress or by the caller's time before the next pull. The clock does not
+interrupt either operation.
 
 **The objective is the invocation's wall time**, the latency a caller and the corpus campaign see; system time is a
 co-benefit and is reported. In the rent-or-buy argument the rent is walking without workers and the buy price `B(w)` is
@@ -181,12 +182,15 @@ constant, `ENGAGEMENT_COST_PER_WORKER` in `parallel_regions.rs`, measured on the
 19.9 µs per worker at fourteen workers, a fit of 19.8 µs over 2–14 workers, so 20 µs and a delay of 280 µs at fourteen.
 Measuring `B` at run time would mean starting a thread, which costs about what it measures, on every invocation.
 
-**The bound.** Against the eager walk, a walk that engages finishes at most about `D` later, plus one step; a walk that
-ends within `D` starts no thread and saves `B`. Against the better choice in hindsight, the worst case is a walk that
-ends just after `D`: the rule pays `D + B` where the better choice paid `min(D, B)`, a ratio of `1 + max(D/B, B/D)`,
-which is 2 at `D = B` and at most 2.25 while `D/B` lies in [0.8, 1.25], the band M1 requires. A model-dense small walk
-can be carried past `D` by its own per-model work and output, then engages and pays `B` for little; M4 reports that
-share.
+**The cost model.** In an idealized rent-or-buy model, delaying engagement for `D` forgoes at most `D` of overlap,
+and a walk that ends within `D` avoids the engagement cost `B`. The model assumes instantaneous deadline observation
+and the same remaining work and execution rates after engagement. Its worst case is a walk that ends just after `D`:
+the rule pays `D + B` where the better choice paid `min(D, B)`, a ratio of `1 + max(D/B, B/D)`, which is 2 at `D = B`
+and at most 2.25 while `D/B` lies in [0.8, 1.25], the band M1 requires. The implementation observes deadlines only at
+pull and step boundaries; independently scheduled runs can also do different checking work. This model therefore
+motivates the delay but does not guarantee a bound on completion-time differences. M5 checks the invocation's measured
+overhead. A model-dense small walk can be carried past `D` by its per-model work and output, then engages and pays `B`
+for little; M4 reports that share.
 
 ### Parameter and public surface
 
@@ -247,8 +251,8 @@ pull that observes cancellation returns before launching any worker. The `Parall
 One clock read per coordinator pull at its entry, beside the deadline test's reads between steps; `walking` adds each
 stepping pull's duration from that read, and the record costs no further read. With `--stats`, per-step phase timing
 adds its two clock reads and live publication per step in the coordinator phase, as the scalar walk pays two per pull.
-The cell costs one small allocation. A walk that ends within `D` saves the engagement cost `B(w)`; one that engages
-pays at most about `D` more than the eager walk.
+The cell costs one small allocation. A walk that ends within `D` avoids the engagement cost `B(w)`; M5 measures the
+net saving and the overhead of walks that engage against the eager walk.
 
 ## Tests
 
@@ -315,8 +319,9 @@ workers and M3 would exceed the cap, which is why M1–M3 read the driver's time
 
 ### M1: the engagement cost and the estimator
 
-On the attribution case and `scalability/prime-sieve.lp` (n = 30), A = I-imm and B = I-never at 2, 4,
-8 and 14 workers, on the driver's time, giving `B̂(w)` with its interval per cell, each run's `spawn` receipt recorded.
+On the attribution case and `scalability/prime-sieve.lp` (n = 30), A = I-never and B = I-imm at 2, 4,
+8 and 14 workers, on the driver's time. The protocol's B-minus-A difference gives the positive engagement cost
+`B̂(w)` with its interval per cell; each run's `spawn` receipt is recorded.
 Per cell, a weighted least-squares fit through the origin gives `ĉ`; the documented `c` is the inverse-variance-weighted
 mean of the two cells' `ĉ`; the fit `B(w) = a + w × c` is also made and its intercept reported with its interval,
 without a criterion. **Criterion**, per cell and judged `w`: the two-sided interval of `B(w)` lies within
@@ -421,8 +426,9 @@ observation record.
 2. The public API gains `Engagement` and `StableModels::with_region_workers_engaging`, and the region statistics gain
    the workers record.
 3. The walk is coordinator-first: the calling thread walks until the deadline, then the workers start.
-4. The caller's time between pulls counts toward the delay, giving the unconditional bound: a walk finishes at most `D`
-   later than the eager walk. M4 reports the share of walks this decides.
+4. The caller's time between pulls counts toward the delay. The deadline is observed on a pull or between steps,
+   so a step in progress or time before the next pull can postpone engagement. Completion-time overhead is measured by
+   M5, not guaranteed by the delay alone. M4 reports the share of walks whose engagement the caller's time decides.
 5. The corpus standing against clingo is a report, with reach and margins per class; M5's per-cell criteria decide
    acceptance.
 6. If `D = w × c` fails its band, `D = a + w × c`, with both constants in one record, is adopted only for a fixed cost
@@ -440,12 +446,5 @@ observation record.
    remaining worker-only statements.
 2. Parameterize the route tests over `Immediate` and `After(Duration::MAX)` and assert the route each takes, including
    `NotBegun`.
-3. In `an_unengaged_walk_reports_the_scalar_walks_receipts`, also assert that the models arrive in the scalar walk's
-   order before engagement.
-4. Rename `region_workers_report_their_largest_countermodel_workspace`, or add the bound that makes "largest"
-   checkable.
-5. A closed walk that never began is begun by a later pull. It is unreachable through `StableModels`, whose stream is
-   terminal after `stop`, but `ParallelRegions` should refuse it directly.
-6. Make the `dyn` deadline-test parameter generic, or record why it is dynamic; pin the record's state spellings in a
-   test; and loop the retention tests over both engagement routes.
-7. Run M1–M6 and the reports in a quiet window, and replace the provisional constant and its record with M1's value.
+3. Loop the copied retention tests over the scalar and coordinator routes, retaining each route's teardown contract.
+4. Run M1–M6 and the reports in a quiet window, and replace the provisional constant and its record with M1's value.

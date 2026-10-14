@@ -69,46 +69,51 @@ struct Selection {
 }
 
 pub(super) fn partition(mut preparation: Preparation) -> Result<Partition, FormulaFailure> {
-    let mut counters = Counters::resume(
-        std::mem::take(&mut preparation.accounting),
+    let mut accounting = std::mem::take(&mut preparation.accounting);
+    let cancellation = preparation.budget.cancellation().cloned();
+    let result = accounting.controlled::<_, FormulaFailure>(
+        cancellation.as_ref(),
         crate::grounding_observer::Work::default(),
-    )
-    .with_cancellation(preparation.budget.cancellation());
-    let selected = prepare(&mut preparation, &mut counters)?;
-    let Some(selected) = selected else {
-        preparation.accounting = counters.into_accounting();
-        return Ok(Partition {
-            base: preparation,
-            terminal: None,
-        });
-    };
-    // Component validation, movement permits and every reservation the move
-    // fills precede it, so the move itself allocates nothing. Each original IR
-    // occurrence remains present exactly once: every rule and fact block, in
-    // item order.
-    let deferred = preparation
-        .program
-        .split_items(&selected.selected.values, selected.room);
-    drop(selected.kept);
-    let original = OriginalAnalysis {
-        program: std::mem::replace(&mut preparation.program.analyzed, selected.source),
-        analysis: std::mem::replace(&mut preparation.program.analysis, selected.analysis),
-        basis: preparation.program.analysis_basis,
-    };
-    let mut deferred_storage = selected.deferred.into_lease();
-    deferred_storage.observe(
-        usize::try_from(deferred_bytes(&deferred)).expect("admitted deferred capacity"),
         preparation.location,
-    )?;
-    drop(selected.selected);
-    preparation.accounting = counters.into_accounting();
+        |counters| {
+            let Some(selected) = prepare(&mut preparation, counters)? else {
+                return Ok(None);
+            };
+            // Every reservation precedes movement; each occurrence remains once.
+            let deferred = preparation
+                .program
+                .split_items(&selected.selected.values, selected.room);
+            drop(selected.kept);
+            let original = std::mem::replace(
+                &mut preparation.program.analyzed,
+                crate::formula_analysis::Summary::complete(selected.source),
+            )
+            .into_full(std::mem::replace(
+                &mut preparation.program.analysis,
+                selected.analysis,
+            ));
+            let original = OriginalAnalysis {
+                program: original.program,
+                analysis: original.analysis,
+                basis: preparation.program.analysis_basis,
+            };
+            let mut deferred_storage = selected.deferred.into_lease();
+            deferred_storage.observe(
+                usize::try_from(deferred_bytes(&deferred)).expect("admitted deferred capacity"),
+                preparation.location,
+            )?;
+            drop(selected.selected);
+            Ok(Some(Definitions {
+                original,
+                deferred,
+                deferred_storage,
+            }))
+        },
+    );
+    preparation.accounting = accounting;
     Ok(Partition {
         base: preparation,
-        terminal: Some(Definitions {
-            original,
-            deferred,
-            deferred_storage,
-        }),
+        terminal: result?,
     })
 }
 
@@ -128,15 +133,22 @@ fn prepare(
     {
         return Ok(None);
     }
+    // This is the one preparation consumer that requires every normalized
+    // source producer. Materialization is explicit and budgeted, after the
+    // unchanged partition eligibility gate and after constraint replacement.
+    let analyzed = program
+        .analyzed
+        .materialize(&mut preparation.budget, location)?;
     let mut domain_limits = zetesis_domain::Limits::default();
     domain_limits.max_work = domain_limits
         .max_work
         .min(limits.max_work.saturating_sub(counters.accounting.work));
-    let analysis = terminal::analyze(&program.analyzed, domain_limits);
-    counters.charge_work(u128::from(analysis.statistics().work), limits, location)?;
+    counters.poll(location)?;
+    let analysis = terminal::analyze(analyzed, domain_limits);
+    counters.absorb(u128::from(analysis.statistics().work), limits, location)?;
     if analysis.status() != terminal::Status::Complete
         || analysis.definitions().is_empty()
-        || !analysis.belongs_to(&program.analyzed)
+        || !analysis.belongs_to(analyzed)
     {
         return Ok(None);
     }
@@ -167,7 +179,7 @@ fn prepare(
         return Ok(None);
     }
     let (source, source_analysis) = source::base(
-        &program.analyzed,
+        analyzed,
         &definitions.values,
         &mut preparation.budget,
         &mut context,

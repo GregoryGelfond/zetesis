@@ -11,7 +11,7 @@ rule population. None changes a program's answers; each saves elapsed time and a
 | Part 1: oracle preparation finds domain positions by identity | Implemented |
 | Part 2: statements normalization leaves unchanged are not rewritten, on both routes | Implemented |
 | Part 3 | Withdrawn: subsumed by columnar fact blocks |
-| Part 4: one raise and one profile walk per invocation, behind one automatic admission per door | Open |
+| Part 4: one raise and one profile walk per invocation, behind one automatic admission per door | Implementation prepared; validation and timing acceptance pending |
 
 Paths are under `crates/` unless another root is named.
 
@@ -68,7 +68,7 @@ unchanged and a failing statement raises the same failure first. On the formula 
 statements only, and each expanded fact receives the provenance `rewrite` would stamp at statement level
 (`Transformed("zetesis-finite-formula")` merged into the carrier's), so every retained provenance is identical.
 
-## Part 4 (open): one raise and one profile walk per invocation
+## Part 4: one raise and one profile walk per invocation
 
 **The equivalence it rests on.** At the pinned themelios revision, `raise(parse)` is `lower_each` followed by
 `collect_runs`, and `raise_occurrences(parse).into_raised()` performs the same two steps (themelios documents the
@@ -80,8 +80,9 @@ and for a bundle, and that the engine behind the facade makes for an already-adm
 parameters and the shared generic result types instantiated with that door's owners and refusals:
 
 ```rust
+// Method on ParsedSource, following its existing consuming profile operations.
 pub fn admit_automatic_with_cancellation(
-    source: ParsedSource,
+    self,
     expansion: ExpansionLimits,
     formula: FormulaLimits,
     cancellation: &Cancellation,
@@ -103,8 +104,7 @@ pub fn admit_bundle_automatic_with_cancellation(
 
 pub fn prepare_program_automatic(
     program: Arc<Program>,
-    options: ProgramRelationalOptions,
-    formula: FormulaLimits,
+    options: ProgramFormulaOptions,
 ) -> Result<
     AutomaticAdmission<PreparedRelational, PreparedFormula>,
     AutomaticAdmissionFailure<FormulaFailure, FormulaFailure>,
@@ -115,7 +115,12 @@ pub enum AutomaticAdmissionFailure<ER, FR> { Extended(ER), Formula(FR) }
 // One inherent `interruption() -> Option<Stop>` per door's instantiation.
 ```
 
-One private generic function, bounded by a crate-private door trait, holds the sequence: attempt the extended route;
+The source method follows `ParsedSource`'s existing ownership convention. The program entry uses one
+`ProgramFormulaOptions`: its `formula.observation` and `formula.metadata_storage` supply the relational options too,
+so neither route has a competing limit set. These resolve the draft's source-method and duplicated-limit review items.
+The engine already derived these two relational limits from its formula limits before the migration.
+
+One private generic function, bounded by a private door trait, holds the sequence: attempt the extended route;
 return its admission; on an interruption or a refusal for which `needs_formula_admission` is false, return it with its
 owner; otherwise prepare the formula route on the same input. `interruption()` classifies both sides (on the extended
 side it takes over the classification the CLI makes today), so a caller never reads an interruption as a refusal. The
@@ -128,7 +133,8 @@ route). If the formula route is permitted the door calls the entry point; otherw
 exactly as under `--oracle closure`, and a refusal needing formula admission returns today's policy refusal. This keeps
 today's order exactly and needs no API change. `--oracle countermodel` prepares the formula route directly, as today.
 
-**Inside the extended attempt, per source, in today's order.** One profile walk computes both profiles' verdicts (the
+**Inside the extended attempt, per source, in today's order.** The retained extended APIs and automatic APIs use
+the same compilation functions with an optional recorder. One profile walk computes both profiles' verdicts (the
 extended and formula profiles are the same traversal under different flags, `profile.rs`), returns the extended verdict
 and records the formula verdict (its node count or first refusal); definitions and the metadata count run under the
 same limits the formula route uses; `raise_occurrences` runs once; formula metadata is collected from the occurrence
@@ -154,7 +160,9 @@ counts the same nodes under both flags; the formula flag only widens head forms,
 the formula flag unset `metadata::check_syntax` refuses every body-carrying `#show` and `#project`; and an objective
 statement is refused as unsupported by the extended profile. So on the handoff path every recorded formula verdict
 passes and the objectives check passes. The lemma is pinned by a test; the guard holds the handoff to it at run time,
-so a later profile change costs time, never a skipped check or a refusal out of order.
+so a later formula-only profile restriction costs time, never a skipped check or a refusal out of order. Objective
+checks remain at their original formula-preparation step even when a handoff exists; the profile guard is not an
+objective certificate.
 
 **Costs, accounting and reach.** On the bundle door's fallback path Part 4 saves the second profile walk, the scans,
 the raise, the statement clones and the ingestion: up to 1.1 µs per fact, about 18 ms at 16,000 facts with a
@@ -166,7 +174,8 @@ invocations per door that take the handoff.
 
 **Tests.** The route chosen and every refusal's diagnostics are unchanged on every corpus program and refusal fixture;
 the recorded formula verdict equals `check_formula`'s; the profile lemma on every corpus program, fixture and generated
-source; the guard (a crate-internal seam records a failing formula verdict, and the entry point prepares from scratch
+source (all parseable corpus `.lp` files, admission `.lp` and JSONL `source` fixtures, explicit refusal cases, and
+generated fact/comparison programs); the guard (a crate-internal seam records a failing formula verdict, and the entry point prepares from scratch
 and returns the reference's result); a formula metadata refusal in source 2 of 3 on the bundle door and one on the
 single-source door, each asserting the handoff was taken; the reference is the composition of the retained public
 entry points; an interruption during the extended attempt is reported with no formula attempt; the formula-policy
@@ -193,7 +202,9 @@ fourteen workers; answer families identical on the portable, oracle and scalabil
 
 ## Decisions
 
-- Part 4 has one public entry point per door, sharing generic result types; the door trait is crate-private.
+- Part 4 has one public entry point per door, sharing generic result types; the door trait is private.
+- The source door is a consuming `ParsedSource` method. The program door takes `ProgramFormulaOptions`; both
+  routes use its single observation and metadata-storage limit set. Existing public entry points are unchanged.
 - Part 4 covers the program door's route decision.
 - The CLI's formula-policy check stays in the CLI, evaluated before the call.
 - Part 1's table is owned by oracle preparation as preparation scratch.
@@ -209,9 +220,5 @@ fourteen workers; answer families identical on the portable, oracle and scalabil
   charge and accounting statements accordingly; test both cases; report reach by caller and measure one shape with a
   nonempty `gate_predicates()`. (This concerns the implemented Part 1's statements and tests.)
 - State the costs and charging of Part 1's public type, with two in-code contracts.
-- Make the single-source door a `ParsedSource` method, or name the departure; settle the program door's duplicated
-  limits.
-- Make the extended attempt one sequence with an optional recorder.
-- State what the guard covers (formula-only profile restrictions; the objectives step covers objective statements) and
-  the lemma test's population; update the manual sentence.
+- Complete Part 4 validation and timing acceptance before reporting its savings as measured.
 - State both directions for the work ceiling.

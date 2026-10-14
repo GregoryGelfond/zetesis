@@ -447,6 +447,7 @@ mod tests {
         let a = AtomPattern::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap();
         let program = Program::new(
             vec![Template::new(Some(a), vec![], vec![], vec![], vec![])],
+            zetesis_core::FactTables::default(),
             AdmissionLimits::default(),
         )
         .unwrap();

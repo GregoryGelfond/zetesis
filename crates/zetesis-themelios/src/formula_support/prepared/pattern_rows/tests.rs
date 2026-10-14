@@ -39,9 +39,9 @@ struct Run {
     work: u64,
 }
 
-fn run(
-    prepared: &PreparedRule<'_>,
-    queries: &CompletedQueries<'_>,
+fn run<'source>(
+    prepared: &PreparedRule<'source>,
+    queries: &CompletedQueries<'source>,
     counters: &mut Counters,
 ) -> Run {
     let limits = FormulaLimits::default();

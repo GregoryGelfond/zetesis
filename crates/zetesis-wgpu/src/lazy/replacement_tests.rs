@@ -222,7 +222,12 @@ fn join_program(width: i32) -> zetesis_core::Program {
         vec![],
         vec![],
     ));
-    Program::new(templates, AdmissionLimits::default()).unwrap()
+    Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn join_seeds(

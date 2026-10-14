@@ -452,6 +452,6 @@ fn witness_storage_limit_is_inclusive() {
 }
 
 #[test]
-fn witness_term_work_limit_is_inclusive() {
-    println!("term_work={}", witnesses::term_work_ceiling(BOUNDED));
+fn witness_term_work_admissions_obey_their_limits() {
+    println!("term_work={}", witnesses::term_work_admissions(BOUNDED));
 }

@@ -1,14 +1,14 @@
 # Name matched positive body atoms through the join's matched-row record
 
-Final formula emission re-derives every positive body atom the join has just matched. This note designs the route
-that names those atoms from the matched rows instead. It changes how emission names atoms, never which atoms or
+Final formula emission can name a planned positive body atom from the relation row the join has just matched.
+This note describes that route and the later, unimplemented identity memo. It changes how emission names atoms, never which atoms or
 formulas it emits. The [grounding chapter](../book/architecture/grounding.md) describes emission and the producer
 route this design extends.
 
 ## Status
 
-- **Stage A** (every emission join keeps the matched-row record; one function names a matched row's atom; one owner
-  keeps the per-depth node cache): designed, not implemented.
+- **Stage A** (ordinary rule emission and capture keep the matched-row record; one function names a matched row's atom; one owner
+  keeps the per-depth node cache): implemented; integration and measured acceptance remain pending.
 - **Stage B** (a memo from atom identity to node): staged. It is considered only after Stage A is measured.
 - Code is cited by path and function; paths are under `crates/zetesis-themelios/src/` unless another root is named.
 
@@ -27,10 +27,10 @@ has just matched, with three lookups:
 The join already holds the answer. `Join::next_base` matches a relation row against each depth's pattern
 (`match_row` in `formula_support.rs`), and a join that keeps the witness record pushes the matched row. The row's
 `atom()` is a canonical `AtomRef` of the support authority. The join plans exactly the body's ordinary positive atoms,
-and each occurrence keeps its literal's index (`PatternOccurrence::source`, `formula_support/order.rs`). Today only
-support production and the producer route use the record (`witnesses::eligible`, `formula_support/witnesses.rs`):
+and each occurrence keeps its literal's index (`PatternOccurrence::source`, `formula_support/order.rs`). Before Stage A, only
+support production and the producer route used the record (`witnesses::eligible`, `formula_support/witnesses.rs`):
 total flat positive bodies with a normal head and at least two atoms. Constraints, rules with negative literals,
-comparisons, aggregates or conditionals, and choice and disjunctive heads take the plain path and re-derive every atom.
+comparisons, aggregates or conditionals, and choice and disjunctive heads took the plain path and re-derived every atom. Stage A reaches their held planned positive rows; factoring and nested element joins retain their existing routes.
 
 **Measured reach** (sampling profiles of the release CPU front at one worker; shares of all samples). The in-reach
 column counts the rule's own body only, the part Stage A reaches:
@@ -48,7 +48,7 @@ column counts the rule's own body only, the part Stage A reaches:
 Across these classes an atom's cost divides roughly into 50% the tuple projection, checks and hash (what the identity
 import removes), 27% the import's retained work (entry admission, discovery-inverse search, insertion check, `refresh`),
 21% catalog position and node interning, and 1% static pattern. The in-reach column is an upper bound: it counts
-negative literals too, and owned completions name their deepest literal by the general route (Design 1). The profiles
+negative literals too, and owned completions name their deepest literal by the general route (Design 1). These historical estimates are not implementation measurements. The profiles
 predate the integer comparison forms and the support-completion skip, which shrank grounding elsewhere, so body atoms
 are now a larger share of what remains; acceptance restates every estimate at the implementation's parent.
 
@@ -57,17 +57,16 @@ are now a larger share of what remains; acceptance restates every estimate at th
 **Preserved.** The emitted formula: atom catalog order and identities, node identities, roots, origins and activated
 objectives; the theory, answers, output and model order. Every failure kind: Stage A adds no refusal kind. Its new
 refusal sites are the record's reservation in `retain_witnesses` (support bytes, on joins that did not keep it), the
-node cache's and inverse's reservations (support bytes), and a work-ceiling site at each new charge. Cancellation is
-observed as before: every reused or imported literal charges a unit before it is named.
+node cache's and inverse's reservations (support bytes), and a work-ceiling site at each new charge. Cancellation remains observed before naming: every ordinary/capture row lookup charges a dispatch unit; imports also retain `atom_ref`'s unit and a cache-store unit. The producer transfers its existing dispatch/store units into the shared owner, including their cancellation-hook order.
 
 **Receipts** (work receipts measure the work performed):
 
 | Receipt | Direction | Why |
 |---|---|---|
 | Grounding work | Either | The record charges one unit per push and per removed row on joins that did not keep it; an imported literal charges less than `Builder::atom`'s path; a reused literal charges one unit where the general path charges three lookups |
-| `atom_lookups`, `node_lookups` | Fall by `row_atom_reuses` | A reused literal presents nothing to the catalog or to interning |
+| `atom_lookups`, `node_lookups` | On successful complete comparisons, fall by `row_atom_reuses` | An ordinary/capture reused literal presents nothing to the catalog or to interning; compare the same producer and factoring policies |
 | `atoms_inserted`, `nodes_inserted` | Unchanged | Every atom and node is first named at the same point |
-| `row_atoms`, `row_atom_reuses` | New | Planned positive literals named through their matched rows, and those reused from the unchanged prefix |
+| `row_atoms`, `row_atom_reuses` | New | Successfully named ordinary-emission/capture positive literals, and the subset reused from the unchanged prefix; excludes the producer route and nested element joins |
 | Support bytes, `support_peak_bytes` | Either | The record, cache and inverse add O(body width) leased bytes per join and rule; a reused literal skips the import's `refresh`, which samples the owner peak |
 
 **Bounded profiles.** A work ceiling can be reached earlier (the record's charges) or later (the replaced lookups). A
@@ -78,7 +77,7 @@ occur if no check follows. Acceptance lists every flip with its direction.
 
 ## Design
 
-### 1. Every emission join keeps the witness record
+### 1. Ordinary emission and capture keep the witness record
 
 - **The record.** `Witnesses { rows, unchanged }` (`formula_support/witnesses.rs`): one `MatchedRow` per matched depth,
   pushed when a row matches and the prefix filters pass, truncated on undo (`undo_at`), with `unchanged` lowered to
@@ -90,7 +89,7 @@ occur if no check follows. Acceptance lists every flip with its direction.
   with owned frames, and `resume` undoes the deepest depth at once. So a lent completion holds every planned depth
   when it is lent, while an owned completion holds every depth but the deepest: its deepest planned literal has no
   recorded row and takes the general route. A body with one planned literal and a generator gets no row route.
-- **Lending.** Only a passing row carries a view of the record (rows by depth, the unchanged count, and the patterns,
+- **Lending.** `next_matched_row` returns a `MatchedBinding` alongside the existing binding and verdict; only a passing row carries a view of the record (rows by depth, the unchanged count, and the patterns,
   so depth maps to literal through `patterns[depth].source`). The record resets its count only when it lends a
   passing row, so a view's `unchanged` is the number of leading depths not undone since the previous passing lend.
   The view answers only for the depths it holds.
@@ -111,12 +110,18 @@ insertion check, and `refresh`. The catalog position and node interning follow a
 ### 3. One owner of the node cache and its prefix rule
 
 `MatchedNodes`, one per rule and consumer, owns the per-depth node cache (leased; it replaces the producer route's
-`atoms` buffer) and, where literal order differs from depth order, the inverse from literal to depth (charged one unit
-per literal). Its rule, for a passing row's view and a depth `d` the view holds: if `d < view.unchanged` and the cache
-holds `d`'s node, charge one unit and return it (`row_atom_reuses`); otherwise call `matched_atom(view.rows[d])` and
-record the node. Both count in `row_atoms`. The producer route's compiled groups keep their exemption from recording.
+`atoms` buffer) and, where literal order differs from depth order, the inverse from literal to depth (leased and initialized once, then filled by source occurrence). The owner first checks each planned occurrence
+for identity order; if an inverse is needed, its initialization charges the literal population and its fill charges each planned occurrence. Its rule, for a passing row's view and a depth `d` the view holds: pay one dispatch unit, then if `d < view.unchanged` and the cache
+holds `d`'s node, return it; otherwise call `matched_atom(view.rows[d])`, pay the store unit and record the node.
+Successful ordinary/capture calls count in `row_atoms`; its successful unchanged branch also counts in
+`row_atom_reuses`. A cache is created only at the first passing row that holds a positive witness.
 
-Consumers: the plain loop (`Builder::body` gains the optional view; every literal without a recorded row is named as
+Producer consumers use that same prefix rule after their already charged input dispatch. The prefix-only algorithm
+refreshes its known changed suffix directly, preserving its existing import/store charges; its later operand reads
+keep their existing charges. Compiled leaf groups call `matched_atom` without populating per-atom state. All producer
+calls are excluded from the two new receipts, so pre-existing producer savings are not attributed to Stage A.
+
+Consumers: the plain loop (`Builder::body_matched` accepts the optional view; every literal without a recorded row is named as
 today, and its other callers pass none), capture (`capture_constraint` names its planned positive literals by the rule
 and its negative literals as today), and the producer route.
 
@@ -144,8 +149,8 @@ retained search, insertion check and `refresh`, the catalog position and node in
 
 ## Correctness
 
-**Claim.** With Stage A, emission produces the same Builder state as without it at every point: catalog, node arena,
-roots, origins, objectives and metadata. Only counters and peak receipts differ.
+**Claim.** With Stage A, corresponding successful naming/publication boundaries preserve the semantic Builder state:
+catalog, node arena, roots, origins, objectives and metadata. Only counters and peak receipts differ.
 
 1. **A matched row's atom is the instantiated literal.** `match_row` binds the pattern's unbound variables to the row's
    columns and checks the bound ones by typed equality; a structural pattern emits the whole captured atom. Undo
@@ -176,12 +181,12 @@ premise, the passing-lend reset, the lend invariant and any memo index are Rust 
 | Item | Work | Retained space |
 |---|---|---|
 | Witness record on joins that did not keep it | One charged unit per push and per removed row | Body width × `MatchedRow` per join, leased |
-| Literal-to-depth inverse (where orders differ) | One charged unit per body literal, once per rule | One depth per literal, leased |
-| Node cache | One store per imported literal | One optional node per depth, leased |
+| Literal-to-depth inverse (where orders differ) | Check each planned occurrence; initialize the literal population; fill each planned occurrence, once per rule | One depth per literal and the buffer header, leased |
+| Node cache | Initialize each depth; one charged store per imported literal | One optional node per depth and the buffer header, leased |
 | A reused literal | One charged unit and one load | — |
-| An imported literal | `atom_ref`'s unit, the import's admission, O(log n) inverse search, insertion check and `refresh`, then catalog and node | — |
+| An ordinary/capture imported literal | Dispatch and cache-store units plus `atom_ref`'s unit, admission, O(log n) inverse search, insertion check and `refresh`, then catalog and node | — |
 
-**Expected gain** (shares of the run at one worker, estimates from attribution): Stage A without prefix reuse removes
+**Historical gain estimate** (shares of the run at one worker, estimates from attribution that must be restated at the implementation parent): Stage A without prefix reuse removes
 the projection, checks and hash of reached atoms — sudoku about 8.2% of the run (10.3% of grounding), traveling-salesman
 about 1.5%, n-queens 1.1%. With reuse fraction `r = row_atom_reuses / row_atoms` the gain is about
 `reach × ((1 − r) × a + r)` with `a` ≈ 0.52–0.55. The memo's increment is at most `(1 − r)` times the import's retained
@@ -194,8 +199,7 @@ the same test binary, as the producer route's switch does.
 
 1. `matched_rows_name_the_atoms_the_general_route_names` — a constraint whose two positive atoms recur; the emitted
    atoms, nodes, roots and origins equal the general route's, and `row_atoms > 0`.
-2. `each_reuse_replaces_one_catalog_and_one_node_lookup` — the lookup counts differ by exactly `row_atom_reuses`;
-   insertions equal.
+2. `each_reuse_replaces_one_catalog_and_one_node_lookup` — successful complete run lookup counts differ by exactly the ordinary/capture `row_atom_reuses`; insertions equal. Aborted-prefix counters are not asserted to have that delta.
 3. `a_negative_literal_is_named_as_before` — `row_atoms = 0`, the formula equal.
 4. `a_structural_pattern_names_its_captured_atom`.
 5. `literals_joined_out_of_order_keep_their_own_rows` — join order unlike literal order; kills an inverse built in
@@ -205,10 +209,14 @@ the same test binary, as the producer route's switch does.
 8. `a_head_slot_row_names_its_deepest_literal_by_the_general_route` — exact `row_atoms`.
 9. `a_generator_over_one_planned_literal_names_no_atom_by_its_row` — `row_atoms = 0`.
 10. `a_streamed_constraint_retains_the_same_identities` — the hybrid schedule's capture.
-11. `the_producer_route_keeps_its_compiled_groups_unrecorded`.
+11. `the_producer_route_keeps_its_compiled_groups_unrecorded` — the producer group-hit instrument is positive, while the two new ordinary/capture receipts remain zero.
 12. A property test over two-predicate bodies whose join order differs from literal order, with negative, structural
     and generated literals.
-13. `scripts/check.sh portable` and `oracle`, answer families identical.
+13. `cache_currency_survives_aggregate_suffixes_and_rule_changes` — exact graphs and catalogs agree across aggregate appends and new rule owners.
+14. Node-cache/inverse live-lease release and cache admission refusal tests.
+15. `scripts/check.sh portable` and `oracle`, answer families identical.
+
+The differential tests disable continuation factoring in both runs. Component factoring remains enabled; connected constraint scopes or nonnormal heads make route fixtures decline it before complete rule traversal. A separate disconnected fixture compares exact catalog and graph output while asserting that component factoring keeps its own route. The generated and head-slot cases assert exactly one row-named atom per completion when two depths are planned; the one-depth generated case asserts zero. The scoped reference is restored on unwind and stays local to its thread.
 
 If the memo is adopted: `an_atom_of_another_owner_is_not_recorded` and
 `a_memo_growth_charges_its_moves_before_it_reserves`. Each named mutation is applied once and must fail its test.
@@ -221,7 +229,7 @@ If the memo is adopted: `an_atom_of_another_owner_is_not_recorded` and
 - `WitnessRow`'s contract, `retain_witnesses` without the producer's assertions, and the lookup receipts' docs.
 - A vocabulary entry for the route and its two receipts; a CHANGELOG entry with the receipts' directions.
 - Lean `DagSharing`: add `intern_stable_under_extension` (interning in an extended table returns the earlier index),
-  with a correspondence entry relating `nodes::intern` to `DagSharing.intern` and stating the Rust obligations.
+  with a correspondence entry relating `nodes::intern` to `DagSharing.intern` and stating the Rust obligations. This list-model law does not itself prove generator safety or runtime cache currency.
 
 ## Acceptance
 
@@ -236,7 +244,7 @@ On a quiet host, one worker, binaries A (the parent) and B (with Stage A) identi
 - Pass if answers are identical on every program (a failed comparison, or any differing or erroring row, fails), if
   sudoku's end-to-end median falls by at least half its restated estimate with separated ranges, if no cell's median
   rises more than 2% with separated ranges, and if each cell reports its reach (`row_atoms / atom_lookups(A)`) and
-  reuse fraction beside its timing, with the bounded profiles' flips listed.
+  reuse fraction beside its timing, with the bounded profiles' flips listed. Here `row_atoms` excludes producer/nested element calls, while `atom_lookups(A)` is the whole matching phase's baseline count; reach is that explicit share, not total positive-body coverage. Reuse is conditional on the newly reached ordinary/capture population.
 
 ## Alternatives considered
 
@@ -255,12 +263,13 @@ On a quiet host, one worker, binaries A (the parent) and B (with Stage A) identi
 - If adopted, the memo is count-bounded and unleased, as `node_indices` is.
 - `GroundingWork` gains the public receipts `row_atoms` and `row_atom_reuses`, printed in the grounding attribution.
 
-## Open review items
+## Resolved review boundaries
 
-- The shared rule's charges must agree with "the producer route's work is unchanged": either restate the producer
-  route's receipts or make the shared rule charge exactly the producer's existing units.
-- `row_atoms` and `row_atom_reuses` as specified also count the producer route, so the reach, reuse and lookup-fall
-  statements misstate Stage A alone; scope the receipts or the statements.
-- Correctness step 3 needs the cache-currency premise stated: a cached node is valid only while its rule's emission
-  owns the cache.
-- Smaller edits: restate the reach denominators, the test list's route assertions and several citations.
+- The producer shares the owner and naming function while retaining its existing allocation, dispatch, import and
+  store charges. Its scoped materialization hooks keep their order relative to cancellation checks. Cross-revision
+  receipt measurements remain part of acceptance; code inspection alone is not a performance result.
+- The two new receipts cover ordinary emission and capture only. Every exact lookup-delta claim uses that scope and
+  successful completed comparisons with the same producer/factoring configuration.
+- Cache currency is an owner invariant: one cache per current rule/consumer, every held planned positive occurrence
+  named on each passing ordinary/capture row, and no cache carried through a new Builder or a detached aggregate suffix.
+- Stage B remains unimplemented. Corpus timing, budget flips and broad release checks remain open until measured.

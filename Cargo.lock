@@ -1912,7 +1912,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "themelios-analysis",
  "themelios-base",
@@ -1929,7 +1929,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-backend"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "serde",
@@ -1938,7 +1938,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-bench"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "serde_json",
@@ -1951,7 +1951,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-cli"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "rayon",
@@ -1978,7 +1978,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-clingo-support"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde_json",
  "tempfile",
@@ -1988,7 +1988,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-core"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "proptest",
  "zetesis-test-support",
@@ -1996,7 +1996,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-cpu"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "criterion",
  "rayon",
@@ -2006,7 +2006,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-domain"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "proptest",
  "themelios-base",
@@ -2016,7 +2016,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-engine"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "themelios-macros",
  "themelios-program",
@@ -2041,7 +2041,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-ferraris"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "criterion",
  "proptest",
@@ -2055,7 +2055,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-maintenance"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "proc-macro2",
@@ -2072,7 +2072,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-objective"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "proptest",
  "zetesis-core",
@@ -2082,7 +2082,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-presentation"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "unicode-width",
@@ -2090,7 +2090,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-reference-support"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde_json",
  "tempfile",
@@ -2104,7 +2104,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-sat"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "proptest",
  "rayon",
@@ -2119,7 +2119,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-solve"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "rayon",
  "zetesis-backend",
@@ -2139,11 +2139,11 @@ dependencies = [
 
 [[package]]
 name = "zetesis-telemetry"
-version = "0.5.0"
+version = "0.6.0"
 
 [[package]]
 name = "zetesis-test-support"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde_json",
  "zetesis-core",
@@ -2151,7 +2151,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-themelios"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "hashbrown 0.17.1",
  "proptest",
@@ -2175,7 +2175,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-theory-support"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "zetesis-core",
  "zetesis-cpu",
@@ -2184,7 +2184,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-validation"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "nix",
@@ -2205,7 +2205,7 @@ dependencies = [
 
 [[package]]
 name = "zetesis-wgpu"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bytemuck",
  "naga",

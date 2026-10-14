@@ -14,7 +14,7 @@ use crate::formula::ceiling;
 use crate::formula_binding::Binding;
 use crate::formula_ir::{ChoiceIr, HeadLiteral, HeadMeasure, HeadOperand};
 use crate::formula_support::{
-    Computation, Counters, Join, SourceSelection, StorageLease, Support, reserve,
+    Computation, Counters, Ir, Join, SourceSelection, StorageLease, Support, reserve,
 };
 use crate::{FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature};
 
@@ -45,13 +45,14 @@ impl Bijection {
 /// publishes a formula. The ordinary choice pass subsequently replays the same
 /// support and assignment. Both passes charge their work. A missing certificate
 /// never skips source validation or changes the complete aggregate semantics.
-pub(crate) fn validate_group(
-    group: &ChoiceIr,
+pub(crate) fn validate_group<'a, 'source: 'a>(
+    group: impl Into<Ir<'a, 'source, ChoiceIr>>,
     assignment: &Binding,
-    support: &Support,
+    support: &Support<'source>,
     budget: &mut Budget,
     context: Context<'_, &mut Computation<'_, '_>>,
 ) -> Result<Option<Bijection>, FormulaFailure> {
+    let group = group.into();
     let Context {
         computation,
         work:
@@ -81,7 +82,7 @@ pub(crate) fn validate_group(
     }
     let mut tuples = TupleHeads::new(computation, limits, counters, location)?;
     let mut atoms = SourceSelection::new(computation, limits, counters, location)?;
-    for element in &group.elements {
+    for element in group.map(|group| group.elements.as_slice()).iter() {
         let terms = element.key.tuple().expect("uniform tuple group checked");
         let mut local = Join::element(
             element,

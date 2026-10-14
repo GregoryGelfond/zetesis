@@ -69,7 +69,7 @@ impl Builder<'_, '_, '_> {
             binding,
             self.computation,
             self.limits,
-            &mut self.counters,
+            self.counters,
             location,
             unbound,
         )

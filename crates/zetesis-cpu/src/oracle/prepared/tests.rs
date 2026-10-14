@@ -37,7 +37,12 @@ fn program() -> Program {
         vec![],
         vec![],
     ));
-    Program::new(templates, AdmissionLimits::default()).unwrap()
+    Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn expected(value: i32) -> Model {
@@ -78,7 +83,12 @@ fn ground_heads_program() -> Program {
             vec![],
         ));
     }
-    Program::new(templates, AdmissionLimits::default()).unwrap()
+    Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 #[test]
@@ -241,7 +251,12 @@ fn changing_layout_program(block_rule: bool) -> (Program, Model) {
         ));
     }
     (
-        Program::new(templates, AdmissionLimits::default()).unwrap(),
+        Program::new(
+            templates,
+            zetesis_core::FactTables::default(),
+            AdmissionLimits::default(),
+        )
+        .unwrap(),
         Model::new(facts).unwrap(),
     )
 }
@@ -718,7 +733,12 @@ fn preparation_refuses_its_own_byte_boundary() {
 
 #[test]
 fn prepared_empty_checks_admit_their_retained_owners() {
-    let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let cancellation = Cancellation::default();
     let prepared =
         PreparedQueries::new(&program, PreparationLimits::default(), &cancellation).unwrap();

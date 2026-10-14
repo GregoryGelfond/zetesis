@@ -468,13 +468,13 @@ fn structural_variant_scans_observe_cancellation() {
         ));
         let cancellation = Cancellation::default();
         cancellation.cancel();
-        counters.cancellation = Some(cancellation);
+        counters.attach_test_control(&cancellation);
         let error = variants
             .next(&limits, counters)
             .err()
             .expect("charged scan must stop");
         assert_eq!(error.interruption(), Some(Stop::Cancelled));
-        counters.cancellation = None;
+        counters.detach_test_control();
     });
 }
 

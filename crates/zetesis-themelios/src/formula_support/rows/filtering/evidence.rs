@@ -246,31 +246,34 @@ fn failed_scalars_never_lend_positive_evidence() {
                 1,
             );
             let selection = Evidence(|_: zetesis_core::relation::Row<'_, '_>| selected);
-            with_fixture(fixture, |support, computation, budget, counters| {
-                let limits = FormulaLimits::default();
-                let mut rows = Join::filtered_rule(
-                    &rule,
-                    support,
-                    Some(&selection),
-                    None,
-                    budget,
-                    Context::new(computation, &limits, counters, location()),
-                )
-                .unwrap();
-                loop {
-                    match rows.next_row(computation, &limits, budget, counters, location()) {
-                        Ok(Some(row)) => {
-                            assert!(!row.passes);
-                            assert!(row.positives.is_none());
+            let ((), work) =
+                with_observed_fixture(fixture, |support, computation, budget, counters| {
+                    let limits = FormulaLimits::default();
+                    let mut rows = Join::filtered_rule(
+                        &rule,
+                        support,
+                        Some(&selection),
+                        None,
+                        budget,
+                        Context::new(computation, &limits, counters, location()),
+                    )
+                    .unwrap();
+                    loop {
+                        match rows.next_row(computation, &limits, budget, counters, location()) {
+                            Ok(Some(row)) => {
+                                assert!(!row.passes);
+                                assert!(row.positives.is_none());
+                            }
+                            Ok(None) => break,
+                            Err(error) => panic!("unexpected failure: {error:?}"),
                         }
-                        Ok(None) => break,
-                        Err(error) => panic!("unexpected failure: {error:?}"),
                     }
-                }
-                // Division by zero remains the join's original family diagnostic;
-                // the selected-row loan does not turn it into scalar success.
-                assert_eq!(rows.join.family.zero.is_some(), divisor == 0);
-            });
+                    // Division by zero remains the join's original family diagnostic;
+                    // the selected-row loan does not turn it into scalar success.
+                    assert_eq!(rows.join.family.zero.is_some(), divisor == 0);
+                });
+            assert_eq!(work.integer_comparison_declines.unwrap() > 0, divisor == 0);
+            assert_eq!(work.integer_comparisons.unwrap() > 0, divisor != 0);
         }
     }
 }

@@ -112,6 +112,46 @@ fn source_work_refusal_remains_a_preparation_stop() {
     assert!(json["statistics"]["query_execution"]["snapshot"]["preparation"].is_null());
 }
 
+fn minimum_submission_storage(
+    program: &zetesis_core::Program,
+    config: &zetesis_cli::SolveConfig,
+) -> usize {
+    let seed = zetesis_core::Seed::new(program, []).unwrap();
+    zetesis_test_support::thresholds::first_success(config.max_closure_bytes, |max_closure_bytes| {
+        // Each probe starts with fresh preparation and workspace ownership.
+        let oracle = zetesis_cpu::BatchOracle::new(config.workers, config.batch_size)
+            .unwrap()
+            .with_closure_storage_limit(config.max_closure_batch_bytes)
+            .with_preparation_limits(zetesis_cpu::PreparationLimits {
+                max_work: config.max_source_work,
+                max_bytes: config.max_closure_batch_bytes,
+                ..zetesis_cpu::PreparationLimits::default()
+            });
+        let checks = match oracle.check_batch(
+            program,
+            std::slice::from_ref(&seed),
+            zetesis_cpu::Limits {
+                max_work: config.max_work,
+                max_derived_atoms: config.max_atoms,
+                max_closure_bytes,
+            },
+            &Cancellation::default(),
+        ) {
+            Ok(checks) => checks,
+            Err(zetesis_cpu::BatchError::Preparation(Stop::StorageLimit)) => return false,
+            Err(error) => panic!("unexpected submission refusal: {error}"),
+        };
+        assert!(matches!(
+            checks.as_slice(),
+            [Ok(_) | Err(Stop::StorageLimit)]
+        ));
+        let statistics = oracle.query_statistics().unwrap();
+        assert_eq!(statistics.preparation_builds, 1);
+        assert_eq!(statistics.active_workspaces, 1);
+        true
+    })
+}
+
 #[test]
 fn candidate_storage_refusal_follows_admitted_preparation() {
     let owner =
@@ -124,9 +164,9 @@ fn candidate_storage_refusal_follows_admitted_preparation() {
     )
     .unwrap();
     let mut config = zetesis_cli::PublicationConfig::from(&options(&[]));
-    // Admit exactly the immutable preparation. Mutable candidate storage has
-    // no remaining allowance; this is a later boundary than a zero-byte setup.
-    config.solve.max_closure_bytes = prepared.statistics().retained_bytes;
+    // Admit the whole submission, including the shared closed-fact claim.
+    // This minimum allocates the active workspace but cannot hold its closure.
+    config.solve.max_closure_bytes = minimum_submission_storage(owner.program(), &config.solve);
     let (report, json) = prepared::relational_json("a.", &config);
     assert_eq!(report.models, 0);
     assert_eq!(report.completion, Completion::Interrupted);

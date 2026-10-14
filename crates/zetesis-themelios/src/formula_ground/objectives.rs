@@ -32,7 +32,7 @@ use crate::formula_support::{
 use crate::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 
 pub(super) fn prepare<'source>(
-    prepared: &Prepared,
+    prepared: &'source Prepared,
     completed: &CompletedQueries<'source>,
     budget: &mut Budget,
     warnings: &mut Warnings,
@@ -213,7 +213,7 @@ struct Fields {
 impl<'source> Preparation<'_, '_, 'source> {
     fn objective(
         &mut self,
-        objective: &ObjectiveIr,
+        objective: &'source ObjectiveIr,
         support: &Support<'source>,
         may_have_numeric_weight: bool,
         presence: &Presence<'_>,
@@ -231,7 +231,7 @@ impl<'source> Preparation<'_, '_, 'source> {
             return self.lifted_objective(objective, support, may_have_numeric_weight, priority);
         }
         let mut bindings = Join::objective(
-            objective,
+            crate::formula_support::Ir::Source(objective),
             support,
             self.computation,
             self.limits,
@@ -316,7 +316,7 @@ impl<'source> Preparation<'_, '_, 'source> {
 
     fn lifted_objective(
         &mut self,
-        objective: &ObjectiveIr,
+        objective: &'source ObjectiveIr,
         support: &Support<'source>,
         may_have_numeric_weight: bool,
         priority: i32,
@@ -386,11 +386,11 @@ impl<'source> Preparation<'_, '_, 'source> {
 
     fn numeric_rows(
         &mut self,
-        objective: &ObjectiveIr,
+        objective: &'source ObjectiveIr,
         support: &Support<'source>,
     ) -> Result<(bool, Evidence), FormulaFailure> {
         let mut bindings = Join::objective(
-            objective,
+            crate::formula_support::Ir::Source(objective),
             support,
             self.computation,
             self.limits,
@@ -434,7 +434,7 @@ impl<'source> Preparation<'_, '_, 'source> {
 
     fn validate_scopes(
         &mut self,
-        objective: &ObjectiveIr,
+        objective: &'source ObjectiveIr,
         binding: &Binding,
         support: &Support<'source>,
     ) -> Result<(), FormulaFailure> {
@@ -455,7 +455,7 @@ impl<'source> Preparation<'_, '_, 'source> {
 
     fn resolve(
         &mut self,
-        objective: &ObjectiveIr,
+        objective: &'source ObjectiveIr,
         binding: &Binding,
         selected: bool,
         family: &mut Evidence,
@@ -588,7 +588,7 @@ impl<'source> Preparation<'_, '_, 'source> {
 
     fn specialize(
         &mut self,
-        objective: &ObjectiveIr,
+        objective: &'source ObjectiveIr,
         binding: &Binding,
         resolved: Resolved,
         body: Option<ValidatedBody>,
@@ -725,7 +725,7 @@ impl<'source> Preparation<'_, '_, 'source> {
 
     fn retain(
         &mut self,
-        objective: &ObjectiveIr,
+        objective: &'source ObjectiveIr,
         template: PendingElement,
     ) -> Result<(), FormulaFailure> {
         self.capacity(objective.location)?;

@@ -699,7 +699,10 @@ fn multiple_aggregates_require_conservative_eligibility() {
         catalog: &mut catalog,
         work: GroundingWork::new(&FormulaLimits::default(), &mut counters, location),
     }
-    .prepare(raised.program(), metadata.project_selection().clone())
+    .prepare(
+        &std::sync::Arc::new(raised.program().clone()),
+        metadata.project_selection().clone(),
+    )
     .unwrap();
     assert_eq!(prepared.objectives.len(), 1);
     assert!(prepared.objectives[0].needs_eligibility_query);

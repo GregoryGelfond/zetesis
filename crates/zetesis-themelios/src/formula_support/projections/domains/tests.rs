@@ -193,7 +193,7 @@ fn all_allowed_groups_keep_indexed_probes() {
             assert!(
                 join.projections
                     .domains(
-                        join.literals,
+                        join.literals.get(),
                         target(join, "p"),
                         &values,
                         Context::new(&*computation, &bounded, counters, location),
@@ -247,7 +247,7 @@ fn matching_prefix_is_not_compared_twice() {
                 let domains = join
                     .projections
                     .domains(
-                        join.literals,
+                        join.literals.get(),
                         target(join, "p"),
                         &values,
                         Context::new(&*computation, &limits, counters, location),
@@ -313,7 +313,7 @@ fn uncovered_known_inputs_decline_selection() {
             let domains = join
                 .projections
                 .domains(
-                    join.literals,
+                    join.literals.get(),
                     target(join, "c"),
                     &values,
                     Context::new(&*computation, &FormulaLimits::default(), counters, location),
@@ -341,7 +341,7 @@ fn foreign_known_values_cannot_select_local_rows() {
             });
             assert!(matches!(
                 join.projections.domains(
-                    join.literals,
+                    join.literals.get(),
                     target(join, "p"),
                     &values,
                     Context::new(&*computation, &FormulaLimits::default(), counters, location)
@@ -372,7 +372,7 @@ fn domain_work_cutoffs_are_inclusive() {
             let domains = join
                 .projections
                 .domains(
-                    join.literals,
+                    join.literals.get(),
                     pattern,
                     &values,
                     Context::new(&*computation, &limits, counters, location),
@@ -390,7 +390,7 @@ fn domain_work_cutoffs_are_inclusive() {
                     ..limits
                 };
                 let result = join.projections.domains(
-                    join.literals,
+                    join.literals.get(),
                     pattern,
                     &values,
                     Context::new(&*computation, &bounded, counters, location),
@@ -427,10 +427,10 @@ fn cancelled_domains_cannot_publish_a_restriction() {
             );
             let cancellation = zetesis_cpu::Cancellation::default();
             cancellation.cancel();
-            counters.cancellation = Some(cancellation);
+            counters.attach_test_control(&cancellation);
             assert!(matches!(
                 join.projections.domains(
-                    join.literals,
+                    join.literals.get(),
                     target(join, "p"),
                     &values,
                     Context::new(&*computation, &FormulaLimits::default(), counters, location)

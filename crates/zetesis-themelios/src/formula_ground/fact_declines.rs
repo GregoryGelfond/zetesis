@@ -66,7 +66,7 @@ fn every_join_path_attempt_declines_on_a_fact_rule() {
                         builder.computation,
                         builder.limits,
                         builder.budget,
-                        &mut builder.counters,
+                        builder.counters,
                     )
                     .unwrap();
                     outer
@@ -74,7 +74,7 @@ fn every_join_path_attempt_declines_on_a_fact_rule() {
                             rule,
                             builder.computation,
                             builder.limits,
-                            &mut builder.counters,
+                            builder.counters,
                         )
                         .unwrap();
                     // Continuations: no generated join, no binding plan.
@@ -94,7 +94,7 @@ fn every_join_path_attempt_declines_on_a_fact_rule() {
                         crate::formula_support::witnesses::eligible(
                             rule,
                             &limits,
-                            &mut builder.counters
+                            builder.counters
                         )
                         .unwrap()
                         .is_none()
@@ -106,7 +106,7 @@ fn every_join_path_attempt_declines_on_a_fact_rule() {
                                 rule,
                                 builder.computation,
                                 builder.limits,
-                                &mut builder.counters,
+                                builder.counters,
                             )
                             .unwrap()
                     );

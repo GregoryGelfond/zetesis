@@ -180,20 +180,31 @@ fn zero_work_preserves_an_exhausted_allowance() {
 }
 
 #[test]
-fn zero_work_observes_cancellation() {
+fn zero_work_does_not_observe_cancellation() {
     let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
     let cancellation = Cancellation::default();
     cancellation.cancel();
     let mut counters = super::Counters::with_allowance(allowance.clone(), &cancellation);
+    counters
+        .charge_work(0, &FormulaLimits::default(), location())
+        .unwrap();
+    assert_eq!(counters.accounting.work, 0);
+    assert_eq!(allowance.statistics().work, 0);
+}
+
+#[test]
+fn explicit_poll_observes_without_charging() {
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let counters = super::Counters::default().with_cancellation(Some(&cancellation));
     assert!(matches!(
-        counters.charge_work(0, &FormulaLimits::default(), location()),
+        counters.poll(location()),
         Err(FormulaFailure::Interrupted {
             reason: Stop::Cancelled,
             ..
         })
     ));
     assert_eq!(counters.accounting.work, 0);
-    assert_eq!(allowance.statistics().work, 0);
 }
 
 #[derive(Default)]

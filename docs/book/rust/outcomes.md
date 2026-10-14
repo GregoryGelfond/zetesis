@@ -67,8 +67,9 @@ established its final least consequence set.
 Formula enumeration bounds retained projection history separately from authored
 encoding. `max_projection_entries` counts distinct excluded keys;
 `max_projection_nodes` counts logical trie nodes; `max_projection_bytes` admits
-named capacity and its conservative growth overlap. The same fields are available
-as advanced CLI options. `statistics.search.projection_history` reports entries,
+named capacity and its conservative growth overlap. These are explicit library
+limits; the CLI derives their capacities from its shared `--memory` allowance.
+`statistics.search.projection_history` reports entries,
 nodes, retained/peak bytes and its subtotal of cumulative search work. A history
 refusal retains any already checked answer prefix and reports incomplete coverage;
 it does not turn a completed answer into a rejected candidate. Under
@@ -201,12 +202,33 @@ The latter moves the existing vector without copying terms or allocating new
 storage. Read `statistics()` first if the evaluation's work receipt is needed.
 
 `publish_prepared` accepts an admitted owner and `PublicationConfig`, containing
-ordinary `SolveConfig` and observation limits. It needs no argument parser,
+ordinary `SolveConfig`, observation limits and a `PublicationMode`. It needs no argument parser,
 global stream or complete `WorldView` buffer. `run_with_renderer` and
 `run_bundle_with_renderer` are source conveniences using the existing CLI options;
 their `json` flag does not replace the injected renderer. The prepared entry
 suppresses routine execution messages; warning diagnostics and typed failures
 remain available.
+
+`PublicationMode::Count` drains the selected full family, bypassing `#show`
+evaluation and `#project` history. It delivers no answer callbacks and leaves
+`Publication::models()` at zero: those are published model records. Pair it with
+`CountRenderer` for a terminal integer and newline. The renderer publishes only
+when the invocation has no failure or publication stop and semantic exhaustion
+establishes `SemanticOutcome::complete_answer_count()`. Cancellation, resource
+stops and failures produce no total. A writer or flush failure preserves complete
+semantic evidence without acknowledging the summary.
+
+`SessionBuilder::counting()` supplies the same writer-free policy: it clears
+projection, requests exhaustive ordinary enumeration, and retains at most one
+optimal representative while the existing incumbent counter counts all ties.
+Drain the session and read `complete_answer_count()` from its outcome. The method
+returns `None` for incomplete or absent coverage, `Some(0)` for complete
+inconsistency, and the exact full-family count after exhaustion. The counting
+policy uses the final answer selection at start, independently of builder call
+order, and ignores projection requests. Search, scoring, memory and control
+limits retain their usual effect; counting does not prove coverage before the
+engine establishes it. An unavailable count is explained on diagnostics with the
+typed stop reason, including cancellation before admission finishes.
 
 `needs_stage_timings()` defaults to `false`. A custom renderer that needs coarse
 host stages overrides it; a wrapper delegates the preference of the view it
@@ -337,8 +359,8 @@ operations thereafter, so at most 255 further charged operations follow a
 requested stop. A refused work charge observes control first, and each operation
 settles its outcome at its exit: when it would report a resource refusal (work,
 storage, a named ceiling, a size the host cannot represent, or an allocation), it
-observes control and reports a requested stop instead. A requested stop
-therefore takes precedence over every resource refusal; errors about the
+observes control and reports an observed stop instead. A stop observed at that
+exit therefore takes precedence over every resource refusal; errors about the
 program's shape, identity or invariants are reported as found. These operations
 are original and frozen formula evaluation (with the exhaustive reference check
 and native aggregate eligibility), the tight, positive and stratified
@@ -347,6 +369,30 @@ emission, and static closure checks. Each charges a `zetesis_cpu::Meter`, which
 carries the cadence, and runs inside `Cancellation::metered`, the only source of
 a meter, which settles the outcome where the operation returns with its error
 type's `Refusal` classification; none of them can skip the precedence.
+
+Grounding's cumulative work account uses the same 256-unit cadence through
+`zetesis_cpu::poll_due(charged, amount)`. Its controlled scopes are charged
+formula preparation, source classification and exact evaluation, instantiation,
+terminal partition and admission, shared constraint-checker preparation, each
+model or region check, each consequence pass, and each answer reconstruction.
+Every scope observes at entry and exit. Exit settlement preserves a resource
+refusal's own source site and original-program envelope. A shape, identity,
+capability or semantic evaluation failure retains its original meaning.
+Independent theory validation charges no grounding account and keeps its
+existing failure order.
+
+A grounding charge observes when its admitted range contains a zero-based
+multiple of 256, and before refusing its work ceiling. A zero charge counts and
+observes nothing. Explicit `poll` calls precede multi-element work with no
+internal control hook; `absorb` records the nested operation's completed work
+before observing a crossed boundary. Single-atom catalog operations are bounded
+cooperative intervals. Finite-table zero callbacks mark observation points;
+grounding's callback leaves them unobserved and carries the cadence on positive
+charges. A resource refusal at such an allocation boundary is settled at the
+controlled exit. Completed results and receipts are unchanged. Interrupted work
+can include up to 255 further admitted units, plus an operation already in flight.
+A completion exit reports a stop it observes there; a stop arriving after that
+observation requires a later caller observation.
 
 A metered operation that runs another's body passes it its own meter. The
 positive and stratified certificates evaluate original truth this way, so the
@@ -373,7 +419,8 @@ control again. Coarser operations, such as objective reduction, search decisions
 and aggregate lowering, still poll before every charged step. A computation that
 completes between two boundaries may return its complete result before observing
 a stop requested since its last observation; static closure checks and partition
-construction poll again before returning a completed result.
+construction and grounding's controlled scopes poll again before returning a
+completed result.
 
 Cancellation is observed at cooperative polling boundaries, not by forcibly
 terminating arbitrary work. A future deadline owns a timer that sets an expiry
@@ -526,3 +573,19 @@ entered slots. Both byte counters exclude allocator and hash-table control
 overhead, thread stacks, the original theory, the candidate cursor and GPU
 storage. Neither counter measures RSS. These fields are preserved in failed
 attempts and in the CLI's JSON completion statistics.
+
+## Diagnostic writer boundaries
+
+The CLI's injected diagnostics writer receives each execution-detail record
+(metadata, information and execution observations, plus lines from the `test`
+workflow) in one `write_all` call. A styled source diagnostic uses one call for
+its heading, one per rendered line and one for its closing newline. A plain
+source diagnostic keeps its prefix and rendering fragments separate, followed
+by one call for its final newline. The statistics report remains one unit.
+
+The emitted bytes are unchanged. A writer that fails by byte position retains
+that boundary; a writer that fails by call content sees the complete units.
+If rendering a record or statistics report fails before writing, the operation
+returns `io::ErrorKind::Other` without writing that unit, rather than panicking.
+A `write_all` call can still partially write before returning an error; one call
+does not guarantee atomic publication.

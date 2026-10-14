@@ -6,7 +6,12 @@ use zetesis_core::{
 use zetesis_cpu::{Cancellation, Limits, check, lazy};
 
 fn source(constraint: bool) -> Program {
-    Program::new(templates(constraint), AdmissionLimits::default()).unwrap()
+    Program::new(
+        templates(constraint),
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn templates(constraint: bool) -> Vec<Template> {
@@ -109,7 +114,12 @@ fn shared_closures_retain_one_finished_catalog() {
             vec![],
             vec![],
         ));
-        Program::new(templates, AdmissionLimits::default()).unwrap()
+        Program::new(
+            templates,
+            zetesis_core::FactTables::default(),
+            AdmissionLimits::default(),
+        )
+        .unwrap()
     };
     let chosen = Atom::new(Predicate::new("zchoice", 0).unwrap(), vec![]).unwrap();
     let checks = lazy::check_with(

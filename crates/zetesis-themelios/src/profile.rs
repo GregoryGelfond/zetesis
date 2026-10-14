@@ -43,100 +43,141 @@ fn check_profile(
     includes: bool,
     formula: bool,
 ) -> Result<usize, AdmissionFailure> {
-    let nodes = check_traversal(parsed, options, extended, formula)?;
+    let [result] = check_profiles(parsed, options, extended, includes, [formula]);
+    result
+}
+
+/// Both verdicts share one syntax traversal and one statement iteration. A
+/// refusal remains local to its profile and retains that profile's first error.
+pub(crate) fn check_automatic(
+    parsed: &Parse<ast::Program>,
+    options: AdmissionOptions,
+    includes: bool,
+) -> [Result<usize, AdmissionFailure>; 2] {
+    check_profiles(parsed, options, true, includes, [false, true])
+}
+
+fn check_profiles<const N: usize>(
+    parsed: &Parse<ast::Program>,
+    options: AdmissionOptions,
+    extended: bool,
+    includes: bool,
+    formulas: [bool; N],
+) -> [Result<usize, AdmissionFailure>; N] {
+    let mut results = check_traversal(parsed, options, extended, formulas);
     for statement in parsed.tree().statements() {
-        if let ast::Statement::ProgramPart(part) = &statement {
-            check_program_part(part, parsed)?;
-            continue;
-        }
-        if extended && matches!(statement, ast::Statement::Const(_)) {
-            continue;
-        }
-        if extended
-            && matches!(
-                statement,
-                ast::Statement::Defined(_) | ast::Statement::Show(_) | ast::Statement::Project(_)
-            )
-        {
-            let body = match &statement {
-                ast::Statement::Show(show) => show.body(),
-                ast::Statement::Project(project) => project.body(),
-                _ => None,
-            };
-            if formula && let Some(body) = body {
-                for (index, element) in body.elements().enumerate() {
-                    if index >= options.max_body_elements {
-                        return Err(AdmissionFailure::Limit {
-                            resource: InputLimit::BodyElements,
-                            limit: options.max_body_elements,
-                            observed: index + 1,
-                            location: parsed.location(element.syntax().text_range()).into(),
-                        });
-                    }
-                }
-            }
-            crate::metadata::check_syntax(&statement, parsed, formula)?;
-            continue;
-        }
-        if formula {
-            if let ast::Statement::WeakConstraint(weak) = &statement {
-                check_weak(weak, parsed, options)?;
-                continue;
-            }
-            if matches!(statement, ast::Statement::Optimize(_)) {
-                continue;
+        for (formula, result) in formulas.into_iter().zip(&mut results) {
+            if result.is_ok()
+                && let Err(error) =
+                    check_statement(&statement, parsed, options, extended, includes, formula)
+            {
+                *result = Err(error);
             }
         }
-        if includes && matches!(statement, ast::Statement::Include(_)) {
-            continue;
+        if results.iter().all(Result::is_err) {
+            break;
         }
-        let ast::Statement::Rule(rule) = statement else {
-            return Err(unsupported(
-                ProfileFeature::Statement,
-                parsed.location(statement.syntax().text_range()),
-            ));
+    }
+    results
+}
+
+fn check_statement(
+    statement: &ast::Statement,
+    parsed: &Parse<ast::Program>,
+    options: AdmissionOptions,
+    extended: bool,
+    includes: bool,
+    formula: bool,
+) -> Result<(), AdmissionFailure> {
+    if let ast::Statement::ProgramPart(part) = statement {
+        check_program_part(part, parsed)?;
+        return Ok(());
+    }
+    if extended && matches!(statement, ast::Statement::Const(_)) {
+        return Ok(());
+    }
+    if extended
+        && matches!(
+            statement,
+            ast::Statement::Defined(_) | ast::Statement::Show(_) | ast::Statement::Project(_)
+        )
+    {
+        let body = match statement {
+            ast::Statement::Show(show) => show.body(),
+            ast::Statement::Project(project) => project.body(),
+            _ => None,
         };
-        if formula {
-            match rule.head() {
-                None
-                | Some(
-                    ast::Head::Literal(_) | ast::Head::Aggregate(_) | ast::Head::Disjunction(_),
-                ) => {}
-                Some(head) => {
-                    return Err(unsupported(
-                        ProfileFeature::Head,
-                        parsed.location(head.syntax().text_range()),
-                    ));
-                }
-            }
-        } else {
-            check_head(&rule, parsed)?;
-        }
-        if let Some(body) = rule.body() {
+        if formula && let Some(body) = body {
             for (index, element) in body.elements().enumerate() {
-                let location = parsed.location(element.syntax().text_range());
                 if index >= options.max_body_elements {
                     return Err(AdmissionFailure::Limit {
                         resource: InputLimit::BodyElements,
                         limit: options.max_body_elements,
                         observed: index + 1,
-                        location: location.into(),
+                        location: parsed.location(element.syntax().text_range()).into(),
                     });
-                }
-                if !(matches!(element, ast::BodyElement::Literal(_))
-                    || formula
-                        && matches!(
-                            element,
-                            ast::BodyElement::Aggregate(_)
-                                | ast::BodyElement::ConditionalLiteral(_)
-                        ))
-                {
-                    return Err(unsupported(ProfileFeature::BodyElement, location));
                 }
             }
         }
+        crate::metadata::check_syntax(statement, parsed, formula)?;
+        return Ok(());
     }
-    Ok(nodes)
+    if formula {
+        if let ast::Statement::WeakConstraint(weak) = statement {
+            check_weak(weak, parsed, options)?;
+            return Ok(());
+        }
+        if matches!(statement, ast::Statement::Optimize(_)) {
+            return Ok(());
+        }
+    }
+    if includes && matches!(statement, ast::Statement::Include(_)) {
+        return Ok(());
+    }
+    let ast::Statement::Rule(rule) = statement else {
+        return Err(unsupported(
+            ProfileFeature::Statement,
+            parsed.location(statement.syntax().text_range()),
+        ));
+    };
+    if formula {
+        match rule.head() {
+            None
+            | Some(ast::Head::Literal(_) | ast::Head::Aggregate(_) | ast::Head::Disjunction(_)) => {
+            }
+            Some(head) => {
+                return Err(unsupported(
+                    ProfileFeature::Head,
+                    parsed.location(head.syntax().text_range()),
+                ));
+            }
+        }
+    } else {
+        check_head(rule, parsed)?;
+    }
+    if let Some(body) = rule.body() {
+        for (index, element) in body.elements().enumerate() {
+            let location = parsed.location(element.syntax().text_range());
+            if index >= options.max_body_elements {
+                return Err(AdmissionFailure::Limit {
+                    resource: InputLimit::BodyElements,
+                    limit: options.max_body_elements,
+                    observed: index + 1,
+                    location: location.into(),
+                });
+            }
+            if !(matches!(element, ast::BodyElement::Literal(_))
+                || formula
+                    && matches!(
+                        element,
+                        ast::BodyElement::Aggregate(_) | ast::BodyElement::ConditionalLiteral(_)
+                    ))
+            {
+                return Err(unsupported(ProfileFeature::BodyElement, location));
+            }
+        }
+    }
+    Ok(())
 }
 
 fn check_program_part(
@@ -158,12 +199,13 @@ fn check_program_part(
     Ok(())
 }
 
-fn check_traversal(
+fn check_traversal<const N: usize>(
     parsed: &Parse<ast::Program>,
     options: AdmissionOptions,
     extended: bool,
-    formula: bool,
-) -> Result<usize, AdmissionFailure> {
+    formulas: [bool; N],
+) -> [Result<usize, AdmissionFailure>; N] {
+    let mut results = std::array::from_fn(|_| Ok(0));
     let mut observation_depth = None;
     let mut count = 0;
     let mut depth = 0;
@@ -172,34 +214,25 @@ fn check_traversal(
             WalkEvent::Enter(node) => {
                 count += 1;
                 depth += 1;
-                if formula && ast::ShowStatement::cast(node.clone()).is_some() {
+                if ast::ShowStatement::cast(node.clone()).is_some() {
                     observation_depth = Some(depth);
                 }
-                let location = parsed.location(node.text_range());
-                for (resource, observed, limit) in [
-                    (InputLimit::SyntaxNodes, count, options.max_syntax_nodes),
-                    (InputLimit::SyntaxDepth, depth, options.max_syntax_depth),
-                ] {
-                    if observed > limit {
-                        return Err(AdmissionFailure::Limit {
-                            resource,
-                            limit,
-                            observed,
-                            location: location.into(),
-                        });
+                for (formula, result) in formulas.into_iter().zip(&mut results) {
+                    if result.is_ok() {
+                        *result = check_node(
+                            &node,
+                            parsed,
+                            options,
+                            extended,
+                            formula && observation_depth.is_some(),
+                            count,
+                            depth,
+                        )
+                        .map(|()| count);
                     }
                 }
-                if extended {
-                    if observation_depth.is_none()
-                        && matches!(
-                            node.kind(),
-                            SyntaxKind::EXTERNAL_TERM | SyntaxKind::SPLICE_TERM
-                        )
-                    {
-                        return Err(unsupported(ProfileFeature::Term, location));
-                    }
-                } else {
-                    check_term_syntax(&node, parsed)?;
+                if results.iter().all(Result::is_err) {
+                    break;
                 }
             }
             WalkEvent::Leave(_) => {
@@ -210,7 +243,45 @@ fn check_traversal(
             }
         }
     }
-    Ok(count)
+    results
+}
+
+fn check_node(
+    node: &SyntaxNode,
+    parsed: &Parse<ast::Program>,
+    options: AdmissionOptions,
+    extended: bool,
+    observation: bool,
+    count: usize,
+    depth: usize,
+) -> Result<(), AdmissionFailure> {
+    let location = parsed.location(node.text_range());
+    for (resource, observed, limit) in [
+        (InputLimit::SyntaxNodes, count, options.max_syntax_nodes),
+        (InputLimit::SyntaxDepth, depth, options.max_syntax_depth),
+    ] {
+        if observed > limit {
+            return Err(AdmissionFailure::Limit {
+                resource,
+                limit,
+                observed,
+                location: location.into(),
+            });
+        }
+    }
+    if extended {
+        if !observation
+            && matches!(
+                node.kind(),
+                SyntaxKind::EXTERNAL_TERM | SyntaxKind::SPLICE_TERM
+            )
+        {
+            return Err(unsupported(ProfileFeature::Term, location));
+        }
+    } else {
+        check_term_syntax(node, parsed)?;
+    }
+    Ok(())
 }
 
 fn check_term_syntax(

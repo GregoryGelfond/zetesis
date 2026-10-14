@@ -128,6 +128,7 @@ fn qualify_lazy_worlds_match_exact_frozen_cpu_closures(backend: GpuApi) {
             ),
             Template::new(None, vec![nullary("cross")], vec![], vec![], vec![]),
         ],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();
@@ -191,6 +192,7 @@ fn qualify_lazy_growth_preserves_previous_round_truth(backend: GpuApi) {
                     )
                 })
                 .collect(),
+            zetesis_core::FactTables::default(),
             AdmissionLimits::default(),
         )
         .unwrap();
@@ -230,7 +232,12 @@ fn qualify_lazy_catalog_fits_when_static_carrier_refuses(backend: GpuApi) {
         vec![pattern("g", vec![Term::Variable(0); 3])],
         vec![],
     ));
-    let program = Program::new(templates, AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     assert!(
         GroundProgram::compile(
             &program,
@@ -274,7 +281,9 @@ fn vulkan_source_selections_preserve_each_frozen_closure() {
     qualify_source_selections_preserve_each_frozen_closure(GpuApi::Vulkan);
 }
 
-fn qualify_source_selections_preserve_each_frozen_closure(backend: GpuApi) {
+/// Frozen selections gain the same shared atom on different rounds. This makes
+/// reusing stale membership observable even though the canonical atom is unchanged.
+fn delayed_shared_membership_program() -> Program {
     let constant = |name, value| pattern(name, vec![Term::Constant(Value::Number(value))]);
     let mut templates = Vec::new();
     for value in 0..2 {
@@ -313,7 +322,16 @@ fn qualify_source_selections_preserve_each_frozen_closure(backend: GpuApi) {
     ] {
         templates.push(Template::new(Some(head), positive, vec![], vec![], vec![]));
     }
-    let program = Program::new(templates, AdmissionLimits::default()).unwrap();
+    Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+fn qualify_source_selections_preserve_each_frozen_closure(backend: GpuApi) {
+    let program = delayed_shared_membership_program();
     let seeds: Vec<_> = (0..33)
         .map(|index| {
             Seed::new(

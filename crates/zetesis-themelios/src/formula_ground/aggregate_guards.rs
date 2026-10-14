@@ -114,16 +114,15 @@ impl Builder<'_, '_, '_> {
         assignment: &Binding,
         location: ProgramSite,
     ) -> Result<(Buffer<NumericComparison>, Buffer<NumericGuard>), FormulaFailure> {
-        let mut evaluated =
-            Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
-        let mut numeric = Buffer::new(self.computation, self.limits, &mut self.counters, location)?;
+        let mut evaluated = Buffer::new(self.computation, self.limits, self.counters, location)?;
+        let mut numeric = Buffer::new(self.computation, self.limits, self.counters, location)?;
         for guard in guards {
             let key = formula_support::expression(
                 &guard.bound,
                 assignment,
                 self.computation,
                 self.limits,
-                &mut self.counters,
+                self.counters,
                 location,
             )?;
             let value = self.computation.read().term(&key).map_err(|error| {
@@ -132,13 +131,8 @@ impl Builder<'_, '_, '_> {
                     location,
                 )
             })?;
-            let bound = numeric_comparison(
-                guard.relation,
-                value,
-                self.limits,
-                &mut self.counters,
-                location,
-            )?;
+            let bound =
+                numeric_comparison(guard.relation, value, self.limits, self.counters, location)?;
             if let NumericComparison::Threshold(bound) = bound {
                 numeric.push(
                     NumericGuard {
@@ -147,7 +141,7 @@ impl Builder<'_, '_, '_> {
                     },
                     self.computation,
                     self.limits,
-                    &mut self.counters,
+                    self.counters,
                     location,
                 )?;
             }
@@ -155,7 +149,7 @@ impl Builder<'_, '_, '_> {
                 bound,
                 self.computation,
                 self.limits,
-                &mut self.counters,
+                self.counters,
                 location,
             )?;
         }
@@ -202,7 +196,7 @@ impl Builder<'_, '_, '_> {
             transaction,
             self.computation,
             self.limits,
-            &mut self.counters,
+            self.counters,
             location,
         )?;
         storage.observe(build.root_storage_bytes(), location)?;
@@ -211,7 +205,7 @@ impl Builder<'_, '_, '_> {
             0,
             header,
             self.limits,
-            &self.counters,
+            self.counters,
             location,
         )?;
         Ok(GuardFamily {

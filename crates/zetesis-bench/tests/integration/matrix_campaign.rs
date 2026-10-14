@@ -23,7 +23,7 @@ struct Fixture {
 fn executable(path: &Path, body: &str) {
     fs::write(
         path,
-        format!("#!/bin/sh\nif [ \"$#\" -eq 1 ]; then echo fixture; exit 0; fi\n{body}\n"),
+        format!("#!/bin/sh\nif [ \"$#\" -eq 1 ] || [ \"$*\" = \"solve --help-all\" ]; then echo fixture; exit 0; fi\n{body}\n"),
     )
     .unwrap();
     fs::set_permissions(path, fs::Permissions::from_mode(0o700)).unwrap();
@@ -997,4 +997,158 @@ fn a_run_retains_failed_qualification_as_failed_evidence() {
                 && sample["slot"]["producer"]["solver"] == "native"
                 && sample["decision"] != "pass")
     );
+}
+
+#[test]
+fn external_manifest_uses_the_existing_explicit_matrix() {
+    let fixture = Fixture::new();
+    let root = fixture.report.parent().unwrap();
+    fs::write(root.join("private.lp"), ":-.\n").unwrap();
+    let manifest = root.join("workloads.json");
+    let specification = serde_json::json!({
+        "schema_version": 1,
+        "root": ".",
+        "cases": [{
+            "entry": "private.lp",
+            "contract": {
+                "satisfiability": "unsat", "family": "all", "model_count": 0,
+                "cost": null, "witnesses": [], "required_symbols": [], "notes": []
+            },
+            "files": [{
+                "path": "private.lp",
+                "sha256": "86235fcc6750736ac152dd2f76f91e906c27c4f08f231fd3a48f4423ded830ea",
+                "includes": []
+            }]
+        }]
+    });
+    fs::write(&manifest, serde_json::to_vec(&specification).unwrap()).unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_zetesis-bench"))
+        .arg("run")
+        .arg(&fixture.corpus)
+        .arg("--workloads")
+        .arg(&manifest)
+        .arg("--zetesis")
+        .arg(&fixture.native)
+        .arg("--clingo")
+        .arg(&fixture.reference)
+        .arg("--report")
+        .arg(&fixture.report)
+        .args(["--warmups", "0", "--repetitions", "1", "--memory-runs", "0"])
+        .output()
+        .unwrap();
+    // The synthetic native producer refuses; the reference completes its empty
+    // family. The adapter must retain both outcomes, not select corpus cases.
+    assert!(
+        !output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        fixture.report.is_file(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let evidence = fixture.evidence();
+    assert_eq!(evidence["accounted"], true);
+    assert_eq!(evidence["report"]["schema"], 2);
+    assert_eq!(evidence["report"]["faults"], serde_json::json!([]));
+    assert_eq!(evidence["report"]["metadata"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        evidence["report"]["cases"],
+        serde_json::json!(["private.lp"])
+    );
+    assert_eq!(evidence["report"]["workloads"].as_array().unwrap().len(), 1);
+    let samples = evidence["report"]["samples"].as_array().unwrap();
+    assert_eq!(samples.len(), 4);
+    let qualification: Vec<_> = samples
+        .iter()
+        .filter(|sample| sample["slot"]["phase"] == "qualification")
+        .collect();
+    assert_eq!(qualification.len(), 2);
+    assert!(qualification.iter().any(|sample| {
+        sample["slot"]["producer"]["solver"] == "reference" && sample["decision"] == "pass"
+    }));
+    assert!(qualification.iter().any(|sample| {
+        sample["slot"]["producer"]["solver"] == "native" && sample["decision"] == "refused"
+    }));
+    assert!(
+        qualification
+            .iter()
+            .all(|sample| sample["capture"].is_object())
+    );
+    let before = evidence["report"]["before"].as_array().unwrap();
+    for original in [root.join("private.lp"), manifest] {
+        let canonical = original.canonicalize().unwrap();
+        assert!(
+            before
+                .iter()
+                .any(|seal| seal["canonical"] == canonical.to_str().unwrap())
+        );
+    }
+}
+
+#[test]
+fn later_workload_shadow_prevents_every_child_launch() {
+    let fixture = Fixture::new();
+    let root = fixture.report.parent().unwrap();
+    fs::create_dir(root.join("nested")).unwrap();
+    fs::create_dir(root.join("workload-01")).unwrap();
+    fs::write(
+        root.join("nested/entry.lp"),
+        "#include \"../workload-01/shadow.lp\".\nq.\n",
+    )
+    .unwrap();
+    fs::write(root.join("workload-01/shadow.lp"), "p.\n").unwrap();
+    fs::write(root.join("shadow.lp"), "p.\n").unwrap();
+    let contract =
+        zetesis_validation::examples::Contract::complete_family(std::num::NonZeroU64::MIN);
+    let limits = matrix::WorkloadLimits::default();
+    let first = matrix::Workload::bundle(
+        matrix::BundleProgram {
+            root,
+            entry: "nested/entry.lp",
+            contract: &contract,
+            files: &[
+                matrix::BundleFile {
+                    path: "nested/entry.lp".into(),
+                    sha256: "74119b6839196c02972f22f8493d43b4c34a9a3b160c1951b930efe93c1fa4b2"
+                        .into(),
+                    includes: vec![matrix::BundleInclude {
+                        spelling: "../workload-01/shadow.lp".into(),
+                        target: "workload-01/shadow.lp".into(),
+                    }],
+                },
+                matrix::BundleFile {
+                    path: "workload-01/shadow.lp".into(),
+                    sha256: "167daf165781921277fb4973782d1f68a77cc079d92c12053786ca72f224d126"
+                        .into(),
+                    includes: vec![],
+                },
+            ],
+        },
+        limits,
+    )
+    .unwrap();
+    let second = matrix::Workload::bundle(
+        matrix::BundleProgram {
+            root,
+            entry: "shadow.lp",
+            contract: &contract,
+            files: &[matrix::BundleFile {
+                path: "shadow.lp".into(),
+                sha256: "167daf165781921277fb4973782d1f68a77cc079d92c12053786ca72f224d126".into(),
+                includes: vec![],
+            }],
+        },
+        limits,
+    )
+    .unwrap();
+    let report = matrix::run_workloads(&fixture.request(Suite::Corpus), &[first, second]).unwrap();
+    assert!(report.accounted());
+    assert!(!report.passed());
+    assert!(report.faults().iter().any(|fault| matches!(fault,
+        performance::Fault::InputWrite(detail) if detail.contains("cwd include shadows the declared bundle target"))));
+    assert!(report.metadata().next().is_none());
+    assert_eq!(report.samples().len(), 8);
+    assert!(report.samples().iter().all(|sample| sample.decision() == Decision::NotAttempted && sample.capture().is_none()));
 }

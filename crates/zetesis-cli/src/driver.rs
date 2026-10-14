@@ -716,6 +716,11 @@ fn run_source_with_renderer(
         cancellation,
         &phases,
     );
+    let result = if options.count {
+        crate::publication::count_stop(result, diagnostics)
+    } else {
+        result
+    };
     let result = report_progress_statistics(result, diagnostics, options, &phases);
     crate::publication::finalize(renderer, result)
 }
@@ -756,6 +761,11 @@ fn run_bundle_renderer_inner(
         cancellation,
         &phases,
     );
+    let result = if options.count {
+        crate::publication::count_stop(result, diagnostics)
+    } else {
+        result
+    };
     let result = report_progress_statistics(result, diagnostics, options, &phases);
     crate::publication::finalize(renderer, result)
 }
@@ -792,6 +802,9 @@ pub fn publish_prepared(
         cancellation,
         &phases,
     );
+    if config.mode == crate::PublicationMode::Count {
+        result = crate::publication::count_stop(result, &mut diagnostics);
+    }
     if let Some(timings) = phases.snapshot() {
         match &mut result {
             Ok(progress) => progress.phase_timings = Some(timings),

@@ -18,9 +18,11 @@ Use the tables below to find a specific capability.
 | Admit ASP source | `zetesis_themelios::{admit, admit_extended, prepare_formula, admit_formula}` and bundle counterparts | [Source preparation](source.md) |
 | Prepare or admit a logical formula program | `zetesis_themelios::{prepare_program_formula, admit_program_formula, ProgramAdmissionOptions, PreparedFormula, ProgramSite}` | [Typed formula preparation](source.md#prepare-a-logical-formula-program) |
 | Prepare an owned logical relational program | `zetesis_themelios::{prepare_program_relational, ProgramRelationalOptions, PreparedRelational}` | [Owned relational preparation](source.md#admit-an-existing-logical-program) |
+| Choose extended or formula admission once per input door | `ParsedSource::admit_automatic_with_cancellation`, `admit_bundle_automatic_with_cancellation`, `prepare_program_automatic`, `AutomaticAdmission`, `AutomaticAdmissionFailure` | [Parsed-source transfer](source.md#reuse-original-input-across-profiles) and [logical programs](source.md#admit-an-existing-logical-program) |
 | Admit a logical program under S0 | `zetesis_themelios::{admit_program, ProgramAdmissionOptions, AdmittedProgram}` | [Typed program admission](source.md#borrow-the-strict-relational-input) |
 | Configure ordinary resource policy | `zetesis_solve::Resources` | [Sessions](sessions.md) |
 | Solve admitted input | `zetesis_solve::{PreparedInput, Session, SessionBuilder, SolveConfig}` | [Sessions](sessions.md) |
+| Count full answer sets or optimal ties | `zetesis_solve::{SessionBuilder::counting, SemanticOutcome::complete_answer_count}` | [Counting](outcomes.md#replace-answer-presentation) |
 | Collect a complete native family | `zetesis_solve::WorldView::collect`, `SessionBuilder::collect`, `WorldViewLimits` | [Completion and output](outcomes.md) |
 | Inspect an answer or interpretation | `AnswerSet`, `zetesis_core::{Interpretation, Model}`, `catalog::{AtomRef, TermRef}` | [Interpretations and atoms](models.md) |
 | Evaluate costs and source displays | `zetesis_objective`, admitted-owner observation APIs | [Costs and shown terms](costs-and-output.md) |
@@ -44,7 +46,7 @@ retain the contracts documented in the themelios manual.
 
 | Task | Public library entry points | Contract or example |
 | --- | --- | --- |
-| Construct finite relational programs | `zetesis_core::{Program, Template, Atom, Seed}` | [Parallel and lazy checking](parallel.md) |
+| Construct finite relational programs | `zetesis_core::{Program, Template, FactTables, FactSegment, Atom, Seed}` | [Parallel and lazy checking](parallel.md) |
 | Share admitted template components | `TemplateCatalogBuilder`, `TemplateCatalog`, `TemplateRef`, `PatternRef`, `TemplateTerm` | [Canonical ownership](../architecture/ownership.md) |
 | Read or explicitly export canonical values | `catalog::{AtomRef, PredicateRef, TermRef}`, `TermRef::nodes`, `TermRef::write_with`, `AtomRef::to_atom` | [Borrowing and explicit copies](models.md#borrowing-and-explicit-copies) |
 | Build typed vocabulary without a program or atom population | `catalog::{VocabularyBuilder, Vocabulary}` | [Scoped term workspaces](models.md#scoped-term-workspaces) |
@@ -115,6 +117,55 @@ semantic solver libraries. Record checks, physical tests and Lean proofs have
 different scopes; none alone certifies the complete Rust/WGSL implementation.
 See [validation](../reference/validation.md) and
 [proof correspondence](../lean/correspondence.md) before extending those claims.
+
+## Migrating from 0.5.0
+
+The changes below affect direct library callers. Source syntax is unchanged;
+aggregate admission and execution/resource behavior are described in the
+[language reference](../reference/language.md#numeric-boundaries-and-refusal-meaning)
+and [resource contracts](outcomes.md#resource-contracts).
+
+| Previous use | Migration |
+| --- | --- |
+| `zetesis_core::Program::new(templates, limits)` | Pass `FactTables::default()` as the second argument, or supply explicit facts. Use `rules()` for all original rule occurrences and `templates()` for the separate template sequence. See [explicit facts](parallel.md#construct-templates-and-explicit-facts). |
+| Matching `zetesis_core::AdmissionError` | Replace `Canonical { error, template }` with `Canonical { error, origin }` and handle `FactLimitExceeded`. `template_index()` and `fact_index()` resolve their separate input sequences; see [explicit facts](parallel.md#construct-templates-and-explicit-facts). |
+| Matching `DomainObservation::Inapplicable` or reading its former `Analyzed(&Analysis)` payload | Remove the `Inapplicable` arm. `Analyzed` carries `NumericAnalysis`: use `analysis()` for bounds/statistics, `catalog()` for canonical keys, and `arguments()` for predicate coordinates. Finite-guard applicability is separate; see [domain observation](source.md#optional-numeric-analysis-and-domain-guards). |
+| Exhaustive `zetesis_ferraris::NodeView` matches | Handle `Threshold` and `ExtremumCut`. Formula storage now includes shared numeric arenas; preserve them when copying. See [finite formulas](reducts.md#numeric-formula-storage). |
+| Exhaustive `zetesis_ferraris::AdmissionError` matches | Handle `ThresholdShape`, `ThresholdMeasure`, `NumericShape`, `NumericDomain`, `OrdinalRank` and `OrdinalCut`. These distinguish numeric shape/measure refusals from allocation and configured limits. |
+| Calling `zetesis_ferraris::Knowledge::preferred_atom_reserved` | Pass `&ChoiceHeads` before cancellation. `ChoiceHeads::default()` preserves the previous ranking; `Extraction::choice_heads` supplies the extracted choice heads. `OriginalSubject::with_choices` selects the same ranking for narrowing that chooses its own split. |
+| Constructing or destructuring `zetesis_sat::RegionSearchStatistics` | It now has `workers` and is non-exhaustive. Construct with `Default::default()` and assign fields; destructure with `..`. The new `RegionWorkerStatistics` is also non-exhaustive. |
+| Selecting or matching worker engagement | `StableModels::with_region_workers_engaging` accepts `Engagement`; `Immediate` starts workers at the first pull. `Engagement` and the reported `RegionWalkEngagement` are non-exhaustive, so external matches need a fallback arm. See [parallel walks](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/README.md#walking-the-tree-with-several-workers). |
+| Exhaustive `zetesis_cli::RunError` or `zetesis_validation::performance::matrix::Decision` matches | Handle `GpuExecutableUnavailable`, meaning the installed CPU front could not run its GPU executable. This remains separate from unavailable compiled backend support. |
+| Exhaustive `zetesis_validation::curated::Error` or `zetesis_validation::examples::Error` matches | Handle `Irregular(PathBuf)` for a resolved input that is not a regular file. These cases previously used `Path`; that variant still reports paths outside the selected root. |
+| Injecting a diagnostics writer whose behavior depends on write-call boundaries | Records and styled diagnostic lines now reach `write_all` as complete units. Bytes are unchanged; see [writer boundaries](outcomes.md#diagnostic-writer-boundaries). |
+
+`GroundingObserver::domain_diagnostics_enabled()` defaults to true, preserving
+existing domain callbacks. An observer may return false to omit the callback,
+integer-certificate requests and census work; this does not disable the shared
+analysis or finite-domain guards. Delegating observers can delegate that request
+alongside the callback. See [domain observation](source.md#optional-numeric-analysis-and-domain-guards).
+
+### Removed and private helpers
+
+Replace `zetesis_wgpu::{GpuOracle, GpuTightOracle, GpuFormulaOracle}::new_metal`
+with `new_selected(options, GpuSelection { api: GpuApi::Metal })`.
+For `GpuFormulaOracle::new_metal_with_projection`, use
+`new_selected_with_projection` with the same selection and projection.
+`zetesis_core::catalog::CatalogRead::constructor_of_predicate` is removed.
+
+The following helpers were public in 0.5.0 and are now crate-private:
+
+| Crate | Helpers |
+| --- | --- |
+| `zetesis-cli` | `RunFailure::into_cause` |
+| `zetesis-core` | `AtomKey::compare_ref`, `AtomRef::compare_key_with`, `Model::selection_payload_bytes`, `Predicate::shares_name` |
+| `zetesis-cpu` | `CONSTRAINT_HEAD`, `InstanceAtomIter` |
+| `zetesis-engine` | `OutputLimits::for_resources` |
+| `zetesis-maintenance` | `is_record` |
+| `zetesis-sat` | `CompletionExecutor::DEFAULT_SCRATCH_BYTES`, `ReductPreparationLimits::DEFAULT_BYTES` |
+| `zetesis-themelios` | `SourceBundle::working_directory`, `Encoded::into_text`, `ProgramSite::with_location`, `ProgramSite::with_statement` |
+| `zetesis-validation` | `Contract::with_witnesses`, `Contract::optimal_family`, `Capture::stderr_text`, `process::invoke_supervised_with_cancellation` |
+| `zetesis-wgpu` | `GpuLazyOracle::check_batch_with_source`, `GpuTightOracle::from_context_with_support` |
 
 ## Migrating from 0.4.0
 

@@ -87,6 +87,51 @@ resource limits or relax complete-family comparison. Library callers explicitly
 apply `scalability::limits` and `scalability::native_answers` before constructing
 their matrix request; execution itself never raises supplied limits.
 
+### Declared external bundles
+
+`run --workloads PATH` measures the external programs in a source-bundle JSON
+manifest through the same matrix. It requires a runnable clingo for fresh
+complete-family qualification, including every final optimum tie. It conflicts
+with `--suite`, `--case`, `--examples`, `--include-einstein` and
+`--without-clingo`; profile, schedule, capture and output controls still apply.
+The positional corpus remains the correctness-catalog context. Source files are
+copied byte for byte into each workload's private directory, preserving their
+relative paths and include spellings.
+
+The version 1 manifest contains `schema_version: 1`, a `root` and a `cases`
+array. A relative root resolves against the manifest's parent directory.
+Each case supplies its root-relative `entry`, existing display `contract`, and
+`files`. Each file records its root-relative `path`, expected `sha256`, and an
+`includes` array of `{ "spelling": "...", "target": "..." }` entries in source
+occurrence order. Targets name declared root-relative members; include
+spellings may use `..` only when the declared graph remains confined. Admission
+checks the actual directives, complete reachable closure, byte hashes and
+resource ceilings. Cycles, undeclared files and conflicting cwd-first include
+lookups are refused. Reports retain the manifest, original-file and copied
+source identities; host paths do not determine portable workload identity.
+When `--memory-runs` is nonzero, the copied source root reserves `child-rss.json`
+for the existing RSS helper. A source file or directory at that path, including
+an alias on the destination filesystem, is refused before any process launches.
+
+Library callers use `performance::bundles::load` and pass its sealed workloads
+to `matrix::run_workloads_with_cancellation`. The declared contracts remain
+expectations; the reference run supplies fresh qualification.
+
+Large complete families may require larger measurement capacities. The advanced
+`--native-atoms` and `--native-value-nodes` controls bound native report
+normalization across all model occurrences, including atoms reused through the
+compact report table. Their defaults follow the decoder: 262,144 atoms and
+1,048,576 value nodes. Existing suite minimum capacities still apply and keep
+larger caller values. The effective bounds are recorded in
+`native_normalization_limits`; they do not change solver resource budgets.
+`--answer-bytes` bounds reference-answer decoding and native displayed-symbol
+spelling, with the existing answer decoder's default of 8 MiB. Its occurrence
+ceilings derive from that byte bound, and existing suite minimum capacities
+still apply. The effective values appear in `limits.answers` and
+`native_normalization_limits.spelling_bytes`. Set `--sample-bytes` and
+`--native-report-bytes` separately for capture and native full-report decoding.
+A refusal retains the failed comparison; it does not establish an incomplete family as complete.
+
 ### Profiles
 
 A run measures one native profile, set by `--backend`, `--grounder` and

@@ -422,7 +422,8 @@ impl AdmissionError {
     /// Whether this refusal is of a resource (a shape bound or count, or an
     /// allocation) rather than of the formula's shape, so that an operation
     /// settling its exit can report a requested stop in its place.
-    pub(crate) const fn is_resource_refusal(self) -> bool {
+    #[must_use]
+    pub const fn is_resource_refusal(self) -> bool {
         match self {
             Self::Limit | Self::Allocation => true,
             Self::Atom

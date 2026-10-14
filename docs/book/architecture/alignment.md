@@ -71,9 +71,9 @@ different types of value.
 These are capability mappings. Ordinary relational solving supports lazy source
 rounds, Rayon and GPU closure. Automatic formula admission can defer terminal
 positive definitions, joining true rows after base membership to reconstruct each
-full original answer. Other rules remain eager; explicit lazy CPU execution can
+full original answer. Other rules remain eager; explicit lazy execution can
 compose core answer enumeration with streamed
-constraint satisfaction. Formula solving combines host candidate production with membership checking on the selected
+constraint satisfaction on the host. Formula solving combines host candidate production with membership checking on the selected
 backend. Explicit GPU execution with automatic membership policy uses complete
 tight certificates when available; other formulas use GPU propagation and exact
 host completion.

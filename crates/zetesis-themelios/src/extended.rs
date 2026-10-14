@@ -7,7 +7,6 @@ use themelios_program::program::{
     BodyElement, Const, Head, Literal, LiteralInner, Program as SourceProgram, Rule, Statement,
 };
 use themelios_program::provenance::{Origin, TransformTag, WithProvenance};
-use themelios_program::raise::raise;
 use themelios_program::symbol::{Sign, Symbol};
 use themelios_program::term::{EvalError, Term, TermParts};
 use themelios_program::transform::{Rewrite, rewrite};
@@ -58,6 +57,7 @@ pub fn admit_extended(
 pub(crate) struct Compilation {
     pub(crate) program: Program,
     pub(crate) template_origins: Vec<Vec<Location>>,
+    pub(crate) fact_origins: Vec<Vec<Location>>,
     pub(crate) metadata: SourceMetadata,
     pub(crate) expansion: ExpansionUsage,
 }
@@ -67,11 +67,21 @@ pub(crate) fn admit_parsed(
     limits: ExpansionLimits,
     cancellation: Option<zetesis_cpu::Cancellation>,
 ) -> Result<Admitted, SourceFailure<ExpansionFailure>> {
-    match compile_parsed(&source, limits, cancellation) {
+    admit_parsed_recording(source, limits, cancellation, None)
+}
+
+pub(crate) fn admit_parsed_recording(
+    source: ParsedSource,
+    limits: ExpansionLimits,
+    cancellation: Option<zetesis_cpu::Cancellation>,
+    recorder: Option<&mut crate::automatic::handoff::Recorder>,
+) -> Result<Admitted, SourceFailure<ExpansionFailure>> {
+    match compile_parsed(&source, limits, cancellation, recorder) {
         Ok(compiled) => Ok(Admitted {
             program: compiled.program,
             source: source.into_source(),
             template_origins: compiled.template_origins,
+            fact_origins: compiled.fact_origins,
             metadata: compiled.metadata,
             expansion: compiled.expansion,
         }),
@@ -83,6 +93,7 @@ fn compile_parsed(
     source: &ParsedSource,
     limits: ExpansionLimits,
     cancellation: Option<zetesis_cpu::Cancellation>,
+    mut recorder: Option<&mut crate::automatic::handoff::Recorder>,
 ) -> Result<Compilation, ExpansionFailure> {
     let parsed = source.parsed();
     let options = source.options();
@@ -93,26 +104,33 @@ fn compile_parsed(
     let budget =
         Budget::new(limits, options.core_limits.max_templates).with_cancellation(cancellation);
     budget.poll(location.into())?;
-    profile::check_extended(parsed, options)?;
+    if let Some(recorder) = recorder.as_deref_mut() {
+        recorder.check_profile(parsed, options, false)?;
+    } else {
+        profile::check_extended(parsed, options)?;
+    }
     check_definitions(parsed, limits)?;
     metadata::check_count(parsed, limits, &mut 0)?;
-    let raised = raise(parsed);
-    if !raised.diagnostics().is_empty() {
-        return Err(AdmissionFailure::Raise(raised.diagnostics().to_vec()).into());
-    }
+    let raised = crate::automatic::handoff::raise(parsed, recorder.as_deref_mut())?;
     budget.poll(location.into())?;
     let mut source_metadata = metadata::Builder::default();
-    metadata::collect(raised.program(), &mut source_metadata)?;
-    compile_owned(
-        raised.program(),
+    metadata::collect(&raised, &mut source_metadata)?;
+    let result = compile_owned(
+        &raised,
         options.core_limits,
         budget,
         location.into(),
         source_metadata.finish(location.into())?,
-    )
+    );
+    if result.is_err()
+        && let Some(recorder) = recorder
+    {
+        recorder.retain_program(raised);
+    }
+    result
 }
 
-/// Compile the source into the program with its template origins and the
+/// Compile the source into the program with its template and fact origins and the
 /// expansion charges it accepted, as one compilation with `metadata`.
 pub(crate) fn compile_owned(
     source: &SourceProgram,
@@ -121,7 +139,7 @@ pub(crate) fn compile_owned(
     location: ProgramSite,
     metadata: SourceMetadata,
 ) -> Result<Compilation, ExpansionFailure> {
-    let (program, template_origins) = compile_relational(
+    let compiled = compile_relational(
         source,
         core_limits,
         &mut budget,
@@ -132,8 +150,9 @@ pub(crate) fn compile_owned(
     )?;
     budget.poll(location)?;
     Ok(Compilation {
-        program,
-        template_origins,
+        program: compiled.program,
+        template_origins: compiled.template_origins,
+        fact_origins: compiled.fact_origins,
         metadata,
         expansion: budget.usage(),
     })
@@ -149,15 +168,13 @@ pub(crate) fn compile_relational<P: Clone + Ord>(
     purpose: FormulaPurpose,
     evidence: impl Fn(&WithProvenance<Statement>, ProgramSite) -> Vec<P>,
     site: impl Fn(&P) -> ProgramSite,
-) -> Result<(Program, Vec<Vec<P>>), ExpansionFailure> {
+) -> Result<compile::CompiledProgram<P>, ExpansionFailure> {
     budget.poll(fallback)?;
     let constants = resolve(source, budget, fallback)?;
-    let (mut templates, mut origins) =
-        compile_extended(source, &constants, budget, fallback, purpose, evidence)?;
+    let mut compiled = compile_extended(source, &constants, budget, fallback, purpose, evidence)?;
     budget.poll(fallback)?;
     crate::coherence::append_with(
-        &mut templates,
-        &mut origins,
+        &mut compiled,
         core_limits,
         |resource, count, evidence| {
             budget.charge(resource, count, evidence.first().map_or(fallback, &site))
@@ -170,16 +187,12 @@ pub(crate) fn compile_relational<P: Clone + Ord>(
         },
     )?;
     budget.poll(fallback)?;
-    let program = Program::new(templates, core_limits).map_err(|error| {
-        let location = error
-            .template_index()
-            .and_then(|index| origins.get(index))
-            .and_then(|evidence| evidence.first())
-            .map_or(fallback, site);
+    let compiled = compiled.admit(core_limits, |error, origins| {
+        let location = origins.first().map_or(fallback, &site);
         AdmissionFailure::Core { error, location }
     })?;
     budget.poll(fallback)?;
-    Ok((program, origins))
+    Ok(compiled)
 }
 
 fn check_definitions(
@@ -331,8 +344,6 @@ pub(crate) fn resolve(
     Ok(values)
 }
 
-type Compiled<P> = (Vec<zetesis_core::Template>, Vec<Vec<P>>);
-
 /// Normalize each statement and compile it. A statement whose every term
 /// normalization would return as it is, charged and validated by
 /// [`kept_as_is`], is compiled from the original carrier: the rewrite would
@@ -347,8 +358,8 @@ fn compile_extended<P: Clone>(
     fallback: ProgramSite,
     purpose: FormulaPurpose,
     evidence: impl Fn(&WithProvenance<Statement>, ProgramSite) -> Vec<P>,
-) -> Result<Compiled<P>, ExpansionFailure> {
-    let mut compiled = (Vec::new(), Vec::new());
+) -> Result<compile::Compiled<P>, ExpansionFailure> {
+    let mut compiled = compile::Compiled::default();
     for (index, carrier) in source.statements().enumerate() {
         let location = origin(carrier, fallback.with_statement(StatementId::new(index)));
         budget.poll(location)?;
@@ -397,30 +408,54 @@ fn compile_extended<P: Clone>(
     Ok(compiled)
 }
 
-/// Emit one normalized statement's templates, each with the statement's
-/// original evidence: its facts, expanded, or the one template of its rule.
+/// Emit one normalized statement into the shared classified source owner.
+/// Checked products retain compact columns, with evidence for every occurrence.
 fn emit<P: Clone>(
     statement: &WithProvenance<Statement>,
     locations: Vec<P>,
     budget: &mut Budget,
     location: ProgramSite,
-    (templates, origins): &mut Compiled<P>,
+    compiled: &mut compile::Compiled<P>,
 ) -> Result<(), ExpansionFailure> {
-    if let Some(mut facts) = fact_expansion::facts(statement, budget, location)? {
+    if let Some(facts) = fact_expansion::facts(statement, budget, location)? {
         budget.charge(
             ExpansionResource::Origins,
             (facts.len() as u128).saturating_mul(locations.len() as u128),
             location,
         )?;
-        while let Some(head) = facts.next(budget, location)? {
-            templates.push(zetesis_core::Template::new(
-                Some(head),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-                Vec::new(),
-            ));
-            origins.push(locations.clone());
+        for product in facts.products() {
+            let mut columns = Vec::new();
+            columns
+                .try_reserve_exact(product.predicate().arity())
+                .map_err(|error| ExpansionFailure::Allocation { error, location })?;
+            for source in product.columns() {
+                let mut column = Vec::new();
+                for cell in source {
+                    budget.poll(location)?;
+                    column
+                        .try_reserve(1)
+                        .map_err(|error| ExpansionFailure::Allocation { error, location })?;
+                    column.push(match cell {
+                        fact_expansion::Cell::Scalar(value) => {
+                            zetesis_core::FactSegment::Value(value.clone())
+                        }
+                        fact_expansion::Cell::Interval(range) => {
+                            zetesis_core::FactSegment::Interval {
+                                first: *range.start(),
+                                last: *range.end(),
+                            }
+                        }
+                    });
+                }
+                columns.push(column);
+            }
+            compiled.product(
+                product.predicate().clone(),
+                columns,
+                &locations,
+                || budget.poll(location),
+                |error| ExpansionFailure::from(AdmissionFailure::Core { error, location }),
+            )?;
         }
     } else {
         budget.charge(ExpansionResource::Templates, 1, location)?;
@@ -429,8 +464,9 @@ fn emit<P: Clone>(
             locations.len() as u128,
             location,
         )?;
-        templates.push(compile::statement(statement, location)?);
-        origins.push(locations);
+        compiled
+            .push(compile::statement(statement, location)?, locations)
+            .map_err(|error| AdmissionFailure::Core { error, location })?;
     }
     Ok(())
 }

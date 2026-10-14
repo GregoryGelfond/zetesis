@@ -34,7 +34,7 @@ impl Join<'_, '_> {
         let binding = frame.binding(&self.values);
         if self.coverage == Coverage::Complete {
             self.projections.prepare(
-                self.literals,
+                self.literals.get(),
                 super::Context::new(&*computation, limits, counters, location),
             )?;
         }
@@ -46,7 +46,7 @@ impl Join<'_, '_> {
             }
             Comparisons::Verified | Comparisons::Deferred => None,
         };
-        for (index, literal) in self.literals.iter().enumerate() {
+        for (index, literal) in self.literals.get().iter().enumerate() {
             if crate::formula_binding_cursor::target(literal)
                 .is_some_and(|target| target >= binding.len())
                 || (self.coverage == Coverage::Selected

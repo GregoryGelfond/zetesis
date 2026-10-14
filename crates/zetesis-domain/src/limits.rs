@@ -3,19 +3,20 @@
 /// Limits on retained abstract data and inspected source structure.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
-    /// Source, transfer-input, intersection-probe, snapshot-copy and value-merge steps.
+    /// Lowering, key inspection, transfer, certificates, finite comparison and copy steps.
     pub max_work: u64,
     /// Distinct signed predicate signatures, including zero-arity predicates.
     pub max_predicates: usize,
     /// Distinct predicate argument positions.
     pub max_positions: usize,
-    /// Transfer records, producer references, and dependency-column references.
+    /// Plan records, slots, bindings, guards, heads, provenance, keys, thresholds,
+    /// integer-expression requests and their retained result cells.
     pub max_links: usize,
     /// Retained values in one argument; overflow widens only that argument.
     pub max_values_per_argument: usize,
-    /// Retained finite value references across all arguments.
+    /// Live finite references across seeds, arguments and temporary transfer sets.
     pub max_value_entries: usize,
-    /// Complete passes, including the final unchanged pass.
+    /// Started synchronous image passes, including unchanged ascent and narrowing.
     pub max_rounds: u64,
     /// Cumulative name/string bytes inspected before comparison or copying.
     pub max_inspected_bytes: u64,
@@ -53,11 +54,11 @@ pub enum Resource {
     Predicates,
     /// Argument positions.
     Positions,
-    /// Retained transfer and provenance/dependency references.
+    /// Retained plan, key, threshold, provenance and certificate-result records.
     Links,
     /// Retained finite value references.
     ValueEntries,
-    /// Complete fixed-point passes.
+    /// Started synchronous image passes.
     Rounds,
     /// Inspected name/string bytes.
     InspectedBytes,
@@ -85,7 +86,9 @@ impl std::fmt::Display for Stop {
 impl std::error::Error for Stop {}
 
 /// Charged logical counts before completion or an explicit conservative stop.
-/// Reservations precede allocation; a later failure can leave a reservation unused.
+/// Work is cumulative; finite value entries are live reservations, not a peak.
+/// Failed temporary sets release their entries before a stopped-result receipt.
+/// Plan/link reservations precede allocation and can remain in a failure receipt.
 #[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 pub struct Statistics {
     /// Source/transfer/intersection/copy/value steps.
@@ -94,11 +97,11 @@ pub struct Statistics {
     pub predicates: usize,
     /// Registered argument positions.
     pub positions: usize,
-    /// Submitted transfer and producer/dependency references.
+    /// Submitted plan, key, threshold, provenance and certificate-result records.
     pub links: usize,
-    /// Finite value references before any global fallback clears results.
+    /// Live finite references at the receipt boundary; not peak storage or total allocations.
     pub value_entries: usize,
-    /// Started fixed-point passes.
+    /// Started synchronous image passes, including narrowing.
     pub rounds: u64,
     /// Inspected name/string payload.
     pub inspected_bytes: u64,

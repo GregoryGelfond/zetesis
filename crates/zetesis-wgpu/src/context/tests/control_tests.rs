@@ -23,7 +23,12 @@ fn controlled_calls(backend: GpuApi) {
     eprintln!("controlled calls adapter={:?}", context.info());
     let mut ordinary = GpuOracle::from_context(&context).unwrap();
     let mut formula = GpuFormulaOracle::from_context(&context).unwrap();
-    let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let ground = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
     let seeds = [Seed::new(&program, []).unwrap()];
     let theory = Theory::new(
@@ -106,7 +111,12 @@ fn controlled_calls(backend: GpuApi) {
 }
 
 fn settled_stops(context: &GpuContext, ordinary: &mut GpuOracle, formula: &mut GpuFormulaOracle) {
-    let program = Program::new(vec![], AdmissionLimits::default()).unwrap();
+    let program = Program::new(
+        vec![],
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
     let ground = GroundProgram::compile(&program, StaticLimits::default()).unwrap();
     let seeds = [Seed::new(&program, []).unwrap()];
     let theory = Theory::new(

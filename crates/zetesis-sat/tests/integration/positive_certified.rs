@@ -9,7 +9,7 @@ use zetesis_ferraris::{Interpretation, Node, PositivePlanLimits, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, CertificateError, CertificateLimits,
     CertificateOrder, CertificatePlanStatistics, CompletionExecutor, Engagement, Incomplete,
-    Limits, StableModels,
+    Limits, RegionWalkEngagement, StableModels,
 };
 use zetesis_theory_support::theories::theory;
 
@@ -160,6 +160,19 @@ fn region_positive_cycles_preserve_the_clause_family() {
         ));
         assert_eq!(collect(&mut regions), expected);
         assert!(regions.exhausted());
+        if workers > 1 {
+            assert_eq!(
+                regions
+                    .statistics()
+                    .regions
+                    .unwrap()
+                    .workers
+                    .unwrap()
+                    .engagement,
+                RegionWalkEngagement::NotBegun,
+                "the determined candidate bypasses either engagement route"
+            );
+        }
     }
 }
 
@@ -220,6 +233,19 @@ fn region_positive_constraints_exclude_the_answer_family() {
         ));
         assert_eq!(collect(&mut regions), expected);
         assert!(regions.exhausted());
+        if workers > 1 {
+            assert_eq!(
+                regions
+                    .statistics()
+                    .regions
+                    .unwrap()
+                    .workers
+                    .unwrap()
+                    .engagement,
+                RegionWalkEngagement::NotBegun,
+                "the determined candidate bypasses either engagement route"
+            );
+        }
         assert_eq!(regions.statistics().certified.unwrap().refuted, 0);
         assert_eq!(regions.statistics().candidates, 0);
         assert_eq!(regions.statistics().countermodel_queries, 0);

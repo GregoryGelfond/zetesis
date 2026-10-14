@@ -16,13 +16,13 @@ use crate::formula_ir::Prepared;
 use crate::formula_support::Support;
 
 impl SourceEligibility {
-    pub(super) fn cyclic(
+    pub(super) fn cyclic<'source>(
         &mut self,
-        prepared: &Prepared,
-        support: &Support<'_>,
+        prepared: &'source Prepared,
+        support: &Support<'source>,
         unresolved: &BTreeSet<Signature>,
         temporary: usize,
-        context: &mut Context<'_, '_, '_>,
+        context: &mut Context<'_, '_, 'source>,
     ) -> Result<(), FormulaFailure> {
         for predicate in support.predicates() {
             context.work()?;
@@ -46,13 +46,13 @@ impl SourceEligibility {
         }
     }
 
-    fn derive_round(
+    fn derive_round<'source>(
         &mut self,
-        prepared: &Prepared,
-        support: &Support<'_>,
+        prepared: &'source Prepared,
+        support: &Support<'source>,
         unresolved: &BTreeSet<Signature>,
         temporary: usize,
-        context: &mut Context<'_, '_, '_>,
+        context: &mut Context<'_, '_, 'source>,
     ) -> Result<bool, FormulaFailure> {
         let overlap = temporary.saturating_add(self.activity.len());
         for predicate in unresolved {

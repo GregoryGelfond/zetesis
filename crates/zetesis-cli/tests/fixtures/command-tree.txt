@@ -43,6 +43,10 @@ command zetesis | An answer-set solver
       index=None action=SetTrue num_args=Some(0) value_names=Some(["JSON"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
       help "Stream a versioned JSON document with full models, shown channels and coverage"
       long ""
+    arg count long=Some("count") short=None aliases=None values=[] defaults=["false"] hidden=false short_help_hidden=false heading=Some("Output")
+      index=None action=SetTrue num_args=Some(0) value_names=Some(["COUNT"]) delimiter=None terminator=None parser=bool flags=[] conflicts=["json", "models"]
+      help "Print only the complete number of answer sets, or all optimal ties"
+      long "Print only the complete number of answer sets, or all optimal ties.\n\nCounts full answer identities independently of #show and #project. Interrupted or failed searches print no count. Accept the total only on successful exit; output can fail after writing bytes. Statistics remain on stderr."
     arg color long=Some("color") short=None aliases=None values=["auto", "always", "never"] defaults=["auto"] hidden=false short_help_hidden=false heading=Some("Output")
       index=None action=Set num_args=Some(1) value_names=Some(["COLOR"]) delimiter=None terminator=None parser=ColorMode flags=[] conflicts=[]
       help "Style human headings and solve metadata"
@@ -80,11 +84,11 @@ command zetesis | An answer-set solver
       help "Additional original input files, in argument order"
       long "Additional original input files, in argument order.\n\nStandard input cannot be combined with file roots in this source-bundle profile."
     arg answers long=Some("answers") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Answers")
-      index=None action=Set num_args=Some(1) value_names=Some(["N"]) delimiter=None terminator=None parser=NonZeroUsize flags=[] conflicts=["all", "models"]
+      index=None action=Set num_args=Some(1) value_names=Some(["N"]) delimiter=None terminator=None parser=NonZeroUsize flags=[] conflicts=["all", "count", "models"]
       help "Display at most N answer sets [default: 1]"
       long "Display at most N answer sets (default: 1). Without objectives, stop after this many answers. Optimization still seeks a proved optimum, then displays up to N tied optima; an interrupted run may report unproved incumbents."
     arg all long=Some("all") short=None aliases=None values=[] defaults=["false"] hidden=false short_help_hidden=false heading=Some("Answers")
-      index=None action=SetTrue num_args=Some(0) value_names=None delimiter=None terminator=None parser=bool flags=[] conflicts=["answers", "models"]
+      index=None action=SetTrue num_args=Some(0) value_names=None delimiter=None terminator=None parser=bool flags=[] conflicts=["answers", "count", "models"]
       help "Enumerate all answer sets, or all tied optima when optimizing"
       long ""
     arg version long=Some("version") short=Some('V') aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None
@@ -364,6 +368,10 @@ command zetesis | An answer-set solver
       index=None action=SetTrue num_args=Some(0) value_names=Some(["JSON"]) delimiter=None terminator=None parser=bool flags=[] conflicts=[]
       help "Stream a versioned JSON document with full models, shown channels and coverage"
       long ""
+    arg count long=Some("count") short=None aliases=None values=[] defaults=["false"] hidden=false short_help_hidden=false heading=Some("Output")
+      index=None action=SetTrue num_args=Some(0) value_names=Some(["COUNT"]) delimiter=None terminator=None parser=bool flags=[] conflicts=["json", "models"]
+      help "Print only the complete number of answer sets, or all optimal ties"
+      long "Print only the complete number of answer sets, or all optimal ties.\n\nCounts full answer identities independently of #show and #project. Interrupted or failed searches print no count. Accept the total only on successful exit; output can fail after writing bytes. Statistics remain on stderr."
     arg color long=Some("color") short=None aliases=None values=["auto", "always", "never"] defaults=["auto"] hidden=false short_help_hidden=false heading=Some("Output")
       index=None action=Set num_args=Some(1) value_names=Some(["COLOR"]) delimiter=None terminator=None parser=ColorMode flags=[] conflicts=[]
       help "Style human headings and solve metadata"
@@ -401,11 +409,11 @@ command zetesis | An answer-set solver
       help "Additional original input files, in argument order"
       long "Additional original input files, in argument order.\n\nStandard input cannot be combined with file roots in this source-bundle profile."
     arg answers long=Some("answers") short=None aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=Some("Answers")
-      index=None action=Set num_args=Some(1) value_names=Some(["N"]) delimiter=None terminator=None parser=NonZeroUsize flags=[] conflicts=["all", "models"]
+      index=None action=Set num_args=Some(1) value_names=Some(["N"]) delimiter=None terminator=None parser=NonZeroUsize flags=[] conflicts=["all", "count", "models"]
       help "Display at most N answer sets [default: 1]"
       long "Display at most N answer sets (default: 1). Without objectives, stop after this many answers. Optimization still seeks a proved optimum, then displays up to N tied optima; an interrupted run may report unproved incumbents."
     arg all long=Some("all") short=None aliases=None values=[] defaults=["false"] hidden=false short_help_hidden=false heading=Some("Answers")
-      index=None action=SetTrue num_args=Some(0) value_names=None delimiter=None terminator=None parser=bool flags=[] conflicts=["answers", "models"]
+      index=None action=SetTrue num_args=Some(0) value_names=None delimiter=None terminator=None parser=bool flags=[] conflicts=["answers", "count", "models"]
       help "Enumerate all answer sets, or all tied optima when optimizing"
       long ""
     arg version long=Some("version") short=Some('V') aliases=None values=[] defaults=[] hidden=false short_help_hidden=false heading=None

@@ -472,6 +472,7 @@ impl CatalogRows {
             .declare_existing(predicate)
             .map_err(|_| failure(Failure::Owner, location))?;
         let outer_bytes = memory.outside(0)?;
+        counters.poll(location)?;
         let catalog = Catalog::new(
             read,
             declared,
@@ -481,7 +482,7 @@ impl CatalogRows {
         counters.record(Event::SupportPeakBytes(
             memory.live_bytes() + catalog.construction().peak_construction_bytes as u128,
         ));
-        counters.charge_work(catalog.construction().construction_work, limits, location)?;
+        counters.absorb(catalog.construction().construction_work, limits, location)?;
         memory.add(catalog.retained_bytes() - size_of::<Catalog>())?;
         // Without installed demand every column keeps postings, as before.
         let demanded = match demand {
@@ -566,7 +567,7 @@ impl CatalogRows {
             counters.record(Event::SupportPeakBytes(
                 outer_bytes as u128 + receipt.storage.peak_construction_bytes as u128,
             ));
-            counters.charge_work(receipt.storage.construction_work, limits, location)?;
+            counters.absorb(receipt.storage.construction_work, limits, location)?;
             catalog_bytes = receipt.storage.retained_bytes;
             scratch_bytes = appended.scratch_bytes;
             memory.release(old_bytes);
@@ -658,7 +659,7 @@ fn catalog_failure(
         outer_bytes,
         location,
     );
-    match counters.charge_work(error.work, limits, location) {
+    match counters.absorb(error.work, limits, location) {
         Ok(()) => failure,
         Err(charge) => charge,
     }
@@ -853,7 +854,7 @@ impl<'source> Relations<'source> {
                     location,
                 )
             })?;
-        counters.charge_work(receipt.storage.construction_work, limits, location)?;
+        counters.absorb(receipt.storage.construction_work, limits, location)?;
         Ok(receipt.row)
     }
 
@@ -882,7 +883,7 @@ impl<'source> Relations<'source> {
                     location,
                 )
             })?;
-        counters.charge_work(receipt.storage.construction_work, limits, location)?;
+        counters.absorb(receipt.storage.construction_work, limits, location)?;
         Ok(receipt.row.is_some())
     }
 

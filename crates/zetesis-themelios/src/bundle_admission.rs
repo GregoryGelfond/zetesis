@@ -7,7 +7,6 @@ use std::path::{Component, Path, PathBuf};
 use themelios_base::diagnostic::Diagnostic;
 use themelios_base::span::Location;
 use themelios_program::program::{Program as SourceProgram, Statement};
-use themelios_program::raise::raise;
 use zetesis_core::{AdmissionLimits, Program};
 
 use crate::{
@@ -48,6 +47,7 @@ pub struct AdmittedBundle {
     program: Program,
     bundle: SourceBundle,
     template_origins: Vec<Vec<Location>>,
+    fact_origins: Vec<Vec<Location>>,
     metadata: SourceMetadata,
     expansion: ExpansionUsage,
 }
@@ -68,6 +68,12 @@ impl AdmittedBundle {
     #[must_use]
     pub fn template_origins(&self) -> &[Vec<Location>] {
         &self.template_origins
+    }
+
+    /// Parsed origins parallel to the native program's fact occurrences.
+    #[must_use]
+    pub fn fact_origins(&self) -> &[Vec<Location>] {
+        &self.fact_origins
     }
     /// Global source declarations and display policy, retaining every original
     /// metadata occurrence. The underlying program and model identity are full.
@@ -287,11 +293,22 @@ fn admit_bundle_with_control(
     limits: ExpansionLimits,
     cancellation: Option<zetesis_cpu::Cancellation>,
 ) -> Result<AdmittedBundle, BundleAdmissionFailure> {
-    match compile_bundle(&bundle, options, limits, cancellation) {
+    admit_bundle_recording(bundle, options, limits, cancellation, None)
+}
+
+pub(crate) fn admit_bundle_recording(
+    bundle: SourceBundle,
+    options: BundleAdmissionOptions,
+    limits: ExpansionLimits,
+    cancellation: Option<zetesis_cpu::Cancellation>,
+    recorder: Option<&mut crate::automatic::handoff::Recorder>,
+) -> Result<AdmittedBundle, BundleAdmissionFailure> {
+    match compile_bundle(&bundle, options, limits, cancellation, recorder) {
         Ok(compiled) => Ok(AdmittedBundle {
             program: compiled.program,
             bundle,
             template_origins: compiled.template_origins,
+            fact_origins: compiled.fact_origins,
             metadata: compiled.metadata,
             expansion: compiled.expansion,
         }),
@@ -307,6 +324,7 @@ fn compile_bundle(
     options: BundleAdmissionOptions,
     limits: ExpansionLimits,
     cancellation: Option<zetesis_cpu::Cancellation>,
+    mut recorder: Option<&mut crate::automatic::handoff::Recorder>,
 ) -> Result<extended::Compilation, BundleAdmissionError> {
     let budget = crate::expansion::Budget::new(limits, options.core_limits.max_templates)
         .with_cancellation(cancellation);
@@ -330,7 +348,12 @@ fn compile_bundle(
             max_body_elements: options.max_body_elements,
             core_limits: options.core_limits,
         };
-        let nodes = profile::check_bundle(source.parsed(), local).map_err(|error| match error {
+        let nodes = if let Some(recorder) = recorder.as_deref_mut() {
+            recorder.check_profile(source.parsed(), local, true)
+        } else {
+            profile::check_bundle(source.parsed(), local)
+        }
+        .map_err(|error| match error {
             AdmissionFailure::Limit {
                 resource: InputLimit::SyntaxNodes,
                 observed,
@@ -347,18 +370,14 @@ fn compile_bundle(
         visited_nodes += nodes;
         extended::check_definitions_in(source.parsed(), limits, &mut definitions)?;
         metadata::check_count(source.parsed(), limits, &mut metadata_count)?;
-        let raised = raise(source.parsed());
-        if !raised.diagnostics().is_empty() {
-            return Err(AdmissionFailure::Raise(raised.diagnostics().to_vec()).into());
-        }
+        let raised = crate::automatic::handoff::raise(source.parsed(), recorder.as_deref_mut())?;
         budget.poll(crate::ProgramSite::source(Location {
             source: source.id(),
             span: source.source().span(),
         }))?;
-        metadata::collect(raised.program(), &mut source_metadata)?;
+        metadata::collect(&raised, &mut source_metadata)?;
         statements.extend(
             raised
-                .program()
                 .statements()
                 .filter(|carrier| !matches!(carrier.get(), Statement::Include(_)))
                 .cloned(),
@@ -372,13 +391,19 @@ fn compile_bundle(
         span: entry.source().span(),
     };
     let source = SourceProgram::of_nodes(statements);
-    Ok(extended::compile_owned(
+    let result = extended::compile_owned(
         &source,
         options.core_limits,
         budget,
         location.into(),
         source_metadata.finish(location.into())?,
-    )?)
+    );
+    if result.is_err()
+        && let Some(recorder) = recorder
+    {
+        recorder.retain_program(source);
+    }
+    Ok(result?)
 }
 
 pub(crate) fn check_include_identity(bundle: &SourceBundle) -> Result<(), BundleAdmissionError> {

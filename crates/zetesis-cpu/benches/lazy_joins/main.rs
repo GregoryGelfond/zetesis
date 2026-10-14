@@ -74,7 +74,12 @@ impl Case {
                 .unwrap(),
             );
         }
-        let program = Program::new(rules, AdmissionLimits::default()).unwrap();
+        let program = Program::new(
+            rules,
+            zetesis_core::FactTables::default(),
+            AdmissionLimits::default(),
+        )
+        .unwrap();
         let seed = Seed::new(&program, []).unwrap();
         Self {
             program,

@@ -311,3 +311,54 @@ fn interrupted_applicability_returns_no_certificate() {
     ));
     assert_eq!(counters.accounting.work, 0);
 }
+
+#[test]
+fn failing_rows_keep_the_unchanged_count_until_a_passing_row() {
+    crate::formula_support::testing::with_completed_source(
+        "p(1;2). q(1;2). :- p(X),q(Y),X=Y.",
+        |prepared, support, computation, counters| {
+            let rule = prepared
+                .rules_without_facts()
+                .iter()
+                .find(|rule| !rule.body.is_empty())
+                .unwrap();
+            let limits = FormulaLimits::default();
+            let mut budget = crate::formula_support::testing::budget();
+            let mut join =
+                Join::rule(rule, support, computation, &limits, &mut budget, counters).unwrap();
+            join.evidence();
+            join.retain_witnesses(Context::new(computation, &limits, counters, rule.location))
+                .unwrap();
+            let mut passing = Vec::new();
+            let mut failed = 0;
+            while let Some(row) = join
+                .next_matched_row(
+                    &mut budget,
+                    Context::new(computation, &limits, counters, rule.location),
+                )
+                .unwrap()
+            {
+                if row.passes {
+                    let view = row.witnesses.unwrap();
+                    assert_eq!(view.rows.len(), 2);
+                    passing.push(view.unchanged);
+                } else {
+                    assert!(
+                        row.witnesses.is_none(),
+                        "a rejected row cannot lend/reset the record"
+                    );
+                    failed += 1;
+                }
+            }
+            assert_eq!(
+                failed, 2,
+                "the reference family retains rejected complete rows"
+            );
+            assert_eq!(
+                passing,
+                [0, 0],
+                "a changed first depth remains changed through rejected completions"
+            );
+        },
+    );
+}

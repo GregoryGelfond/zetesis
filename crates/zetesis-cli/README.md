@@ -17,6 +17,7 @@ zetesis solve input.lp
 zetesis solve encoding.lp instance.lp --all
 zetesis solve input.lp --all --stats
 zetesis solve input.lp --all --json
+zetesis solve input.lp --count
 printf 'a :- not b. b :- not a.\n' | zetesis solve - --all
 zetesis devices
 zetesis help solve
@@ -48,6 +49,13 @@ retained incumbents are displayed. Exhaustion establishes optimality; an
 interrupted search can return incumbents whose optimality remains unproved.
 The `--answers N` limit bounds displayed ties. Equal displays can represent distinct
 full answer sets.
+
+`--count` prints one integer only after complete enumeration: all full answer
+sets, or all optimal ties when objectives are present. It bypasses `#show`
+evaluation and `#project` deduplication. Interrupted search publishes no partial
+total; stops and failures are reported on stderr. It conflicts with `--answers`, `--all`,
+`--models` and `--json`; `--stats` remains available on stderr. See the
+[counting contract](../../docs/book/reference/commands.md#select-answers).
 
 `--time-limit DURATION` requests a cooperative deadline after input loading.
 Whole nonnegative seconds, or a whole number with `s`, `m` or `h`, are accepted;
@@ -223,18 +231,19 @@ to CPU. Static GPU closure admits at most 4,096 atoms.
 
 Automatic finite formula admission can defer eligible terminal positive definitions
 and reconstruct them from verified base answers; it grounds the remaining rules
-eagerly. Explicit lazy CPU execution
+eagerly. Explicit lazy execution
 can stream ordinary constraints after complete support and arithmetic admission,
 while retaining producers and ineligible constraints. Objectives are scored only
 after complete original constraint checks; their presence disables terminal
-deferral. This hybrid profile requires indexed joins and the CPU backend; see the
+deferral. This hybrid profile requires indexed joins. The selected CPU or GPU
+backend checks its formula core; streamed constraints are checked on the host. See the
 [grounding contract](../../docs/book/architecture/grounding.md#eager-and-lazy-execution).
 With `--oracle auto`, complete-theory checks can select ranked support
 on CPU or a device. Device tight checking evaluates original truth and complete
 positive support without CPU residual queries. When no tight certificate is
 selected, explicit GPU execution uses general propagation and completes
 unresolved reduct queries exactly on CPU. Outer candidate search and objective
-scoring remain on the host. Formula device execution requires an eager theory.
+scoring remain on the host.
 
 CPU automatic membership can also select positive least consequences, including
 positive recursion and checks of all original constraints after closure. The

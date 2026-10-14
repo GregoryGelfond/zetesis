@@ -52,6 +52,7 @@ fn raising_preserves_the_original_program_parts() {
     let actual = raise(&parsed, &mut metadata::Builder::default()).unwrap();
     let expected = raise_program(&parsed).into_program();
     assert_eq!(actual, expected);
+    assert_eq!(format!("{actual:?}"), format!("{expected:?}"));
     assert_eq!(actual.parts().count(), 2);
 }
 

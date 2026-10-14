@@ -103,6 +103,136 @@ fn a_constraint_is_registered_as_a_constraint() {
 }
 
 #[test]
+fn a_projection_makes_a_normal_producer_rich() {
+    let preparation = prepare("d(1). p(1,2). q(X) :- d(X), not p(X,_).");
+    let rules = preparation.program.rules_without_facts();
+    assert!(
+        rules[0]
+            .body
+            .iter()
+            .any(|literal| matches!(literal, crate::formula_ir::LiteralIr::ProjectedAtom(..)))
+    );
+    assert!(matches!(
+        registered(&preparation).producers[..],
+        [Producer::Rich(_)]
+    ));
+}
+
+#[test]
+fn registration_rejects_a_foreign_rule_occurrence() {
+    let source = "p(1). {q(X)} :- p(X).";
+    let owner = prepare(source);
+    let foreign = prepare(source);
+    let registration = registered(&owner);
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    let snapshot = owner
+        .catalog
+        .snapshot(&limits, &mut counters, owner.location)
+        .unwrap();
+    let support = super::Support::indexed(&snapshot, &limits, &counters, owner.location).unwrap();
+    for (index, rule) in [
+        (0, &foreign.program.rules_without_facts()[0]),
+        (1, &owner.program.rules_without_facts()[0]),
+    ] {
+        let Err(error) = registration.variants(index, rule, &support, true, &limits, &mut counters)
+        else {
+            panic!("only the registered rule at its own position may use this registration");
+        };
+        assert!(matches!(error, crate::FormulaFailure::SupportRelation {
+            error: zetesis_core::relation::Failure::Owner, location,
+        } if location == rule.location));
+    }
+}
+
+#[test]
+fn registration_refuses_every_insufficient_work_prefix() {
+    let owner = prepare("p(1). q(2). {r(X,Y)} :- p(X), q(Y), not p(Y).");
+    let defaults = FormulaLimits::default();
+    let view = owner
+        .catalog
+        .component_view(&defaults, &mut Counters::default(), owner.location)
+        .unwrap();
+    let run = |maximum| {
+        let limits = FormulaLimits {
+            max_work: maximum,
+            ..defaults
+        };
+        let mut counters = Counters::default();
+        let result = Registration::prepare(
+            owner.program.rules_without_facts(),
+            view,
+            0,
+            &limits,
+            &mut counters,
+            owner.location,
+        );
+        (result, counters.accounting.work)
+    };
+    let (complete, required) = run(defaults.max_work);
+    assert!(complete.is_ok());
+    assert!(required > 0);
+    for maximum in 0..required {
+        let (result, work) = run(maximum);
+        assert!(matches!(result, Err(crate::FormulaFailure::Limit {
+            resource: crate::FormulaResource::Work, observed, limit, ..
+        }) if observed > limit && limit == u128::from(maximum)));
+        assert!(work <= maximum);
+    }
+    assert!(run(required).0.is_ok());
+}
+
+#[test]
+fn registration_admits_its_header_beside_existing_storage() {
+    let owner = prepare("p(1). {q(X)} :- p(X).");
+    let external = owner.catalog.bytes(owner.location).unwrap() as u128;
+    let required = external + std::mem::size_of::<Registration<'_>>() as u128;
+    let limits = FormulaLimits {
+        max_support_bytes: usize::try_from(required - 1).unwrap(),
+        ..FormulaLimits::default()
+    };
+    let mut counters = Counters::default();
+    let result = Registration::prepare(
+        owner.program.rules_without_facts(),
+        None,
+        external,
+        &limits,
+        &mut counters,
+        owner.location,
+    );
+    assert!(matches!(result, Err(crate::FormulaFailure::Limit {
+        resource: crate::FormulaResource::SupportBytes, observed, limit, ..
+    }) if observed == required && limit == required - 1));
+    assert_eq!(counters.accounting.work, 0);
+}
+
+#[test]
+fn an_unchanged_visit_charges_each_registered_read() {
+    let owner = prepare("p(1). q(2). {r(X)} :- p(X), not q(X).");
+    let registration = registered(&owner);
+    let Producer::Rich(range) = &registration.producers[0] else {
+        panic!("the choice must be a rich producer");
+    };
+    assert_eq!(range.len(), 2);
+    let limits = FormulaLimits::default();
+    let mut counters = Counters::default();
+    // Before facts are published, both read relations are unchanged and empty.
+    let snapshot = owner
+        .catalog
+        .snapshot(&limits, &mut counters, owner.location)
+        .unwrap();
+    let support = super::Support::indexed(&snapshot, &limits, &counters, owner.location).unwrap();
+    let rule = &owner.program.rules_without_facts()[0];
+    let before = counters.accounting.work;
+    let mut variants = registration
+        .variants(0, rule, &support, false, &limits, &mut counters)
+        .unwrap();
+    // One unit to test an entry and one to resolve its predicate.
+    assert_eq!(counters.accounting.work - before, 4);
+    assert!(variants.next(&limits, &mut counters).unwrap().is_none());
+}
+
+#[test]
 fn a_rich_rule_reads_every_frame_of_either_sign() {
     // Body atoms of both signs, a choice element's condition, and an
     // aggregate element's condition, but not the derived heads.

@@ -7,6 +7,14 @@ their own source revisions, workloads and measurement conditions.
 
 ## Recorded comparisons
 
+The [14 October CPU corpus comparison](cpu-corpus-20261014.md) compares released
+0.5.0 with a frozen pre-release candidate at one and fourteen workers. Summed
+process-time estimates fall 35.48% and 35.78%, respectively, including the
+change from the release's combined executable to the candidate's CPU front.
+The page retains all 94 cases, direct clingo comparisons with a descriptive 3%
+band, internal stages, memory, binary identities and reproduction commands.
+This is a cumulative candidate measurement, not a released-version claim.
+
 The [10 October CPU corpus comparison](cpu-corpus-20261010.md) measures all
 94 cases before and after the final combined propagation, objective-preparation
 and arithmetic-checking changes. Automatic grounding's summed wall medians rise

@@ -34,7 +34,12 @@ fn program(rules: &[(u8, u8, u8, u8)]) -> Program {
             )
         })
         .collect();
-    Program::new(templates, zetesis_core::AdmissionLimits::default()).unwrap()
+    Program::new(
+        templates,
+        zetesis_core::FactTables::default(),
+        zetesis_core::AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn compare(program: &Program) {

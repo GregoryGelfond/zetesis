@@ -5,19 +5,15 @@ use std::io::Write;
 
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
-    BundleAdmissionError, BundleAdmissionOptions, ExpansionLimits, ParsedSource, SourceBundle,
-    SourceFailure, admit_bundle_extended_with_cancellation,
+    AutomaticAdmission, AutomaticAdmissionFailure, BundleAdmissionError, BundleAdmissionOptions,
+    ExpansionLimits, ParsedSource, SourceBundle, SourceFailure,
+    admit_bundle_automatic_with_cancellation, admit_bundle_extended_with_cancellation,
 };
 
 use crate::SolvePhase;
 use crate::failure::Progress;
 use crate::phase_timing::Recorder;
 use crate::{Options, Oracle, PublicationFailure, RunError};
-
-enum Input {
-    Text(String),
-    Parsed(ParsedSource),
-}
 
 /// A program prepared by the shared library execution policy, with how its
 /// preparation compiled its comparisons; the CLI only presents its warnings,
@@ -170,18 +166,48 @@ pub(crate) fn source(
         return Ok(report);
     }
     let admission = options.resources().admission_options();
-    let source = if options.oracle == Oracle::Countermodel {
-        Input::Text(source)
+    // This reads configuration only. Consult a refusal at the same boundary as
+    // before: after an extended refusal that actually requires formulas.
+    let formula_policy = validate_formula(options);
+    let prepared = if options.oracle == Oracle::Countermodel {
+        formula_policy?;
+        if let Some(report) =
+            crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
+        {
+            return Ok(report);
+        }
+        phases.measure(SolvePhase::AdmissionMaterialization, || {
+            ParsedSource::new(source, admission)
+                .map_err(zetesis_themelios::FormulaFailure::from)?
+                .prepare_formula_with_cancellation(
+                    expansion_limits(options),
+                    formula_limits(options),
+                    cancellation,
+                )
+                .map_err(SourceFailure::into_error)
+        })
     } else {
         let source = phases
             .measure(SolvePhase::AdmissionMaterialization, || {
                 ParsedSource::new(source, admission)
             })
             .map_err(|error| RunError::Expansion(error.into()))?;
-        match phases.measure(SolvePhase::AdmissionMaterialization, || {
-            source.admit_extended_with_cancellation(expansion_limits(options), cancellation)
-        }) {
-            Ok(admitted) => {
+        let admitted = phases.measure(SolvePhase::AdmissionMaterialization, || {
+            if options.oracle == Oracle::Auto && formula_policy.is_ok() {
+                source.admit_automatic_with_cancellation(
+                    expansion_limits(options),
+                    formula_limits(options),
+                    cancellation,
+                )
+            } else {
+                source
+                    .admit_extended_with_cancellation(expansion_limits(options), cancellation)
+                    .map(AutomaticAdmission::Extended)
+                    .map_err(AutomaticAdmissionFailure::Extended)
+            }
+        });
+        match admitted {
+            Ok(AutomaticAdmission::Extended(admitted)) => {
                 diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
                 return crate::publication::solve(
                     crate::PreparedInput::admitted(&admitted),
@@ -194,50 +220,60 @@ pub(crate) fn source(
                 )
                 .map_err(|failure| source_failure(failure, "<input>", admitted.source()));
             }
+            Ok(AutomaticAdmission::Formula(prepared)) => Ok(prepared),
             Err(error) => {
-                if let Some(reason) = expansion_control(error.error()) {
+                if let Some(reason) = error.interruption() {
                     return crate::publication::interrupted(reason, renderer, diagnostics, phases);
                 }
-                if options.oracle == Oracle::Auto && error.error().needs_formula_admission() {
-                    Input::Parsed(error.into_source())
-                } else {
-                    return Err(RunError::Expansion(error.into_error()).into());
+                match error {
+                    AutomaticAdmissionFailure::Extended(error) => {
+                        if options.oracle == Oracle::Auto && error.error().needs_formula_admission()
+                        {
+                            formula_policy?;
+                        }
+                        return Err(RunError::Expansion(error.into_error()).into());
+                    }
+                    AutomaticAdmissionFailure::Formula(error) => Err(error.into_error()),
                 }
             }
         }
     };
-    validate_formula(options)?;
-    if let Some(report) =
-        crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
-    {
-        return Ok(report);
-    }
+    solve_source_formula(
+        prepared,
+        options,
+        renderer,
+        diagnostics,
+        cancellation,
+        phases,
+    )
+}
+
+fn solve_source_formula(
+    prepared: Result<zetesis_themelios::PreparedFormula, zetesis_themelios::FormulaFailure>,
+    options: &Options,
+    renderer: &mut impl crate::AnswerRenderer,
+    diagnostics: &mut Diagnostics<impl Write>,
+    cancellation: &Cancellation,
+    phases: &Recorder,
+) -> Result<Progress, PublicationFailure> {
     let observer = phases.grounding_observer();
     let admitted: Result<FormulaInput, zetesis_themelios::FormulaFailure> =
-        phases.measure(SolvePhase::AdmissionMaterialization, || {
-            let parsed = match source {
-                Input::Text(text) => ParsedSource::new(text, admission)?,
-                Input::Parsed(parsed) => parsed,
-            };
-            let prepared = parsed
-                .prepare_formula_with_cancellation(
-                    expansion_limits(options),
-                    formula_limits(options),
-                    cancellation,
+        prepared.and_then(|prepared| {
+            phases.measure(SolvePhase::AdmissionMaterialization, || {
+                let prepared = prepared
+                    .with_grounding_options(grounding_options(options))
+                    .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()));
+                let forms = prepared.comparison_forms();
+                let observer = observer
+                    .as_ref()
+                    .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver);
+                zetesis_solve::prepare_formula_execution(
+                    prepared,
+                    &crate::SolveConfig::from(options),
+                    observer,
                 )
-                .map_err(SourceFailure::into_error)?
-                .with_grounding_options(grounding_options(options))
-                .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()));
-            let forms = prepared.comparison_forms();
-            let observer = observer
-                .as_ref()
-                .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver);
-            zetesis_solve::prepare_formula_execution(
-                prepared,
-                &crate::SolveConfig::from(options),
-                observer,
-            )
-            .map(|execution| FormulaInput(execution, forms))
+                .map(|execution| FormulaInput(execution, forms))
+            })
         });
     let admitted = match admitted {
         Ok(admitted) => admitted,
@@ -279,18 +315,46 @@ pub(crate) fn bundle(
             bundle.total_bytes()
         ),
     )?;
-    let bundle = if options.oracle == Oracle::Countermodel {
-        bundle
-    } else {
-        match phases.measure(SolvePhase::AdmissionMaterialization, || {
-            admit_bundle_extended_with_cancellation(
+    let formula_policy = validate_formula(options);
+    let prepared = if options.oracle == Oracle::Countermodel {
+        formula_policy?;
+        if let Some(report) =
+            crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
+        {
+            return Ok(report);
+        }
+        phases.measure(SolvePhase::AdmissionMaterialization, || {
+            zetesis_themelios::prepare_bundle_formula_with_cancellation(
                 bundle,
                 bundle_options(options),
                 expansion_limits(options),
+                formula_limits(options),
                 cancellation,
             )
-        }) {
-            Ok(admitted) => {
+        })
+    } else {
+        let admitted = phases.measure(SolvePhase::AdmissionMaterialization, || {
+            if options.oracle == Oracle::Auto && formula_policy.is_ok() {
+                admit_bundle_automatic_with_cancellation(
+                    bundle,
+                    bundle_options(options),
+                    expansion_limits(options),
+                    formula_limits(options),
+                    cancellation,
+                )
+            } else {
+                admit_bundle_extended_with_cancellation(
+                    bundle,
+                    bundle_options(options),
+                    expansion_limits(options),
+                    cancellation,
+                )
+                .map(AutomaticAdmission::Extended)
+                .map_err(AutomaticAdmissionFailure::Extended)
+            }
+        });
+        match admitted {
+            Ok(AutomaticAdmission::Extended(admitted)) => {
                 diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
                 return crate::publication::solve(
                     crate::PreparedInput::bundle(&admitted),
@@ -303,51 +367,64 @@ pub(crate) fn bundle(
                 )
                 .map_err(|failure| bundle_failure(failure, admitted.bundle()));
             }
+            Ok(AutomaticAdmission::Formula(prepared)) => Ok(prepared),
             Err(error) => {
-                if let BundleAdmissionError::Expansion(expansion) = error.error()
-                    && let Some(reason) = expansion_control(expansion)
-                {
+                if let Some(reason) = error.interruption() {
                     return crate::publication::interrupted(reason, renderer, diagnostics, phases);
                 }
-                if options.oracle == Oracle::Auto
-                    && matches!(error.error(), BundleAdmissionError::Expansion(expansion)
-            if expansion.needs_formula_admission())
-                {
-                    error.into_bundle()
-                } else {
-                    return Err(RunError::BundleAdmission(error).into());
+                match error {
+                    AutomaticAdmissionFailure::Extended(error) => {
+                        if options.oracle == Oracle::Auto
+                            && matches!(error.error(), BundleAdmissionError::Expansion(expansion) if expansion.needs_formula_admission())
+                        {
+                            formula_policy?;
+                        }
+                        return Err(RunError::BundleAdmission(error).into());
+                    }
+                    AutomaticAdmissionFailure::Formula(error) => Err(error),
                 }
             }
         }
     };
-    validate_formula(options)?;
-    if let Some(report) =
-        crate::publication::check_cancellation(renderer, diagnostics, cancellation, phases)?
-    {
-        return Ok(report);
-    }
+    solve_bundle_formula(
+        prepared,
+        options,
+        renderer,
+        diagnostics,
+        cancellation,
+        phases,
+    )
+}
+
+fn solve_bundle_formula(
+    prepared: Result<
+        zetesis_themelios::PreparedFormulaBundle,
+        zetesis_themelios::FormulaBundleFailure,
+    >,
+    options: &Options,
+    renderer: &mut impl crate::AnswerRenderer,
+    diagnostics: &mut Diagnostics<impl Write>,
+    cancellation: &Cancellation,
+    phases: &Recorder,
+) -> Result<Progress, PublicationFailure> {
     let observer = phases.grounding_observer();
-    let admitted: Result<FormulaInput, zetesis_themelios::FormulaBundleFailure> =
-        phases.measure(SolvePhase::AdmissionMaterialization, || {
-            let prepared = zetesis_themelios::prepare_bundle_formula_with_cancellation(
-                bundle,
-                bundle_options(options),
-                expansion_limits(options),
-                formula_limits(options),
-                cancellation,
-            )?
-            .with_grounding_options(grounding_options(options))
-            .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()));
-            let forms = prepared.comparison_forms();
-            let observer = observer
-                .as_ref()
-                .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver);
-            zetesis_solve::prepare_bundle_execution(
-                prepared,
-                &crate::SolveConfig::from(options),
-                observer,
-            )
-            .map(|execution| FormulaInput(execution, forms))
+    let admitted: Result<FormulaInput, zetesis_themelios::FormulaBundleFailure> = prepared
+        .and_then(|prepared| {
+            phases.measure(SolvePhase::AdmissionMaterialization, || {
+                let prepared = prepared
+                    .with_grounding_options(grounding_options(options))
+                    .with_domain_analysis(Some(zetesis_themelios::DomainLimits::default()));
+                let forms = prepared.comparison_forms();
+                let observer = observer
+                    .as_ref()
+                    .map(|observer| observer as &dyn zetesis_themelios::GroundingObserver);
+                zetesis_solve::prepare_bundle_execution(
+                    prepared,
+                    &crate::SolveConfig::from(options),
+                    observer,
+                )
+                .map(|execution| FormulaInput(execution, forms))
+            })
         });
     let admitted = match admitted {
         Ok(admitted) => admitted,
@@ -359,18 +436,6 @@ pub(crate) fn bundle(
         }
     };
     admitted.solve(options, renderer, diagnostics, cancellation, phases)
-}
-
-fn expansion_control(error: &zetesis_themelios::ExpansionFailure) -> Option<zetesis_cpu::Stop> {
-    if let zetesis_themelios::ExpansionFailure::Interrupted {
-        reason: reason @ (zetesis_cpu::Stop::Cancelled | zetesis_cpu::Stop::Deadline),
-        ..
-    } = error
-    {
-        Some(*reason)
-    } else {
-        None
-    }
 }
 
 fn source_failure(

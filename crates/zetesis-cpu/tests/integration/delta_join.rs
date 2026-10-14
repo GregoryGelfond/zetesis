@@ -33,7 +33,12 @@ fn chain_rules(length: i32) -> Vec<Template> {
 }
 
 fn chain(length: i32) -> Program {
-    Program::new(chain_rules(length), AdmissionLimits::default()).unwrap()
+    Program::new(
+        chain_rules(length),
+        zetesis_core::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 #[test]

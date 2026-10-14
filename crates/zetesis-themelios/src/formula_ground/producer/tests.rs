@@ -247,7 +247,13 @@ fn fragment(source: &str) -> (Fragment, Counts) {
                 if !rule.body.is_empty() {
                     source_origins.extend_from_slice(&rule.origins);
                     builder
-                        .instantiate_rule(rule, index, None, support)
+                        .instantiate_rule(
+                            rule,
+                            index,
+                            None,
+                            support,
+                            crate::formula_ground::Schedule::Eager(None),
+                        )
                         .unwrap();
                 }
             }
@@ -262,7 +268,7 @@ fn fragment(source: &str) -> (Fragment, Counts) {
                         .get(
                             index,
                             builder.computation,
-                            &mut builder.counters,
+                            builder.counters,
                             &limits,
                             location,
                         )
@@ -368,15 +374,15 @@ fn interrupted_families_publish_no_theory() {
             ground(preparation, None, None)
         });
         assert_eq!(counts.runs, 1, "{point:?}");
-        assert!(
-            matches!(
-                result,
-                Err(FormulaFailure::Interrupted {
-                    reason: Stop::Cancelled,
-                    ..
-                })
-            ),
-            "{point:?}"
+        // Either scalar expansion or formula accounting may observe first;
+        // retain the observed owner's typed interruption and source location.
+        let Err(error) = result else {
+            panic!("cancelled producers publish no theory");
+        };
+        assert_eq!(
+            error.interruption(),
+            Some(Stop::Cancelled),
+            "{point:?}: {counts:?}: {error:?}"
         );
     }
 }
@@ -547,15 +553,15 @@ fn reused_subformulas_observe_cancellation() {
         let (result, counts) = route::controlled(true, Some((point, after, cancellation)), || {
             ground(preparation, None, None)
         });
-        assert!(
-            matches!(
-                result,
-                Err(FormulaFailure::Interrupted {
-                    reason: Stop::Cancelled,
-                    ..
-                })
-            ),
-            "{point:?}: {counts:?}"
+        // Either scalar expansion or formula accounting may observe first;
+        // retain the observed owner's typed interruption and source location.
+        let Err(error) = result else {
+            panic!("cancelled producers publish no theory");
+        };
+        assert_eq!(
+            error.interruption(),
+            Some(Stop::Cancelled),
+            "{point:?}: {counts:?}: {error:?}"
         );
     }
 }

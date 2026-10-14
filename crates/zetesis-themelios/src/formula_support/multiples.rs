@@ -221,7 +221,7 @@ impl<'a, 'source> Join<'a, 'source> {
         if self.source_evidence || self.delta.is_none() {
             return Ok(false);
         }
-        if !std::ptr::eq(self.literals, rule.body.as_slice()) {
+        if !std::ptr::eq(self.literals.get(), rule.body.as_slice()) {
             return Err(FormulaFailure::SupportRelation {
                 error: zetesis_core::relation::Failure::Owner,
                 location: rule.location,
@@ -327,7 +327,9 @@ impl<'a, 'source> Join<'a, 'source> {
         let offered = match &ordinary {
             Probe::Indexed(delta::Rows::Interval(range)) => range.len(),
             Probe::Indexed(delta::Rows::Posting(rows)) => rows.len(),
-            Probe::Table(_) | Probe::Owned(_) => unreachable!("indexed_probe returns indexed rows"),
+            Probe::Table(_) | Probe::Owned(_) | Probe::Expression(_) | Probe::Range(_) => {
+                unreachable!("indexed_probe returns indexed rows")
+            }
         };
         let interval = self.delta.map(|_| {
             delta::interval(

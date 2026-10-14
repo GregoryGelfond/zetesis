@@ -12,6 +12,7 @@ fn cycle() -> Program {
                 Template::new(Some(atom(head)), vec![], vec![], vec![atom(gate)], vec![])
             })
             .collect(),
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap()
@@ -264,6 +265,7 @@ fn an_upper_only_constraint_does_not_refute() {
             Template::new(Some(a.clone()), vec![], vec![a.clone()], vec![], vec![]),
             Template::new(None, vec![a], vec![], vec![], vec![]),
         ],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();

@@ -45,8 +45,8 @@ fn defined_signatures_are_located_declarations_without_logical_effects() {
     let accepted = input(source);
     let base = input("p(1). {q}.");
     assert_eq!(
-        accepted.program().templates().iter().collect::<Vec<_>>(),
-        base.program().templates().iter().collect::<Vec<_>>()
+        zetesis_test_support::programs::rules(accepted.program()).collect::<Vec<_>>(),
+        zetesis_test_support::programs::rules(base.program()).collect::<Vec<_>>()
     );
     assert_eq!(answer_sets(accepted.program()), answer_sets(base.program()));
     assert!(!accepted.metadata().output().is_explicit());
@@ -177,7 +177,7 @@ fn raw_metadata_occurrences_have_their_own_budget_before_deduplication() {
         ExpansionLimits::default(),
     )
     .expect("metadata consumes no templates");
-    assert!(accepted.program().templates().is_empty());
+    assert!(accepted.program().is_empty());
     assert_eq!(answer_sets(accepted.program()).len(), 1);
     assert!(
         admit_extended(

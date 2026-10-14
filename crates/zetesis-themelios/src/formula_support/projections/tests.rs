@@ -492,7 +492,7 @@ fn cancelled_hits_never_return_a_value() {
             .unwrap();
             let cancellation = zetesis_cpu::Cancellation::default();
             cancellation.cancel();
-            counters.cancellation = Some(cancellation);
+            counters.attach_test_control(&cancellation);
             assert!(matches!(
                 evaluate(
                     projections,

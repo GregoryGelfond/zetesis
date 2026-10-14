@@ -162,7 +162,7 @@ fn cancelled_leaf_never_reads_its_variable() {
     Fixture::default().with(location(), |_, computation, counters| {
         let cancellation = zetesis_cpu::Cancellation::default();
         cancellation.cancel();
-        counters.cancellation = Some(cancellation);
+        counters.attach_test_control(&cancellation);
         let mut evaluation = Evaluation::default();
         let result = evaluation.expression(
             &Expression::new(vec![Operation::Variable(0)]),

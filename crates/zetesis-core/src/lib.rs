@@ -1,21 +1,22 @@
 //! Device-independent relational vocabulary for zetesis.
 //!
-//! Programs are immutable admitted templates. A [`Seed`] is an exact sparse true
-//! set bound to one program instance; absent tuples are its false complement.
+//! Programs are immutable admitted templates and explicit facts. A [`Seed`] is an
+//! exact sparse true set bound to one program instance; absent tuples are its false
+//! complement.
 //! [`GroundProgram::compile`] is explicitly eager. Admission, seed construction,
 //! and carrier-iterator creation never invoke it. See the
 //! [library map](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/rust/libraries.md)
 //! and [grounding architecture](https://github.com/GregoryGelfond/zetesis/blob/main/docs/book/architecture/grounding.md).
 //!
 //! ```
-//! use zetesis_core::{AdmissionLimits, Atom, AtomPattern, GroundProgram,
+//! use zetesis_core::{AdmissionLimits, Atom, AtomPattern, FactTables, GroundProgram,
 //!     Predicate, Program, Seed, StaticLimits, Template};
 //!
 //! let signature = Predicate::new("selected", 0)?;
 //! let selected = AtomPattern::new(signature.clone(), vec![])?;
 //! // The normalized singleton choice `{selected}.` uses a true candidate gate.
 //! let choice = Template::new(Some(selected.clone()), vec![], vec![selected], vec![], vec![]);
-//! let program = Program::new(vec![choice], AdmissionLimits::default())?;
+//! let program = Program::new(vec![choice], FactTables::default(), AdmissionLimits::default())?;
 //! let seed = Seed::new(&program, [Atom::new(signature, vec![])?])?;
 //! let graph = GroundProgram::compile(&program, StaticLimits::default())?;
 //! assert_eq!(graph.seed_words(&seed)?, vec![1]);
@@ -65,9 +66,10 @@ pub use model::{
     ModelOrder, ModelPublication, ModelPublicationFailure,
 };
 pub use program::{
-    AdmissionError, AdmissionLimits, AdmissionResource, Domain, DomainPositions, FilterRef,
-    Filters, PatternRef, PatternTerms, Patterns, Predicates, Program, TemplateRef, TemplateTerm,
-    Templates,
+    AdmissionError, AdmissionLimits, AdmissionOrigin, AdmissionResource, Domain, DomainPositions,
+    FactIter, FactOccurrences, FactRef, FactRelation, FactSegment, FactTables, FilterRef, Filters,
+    PatternRef, PatternTerms, Patterns, Predicates, Program, RuleRef, Rules, TemplateRef,
+    TemplateTerm, Templates,
 };
 pub use template::{
     AtomPattern, Filter, InstantiationError, Template, TemplateCatalog, TemplateCatalogBuilder,

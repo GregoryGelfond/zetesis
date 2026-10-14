@@ -25,7 +25,12 @@ fn facts() -> Program {
             AtomPattern::new(Predicate::new("p", 1).unwrap(), vec![Term::Constant(value)]).unwrap();
         Template::new(Some(atom), vec![], vec![], vec![], vec![])
     });
-    Program::new(statements.into(), AdmissionLimits::default()).unwrap()
+    Program::new(
+        statements.into(),
+        crate::FactTables::default(),
+        AdmissionLimits::default(),
+    )
+    .unwrap()
 }
 
 fn table(program: &Program) -> DomainPositions<'_> {

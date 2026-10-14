@@ -105,26 +105,12 @@ impl Column {
         Ok((column, payload))
     }
 
-    /// The segments in emission order, without moving the column's cursor.
+    /// The segments in emission order, independent of the copy-preflight position.
     pub(super) fn cells(&self) -> impl Iterator<Item = Cell<'_>> {
         self.segments.iter().map(|segment| match segment {
             Segment::Scalar(value) => Cell::Scalar(value),
             Segment::Interval(range) => Cell::Interval(range.clone()),
         })
-    }
-
-    pub(super) fn value(&self) -> Value {
-        match &self.segments[self.segment] {
-            Segment::Scalar(value) => value.clone(),
-            Segment::Interval(range) => Value::Number(
-                i32::try_from(
-                    i64::from(*range.start())
-                        + i64::try_from(self.offset)
-                            .expect("an i32 interval has at most 2^32 positions"),
-                )
-                .expect("the current position belongs to the checked interval"),
-            ),
-        }
     }
 
     pub(super) fn value_bytes(&self) -> u128 {

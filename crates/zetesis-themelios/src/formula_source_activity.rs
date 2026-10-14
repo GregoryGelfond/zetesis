@@ -34,8 +34,8 @@ use crate::formula_binding::Binding;
 use crate::formula_facts::{FactBlock, Item};
 use crate::formula_ir::{HeadIr, LiteralIr, Prepared, RuleIr};
 use crate::formula_support::{
-    self, CompletedQueries, Computation, Counters, Join, SourceAtom, SourceSelection, StorageLease,
-    Support,
+    self, CompletedQueries, Computation, Counters, Ir, Join, SourceAtom, SourceSelection,
+    StorageLease, Support,
 };
 use crate::{FormulaFailure, FormulaLimits, FormulaResource};
 
@@ -309,12 +309,12 @@ impl Context<'_, '_, '_> {
 impl SourceEligibility {
     /// Discover all scoped atom dependencies and complete their shared activity.
     /// This never adds the observing conditions to logical producers.
-    pub(crate) fn build_from_conditions<'a>(
-        prepared: &Prepared,
-        completed_support: &CompletedQueries<'_>,
+    pub(crate) fn build_from_conditions<'a, 'source>(
+        prepared: &'source Prepared,
+        completed_support: &CompletedQueries<'source>,
         retained: usize,
         conditions: impl IntoIterator<Item = &'a [LiteralIr]>,
-        context: &mut Context<'_, '_, '_>,
+        context: &mut Context<'_, '_, 'source>,
     ) -> Result<Self, FormulaFailure> {
         let support = completed_support.support();
         let graph = prepared.analysis.dependencies();
@@ -351,13 +351,13 @@ impl SourceEligibility {
         Ok(result)
     }
 
-    fn predicate(
+    fn predicate<'source>(
         &mut self,
-        prepared: &Prepared,
+        prepared: &'source Prepared,
         predicate: &Signature,
-        support: &Support<'_>,
+        support: &Support<'source>,
         temporary: usize,
-        context: &mut Context<'_, '_, '_>,
+        context: &mut Context<'_, '_, 'source>,
     ) -> Result<(), FormulaFailure> {
         self.round = Some(authority::Round::new(context));
         let result = self
@@ -373,13 +373,13 @@ impl SourceEligibility {
         result
     }
 
-    fn derive_predicate(
+    fn derive_predicate<'source>(
         &mut self,
-        prepared: &Prepared,
+        prepared: &'source Prepared,
         predicate: &Signature,
-        support: &Support<'_>,
+        support: &Support<'source>,
         temporary: usize,
-        context: &mut Context<'_, '_, '_>,
+        context: &mut Context<'_, '_, 'source>,
     ) -> Result<(), FormulaFailure> {
         // A fact block is a precise producer: a normal head over an empty body.
         let mut precise = true;
@@ -431,17 +431,17 @@ impl SourceEligibility {
         Ok(())
     }
 
-    fn rule(
+    fn rule<'source>(
         &mut self,
-        rule: &RuleIr,
+        rule: &'source RuleIr,
         predicate: &Signature,
-        support: &Support<'_>,
+        support: &Support<'source>,
         temporary: usize,
-        context: &mut Context<'_, '_, '_>,
+        context: &mut Context<'_, '_, 'source>,
     ) -> Result<(), FormulaFailure> {
         context.location = rule.location;
         let mut outer = Join::rule(
-            rule,
+            Ir::Source(rule),
             support,
             context.computation,
             context.limits,
@@ -491,7 +491,7 @@ impl SourceEligibility {
                             continue;
                         }
                         let mut local = Join::element(
-                            element,
+                            Ir::Source(element),
                             &binding,
                             support,
                             context.budget,
@@ -572,12 +572,12 @@ impl SourceEligibility {
         self.stage(&atom, activity, temporary, context)
     }
 
-    fn producer_activity(
+    fn producer_activity<'source>(
         &self,
         literals: &[LiteralIr],
         binding: &Binding,
-        support: &Support<'_>,
-        context: &mut Context<'_, '_, '_>,
+        support: &Support<'source>,
+        context: &mut Context<'_, '_, 'source>,
     ) -> Result<Activity, FormulaFailure> {
         if ordinary(literals) {
             self.activity(literals, binding, context)

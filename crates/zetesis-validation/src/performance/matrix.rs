@@ -15,8 +15,10 @@
 //! every fixed schedule position remains recorded. No failed sample is replaced.
 //! Callers arrange a qualified executable and quiet physical-device window.
 //! The top-level manifest is the pinned catalog context for corpus selections.
-//! Generated and authored workloads authenticate their own inputs in per-workload
-//! provenance; the catalog does not claim to contain or qualify those sources.
+//! Generated, authored and external bundle workloads authenticate their own
+//! inputs in per-workload provenance; the catalog does not claim to contain or qualify those sources.
+//! External bundles require fresh reference qualification. Memory campaigns also
+//! reserve the root `child-rss.json` artifact path, checked on the copied filesystem.
 
 mod config;
 mod invocation;
@@ -39,7 +41,10 @@ pub use record::{
     Procedure, RegionChecks, Sample, SourceEvaluationStatistics, TerminalStatistics,
 };
 pub(crate) use workload::workload_label;
-pub use workload::{AuthoredProgram, ConstantAmendment, Workload, WorkloadLimits};
+pub use workload::{
+    AuthoredProgram, BundleFile, BundleInclude, BundleProgram, ConstantAmendment, Workload,
+    WorkloadLimits,
+};
 
 use super::{Capture, Error, Fault};
 use crate::selected::{Change, FileSeal, publication};

@@ -3,7 +3,7 @@ use crate::{ExpansionLimits, ExpansionResource, StatementId};
 use themelios_program::program::{Arguments, Atom, Rule};
 use themelios_program::symbol::{Name, Sign, Symbol};
 use themelios_program::term::{EvalError, Term as SourceTerm, Variable};
-use zetesis_core::{Term, Value};
+use zetesis_core::{AdmissionLimits, FactSegment, FactTables, Program, Value, ValueLimits};
 use zetesis_cpu::{Cancellation, Stop};
 
 fn fact(lower: i32, upper: i32) -> WithProvenance<Statement> {
@@ -104,26 +104,46 @@ fn range(lower: i32, upper: i32) -> SourceTerm {
     }
 }
 
+fn native(facts: &Facts) -> Program {
+    let mut tables = FactTables::default();
+    for product in facts.products() {
+        let columns = product
+            .columns()
+            .map(|column| {
+                column
+                    .map(|cell| match cell {
+                        Cell::Scalar(value) => FactSegment::Value(value.clone()),
+                        Cell::Interval(range) => FactSegment::Interval {
+                            first: *range.start(),
+                            last: *range.end(),
+                        },
+                    })
+                    .collect()
+            })
+            .collect();
+        tables
+            .push_product(0, product.predicate().clone(), columns)
+            .unwrap();
+    }
+    Program::new(Vec::new(), tables, AdmissionLimits::default()).unwrap()
+}
+
 fn heads(source: &WithProvenance<Statement>, budget: &mut Budget) -> Vec<Vec<Value>> {
     let location = crate::test_support::location();
-    let mut facts = facts(source, budget, location).unwrap().unwrap();
-    let count = facts.len();
-    let mut output = Vec::new();
-    while let Some(head) = facts.next(budget, location).unwrap() {
-        output.push(
-            head.terms()
+    let facts = facts(source, budget, location).unwrap().unwrap();
+    let program = native(&facts);
+    assert_eq!(program.facts().len(), facts.len());
+    program
+        .facts()
+        .into_iter()
+        .map(|fact| {
+            fact.atom()
+                .values()
                 .iter()
-                .map(|term| match term {
-                    Term::Constant(value) => value.clone(),
-                    Term::Variable(_) => panic!("fact acquired a variable"),
-                })
-                .collect(),
-        );
-    }
-    assert_eq!(output.len(), count);
-    assert_eq!(facts.len(), 0);
-    assert!(facts.next(budget, location).unwrap().is_none());
-    output
+                .map(|value| value.to_value(ValueLimits::default()).unwrap())
+                .collect()
+        })
+        .collect()
 }
 
 #[test]
@@ -234,7 +254,7 @@ fn range_width_does_not_allocate_expanded_columns() {
     let small = facts(&fact(1, 3), &mut family_budget(usize::MAX), location)
         .unwrap()
         .unwrap();
-    let mut large = facts(
+    let large = facts(
         &fact(1, 1_000_000),
         &mut family_budget(usize::MAX),
         location,
@@ -243,18 +263,19 @@ fn range_width_does_not_allocate_expanded_columns() {
     .unwrap();
     assert_eq!(retained(&small), retained(&large));
     assert!(retained(&large) < 4096);
-    let budget = family_budget(usize::MAX);
-    assert_eq!(
-        large.next(&budget, location).unwrap().unwrap().terms(),
-        &[Term::Constant(Value::Number(1))]
-    );
-    assert_eq!(large.len(), 999_999);
+    assert_eq!(large.len(), 1_000_000);
+    let product = large.products().next().unwrap();
+    let mut columns = product.columns();
+    let mut cells = columns.next().unwrap();
+    assert!(matches!(cells.next(), Some(Cell::Interval(range)) if range == (1..=1_000_000)));
+    assert!(cells.next().is_none());
+    assert!(columns.next().is_none());
 }
 
 #[test]
 fn product_cardinality_does_not_allocate_fact_carriers() {
     let location = crate::test_support::location();
-    let mut products = facts(
+    let products = facts(
         &input(vec![range(1, 100), range(1, 100)]),
         &mut family_budget(usize::MAX),
         location,
@@ -264,25 +285,14 @@ fn product_cardinality_does_not_allocate_fact_carriers() {
     assert_eq!(products.len(), 10_000);
     assert_eq!(products.products.len(), 1);
     assert!(products.products[0].retained_bytes() < 4096);
-    let budget = family_budget(usize::MAX);
-    for second in 1..=100 {
-        let head = products.next(&budget, location).unwrap().unwrap();
-        assert_eq!(
-            head.terms(),
-            &[
-                Term::Constant(Value::Number(1)),
-                Term::Constant(Value::Number(second))
-            ]
-        );
+    let product = products.products().next().unwrap();
+    assert_eq!(product.len(), 10_000);
+    let columns = product.columns().collect::<Vec<_>>();
+    assert_eq!(columns.len(), 2);
+    for mut column in columns {
+        assert!(matches!(column.next(), Some(Cell::Interval(range)) if range == (1..=100)));
+        assert!(column.next().is_none());
     }
-    let head = products.next(&budget, location).unwrap().unwrap();
-    assert_eq!(
-        head.terms(),
-        &[
-            Term::Constant(Value::Number(2)),
-            Term::Constant(Value::Number(1))
-        ]
-    );
 }
 
 #[test]
@@ -333,36 +343,48 @@ fn copied_scalar_bytes_are_preflighted_once() {
         },
         100,
     );
-    let mut products = facts(&source, &mut budget, crate::test_support::location())
+    let products = facts(&source, &mut budget, crate::test_support::location())
         .unwrap()
         .unwrap();
     assert_eq!(budget.usage().scalar_bytes, 16);
     let accepted = budget.usage();
-    while products
-        .next(&budget, crate::test_support::location())
-        .unwrap()
-        .is_some()
-    {}
+    let program = native(&products);
+    assert_eq!(program.facts().len(), 4);
     assert_eq!(budget.usage(), accepted);
 }
 
 #[test]
-fn an_interrupted_fact_cursor_cannot_resume_its_prefix() {
+fn interrupted_fact_evidence_transfer_preserves_accepted_usage() {
     let cancellation = Cancellation::default();
     let mut budget = family_budget(usize::MAX).with_cancellation(Some(cancellation.clone()));
     let location = crate::test_support::location();
-    let mut products = facts(&fact(1, 3), &mut budget, location).unwrap().unwrap();
-    assert!(products.next(&budget, location).unwrap().is_some());
+    let products = facts(&fact(1, 3), &mut budget, location).unwrap().unwrap();
     let accepted = budget.usage();
-    cancellation.cancel();
-    assert!(
-        matches!(products.next(&budget, location), Err(ExpansionFailure::Interrupted {
+    let mut compiled = crate::compile::Compiled::default();
+    let mut visited = 0;
+    let error = compiled
+        .product(
+            products.products().next().unwrap().predicate().clone(),
+            vec![vec![FactSegment::Interval { first: 1, last: 3 }]],
+            &[location],
+            || {
+                visited += 1;
+                if visited == 2 {
+                    cancellation.cancel();
+                }
+                budget.poll(location)
+            },
+            |error| ExpansionFailure::from(crate::AdmissionFailure::Core { error, location }),
+        )
+        .unwrap_err();
+    assert!(matches!(error, ExpansionFailure::Interrupted {
         reason: Stop::Cancelled, location: actual,
-    }) if actual == location)
-    );
-    assert_eq!(products.len(), 2);
-    assert!(products.next(&budget, location).unwrap().is_none());
+    } if actual == location));
+    assert_eq!(visited, 2);
+    assert_eq!(compiled.fact_origins.len(), 1);
     assert_eq!(budget.usage(), accepted);
+    // The enclosing compilation drops this incomplete owner on the error;
+    // program_relational's cancellation test covers that publication boundary.
 }
 
 fn alternatives(rows: Vec<Vec<SourceTerm>>) -> WithProvenance<Statement> {
@@ -385,12 +407,14 @@ fn alternative_arities_keep_their_product_order() {
     ]);
     let location = crate::test_support::location();
     let mut budget = family_budget(usize::MAX);
-    let mut products = facts(&source, &mut budget, location).unwrap().unwrap();
+    let products = facts(&source, &mut budget, location).unwrap().unwrap();
     assert_eq!(products.len(), 5);
-    let mut arities = Vec::new();
-    while let Some(head) = products.next(&budget, location).unwrap() {
-        arities.push(head.predicate().arity());
-    }
+    let program = native(&products);
+    let arities = program
+        .facts()
+        .into_iter()
+        .map(|fact| fact.atom().predicate().arity())
+        .collect::<Vec<_>>();
     assert_eq!(arities, vec![1, 1, 2, 2, 0]);
     assert_eq!(
         heads(&source, &mut family_budget(usize::MAX)),
@@ -421,7 +445,7 @@ fn later_invalid_alternatives_refuse_before_emission() {
     assert!(matches!(facts(&source, &mut budget, location),
         Err(ExpansionFailure::Evaluation { error: EvalError::NotGround { variable: Variable::Anonymous },
             location: actual }) if actual == location));
-    // No cursor was returned for a consumer to replace this error with its
+    // No product family was returned for a consumer to replace this error with its
     // zero Origins ceiling, although the preceding alternative was checked.
     assert_eq!(budget.usage().templates, 100);
     assert_eq!(budget.usage().origin_locations, 0);
@@ -512,13 +536,13 @@ fn relational_admission_keeps_each_expanded_facts_evidence() {
         crate::ExpansionLimits::default(),
     )
     .unwrap();
-    assert_eq!(admitted.program().templates().len(), 4);
-    assert_eq!(admitted.template_origins().len(), 4);
-    let first = &admitted.template_origins()[0];
+    assert_eq!(admitted.program().facts().len(), 4);
+    assert_eq!(admitted.fact_origins().len(), 4);
+    let first = &admitted.fact_origins()[0];
     assert!(!first.is_empty());
     assert!(
         admitted
-            .template_origins()
+            .fact_origins()
             .iter()
             .all(|origins| origins == first)
     );

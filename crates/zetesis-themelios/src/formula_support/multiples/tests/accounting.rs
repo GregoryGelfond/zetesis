@@ -133,7 +133,7 @@ fn cancelled_queries_publish_no_probe_and_retry() {
     at_probe(|join, computation, counters, location| {
         let cancellation = zetesis_cpu::Cancellation::default();
         cancellation.cancel();
-        counters.cancellation = Some(cancellation);
+        counters.attach_test_control(&cancellation);
         let live = join.support.live_bytes();
         assert!(matches!(
             join.prepare_probe(
@@ -147,7 +147,7 @@ fn cancelled_queries_publish_no_probe_and_retry() {
         ));
         assert!(join.probes[join.depth].is_none());
         assert_eq!(join.support.live_bytes(), live);
-        counters.cancellation = None;
+        counters.detach_test_control();
         join.prepare_probe(
             join.plan.patterns[join.depth],
             Context::new(computation, &FormulaLimits::default(), counters, location),

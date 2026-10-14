@@ -1,19 +1,19 @@
 # Observe control at the metered cadence in grounding's work account
 
-Grounding observes cancellation and deadlines at every work charge. This note brings grounding's work account under
+Grounding's work account observes cancellation and deadlines at a charged-unit cadence. This note states
 the metered contract the CPU's metered operations already follow ([outcomes](../book/rust/outcomes.md), the metered
 operations passage):
 
 - control is observed before the first charged operation and at least once every `POLL_INTERVAL` (256) charged
   operations;
 - a refused work charge observes control first;
-- every operation settles its outcome at its exit, so a requested stop takes precedence over every resource refusal.
+- every operation settles its outcome at its exit, so a stop observed there takes precedence over every resource refusal.
 
 Observation decides only when a run stops; it never changes what a completed run charges or answers.
 
 ## Status
 
-- **Stage 1** (grounding's work account): designed, not implemented.
+- **Stage 1** (grounding's work account): implemented; correctness and performance acceptance remain separate gates.
 - **Stage 2** (model construction, the observation encoders and the lazy oracle): a later stage, after Stage 1 is
   accepted, and accepted only on its own gain condition.
 - Paths are under `crates/zetesis-themelios/src/` unless another crate is named.
@@ -69,13 +69,14 @@ its site and its `Program` envelope, including a failure a pending stop outranks
   per element is preceded by an explicit observation. A finite table's allocation at one of its allocation boundaries
   is no longer preceded by an observation: under a pending stop it is admitted against the table's byte ceiling and
   made, and the stop is observed by the next boundary-crossing charge or at the exit.
-- **Precedence:** each scope settles its outcome at its exit, so a resource refusal under a requested stop is reported
+- **Precedence:** each scope settles its outcome at its exit, so a resource refusal under a stop observed at that exit is reported
   as the stop, at the refusal's own site and inside its envelope. Today a stop takes precedence only over the work
   ceiling and over refusals some charge happened to precede, so this tightens precedence. It inverts one deliberate
   ordering: a zero allowance refused before any charge (the empty candidate's value ceiling) is reported as the stop
   when a stop is pending at the exit.
-- **Completion:** the entry observes once more before returning a completed result, so a stop requested any time before
-  the entry returns is reported.
+- **Completion:** the entry observes once more before returning a completed result and reports any stop observed there.
+  A concurrent stop arriving after that observation requires the caller's next observation; this is not an atomic
+  guarantee about the interval between the final poll and return.
 - **Interrupted runs** can record up to 255 more units than today, all admitted before the observation.
 
 ## Stage 1: grounding's work account
@@ -126,7 +127,7 @@ observation point; the callback observes control there by its own rule (the lega
 
 **One entry creates the control.** `Accounting::controlled` (`formula_support/accounting.rs`) becomes the one entry
 that gives the account control: it observes at entry, lends the operation the only counters that carry control,
-observes again before a completed result is returned, settles a resource refusal under a requested stop as the stop
+observes again before a completed result is returned, settles a resource refusal under a stop observed at exit as the stop
 (at the refusal's own site, or the entry's when it has none, inside its envelope), and moves the account in and back
 out on every outcome, unwinding included. Its error type is any `E: StopPrecedence`, a crate-private trait
 (`is_resource_refusal`, `outranked_by(stop, site)`, `from_stop(stop, site, receipt)`) implemented for the four error
@@ -135,12 +136,14 @@ Because `outranked_by` reads the replaced error, it keeps the site and envelope,
 `zetesis_cpu::Refusal::from_stop` cannot; the public trait does not change. The entry's own stops (at entry, or before
 completion) take exactly the shapes today's observations produce at the points the entry replaces.
 
-The token moves from a `Counters` field into `AccountControl`, defined in `formula_support::accounting` with no
+The token is held in `AccountControl`, defined in `formula_support::accounting` with no
 `Default`, no `Clone` and no constructor visible outside it. Creating control is therefore possible only through the
 entry (and a test-only writer for unit tests of inner operations), by type. Moving a whole controlled account out of
-its scope (`mem::take` or `mem::replace` on the lent counters) stays possible, as instantiation's builder does
-legitimately inside its scope; it is excluded by convention and checked in debug builds by a scope flag the entry clears
-at its exit, which `AccountControl::observe` asserts open.
+its scope (`mem::take` or `mem::replace` on the lent counters) stays possible inside a scope; escaping it is excluded by convention and checked in debug builds by a scope flag the entry clears
+at its exit, which `AccountControl::observe` asserts open. The production formula builder now borrows the lent counters;
+its success, refusal and unwind all leave the complete account with the entry. Publication keeps that borrow through
+its last resource check. Terminal admission retires generated membership in place, retaining its account through the
+final generated-value and storage ceilings before handing the completed baseline onward.
 
 **The ten scopes.** Every production site that gives a `Counters` a token becomes a `controlled` scope:
 `formula.rs` (`prepare`), `formula_source.rs` (`classify`, `evaluate`), `formula_ground.rs` (`instantiate`),
@@ -211,7 +214,7 @@ observes at the account's cadence; a stop pending at a table allocation is repor
 admission settles its tail ceilings; a controlled account charged after its scope panics in debug builds; completed
 receipts are unchanged; the published classifications agree with their former uses.
 
-About thirty existing tests that attach control to the account are restated under the seams with unchanged
+Existing tests that attach control to the account use test-only writers retaining their nonzero-charge observation
 propositions; two that assert the zero-value ceiling precedes a pending stop are split into the inside-the-operation
 proposition (unchanged) and the entry's settlement (the stop is reported).
 
@@ -222,10 +225,11 @@ proposition (unchanged) and the entry's settlement (the stop is reported).
   order. The grounding chapter's "zero work charges still poll cancellation" becomes "a zero charge admits nothing and
   observes nothing". `prepare_program_formula_with`'s documentation, `charge_work`'s, the entry's and the table
   callback's contracts follow.
-- **Lean: `proofs/Zetesis/ChargeCadence.lean`.** `pollDue charged amount` as a proposition with a decidable instance;
-  `pollDue_zero`; `dueRule_iff` (the computation `poll_due` performs is `pollDue`); over a list of charges,
-  `observes_next_multiple` (the charge admitting the next multiple of 256 after a request observes, at most 255 units
-  after it) and `fewer_than_interval`. Natural-number statements; atomics and concurrent flags stay outside.
+- **Lean: `proofs/Zetesis/ChargeCadence.lean`.** `PollDue` describes range coverage for any positive period;
+  `dueRule_iff` relates that proposition to the overflow-free distance rule used by `poll_due`. `pollDue_zero`,
+  `fewer_than_interval`, `distance_reaches_boundary`, `distance_minimal`, `observes_covered_boundary` and
+  `observes_next_multiple` state the zero, distance and charged-range laws. These are natural-number statements;
+  atomics, scope coverage, error classification and concurrent flags remain Rust correspondence obligations.
 - CHANGELOG, Compatibility: where the account's operations observe control, the new precedence, `poll_due`, the four
   published classifications and the restated table callback contract.
 
@@ -264,17 +268,12 @@ parent) and B identified by commit and SHA-256:
 
 ## Open review items
 
-- Restore `ModelError::Catalog`'s classification by `catalog::Error::is_resource_refusal` in the reconstruction rows,
-  pointing rows to published methods rather than restating their values (one test pins the values).
-- Bring the scope statements into line with the scopes: draw the terminal partition's scope through its
-  deferred-storage observation, or name that refusal as outside; make the CHANGELOG list the operations of all ten
-  scopes; restate Stage 2's reach as the three accounts it moves.
+- Stage 1's owner methods now classify `ModelError::Catalog` through the catalog owner, and terminal scopes cover
+  deferred-storage observation and admission's tail ceilings. Review and qualification must check those actual consumers.
 - Before Stage 2 is built, settle the evaluator's and renderer's `Work` by structure (one settled constructor, private
   fields) or state the strength of the listing.
 - Label the term-comparison reach column for what it measures, attribute it per profile by the comparison's callback,
   and call `zetesis_cpu::oracle` the CPU oracle.
-- Correct four counts and statements: the field writes in tests (fifteen), the expansion-budget sites, the reach range,
-  and reconstruction's observations today.
 - Split conjoined test propositions (a zero charge neither observes nor counts; the outranked and passed-through
   refusal pairing).
 - Offered: one operation that brackets work with no control hook (observe, run under the remaining allowance, absorb),

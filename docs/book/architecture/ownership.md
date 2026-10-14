@@ -54,6 +54,24 @@ thereby members of the substitution domain. `TemplateCatalog` supplies the same
 ordered component storage to rules and objectives without treating an objective
 as a synthetic rule or source of support.
 
+Explicit `FactTables` input is consumed into one closed atom authority over that
+same vocabulary. Per-predicate relation catalogs retain row membership, equality
+columns and canonical order; an occurrence list retains original duplicates and
+anchors beside template order. Neither the catalogs nor occurrence positions own
+another `Value` or `Atom`. Admission charges its still-live imported-column IDs,
+canonical writer, relation metadata and close/publication overlap together, with
+the vocabulary counted once. Caller construction values follow the same exclusion
+as caller-supplied templates. After admission, formula/source evidence and core
+fact occurrences remain separate coordinates linked by their owning adapter.
+
+An oracle workspace descends from the program's closed store with a fresh atom
+scope and empty discovery. Bootstrap visits facts at their original positions;
+presence in shared storage never substitutes for that visit or seeds truth by
+itself. Per-workspace byte receipts include the shared base. The batch cache
+counts the closed rows and indexes once under exact program/preparation ownership;
+it leaves the existing vocabulary accounting in place. Other lazy-round and eager
+grounding catalogs still import each fact through their established paths.
+
 `TemplateRef`, `PatternRef`, `FilterRef` and `TemplateTerm` borrow that storage.
 `ObjectiveTemplateRef` adds objective weight polarity, priority slot and closed
 condition metadata. Owned condition descriptions import into one objective tuple

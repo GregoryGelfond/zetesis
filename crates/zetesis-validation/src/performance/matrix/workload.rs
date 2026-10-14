@@ -3,7 +3,9 @@
 
 mod constants;
 mod authored;
+mod bundle;
 pub use authored::AuthoredProgram;
+pub use bundle::{BundleFile, BundleInclude, BundleProgram};
 
 use serde::Serialize;
 use sha2::{Digest, Sha256};
@@ -33,7 +35,8 @@ pub struct ConstantAmendment<'a> {
 ///
 /// Source bytes bound parser input and derived content, not syntax-tree
 /// allocation or RSS. Metadata bytes count retained provenance text and cost
-/// values; vector/object counts are bounded by source and amendment populations.
+/// values; vector/object counts are bounded by source, amendment and bundle
+/// graph populations.
 #[derive(Clone, Copy, Debug)]
 pub struct WorkloadLimits {
     /// Input or derived bytes in one source.
@@ -58,12 +61,13 @@ impl Default for WorkloadLimits {
 }
 
 /// Validated constant-only derivation of one complete admitted source closure,
-/// an authored singleton, or one generated program.
+/// an authored singleton, an external bundle, or one generated program.
 ///
 /// No source payload is retained. Materialization repeats the checked derivation
 /// or generation and seals the bytes actually launched. Authored sources retain
-/// their own file seal, independent of the correctness catalog. The unchanged corpus
-/// contract remains provenance for amended workloads; a generated workload's
+/// their own file seal; external bundles retain every original member seal,
+/// independently of the correctness catalog. The unchanged corpus contract
+/// remains provenance for amended workloads; a generated workload's
 /// contract is its family's closed-form count.
 #[derive(Clone, Debug, Serialize)]
 pub struct Workload {
@@ -81,8 +85,11 @@ pub struct Workload {
     /// correctness catalog. It has no upstream-cleaning or generated-family claim.
     #[serde(skip_serializing_if = "Option::is_none")]
     authored: Option<authored::Authored>,
-    pub(super) metadata_bytes: usize,
-    pub(super) source_bytes: usize,
+    /// Original external include graph, independent of corpus provenance.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    bundle: Option<bundle::Bundle>,
+    pub(in crate::performance) metadata_bytes: usize,
+    pub(in crate::performance) source_bytes: usize,
 }
 
 /// Provenance of a generated program: the family, the size and the digest of
@@ -256,6 +263,7 @@ impl Workload {
             default_contract,
             generated: None,
             authored: None,
+            bundle: None,
             metadata_bytes: budget.metadata,
             source_bytes: budget.sources,
         })
@@ -306,6 +314,7 @@ impl Workload {
                 bytes: source.len(),
             }),
             authored: None,
+            bundle: None,
             metadata_bytes: budget.metadata,
             source_bytes: budget.sources,
         })
@@ -361,7 +370,7 @@ impl Workload {
         self.authored.is_some()
     }
 
-    /// The contract the campaign checks: the authored/corpus contract of an unchanged
+    /// The contract the campaign checks: the authored/corpus/bundle contract of an unchanged
     /// entry, the closed-form contract of a generated program, and none for
     /// an amended entry, whose family is established by the reference alone.
     #[must_use]
@@ -374,6 +383,9 @@ impl Workload {
         corpus: &examples::Corpus,
         limits: super::super::Limits,
     ) -> Result<(), Error> {
+        if self.is_bundle() {
+            return self.validate_bundle(limits);
+        }
         if self.is_authored() {
             return self.validate_authored(limits);
         }
@@ -429,6 +441,9 @@ impl Workload {
         directory: &Path,
         limit: usize,
     ) -> Result<Vec<crate::selected::FileSeal>, Error> {
+        if self.is_bundle() {
+            return self.materialize_bundle(directory, limit);
+        }
         if self.is_authored() {
             return self.materialize_authored(directory, limit);
         }

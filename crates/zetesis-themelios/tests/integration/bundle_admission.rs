@@ -56,7 +56,11 @@ fn base_sections_preserve_included_rules() {
     fixture.write("child.lp", "#program base. q :- p. #program base().");
     let admitted = bundle_fixtures::admit(&fixture).unwrap();
     assert_eq!(answer_sets(admitted.program()), explicit("p. q. r."));
-    for origins in admitted.template_origins() {
+    for origins in admitted
+        .template_origins()
+        .iter()
+        .chain(admitted.fact_origins())
+    {
         assert!(!origins.is_empty());
         for location in origins {
             let text = admitted
@@ -112,8 +116,9 @@ fn merged_cross_file_rules_retain_both_original_source_locations() {
     );
     fixture.write("child.lp", "p(1..2).\n");
     let admitted = bundle_fixtures::admit(&fixture).expect("merged rule evidence");
-    assert_eq!(admitted.program().templates().len(), 2);
-    for locations in admitted.template_origins() {
+    assert_eq!(admitted.program().facts().len(), 2);
+    assert!(admitted.program().templates().is_empty());
+    for locations in admitted.fact_origins() {
         assert_eq!(locations.len(), 2);
         let identities: BTreeSet<_> = locations.iter().map(|location| location.source).collect();
         assert_eq!(

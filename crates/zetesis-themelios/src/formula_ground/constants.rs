@@ -271,7 +271,7 @@ fn origin_insertion_obeys_the_work_ceiling() {
             let mut budget = Budget::new(ExpansionLimits::default(), 0);
             let mut builder = Builder::empty(computation, &limits, &mut budget, counters,
                 Purpose::Theory, None, location()).unwrap();
-            builder.metadata.atom(location(), &mut builder.counters, builder.limits).unwrap();
+            builder.metadata.atom(location(), builder.counters, builder.limits).unwrap();
             let before = builder.counters.accounting.work;
             let result = builder.record_origins(0, &[next]);
             if allowance == 2 {
@@ -631,10 +631,10 @@ fn final_admission(
         if cancel_at_finish {
             let cancellation = Cancellation::default();
             cancellation.cancel();
-            builder.counters = builder.counters.with_cancellation(Some(&cancellation));
+            builder.counters.attach_test_control(&cancellation);
         }
         let before = builder.counters.accounting.work;
-        let (emission, counters) = builder.finish(&Profile::new(None), location())?;
+        let emission = builder.finish(&Profile::new(None), location())?;
         let work = emission.admission.work();
         assert_eq!(u128::from(counters.accounting.work - before), work);
         let theory = emission.admission.admit().unwrap();
@@ -677,4 +677,35 @@ fn final_admission_keeps_cancellation_typed() {
             Err(FormulaFailure::Interrupted { reason: zetesis_cpu::Stop::Cancelled, location: origin })
                 if origin == location()));
     }
+}
+
+#[test]
+fn builder_unwind_retains_the_borrowed_account() {
+    Fixture::default().with(location(), |_, computation, counters| {
+        let limits = FormulaLimits::default();
+        let mut budget = Budget::new(ExpansionLimits::default(), 0);
+        let accepted = std::cell::Cell::new(0);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut builder = Builder::empty(
+                computation,
+                &limits,
+                &mut budget,
+                counters,
+                Purpose::Theory,
+                None,
+                location(),
+            )
+            .unwrap();
+            builder.initialize(location()).unwrap();
+            builder
+                .counters
+                .charge_work(17, &limits, location())
+                .unwrap();
+            accepted.set(builder.counters.accounting.work);
+            panic!("after builder charges");
+        }));
+        assert!(result.is_err());
+        assert!(accepted.get() >= 17);
+        assert_eq!(counters.accounting.work, accepted.get());
+    });
 }

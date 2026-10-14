@@ -11,6 +11,7 @@ use std::{
 };
 use zetesis_presentation::Layout;
 use zetesis_validation::{
+    answers::{Limits as AnswerLimits, native_json},
     performance::{self, matrix, scalability, series},
     selected,
 };
@@ -166,6 +167,14 @@ pub struct RunOptions {
     /// Omitted, the whole suite is measured.
     #[arg(long = "case", value_name = "PATH")]
     pub cases: Vec<String>,
+    /// Source-bundle manifest for external programs; uses the explicit workload
+    /// matrix and requires clingo. Conflicts with suite and case selection.
+    #[arg(
+        long,
+        value_name = "PATH",
+        conflicts_with_all = ["suite", "cases", "examples", "include_einstein", "without_clingo"]
+    )]
+    pub workloads: Option<PathBuf>,
     /// Authored examples root for --suite scalability; defaults to examples.
     #[arg(long)]
     pub examples: Option<PathBuf>,
@@ -296,9 +305,18 @@ pub struct RunOptions {
     /// Combined stdout/stderr ceiling per invocation.
     #[arg(long, default_value_t = 16 * 1024 * 1024, hide_short_help = true, help_heading = "Advanced measurement controls")]
     pub sample_bytes: usize,
+    /// Reference answer decoding and native displayed-symbol spelling bytes; not a solver limit.
+    #[arg(long, default_value_t = AnswerLimits::default().max_input_bytes, hide_short_help = true, help_heading = "Advanced measurement controls")]
+    pub answer_bytes: usize,
     /// Native JSON decoder source-byte ceiling, separate from capture.
     #[arg(long, default_value_t = 16 * 1024 * 1024, hide_short_help = true, help_heading = "Advanced measurement controls")]
     pub native_report_bytes: usize,
+    /// Full atom occurrences across native model records; not a solver limit.
+    #[arg(long, default_value_t = native_json::Limits::default().max_atoms, hide_short_help = true, help_heading = "Advanced measurement controls")]
+    pub native_atoms: usize,
+    /// Value-node occurrences accepted by native report normalization; not a solver limit.
+    #[arg(long, default_value_t = native_json::Limits::default().max_value_nodes, hide_short_help = true, help_heading = "Advanced measurement controls")]
+    pub native_value_nodes: usize,
     /// Combined retained captures across the entire campaign.
     #[arg(long, default_value_t = 512 * 1024 * 1024, hide_short_help = true, help_heading = "Advanced measurement controls")]
     pub capture_bytes: usize,
@@ -311,6 +329,22 @@ pub struct RunOptions {
 }
 
 impl RunOptions {
+    // Caller-selected decoder ceilings precede each maintained population's
+    // existing minimum capacities. Presets preserve larger caller allowances.
+    fn native_answers(&self) -> native_json::Limits {
+        let mut limits = native_json::Limits {
+            max_atoms: self.native_atoms,
+            max_value_nodes: self.native_value_nodes,
+            ..native_json::Limits::default()
+        };
+        limits.report.max_input_bytes = self.native_report_bytes;
+        match self.suite {
+            Suite::Series => series::native_answers(limits),
+            Suite::Scalability => scalability::native_answers(limits),
+            Suite::Corpus | Suite::Baseline | Suite::Queens => limits,
+        }
+    }
+
     /// Map command arguments to the reusable bounded plan; no I/O is performed.
     ///
     /// The profiles are the product of the compared backends, grounders and
@@ -321,6 +355,17 @@ impl RunOptions {
     /// Refuses options of another suite, case selections, worker counts,
     /// profile counts, dimensions or schedules outside maintained bounds.
     pub fn plan(&self) -> Result<matrix::Plan, performance::Error> {
+        if self.workloads.is_some()
+            && (self.suite != Suite::Corpus
+                || !self.cases.is_empty()
+                || self.examples.is_some()
+                || self.include_einstein
+                || self.without_clingo)
+        {
+            return Err(performance::Error::Configuration(
+                "--workloads requires clingo and conflicts with suite, case and authored selections",
+            ));
+        }
         if self.suite != Suite::Scalability && (self.examples.is_some() || self.include_einstein) {
             return Err(performance::Error::Configuration(
                 "--examples and --include-einstein require --suite scalability",
@@ -441,17 +486,31 @@ pub(crate) enum Clingo {
 /// file, else the first `clingo` on `search_path`, else none.
 ///
 /// # Errors
-/// Refuses a named clingo that is not a runnable file, and path failures other
-/// than an absent `clingo`.
+/// Refuses a named clingo that is not a runnable file, path failures other
+/// than an absent `clingo`, and external workloads without a reference.
 pub(crate) fn clingo(
     options: &RunOptions,
     search_path: Option<&std::ffi::OsStr>,
 ) -> Result<Clingo, Error> {
-    use zetesis_validation::process::{is_executable_file, resolve_executable};
-    if options.without_clingo {
-        return Ok(Clingo::Declined);
+    let found = if options.without_clingo {
+        Clingo::Declined
+    } else {
+        discover_clingo(options.clingo.as_deref(), search_path)?
+    };
+    if options.workloads.is_some() && !matches!(found, Clingo::Found(_)) {
+        return Err(Error::Usage(
+            "--workloads requires a runnable clingo for fresh complete-family qualification",
+        ));
     }
-    match &options.clingo {
+    Ok(found)
+}
+
+fn discover_clingo(
+    named: Option<&Path>,
+    search_path: Option<&std::ffi::OsStr>,
+) -> Result<Clingo, Error> {
+    use zetesis_validation::process::{is_executable_file, resolve_executable};
+    match named {
         Some(named) => {
             let path = resolve_executable(named, search_path).map_err(Error::Io)?;
             if is_executable_file(&path) {
@@ -510,21 +569,15 @@ pub(crate) fn execute(
     limits.campaign_timeout = Duration::from_secs(options.campaign_seconds);
     limits.max_total_capture_bytes = options.capture_bytes;
     limits.max_report_bytes = options.report_bytes;
-    let mut native_answers = zetesis_validation::answers::native_json::Limits::default();
-    native_answers.report.max_input_bytes = options.native_report_bytes;
+    limits.answers = AnswerLimits::for_bytes(options.answer_bytes);
+    let native_answers = options.native_answers();
     // Maintained populations declare their measurement capacities, independently
     // of the solver profiles. The complete request retains the chosen ceilings.
-    match options.suite {
-        Suite::Series => {
-            limits = series::limits(limits);
-            native_answers = series::native_answers(native_answers);
-        }
-        Suite::Scalability => {
-            limits = scalability::limits(limits);
-            native_answers = scalability::native_answers(native_answers);
-        }
-        Suite::Corpus | Suite::Baseline | Suite::Queens => {}
-    }
+    limits = match options.suite {
+        Suite::Series => series::limits(limits),
+        Suite::Scalability => scalability::limits(limits),
+        Suite::Corpus | Suite::Baseline | Suite::Queens => limits,
+    };
     writeln!(
         diagnostics,
         "Recording benchmark evidence in {}",
@@ -550,9 +603,41 @@ pub(crate) fn execute(
         max_spelling_bytes: limits.answers.max_input_bytes,
         helper: (options.memory_runs > 0).then_some(current.as_path()),
     };
-    let report = if options.suite == Suite::Scalability {
+    let report = campaign(options, &request, cancelled).map_err(Error::Campaign)?;
+    report.publish().map_err(Error::Campaign)?;
+    crate::view::run(&report.summary(), options.view.json, layout, output)?;
+    Ok(if report.passed() {
+        Completion::Passed
+    } else {
+        Completion::NonPass
+    })
+}
+
+// Select inputs here; scheduling, capture and publication remain matrix-owned.
+fn campaign(
+    options: &RunOptions,
+    request: &matrix::Request<'_>,
+    cancelled: &std::sync::atomic::AtomicBool,
+) -> Result<matrix::Report, performance::Error> {
+    if let Some(path) = &options.workloads {
+        let workloads = performance::bundles::load(
+            path,
+            matrix::WorkloadLimits {
+                source_bytes: request.limits.corpus.source_bytes,
+                total_source_bytes: request.limits.corpus.total_source_bytes,
+                metadata_bytes: request.limits.corpus.manifest_bytes,
+                amendments: 0,
+            },
+        )?;
+        matrix::run_workloads_with_cancellation(
+            request,
+            &workloads,
+            options.invocation(),
+            cancelled,
+        )
+    } else if options.suite == Suite::Scalability {
         scalability::run_with_cancellation(
-            &request,
+            request,
             options
                 .examples
                 .as_deref()
@@ -562,16 +647,8 @@ pub(crate) fn execute(
             cancelled,
         )
     } else {
-        performance::command::run_with_cancellation(&request, options.invocation(), cancelled)
+        performance::command::run_with_cancellation(request, options.invocation(), cancelled)
     }
-    .map_err(Error::Campaign)?;
-    report.publish().map_err(Error::Campaign)?;
-    crate::view::run(&report.summary(), options.view.json, layout, output)?;
-    Ok(if report.passed() {
-        Completion::Passed
-    } else {
-        Completion::NonPass
-    })
 }
 
 /// The installed `zetesis`: the one in the directory of `this` executable,

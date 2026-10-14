@@ -868,8 +868,8 @@ impl StableModels {
                     countermodel_queries: merged.countermodel_queries,
                     countermodels: merged.countermodels,
                     certified,
-                    // The workers' sums, and the coordinator's own phases:
-                    // the index build before the workers launched.
+                    // The walk's coordinator and worker phases, plus the
+                    // enumeration's index build before the walk began.
                     phase_timings: crate::timing::combined(
                         merged.phase_timings,
                         self.statistics.phase_timings,
@@ -1004,7 +1004,8 @@ struct Membership<'a> {
 enum Proposer {
     Clauses(Box<ClauseProposer>),
     Regions(Box<RegionSearch>),
-    /// Several workers walk the region tree and decide the leaves themselves.
+    /// The coordinator and, after engagement, workers walk the region tree
+    /// and decide its leaves.
     Parallel(Box<ParallelRegions>),
     /// Bounded parallel production, before any membership operation.
     Proposals(Box<RegionProposals>),
@@ -1022,7 +1023,7 @@ enum Walk<'a> {
 enum Proposal {
     /// A classical model the reduct has yet to decide.
     Candidate(Interpretation),
-    /// A stable model a worker has already decided.
+    /// A stable model the coordinator or a worker has already decided.
     Stable(Interpretation),
 }
 

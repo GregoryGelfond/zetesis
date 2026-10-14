@@ -1070,6 +1070,41 @@
     "line": 115
   },
   {
+    "name": "Zetesis.ChargeCadence.pollDue_zero",
+    "file": "Zetesis/ChargeCadence.lean",
+    "line": 29
+  },
+  {
+    "name": "Zetesis.ChargeCadence.fewer_than_interval",
+    "file": "Zetesis/ChargeCadence.lean",
+    "line": 34
+  },
+  {
+    "name": "Zetesis.ChargeCadence.distance_reaches_boundary",
+    "file": "Zetesis/ChargeCadence.lean",
+    "line": 41
+  },
+  {
+    "name": "Zetesis.ChargeCadence.distance_minimal",
+    "file": "Zetesis/ChargeCadence.lean",
+    "line": 53
+  },
+  {
+    "name": "Zetesis.ChargeCadence.dueRule_iff",
+    "file": "Zetesis/ChargeCadence.lean",
+    "line": 73
+  },
+  {
+    "name": "Zetesis.ChargeCadence.observes_covered_boundary",
+    "file": "Zetesis/ChargeCadence.lean",
+    "line": 93
+  },
+  {
+    "name": "Zetesis.ChargeCadence.observes_next_multiple",
+    "file": "Zetesis/ChargeCadence.lean",
+    "line": 108
+  },
+  {
     "name": "Zetesis.ChoiceConsumers.original_bounds",
     "file": "Zetesis/ChoiceConsumers.lean",
     "line": 32
@@ -2043,6 +2078,16 @@
     "name": "Zetesis.DagSharing.exact_choice_graph_sharing",
     "file": "Zetesis/DagSharing.lean",
     "line": 398
+  },
+  {
+    "name": "Zetesis.DagSharing.findNode_stable_under_extension",
+    "file": "Zetesis/DagSharing.lean",
+    "line": 406
+  },
+  {
+    "name": "Zetesis.DagSharing.intern_stable_under_extension",
+    "file": "Zetesis/DagSharing.lean",
+    "line": 428
   },
   {
     "name": "Zetesis.DeltaJoins.first_true",
@@ -6280,6 +6325,26 @@
     "line": 46
   },
   {
+    "name": "Zetesis.NumericDomains.endpoint_magnitude",
+    "file": "Zetesis/RemainderIntervals.lean",
+    "line": 19
+  },
+  {
+    "name": "Zetesis.NumericDomains.remainder_dividend_envelope",
+    "file": "Zetesis/RemainderIntervals.lean",
+    "line": 45
+  },
+  {
+    "name": "Zetesis.NumericDomains.remainder_interval",
+    "file": "Zetesis/RemainderIntervals.lean",
+    "line": 96
+  },
+  {
+    "name": "Zetesis.NumericDomains.checked_remainder_interval",
+    "file": "Zetesis/RemainderIntervals.lean",
+    "line": 136
+  },
+  {
     "name": "Zetesis.RequiredChoiceCosts.sum_nonnegative",
     "file": "Zetesis/RequiredChoiceCosts.lean",
     "line": 41
@@ -6983,6 +7048,21 @@
     "name": "Zetesis.SourceMeasures.required_count_carrier_membership",
     "file": "Zetesis/SourceMeasures.lean",
     "line": 315
+  },
+  {
+    "name": "Zetesis.SourceMeasures.extremum_dominates_member",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 355
+  },
+  {
+    "name": "Zetesis.SourceMeasures.extremum_dominates_required",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 378
+  },
+  {
+    "name": "Zetesis.SourceMeasures.required_extremum_carrier_membership",
+    "file": "Zetesis/SourceMeasures.lean",
+    "line": 414
   },
   {
     "name": "Zetesis.SourceSupport.unchanged_round_closed",

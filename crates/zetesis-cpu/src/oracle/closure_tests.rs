@@ -29,6 +29,7 @@ fn choices() -> Program {
                 Template::new(Some(head.clone()), vec![], vec![head], vec![], vec![])
             })
             .into(),
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap()
@@ -125,6 +126,7 @@ fn gate_agreement_ignores_positive_only_atoms() {
             vec![],
             vec![],
         )],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap();
@@ -189,6 +191,7 @@ fn chain(constraint: Template) -> Program {
                 vec![],
             ),
         ],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )
     .unwrap()
@@ -272,7 +275,12 @@ fn capacity_program() -> (Program, Model) {
     }))
     .unwrap();
     (
-        Program::new(templates, AdmissionLimits::default()).unwrap(),
+        Program::new(
+            templates,
+            zetesis_core::FactTables::default(),
+            AdmissionLimits::default(),
+        )
+        .unwrap(),
         expected,
     )
 }

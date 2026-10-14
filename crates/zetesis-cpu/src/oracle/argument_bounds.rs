@@ -1,7 +1,7 @@
 //! Upper bounds on the values each argument of a predicate can take in any
 //! closure of a program.
 //!
-//! Every atom of a closure is an instance of a template's head, so an
+//! Every atom of a closure is a table fact or an instance of a template's head, so an
 //! argument's values are bounded by what the heads can put there: a constant
 //! contributes itself, and a variable ranges within the values of every
 //! positive body position that binds it, the intersection of their bounds.
@@ -116,6 +116,7 @@ pub(super) fn infer(
             )?;
         }
     }
+    seed_fact_columns(program, positions, max_values, &mut growing, work)?;
     // Each pass adds values or turns an argument unknown, never the
     // reverse, and the values come from the program's constants, so the
     // passes end when one changes nothing.
@@ -162,6 +163,39 @@ pub(super) fn infer(
         program: program.clone(),
         bounds,
     })
+}
+
+/// Seed each admitted fact column once, outside variable propagation. The
+/// relation view borrows canonical values; neither equality IDs nor occurrence
+/// positions are interpreted as numeric values or domain ranks.
+fn seed_fact_columns(
+    program: &Program,
+    positions: Option<&DomainPositions<'_>>,
+    max_values: usize,
+    growing: &mut [Vec<Growing>],
+    work: &mut Work<'_>,
+) -> Result<(), Stop> {
+    for facts in program.fact_relations() {
+        let relation = facts.relation();
+        let target = table(program, relation.predicate(), work)?;
+        for (column, argument) in growing[target].iter_mut().enumerate() {
+            for row in 0..relation.row_count() {
+                work.tick()?;
+                let value = relation
+                    .row(row)
+                    .and_then(|row| row.value(column))
+                    .ok_or(Stop::InvalidProgram)?;
+                let position = domain_position(program, positions, value, work)?;
+                widen(
+                    argument,
+                    Growing::Finite(BTreeSet::from([position])),
+                    max_values,
+                    work,
+                )?;
+            }
+        }
+    }
+    Ok(())
 }
 
 /// The values a head variable can take: the intersection of the bounds of
