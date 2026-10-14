@@ -21,7 +21,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   the executable their runs name as having done the work when it is not the
   one they invoked, as after a hand-off, and record it beside the invoked one
   (`executed`, `executed_after`); a run naming a third executable, or unable to
-  name its own, is refused.
+  name its own, is refused. A named path is resolved through links before it
+  is compared, so a run naming either executable through a link names that
+  executable; a relative path counts as unable to name its own and is refused.
 - Prime-sieve and subset-sum examples in the maintained correctness and scaling
   comparisons, with complete-answer checks against clingo.
 - `Cancellation::metered` runs a metered computation with a `Meter`, which holds

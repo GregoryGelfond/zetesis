@@ -330,3 +330,44 @@ fn an_executable_that_cannot_be_sealed_is_refused() {
         .unwrap_err();
     assert!(refusal.contains("could not be sealed"), "{refusal}");
 }
+
+#[test]
+fn a_relative_executable_path_reads_as_unresolved() {
+    // A relative path would resolve against this process's working directory,
+    // not the run's, so it names no executable this rule can check.
+    let named = |executable: &str| super::named(&serde_json::json!({ "executable": executable }));
+    for executable in ["zetesis", "bin/zetesis", "./zetesis", ""] {
+        assert_eq!(named(executable), Named::Unresolved, "{executable:?}");
+    }
+}
+
+/// A link named `name` in `directory` to `target`.
+#[cfg(unix)]
+fn link(directory: &tempfile::TempDir, name: &str, target: &Path) -> PathBuf {
+    let alias = directory.path().join(name);
+    std::os::unix::fs::symlink(target, &alias).unwrap();
+    alias
+}
+
+#[cfg(unix)]
+#[test]
+fn a_link_to_the_native_executable_names_the_native_one() {
+    let (directory, mut rule, native, _, _) = executables();
+    let alias = link(&directory, "native-alias", &native);
+    rule.settle(&Named::Path(alias)).unwrap();
+    let (sealed, after) = rule.close();
+    assert!(sealed.is_none() && after.is_none());
+}
+
+#[cfg(unix)]
+#[test]
+fn runs_naming_one_executable_through_a_link_settle_to_it() {
+    // Comparing the named path itself would refuse the second run as naming a
+    // third executable.
+    let (directory, mut rule, _, sibling, _) = executables();
+    let alias = link(&directory, "sibling-alias", &sibling);
+    for named in [alias.clone(), alias, sibling.clone()] {
+        rule.settle(&Named::Path(named)).unwrap();
+    }
+    assert_eq!(rule.close().0.unwrap().canonical(), sibling);
+}
