@@ -31,7 +31,7 @@ use themelios_program::program::{
     Arguments, Body, BodyElement, Choice, DefaultNegation, Direction, HasGuards, Head, Literal,
     LiteralInner, Optimize, OptimizeElement, Program as SourceProgram, Relation, Rule, Statement,
 };
-use themelios_program::provenance::{Origin, TransformTag, WithProvenance};
+use themelios_program::provenance::{Origin, Provenance, TransformTag, WithProvenance};
 use themelios_program::symbol::Symbol;
 use themelios_program::term::{BinaryOp, Term, TermParts, UnaryOp, Variable};
 use themelios_program::transform::{Rewrite, rewrite};
@@ -879,9 +879,13 @@ impl Normalizer<'_> {
         })()
     }
 }
+/// The transformation tag the formula route's rewrite stamps on what it
+/// rebuilds.
+const FORMULA_TRANSFORM: &str = "zetesis-finite-formula";
+
 impl Rewrite for Normalizer<'_> {
     fn tag(&self) -> TransformTag {
-        TransformTag::new("zetesis-finite-formula")
+        TransformTag::new(FORMULA_TRANSFORM)
     }
     fn rewrite_term(&mut self, term: Term) -> Term {
         if self.failure.is_some() {
@@ -1006,8 +1010,24 @@ impl Compiler<'_> {
         fallback: ProgramSite,
     ) -> Result<(), FormulaFailure> {
         self.location = extended::origin(carrier, fallback);
-        let rewritten = self.normalize_statement(carrier, constants)?;
-        let statement = rewritten.statements().next().expect("rewrite keeps a rule");
+        let rewritten;
+        let stamped;
+        let (statement, provenance) = if self.keeps_fact(carrier, constants)? {
+            // The rewrite would hand back this statement's content and stamp
+            // its carrier; its analyzed facts take that stamp, and nothing reads
+            // the nested carriers it would rebuild.
+            stamped = carrier
+                .provenance()
+                .clone()
+                .merge(Provenance::from(Origin::Transformed(TransformTag::new(
+                    FORMULA_TRANSFORM,
+                ))));
+            (carrier, &stamped)
+        } else {
+            rewritten = self.normalize_statement(carrier, constants)?;
+            let statement = rewritten.statements().next().expect("rewrite keeps a rule");
+            (statement, statement.provenance())
+        };
         let origins = extended::program_sites(carrier, self.location);
         if self.project_statement(
             statement,
@@ -1042,7 +1062,7 @@ impl Compiler<'_> {
                 while let Some(head) = facts.next(self.budget, self.location)? {
                     parts.analyzed.push(crate::formula_analysis::fact(
                         &head,
-                        statement,
+                        provenance,
                         self.location,
                     )?);
                     let rule = self.fact_rule(&head, &origins)?;
@@ -1054,7 +1074,7 @@ impl Compiler<'_> {
             while let Some(head) = facts.next(self.budget, self.location)? {
                 parts.analyzed.push(crate::formula_analysis::fact(
                     &head,
-                    statement,
+                    provenance,
                     self.location,
                 )?);
             }
@@ -1068,6 +1088,29 @@ impl Compiler<'_> {
             )?;
         }
         Ok(())
+    }
+
+    /// Whether `carrier` is a fact statement normalization would return as it
+    /// is, its terms charged as normalization charges them. Only fact
+    /// statements are kept: their analyzed facts are rebuilt from the expanded
+    /// heads with the statement's provenance, so the content and the stamp are
+    /// all the rewrite would contribute. A kept head has no constructor or
+    /// operator term, so it is never a generated fact.
+    fn keeps_fact(
+        &mut self,
+        carrier: &WithProvenance<Statement>,
+        constants: &BTreeMap<String, Symbol>,
+    ) -> Result<bool, ExpansionFailure> {
+        if fact_expansion::fact_atom(carrier.get()).is_none() {
+            return Ok(false);
+        }
+        extended::kept_as_is(
+            carrier.get(),
+            constants,
+            extended::Normalization::Formula,
+            self.budget,
+            self.location,
+        )
     }
 
     /// Keep the rewritten owner private until every normalization step has succeeded.

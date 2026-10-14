@@ -361,7 +361,13 @@ fn compile_extended<P: Clone>(
             continue;
         }
         let locations = evidence(carrier, location);
-        if kept_as_is(carrier.get(), constants, budget, location)? {
+        if kept_as_is(
+            carrier.get(),
+            constants,
+            Normalization::Extended,
+            budget,
+            location,
+        )? {
             emit(carrier, locations, budget, location, &mut compiled)?;
             continue;
         }
@@ -429,29 +435,47 @@ fn emit<P: Clone>(
     Ok(())
 }
 
-/// Whether normalization would return `statement` exactly as it is. Its
+/// The normalizer a kept statement must match: the extended profile's, or
+/// the formula route's, which keeps the sentinels `#inf` and `#sup` with one
+/// unit of term work where the extended profile validates them as scalars.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Normalization {
+    Extended,
+    Formula,
+}
+
+/// Whether `normalization` would return `statement` exactly as it is. Its
 /// terms are charged and validated as the rewrite would charge and validate
 /// them, in the rewrite's order, on a tentative budget that becomes the
 /// budget only when every term is a [`Leaf`]; otherwise the budget is left
 /// as it was, and the rewrite charges the statement from the start. A
 /// failure is the one the rewrite would raise first, since it arises before
 /// any term the rewrite would rebuild. Nothing is cloned but the budget.
-fn kept_as_is(
+pub(crate) fn kept_as_is(
     statement: &Statement,
     constants: &BTreeMap<String, Symbol>,
+    normalization: Normalization,
     budget: &mut Budget,
     location: ProgramSite,
 ) -> Result<bool, ExpansionFailure> {
     let Statement::Rule(rule) = statement else {
         return Ok(false);
     };
+    #[cfg(test)]
+    if testing::rewrites_every_statement() {
+        return Ok(false);
+    }
     let mut tentative = budget.clone();
     let kept = every_term(rule, &mut |term| match Leaf::of(term, constants) {
-        Some(leaf) => leaf.account(&mut tentative, location).map(|()| true),
+        Some(leaf) => leaf
+            .account(normalization, &mut tentative, location)
+            .map(|()| true),
         None => Ok(false),
     })?;
     if kept {
         *budget = tentative;
+        #[cfg(test)]
+        testing::note_kept();
     }
     Ok(kept)
 }
@@ -518,13 +542,17 @@ fn literal_terms(
 }
 
 /// A term [`normalize_node`] returns exactly as it is, charged and validated
-/// by [`Leaf::account`]: a variable, or an argument-free scalar naming no
-/// definition. Every other term is rebuilt, or, for a pool or interval
-/// former, kept around terms that may not be.
+/// by [`Leaf::account`]: a variable, an argument-free scalar naming no
+/// definition, or a ground symbol with arguments none of whose parts names a
+/// definition. Raise yields such a symbol in its canonical form, and the
+/// normalizer's symbolic branch folds it back to itself. Every other term is
+/// rebuilt, or, for a pool or interval former, kept around terms that may
+/// not be.
 #[derive(Clone, Copy)]
 enum Leaf<'a> {
     Variable,
     Scalar(&'a Symbol),
+    Compound(&'a Symbol),
 }
 
 impl<'a> Leaf<'a> {
@@ -536,20 +564,89 @@ impl<'a> Leaf<'a> {
             {
                 Some(Self::Scalar(symbol))
             }
+            Term::Symbolic(symbol)
+                if !symbol.arguments().is_empty()
+                    && symbol
+                        .subsymbols()
+                        .all(|part| defined(part, constants).is_none()) =>
+            {
+                Some(Self::Compound(symbol))
+            }
             _ => None,
         }
     }
 
-    /// Charge and validate as [`normalize_node`] does for this term: its unit
-    /// of term work first, then a scalar's validation and payload.
-    fn account(self, budget: &mut Budget, location: ProgramSite) -> Result<(), ExpansionFailure> {
+    /// Charge and validate as `normalization` does for this term: its unit of
+    /// term work first; then a scalar's validation and payload, except a
+    /// sentinel the formula route keeps; or a compound symbol's payload, one
+    /// unit for each of its parts as the fold visits them, and its validation.
+    fn account(
+        self,
+        normalization: Normalization,
+        budget: &mut Budget,
+        location: ProgramSite,
+    ) -> Result<(), ExpansionFailure> {
         budget.charge(ExpansionResource::TermWork, 1, location)?;
         match self {
             Self::Variable => Ok(()),
+            Self::Scalar(Symbol::Infimum | Symbol::Supremum)
+                if normalization == Normalization::Formula =>
+            {
+                Ok(())
+            }
             Self::Scalar(symbol) => scalar_leaf(symbol, budget, location),
+            Self::Compound(symbol) => {
+                budget.charge(
+                    ExpansionResource::ScalarBytes,
+                    symbol_bytes(symbol),
+                    location,
+                )?;
+                for _ in symbol.subsymbols() {
+                    budget.charge(ExpansionResource::TermWork, 1, location)?;
+                }
+                compile::validate_scalar(symbol, location)?;
+                Ok(())
+            }
         }
     }
 }
+
+/// A switch for tests that compare a kept statement with its rewrite: while it
+/// is set on a thread, [`kept_as_is`] keeps nothing there. The statements kept
+/// on a thread are counted, so a test can assert which path it took.
+#[cfg(test)]
+pub(crate) mod testing {
+    use std::cell::Cell;
+
+    thread_local! {
+        static REWRITE_EVERY_STATEMENT: Cell<bool> = const { Cell::new(false) };
+        static KEPT: Cell<usize> = const { Cell::new(0) };
+    }
+
+    pub(crate) fn rewrites_every_statement() -> bool {
+        REWRITE_EVERY_STATEMENT.with(Cell::get)
+    }
+
+    pub(super) fn note_kept() {
+        KEPT.with(|kept| kept.set(kept.get() + 1));
+    }
+
+    /// The statements kept on this thread so far.
+    pub(crate) fn kept_statements() -> usize {
+        KEPT.with(Cell::get)
+    }
+
+    /// Run `body` with every statement rewritten on this thread.
+    pub(crate) fn with_every_statement_rewritten<T>(body: impl FnOnce() -> T) -> T {
+        let previous = REWRITE_EVERY_STATEMENT.with(|rewrite| rewrite.replace(true));
+        let result = body();
+        REWRITE_EVERY_STATEMENT.with(|rewrite| rewrite.set(previous));
+        result
+    }
+}
+
+#[cfg(test)]
+mod kept_tests;
 
 /// The value an argument-free scalar names, when it names a definition.
 fn defined<'a>(symbol: &Symbol, constants: &'a BTreeMap<String, Symbol>) -> Option<&'a Symbol> {

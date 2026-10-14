@@ -7,7 +7,7 @@
 
 use crate::ProgramSite;
 use themelios_program::program::{Arguments, Atom, Body, Program, Rule, Statement};
-use themelios_program::provenance::WithProvenance;
+use themelios_program::provenance::{Provenance, WithProvenance};
 use themelios_program::symbol::{Name, Sign, Signature, Symbol};
 use themelios_program::term::Term;
 use themelios_program::transform::Visit;
@@ -20,12 +20,13 @@ use crate::{
     ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource, ProfileFeature, extended,
 };
 
-/// Rebuild one already expanded fact. The caller bounds fact count, scalar
-/// expansion and provenance before calling. Only the enclosing statement keeps
-/// parsed origins; synthesized children truthfully have constructed provenance.
+/// Rebuild one already expanded fact with `provenance`, the normalized fact
+/// statement's. The caller bounds fact count, scalar expansion and provenance
+/// before calling. Only the statement keeps parsed origins; synthesized
+/// children truthfully have constructed provenance.
 pub(crate) fn fact(
     pattern: &AtomPattern,
-    source: &WithProvenance<Statement>,
+    provenance: &Provenance,
     location: ProgramSite,
 ) -> Result<WithProvenance<Statement>, FormulaFailure> {
     let terms = pattern
@@ -78,7 +79,7 @@ pub(crate) fn fact(
     };
     Ok(WithProvenance::new(
         Statement::Rule(Rule::new(atom, Body::new([]))),
-        source.provenance().clone(),
+        provenance.clone(),
     ))
 }
 

@@ -5,7 +5,7 @@
 //! their existing admission owners. No successful partial program is published.
 
 use crate::ProgramSite;
-use themelios_program::program::{DefaultNegation, Head, LiteralInner, Statement};
+use themelios_program::program::{Atom, DefaultNegation, Head, LiteralInner, Statement};
 use themelios_program::provenance::WithProvenance;
 use zetesis_core::AtomPattern;
 
@@ -88,28 +88,36 @@ impl<'a> ProductView<'a> {
 
 pub(crate) use columns::Cell;
 
+/// The head atom of a fact statement: a rule with an empty body and a positive
+/// atom head. Any other statement is no fact producer.
+pub(crate) fn fact_atom(statement: &Statement) -> Option<&Atom> {
+    let Statement::Rule(rule) = statement else {
+        return None;
+    };
+    if rule.body().get().elements().next().is_some() {
+        return None;
+    }
+    let Head::Literal(literal) = rule.head().get() else {
+        return None;
+    };
+    if literal.negation != DefaultNegation::None {
+        // A default-negated literal remains a formula, never a fact producer.
+        return None;
+    }
+    let LiteralInner::Atom(atom) = &literal.inner else {
+        return None;
+    };
+    Some(atom.get())
+}
+
 pub(crate) fn facts(
     carrier: &WithProvenance<Statement>,
     budget: &mut Budget,
     location: ProgramSite,
 ) -> Result<Option<Facts>, ExpansionFailure> {
-    let Statement::Rule(rule) = carrier.get() else {
+    let Some(atom) = fact_atom(carrier.get()) else {
         return Ok(None);
     };
-    if rule.body().get().elements().next().is_some() {
-        return Ok(None);
-    }
-    let Head::Literal(literal) = rule.head().get() else {
-        return Ok(None);
-    };
-    if literal.negation != DefaultNegation::None {
-        // A default-negated literal remains a formula, never a fact producer.
-        return Ok(None);
-    }
-    let LiteralInner::Atom(atom) = &literal.inner else {
-        return Ok(None);
-    };
-    let atom = atom.get();
     let mut facts = Facts {
         products: Vec::new(),
         product: 0,
