@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
+            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2436da5c.js"></script>
+        <script src="../toc-5c747b16.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -257,11 +257,47 @@ one producer left demands that producer’s body. The <code>zetesis-ferraris</co
 these rules to a fixed point over the theory’s own DAG, without a clause
 form (<code>FormulaBounds.read_sound</code>, <code>never_root_refutes</code>, <code>known_sound</code>,
 <code>unsupported_cut</code>). A region no reading refutes is split
-on the open atom the narrowing found most constrained, cut branch first;
+on the open atom the split ranking below prefers, cut branch first;
 a region with every atom decided is a leaf, and a leaf is a classical model, since at a full decision every
 root is sure or never (<code>FormulaBounds.decided_leaf_models</code>). The leaf
-is the candidate the reduct decides.
-Once a step proves a region contradictory, narrowing discards it without
+is the candidate the reduct decides.</p>
+<p>Native nonnegative threshold rows also share consequences during
+original-candidate narrowing. Preparation links exact prefixes of grouped
+<code>(condition, weight)</code> terms. A required lower bound passes from a prefix to its
+extensions; an exclusive upper bound passes from an extension to its prefixes.
+Equal rows pass both requirements. Transfer continues through an intermediate
+row even when it has no guard at that bound. Links stay in the prepared index
+and pending rows in worker scratch; existing per-region threshold state holds
+the requirements, adding no state to child copies. This transfer is disabled
+for frozen-reduct narrowing. Recognition is limited to exact prefixes in
+prepared order; other subset relations can remain undiscovered.</p>
+<p>For a required finite sum interval, original-candidate narrowing also checks
+divisibility of the remaining coefficients. If <code>B</code> is already known true and
+<code>d</code> divides every undecided coefficient, every completion has sum <code>B + d*k</code>.
+An interval containing none of those values refutes the region, even when its
+ordinary lower and upper readings overlap. Coefficients sharing one condition
+are grouped first. Unit rows cannot gain from this test and skip it. The
+coalesced check reads coefficients from the small end. If the first undecided
+coefficient fits within the required interval’s width, every divisor of that
+coefficient has a progression point in the interval, and the check ends before
+computing a remainder. Deciding conditions or tightening the interval reconsiders
+the row; this witness is not retained as a permanent property.</p>
+<p>This check reads processed sums after node, bound-transfer, witness and support
+queues reach a fixed point. Arithmetic notifications use a separate coalesced
+queue, preserving bound-transfer order and checking each dirty row at most once
+per closure. They do not repeat Boolean or prefix transport. The check publishes
+no new bounds and adds no state to child copies. Both queues and their membership
+masks belong to worker scratch, with their actual capacities accounted.</p>
+<p>Work includes visited coefficients, Euclidean remainder steps and interval tests.
+The scan visits smaller coefficients first and stops if the current progression
+intersects the interval: further gcd reductions preserve that intersection, so
+they cannot refute the region. Deferring the scan can spend more mandatory work
+before an arithmetic refutation, but cannot restore an impossible completion:
+new decisions and stricter bounds only restrict the earlier possibilities.
+Frozen-reduct narrowing is unchanged. The
+<a href="../lean/correspondence.html#nonnegative-aggregate-thresholds">residual-sum laws</a>
+state the necessary condition and the remaining implementation obligations.</p>
+<p>Once a step proves a region contradictory, narrowing discards it without
 visiting the remaining operands, parents or support wakeups. Work accounting
 covers the visited prefix; cleanup still settles worker receipts. Partial
 knowledge from a refuted or interrupted closure is not reused as a completed
@@ -294,14 +330,21 @@ without a restart, and no exclusion index is kept, because a leaf is visited
 once. Propagation under the original theory, permanent restrictions and current
 bound repeats to a shared fixed point before one split ranking. That ranking
 uses the active bound when present, otherwise the latest permanent restriction,
-otherwise the original theory. Its open atom with the most unknown parents is
-preferred, with ties going to the lowest atom. The packed region masks enumerate
+otherwise the original theory. Open atoms that head an atomic choice root of the
+original theory rank first, whether or not the theory lies in the producer
+fragment: deciding the choices leaves the atoms they derive to propagation and,
+where it applies, the support cut. Among atoms of the same kind, the one with the
+most unknown parents in the ranking subject is preferred, with ties going to the
+lowest atom. Any open
+atom is a sound split (the <code>CoverageTree.split</code> node of <code>Search.lean</code>), so this
+order changes the regions visited, never the answers. The packed region masks enumerate
 open atoms in ascending order, excluding decided atoms and unused final bits;
 each inspected parent count spends one work permit.
 The traversal itself is one operation in <code>zetesis-cpu</code>, shared by both
 routes when one worker walks; with several workers the formula route walks
-the same tree in <code>zetesis-sat</code>’s parallel regions, each worker owning a stack
-of regions and a shared pool offering regions to idle workers. The closure
+the same tree in <code>zetesis-sat</code>’s parallel regions: the walk begins on the
+calling thread, and the workers it then starts each own a deque of regions,
+from which idle workers steal. The closure
 route narrows by its two closures, the formula route by
 the readings.</p>
 <p>Under the same method the reduct’s proper-subset query is a second region
@@ -315,11 +358,13 @@ and a covered tree with no such leaf is the proof of minimality
 are then the same operation over the same index of the theory, and no
 clause form is built anywhere on the route.</p>
 <p>Because the regions share nothing, several workers can walk the tree at
-once (<code>--threads</code>, the host’s available parallelism by default), each deciding
-the leaves it reaches, over a pool of regions still to visit. The family is exact at any worker count, each
-answer arriving once, by the partition law; the order in which answers
-arrive is the schedule’s, is not promised to repeat between runs, and is
-not a property of the result. Verification rests on the laws and on the
+once (<code>--threads</code>, the host’s available parallelism by default), started once
+the walk has run on one thread, in wall time since it began, for longer than
+their start costs, each deciding the leaves it reaches. The family is exact at
+any worker count, each answer arriving once, by the partition law; the order in
+which answers arrive is the scalar walk’s until the workers start and the
+schedule’s after, is not promised to repeat between runs, and is not a property
+of the result. Verification rests on the laws and on the
 oracle comparison of answer sets as sets, not on order or determinism.</p>
 <p>Candidate production and membership need not run on the same executor.
 <code>StableModels::with_region_producers</code> uses the same original-theory readings
@@ -669,6 +714,29 @@ a replacement. Supplying a context does not override a CPU request.</p>
 limit or cancellation remains an incomplete result. Device statistics count
 actual device attempts and never include seeds checked only by the CPU. This
 policy leaves device scheduling separate from the reduct membership contract.</p>
+<h3 id="one-install-two-executables"><a class="header" href="#one-install-two-executables">One install, two executables</a></h3>
+<p>Linking the GPU stack starts the platform’s graphics frameworks with every
+process, so an executable that can use a GPU pays that start on every run,
+including the CPU runs that are nearly all of them. The default install
+therefore holds two builds of the same source. The <code>zetesis</code> a user runs is
+built without the GPU stack (the CLI’s <code>front</code> feature) and runs every CPU
+invocation itself. An invocation that opens a GPU device, a solve on a GPU
+backend or <code>zetesis devices</code>, it hands to the full build installed beside it in
+<code>zetesis-libexec/&lt;identity&gt;/zetesis</code>, before any input is read or output
+written, by replacing its own process; the arguments, standard streams,
+environment, process ID and exit status carry over, and the name the operating
+system reports stays <code>zetesis</code>. Test commands are not handed off: their GPU
+work runs in child processes, and each decides for itself.</p>
+<p>The identity is the full build’s content, which the installer compiles into the
+front, so a front can find only the build installed with it; a front built
+without one does not compile. The command-line grammar is the same in every
+build profile, which a test checks against one recorded rendering of the
+command tree, so the two executables read an invocation identically. A front
+that cannot run its full build reports <code>gpu_executable_unavailable</code>, and never
+serves the request on the CPU instead. The JSON statistics and the record view
+name the executable that did the work. A CPU-only install has no full build and refuses GPU requests with
+<code>backend_unavailable</code>; a single build with GPU support, as Cargo installs it,
+never hands off.</p>
 <h2 id="immutable-rounds-and-commit-boundaries"><a class="header" href="#immutable-rounds-and-commit-boundaries">Immutable rounds and commit boundaries</a></h2>
 <p>Each lazy batch has independent frozen seeds and positive snapshots. All chunks
 in one round read those same snapshots. Deltas become the next snapshots only

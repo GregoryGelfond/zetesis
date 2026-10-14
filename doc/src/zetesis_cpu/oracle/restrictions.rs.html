@@ -221,197 +221,201 @@
 <a href=#221 id=221 data-nosnippet>221</a>    work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#222 id=222 data-nosnippet>222</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;CarrierAtom&gt;, Stop&gt; {
 <a href=#223 id=223 data-nosnippet>223</a>    <span class="kw">let </span><span class="kw-2">mut </span>facts: Vec&lt;CarrierAtom&gt; = Vec::new();
-<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">for </span>template <span class="kw">in </span>program.templates() {
-<a href=#225 id=225 data-nosnippet>225</a>        work.tick()<span class="question-mark">?</span>;
-<a href=#226 id=226 data-nosnippet>226</a>        <span class="kw">if </span>template.positive().is_empty()
-<a href=#227 id=227 data-nosnippet>227</a>            &amp;&amp; template.gate_true().is_empty()
-<a href=#228 id=228 data-nosnippet>228</a>            &amp;&amp; template.gate_false().is_empty()
-<a href=#229 id=229 data-nosnippet>229</a>            &amp;&amp; template.filters().is_empty()
-<a href=#230 id=230 data-nosnippet>230</a>            &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(head) = template.head()
-<a href=#231 id=231 data-nosnippet>231</a>        {
-<a href=#232 id=232 data-nosnippet>232</a>            <span class="kw">let </span>atom = located(program, head, <span class="kw-2">&amp;</span>[], <span class="bool-val">false</span>, remaining_atoms, storage, work)<span class="question-mark">?</span>;
-<a href=#233 id=233 data-nosnippet>233</a>            <span class="kw">let </span>(<span class="kw-2">mut </span>low, <span class="kw-2">mut </span>high) = (<span class="number">0</span>, facts.len());
-<a href=#234 id=234 data-nosnippet>234</a>            <span class="kw">let </span><span class="kw-2">mut </span>duplicate = <span class="bool-val">false</span>;
-<a href=#235 id=235 data-nosnippet>235</a>            <span class="kw">while </span>low &lt; high {
-<a href=#236 id=236 data-nosnippet>236</a>                <span class="kw">let </span>middle = low + (high - low) / <span class="number">2</span>;
-<a href=#237 id=237 data-nosnippet>237</a>                work.tick()<span class="question-mark">?</span>;
-<a href=#238 id=238 data-nosnippet>238</a>                <span class="kw">match </span>facts[middle]
-<a href=#239 id=239 data-nosnippet>239</a>                    .atom()
-<a href=#240 id=240 data-nosnippet>240</a>                    .compare_ref_with(atom.atom(), || work.tick())<span class="question-mark">?
-<a href=#241 id=241 data-nosnippet>241</a>                </span>{
-<a href=#242 id=242 data-nosnippet>242</a>                    std::cmp::Ordering::Less =&gt; low = middle + <span class="number">1</span>,
-<a href=#243 id=243 data-nosnippet>243</a>                    std::cmp::Ordering::Greater =&gt; high = middle,
-<a href=#244 id=244 data-nosnippet>244</a>                    std::cmp::Ordering::Equal =&gt; {
-<a href=#245 id=245 data-nosnippet>245</a>                        duplicate = <span class="bool-val">true</span>;
-<a href=#246 id=246 data-nosnippet>246</a>                        <span class="kw">break</span>;
-<a href=#247 id=247 data-nosnippet>247</a>                    }
-<a href=#248 id=248 data-nosnippet>248</a>                }
-<a href=#249 id=249 data-nosnippet>249</a>            }
-<a href=#250 id=250 data-nosnippet>250</a>            <span class="kw">if </span>duplicate {
-<a href=#251 id=251 data-nosnippet>251</a>                storage.bytes -= atom.coordinate_bytes();
-<a href=#252 id=252 data-nosnippet>252</a>            } <span class="kw">else </span>{
-<a href=#253 id=253 data-nosnippet>253</a>                storage.reserve(<span class="kw-2">&amp;mut </span>facts, <span class="number">1</span>, work)<span class="question-mark">?</span>;
-<a href=#254 id=254 data-nosnippet>254</a>                work.charge(facts.len() - low + <span class="number">1</span>)<span class="question-mark">?</span>;
-<a href=#255 id=255 data-nosnippet>255</a>                facts.insert(low, atom);
-<a href=#256 id=256 data-nosnippet>256</a>            }
-<a href=#257 id=257 data-nosnippet>257</a>        }
-<a href=#258 id=258 data-nosnippet>258</a>    }
-<a href=#259 id=259 data-nosnippet>259</a>    <span class="prelude-val">Ok</span>(facts)
-<a href=#260 id=260 data-nosnippet>260</a>}
-<a href=#261 id=261 data-nosnippet>261</a>
-<a href=#262 id=262 data-nosnippet>262</a><span class="kw">fn </span>compile(
-<a href=#263 id=263 data-nosnippet>263</a>    program: <span class="kw-2">&amp;</span>Program,
-<a href=#264 id=264 data-nosnippet>264</a>    limits: CandidateRestrictionLimits,
-<a href=#265 id=265 data-nosnippet>265</a>    work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#266 id=266 data-nosnippet>266</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Restrictions, Stop&gt; {
-<a href=#267 id=267 data-nosnippet>267</a>    <span class="kw">let </span><span class="kw-2">mut </span>eligible = <span class="bool-val">false</span>;
-<a href=#268 id=268 data-nosnippet>268</a>    <span class="kw">for </span>template <span class="kw">in </span>program.templates() {
-<a href=#269 id=269 data-nosnippet>269</a>        work.tick()<span class="question-mark">?</span>;
-<a href=#270 id=270 data-nosnippet>270</a>        eligible |= template.head().is_none() &amp;&amp; template.gate_false().is_empty();
-<a href=#271 id=271 data-nosnippet>271</a>    }
-<a href=#272 id=272 data-nosnippet>272</a>    <span class="kw">if </span>!eligible {
-<a href=#273 id=273 data-nosnippet>273</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(Restrictions {
-<a href=#274 id=274 data-nosnippet>274</a>            forbidden: Vec::new(),
-<a href=#275 id=275 data-nosnippet>275</a>            atoms: <span class="number">0</span>,
-<a href=#276 id=276 data-nosnippet>276</a>            bytes: <span class="number">0</span>,
-<a href=#277 id=277 data-nosnippet>277</a>            peak_bytes: <span class="number">0</span>,
-<a href=#278 id=278 data-nosnippet>278</a>        });
-<a href=#279 id=279 data-nosnippet>279</a>    }
-<a href=#280 id=280 data-nosnippet>280</a>    <span class="kw">let </span><span class="kw-2">mut </span>storage = Storage {
-<a href=#281 id=281 data-nosnippet>281</a>        bytes: <span class="number">0</span>,
-<a href=#282 id=282 data-nosnippet>282</a>        peak: <span class="number">0</span>,
-<a href=#283 id=283 data-nosnippet>283</a>        limit: limits.max_bytes,
-<a href=#284 id=284 data-nosnippet>284</a>    };
-<a href=#285 id=285 data-nosnippet>285</a>    <span class="kw">let </span><span class="kw-2">mut </span>remaining_atoms = limits.max_atoms;
-<a href=#286 id=286 data-nosnippet>286</a>    <span class="kw">let </span>facts = unconditional_facts(program, <span class="kw-2">&amp;mut </span>remaining_atoms, <span class="kw-2">&amp;mut </span>storage, work)<span class="question-mark">?</span>;
-<a href=#287 id=287 data-nosnippet>287</a>    <span class="comment">// Only actual unconditional facts enter the shared join; neither possible
-<a href=#288 id=288 data-nosnippet>288</a>    // support nor the entire carrier is supplied as a source truth relation.
-<a href=#289 id=289 data-nosnippet>289</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>relations = Relations::new();
-<a href=#290 id=290 data-nosnippet>290</a>    storage.bytes += relations.retained_bytes();
-<a href=#291 id=291 data-nosnippet>291</a>    storage.admit(storage.bytes)<span class="question-mark">?</span>;
-<a href=#292 id=292 data-nosnippet>292</a>    <span class="kw">for </span>atom <span class="kw">in </span><span class="kw-2">&amp;</span>facts {
-<a href=#293 id=293 data-nosnippet>293</a>        <span class="kw">let </span>previous = relations.retained_bytes();
-<a href=#294 id=294 data-nosnippet>294</a>        relations.push_with(
-<a href=#295 id=295 data-nosnippet>295</a>            atom.atom(),
-<a href=#296 id=296 data-nosnippet>296</a>            storage.bytes - previous,
-<a href=#297 id=297 data-nosnippet>297</a>            limits.max_bytes,
-<a href=#298 id=298 data-nosnippet>298</a>            <span class="kw-2">&amp;mut </span>storage.peak,
-<a href=#299 id=299 data-nosnippet>299</a>            work,
-<a href=#300 id=300 data-nosnippet>300</a>        )<span class="question-mark">?</span>;
-<a href=#301 id=301 data-nosnippet>301</a>        storage.bytes = storage.bytes - previous + relations.retained_bytes();
-<a href=#302 id=302 data-nosnippet>302</a>        storage.admit(storage.bytes)<span class="question-mark">?</span>;
-<a href=#303 id=303 data-nosnippet>303</a>    }
-<a href=#304 id=304 data-nosnippet>304</a>    <span class="kw">let </span>facts_bytes = storage.bytes;
-<a href=#305 id=305 data-nosnippet>305</a>    <span class="kw">let </span><span class="kw-2">mut </span>forbidden = Vec::new();
-<a href=#306 id=306 data-nosnippet>306</a>    <span class="kw">for </span>template <span class="kw">in </span>program.templates() {
-<a href=#307 id=307 data-nosnippet>307</a>        work.tick()<span class="question-mark">?</span>;
-<a href=#308 id=308 data-nosnippet>308</a>        <span class="kw">if </span>template.head().is_some() || !template.gate_false().is_empty() {
-<a href=#309 id=309 data-nosnippet>309</a>            <span class="kw">continue</span>;
-<a href=#310 id=310 data-nosnippet>310</a>        }
-<a href=#311 id=311 data-nosnippet>311</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(partition) = lift(program, template, <span class="kw-2">&amp;mut </span>storage, work)<span class="question-mark">? </span><span class="kw">else </span>{
-<a href=#312 id=312 data-nosnippet>312</a>            <span class="kw">continue</span>;
-<a href=#313 id=313 data-nosnippet>313</a>        };
-<a href=#314 id=314 data-nosnippet>314</a>        <span class="kw">let </span>query = template.with_patterns(<span class="kw-2">&amp;</span>partition.positive, <span class="kw-2">&amp;</span>partition.gates);
-<a href=#315 id=315 data-nosnippet>315</a>        <span class="kw">let </span>scratch = visit(
-<a href=#316 id=316 data-nosnippet>316</a>            query,
-<a href=#317 id=317 data-nosnippet>317</a>            <span class="kw-2">&amp;</span>relations,
-<a href=#318 id=318 data-nosnippet>318</a>            <span class="kw">super</span>::Gates::Unjudged,
-<a href=#319 id=319 data-nosnippet>319</a>            <span class="prelude-val">None</span>,
-<a href=#320 id=320 data-nosnippet>320</a>            <span class="kw">super</span>::QueryStorage {
-<a href=#321 id=321 data-nosnippet>321</a>                retained_bytes: storage.bytes,
-<a href=#322 id=322 data-nosnippet>322</a>                max_bytes: limits.max_bytes,
-<a href=#323 id=323 data-nosnippet>323</a>            },
-<a href=#324 id=324 data-nosnippet>324</a>            work,
-<a href=#325 id=325 data-nosnippet>325</a>            |assignment, scratch, work| {
-<a href=#326 id=326 data-nosnippet>326</a>                storage.bytes += scratch;
-<a href=#327 id=327 data-nosnippet>327</a>                storage.admit(storage.bytes)<span class="question-mark">?</span>;
-<a href=#328 id=328 data-nosnippet>328</a>                storage.reserve(<span class="kw-2">&amp;mut </span>forbidden, <span class="number">1</span>, work)<span class="question-mark">?</span>;
-<a href=#329 id=329 data-nosnippet>329</a>                <span class="kw">let </span><span class="kw-2">mut </span>conjunction = Vec::new();
-<a href=#330 id=330 data-nosnippet>330</a>                storage.reserve(<span class="kw-2">&amp;mut </span>conjunction, query.gate_true().len(), work)<span class="question-mark">?</span>;
-<a href=#331 id=331 data-nosnippet>331</a>                <span class="kw">for </span>premise <span class="kw">in </span>query.gate_true() {
-<a href=#332 id=332 data-nosnippet>332</a>                    conjunction.push(located(
-<a href=#333 id=333 data-nosnippet>333</a>                        program,
-<a href=#334 id=334 data-nosnippet>334</a>                        premise,
-<a href=#335 id=335 data-nosnippet>335</a>                        assignment,
-<a href=#336 id=336 data-nosnippet>336</a>                        <span class="bool-val">true</span>,
-<a href=#337 id=337 data-nosnippet>337</a>                        <span class="kw-2">&amp;mut </span>remaining_atoms,
-<a href=#338 id=338 data-nosnippet>338</a>                        <span class="kw-2">&amp;mut </span>storage,
-<a href=#339 id=339 data-nosnippet>339</a>                        work,
-<a href=#340 id=340 data-nosnippet>340</a>                    )<span class="question-mark">?</span>);
-<a href=#341 id=341 data-nosnippet>341</a>                }
-<a href=#342 id=342 data-nosnippet>342</a>                work.tick()<span class="question-mark">?</span>;
-<a href=#343 id=343 data-nosnippet>343</a>                forbidden.push(conjunction);
-<a href=#344 id=344 data-nosnippet>344</a>                storage.bytes -= scratch;
-<a href=#345 id=345 data-nosnippet>345</a>                <span class="prelude-val">Ok</span>::&lt;(), Stop&gt;(())
-<a href=#346 id=346 data-nosnippet>346</a>            },
-<a href=#347 id=347 data-nosnippet>347</a>        )<span class="question-mark">?</span>;
-<a href=#348 id=348 data-nosnippet>348</a>        storage.admit(storage.bytes + scratch)<span class="question-mark">?</span>;
-<a href=#349 id=349 data-nosnippet>349</a>        storage.bytes -= buffer_bytes(<span class="kw-2">&amp;</span>partition.positive) + buffer_bytes(<span class="kw-2">&amp;</span>partition.gates);
-<a href=#350 id=350 data-nosnippet>350</a>    }
-<a href=#351 id=351 data-nosnippet>351</a>    storage.bytes -= facts_bytes;
-<a href=#352 id=352 data-nosnippet>352</a>    <span class="prelude-val">Ok</span>(Restrictions {
-<a href=#353 id=353 data-nosnippet>353</a>        forbidden,
-<a href=#354 id=354 data-nosnippet>354</a>        atoms: limits.max_atoms - remaining_atoms,
-<a href=#355 id=355 data-nosnippet>355</a>        bytes: usize::try_from(storage.bytes).map_err(|<span class="kw">_</span>| Stop::Allocation)<span class="question-mark">?</span>,
-<a href=#356 id=356 data-nosnippet>356</a>        peak_bytes: usize::try_from(storage.peak).map_err(|<span class="kw">_</span>| Stop::Allocation)<span class="question-mark">?</span>,
-<a href=#357 id=357 data-nosnippet>357</a>    })
-<a href=#358 id=358 data-nosnippet>358</a>}
-<a href=#359 id=359 data-nosnippet>359</a>
-<a href=#360 id=360 data-nosnippet>360</a><span class="kw">struct </span>Partition&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#361 id=361 data-nosnippet>361</a>    positive: Vec&lt;PatternRef&lt;<span class="lifetime">'a</span>&gt;&gt;,
-<a href=#362 id=362 data-nosnippet>362</a>    gates: Vec&lt;PatternRef&lt;<span class="lifetime">'a</span>&gt;&gt;,
-<a href=#363 id=363 data-nosnippet>363</a>}
-<a href=#364 id=364 data-nosnippet>364</a><span class="doccomment">/// Every variable must be bound by nongate facts. Other constraints remain for
-<a href=#365 id=365 data-nosnippet>365</a>/// the membership oracle. The partition copies pattern handles, never payload.
-<a href=#366 id=366 data-nosnippet>366</a></span><span class="kw">fn </span>lift&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#367 id=367 data-nosnippet>367</a>    program: <span class="kw-2">&amp;</span>Program,
-<a href=#368 id=368 data-nosnippet>368</a>    template: TemplateRef&lt;<span class="lifetime">'a</span>&gt;,
-<a href=#369 id=369 data-nosnippet>369</a>    storage: <span class="kw-2">&amp;mut </span>Storage,
-<a href=#370 id=370 data-nosnippet>370</a>    work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#371 id=371 data-nosnippet>371</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;Partition&lt;<span class="lifetime">'a</span>&gt;&gt;, Stop&gt; {
-<a href=#372 id=372 data-nosnippet>372</a>    <span class="kw">let </span><span class="kw-2">mut </span>bound = Vec::new();
-<a href=#373 id=373 data-nosnippet>373</a>    storage.reserve(<span class="kw-2">&amp;mut </span>bound, template.variable_count(), work)<span class="question-mark">?</span>;
-<a href=#374 id=374 data-nosnippet>374</a>    work.charge(template.variable_count())<span class="question-mark">?</span>;
-<a href=#375 id=375 data-nosnippet>375</a>    bound.resize(template.variable_count(), <span class="bool-val">false</span>);
-<a href=#376 id=376 data-nosnippet>376</a>    <span class="kw">let </span><span class="kw-2">mut </span>positive = Vec::new();
-<a href=#377 id=377 data-nosnippet>377</a>    <span class="kw">let </span><span class="kw-2">mut </span>gates = Vec::new();
-<a href=#378 id=378 data-nosnippet>378</a>    <span class="kw">for </span>pattern <span class="kw">in </span>template.positive() {
-<a href=#379 id=379 data-nosnippet>379</a>        work.tick()<span class="question-mark">?</span>;
-<a href=#380 id=380 data-nosnippet>380</a>        <span class="kw">if </span>program
-<a href=#381 id=381 data-nosnippet>381</a>            .gate_predicates()
-<a href=#382 id=382 data-nosnippet>382</a>            .binary_search_with(pattern.predicate(), || work.tick())<span class="question-mark">?
-<a href=#383 id=383 data-nosnippet>383</a>            </span>.is_err()
-<a href=#384 id=384 data-nosnippet>384</a>        {
-<a href=#385 id=385 data-nosnippet>385</a>            storage.reserve(<span class="kw-2">&amp;mut </span>positive, <span class="number">1</span>, work)<span class="question-mark">?</span>;
-<a href=#386 id=386 data-nosnippet>386</a>            <span class="kw">for </span>term <span class="kw">in </span>pattern.terms() {
-<a href=#387 id=387 data-nosnippet>387</a>                work.tick()<span class="question-mark">?</span>;
-<a href=#388 id=388 data-nosnippet>388</a>                <span class="kw">if let </span>TemplateTerm::Variable(variable) = term {
-<a href=#389 id=389 data-nosnippet>389</a>                    <span class="kw-2">*</span>bound.get_mut(variable).ok_or(Stop::InvalidProgram)<span class="question-mark">? </span>= <span class="bool-val">true</span>;
-<a href=#390 id=390 data-nosnippet>390</a>                }
-<a href=#391 id=391 data-nosnippet>391</a>            }
-<a href=#392 id=392 data-nosnippet>392</a>            work.tick()<span class="question-mark">?</span>;
-<a href=#393 id=393 data-nosnippet>393</a>            positive.push(pattern);
-<a href=#394 id=394 data-nosnippet>394</a>        } <span class="kw">else </span>{
-<a href=#395 id=395 data-nosnippet>395</a>            storage.reserve(<span class="kw-2">&amp;mut </span>gates, <span class="number">1</span>, work)<span class="question-mark">?</span>;
+<a href=#224 id=224 data-nosnippet>224</a>    <span class="kw">for </span>rule <span class="kw">in </span>program.rules() {
+<a href=#225 id=225 data-nosnippet>225</a>        <span class="kw">let </span>template = <span class="kw">match </span>rule {
+<a href=#226 id=226 data-nosnippet>226</a>            zetesis_core::RuleRef::Template { template, .. } =&gt; template,
+<a href=#227 id=227 data-nosnippet>227</a>            zetesis_core::RuleRef::Fact(fact) =&gt; fact.as_template(),
+<a href=#228 id=228 data-nosnippet>228</a>        };
+<a href=#229 id=229 data-nosnippet>229</a>        work.tick()<span class="question-mark">?</span>;
+<a href=#230 id=230 data-nosnippet>230</a>        <span class="kw">if </span>template.positive().is_empty()
+<a href=#231 id=231 data-nosnippet>231</a>            &amp;&amp; template.gate_true().is_empty()
+<a href=#232 id=232 data-nosnippet>232</a>            &amp;&amp; template.gate_false().is_empty()
+<a href=#233 id=233 data-nosnippet>233</a>            &amp;&amp; template.filters().is_empty()
+<a href=#234 id=234 data-nosnippet>234</a>            &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(head) = template.head()
+<a href=#235 id=235 data-nosnippet>235</a>        {
+<a href=#236 id=236 data-nosnippet>236</a>            <span class="kw">let </span>atom = located(program, head, <span class="kw-2">&amp;</span>[], <span class="bool-val">false</span>, remaining_atoms, storage, work)<span class="question-mark">?</span>;
+<a href=#237 id=237 data-nosnippet>237</a>            <span class="kw">let </span>(<span class="kw-2">mut </span>low, <span class="kw-2">mut </span>high) = (<span class="number">0</span>, facts.len());
+<a href=#238 id=238 data-nosnippet>238</a>            <span class="kw">let </span><span class="kw-2">mut </span>duplicate = <span class="bool-val">false</span>;
+<a href=#239 id=239 data-nosnippet>239</a>            <span class="kw">while </span>low &lt; high {
+<a href=#240 id=240 data-nosnippet>240</a>                <span class="kw">let </span>middle = low + (high - low) / <span class="number">2</span>;
+<a href=#241 id=241 data-nosnippet>241</a>                work.tick()<span class="question-mark">?</span>;
+<a href=#242 id=242 data-nosnippet>242</a>                <span class="kw">match </span>facts[middle]
+<a href=#243 id=243 data-nosnippet>243</a>                    .atom()
+<a href=#244 id=244 data-nosnippet>244</a>                    .compare_ref_with(atom.atom(), || work.tick())<span class="question-mark">?
+<a href=#245 id=245 data-nosnippet>245</a>                </span>{
+<a href=#246 id=246 data-nosnippet>246</a>                    std::cmp::Ordering::Less =&gt; low = middle + <span class="number">1</span>,
+<a href=#247 id=247 data-nosnippet>247</a>                    std::cmp::Ordering::Greater =&gt; high = middle,
+<a href=#248 id=248 data-nosnippet>248</a>                    std::cmp::Ordering::Equal =&gt; {
+<a href=#249 id=249 data-nosnippet>249</a>                        duplicate = <span class="bool-val">true</span>;
+<a href=#250 id=250 data-nosnippet>250</a>                        <span class="kw">break</span>;
+<a href=#251 id=251 data-nosnippet>251</a>                    }
+<a href=#252 id=252 data-nosnippet>252</a>                }
+<a href=#253 id=253 data-nosnippet>253</a>            }
+<a href=#254 id=254 data-nosnippet>254</a>            <span class="kw">if </span>duplicate {
+<a href=#255 id=255 data-nosnippet>255</a>                storage.bytes -= atom.coordinate_bytes();
+<a href=#256 id=256 data-nosnippet>256</a>            } <span class="kw">else </span>{
+<a href=#257 id=257 data-nosnippet>257</a>                storage.reserve(<span class="kw-2">&amp;mut </span>facts, <span class="number">1</span>, work)<span class="question-mark">?</span>;
+<a href=#258 id=258 data-nosnippet>258</a>                work.charge(facts.len() - low + <span class="number">1</span>)<span class="question-mark">?</span>;
+<a href=#259 id=259 data-nosnippet>259</a>                facts.insert(low, atom);
+<a href=#260 id=260 data-nosnippet>260</a>            }
+<a href=#261 id=261 data-nosnippet>261</a>        }
+<a href=#262 id=262 data-nosnippet>262</a>    }
+<a href=#263 id=263 data-nosnippet>263</a>    <span class="prelude-val">Ok</span>(facts)
+<a href=#264 id=264 data-nosnippet>264</a>}
+<a href=#265 id=265 data-nosnippet>265</a>
+<a href=#266 id=266 data-nosnippet>266</a><span class="kw">fn </span>compile(
+<a href=#267 id=267 data-nosnippet>267</a>    program: <span class="kw-2">&amp;</span>Program,
+<a href=#268 id=268 data-nosnippet>268</a>    limits: CandidateRestrictionLimits,
+<a href=#269 id=269 data-nosnippet>269</a>    work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#270 id=270 data-nosnippet>270</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Restrictions, Stop&gt; {
+<a href=#271 id=271 data-nosnippet>271</a>    <span class="kw">let </span><span class="kw-2">mut </span>eligible = <span class="bool-val">false</span>;
+<a href=#272 id=272 data-nosnippet>272</a>    <span class="kw">for </span>template <span class="kw">in </span>program.templates() {
+<a href=#273 id=273 data-nosnippet>273</a>        work.tick()<span class="question-mark">?</span>;
+<a href=#274 id=274 data-nosnippet>274</a>        eligible |= template.head().is_none() &amp;&amp; template.gate_false().is_empty();
+<a href=#275 id=275 data-nosnippet>275</a>    }
+<a href=#276 id=276 data-nosnippet>276</a>    <span class="kw">if </span>!eligible {
+<a href=#277 id=277 data-nosnippet>277</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(Restrictions {
+<a href=#278 id=278 data-nosnippet>278</a>            forbidden: Vec::new(),
+<a href=#279 id=279 data-nosnippet>279</a>            atoms: <span class="number">0</span>,
+<a href=#280 id=280 data-nosnippet>280</a>            bytes: <span class="number">0</span>,
+<a href=#281 id=281 data-nosnippet>281</a>            peak_bytes: <span class="number">0</span>,
+<a href=#282 id=282 data-nosnippet>282</a>        });
+<a href=#283 id=283 data-nosnippet>283</a>    }
+<a href=#284 id=284 data-nosnippet>284</a>    <span class="kw">let </span><span class="kw-2">mut </span>storage = Storage {
+<a href=#285 id=285 data-nosnippet>285</a>        bytes: <span class="number">0</span>,
+<a href=#286 id=286 data-nosnippet>286</a>        peak: <span class="number">0</span>,
+<a href=#287 id=287 data-nosnippet>287</a>        limit: limits.max_bytes,
+<a href=#288 id=288 data-nosnippet>288</a>    };
+<a href=#289 id=289 data-nosnippet>289</a>    <span class="kw">let </span><span class="kw-2">mut </span>remaining_atoms = limits.max_atoms;
+<a href=#290 id=290 data-nosnippet>290</a>    <span class="kw">let </span>facts = unconditional_facts(program, <span class="kw-2">&amp;mut </span>remaining_atoms, <span class="kw-2">&amp;mut </span>storage, work)<span class="question-mark">?</span>;
+<a href=#291 id=291 data-nosnippet>291</a>    <span class="comment">// Only actual unconditional facts enter the shared join; neither possible
+<a href=#292 id=292 data-nosnippet>292</a>    // support nor the entire carrier is supplied as a source truth relation.
+<a href=#293 id=293 data-nosnippet>293</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>relations = Relations::new();
+<a href=#294 id=294 data-nosnippet>294</a>    storage.bytes += relations.retained_bytes();
+<a href=#295 id=295 data-nosnippet>295</a>    storage.admit(storage.bytes)<span class="question-mark">?</span>;
+<a href=#296 id=296 data-nosnippet>296</a>    <span class="kw">for </span>atom <span class="kw">in </span><span class="kw-2">&amp;</span>facts {
+<a href=#297 id=297 data-nosnippet>297</a>        <span class="kw">let </span>previous = relations.retained_bytes();
+<a href=#298 id=298 data-nosnippet>298</a>        relations.push_with(
+<a href=#299 id=299 data-nosnippet>299</a>            atom.atom(),
+<a href=#300 id=300 data-nosnippet>300</a>            storage.bytes - previous,
+<a href=#301 id=301 data-nosnippet>301</a>            limits.max_bytes,
+<a href=#302 id=302 data-nosnippet>302</a>            <span class="kw-2">&amp;mut </span>storage.peak,
+<a href=#303 id=303 data-nosnippet>303</a>            work,
+<a href=#304 id=304 data-nosnippet>304</a>        )<span class="question-mark">?</span>;
+<a href=#305 id=305 data-nosnippet>305</a>        storage.bytes = storage.bytes - previous + relations.retained_bytes();
+<a href=#306 id=306 data-nosnippet>306</a>        storage.admit(storage.bytes)<span class="question-mark">?</span>;
+<a href=#307 id=307 data-nosnippet>307</a>    }
+<a href=#308 id=308 data-nosnippet>308</a>    <span class="kw">let </span>facts_bytes = storage.bytes;
+<a href=#309 id=309 data-nosnippet>309</a>    <span class="kw">let </span><span class="kw-2">mut </span>forbidden = Vec::new();
+<a href=#310 id=310 data-nosnippet>310</a>    <span class="kw">for </span>template <span class="kw">in </span>program.templates() {
+<a href=#311 id=311 data-nosnippet>311</a>        work.tick()<span class="question-mark">?</span>;
+<a href=#312 id=312 data-nosnippet>312</a>        <span class="kw">if </span>template.head().is_some() || !template.gate_false().is_empty() {
+<a href=#313 id=313 data-nosnippet>313</a>            <span class="kw">continue</span>;
+<a href=#314 id=314 data-nosnippet>314</a>        }
+<a href=#315 id=315 data-nosnippet>315</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(partition) = lift(program, template, <span class="kw-2">&amp;mut </span>storage, work)<span class="question-mark">? </span><span class="kw">else </span>{
+<a href=#316 id=316 data-nosnippet>316</a>            <span class="kw">continue</span>;
+<a href=#317 id=317 data-nosnippet>317</a>        };
+<a href=#318 id=318 data-nosnippet>318</a>        <span class="kw">let </span>query = template.with_patterns(<span class="kw-2">&amp;</span>partition.positive, <span class="kw-2">&amp;</span>partition.gates);
+<a href=#319 id=319 data-nosnippet>319</a>        <span class="kw">let </span>scratch = visit(
+<a href=#320 id=320 data-nosnippet>320</a>            query,
+<a href=#321 id=321 data-nosnippet>321</a>            <span class="kw-2">&amp;</span>relations,
+<a href=#322 id=322 data-nosnippet>322</a>            <span class="kw">super</span>::Gates::Unjudged,
+<a href=#323 id=323 data-nosnippet>323</a>            <span class="prelude-val">None</span>,
+<a href=#324 id=324 data-nosnippet>324</a>            <span class="kw">super</span>::QueryStorage {
+<a href=#325 id=325 data-nosnippet>325</a>                retained_bytes: storage.bytes,
+<a href=#326 id=326 data-nosnippet>326</a>                max_bytes: limits.max_bytes,
+<a href=#327 id=327 data-nosnippet>327</a>            },
+<a href=#328 id=328 data-nosnippet>328</a>            work,
+<a href=#329 id=329 data-nosnippet>329</a>            |assignment, scratch, work| {
+<a href=#330 id=330 data-nosnippet>330</a>                storage.bytes += scratch;
+<a href=#331 id=331 data-nosnippet>331</a>                storage.admit(storage.bytes)<span class="question-mark">?</span>;
+<a href=#332 id=332 data-nosnippet>332</a>                storage.reserve(<span class="kw-2">&amp;mut </span>forbidden, <span class="number">1</span>, work)<span class="question-mark">?</span>;
+<a href=#333 id=333 data-nosnippet>333</a>                <span class="kw">let </span><span class="kw-2">mut </span>conjunction = Vec::new();
+<a href=#334 id=334 data-nosnippet>334</a>                storage.reserve(<span class="kw-2">&amp;mut </span>conjunction, query.gate_true().len(), work)<span class="question-mark">?</span>;
+<a href=#335 id=335 data-nosnippet>335</a>                <span class="kw">for </span>premise <span class="kw">in </span>query.gate_true() {
+<a href=#336 id=336 data-nosnippet>336</a>                    conjunction.push(located(
+<a href=#337 id=337 data-nosnippet>337</a>                        program,
+<a href=#338 id=338 data-nosnippet>338</a>                        premise,
+<a href=#339 id=339 data-nosnippet>339</a>                        assignment,
+<a href=#340 id=340 data-nosnippet>340</a>                        <span class="bool-val">true</span>,
+<a href=#341 id=341 data-nosnippet>341</a>                        <span class="kw-2">&amp;mut </span>remaining_atoms,
+<a href=#342 id=342 data-nosnippet>342</a>                        <span class="kw-2">&amp;mut </span>storage,
+<a href=#343 id=343 data-nosnippet>343</a>                        work,
+<a href=#344 id=344 data-nosnippet>344</a>                    )<span class="question-mark">?</span>);
+<a href=#345 id=345 data-nosnippet>345</a>                }
+<a href=#346 id=346 data-nosnippet>346</a>                work.tick()<span class="question-mark">?</span>;
+<a href=#347 id=347 data-nosnippet>347</a>                forbidden.push(conjunction);
+<a href=#348 id=348 data-nosnippet>348</a>                storage.bytes -= scratch;
+<a href=#349 id=349 data-nosnippet>349</a>                <span class="prelude-val">Ok</span>::&lt;(), Stop&gt;(())
+<a href=#350 id=350 data-nosnippet>350</a>            },
+<a href=#351 id=351 data-nosnippet>351</a>        )<span class="question-mark">?</span>;
+<a href=#352 id=352 data-nosnippet>352</a>        storage.admit(storage.bytes + scratch)<span class="question-mark">?</span>;
+<a href=#353 id=353 data-nosnippet>353</a>        storage.bytes -= buffer_bytes(<span class="kw-2">&amp;</span>partition.positive) + buffer_bytes(<span class="kw-2">&amp;</span>partition.gates);
+<a href=#354 id=354 data-nosnippet>354</a>    }
+<a href=#355 id=355 data-nosnippet>355</a>    storage.bytes -= facts_bytes;
+<a href=#356 id=356 data-nosnippet>356</a>    <span class="prelude-val">Ok</span>(Restrictions {
+<a href=#357 id=357 data-nosnippet>357</a>        forbidden,
+<a href=#358 id=358 data-nosnippet>358</a>        atoms: limits.max_atoms - remaining_atoms,
+<a href=#359 id=359 data-nosnippet>359</a>        bytes: usize::try_from(storage.bytes).map_err(|<span class="kw">_</span>| Stop::Allocation)<span class="question-mark">?</span>,
+<a href=#360 id=360 data-nosnippet>360</a>        peak_bytes: usize::try_from(storage.peak).map_err(|<span class="kw">_</span>| Stop::Allocation)<span class="question-mark">?</span>,
+<a href=#361 id=361 data-nosnippet>361</a>    })
+<a href=#362 id=362 data-nosnippet>362</a>}
+<a href=#363 id=363 data-nosnippet>363</a>
+<a href=#364 id=364 data-nosnippet>364</a><span class="kw">struct </span>Partition&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#365 id=365 data-nosnippet>365</a>    positive: Vec&lt;PatternRef&lt;<span class="lifetime">'a</span>&gt;&gt;,
+<a href=#366 id=366 data-nosnippet>366</a>    gates: Vec&lt;PatternRef&lt;<span class="lifetime">'a</span>&gt;&gt;,
+<a href=#367 id=367 data-nosnippet>367</a>}
+<a href=#368 id=368 data-nosnippet>368</a><span class="doccomment">/// Every variable must be bound by nongate facts. Other constraints remain for
+<a href=#369 id=369 data-nosnippet>369</a>/// the membership oracle. The partition copies pattern handles, never payload.
+<a href=#370 id=370 data-nosnippet>370</a></span><span class="kw">fn </span>lift&lt;<span class="lifetime">'a</span>&gt;(
+<a href=#371 id=371 data-nosnippet>371</a>    program: <span class="kw-2">&amp;</span>Program,
+<a href=#372 id=372 data-nosnippet>372</a>    template: TemplateRef&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#373 id=373 data-nosnippet>373</a>    storage: <span class="kw-2">&amp;mut </span>Storage,
+<a href=#374 id=374 data-nosnippet>374</a>    work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#375 id=375 data-nosnippet>375</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;Partition&lt;<span class="lifetime">'a</span>&gt;&gt;, Stop&gt; {
+<a href=#376 id=376 data-nosnippet>376</a>    <span class="kw">let </span><span class="kw-2">mut </span>bound = Vec::new();
+<a href=#377 id=377 data-nosnippet>377</a>    storage.reserve(<span class="kw-2">&amp;mut </span>bound, template.variable_count(), work)<span class="question-mark">?</span>;
+<a href=#378 id=378 data-nosnippet>378</a>    work.charge(template.variable_count())<span class="question-mark">?</span>;
+<a href=#379 id=379 data-nosnippet>379</a>    bound.resize(template.variable_count(), <span class="bool-val">false</span>);
+<a href=#380 id=380 data-nosnippet>380</a>    <span class="kw">let </span><span class="kw-2">mut </span>positive = Vec::new();
+<a href=#381 id=381 data-nosnippet>381</a>    <span class="kw">let </span><span class="kw-2">mut </span>gates = Vec::new();
+<a href=#382 id=382 data-nosnippet>382</a>    <span class="kw">for </span>pattern <span class="kw">in </span>template.positive() {
+<a href=#383 id=383 data-nosnippet>383</a>        work.tick()<span class="question-mark">?</span>;
+<a href=#384 id=384 data-nosnippet>384</a>        <span class="kw">if </span>program
+<a href=#385 id=385 data-nosnippet>385</a>            .gate_predicates()
+<a href=#386 id=386 data-nosnippet>386</a>            .binary_search_with(pattern.predicate(), || work.tick())<span class="question-mark">?
+<a href=#387 id=387 data-nosnippet>387</a>            </span>.is_err()
+<a href=#388 id=388 data-nosnippet>388</a>        {
+<a href=#389 id=389 data-nosnippet>389</a>            storage.reserve(<span class="kw-2">&amp;mut </span>positive, <span class="number">1</span>, work)<span class="question-mark">?</span>;
+<a href=#390 id=390 data-nosnippet>390</a>            <span class="kw">for </span>term <span class="kw">in </span>pattern.terms() {
+<a href=#391 id=391 data-nosnippet>391</a>                work.tick()<span class="question-mark">?</span>;
+<a href=#392 id=392 data-nosnippet>392</a>                <span class="kw">if let </span>TemplateTerm::Variable(variable) = term {
+<a href=#393 id=393 data-nosnippet>393</a>                    <span class="kw-2">*</span>bound.get_mut(variable).ok_or(Stop::InvalidProgram)<span class="question-mark">? </span>= <span class="bool-val">true</span>;
+<a href=#394 id=394 data-nosnippet>394</a>                }
+<a href=#395 id=395 data-nosnippet>395</a>            }
 <a href=#396 id=396 data-nosnippet>396</a>            work.tick()<span class="question-mark">?</span>;
-<a href=#397 id=397 data-nosnippet>397</a>            gates.push(pattern);
-<a href=#398 id=398 data-nosnippet>398</a>        }
-<a href=#399 id=399 data-nosnippet>399</a>    }
-<a href=#400 id=400 data-nosnippet>400</a>    <span class="kw">let </span><span class="kw-2">mut </span>complete = <span class="bool-val">true</span>;
-<a href=#401 id=401 data-nosnippet>401</a>    <span class="kw">for </span>present <span class="kw">in </span><span class="kw-2">&amp;</span>bound {
-<a href=#402 id=402 data-nosnippet>402</a>        work.tick()<span class="question-mark">?</span>;
-<a href=#403 id=403 data-nosnippet>403</a>        complete &amp;= <span class="kw-2">*</span>present;
-<a href=#404 id=404 data-nosnippet>404</a>    }
-<a href=#405 id=405 data-nosnippet>405</a>    storage.release(bound);
-<a href=#406 id=406 data-nosnippet>406</a>    <span class="kw">if </span>!complete {
-<a href=#407 id=407 data-nosnippet>407</a>        storage.bytes -= buffer_bytes(<span class="kw-2">&amp;</span>positive) + buffer_bytes(<span class="kw-2">&amp;</span>gates);
-<a href=#408 id=408 data-nosnippet>408</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
-<a href=#409 id=409 data-nosnippet>409</a>    }
-<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">for </span>pattern <span class="kw">in </span>template.gate_true() {
-<a href=#411 id=411 data-nosnippet>411</a>        storage.reserve(<span class="kw-2">&amp;mut </span>gates, <span class="number">1</span>, work)<span class="question-mark">?</span>;
-<a href=#412 id=412 data-nosnippet>412</a>        work.tick()<span class="question-mark">?</span>;
-<a href=#413 id=413 data-nosnippet>413</a>        gates.push(pattern);
-<a href=#414 id=414 data-nosnippet>414</a>    }
-<a href=#415 id=415 data-nosnippet>415</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(Partition { positive, gates }))
-<a href=#416 id=416 data-nosnippet>416</a>}
+<a href=#397 id=397 data-nosnippet>397</a>            positive.push(pattern);
+<a href=#398 id=398 data-nosnippet>398</a>        } <span class="kw">else </span>{
+<a href=#399 id=399 data-nosnippet>399</a>            storage.reserve(<span class="kw-2">&amp;mut </span>gates, <span class="number">1</span>, work)<span class="question-mark">?</span>;
+<a href=#400 id=400 data-nosnippet>400</a>            work.tick()<span class="question-mark">?</span>;
+<a href=#401 id=401 data-nosnippet>401</a>            gates.push(pattern);
+<a href=#402 id=402 data-nosnippet>402</a>        }
+<a href=#403 id=403 data-nosnippet>403</a>    }
+<a href=#404 id=404 data-nosnippet>404</a>    <span class="kw">let </span><span class="kw-2">mut </span>complete = <span class="bool-val">true</span>;
+<a href=#405 id=405 data-nosnippet>405</a>    <span class="kw">for </span>present <span class="kw">in </span><span class="kw-2">&amp;</span>bound {
+<a href=#406 id=406 data-nosnippet>406</a>        work.tick()<span class="question-mark">?</span>;
+<a href=#407 id=407 data-nosnippet>407</a>        complete &amp;= <span class="kw-2">*</span>present;
+<a href=#408 id=408 data-nosnippet>408</a>    }
+<a href=#409 id=409 data-nosnippet>409</a>    storage.release(bound);
+<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">if </span>!complete {
+<a href=#411 id=411 data-nosnippet>411</a>        storage.bytes -= buffer_bytes(<span class="kw-2">&amp;</span>positive) + buffer_bytes(<span class="kw-2">&amp;</span>gates);
+<a href=#412 id=412 data-nosnippet>412</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
+<a href=#413 id=413 data-nosnippet>413</a>    }
+<a href=#414 id=414 data-nosnippet>414</a>    <span class="kw">for </span>pattern <span class="kw">in </span>template.gate_true() {
+<a href=#415 id=415 data-nosnippet>415</a>        storage.reserve(<span class="kw-2">&amp;mut </span>gates, <span class="number">1</span>, work)<span class="question-mark">?</span>;
+<a href=#416 id=416 data-nosnippet>416</a>        work.tick()<span class="question-mark">?</span>;
+<a href=#417 id=417 data-nosnippet>417</a>        gates.push(pattern);
+<a href=#418 id=418 data-nosnippet>418</a>    }
+<a href=#419 id=419 data-nosnippet>419</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(Partition { positive, gates }))
+<a href=#420 id=420 data-nosnippet>420</a>}
 </code></pre></div></section></main></body></html>

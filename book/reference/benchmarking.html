@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
+            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2436da5c.js"></script>
+        <script src="../toc-5c747b16.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -240,7 +240,7 @@ inputs.</p>
 <tr><td><code>baseline</code></td><td>SEND, queens variant 02 and task allocation</td></tr>
 <tr><td><code>queens</code></td><td>The six unchanged eight-queens encodings</td></tr>
 <tr><td><code>series</code></td><td>The maintained 22 generated, constant-amended and original workloads</td></tr>
-<tr><td><code>scalability</code></td><td>Fourteen authored and corpus workloads, with indexed formula joins and region search</td></tr>
+<tr><td><code>scalability</code></td><td>Twenty authored and corpus workloads, with indexed formula joins and region search</td></tr>
 </tbody>
 </table>
 </div>
@@ -252,7 +252,9 @@ cells in their series order. A case outside the suite is refused before anything
 launches. The scalability suite measures its
 own workloads and accepts no <code>--case</code>; it alone accepts <code>--examples</code>, its
 authored root, which defaults to <code>examples</code>, and <code>--include-einstein</code>, which
-adds the unchanged Einstein riddle as a fifteenth workload. The maintained
+adds the unchanged Einstein riddle as a twenty-first workload. Prime sieve at
+n=30/100/300 and subset sum at n=12/20/30 follow the established fourteen
+workloads; the separate 94-case corpus is unchanged. The maintained
 Sudoku case has eight givens per row: it tests grounding and language handling,
 not difficult Sudoku search. The series suite raises the per-invocation,
 capture, evidence and native-decoder ceilings to the sizes of its records.
@@ -266,6 +268,46 @@ The report records the resulting capacities in <code>limits</code> and
 resource limits or relax complete-family comparison. Library callers explicitly
 apply <code>scalability::limits</code> and <code>scalability::native_answers</code> before constructing
 their matrix request; execution itself never raises supplied limits.</p>
+<h3 id="declared-external-bundles"><a class="header" href="#declared-external-bundles">Declared external bundles</a></h3>
+<p><code>run --workloads PATH</code> measures the external programs in a source-bundle JSON
+manifest through the same matrix. It requires a runnable clingo for fresh
+complete-family qualification, including every final optimum tie. It conflicts
+with <code>--suite</code>, <code>--case</code>, <code>--examples</code>, <code>--include-einstein</code> and
+<code>--without-clingo</code>; profile, schedule, capture and output controls still apply.
+The positional corpus remains the correctness-catalog context. Source files are
+copied byte for byte into each workload’s private directory, preserving their
+relative paths and include spellings.</p>
+<p>The version 1 manifest contains <code>schema_version: 1</code>, a <code>root</code> and a <code>cases</code>
+array. A relative root resolves against the manifest’s parent directory.
+Each case supplies its root-relative <code>entry</code>, existing display <code>contract</code>, and
+<code>files</code>. Each file records its root-relative <code>path</code>, expected <code>sha256</code>, and an
+<code>includes</code> array of <code>{ "spelling": "...", "target": "..." }</code> entries in source
+occurrence order. Targets name declared root-relative members; include
+spellings may use <code>..</code> only when the declared graph remains confined. Admission
+checks the actual directives, complete reachable closure, byte hashes and
+resource ceilings. Cycles, undeclared files and conflicting cwd-first include
+lookups are refused. Reports retain the manifest, original-file and copied
+source identities; host paths do not determine portable workload identity.
+When <code>--memory-runs</code> is nonzero, the copied source root reserves <code>child-rss.json</code>
+for the existing RSS helper. A source file or directory at that path, including
+an alias on the destination filesystem, is refused before any process launches.</p>
+<p>Library callers use <code>performance::bundles::load</code> and pass its sealed workloads
+to <code>matrix::run_workloads_with_cancellation</code>. The declared contracts remain
+expectations; the reference run supplies fresh qualification.</p>
+<p>Large complete families may require larger measurement capacities. The advanced
+<code>--native-atoms</code> and <code>--native-value-nodes</code> controls bound native report
+normalization across all model occurrences, including atoms reused through the
+compact report table. Their defaults follow the decoder: 262,144 atoms and
+1,048,576 value nodes. Existing suite minimum capacities still apply and keep
+larger caller values. The effective bounds are recorded in
+<code>native_normalization_limits</code>; they do not change solver resource budgets.
+<code>--answer-bytes</code> bounds reference-answer decoding and native displayed-symbol
+spelling, with the existing answer decoder’s default of 8 MiB. Its occurrence
+ceilings derive from that byte bound, and existing suite minimum capacities
+still apply. The effective values appear in <code>limits.answers</code> and
+<code>native_normalization_limits.spelling_bytes</code>. Set <code>--sample-bytes</code> and
+<code>--native-report-bytes</code> separately for capture and native full-report decoding.
+A refusal retains the failed comparison; it does not establish an incomplete family as complete.</p>
 <h3 id="profiles"><a class="header" href="#profiles">Profiles</a></h3>
 <p>A run measures one native profile, set by <code>--backend</code>, <code>--grounder</code> and
 <code>--threads</code>, or compares several. Each compared axis replaces its single

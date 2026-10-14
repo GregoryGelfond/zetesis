@@ -19,10 +19,10 @@
 <a href=#19 id=19 data-nosnippet>19</a><span class="kw">use </span><span class="kw">crate</span>::formula_support::{Context, Join, Support};
 <a href=#20 id=20 data-nosnippet>20</a>
 <a href=#21 id=21 data-nosnippet>21</a><span class="doccomment">/// Return false only when the original complete-join path should be used.
-<a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>rule(
-<a href=#23 id=23 data-nosnippet>23</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
+<a href=#22 id=22 data-nosnippet>22</a></span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>rule&lt;<span class="lifetime">'source</span>&gt;(
+<a href=#23 id=23 data-nosnippet>23</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'source</span>&gt;,
 <a href=#24 id=24 data-nosnippet>24</a>    rule: <span class="kw-2">&amp;</span>RuleIr,
-<a href=#25 id=25 data-nosnippet>25</a>    support: <span class="kw-2">&amp;</span>Support,
+<a href=#25 id=25 data-nosnippet>25</a>    support: <span class="kw-2">&amp;</span>Support&lt;<span class="lifetime">'source</span>&gt;,
 <a href=#26 id=26 data-nosnippet>26</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#27 id=27 data-nosnippet>27</a>    <span class="kw">let </span>HeadIr::Normal(head) = <span class="kw-2">&amp;</span>rule.head <span class="kw">else </span>{
 <a href=#28 id=28 data-nosnippet>28</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="bool-val">false</span>);
@@ -32,7 +32,7 @@
 <a href=#32 id=32 data-nosnippet>32</a>            builder.computation.static_pattern(
 <a href=#33 id=33 data-nosnippet>33</a>                head,
 <a href=#34 id=34 data-nosnippet>34</a>                builder.limits,
-<a href=#35 id=35 data-nosnippet>35</a>                <span class="kw-2">&amp;mut </span>builder.counters,
+<a href=#35 id=35 data-nosnippet>35</a>                builder.counters,
 <a href=#36 id=36 data-nosnippet>36</a>                rule.location,
 <a href=#37 id=37 data-nosnippet>37</a>            )
 <a href=#38 id=38 data-nosnippet>38</a>        })
@@ -105,7 +105,7 @@
 <a href=#105 id=105 data-nosnippet>105</a>                        variable,
 <a href=#106 id=106 data-nosnippet>106</a>                        <span class="kw-2">&amp;</span>key,
 <a href=#107 id=107 data-nosnippet>107</a>                        builder.limits,
-<a href=#108 id=108 data-nosnippet>108</a>                        <span class="kw-2">&amp;mut </span>builder.counters,
+<a href=#108 id=108 data-nosnippet>108</a>                        builder.counters,
 <a href=#109 id=109 data-nosnippet>109</a>                        rule.location,
 <a href=#110 id=110 data-nosnippet>110</a>                    )<span class="question-mark">?</span>;
 <a href=#111 id=111 data-nosnippet>111</a>                }
@@ -122,23 +122,23 @@
 <a href=#122 id=122 data-nosnippet>122</a>    <span class="kw">let </span><span class="kw-2">mut </span>fixed = Binding::new(
 <a href=#123 id=123 data-nosnippet>123</a>        builder.computation,
 <a href=#124 id=124 data-nosnippet>124</a>        builder.limits,
-<a href=#125 id=125 data-nosnippet>125</a>        <span class="kw-2">&amp;mut </span>builder.counters,
+<a href=#125 id=125 data-nosnippet>125</a>        builder.counters,
 <a href=#126 id=126 data-nosnippet>126</a>        rule.location,
 <a href=#127 id=127 data-nosnippet>127</a>    )<span class="question-mark">?</span>;
 <a href=#128 id=128 data-nosnippet>128</a>    fixed.extend_scope(
 <a href=#129 id=129 data-nosnippet>129</a>        rule.variables,
 <a href=#130 id=130 data-nosnippet>130</a>        builder.computation,
 <a href=#131 id=131 data-nosnippet>131</a>        builder.limits,
-<a href=#132 id=132 data-nosnippet>132</a>        <span class="kw-2">&amp;mut </span>builder.counters,
+<a href=#132 id=132 data-nosnippet>132</a>        builder.counters,
 <a href=#133 id=133 data-nosnippet>133</a>        rule.location,
 <a href=#134 id=134 data-nosnippet>134</a>    )<span class="question-mark">?</span>;
 <a href=#135 id=135 data-nosnippet>135</a>    <span class="prelude-val">Ok</span>(fixed)
 <a href=#136 id=136 data-nosnippet>136</a>}
 <a href=#137 id=137 data-nosnippet>137</a>
-<a href=#138 id=138 data-nosnippet>138</a><span class="kw">fn </span>emit(
-<a href=#139 id=139 data-nosnippet>139</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
+<a href=#138 id=138 data-nosnippet>138</a><span class="kw">fn </span>emit&lt;<span class="lifetime">'source</span>&gt;(
+<a href=#139 id=139 data-nosnippet>139</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'source</span>&gt;,
 <a href=#140 id=140 data-nosnippet>140</a>    rule: <span class="kw-2">&amp;</span>RuleIr,
-<a href=#141 id=141 data-nosnippet>141</a>    support: <span class="kw-2">&amp;</span>Support,
+<a href=#141 id=141 data-nosnippet>141</a>    support: <span class="kw-2">&amp;</span>Support&lt;<span class="lifetime">'source</span>&gt;,
 <a href=#142 id=142 data-nosnippet>142</a>    components: <span class="kw-2">&amp;</span>plan::Plan,
 <a href=#143 id=143 data-nosnippet>143</a>    fixed: <span class="kw-2">&amp;</span>Binding,
 <a href=#144 id=144 data-nosnippet>144</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
@@ -155,7 +155,7 @@
 <a href=#155 id=155 data-nosnippet>155</a>            Context::new(
 <a href=#156 id=156 data-nosnippet>156</a>                <span class="kw-2">&amp;*</span>builder.computation,
 <a href=#157 id=157 data-nosnippet>157</a>                builder.limits,
-<a href=#158 id=158 data-nosnippet>158</a>                <span class="kw-2">&amp;mut </span>builder.counters,
+<a href=#158 id=158 data-nosnippet>158</a>                builder.counters,
 <a href=#159 id=159 data-nosnippet>159</a>                rule.location,
 <a href=#160 id=160 data-nosnippet>160</a>            ),
 <a href=#161 id=161 data-nosnippet>161</a>        )<span class="question-mark">?</span>;
@@ -163,7 +163,7 @@
 <a href=#163 id=163 data-nosnippet>163</a>            builder.computation,
 <a href=#164 id=164 data-nosnippet>164</a>            builder.limits,
 <a href=#165 id=165 data-nosnippet>165</a>            builder.budget,
-<a href=#166 id=166 data-nosnippet>166</a>            <span class="kw-2">&amp;mut </span>builder.counters,
+<a href=#166 id=166 data-nosnippet>166</a>            builder.counters,
 <a href=#167 id=167 data-nosnippet>167</a>            rule.location,
 <a href=#168 id=168 data-nosnippet>168</a>        )<span class="question-mark">? </span>{
 <a href=#169 id=169 data-nosnippet>169</a>            <span class="kw">let </span>conjunction =

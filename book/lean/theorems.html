@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
+            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2436da5c.js"></script>
+        <script src="../toc-5c747b16.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -370,7 +370,16 @@ can filter the context’s answers without creating new support. The embedding i
 the earlier head-element laws is mathematical and does not prescribe a compiler
 rewrite or verify its source key assignment.</p>
 <p><code>AggregateReduct.direct_reduct</code> relates the failing-subset formula to original
-and frozen eligibility under complete masks. <code>AggregateRanges</code> establishes bounds
+and frozen eligibility under complete masks. <code>ThresholdReduct.reference_original</code>
+and <code>reference_frozen</code> give the corresponding equivalence for a nonnegative
+weighted threshold recurrence, including repeated conditions at distinct tuple
+positions. They do not yet establish a native runtime replacement.
+<code>ThresholdResidues</code> separates the known and undecided contributions and proves
+that every compatible remainder is divisible by a common divisor of the
+undecided weights. An interval missed by that progression has no compatible
+reading. Runtime grouping, divisor computation and event scheduling remain
+separate obligations; the law does not claim every progression point is possible.
+<code>AggregateRanges</code> establishes bounds
 on mathematical signed partial sums. <code>AggregateDependencies</code> composes complete
 predecessor-indexed value families. Its <code>Reuse.restart_exact</code> proves full reset
 or direct rebuilding from complete projected inputs under fixed support;
@@ -420,12 +429,29 @@ defines the finite measures of key selections between required and possible
 keys. <code>carrier_membership</code> characterizes that enumeration;
 <code>actual_value_covered</code> includes every actual active selection.
 <code>invariant_carrier</code> gives the singleton case. <code>source_priority_presence</code>
-retains complete binding and numeric-field requirements.</p>
+retains complete binding and numeric-field requirements. Required count and
+sum laws describe intervals and seeded subset sums. The required-extremum
+law describes the required result together with strictly preceding optional
+values, under explicit order and empty-endpoint laws.</p>
 <p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/IntegerEnvelopes.lean"><code>IntegerEnvelopes</code></a>
 proves bounds along directed comparisons and through affine expressions.
 Endpoint rounding is mathematical integer division. <code>filtered_bindings_exact</code>
 states that complete envelope enumeration followed by the original guard gives
 exact bindings. Source recognition and machine arithmetic remain separate.</p>
+<p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RemainderIntervals.lean"><code>RemainderIntervals</code></a>
+bounds signed truncating remainder for an interval of possible divisors. Its
+checked law preserves the zero-divisor and minimum-integer/-1 exclusions.
+The laws do not establish source-domain coverage or Rust correspondence.</p>
+<p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/BoundedMultiples.lean"><code>BoundedMultiples</code></a>
+identifies bounded values with zero truncating remainder as products of a positive
+divisor and factors from the exact ceiling-to-floor interval.
+<code>multiple_membership</code> connects this identity to finite interval enumeration,
+including divisor one and empty intervals. Source totality, checked arithmetic
+and executable posting selection remain separate obligations.</p>
+<p><a href="https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ChargeCadence.lean"><code>ChargeCadence</code></a>
+proves when a charged range crosses a periodic observation boundary and bounds
+the number of charged operations until the next boundary. It does not model
+wall-clock latency or concurrent cancellation flags.</p>
 <p>These are useful mathematical components. Their coverage or arithmetic premises
 do not prove that a particular Rust source cursor enumerates the required
 bindings, that whole tuples are coalesced correctly, or that the machine obeys

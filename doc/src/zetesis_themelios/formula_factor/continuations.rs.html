@@ -7,11 +7,11 @@
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span><span class="kw">crate</span>::formula_support::{Context, Continuations, Join, Row, Support};
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>themelios_program::program::DefaultNegation;
 <a href=#9 id=9 data-nosnippet>9</a>
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>rule&lt;<span class="lifetime">'a</span>&gt;(
-<a href=#11 id=11 data-nosnippet>11</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>rule&lt;<span class="lifetime">'a</span>, <span class="lifetime">'source</span>&gt;(
+<a href=#11 id=11 data-nosnippet>11</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'source</span>&gt;,
 <a href=#12 id=12 data-nosnippet>12</a>    rule: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>RuleIr,
 <a href=#13 id=13 data-nosnippet>13</a>    join: <span class="kw-2">&amp;mut </span>Join&lt;<span class="lifetime">'a</span>, <span class="lifetime">'_</span>&gt;,
-<a href=#14 id=14 data-nosnippet>14</a>    support: <span class="kw-2">&amp;</span>Support&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#14 id=14 data-nosnippet>14</a>    support: <span class="kw-2">&amp;</span>Support&lt;<span class="lifetime">'source</span>&gt;,
 <a href=#15 id=15 data-nosnippet>15</a>) -&gt; <span class="prelude-ty">Result</span>&lt;bool, FormulaFailure&gt; {
 <a href=#16 id=16 data-nosnippet>16</a>    <span class="attr">#[cfg(test)]
 <a href=#17 id=17 data-nosnippet>17</a>    </span><span class="kw">if </span>!<span class="kw">super</span>::testing::enabled() {
@@ -23,7 +23,7 @@
 <a href=#23 id=23 data-nosnippet>23</a>        Context::new(
 <a href=#24 id=24 data-nosnippet>24</a>            <span class="kw-2">&amp;*</span>builder.computation,
 <a href=#25 id=25 data-nosnippet>25</a>            builder.limits,
-<a href=#26 id=26 data-nosnippet>26</a>            <span class="kw-2">&amp;mut </span>builder.counters,
+<a href=#26 id=26 data-nosnippet>26</a>            builder.counters,
 <a href=#27 id=27 data-nosnippet>27</a>            rule.location,
 <a href=#28 id=28 data-nosnippet>28</a>        ),
 <a href=#29 id=29 data-nosnippet>29</a>    )<span class="question-mark">?
@@ -35,7 +35,7 @@
 <a href=#35 id=35 data-nosnippet>35</a>        Context::new(
 <a href=#36 id=36 data-nosnippet>36</a>            <span class="kw-2">&amp;mut *</span>builder.computation,
 <a href=#37 id=37 data-nosnippet>37</a>            builder.limits,
-<a href=#38 id=38 data-nosnippet>38</a>            <span class="kw-2">&amp;mut </span>builder.counters,
+<a href=#38 id=38 data-nosnippet>38</a>            builder.counters,
 <a href=#39 id=39 data-nosnippet>39</a>            rule.location,
 <a href=#40 id=40 data-nosnippet>40</a>        ),
 <a href=#41 id=41 data-nosnippet>41</a>    )<span class="question-mark">? </span>{
@@ -50,7 +50,7 @@
 <a href=#50 id=50 data-nosnippet>50</a>                    Context::new(
 <a href=#51 id=51 data-nosnippet>51</a>                        <span class="kw-2">&amp;mut *</span>builder.computation,
 <a href=#52 id=52 data-nosnippet>52</a>                        builder.limits,
-<a href=#53 id=53 data-nosnippet>53</a>                        <span class="kw-2">&amp;mut </span>builder.counters,
+<a href=#53 id=53 data-nosnippet>53</a>                        builder.counters,
 <a href=#54 id=54 data-nosnippet>54</a>                        rule.location,
 <a href=#55 id=55 data-nosnippet>55</a>                    ),
 <a href=#56 id=56 data-nosnippet>56</a>                )<span class="question-mark">?
@@ -64,7 +64,7 @@
 <a href=#64 id=64 data-nosnippet>64</a>            Context::new(
 <a href=#65 id=65 data-nosnippet>65</a>                <span class="kw-2">&amp;mut *</span>builder.computation,
 <a href=#66 id=66 data-nosnippet>66</a>                builder.limits,
-<a href=#67 id=67 data-nosnippet>67</a>                <span class="kw-2">&amp;mut </span>builder.counters,
+<a href=#67 id=67 data-nosnippet>67</a>                builder.counters,
 <a href=#68 id=68 data-nosnippet>68</a>                rule.location,
 <a href=#69 id=69 data-nosnippet>69</a>            ),
 <a href=#70 id=70 data-nosnippet>70</a>        )<span class="question-mark">? </span>{
@@ -82,10 +82,10 @@
 <a href=#82 id=82 data-nosnippet>82</a>
 <a href=#83 id=83 data-nosnippet>83</a><span class="doccomment">/// A selected row has completed body selection and head arithmetic. Its logical
 <a href=#84 id=84 data-nosnippet>84</a>/// aggregate and negative conditions are still formulas, not a truth certificate.
-<a href=#85 id=85 data-nosnippet>85</a></span><span class="kw">fn </span>next_selected(
-<a href=#86 id=86 data-nosnippet>86</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
+<a href=#85 id=85 data-nosnippet>85</a></span><span class="kw">fn </span>next_selected&lt;<span class="lifetime">'source</span>&gt;(
+<a href=#86 id=86 data-nosnippet>86</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'source</span>&gt;,
 <a href=#87 id=87 data-nosnippet>87</a>    rule: <span class="kw-2">&amp;</span>RuleIr,
-<a href=#88 id=88 data-nosnippet>88</a>    support: <span class="kw-2">&amp;</span>Support&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#88 id=88 data-nosnippet>88</a>    support: <span class="kw-2">&amp;</span>Support&lt;<span class="lifetime">'source</span>&gt;,
 <a href=#89 id=89 data-nosnippet>89</a>    rows: <span class="kw-2">&amp;mut </span>Continuations&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#90 id=90 data-nosnippet>90</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;Row&lt;<span class="lifetime">'static</span>&gt;&gt;, FormulaFailure&gt; {
 <a href=#91 id=91 data-nosnippet>91</a>    <span class="kw">while let </span><span class="prelude-val">Some</span>(row) = rows.next(
@@ -93,7 +93,7 @@
 <a href=#93 id=93 data-nosnippet>93</a>        Context::new(
 <a href=#94 id=94 data-nosnippet>94</a>            <span class="kw-2">&amp;mut *</span>builder.computation,
 <a href=#95 id=95 data-nosnippet>95</a>            builder.limits,
-<a href=#96 id=96 data-nosnippet>96</a>            <span class="kw-2">&amp;mut </span>builder.counters,
+<a href=#96 id=96 data-nosnippet>96</a>            builder.counters,
 <a href=#97 id=97 data-nosnippet>97</a>            rule.location,
 <a href=#98 id=98 data-nosnippet>98</a>        ),
 <a href=#99 id=99 data-nosnippet>99</a>    )<span class="question-mark">? </span>{
@@ -109,10 +109,10 @@
 <a href=#109 id=109 data-nosnippet>109</a>    <span class="macro">matches!</span>(literal, LiteralIr::Atom(DefaultNegation::None, <span class="kw">_</span>))
 <a href=#110 id=110 data-nosnippet>110</a>}
 <a href=#111 id=111 data-nosnippet>111</a>
-<a href=#112 id=112 data-nosnippet>112</a><span class="kw">fn </span>witness(
-<a href=#113 id=113 data-nosnippet>113</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
+<a href=#112 id=112 data-nosnippet>112</a><span class="kw">fn </span>witness&lt;<span class="lifetime">'source</span>&gt;(
+<a href=#113 id=113 data-nosnippet>113</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'source</span>&gt;,
 <a href=#114 id=114 data-nosnippet>114</a>    rule: <span class="kw-2">&amp;</span>RuleIr,
-<a href=#115 id=115 data-nosnippet>115</a>    support: <span class="kw-2">&amp;</span>Support&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#115 id=115 data-nosnippet>115</a>    support: <span class="kw-2">&amp;</span>Support&lt;<span class="lifetime">'source</span>&gt;,
 <a href=#116 id=116 data-nosnippet>116</a>    binding: <span class="kw-2">&amp;</span>Binding&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#117 id=117 data-nosnippet>117</a>) -&gt; <span class="prelude-ty">Result</span>&lt;usize, FormulaFailure&gt; {
 <a href=#118 id=118 data-nosnippet>118</a>    <span class="attr">#[cfg(test)]
@@ -125,10 +125,10 @@
 <a href=#125 id=125 data-nosnippet>125</a>    )
 <a href=#126 id=126 data-nosnippet>126</a>}
 <a href=#127 id=127 data-nosnippet>127</a>
-<a href=#128 id=128 data-nosnippet>128</a><span class="kw">fn </span>emit(
-<a href=#129 id=129 data-nosnippet>129</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
+<a href=#128 id=128 data-nosnippet>128</a><span class="kw">fn </span>emit&lt;<span class="lifetime">'source</span>&gt;(
+<a href=#129 id=129 data-nosnippet>129</a>    builder: <span class="kw-2">&amp;mut </span>Builder&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'source</span>&gt;,
 <a href=#130 id=130 data-nosnippet>130</a>    rule: <span class="kw-2">&amp;</span>RuleIr,
-<a href=#131 id=131 data-nosnippet>131</a>    support: <span class="kw-2">&amp;</span>Support&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#131 id=131 data-nosnippet>131</a>    support: <span class="kw-2">&amp;</span>Support&lt;<span class="lifetime">'source</span>&gt;,
 <a href=#132 id=132 data-nosnippet>132</a>    binding: <span class="kw-2">&amp;</span>Binding&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#133 id=133 data-nosnippet>133</a>    alternatives: usize,
 <a href=#134 id=134 data-nosnippet>134</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {

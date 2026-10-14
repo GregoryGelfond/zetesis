@@ -57,7 +57,7 @@
 <a href=#57 id=57 data-nosnippet>57</a><span class="kw">impl </span>Index {
 <a href=#58 id=58 data-nosnippet>58</a>    <span class="doccomment">/// Plan against an unpublished root whose nodes were supplied in `path`.
 <a href=#59 id=59 data-nosnippet>59</a>    /// This supports several leaves in one bounded metadata transaction.
-<a href=#60 id=60 data-nosnippet>60</a>    </span><span class="kw">pub fn </span>plan_from&lt;E&gt;(
+<a href=#60 id=60 data-nosnippet>60</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>plan_from&lt;E&gt;(
 <a href=#61 id=61 data-nosnippet>61</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#62 id=62 data-nosnippet>62</a>        root: Link,
 <a href=#63 id=63 data-nosnippet>63</a>        id: usize,
@@ -71,7 +71,7 @@
 <a href=#71 id=71 data-nosnippet>71</a>    /// published link. The path ends at the absent child's new leaf. Propagation
 <a href=#72 id=72 data-nosnippet>72</a>    /// stops once subtree height is unchanged. A consumer reusing an all-right
 <a href=#73 id=73 data-nosnippet>73</a>    /// path must establish that property separately before invoking the planner.
-<a href=#74 id=74 data-nosnippet>74</a>    </span><span class="kw">pub fn </span>plan_changes_from&lt;E&gt;(
+<a href=#74 id=74 data-nosnippet>74</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>plan_changes_from&lt;E&gt;(
 <a href=#75 id=75 data-nosnippet>75</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#76 id=76 data-nosnippet>76</a>        root: Link,
 <a href=#77 id=77 data-nosnippet>77</a>        id: usize,
@@ -165,7 +165,7 @@
 <a href=#165 id=165 data-nosnippet>165</a>    <span class="doccomment">/// Publish a suffix established by `plan_changes_from`; nodes before this
 <a href=#166 id=166 data-nosnippet>166</a>    /// boundary were not mutated. The owner pre-admits every write and publishes
 <a href=#167 id=167 data-nosnippet>167</a>    /// its root in the same indivisible transaction, without callbacks.
-<a href=#168 id=168 data-nosnippet>168</a>    </span><span class="kw">pub fn </span>publish_nodes_from(<span class="kw-2">&amp;mut </span><span class="self">self</span>, changed_from: usize) {
+<a href=#168 id=168 data-nosnippet>168</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>publish_nodes_from(<span class="kw-2">&amp;mut </span><span class="self">self</span>, changed_from: usize) {
 <a href=#169 id=169 data-nosnippet>169</a>        <span class="kw">let </span>leaf = <span class="self">self</span>.path.last().expect(<span class="string">"planned leaf"</span>);
 <a href=#170 id=170 data-nosnippet>170</a>        <span class="self">self</span>.nodes.push(leaf.node);
 <a href=#171 id=171 data-nosnippet>171</a>        <span class="kw">for </span>step <span class="kw">in </span><span class="kw-2">&amp;</span><span class="self">self</span>.path[changed_from..<span class="self">self</span>.path.len() - <span class="number">1</span>] {

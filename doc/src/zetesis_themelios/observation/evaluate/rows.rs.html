@@ -20,12 +20,12 @@
 <a href=#20 id=20 data-nosnippet>20</a>}
 <a href=#21 id=21 data-nosnippet>21</a>
 <a href=#22 id=22 data-nosnippet>22</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; ModelRows&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">pub fn </span>new(model: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Model, work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, Error&gt; {
+<a href=#23 id=23 data-nosnippet>23</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>new(model: <span class="kw-2">&amp;</span><span class="lifetime">'a </span>Model, work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, Error&gt; {
 <a href=#24 id=24 data-nosnippet>24</a>        work.step(<span class="number">1</span>)<span class="question-mark">?</span>;
 <a href=#25 id=25 data-nosnippet>25</a>        <span class="prelude-val">Ok</span>(<span class="self">Self </span>{ model })
 <a href=#26 id=26 data-nosnippet>26</a>    }
 <a href=#27 id=27 data-nosnippet>27</a>
-<a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">pub fn </span>get(<span class="kw-2">&amp;</span><span class="self">self</span>, row: usize) -&gt; AtomRef&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#28 id=28 data-nosnippet>28</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>get(<span class="kw-2">&amp;</span><span class="self">self</span>, row: usize) -&gt; AtomRef&lt;<span class="lifetime">'a</span>&gt; {
 <a href=#29 id=29 data-nosnippet>29</a>        <span class="self">self</span>.model.atoms().at(row).expect(<span class="string">"admitted model row"</span>)
 <a href=#30 id=30 data-nosnippet>30</a>    }
 <a href=#31 id=31 data-nosnippet>31</a>
@@ -57,7 +57,7 @@
 <a href=#57 id=57 data-nosnippet>57</a>        <span class="prelude-val">Ok</span>(lower..upper)
 <a href=#58 id=58 data-nosnippet>58</a>    }
 <a href=#59 id=59 data-nosnippet>59</a>
-<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">pub fn </span>predicate&lt;<span class="lifetime">'predicate</span>&gt;(
+<a href=#60 id=60 data-nosnippet>60</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>predicate&lt;<span class="lifetime">'predicate</span>&gt;(
 <a href=#61 id=61 data-nosnippet>61</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#62 id=62 data-nosnippet>62</a>        predicate: <span class="kw">impl </span>Into&lt;PredicateRef&lt;<span class="lifetime">'predicate</span>&gt;&gt;,
 <a href=#63 id=63 data-nosnippet>63</a>        work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;,
@@ -78,7 +78,7 @@
 <a href=#78 id=78 data-nosnippet>78</a>}
 <a href=#79 id=79 data-nosnippet>79</a>
 <a href=#80 id=80 data-nosnippet>80</a><span class="kw">impl </span>AtomChoices {
-<a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">pub fn </span>new(
+<a href=#81 id=81 data-nosnippet>81</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>new(
 <a href=#82 id=82 data-nosnippet>82</a>        patterns: <span class="kw-2">&amp;</span>[Pattern],
 <a href=#83 id=83 data-nosnippet>83</a>        rows: <span class="kw-2">&amp;</span>ModelRows&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#84 id=84 data-nosnippet>84</a>        metadata: <span class="kw">crate</span>::metadata::Read&lt;<span class="lifetime">'_</span>&gt;,
@@ -103,7 +103,7 @@
 <a href=#103 id=103 data-nosnippet>103</a>        })
 <a href=#104 id=104 data-nosnippet>104</a>    }
 <a href=#105 id=105 data-nosnippet>105</a>
-<a href=#106 id=106 data-nosnippet>106</a>    <span class="kw">pub fn </span>next(<span class="kw-2">&amp;mut </span><span class="self">self</span>, work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;(usize, usize)&gt;, Error&gt; {
+<a href=#106 id=106 data-nosnippet>106</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>next(<span class="kw-2">&amp;mut </span><span class="self">self</span>, work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;(usize, usize)&gt;, Error&gt; {
 <a href=#107 id=107 data-nosnippet>107</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>(range) = <span class="self">self</span>.ranges.get(<span class="self">self</span>.alternative) {
 <a href=#108 id=108 data-nosnippet>108</a>            work.step(<span class="number">1</span>)<span class="question-mark">?</span>;
 <a href=#109 id=109 data-nosnippet>109</a>            <span class="kw">if </span><span class="self">self</span>.position &lt; range.len() {

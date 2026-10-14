@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
+            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2436da5c.js"></script>
+        <script src="../toc-5c747b16.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -288,10 +288,15 @@ of verified formula interpretations into full models. It precedes scoring and
 output and includes refused attempts. The separate model-construction receipt
 records accepted operations and actual metadata peaks without requiring clocks;
 constructed model counts establish neither publication nor complete enumeration.</p>
-<p>The grounding profile also exposes <code>support_producer_visits</code> and
-<code>support_snapshot_preparations</code>. These count entered operations, including those
-followed by failure. They distinguish affected-producer scheduling from a full
-round scan without asserting a timing benefit. Fields missing from older
+<p>The grounding profile also exposes <code>support_producer_visits</code>,
+<code>support_rich_traversals</code>, <code>support_unchanged_visits</code> and
+<code>support_snapshot_preparations</code>. These count entered operations, including
+those followed by failure. Rich traversals and unchanged visits are disjoint
+subsets of producer visits. <code>support_rich_traversals</code> includes the first round.
+<code>support_unchanged_visits</code> counts the rich-producer visits after the first round
+that ended without a traversal because nothing the producer reads had changed.
+They distinguish affected-producer scheduling from a full round scan without
+asserting a timing benefit. Fields missing from older
 reports remain unavailable.</p>
 <h2 id="thread-and-failure-contracts"><a class="header" href="#thread-and-failure-contracts">Thread and failure contracts</a></h2>
 <p>The measurement owner is <code>Send + Sync</code>. Short internal locks protect fixed-size

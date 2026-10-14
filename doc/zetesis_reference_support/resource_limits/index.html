@@ -1,0 +1,62 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="The limit each typed resource is counted against, set by resource, for the limits an admission takes and for those of three other operations whose tests span crates."><title>zetesis_reference_support::resource_limits - Rust</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../" data-static-root-path="../../static.files/" data-current-crate="zetesis_reference_support" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../static.files/storage-41dd4d93.js"></script><script defer src="../sidebar-items.js"></script><script defer src="../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../static.files/favicon-044be391.svg"></head><body class="rustdoc mod"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><rustdoc-topbar><h2><a href="#">Module resource_limits</a></h2></rustdoc-topbar><nav class="sidebar"><div class="sidebar-crate"><h2><a href="../../zetesis_reference_support/index.html">zetesis_<wbr>reference_<wbr>support</a><span class="version">0.6.0</span></h2></div><div class="sidebar-elems"><section id="rustdoc-toc"><h2 class="location"><a href="#">Module resource_<wbr>limits</a></h2><h3><a href="#functions">Module Items</a></h3><ul class="block"><li><a href="#functions" title="Functions">Functions</a></li></ul></section><div id="rustdoc-modnav"><h2 class="in-crate"><a href="../index.html">In crate zetesis_<wbr>reference_<wbr>support</a></h2></div></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><div class="width-limiter"><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><div class="rustdoc-breadcrumbs"><a href="../index.html">zetesis_reference_support</a></div><h1>Module <span>resource_<wbr>limits</span>&nbsp;<button id="copy-path" title="Copy item path to clipboard">Copy item path</button></h1><rustdoc-toolbar></rustdoc-toolbar><span class="sub-heading"><a class="src" href="../../src/zetesis_reference_support/resource_limits.rs.html#1-629">Source</a> </span></div><details class="toggle top-doc" open><summary class="hideme"><span>Expand description</span></summary><div class="docblock"><p>The limit each typed resource is counted against, set by resource, for the
+limits an admission takes and for those of three other operations whose
+tests span crates.</p>
+<p>A refusal at a limit reports the resource it met. The view holds a family
+of limits when a <code>zetesis-themelios</code> admission takes it, directly or nested
+in the limits it takes: the admission of a source, of a bundle or of a
+logical program, formula preparation and expansion included. Those are the
+formula and expansion resources; the input limits of a source or a bundle;
+the core admission resources of a source or a logical program, and the
+logical program resources; the observation and objective admission
+resources; and the aggregate ceilings an aggregate error kind reports.
+Formula admission counts template variables and predicate arity against the
+core admission limits, so those two formula resources are set through
+<a href="fn.admission_formula.html" title="fn zetesis_reference_support::resource_limits::admission_formula"><code>admission_formula</code></a>.</p>
+<p>The view also holds the limits of three operations other than admission,
+because the tests of more than one crate set them one at a time: loading a
+bundle (<a href="fn.bundle_loading.html" title="fn zetesis_reference_support::resource_limits::bundle_loading"><code>bundle_loading</code></a>), building an objective plan
+(<a href="fn.objective_plan.html" title="fn zetesis_reference_support::resource_limits::objective_plan"><code>objective_plan</code></a>), and evaluating an admitted program’s observations
+(<a href="fn.observation_evaluation.html" title="fn zetesis_reference_support::resource_limits::observation_evaluation"><code>observation_evaluation</code></a>). Evaluation counts <code>Nodes</code>, <code>Depth</code> and <code>Bytes</code>
+per constructed symbol against fields of its own, while <a href="fn.observation.html" title="fn zetesis_reference_support::resource_limits::observation"><code>observation()</code></a>
+pairs those three resources with their admission fields and refuses the
+resources counted only while observations are evaluated.</p>
+<p>The limits of operations that only one crate’s tests set are paired in that
+crate’s <code>tests/integration/support</code>. In <code>zetesis-themelios</code> these are
+compiling a program’s metadata through its own door
+(<code>metadata_resources</code>), planning counts (<code>count_plan_resources</code>), bounding
+an objective (<code>objective_bound_resources</code>, which sets its aggregate ceilings
+through <a href="fn.aggregate.html" title="fn zetesis_reference_support::resource_limits::aggregate"><code>aggregate</code></a>), and constructing observation symbols
+(<code>observation_construction</code>).</p>
+<p>The view stands above <code>zetesis-themelios</code>, so it serves the tests that use
+that crate as a dependency, its own integration tests among them. A unit
+test of <code>zetesis-themelios</code> would link a second copy of the crate, and a
+test of a crate below it would make that crate depend on its own
+dependents, so the tests of the crates that define these limits (the unit
+tests of <code>zetesis-themelios</code>, and the tests of <code>zetesis-core</code>,
+<code>zetesis-ferraris</code> and <code>zetesis-objective</code>) name the fields they set
+themselves. The view’s own tests check that each resource it names has a
+field of its own; that the field is the one a refusal reports is checked
+only where a test the view serves meets that refusal.</p>
+<p>A test the view serves that sets one such limit, leaving the others at
+their defaults, names the resource; the field holding that limit is named
+here, once. A test that sets several limits at once, or varies one limit of
+a configuration that already sets others, names the fields, and its code
+shows why. A test that sets a field of these limits that no typed resource
+reports, such as the formula limits’ key-analysis work, says why where it
+sets it. Formula and expansion limits are also read by resource, so a
+threshold search over one of them starts from its default. Limits are read
+and set as <code>u64</code> whatever the field’s width.</p>
+</div></details><h2 id="functions" class="section-header">Functions<a href="#functions" class="anchor">§</a></h2><dl class="item-table"><dt><a class="fn" href="fn.admission.html" title="fn zetesis_reference_support::resource_limits::admission">admission</a></dt><dd>The default admission options of one source, with the input <code>resource</code>
+bounded by <code>limit</code>.</dd><dt><a class="fn" href="fn.admission_core.html" title="fn zetesis_reference_support::resource_limits::admission_core">admission_<wbr>core</a></dt><dd>The default admission options of one source, with the core admission
+<code>resource</code> bounded by <code>limit</code>.</dd><dt><a class="fn" href="fn.admission_formula.html" title="fn zetesis_reference_support::resource_limits::admission_formula">admission_<wbr>formula</a></dt><dd>The default admission options of one source, with the formula <code>resource</code>
+bounded by <code>limit</code>: formula admission counts template variables and
+predicate arity against the core admission limits.</dd><dt><a class="fn" href="fn.aggregate.html" title="fn zetesis_reference_support::resource_limits::aggregate">aggregate</a></dt><dd>The default aggregate limits, with the ceiling that a refusal of <code>kind</code>
+reports bounded by <code>limit</code>.</dd><dt><a class="fn" href="fn.bundle.html" title="fn zetesis_reference_support::resource_limits::bundle">bundle</a></dt><dd>The default bundle admission options, with the input <code>resource</code> bounded by
+<code>limit</code> across the bundle.</dd><dt><a class="fn" href="fn.bundle_loading.html" title="fn zetesis_reference_support::resource_limits::bundle_loading">bundle_<wbr>loading</a></dt><dd>The default bundle loading limits, with <code>resource</code> bounded by <code>limit</code>.</dd><dt><a class="fn" href="fn.expansion.html" title="fn zetesis_reference_support::resource_limits::expansion">expansion</a></dt><dd>The default expansion limits, with <code>resource</code> bounded by <code>limit</code>.</dd><dt><a class="fn" href="fn.expansion_default.html" title="fn zetesis_reference_support::resource_limits::expansion_default">expansion_<wbr>default</a></dt><dd>The default expansion limit of <code>resource</code>.</dd><dt><a class="fn" href="fn.formula.html" title="fn zetesis_reference_support::resource_limits::formula">formula</a></dt><dd>The default formula limits, with <code>resource</code> bounded by <code>limit</code>.</dd><dt><a class="fn" href="fn.formula_aggregate.html" title="fn zetesis_reference_support::resource_limits::formula_aggregate">formula_<wbr>aggregate</a></dt><dd>The default formula limits, with the aggregate ceiling that a refusal of
+<code>kind</code> reports bounded by <code>limit</code>.</dd><dt><a class="fn" href="fn.formula_default.html" title="fn zetesis_reference_support::resource_limits::formula_default">formula_<wbr>default</a></dt><dd>The default formula limit of <code>resource</code>.</dd><dt><a class="fn" href="fn.formula_objective.html" title="fn zetesis_reference_support::resource_limits::formula_objective">formula_<wbr>objective</a></dt><dd>The default formula limits, with the objective admission <code>resource</code>
+bounded by <code>limit</code>.</dd><dt><a class="fn" href="fn.formula_observation.html" title="fn zetesis_reference_support::resource_limits::formula_observation">formula_<wbr>observation</a></dt><dd>The default formula limits, with the observation admission <code>resource</code>
+bounded by <code>limit</code>.</dd><dt><a class="fn" href="fn.objective_plan.html" title="fn zetesis_reference_support::resource_limits::objective_plan">objective_<wbr>plan</a></dt><dd>The default objective plan limits, with <code>resource</code> bounded by <code>limit</code>.</dd><dt><a class="fn" href="fn.observation.html" title="fn zetesis_reference_support::resource_limits::observation">observation</a></dt><dd>The default observation admission limits, with <code>resource</code> bounded by
+<code>limit</code>.</dd><dt><a class="fn" href="fn.observation_evaluation.html" title="fn zetesis_reference_support::resource_limits::observation_evaluation">observation_<wbr>evaluation</a></dt><dd>The default observation evaluation limits, with <code>resource</code> bounded by
+<code>limit</code>.</dd><dt><a class="fn" href="fn.program.html" title="fn zetesis_reference_support::resource_limits::program">program</a></dt><dd>The default logical program admission options, with <code>resource</code> bounded by
+<code>limit</code>.</dd><dt><a class="fn" href="fn.program_core.html" title="fn zetesis_reference_support::resource_limits::program_core">program_<wbr>core</a></dt><dd>The default logical program admission options, with the core admission
+<code>resource</code> bounded by <code>limit</code>.</dd></dl></section></div></main></body></html>

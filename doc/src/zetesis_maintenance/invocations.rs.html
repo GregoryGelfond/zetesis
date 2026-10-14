@@ -24,7 +24,7 @@
 <a href=#24 id=24 data-nosnippet>24</a>/// the contributor guide does in prose, or shows it in a code block, is not a
 <a href=#25 id=25 data-nosnippet>25</a>/// record.
 <a href=#26 id=26 data-nosnippet>26</a></span><span class="attr">#[must_use]
-<a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">pub fn </span>is_record(text: <span class="kw-2">&amp;</span>str) -&gt; bool {
+<a href=#27 id=27 data-nosnippet>27</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>is_record(text: <span class="kw-2">&amp;</span>str) -&gt; bool {
 <a href=#28 id=28 data-nosnippet>28</a>    markdown::lines(text)
 <a href=#29 id=29 data-nosnippet>29</a>        .any(|(<span class="kw">_</span>, line)| <span class="macro">matches!</span>(line, Line::Prose(prose) <span class="kw">if </span>prose.trim() == RECORD))
 <a href=#30 id=30 data-nosnippet>30</a>}

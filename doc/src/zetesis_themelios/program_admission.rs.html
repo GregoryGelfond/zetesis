@@ -149,133 +149,141 @@
 <a href=#149 id=149 data-nosnippet>149</a>    }
 <a href=#150 id=150 data-nosnippet>150</a>}
 <a href=#151 id=151 data-nosnippet>151</a>
-<a href=#152 id=152 data-nosnippet>152</a><span class="doccomment">/// Checked relational templates and their original logical statements.
+<a href=#152 id=152 data-nosnippet>152</a><span class="doccomment">/// Checked relational rules and their original logical statements.
 <a href=#153 id=153 data-nosnippet>153</a>/// Compilation does not copy the caller's program. Consuming `into_program`
 <a href=#154 id=154 data-nosnippet>154</a>/// releases the provenance borrow and leaves an independently owned native value.
 <a href=#155 id=155 data-nosnippet>155</a></span><span class="attr">#[derive(Debug)]
 <a href=#156 id=156 data-nosnippet>156</a></span><span class="kw">pub struct </span>AdmittedProgram&lt;<span class="lifetime">'a</span>&gt; {
 <a href=#157 id=157 data-nosnippet>157</a>    program: Program,
 <a href=#158 id=158 data-nosnippet>158</a>    statements: Vec&lt;Vec&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>WithProvenance&lt;Statement&gt;&gt;&gt;,
-<a href=#159 id=159 data-nosnippet>159</a>}
-<a href=#160 id=160 data-nosnippet>160</a>
-<a href=#161 id=161 data-nosnippet>161</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; AdmittedProgram&lt;<span class="lifetime">'a</span>&gt; {
-<a href=#162 id=162 data-nosnippet>162</a>    <span class="doccomment">/// The same canonical relational representation used by source admission.
-<a href=#163 id=163 data-nosnippet>163</a>    </span><span class="attr">#[must_use]
-<a href=#164 id=164 data-nosnippet>164</a>    </span><span class="kw">pub fn </span>program(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>Program {
-<a href=#165 id=165 data-nosnippet>165</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.program
-<a href=#166 id=166 data-nosnippet>166</a>    }
-<a href=#167 id=167 data-nosnippet>167</a>
-<a href=#168 id=168 data-nosnippet>168</a>    <span class="doccomment">/// Original statements in native template order. A generated strong-negation
-<a href=#169 id=169 data-nosnippet>169</a>    /// coherence constraint names both statements that introduced its signatures.
-<a href=#170 id=170 data-nosnippet>170</a>    </span><span class="attr">#[must_use]
-<a href=#171 id=171 data-nosnippet>171</a>    </span><span class="kw">pub fn </span>template_statements(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[Vec&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>WithProvenance&lt;Statement&gt;&gt;] {
-<a href=#172 id=172 data-nosnippet>172</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.statements
-<a href=#173 id=173 data-nosnippet>173</a>    }
-<a href=#174 id=174 data-nosnippet>174</a>
-<a href=#175 id=175 data-nosnippet>175</a>    <span class="doccomment">/// Release the input borrow while retaining the checked native program.
-<a href=#176 id=176 data-nosnippet>176</a>    </span><span class="attr">#[must_use]
-<a href=#177 id=177 data-nosnippet>177</a>    </span><span class="kw">pub fn </span>into_program(<span class="self">self</span>) -&gt; Program {
-<a href=#178 id=178 data-nosnippet>178</a>        <span class="self">self</span>.program
-<a href=#179 id=179 data-nosnippet>179</a>    }
-<a href=#180 id=180 data-nosnippet>180</a>}
-<a href=#181 id=181 data-nosnippet>181</a>
-<a href=#182 id=182 data-nosnippet>182</a><span class="doccomment">/// Compile a canonical logical program under the strict relational (S0) profile.
-<a href=#183 id=183 data-nosnippet>183</a>///
-<a href=#184 id=184 data-nosnippet>184</a>/// This is the typed counterpart of [`crate::admit`]. It accepts base-part rules
-<a href=#185 id=185 data-nosnippet>185</a>/// with scalar relational joins,
-<a href=#186 id=186 data-nosnippet>186</a>/// default negation, equality/disequality filters and unbounded single-atom
-<a href=#187 id=187 data-nosnippet>187</a>/// choices. Use [`crate::prepare_program_formula`] for the general formula
-<a href=#188 id=188 data-nosnippet>188</a>/// profile, including arithmetic generators, aggregates and directives.
-<a href=#189 id=189 data-nosnippet>189</a>/// No rendering, parsing, grounding or answer enumeration occurs here.
-<a href=#190 id=190 data-nosnippet>190</a>///
-<a href=#191 id=191 data-nosnippet>191</a>/// The compiler and strong-negation coherence operation are shared with source
-<a href=#192 id=192 data-nosnippet>192</a>/// admission. Source admission additionally checks authored syntax before
-<a href=#193 id=193 data-nosnippet>193</a>/// canonicalization; those source checks are not replaced by this operation.
-<a href=#194 id=194 data-nosnippet>194</a>/// Logical traversal is bounded and iterative. Retained input evidence consists
-<a href=#195 id=195 data-nosnippet>195</a>/// of borrowed statement references; the native program owns its canonical data.
-<a href=#196 id=196 data-nosnippet>196</a>///
-<a href=#197 id=197 data-nosnippet>197</a>/// # Errors
-<a href=#198 id=198 data-nosnippet>198</a>/// Returns a typed limit, capability, construction or native admission failure,
-<a href=#199 id=199 data-nosnippet>199</a>/// naming the caller's actual statement or part when applicable.
-<a href=#200 id=200 data-nosnippet>200</a></span><span class="kw">pub fn </span>admit_program(
-<a href=#201 id=201 data-nosnippet>201</a>    source: <span class="kw-2">&amp;</span>LogicalProgram,
-<a href=#202 id=202 data-nosnippet>202</a>    options: ProgramAdmissionOptions,
-<a href=#203 id=203 data-nosnippet>203</a>) -&gt; <span class="prelude-ty">Result</span>&lt;AdmittedProgram&lt;<span class="lifetime">'_</span>&gt;, ProgramAdmissionFailure&lt;<span class="lifetime">'_</span>&gt;&gt; {
-<a href=#204 id=204 data-nosnippet>204</a>    <span class="kw">let </span><span class="kw-2">mut </span>budget = <span class="kw">crate</span>::program_limits::Budget::new(<span class="kw">crate</span>::program_limits::Limits {
-<a href=#205 id=205 data-nosnippet>205</a>        nodes: options.max_nodes,
-<a href=#206 id=206 data-nosnippet>206</a>        depth: options.max_depth,
-<a href=#207 id=207 data-nosnippet>207</a>        body_elements: options.max_body_elements,
-<a href=#208 id=208 data-nosnippet>208</a>        text_bytes: options.max_text_bytes,
-<a href=#209 id=209 data-nosnippet>209</a>    });
-<a href=#210 id=210 data-nosnippet>210</a>    <span class="kw">let </span><span class="kw-2">mut </span>templates = Vec::new();
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="kw">let </span><span class="kw-2">mut </span>statements = Vec::new();
-<a href=#212 id=212 data-nosnippet>212</a>    <span class="kw">for </span>part <span class="kw">in </span>source.parts() {
-<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw">if </span>part.key().name.as_str() != <span class="string">"base" </span>|| !part.key().formals.is_empty() {
-<a href=#214 id=214 data-nosnippet>214</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ProgramAdmissionFailure {
-<a href=#215 id=215 data-nosnippet>215</a>                subject: ProgramSubject::Part(part.key()),
-<a href=#216 id=216 data-nosnippet>216</a>                kind: ProgramFailureKind::Compilation(CompilationFailure::Profile(
-<a href=#217 id=217 data-nosnippet>217</a>                    ProfileFeature::ProgramPart,
-<a href=#218 id=218 data-nosnippet>218</a>                )),
-<a href=#219 id=219 data-nosnippet>219</a>            });
-<a href=#220 id=220 data-nosnippet>220</a>        }
-<a href=#221 id=221 data-nosnippet>221</a>        <span class="kw">for </span>carrier <span class="kw">in </span>part.statements() {
-<a href=#222 id=222 data-nosnippet>222</a>            <span class="kw">let </span>subject = ProgramSubject::Statement(carrier);
-<a href=#223 id=223 data-nosnippet>223</a>            <span class="kw">if </span>templates.len() &gt;= options.core_limits.max_templates {
-<a href=#224 id=224 data-nosnippet>224</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(core_failure(
-<a href=#225 id=225 data-nosnippet>225</a>                    AdmissionError::LimitExceeded {
-<a href=#226 id=226 data-nosnippet>226</a>                        resource: zetesis_core::AdmissionResource::Templates,
-<a href=#227 id=227 data-nosnippet>227</a>                        limit: options.core_limits.max_templates,
-<a href=#228 id=228 data-nosnippet>228</a>                        actual: templates.len().saturating_add(<span class="number">1</span>),
-<a href=#229 id=229 data-nosnippet>229</a>                        template: <span class="prelude-val">Some</span>(templates.len()),
-<a href=#230 id=230 data-nosnippet>230</a>                    },
-<a href=#231 id=231 data-nosnippet>231</a>                    <span class="prelude-val">Some</span>(carrier),
-<a href=#232 id=232 data-nosnippet>232</a>                ));
-<a href=#233 id=233 data-nosnippet>233</a>            }
-<a href=#234 id=234 data-nosnippet>234</a>            <span class="kw">if let </span>Statement::Rule(rule) = carrier.get() {
-<a href=#235 id=235 data-nosnippet>235</a>                budget
-<a href=#236 id=236 data-nosnippet>236</a>                    .check_rule(rule)
-<a href=#237 id=237 data-nosnippet>237</a>                    .map_err(|error| ProgramAdmissionFailure {
-<a href=#238 id=238 data-nosnippet>238</a>                        subject,
-<a href=#239 id=239 data-nosnippet>239</a>                        kind: ProgramFailureKind::Limit(error),
-<a href=#240 id=240 data-nosnippet>240</a>                    })<span class="question-mark">?</span>;
-<a href=#241 id=241 data-nosnippet>241</a>            }
-<a href=#242 id=242 data-nosnippet>242</a>            <span class="kw">let </span>template = <span class="kw">crate</span>::compile::checked_statement(carrier.get()).map_err(|error| {
-<a href=#243 id=243 data-nosnippet>243</a>                ProgramAdmissionFailure {
-<a href=#244 id=244 data-nosnippet>244</a>                    subject,
-<a href=#245 id=245 data-nosnippet>245</a>                    kind: ProgramFailureKind::Compilation(error),
-<a href=#246 id=246 data-nosnippet>246</a>                }
-<a href=#247 id=247 data-nosnippet>247</a>            })<span class="question-mark">?</span>;
-<a href=#248 id=248 data-nosnippet>248</a>            templates.push(template);
-<a href=#249 id=249 data-nosnippet>249</a>            statements.push(<span class="macro">vec!</span>[carrier]);
-<a href=#250 id=250 data-nosnippet>250</a>        }
-<a href=#251 id=251 data-nosnippet>251</a>    }
-<a href=#252 id=252 data-nosnippet>252</a>    <span class="kw">crate</span>::coherence::append_with(
-<a href=#253 id=253 data-nosnippet>253</a>        <span class="kw-2">&amp;mut </span>templates,
-<a href=#254 id=254 data-nosnippet>254</a>        <span class="kw-2">&amp;mut </span>statements,
-<a href=#255 id=255 data-nosnippet>255</a>        options.core_limits,
-<a href=#256 id=256 data-nosnippet>256</a>        |<span class="kw">_</span>, <span class="kw">_</span>, <span class="kw">_</span>| <span class="prelude-val">Ok</span>(()),
-<a href=#257 id=257 data-nosnippet>257</a>        |error, origins| core_failure(error, origins.first().copied()),
-<a href=#258 id=258 data-nosnippet>258</a>    )<span class="question-mark">?</span>;
-<a href=#259 id=259 data-nosnippet>259</a>    <span class="kw">let </span>program = Program::new(templates, options.core_limits).map_err(|error| {
-<a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">let </span>statement = error
-<a href=#261 id=261 data-nosnippet>261</a>            .template_index()
-<a href=#262 id=262 data-nosnippet>262</a>            .and_then(|index| statements.get(index))
-<a href=#263 id=263 data-nosnippet>263</a>            .and_then(|origins| origins.first().copied());
-<a href=#264 id=264 data-nosnippet>264</a>        core_failure(error, statement)
-<a href=#265 id=265 data-nosnippet>265</a>    })<span class="question-mark">?</span>;
-<a href=#266 id=266 data-nosnippet>266</a>    <span class="prelude-val">Ok</span>(AdmittedProgram {
-<a href=#267 id=267 data-nosnippet>267</a>        program,
-<a href=#268 id=268 data-nosnippet>268</a>        statements,
-<a href=#269 id=269 data-nosnippet>269</a>    })
-<a href=#270 id=270 data-nosnippet>270</a>}
-<a href=#271 id=271 data-nosnippet>271</a>
-<a href=#272 id=272 data-nosnippet>272</a><span class="kw">fn </span>core_failure(
-<a href=#273 id=273 data-nosnippet>273</a>    error: AdmissionError,
-<a href=#274 id=274 data-nosnippet>274</a>    statement: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;&gt;,
-<a href=#275 id=275 data-nosnippet>275</a>) -&gt; ProgramAdmissionFailure&lt;<span class="lifetime">'_</span>&gt; {
-<a href=#276 id=276 data-nosnippet>276</a>    ProgramAdmissionFailure {
-<a href=#277 id=277 data-nosnippet>277</a>        subject: statement.map_or(ProgramSubject::Program, ProgramSubject::Statement),
-<a href=#278 id=278 data-nosnippet>278</a>        kind: ProgramFailureKind::Core(error),
-<a href=#279 id=279 data-nosnippet>279</a>    }
-<a href=#280 id=280 data-nosnippet>280</a>}
+<a href=#159 id=159 data-nosnippet>159</a>    fact_statements: Vec&lt;Vec&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>WithProvenance&lt;Statement&gt;&gt;&gt;,
+<a href=#160 id=160 data-nosnippet>160</a>}
+<a href=#161 id=161 data-nosnippet>161</a>
+<a href=#162 id=162 data-nosnippet>162</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; AdmittedProgram&lt;<span class="lifetime">'a</span>&gt; {
+<a href=#163 id=163 data-nosnippet>163</a>    <span class="doccomment">/// The same canonical relational representation used by source admission.
+<a href=#164 id=164 data-nosnippet>164</a>    </span><span class="attr">#[must_use]
+<a href=#165 id=165 data-nosnippet>165</a>    </span><span class="kw">pub fn </span>program(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>Program {
+<a href=#166 id=166 data-nosnippet>166</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.program
+<a href=#167 id=167 data-nosnippet>167</a>    }
+<a href=#168 id=168 data-nosnippet>168</a>
+<a href=#169 id=169 data-nosnippet>169</a>    <span class="doccomment">/// Original statements in native template order. A generated strong-negation
+<a href=#170 id=170 data-nosnippet>170</a>    /// coherence constraint names both statements that introduced its signatures.
+<a href=#171 id=171 data-nosnippet>171</a>    </span><span class="attr">#[must_use]
+<a href=#172 id=172 data-nosnippet>172</a>    </span><span class="kw">pub fn </span>template_statements(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[Vec&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>WithProvenance&lt;Statement&gt;&gt;] {
+<a href=#173 id=173 data-nosnippet>173</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.statements
+<a href=#174 id=174 data-nosnippet>174</a>    }
+<a href=#175 id=175 data-nosnippet>175</a>
+<a href=#176 id=176 data-nosnippet>176</a>    <span class="doccomment">/// Original statements parallel to native fact occurrences. Repeated
+<a href=#177 id=177 data-nosnippet>177</a>    /// occurrences retain their evidence even when their atom is shared.
+<a href=#178 id=178 data-nosnippet>178</a>    </span><span class="attr">#[must_use]
+<a href=#179 id=179 data-nosnippet>179</a>    </span><span class="kw">pub fn </span>fact_statements(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[Vec&lt;<span class="kw-2">&amp;</span><span class="lifetime">'a </span>WithProvenance&lt;Statement&gt;&gt;] {
+<a href=#180 id=180 data-nosnippet>180</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.fact_statements
+<a href=#181 id=181 data-nosnippet>181</a>    }
+<a href=#182 id=182 data-nosnippet>182</a>
+<a href=#183 id=183 data-nosnippet>183</a>    <span class="doccomment">/// Release the input borrow while retaining the checked native program.
+<a href=#184 id=184 data-nosnippet>184</a>    </span><span class="attr">#[must_use]
+<a href=#185 id=185 data-nosnippet>185</a>    </span><span class="kw">pub fn </span>into_program(<span class="self">self</span>) -&gt; Program {
+<a href=#186 id=186 data-nosnippet>186</a>        <span class="self">self</span>.program
+<a href=#187 id=187 data-nosnippet>187</a>    }
+<a href=#188 id=188 data-nosnippet>188</a>}
+<a href=#189 id=189 data-nosnippet>189</a>
+<a href=#190 id=190 data-nosnippet>190</a><span class="doccomment">/// Compile a canonical logical program under the strict relational (S0) profile.
+<a href=#191 id=191 data-nosnippet>191</a>///
+<a href=#192 id=192 data-nosnippet>192</a>/// This is the typed counterpart of [`crate::admit`]. It accepts base-part rules
+<a href=#193 id=193 data-nosnippet>193</a>/// with scalar relational joins,
+<a href=#194 id=194 data-nosnippet>194</a>/// default negation, equality/disequality filters and unbounded single-atom
+<a href=#195 id=195 data-nosnippet>195</a>/// choices. Use [`crate::prepare_program_formula`] for the general formula
+<a href=#196 id=196 data-nosnippet>196</a>/// profile, including arithmetic generators, aggregates and directives.
+<a href=#197 id=197 data-nosnippet>197</a>/// No rendering, parsing, grounding or answer enumeration occurs here.
+<a href=#198 id=198 data-nosnippet>198</a>///
+<a href=#199 id=199 data-nosnippet>199</a>/// The compiler and strong-negation coherence operation are shared with source
+<a href=#200 id=200 data-nosnippet>200</a>/// admission. Source admission additionally checks authored syntax before
+<a href=#201 id=201 data-nosnippet>201</a>/// canonicalization; those source checks are not replaced by this operation.
+<a href=#202 id=202 data-nosnippet>202</a>/// Logical traversal is bounded and iterative. Retained input evidence consists
+<a href=#203 id=203 data-nosnippet>203</a>/// of borrowed statement references; the native program owns its canonical data.
+<a href=#204 id=204 data-nosnippet>204</a>///
+<a href=#205 id=205 data-nosnippet>205</a>/// # Errors
+<a href=#206 id=206 data-nosnippet>206</a>/// Returns a typed limit, capability, construction or native admission failure,
+<a href=#207 id=207 data-nosnippet>207</a>/// naming the caller's actual statement or part when applicable.
+<a href=#208 id=208 data-nosnippet>208</a></span><span class="kw">pub fn </span>admit_program(
+<a href=#209 id=209 data-nosnippet>209</a>    source: <span class="kw-2">&amp;</span>LogicalProgram,
+<a href=#210 id=210 data-nosnippet>210</a>    options: ProgramAdmissionOptions,
+<a href=#211 id=211 data-nosnippet>211</a>) -&gt; <span class="prelude-ty">Result</span>&lt;AdmittedProgram&lt;<span class="lifetime">'_</span>&gt;, ProgramAdmissionFailure&lt;<span class="lifetime">'_</span>&gt;&gt; {
+<a href=#212 id=212 data-nosnippet>212</a>    <span class="kw">let </span><span class="kw-2">mut </span>budget = <span class="kw">crate</span>::program_limits::Budget::new(<span class="kw">crate</span>::program_limits::Limits {
+<a href=#213 id=213 data-nosnippet>213</a>        nodes: options.max_nodes,
+<a href=#214 id=214 data-nosnippet>214</a>        depth: options.max_depth,
+<a href=#215 id=215 data-nosnippet>215</a>        body_elements: options.max_body_elements,
+<a href=#216 id=216 data-nosnippet>216</a>        text_bytes: options.max_text_bytes,
+<a href=#217 id=217 data-nosnippet>217</a>    });
+<a href=#218 id=218 data-nosnippet>218</a>    <span class="kw">let </span><span class="kw-2">mut </span>compiled = <span class="kw">crate</span>::compile::Compiled::default();
+<a href=#219 id=219 data-nosnippet>219</a>    <span class="kw">for </span>part <span class="kw">in </span>source.parts() {
+<a href=#220 id=220 data-nosnippet>220</a>        <span class="kw">if </span>part.key().name.as_str() != <span class="string">"base" </span>|| !part.key().formals.is_empty() {
+<a href=#221 id=221 data-nosnippet>221</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(ProgramAdmissionFailure {
+<a href=#222 id=222 data-nosnippet>222</a>                subject: ProgramSubject::Part(part.key()),
+<a href=#223 id=223 data-nosnippet>223</a>                kind: ProgramFailureKind::Compilation(CompilationFailure::Profile(
+<a href=#224 id=224 data-nosnippet>224</a>                    ProfileFeature::ProgramPart,
+<a href=#225 id=225 data-nosnippet>225</a>                )),
+<a href=#226 id=226 data-nosnippet>226</a>            });
+<a href=#227 id=227 data-nosnippet>227</a>        }
+<a href=#228 id=228 data-nosnippet>228</a>        <span class="kw">for </span>carrier <span class="kw">in </span>part.statements() {
+<a href=#229 id=229 data-nosnippet>229</a>            <span class="kw">let </span>subject = ProgramSubject::Statement(carrier);
+<a href=#230 id=230 data-nosnippet>230</a>            <span class="kw">if </span>compiled.len() &gt;= options.core_limits.max_templates {
+<a href=#231 id=231 data-nosnippet>231</a>                <span class="kw">let </span>resource = zetesis_core::AdmissionResource::Templates;
+<a href=#232 id=232 data-nosnippet>232</a>                <span class="kw">let </span>limit = options.core_limits.max_templates;
+<a href=#233 id=233 data-nosnippet>233</a>                <span class="kw">let </span>actual = compiled.len().saturating_add(<span class="number">1</span>);
+<a href=#234 id=234 data-nosnippet>234</a>                <span class="comment">// This boundary refuses before traversing or classifying the
+<a href=#235 id=235 data-nosnippet>235</a>                // next statement. Its source identity is known; its native
+<a href=#236 id=236 data-nosnippet>236</a>                // template/fact position is deliberately not invented.
+<a href=#237 id=237 data-nosnippet>237</a>                </span><span class="kw">let </span>error = AdmissionError::LimitExceeded {
+<a href=#238 id=238 data-nosnippet>238</a>                    resource,
+<a href=#239 id=239 data-nosnippet>239</a>                    limit,
+<a href=#240 id=240 data-nosnippet>240</a>                    actual,
+<a href=#241 id=241 data-nosnippet>241</a>                    template: <span class="prelude-val">None</span>,
+<a href=#242 id=242 data-nosnippet>242</a>                };
+<a href=#243 id=243 data-nosnippet>243</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(core_failure(error, <span class="prelude-val">Some</span>(carrier)));
+<a href=#244 id=244 data-nosnippet>244</a>            }
+<a href=#245 id=245 data-nosnippet>245</a>            <span class="kw">if let </span>Statement::Rule(rule) = carrier.get() {
+<a href=#246 id=246 data-nosnippet>246</a>                budget
+<a href=#247 id=247 data-nosnippet>247</a>                    .check_rule(rule)
+<a href=#248 id=248 data-nosnippet>248</a>                    .map_err(|error| ProgramAdmissionFailure {
+<a href=#249 id=249 data-nosnippet>249</a>                        subject,
+<a href=#250 id=250 data-nosnippet>250</a>                        kind: ProgramFailureKind::Limit(error),
+<a href=#251 id=251 data-nosnippet>251</a>                    })<span class="question-mark">?</span>;
+<a href=#252 id=252 data-nosnippet>252</a>            }
+<a href=#253 id=253 data-nosnippet>253</a>            <span class="kw">let </span>rule = <span class="kw">crate</span>::compile::checked_statement(carrier.get()).map_err(|error| {
+<a href=#254 id=254 data-nosnippet>254</a>                ProgramAdmissionFailure {
+<a href=#255 id=255 data-nosnippet>255</a>                    subject,
+<a href=#256 id=256 data-nosnippet>256</a>                    kind: ProgramFailureKind::Compilation(error),
+<a href=#257 id=257 data-nosnippet>257</a>                }
+<a href=#258 id=258 data-nosnippet>258</a>            })<span class="question-mark">?</span>;
+<a href=#259 id=259 data-nosnippet>259</a>            compiled
+<a href=#260 id=260 data-nosnippet>260</a>                .push(rule, <span class="macro">vec!</span>[carrier])
+<a href=#261 id=261 data-nosnippet>261</a>                .map_err(|error| core_failure(error, <span class="prelude-val">Some</span>(carrier)))<span class="question-mark">?</span>;
+<a href=#262 id=262 data-nosnippet>262</a>        }
+<a href=#263 id=263 data-nosnippet>263</a>    }
+<a href=#264 id=264 data-nosnippet>264</a>    <span class="kw">crate</span>::coherence::append_with(
+<a href=#265 id=265 data-nosnippet>265</a>        <span class="kw-2">&amp;mut </span>compiled,
+<a href=#266 id=266 data-nosnippet>266</a>        options.core_limits,
+<a href=#267 id=267 data-nosnippet>267</a>        |<span class="kw">_</span>, <span class="kw">_</span>, <span class="kw">_</span>| <span class="prelude-val">Ok</span>(()),
+<a href=#268 id=268 data-nosnippet>268</a>        |error, origins| core_failure(error, origins.first().copied()),
+<a href=#269 id=269 data-nosnippet>269</a>    )<span class="question-mark">?</span>;
+<a href=#270 id=270 data-nosnippet>270</a>    <span class="kw">let </span>compiled = compiled.admit(options.core_limits, |error, origins| {
+<a href=#271 id=271 data-nosnippet>271</a>        core_failure(error, origins.first().copied())
+<a href=#272 id=272 data-nosnippet>272</a>    })<span class="question-mark">?</span>;
+<a href=#273 id=273 data-nosnippet>273</a>    <span class="prelude-val">Ok</span>(AdmittedProgram {
+<a href=#274 id=274 data-nosnippet>274</a>        program: compiled.program,
+<a href=#275 id=275 data-nosnippet>275</a>        statements: compiled.template_origins,
+<a href=#276 id=276 data-nosnippet>276</a>        fact_statements: compiled.fact_origins,
+<a href=#277 id=277 data-nosnippet>277</a>    })
+<a href=#278 id=278 data-nosnippet>278</a>}
+<a href=#279 id=279 data-nosnippet>279</a>
+<a href=#280 id=280 data-nosnippet>280</a><span class="kw">fn </span>core_failure(
+<a href=#281 id=281 data-nosnippet>281</a>    error: AdmissionError,
+<a href=#282 id=282 data-nosnippet>282</a>    statement: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>WithProvenance&lt;Statement&gt;&gt;,
+<a href=#283 id=283 data-nosnippet>283</a>) -&gt; ProgramAdmissionFailure&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#284 id=284 data-nosnippet>284</a>    ProgramAdmissionFailure {
+<a href=#285 id=285 data-nosnippet>285</a>        subject: statement.map_or(ProgramSubject::Program, ProgramSubject::Statement),
+<a href=#286 id=286 data-nosnippet>286</a>        kind: ProgramFailureKind::Core(error),
+<a href=#287 id=287 data-nosnippet>287</a>    }
+<a href=#288 id=288 data-nosnippet>288</a>}
 </code></pre></div></section></main></body></html>

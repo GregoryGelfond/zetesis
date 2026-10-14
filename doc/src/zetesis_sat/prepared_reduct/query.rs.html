@@ -170,7 +170,7 @@
 <a href=#170 id=170 data-nosnippet>170</a>    <span class="doccomment">/// Decide original membership using this immutable proper-subset query.
 <a href=#171 id=171 data-nosnippet>171</a>    ///
 <a href=#172 id=172 data-nosnippet>172</a>    /// Original satisfaction is evaluated once and supplies authenticated truth
-<a href=#173 id=173 data-nosnippet>173</a>    /// for implication parameters. A returned subset is still independently
+<a href=#173 id=173 data-nosnippet>173</a>    /// for implication and numeric-node parameters. A returned subset is still independently
 <a href=#174 id=174 data-nosnippet>174</a>    /// checked against the original frozen reduct. This operation preserves
 <a href=#175 id=175 data-nosnippet>175</a>    /// `Limits`' separate search and per-verification work ceilings. Preparation
 <a href=#176 id=176 data-nosnippet>176</a>    /// work is reported only by this owner's construction receipt.
@@ -319,7 +319,7 @@
 <a href=#319 id=319 data-nosnippet>319</a>                truth.interpretation().contains(atom),
 <a href=#320 id=320 data-nosnippet>320</a>            ));
 <a href=#321 id=321 data-nosnippet>321</a>        }
-<a href=#322 id=322 data-nosnippet>322</a>        <span class="kw">for </span>(offset, <span class="kw-2">&amp;</span>node) <span class="kw">in </span><span class="self">self</span>.<span class="number">0</span>.implications.iter().enumerate() {
+<a href=#322 id=322 data-nosnippet>322</a>        <span class="kw">for </span>(offset, <span class="kw-2">&amp;</span>node) <span class="kw">in </span><span class="self">self</span>.<span class="number">0</span>.guarded.iter().enumerate() {
 <a href=#323 id=323 data-nosnippet>323</a>            budget.tick()<span class="question-mark">?</span>;
 <a href=#324 id=324 data-nosnippet>324</a>            <span class="kw">let </span>value = truth.node_truth(node).ok_or(Incomplete::InvalidWitness)<span class="question-mark">?</span>;
 <a href=#325 id=325 data-nosnippet>325</a>            parameters.push(Literal::new(<span class="number">2 </span>* atoms + offset, value));
@@ -389,7 +389,7 @@
 <a href=#389 id=389 data-nosnippet>389</a>    <span class="kw">let </span>count = prepared
 <a href=#390 id=390 data-nosnippet>390</a>        .theory
 <a href=#391 id=391 data-nosnippet>391</a>        .atom_count()
-<a href=#392 id=392 data-nosnippet>392</a>        .checked_add(prepared.implications.len())
+<a href=#392 id=392 data-nosnippet>392</a>        .checked_add(prepared.guarded.len())
 <a href=#393 id=393 data-nosnippet>393</a>        .ok_or(Incomplete::CounterOverflow)<span class="question-mark">?</span>;
 <a href=#394 id=394 data-nosnippet>394</a>    <span class="kw">let </span>required = base
 <a href=#395 id=395 data-nosnippet>395</a>        + parameters.capacity().max(count) <span class="kw">as </span>u128 * size_of::&lt;Literal&gt;() <span class="kw">as </span>u128

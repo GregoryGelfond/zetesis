@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"fn":["check"]};
+window.SIDEBAR_ITEMS = {"fn":["check","check_sibling_directory"]};

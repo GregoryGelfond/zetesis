@@ -58,10 +58,10 @@
 <a href=#58 id=58 data-nosnippet>58</a>    }
 <a href=#59 id=59 data-nosnippet>59</a>}
 <a href=#60 id=60 data-nosnippet>60</a>
-<a href=#61 id=61 data-nosnippet>61</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>prepare(
-<a href=#62 id=62 data-nosnippet>62</a>    prepared: <span class="kw-2">&amp;</span>Prepared,
-<a href=#63 id=63 data-nosnippet>63</a>    completed: <span class="kw-2">&amp;</span>CompletedQueries&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#64 id=64 data-nosnippet>64</a>    computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
+<a href=#61 id=61 data-nosnippet>61</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>prepare&lt;<span class="lifetime">'source</span>&gt;(
+<a href=#62 id=62 data-nosnippet>62</a>    prepared: <span class="kw-2">&amp;</span><span class="lifetime">'source </span>Prepared,
+<a href=#63 id=63 data-nosnippet>63</a>    completed: <span class="kw-2">&amp;</span>CompletedQueries&lt;<span class="lifetime">'source</span>&gt;,
+<a href=#64 id=64 data-nosnippet>64</a>    computation: <span class="kw-2">&amp;mut </span>Computation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'source</span>&gt;,
 <a href=#65 id=65 data-nosnippet>65</a>    limits: <span class="kw-2">&amp;</span>FormulaLimits,
 <a href=#66 id=66 data-nosnippet>66</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
 <a href=#67 id=67 data-nosnippet>67</a>    counters: <span class="kw-2">&amp;mut </span>Counters,
@@ -106,17 +106,17 @@
 <a href=#106 id=106 data-nosnippet>106</a>    <span class="prelude-val">Ok</span>(PendingProjection { atoms: <span class="prelude-val">Some</span>(atoms) })
 <a href=#107 id=107 data-nosnippet>107</a>}
 <a href=#108 id=108 data-nosnippet>108</a>
-<a href=#109 id=109 data-nosnippet>109</a><span class="kw">fn </span>instances(
-<a href=#110 id=110 data-nosnippet>110</a>    declaration: <span class="kw-2">&amp;</span>RuleIr,
-<a href=#111 id=111 data-nosnippet>111</a>    completed: <span class="kw-2">&amp;</span>CompletedQueries&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#109 id=109 data-nosnippet>109</a><span class="kw">fn </span>instances&lt;<span class="lifetime">'source</span>&gt;(
+<a href=#110 id=110 data-nosnippet>110</a>    declaration: <span class="kw-2">&amp;</span><span class="lifetime">'source </span>RuleIr,
+<a href=#111 id=111 data-nosnippet>111</a>    completed: <span class="kw-2">&amp;</span>CompletedQueries&lt;<span class="lifetime">'source</span>&gt;,
 <a href=#112 id=112 data-nosnippet>112</a>    eligibility: <span class="kw-2">&amp;</span>SourceEligibility,
 <a href=#113 id=113 data-nosnippet>113</a>    domain: <span class="kw-2">&amp;mut </span>SourceSelection,
-<a href=#114 id=114 data-nosnippet>114</a>    context: <span class="kw-2">&amp;mut </span>Context&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
+<a href=#114 id=114 data-nosnippet>114</a>    context: <span class="kw-2">&amp;mut </span>Context&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'source</span>&gt;,
 <a href=#115 id=115 data-nosnippet>115</a>) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#116 id=116 data-nosnippet>116</a>    context.location = declaration.location;
 <a href=#117 id=117 data-nosnippet>117</a>    <span class="kw">let </span>support = completed.support();
 <a href=#118 id=118 data-nosnippet>118</a>    <span class="kw">let </span><span class="kw-2">mut </span>rows = Join::rule(
-<a href=#119 id=119 data-nosnippet>119</a>        declaration,
+<a href=#119 id=119 data-nosnippet>119</a>        <span class="kw">crate</span>::formula_support::Ir::Source(declaration),
 <a href=#120 id=120 data-nosnippet>120</a>        support,
 <a href=#121 id=121 data-nosnippet>121</a>        context.computation,
 <a href=#122 id=122 data-nosnippet>122</a>        context.limits,

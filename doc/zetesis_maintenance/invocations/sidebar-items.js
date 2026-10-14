@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["RECORD"],"fn":["check","is_record"]};
+window.SIDEBAR_ITEMS = {"constant":["RECORD"],"fn":["check"]};

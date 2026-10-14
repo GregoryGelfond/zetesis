@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["CLOSED","FAILED","FULL"],"struct":["BoundedText","BoundedWriter","Closed","FailAt"]};
+window.SIDEBAR_ITEMS = {"constant":["CLOSED","FAILED","FULL"],"struct":["BoundedText","BoundedWriter","Chunks","ChunksFailingAt","Closed","FailAt"]};

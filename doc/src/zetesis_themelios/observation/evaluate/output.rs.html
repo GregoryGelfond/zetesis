@@ -7,14 +7,14 @@
 <a href=#7 id=7 data-nosnippet>7</a>    bytes: u128,
 <a href=#8 id=8 data-nosnippet>8</a>}
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">impl </span>Terms {
-<a href=#10 id=10 data-nosnippet>10</a>    <span class="kw">pub fn </span>new(read: TermRead&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="self">Self </span>{
+<a href=#10 id=10 data-nosnippet>10</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>new(read: TermRead&lt;<span class="lifetime">'_</span>&gt;) -&gt; <span class="self">Self </span>{
 <a href=#11 id=11 data-nosnippet>11</a>        <span class="self">Self </span>{
 <a href=#12 id=12 data-nosnippet>12</a>            values: read.assignment(),
 <a href=#13 id=13 data-nosnippet>13</a>            order: Vec::new(),
 <a href=#14 id=14 data-nosnippet>14</a>            bytes: <span class="number">0</span>,
 <a href=#15 id=15 data-nosnippet>15</a>        }
 <a href=#16 id=16 data-nosnippet>16</a>    }
-<a href=#17 id=17 data-nosnippet>17</a>    <span class="kw">pub fn </span>insert(
+<a href=#17 id=17 data-nosnippet>17</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>insert(
 <a href=#18 id=18 data-nosnippet>18</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
 <a href=#19 id=19 data-nosnippet>19</a>        key: <span class="kw-2">&amp;</span>TermKey,
 <a href=#20 id=20 data-nosnippet>20</a>        metric: Metric,
@@ -60,7 +60,7 @@
 <a href=#60 id=60 data-nosnippet>60</a>        <span class="self">self</span>.order.insert(lower, slot);
 <a href=#61 id=61 data-nosnippet>61</a>        <span class="prelude-val">Ok</span>(())
 <a href=#62 id=62 data-nosnippet>62</a>    }
-<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">pub fn </span>export(<span class="self">self</span>, ctx: <span class="kw-2">&amp;mut </span>Interpreter&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Symbol&gt;, Error&gt; {
+<a href=#63 id=63 data-nosnippet>63</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>export(<span class="self">self</span>, ctx: <span class="kw-2">&amp;mut </span>Interpreter&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;Symbol&gt;, Error&gt; {
 <a href=#64 id=64 data-nosnippet>64</a>        ctx.work.step(<span class="self">self</span>.order.len() <span class="kw">as </span>u128)<span class="question-mark">?</span>;
 <a href=#65 id=65 data-nosnippet>65</a>        <span class="kw">let </span><span class="kw-2">mut </span>result = ctx.work.reserve(<span class="self">self</span>.order.len())<span class="question-mark">?</span>;
 <a href=#66 id=66 data-nosnippet>66</a>        <span class="kw">for </span>slot <span class="kw">in </span><span class="self">self</span>.order {

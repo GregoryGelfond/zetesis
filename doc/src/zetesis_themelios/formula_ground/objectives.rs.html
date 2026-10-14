@@ -32,7 +32,7 @@
 <a href=#32 id=32 data-nosnippet>32</a><span class="kw">use crate</span>::{ExpansionFailure, ExpansionResource, FormulaFailure, FormulaLimits, FormulaResource};
 <a href=#33 id=33 data-nosnippet>33</a>
 <a href=#34 id=34 data-nosnippet>34</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>prepare&lt;<span class="lifetime">'source</span>&gt;(
-<a href=#35 id=35 data-nosnippet>35</a>    prepared: <span class="kw-2">&amp;</span>Prepared,
+<a href=#35 id=35 data-nosnippet>35</a>    prepared: <span class="kw-2">&amp;</span><span class="lifetime">'source </span>Prepared,
 <a href=#36 id=36 data-nosnippet>36</a>    completed: <span class="kw-2">&amp;</span>CompletedQueries&lt;<span class="lifetime">'source</span>&gt;,
 <a href=#37 id=37 data-nosnippet>37</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
 <a href=#38 id=38 data-nosnippet>38</a>    warnings: <span class="kw-2">&amp;mut </span>Warnings,
@@ -213,7 +213,7 @@
 <a href=#213 id=213 data-nosnippet>213</a><span class="kw">impl</span>&lt;<span class="lifetime">'source</span>&gt; Preparation&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'source</span>&gt; {
 <a href=#214 id=214 data-nosnippet>214</a>    <span class="kw">fn </span>objective(
 <a href=#215 id=215 data-nosnippet>215</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#216 id=216 data-nosnippet>216</a>        objective: <span class="kw-2">&amp;</span>ObjectiveIr,
+<a href=#216 id=216 data-nosnippet>216</a>        objective: <span class="kw-2">&amp;</span><span class="lifetime">'source </span>ObjectiveIr,
 <a href=#217 id=217 data-nosnippet>217</a>        support: <span class="kw-2">&amp;</span>Support&lt;<span class="lifetime">'source</span>&gt;,
 <a href=#218 id=218 data-nosnippet>218</a>        may_have_numeric_weight: bool,
 <a href=#219 id=219 data-nosnippet>219</a>        presence: <span class="kw-2">&amp;</span>Presence&lt;<span class="lifetime">'_</span>&gt;,
@@ -231,7 +231,7 @@
 <a href=#231 id=231 data-nosnippet>231</a>            <span class="kw">return </span><span class="self">self</span>.lifted_objective(objective, support, may_have_numeric_weight, priority);
 <a href=#232 id=232 data-nosnippet>232</a>        }
 <a href=#233 id=233 data-nosnippet>233</a>        <span class="kw">let </span><span class="kw-2">mut </span>bindings = Join::objective(
-<a href=#234 id=234 data-nosnippet>234</a>            objective,
+<a href=#234 id=234 data-nosnippet>234</a>            <span class="kw">crate</span>::formula_support::Ir::Source(objective),
 <a href=#235 id=235 data-nosnippet>235</a>            support,
 <a href=#236 id=236 data-nosnippet>236</a>            <span class="self">self</span>.computation,
 <a href=#237 id=237 data-nosnippet>237</a>            <span class="self">self</span>.limits,
@@ -316,7 +316,7 @@
 <a href=#316 id=316 data-nosnippet>316</a>
 <a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">fn </span>lifted_objective(
 <a href=#318 id=318 data-nosnippet>318</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#319 id=319 data-nosnippet>319</a>        objective: <span class="kw-2">&amp;</span>ObjectiveIr,
+<a href=#319 id=319 data-nosnippet>319</a>        objective: <span class="kw-2">&amp;</span><span class="lifetime">'source </span>ObjectiveIr,
 <a href=#320 id=320 data-nosnippet>320</a>        support: <span class="kw-2">&amp;</span>Support&lt;<span class="lifetime">'source</span>&gt;,
 <a href=#321 id=321 data-nosnippet>321</a>        may_have_numeric_weight: bool,
 <a href=#322 id=322 data-nosnippet>322</a>        priority: i32,
@@ -386,11 +386,11 @@
 <a href=#386 id=386 data-nosnippet>386</a>
 <a href=#387 id=387 data-nosnippet>387</a>    <span class="kw">fn </span>numeric_rows(
 <a href=#388 id=388 data-nosnippet>388</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#389 id=389 data-nosnippet>389</a>        objective: <span class="kw-2">&amp;</span>ObjectiveIr,
+<a href=#389 id=389 data-nosnippet>389</a>        objective: <span class="kw-2">&amp;</span><span class="lifetime">'source </span>ObjectiveIr,
 <a href=#390 id=390 data-nosnippet>390</a>        support: <span class="kw-2">&amp;</span>Support&lt;<span class="lifetime">'source</span>&gt;,
 <a href=#391 id=391 data-nosnippet>391</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(bool, Evidence), FormulaFailure&gt; {
 <a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">let </span><span class="kw-2">mut </span>bindings = Join::objective(
-<a href=#393 id=393 data-nosnippet>393</a>            objective,
+<a href=#393 id=393 data-nosnippet>393</a>            <span class="kw">crate</span>::formula_support::Ir::Source(objective),
 <a href=#394 id=394 data-nosnippet>394</a>            support,
 <a href=#395 id=395 data-nosnippet>395</a>            <span class="self">self</span>.computation,
 <a href=#396 id=396 data-nosnippet>396</a>            <span class="self">self</span>.limits,
@@ -434,7 +434,7 @@
 <a href=#434 id=434 data-nosnippet>434</a>
 <a href=#435 id=435 data-nosnippet>435</a>    <span class="kw">fn </span>validate_scopes(
 <a href=#436 id=436 data-nosnippet>436</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#437 id=437 data-nosnippet>437</a>        objective: <span class="kw-2">&amp;</span>ObjectiveIr,
+<a href=#437 id=437 data-nosnippet>437</a>        objective: <span class="kw-2">&amp;</span><span class="lifetime">'source </span>ObjectiveIr,
 <a href=#438 id=438 data-nosnippet>438</a>        binding: <span class="kw-2">&amp;</span>Binding,
 <a href=#439 id=439 data-nosnippet>439</a>        support: <span class="kw-2">&amp;</span>Support&lt;<span class="lifetime">'source</span>&gt;,
 <a href=#440 id=440 data-nosnippet>440</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
@@ -455,7 +455,7 @@
 <a href=#455 id=455 data-nosnippet>455</a>
 <a href=#456 id=456 data-nosnippet>456</a>    <span class="kw">fn </span>resolve(
 <a href=#457 id=457 data-nosnippet>457</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#458 id=458 data-nosnippet>458</a>        objective: <span class="kw-2">&amp;</span>ObjectiveIr,
+<a href=#458 id=458 data-nosnippet>458</a>        objective: <span class="kw-2">&amp;</span><span class="lifetime">'source </span>ObjectiveIr,
 <a href=#459 id=459 data-nosnippet>459</a>        binding: <span class="kw-2">&amp;</span>Binding,
 <a href=#460 id=460 data-nosnippet>460</a>        selected: bool,
 <a href=#461 id=461 data-nosnippet>461</a>        family: <span class="kw-2">&amp;mut </span>Evidence,
@@ -588,7 +588,7 @@
 <a href=#588 id=588 data-nosnippet>588</a>
 <a href=#589 id=589 data-nosnippet>589</a>    <span class="kw">fn </span>specialize(
 <a href=#590 id=590 data-nosnippet>590</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#591 id=591 data-nosnippet>591</a>        objective: <span class="kw-2">&amp;</span>ObjectiveIr,
+<a href=#591 id=591 data-nosnippet>591</a>        objective: <span class="kw-2">&amp;</span><span class="lifetime">'source </span>ObjectiveIr,
 <a href=#592 id=592 data-nosnippet>592</a>        binding: <span class="kw-2">&amp;</span>Binding,
 <a href=#593 id=593 data-nosnippet>593</a>        resolved: Resolved,
 <a href=#594 id=594 data-nosnippet>594</a>        body: <span class="prelude-ty">Option</span>&lt;ValidatedBody&gt;,
@@ -725,7 +725,7 @@
 <a href=#725 id=725 data-nosnippet>725</a>
 <a href=#726 id=726 data-nosnippet>726</a>    <span class="kw">fn </span>retain(
 <a href=#727 id=727 data-nosnippet>727</a>        <span class="kw-2">&amp;mut </span><span class="self">self</span>,
-<a href=#728 id=728 data-nosnippet>728</a>        objective: <span class="kw-2">&amp;</span>ObjectiveIr,
+<a href=#728 id=728 data-nosnippet>728</a>        objective: <span class="kw-2">&amp;</span><span class="lifetime">'source </span>ObjectiveIr,
 <a href=#729 id=729 data-nosnippet>729</a>        template: PendingElement,
 <a href=#730 id=730 data-nosnippet>730</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;(), FormulaFailure&gt; {
 <a href=#731 id=731 data-nosnippet>731</a>        <span class="self">self</span>.capacity(objective.location)<span class="question-mark">?</span>;

@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
+            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2436da5c.js"></script>
+        <script src="../toc-5c747b16.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -183,10 +183,11 @@
                         <h1 id="working-with-finite-reducts"><a class="header" href="#working-with-finite-reducts">Working with finite reducts</a></h1>
 <p><code>zetesis-ferraris</code> accepts an already finite formula DAG. Every edge refers to a
 preceding node. Roots are the formulas asserted by the theory; their conjunction
-is the semantic input. <code>FormulaParts</code> owns the node vector and operand arena
-as one pair. Two-child conjunctions and disjunctions use inline pairs; wider
-rows refer to the arena. <code>Theory::new</code> checks the complete shape and transfers
-both buffers with the roots, without grounding or searching. Semantic inspection
+is the semantic input. <code>FormulaParts</code> owns the nodes and their Boolean and numeric
+arenas together. Two-child conjunctions and disjunctions use inline pairs; wider
+rows refer to the operand arena. Weighted bounds and ordinal min/max cuts share
+numeric contribution rows. <code>Theory::new</code> checks the complete shape and transfers
+those buffers with the roots, without grounding or searching. Semantic inspection
 uses <code>theory.view().node(index)</code> to borrow the entire <code>NodeView</code> operand row.</p>
 <p>Here atom indices <code>0</code> and <code>1</code> denote <code>a</code> and <code>b</code>. The theory is <code>a | b.</code>.
 The candidate <code>{a,b}</code> satisfies the theory but has a proper-subset reduct model:</p>
@@ -249,6 +250,18 @@ a witness against minimality.</li>
 contained in <code>M</code>. The membership checker imposes the proper-subset condition.
 Its exhaustive subset enumeration is useful for small exact checks and reference
 comparisons; use the ordinary session for the composed native search.</p>
+<h2 id="numeric-formula-storage"><a class="header" href="#numeric-formula-storage">Numeric formula storage</a></h2>
+<p><code>NodeView::Threshold</code> reads a nonnegative weighted bound; <code>ExtremumCut</code> reads a
+min/max cut over an ordered value dictionary. Both borrow shared numeric rows.
+Exhaustive visitors must handle these variants and preserve their original-truth
+gates when evaluating a frozen reduct. The <a href="../architecture/alignment.html#ordered-comparisons-and-objective-reductions">aggregate representation</a>
+explains their semantics and the Boolean lowering used for device transport.</p>
+<p>Keep all arenas together when copying a formula. <code>theory.parts().try_clone()</code>
+copies its complete raw storage, including shared numeric rows; the result still
+needs admission and does not retain the original theory’s identity.
+<code>FormulaParts::new(nodes, operands)</code> remains the Boolean-only constructor and
+refuses numeric nodes without their arenas. <code>FormulaParts::from_numeric_raw</code>
+transfers the complete raw representation; <code>Theory::new</code> validates it.</p>
 <h2 id="preserve-the-subject"><a class="header" href="#preserve-the-subject">Preserve the subject</a></h2>
 <p>An <code>Interpretation</code> belongs to one immutable <code>Theory</code>. Cloning the theory shares
 identity. Independently constructing equal paired formula storage produces

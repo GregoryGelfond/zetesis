@@ -31,7 +31,7 @@
 <a href=#31 id=31 data-nosnippet>31</a>}
 <a href=#32 id=32 data-nosnippet>32</a>
 <a href=#33 id=33 data-nosnippet>33</a><span class="kw">impl</span>&lt;<span class="lifetime">'d</span>&gt; Defined&lt;<span class="lifetime">'d</span>&gt; {
-<a href=#34 id=34 data-nosnippet>34</a>    <span class="kw">pub fn </span>index(
+<a href=#34 id=34 data-nosnippet>34</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>index(
 <a href=#35 id=35 data-nosnippet>35</a>        all: <span class="kw-2">&amp;</span><span class="lifetime">'d </span>[<span class="kw-2">&amp;</span><span class="lifetime">'d </span>WithProvenance&lt;Statement&gt;],
 <a href=#36 id=36 data-nosnippet>36</a>        context: <span class="kw-2">&amp;mut </span>Context&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
 <a href=#37 id=37 data-nosnippet>37</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, FormulaFailure&gt; {
@@ -66,7 +66,7 @@
 <a href=#66 id=66 data-nosnippet>66</a>
 <a href=#67 id=67 data-nosnippet>67</a>    <span class="doccomment">/// Whether a definition's head has the predicate's name and arity, as
 <a href=#68 id=68 data-nosnippet>68</a>    /// `matching::signature` compares them with the sign ignored.
-<a href=#69 id=69 data-nosnippet>69</a>    </span><span class="kw">pub fn </span>defines(
+<a href=#69 id=69 data-nosnippet>69</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>defines(
 <a href=#70 id=70 data-nosnippet>70</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#71 id=71 data-nosnippet>71</a>        predicate: PredicateRef&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#72 id=72 data-nosnippet>72</a>        context: <span class="kw-2">&amp;mut </span>Context&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
@@ -88,7 +88,7 @@
 <a href=#88 id=88 data-nosnippet>88</a>    <span class="doccomment">/// The index range of definitions carrying the site's parsed coordinate.
 <a href=#89 id=89 data-nosnippet>89</a>    /// Constructed sites have no parsed hint; whole-rule matching remains the
 <a href=#90 id=90 data-nosnippet>90</a>    /// independent correspondence check for every site.
-<a href=#91 id=91 data-nosnippet>91</a>    </span><span class="kw">pub fn </span>origin(
+<a href=#91 id=91 data-nosnippet>91</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>origin(
 <a href=#92 id=92 data-nosnippet>92</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#93 id=93 data-nosnippet>93</a>        origin: ProgramSite,
 <a href=#94 id=94 data-nosnippet>94</a>        context: <span class="kw-2">&amp;mut </span>Context&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
@@ -103,12 +103,12 @@
 <a href=#103 id=103 data-nosnippet>103</a>    }
 <a href=#104 id=104 data-nosnippet>104</a>
 <a href=#105 id=105 data-nosnippet>105</a>    <span class="doccomment">/// The definition position of the origin entry at `index`.
-<a href=#106 id=106 data-nosnippet>106</a>    </span><span class="kw">pub fn </span>position(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; usize {
+<a href=#106 id=106 data-nosnippet>106</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>position(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; usize {
 <a href=#107 id=107 data-nosnippet>107</a>        <span class="self">self</span>.origins.values[index].<span class="number">1
 <a href=#108 id=108 data-nosnippet>108</a>    </span>}
 <a href=#109 id=109 data-nosnippet>109</a>
 <a href=#110 id=110 data-nosnippet>110</a>    <span class="doccomment">/// Number of origin entries, for per-origin cursors.
-<a href=#111 id=111 data-nosnippet>111</a>    </span><span class="kw">pub fn </span>origin_entries(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#111 id=111 data-nosnippet>111</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>origin_entries(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
 <a href=#112 id=112 data-nosnippet>112</a>        <span class="self">self</span>.origins.values.len()
 <a href=#113 id=113 data-nosnippet>113</a>    }
 <a href=#114 id=114 data-nosnippet>114</a>}

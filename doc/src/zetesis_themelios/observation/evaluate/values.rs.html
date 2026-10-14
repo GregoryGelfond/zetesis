@@ -21,13 +21,13 @@
 <a href=#21 id=21 data-nosnippet>21</a>            bytes: <span class="number">0</span>,
 <a href=#22 id=22 data-nosnippet>22</a>        }
 <a href=#23 id=23 data-nosnippet>23</a>    }
-<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">pub fn </span>len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
+<a href=#24 id=24 data-nosnippet>24</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>len(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; usize {
 <a href=#25 id=25 data-nosnippet>25</a>        <span class="self">self</span>.metrics.len()
 <a href=#26 id=26 data-nosnippet>26</a>    }
-<a href=#27 id=27 data-nosnippet>27</a>    <span class="kw">pub fn </span>metric(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; Metric {
+<a href=#27 id=27 data-nosnippet>27</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>metric(<span class="kw-2">&amp;</span><span class="self">self</span>, index: usize) -&gt; Metric {
 <a href=#28 id=28 data-nosnippet>28</a>        <span class="self">self</span>.metrics[index]
 <a href=#29 id=29 data-nosnippet>29</a>    }
-<a href=#30 id=30 data-nosnippet>30</a>    <span class="kw">pub fn </span>key(
+<a href=#30 id=30 data-nosnippet>30</a>    <span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>key(
 <a href=#31 id=31 data-nosnippet>31</a>        <span class="kw-2">&amp;</span><span class="self">self</span>,
 <a href=#32 id=32 data-nosnippet>32</a>        index: usize,
 <a href=#33 id=33 data-nosnippet>33</a>        context: <span class="kw-2">&amp;mut </span>Interpreter&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,

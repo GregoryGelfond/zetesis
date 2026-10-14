@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
+            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2436da5c.js"></script>
+        <script src="../toc-5c747b16.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,10 +184,20 @@
 <p><code>zetesis-themelios</code> has two materialization boundaries. Relational admission
 returns templates for lazy or eager normal-rule execution. Formula preparation
 returns scoped instructions; grounding consumes them to construct a finite
-Ferraris theory. Neither boundary searches for answer sets.</p>
+Ferraris theory. Automatic CPU solving can instead certify and directly evaluate
+a complete acyclic normal source, retaining its original program and canonical
+interpretation without a formula graph. None of these preparation paths searches
+candidate regions.</p>
 <p>This chapter maps the implementation for readers extending the source language.
 The <a href="../rust/source.html">source API guide</a> describes the public entry points;
 <a href="grounding.html">grounding</a> explains their mathematical contracts.</p>
+<p>Closed-range facts use one checked product cursor in both relational and formula
+admission. It retains interval endpoints and scalar alternatives, then emits one
+head at a time in source order. Formula admission consumes that head directly;
+relational admission retains the templates its executor needs. Complete-family
+validation and logical expansion limits precede emission. This removes temporary
+range columns and per-statement template vectors, without changing duplicates,
+provenance or arithmetic diagnostics.</p>
 <h2 id="follow-the-owned-objects"><a class="header" href="#follow-the-owned-objects">Follow the owned objects</a></h2>
 <pre><code class="language-text">original source catalog → parsed and raised themelios program ┐
 canonical Arc&lt;Program&gt; → bounded logical inspection           ┴
@@ -252,6 +262,7 @@ those instructions rather than interpreting the plan as new program semantics.</
 <tr><td>Source catalog and includes</td><td><code>bundle</code>, <code>bundle_admission</code></td><td>Original files, paths, source identities and located failures</td></tr>
 <tr><td>Diagnostic and strict-profile checks</td><td><code>profile</code>, <code>diagnostic</code>, <code>source_diagnostics</code></td><td>Typed refusals and source views; no recovered partial program</td></tr>
 <tr><td>Relational templates</td><td><code>compile</code>, <code>extended</code>, <code>expansion</code>, <code>fact_expansion</code></td><td>Closed values, bounded constants/arithmetic/fact expansion and template admission</td></tr>
+<tr><td>Fact blocks</td><td><code>formula_facts</code>, <code>formula_ir::facts</code></td><td>On the formula route, facts held in fact blocks, products and runs of admitted values, with their statements’ evidence, standing in item order where rules with empty bodies would have stood</td></tr>
 <tr><td>Classical negation</td><td><code>coherence</code></td><td>Distinct signed predicates and consistency constraints</td></tr>
 <tr><td>Semantic value conversion</td><td><code>structural_value</code>, <code>scalar_arithmetic</code>, <code>formula_value</code></td><td>Typed closed values and checked arithmetic; no atom support</td></tr>
 <tr><td>Formula preparation</td><td><code>formula</code>, <code>formula::preparation</code>, <code>formula_ir</code></td><td>Public owned preparation, scoped rule/objective IR and cumulative budgets</td></tr>
@@ -269,7 +280,7 @@ those instructions rather than interpreting the plan as new program semantics.</
 <tr><td>Formula emission</td><td><code>formula_ground</code>, <code>formula_guard</code>, <code>formula_conditional</code></td><td>Original implications, aggregate conditions and universal instances</td></tr>
 <tr><td>Optional formula factoring</td><td><code>formula_factor</code></td><td>Qualified existential components with the complete-join path as fallback</td></tr>
 <tr><td>Optional count certificates</td><td><code>formula_count_plan</code></td><td>Capture, derivation and emitted correspondence to the original theory</td></tr>
-<tr><td>Source activity</td><td><code>formula_source_activity</code></td><td>Bounded absent/optional/required producer refinement over completed support, shared by objectives and projection</td></tr>
+<tr><td>Source activity</td><td><code>formula_source_activity</code></td><td>Bounded absent/optional/required producer refinement over completed support, shared by objectives and projection; each fact row is a required producer</td></tr>
 <tr><td>Original-model queries</td><td><code>formula_source_activity::model_query</code></td><td>Closed conditions over full original atom identities, separate from source activity and reduct formulas</td></tr>
 <tr><td>Objective source preparation</td><td><code>formula_weak</code>, <code>formula_ir::objective_scope</code>, <code>formula_objective_dependencies</code></td><td>Scoped weak bodies and independently applicable objective precision plans</td></tr>
 <tr><td>Objective materialization</td><td><code>formula_ground::objectives</code>, <code>formula_ground::scoped_body</code></td><td>Retained objective templates and bounded body validation without producer support</td></tr>

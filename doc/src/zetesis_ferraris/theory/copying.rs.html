@@ -1,0 +1,171 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `crates/zetesis-ferraris/src/theory/copying.rs`."><title>copying.rs - source</title><script>if(window.location.protocol!=="file:")document.head.insertAdjacentHTML("beforeend","SourceSerif4-Regular-6b053e98.ttf.woff2,FiraSans-Italic-81dc35de.woff2,FiraSans-Regular-0fe48ade.woff2,FiraSans-MediumItalic-ccf7e434.woff2,FiraSans-Medium-e1aa3f0a.woff2,SourceCodePro-Regular-8badfe75.ttf.woff2,SourceCodePro-Semibold-aa29a496.ttf.woff2".split(",").map(f=>`<link rel="preload" as="font" type="font/woff2"href="../../../static.files/${f}">`).join(""))</script><link rel="stylesheet" href="../../../static.files/normalize-9960930a.css"><link rel="stylesheet" href="../../../static.files/rustdoc-17e0aaed.css"><meta name="rustdoc-vars" data-root-path="../../../" data-static-root-path="../../../static.files/" data-current-crate="zetesis_ferraris" data-themes="" data-resource-suffix="" data-rustdoc-version="1.97.1 (8bab26f4f 2026-07-14)" data-channel="1.97.1" data-search-js="search-fd9372ac.js" data-stringdex-js="stringdex-2da4960a.js" data-settings-js="settings-170eb4bf.js" ><script src="../../../static.files/storage-41dd4d93.js"></script><script defer src="../../../static.files/src-script-813739b1.js"></script><script defer src="../../../src-files.js"></script><script defer src="../../../static.files/main-fcd733ba.js"></script><noscript><link rel="stylesheet" href="../../../static.files/noscript-f7c3ffd8.css"></noscript><link rel="alternate icon" type="image/png" href="../../../static.files/favicon-32x32-eab170b8.png"><link rel="icon" type="image/svg+xml" href="../../../static.files/favicon-044be391.svg"></head><body class="rustdoc src"><a class="skip-main-content" href="#main-content">Skip to main content</a><!--[if lte IE 11]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="src-sidebar-title"><h2>Files</h2></div></nav><div class="sidebar-resizer" title="Drag to resize sidebar"></div><main><section id="main-content" class="content" tabindex="-1"><div class="main-heading"><h1><div class="sub-heading">zetesis_ferraris/theory/</div>copying.rs</h1><rustdoc-toolbar></rustdoc-toolbar></div><div class="example-wrap digits-3"><pre class="rust"><code><a href=#1 id=1 data-nosnippet>1</a><span class="kw">use </span>std::mem::size_of;
+<a href=#2 id=2 data-nosnippet>2</a>
+<a href=#3 id=3 data-nosnippet>3</a><span class="kw">use super</span>::{
+<a href=#4 id=4 data-nosnippet>4</a>    AdmissionError, ExtremumCutDescriptor, FormulaParts, FormulaTransaction, FormulaView, Node,
+<a href=#5 id=5 data-nosnippet>5</a>    NumericRow, Storage, ThresholdDescriptor,
+<a href=#6 id=6 data-nosnippet>6</a>};
+<a href=#7 id=7 data-nosnippet>7</a>
+<a href=#8 id=8 data-nosnippet>8</a><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>copy&lt;T: Copy&gt;(source: <span class="kw-2">&amp;</span>[T]) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;T&gt;, AdmissionError&gt; {
+<a href=#9 id=9 data-nosnippet>9</a>    <span class="kw">let </span><span class="kw-2">mut </span>result = Vec::new();
+<a href=#10 id=10 data-nosnippet>10</a>    result
+<a href=#11 id=11 data-nosnippet>11</a>        .try_reserve_exact(source.len())
+<a href=#12 id=12 data-nosnippet>12</a>        .map_err(|<span class="kw">_</span>| AdmissionError::Allocation)<span class="question-mark">?</span>;
+<a href=#13 id=13 data-nosnippet>13</a>    result.extend_from_slice(source);
+<a href=#14 id=14 data-nosnippet>14</a>    <span class="prelude-val">Ok</span>(result)
+<a href=#15 id=15 data-nosnippet>15</a>}
+<a href=#16 id=16 data-nosnippet>16</a>
+<a href=#17 id=17 data-nosnippet>17</a><span class="kw">fn </span>bytes&lt;T&gt;(count: usize) -&gt; u128 {
+<a href=#18 id=18 data-nosnippet>18</a>    count <span class="kw">as </span>u128 * size_of::&lt;T&gt;() <span class="kw">as </span>u128
+<a href=#19 id=19 data-nosnippet>19</a>}
+<a href=#20 id=20 data-nosnippet>20</a>
+<a href=#21 id=21 data-nosnippet>21</a><span class="kw">impl </span>FormulaParts {
+<a href=#22 id=22 data-nosnippet>22</a>    <span class="doccomment">/// Copy all seven arenas fallibly, preserving sharing and absolute child IDs.
+<a href=#23 id=23 data-nosnippet>23</a>    /// The copy is raw storage and carries no admission or original owner identity.
+<a href=#24 id=24 data-nosnippet>24</a>    /// Work and temporary payload are linear in all stored cells, including unused
+<a href=#25 id=25 data-nosnippet>25</a>    /// cells. [`Self::copy_work`] reports the complete logical copy/recount charge.
+<a href=#26 id=26 data-nosnippet>26</a>    /// Actual destination capacities may differ from the source capacities.
+<a href=#27 id=27 data-nosnippet>27</a>    ///
+<a href=#28 id=28 data-nosnippet>28</a>    /// # Errors
+<a href=#29 id=29 data-nosnippet>29</a>    /// Refuses failed reservation or overflow in declared logical occurrences.
+<a href=#30 id=30 data-nosnippet>30</a>    </span><span class="kw">pub fn </span>try_clone(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, AdmissionError&gt; {
+<a href=#31 id=31 data-nosnippet>31</a>        <span class="self">self</span>.view().try_to_parts()
+<a href=#32 id=32 data-nosnippet>32</a>    }
+<a href=#33 id=33 data-nosnippet>33</a>
+<a href=#34 id=34 data-nosnippet>34</a>    <span class="doccomment">/// Complete logical work for [`Self::try_clone`]: one visit per copied cell
+<a href=#35 id=35 data-nosnippet>35</a>    /// in all seven arenas, then one visit per node to recount child occurrences.
+<a href=#36 id=36 data-nosnippet>36</a>    /// Shared numeric entries are copied once, irrespective of how many nodes
+<a href=#37 id=37 data-nosnippet>37</a>    /// reference their row. Unreferenced arena cells still contribute.
+<a href=#38 id=38 data-nosnippet>38</a>    ///
+<a href=#39 id=39 data-nosnippet>39</a>    /// This allocation-free measurement is a full-attempt precharge; an early
+<a href=#40 id=40 data-nosnippet>40</a>    /// refusal may perform less work. It excludes fixed reservation bookkeeping,
+<a href=#41 id=41 data-nosnippet>41</a>    /// allocator work, hardware instructions and topology/numeric admission.
+<a href=#42 id=42 data-nosnippet>42</a>    /// It neither checks dimensions nor measures bytes or retained capacity.
+<a href=#43 id=43 data-nosnippet>43</a>    </span><span class="attr">#[must_use]
+<a href=#44 id=44 data-nosnippet>44</a>    </span><span class="kw">pub fn </span>copy_work(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u128 {
+<a href=#45 id=45 data-nosnippet>45</a>        <span class="number">2 </span>* <span class="self">self</span>.nodes.len() <span class="kw">as </span>u128
+<a href=#46 id=46 data-nosnippet>46</a>            + <span class="self">self</span>.operands.len() <span class="kw">as </span>u128
+<a href=#47 id=47 data-nosnippet>47</a>            + <span class="self">self</span>.numeric.conditions.len() <span class="kw">as </span>u128
+<a href=#48 id=48 data-nosnippet>48</a>            + <span class="self">self</span>.numeric.values.len() <span class="kw">as </span>u128
+<a href=#49 id=49 data-nosnippet>49</a>            + <span class="self">self</span>.numeric.rows.len() <span class="kw">as </span>u128
+<a href=#50 id=50 data-nosnippet>50</a>            + <span class="self">self</span>.numeric.thresholds.len() <span class="kw">as </span>u128
+<a href=#51 id=51 data-nosnippet>51</a>            + <span class="self">self</span>.numeric.cuts.len() <span class="kw">as </span>u128
+<a href=#52 id=52 data-nosnippet>52</a>    }
+<a href=#53 id=53 data-nosnippet>53</a>
+<a href=#54 id=54 data-nosnippet>54</a>    <span class="doccomment">/// Bytes occupied by the lengths of all seven vector payloads.
+<a href=#55 id=55 data-nosnippet>55</a>    /// Excludes vector headers, this owner, allocator overhead and roots.
+<a href=#56 id=56 data-nosnippet>56</a>    </span><span class="attr">#[must_use]
+<a href=#57 id=57 data-nosnippet>57</a>    </span><span class="kw">pub fn </span>payload_bytes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u128 {
+<a href=#58 id=58 data-nosnippet>58</a>        bytes::&lt;Node&gt;(<span class="self">self</span>.nodes.len())
+<a href=#59 id=59 data-nosnippet>59</a>            + bytes::&lt;usize&gt;(<span class="self">self</span>.operands.len())
+<a href=#60 id=60 data-nosnippet>60</a>            + bytes::&lt;usize&gt;(<span class="self">self</span>.numeric.conditions.len())
+<a href=#61 id=61 data-nosnippet>61</a>            + bytes::&lt;u64&gt;(<span class="self">self</span>.numeric.values.len())
+<a href=#62 id=62 data-nosnippet>62</a>            + bytes::&lt;NumericRow&gt;(<span class="self">self</span>.numeric.rows.len())
+<a href=#63 id=63 data-nosnippet>63</a>            + bytes::&lt;ThresholdDescriptor&gt;(<span class="self">self</span>.numeric.thresholds.len())
+<a href=#64 id=64 data-nosnippet>64</a>            + bytes::&lt;ExtremumCutDescriptor&gt;(<span class="self">self</span>.numeric.cuts.len())
+<a href=#65 id=65 data-nosnippet>65</a>    }
+<a href=#66 id=66 data-nosnippet>66</a>
+<a href=#67 id=67 data-nosnippet>67</a>    <span class="doccomment">/// Bytes retained by the actual capacities of all seven vector allocations.
+<a href=#68 id=68 data-nosnippet>68</a>    /// Excludes vector headers, this owner, allocator overhead and roots.
+<a href=#69 id=69 data-nosnippet>69</a>    </span><span class="attr">#[must_use]
+<a href=#70 id=70 data-nosnippet>70</a>    </span><span class="kw">pub fn </span>retained_bytes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u128 {
+<a href=#71 id=71 data-nosnippet>71</a>        bytes::&lt;Node&gt;(<span class="self">self</span>.nodes.capacity())
+<a href=#72 id=72 data-nosnippet>72</a>            + bytes::&lt;usize&gt;(<span class="self">self</span>.operands.capacity())
+<a href=#73 id=73 data-nosnippet>73</a>            + bytes::&lt;usize&gt;(<span class="self">self</span>.numeric.conditions.capacity())
+<a href=#74 id=74 data-nosnippet>74</a>            + bytes::&lt;u64&gt;(<span class="self">self</span>.numeric.values.capacity())
+<a href=#75 id=75 data-nosnippet>75</a>            + bytes::&lt;NumericRow&gt;(<span class="self">self</span>.numeric.rows.capacity())
+<a href=#76 id=76 data-nosnippet>76</a>            + bytes::&lt;ThresholdDescriptor&gt;(<span class="self">self</span>.numeric.thresholds.capacity())
+<a href=#77 id=77 data-nosnippet>77</a>            + bytes::&lt;ExtremumCutDescriptor&gt;(<span class="self">self</span>.numeric.cuts.capacity())
+<a href=#78 id=78 data-nosnippet>78</a>    }
+<a href=#79 id=79 data-nosnippet>79</a>}
+<a href=#80 id=80 data-nosnippet>80</a>
+<a href=#81 id=81 data-nosnippet>81</a><span class="kw">impl </span>FormulaView&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#82 id=82 data-nosnippet>82</a>    <span class="doccomment">/// Fallibly copy the complete raw owner, preserving row sharing and child IDs.
+<a href=#83 id=83 data-nosnippet>83</a>    /// This includes unreferenced cells and established numeric shape validation;
+<a href=#84 id=84 data-nosnippet>84</a>    /// no topology frontier or admitted-theory identity is copied. The numeric
+<a href=#85 id=85 data-nosnippet>85</a>    /// cache is safe because every node, row, descriptor and child ID is identical.
+<a href=#86 id=86 data-nosnippet>86</a>    /// Work and payload are linear in all arena lengths.
+<a href=#87 id=87 data-nosnippet>87</a>    ///
+<a href=#88 id=88 data-nosnippet>88</a>    /// # Errors
+<a href=#89 id=89 data-nosnippet>89</a>    /// Refuses failed reservations or overflow in declared logical occurrences.
+<a href=#90 id=90 data-nosnippet>90</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>try_to_parts(<span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;FormulaParts, AdmissionError&gt; {
+<a href=#91 id=91 data-nosnippet>91</a>        <span class="kw">let </span>nodes = copy(<span class="self">self</span>.nodes)<span class="question-mark">?</span>;
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="kw">let </span>operands = copy(<span class="self">self</span>.operands)<span class="question-mark">?</span>;
+<a href=#93 id=93 data-nosnippet>93</a>        <span class="kw">let </span>numeric = <span class="self">self</span>.numeric.try_clone()<span class="question-mark">?</span>;
+<a href=#94 id=94 data-nosnippet>94</a>        <span class="kw">let </span>occurrences = <span class="kw">super</span>::count_occurrences(<span class="kw-2">&amp;</span>nodes, <span class="kw-2">&amp;</span>numeric)<span class="question-mark">?</span>;
+<a href=#95 id=95 data-nosnippet>95</a>        <span class="prelude-val">Ok</span>(FormulaParts {
+<a href=#96 id=96 data-nosnippet>96</a>            nodes,
+<a href=#97 id=97 data-nosnippet>97</a>            operands,
+<a href=#98 id=98 data-nosnippet>98</a>            numeric,
+<a href=#99 id=99 data-nosnippet>99</a>            occurrences,
+<a href=#100 id=100 data-nosnippet>100</a>        })
+<a href=#101 id=101 data-nosnippet>101</a>    }
+<a href=#102 id=102 data-nosnippet>102</a>
+<a href=#103 id=103 data-nosnippet>103</a>    <span class="doccomment">/// Copy every arena, remapping absolute child IDs through `children`.
+<a href=#104 id=104 data-nosnippet>104</a>    ///
+<a href=#105 id=105 data-nosnippet>105</a>    /// The node positions and atom IDs remain unchanged. All Boolean operand and
+<a href=#106 id=106 data-nosnippet>106</a>    /// condition cells, including unused raw cells, require a map entry. Descriptor
+<a href=#107 id=107 data-nosnippet>107</a>    /// and row indices retain their sharing. The result is raw remapping input:
+<a href=#108 id=108 data-nosnippet>108</a>    /// remapped children need not precede these local node positions. In particular,
+<a href=#109 id=109 data-nosnippet>109</a>    /// detached suffixes may map their external original child IDs into a new owner.
+<a href=#110 id=110 data-nosnippet>110</a>    /// Work is linear in stored nodes and arena cells; one complete copy is retained.
+<a href=#111 id=111 data-nosnippet>111</a>    ///
+<a href=#112 id=112 data-nosnippet>112</a>    /// # Errors
+<a href=#113 id=113 data-nosnippet>113</a>    /// Refuses a missing map entry, failed reservation or occurrence overflow.
+<a href=#114 id=114 data-nosnippet>114</a>    </span><span class="kw">pub fn </span>try_remap(<span class="self">self</span>, children: <span class="kw-2">&amp;</span>[usize]) -&gt; <span class="prelude-ty">Result</span>&lt;FormulaParts, AdmissionError&gt; {
+<a href=#115 id=115 data-nosnippet>115</a>        <span class="kw">let </span><span class="kw-2">mut </span>result = <span class="self">self</span>.try_to_parts()<span class="question-mark">?</span>;
+<a href=#116 id=116 data-nosnippet>116</a>        result.numeric.invalidate_validation();
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="kw">let </span>child = |id: usize| children.get(id).copied().ok_or(AdmissionError::Edge);
+<a href=#118 id=118 data-nosnippet>118</a>        <span class="kw">for </span>node <span class="kw">in </span><span class="kw-2">&amp;mut </span>result.nodes {
+<a href=#119 id=119 data-nosnippet>119</a>            node.<span class="number">0 </span>= <span class="kw">match </span>node.<span class="number">0 </span>{
+<a href=#120 id=120 data-nosnippet>120</a>                Storage::Implies(left, right) =&gt; Storage::Implies(child(left)<span class="question-mark">?</span>, child(right)<span class="question-mark">?</span>),
+<a href=#121 id=121 data-nosnippet>121</a>                Storage::AndPair([left, right]) =&gt; Storage::AndPair([child(left)<span class="question-mark">?</span>, child(right)<span class="question-mark">?</span>]),
+<a href=#122 id=122 data-nosnippet>122</a>                Storage::OrPair([left, right]) =&gt; Storage::OrPair([child(left)<span class="question-mark">?</span>, child(right)<span class="question-mark">?</span>]),
+<a href=#123 id=123 data-nosnippet>123</a>                other =&gt; other,
+<a href=#124 id=124 data-nosnippet>124</a>            };
+<a href=#125 id=125 data-nosnippet>125</a>        }
+<a href=#126 id=126 data-nosnippet>126</a>        <span class="kw">for </span>id <span class="kw">in </span>result
+<a href=#127 id=127 data-nosnippet>127</a>            .operands
+<a href=#128 id=128 data-nosnippet>128</a>            .iter_mut()
+<a href=#129 id=129 data-nosnippet>129</a>            .chain(<span class="kw-2">&amp;mut </span>result.numeric.conditions)
+<a href=#130 id=130 data-nosnippet>130</a>        {
+<a href=#131 id=131 data-nosnippet>131</a>            <span class="kw-2">*</span>id = child(<span class="kw-2">*</span>id)<span class="question-mark">?</span>;
+<a href=#132 id=132 data-nosnippet>132</a>        }
+<a href=#133 id=133 data-nosnippet>133</a>        <span class="prelude-val">Ok</span>(result)
+<a href=#134 id=134 data-nosnippet>134</a>    }
+<a href=#135 id=135 data-nosnippet>135</a>}
+<a href=#136 id=136 data-nosnippet>136</a>
+<a href=#137 id=137 data-nosnippet>137</a><span class="kw">impl </span>FormulaTransaction&lt;<span class="lifetime">'_</span>&gt; {
+<a href=#138 id=138 data-nosnippet>138</a>    <span class="doccomment">/// Current appended payload across all seven arenas, excluding retained capacity.
+<a href=#139 id=139 data-nosnippet>139</a>    /// Includes nodes, both numeric columns and row and numeric descriptors.
+<a href=#140 id=140 data-nosnippet>140</a>    </span><span class="attr">#[must_use]
+<a href=#141 id=141 data-nosnippet>141</a>    </span><span class="kw">pub fn </span>appended_payload_bytes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u128 {
+<a href=#142 id=142 data-nosnippet>142</a>        bytes::&lt;Node&gt;(<span class="self">self</span>.parts.nodes.len() - <span class="self">self</span>.first)
+<a href=#143 id=143 data-nosnippet>143</a>            + bytes::&lt;usize&gt;(<span class="self">self</span>.parts.operands.len() - <span class="self">self</span>.operand_start)
+<a href=#144 id=144 data-nosnippet>144</a>            + bytes::&lt;usize&gt;(<span class="self">self</span>.parts.numeric.conditions.len() - <span class="self">self</span>.numeric_start.conditions)
+<a href=#145 id=145 data-nosnippet>145</a>            + bytes::&lt;u64&gt;(<span class="self">self</span>.parts.numeric.values.len() - <span class="self">self</span>.numeric_start.values)
+<a href=#146 id=146 data-nosnippet>146</a>            + bytes::&lt;NumericRow&gt;(<span class="self">self</span>.parts.numeric.rows.len() - <span class="self">self</span>.numeric_start.rows)
+<a href=#147 id=147 data-nosnippet>147</a>            + bytes::&lt;ThresholdDescriptor&gt;(
+<a href=#148 id=148 data-nosnippet>148</a>                <span class="self">self</span>.parts.numeric.thresholds.len() - <span class="self">self</span>.numeric_start.thresholds,
+<a href=#149 id=149 data-nosnippet>149</a>            )
+<a href=#150 id=150 data-nosnippet>150</a>            + bytes::&lt;ExtremumCutDescriptor&gt;(
+<a href=#151 id=151 data-nosnippet>151</a>                <span class="self">self</span>.parts.numeric.cuts.len() - <span class="self">self</span>.numeric_start.cuts,
+<a href=#152 id=152 data-nosnippet>152</a>            )
+<a href=#153 id=153 data-nosnippet>153</a>    }
+<a href=#154 id=154 data-nosnippet>154</a>
+<a href=#155 id=155 data-nosnippet>155</a>    <span class="doccomment">/// Physical appended cells across all seven arenas, for complete detachment work.
+<a href=#156 id=156 data-nosnippet>156</a>    /// A shared row is counted once, unlike logical threshold child occurrences.
+<a href=#157 id=157 data-nosnippet>157</a>    </span><span class="attr">#[must_use]
+<a href=#158 id=158 data-nosnippet>158</a>    </span><span class="kw">pub fn </span>appended_cells(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u128 {
+<a href=#159 id=159 data-nosnippet>159</a>        (<span class="self">self</span>.parts.nodes.len() - <span class="self">self</span>.first) <span class="kw">as </span>u128
+<a href=#160 id=160 data-nosnippet>160</a>            + (<span class="self">self</span>.parts.operands.len() - <span class="self">self</span>.operand_start) <span class="kw">as </span>u128
+<a href=#161 id=161 data-nosnippet>161</a>            + (<span class="self">self</span>.parts.numeric.conditions.len() - <span class="self">self</span>.numeric_start.conditions) <span class="kw">as </span>u128
+<a href=#162 id=162 data-nosnippet>162</a>            + (<span class="self">self</span>.parts.numeric.values.len() - <span class="self">self</span>.numeric_start.values) <span class="kw">as </span>u128
+<a href=#163 id=163 data-nosnippet>163</a>            + (<span class="self">self</span>.parts.numeric.rows.len() - <span class="self">self</span>.numeric_start.rows) <span class="kw">as </span>u128
+<a href=#164 id=164 data-nosnippet>164</a>            + (<span class="self">self</span>.parts.numeric.thresholds.len() - <span class="self">self</span>.numeric_start.thresholds) <span class="kw">as </span>u128
+<a href=#165 id=165 data-nosnippet>165</a>            + (<span class="self">self</span>.parts.numeric.cuts.len() - <span class="self">self</span>.numeric_start.cuts) <span class="kw">as </span>u128
+<a href=#166 id=166 data-nosnippet>166</a>    }
+<a href=#167 id=167 data-nosnippet>167</a>}
+<a href=#168 id=168 data-nosnippet>168</a>
+<a href=#169 id=169 data-nosnippet>169</a><span class="kw">mod </span>appending;
+<a href=#170 id=170 data-nosnippet>170</a><span class="kw">mod </span>selecting;
+</code></pre></div></section></main></body></html>

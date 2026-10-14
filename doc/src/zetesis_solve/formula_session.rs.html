@@ -557,59 +557,60 @@
 <a href=#557 id=557 data-nosnippet>557</a>            query_execution: <span class="prelude-val">None</span>,
 <a href=#558 id=558 data-nosnippet>558</a>            hybrid_execution: <span class="prelude-val">None</span>,
 <a href=#559 id=559 data-nosnippet>559</a>            terminal_execution: <span class="prelude-val">None</span>,
-<a href=#560 id=560 data-nosnippet>560</a>            model_construction: <span class="self">self
-<a href=#561 id=561 data-nosnippet>561</a>                </span>.construction
-<a href=#562 id=562 data-nosnippet>562</a>                .as_ref()
-<a href=#563 id=563 data-nosnippet>563</a>                .map(<span class="kw">crate</span>::model_construction::Account::statistics),
-<a href=#564 id=564 data-nosnippet>564</a>            formula_execution: <span class="self">self
-<a href=#565 id=565 data-nosnippet>565</a>                </span>.models
-<a href=#566 id=566 data-nosnippet>566</a>                .as_ref()
-<a href=#567 id=567 data-nosnippet>567</a>                .and_then(|models| <span class="self">self</span>.execution.as_ref()<span class="question-mark">?</span>.statistics(models)),
-<a href=#568 id=568 data-nosnippet>568</a>        }
-<a href=#569 id=569 data-nosnippet>569</a>    }
-<a href=#570 id=570 data-nosnippet>570</a>
-<a href=#571 id=571 data-nosnippet>571</a>    <span class="kw">fn </span>import_timings(<span class="kw-2">&amp;</span><span class="self">self</span>, phases: <span class="kw-2">&amp;</span>Recorder, timing: <span class="prelude-ty">Option</span>&lt;zetesis_sat::SearchPhaseTimings&gt;) {
-<a href=#572 id=572 data-nosnippet>572</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(timing) = timing {
-<a href=#573 id=573 data-nosnippet>573</a>            phases.search(<span class="self">self</span>.imported_timings.replace(timing), timing);
-<a href=#574 id=574 data-nosnippet>574</a>        }
-<a href=#575 id=575 data-nosnippet>575</a>    }
-<a href=#576 id=576 data-nosnippet>576</a>}
-<a href=#577 id=577 data-nosnippet>577</a>
-<a href=#578 id=578 data-nosnippet>578</a><span class="attr">#[cfg(test)]
-<a href=#579 id=579 data-nosnippet>579</a></span><span class="kw">mod </span>tests;
-<a href=#580 id=580 data-nosnippet>580</a>
-<a href=#581 id=581 data-nosnippet>581</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; FormulaSession&lt;<span class="lifetime">'a</span>, <span class="kw">crate</span>::formula_execution::Execution&gt; {
-<a href=#582 id=582 data-nosnippet>582</a>    <span class="doccomment">/// Own semantic preparation before choosing its execution route. A stopped
-<a href=#583 id=583 data-nosnippet>583</a>    /// preparation retains its receipts without constructing a device pipeline.
-<a href=#584 id=584 data-nosnippet>584</a>    /// Route construction keeps the ordinary session's fallible start door.
-<a href=#585 id=585 data-nosnippet>585</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>with_resources(
-<a href=#586 id=586 data-nosnippet>586</a>        input: Input&lt;<span class="lifetime">'a</span>&gt;,
-<a href=#587 id=587 data-nosnippet>587</a>        config: <span class="kw-2">&amp;</span>SolveConfig,
-<a href=#588 id=588 data-nosnippet>588</a>        resources: <span class="kw-2">&amp;</span><span class="kw">crate</span>::ExecutionResources,
-<a href=#589 id=589 data-nosnippet>589</a>        observations: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>ExecutionSink,
-<a href=#590 id=590 data-nosnippet>590</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
-<a href=#591 id=591 data-nosnippet>591</a>        phases: <span class="kw-2">&amp;</span>Recorder,
-<a href=#592 id=592 data-nosnippet>592</a>        selection: AnswerSelection,
-<a href=#593 id=593 data-nosnippet>593</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, SolveError&gt; {
-<a href=#594 id=594 data-nosnippet>594</a>        <span class="kw">let </span><span class="kw-2">mut </span>session = <span class="self">Self</span>::uninitialized(input, selection);
-<a href=#595 id=595 data-nosnippet>595</a>        <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = session.initialize(config, observations, cancellation, phases) {
-<a href=#596 id=596 data-nosnippet>596</a>            session.fail(error, phases);
-<a href=#597 id=597 data-nosnippet>597</a>        }
-<a href=#598 id=598 data-nosnippet>598</a>        <span class="kw">if </span>session.final_outcome.is_none() {
-<a href=#599 id=599 data-nosnippet>599</a>            <span class="kw">let </span>plan = session
-<a href=#600 id=600 data-nosnippet>600</a>                .models
-<a href=#601 id=601 data-nosnippet>601</a>                .as_ref()
-<a href=#602 id=602 data-nosnippet>602</a>                .and_then(StableModels::prepared_tight_certificate);
-<a href=#603 id=603 data-nosnippet>603</a>            session.execution = <span class="prelude-val">Some</span>(phases.measure(SolvePhase::ExecutionSetup, || {
-<a href=#604 id=604 data-nosnippet>604</a>                <span class="kw">crate</span>::formula_execution::Execution::with_resources(
-<a href=#605 id=605 data-nosnippet>605</a>                    config,
-<a href=#606 id=606 data-nosnippet>606</a>                    resources,
-<a href=#607 id=607 data-nosnippet>607</a>                    plan,
-<a href=#608 id=608 data-nosnippet>608</a>                    observations,
-<a href=#609 id=609 data-nosnippet>609</a>                )
-<a href=#610 id=610 data-nosnippet>610</a>            })<span class="question-mark">?</span>);
-<a href=#611 id=611 data-nosnippet>611</a>        }
-<a href=#612 id=612 data-nosnippet>612</a>        <span class="prelude-val">Ok</span>(session)
-<a href=#613 id=613 data-nosnippet>613</a>    }
-<a href=#614 id=614 data-nosnippet>614</a>}
+<a href=#560 id=560 data-nosnippet>560</a>            source_evaluation: <span class="prelude-val">None</span>,
+<a href=#561 id=561 data-nosnippet>561</a>            model_construction: <span class="self">self
+<a href=#562 id=562 data-nosnippet>562</a>                </span>.construction
+<a href=#563 id=563 data-nosnippet>563</a>                .as_ref()
+<a href=#564 id=564 data-nosnippet>564</a>                .map(<span class="kw">crate</span>::model_construction::Account::statistics),
+<a href=#565 id=565 data-nosnippet>565</a>            formula_execution: <span class="self">self
+<a href=#566 id=566 data-nosnippet>566</a>                </span>.models
+<a href=#567 id=567 data-nosnippet>567</a>                .as_ref()
+<a href=#568 id=568 data-nosnippet>568</a>                .and_then(|models| <span class="self">self</span>.execution.as_ref()<span class="question-mark">?</span>.statistics(models)),
+<a href=#569 id=569 data-nosnippet>569</a>        }
+<a href=#570 id=570 data-nosnippet>570</a>    }
+<a href=#571 id=571 data-nosnippet>571</a>
+<a href=#572 id=572 data-nosnippet>572</a>    <span class="kw">fn </span>import_timings(<span class="kw-2">&amp;</span><span class="self">self</span>, phases: <span class="kw-2">&amp;</span>Recorder, timing: <span class="prelude-ty">Option</span>&lt;zetesis_sat::SearchPhaseTimings&gt;) {
+<a href=#573 id=573 data-nosnippet>573</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(timing) = timing {
+<a href=#574 id=574 data-nosnippet>574</a>            phases.search(<span class="self">self</span>.imported_timings.replace(timing), timing);
+<a href=#575 id=575 data-nosnippet>575</a>        }
+<a href=#576 id=576 data-nosnippet>576</a>    }
+<a href=#577 id=577 data-nosnippet>577</a>}
+<a href=#578 id=578 data-nosnippet>578</a>
+<a href=#579 id=579 data-nosnippet>579</a><span class="attr">#[cfg(test)]
+<a href=#580 id=580 data-nosnippet>580</a></span><span class="kw">mod </span>tests;
+<a href=#581 id=581 data-nosnippet>581</a>
+<a href=#582 id=582 data-nosnippet>582</a><span class="kw">impl</span>&lt;<span class="lifetime">'a</span>&gt; FormulaSession&lt;<span class="lifetime">'a</span>, <span class="kw">crate</span>::formula_execution::Execution&gt; {
+<a href=#583 id=583 data-nosnippet>583</a>    <span class="doccomment">/// Own semantic preparation before choosing its execution route. A stopped
+<a href=#584 id=584 data-nosnippet>584</a>    /// preparation retains its receipts without constructing a device pipeline.
+<a href=#585 id=585 data-nosnippet>585</a>    /// Route construction keeps the ordinary session's fallible start door.
+<a href=#586 id=586 data-nosnippet>586</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>with_resources(
+<a href=#587 id=587 data-nosnippet>587</a>        input: Input&lt;<span class="lifetime">'a</span>&gt;,
+<a href=#588 id=588 data-nosnippet>588</a>        config: <span class="kw-2">&amp;</span>SolveConfig,
+<a href=#589 id=589 data-nosnippet>589</a>        resources: <span class="kw-2">&amp;</span><span class="kw">crate</span>::ExecutionResources,
+<a href=#590 id=590 data-nosnippet>590</a>        observations: <span class="kw-2">&amp;mut </span><span class="kw">impl </span>ExecutionSink,
+<a href=#591 id=591 data-nosnippet>591</a>        cancellation: <span class="kw-2">&amp;</span>Cancellation,
+<a href=#592 id=592 data-nosnippet>592</a>        phases: <span class="kw-2">&amp;</span>Recorder,
+<a href=#593 id=593 data-nosnippet>593</a>        selection: AnswerSelection,
+<a href=#594 id=594 data-nosnippet>594</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="self">Self</span>, SolveError&gt; {
+<a href=#595 id=595 data-nosnippet>595</a>        <span class="kw">let </span><span class="kw-2">mut </span>session = <span class="self">Self</span>::uninitialized(input, selection);
+<a href=#596 id=596 data-nosnippet>596</a>        <span class="kw">if let </span><span class="prelude-val">Err</span>(error) = session.initialize(config, observations, cancellation, phases) {
+<a href=#597 id=597 data-nosnippet>597</a>            session.fail(error, phases);
+<a href=#598 id=598 data-nosnippet>598</a>        }
+<a href=#599 id=599 data-nosnippet>599</a>        <span class="kw">if </span>session.final_outcome.is_none() {
+<a href=#600 id=600 data-nosnippet>600</a>            <span class="kw">let </span>plan = session
+<a href=#601 id=601 data-nosnippet>601</a>                .models
+<a href=#602 id=602 data-nosnippet>602</a>                .as_ref()
+<a href=#603 id=603 data-nosnippet>603</a>                .and_then(StableModels::prepared_tight_certificate);
+<a href=#604 id=604 data-nosnippet>604</a>            session.execution = <span class="prelude-val">Some</span>(phases.measure(SolvePhase::ExecutionSetup, || {
+<a href=#605 id=605 data-nosnippet>605</a>                <span class="kw">crate</span>::formula_execution::Execution::with_resources(
+<a href=#606 id=606 data-nosnippet>606</a>                    config,
+<a href=#607 id=607 data-nosnippet>607</a>                    resources,
+<a href=#608 id=608 data-nosnippet>608</a>                    plan,
+<a href=#609 id=609 data-nosnippet>609</a>                    observations,
+<a href=#610 id=610 data-nosnippet>610</a>                )
+<a href=#611 id=611 data-nosnippet>611</a>            })<span class="question-mark">?</span>);
+<a href=#612 id=612 data-nosnippet>612</a>        }
+<a href=#613 id=613 data-nosnippet>613</a>        <span class="prelude-val">Ok</span>(session)
+<a href=#614 id=614 data-nosnippet>614</a>    }
+<a href=#615 id=615 data-nosnippet>615</a>}
 </code></pre></div></section></main></body></html>

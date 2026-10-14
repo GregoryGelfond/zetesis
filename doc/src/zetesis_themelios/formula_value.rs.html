@@ -265,49 +265,47 @@
 <a href=#265 id=265 data-nosnippet>265</a>    </span><span class="kw">fn </span>undeclared_inputs_do_not_affect_evaluation() {
 <a href=#266 id=266 data-nosnippet>266</a>        <span class="kw">use </span><span class="kw">crate</span>::formula_ir::{Expression, Operation};
 <a href=#267 id=267 data-nosnippet>267</a>        <span class="kw">let </span><span class="kw-2">mut </span>fixture = Fixture::default();
-<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">let </span>expression = Expression {
-<a href=#269 id=269 data-nosnippet>269</a>            nodes: <span class="macro">vec!</span>[
-<a href=#270 id=270 data-nosnippet>270</a>                Operation::Variable(<span class="number">1</span>),
-<a href=#271 id=271 data-nosnippet>271</a>                Operation::Constructor(Box::new(Constructor {
-<a href=#272 id=272 data-nosnippet>272</a>                    shape: fixture.constructor(
-<a href=#273 id=273 data-nosnippet>273</a>                        ValueNodeRef::Function {
-<a href=#274 id=274 data-nosnippet>274</a>                            name: <span class="string">"f"</span>,
-<a href=#275 id=275 data-nosnippet>275</a>                            sign: Sign::Positive,
-<a href=#276 id=276 data-nosnippet>276</a>                            arity: <span class="number">1</span>,
-<a href=#277 id=277 data-nosnippet>277</a>                        },
-<a href=#278 id=278 data-nosnippet>278</a>                        location(),
-<a href=#279 id=279 data-nosnippet>279</a>                    ),
-<a href=#280 id=280 data-nosnippet>280</a>                    arguments: <span class="macro">vec!</span>[<span class="number">0</span>],
-<a href=#281 id=281 data-nosnippet>281</a>                })),
-<a href=#282 id=282 data-nosnippet>282</a>            ],
-<a href=#283 id=283 data-nosnippet>283</a>        };
-<a href=#284 id=284 data-nosnippet>284</a>        <span class="macro">assert_eq!</span>(expression.inputs().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(), <span class="macro">vec!</span>[<span class="number">1</span>]);
-<a href=#285 id=285 data-nosnippet>285</a>        fixture.with(location(), |<span class="kw">_</span>, computation, counters| {
-<a href=#286 id=286 data-nosnippet>286</a>            <span class="kw">for </span>ignored <span class="kw">in </span>-<span class="number">4</span>..=<span class="number">4 </span>{
-<a href=#287 id=287 data-nosnippet>287</a>                <span class="kw">for </span>input <span class="kw">in </span>-<span class="number">4</span>..=<span class="number">4 </span>{
-<a href=#288 id=288 data-nosnippet>288</a>                    <span class="kw">let </span>fields = binding(
-<a href=#289 id=289 data-nosnippet>289</a>                        <span class="kw-2">&amp;</span>[<span class="prelude-val">Some</span>(Value::Number(ignored)), <span class="prelude-val">Some</span>(Value::Number(input))],
-<a href=#290 id=290 data-nosnippet>290</a>                        computation,
-<a href=#291 id=291 data-nosnippet>291</a>                        counters,
-<a href=#292 id=292 data-nosnippet>292</a>                        location(),
-<a href=#293 id=293 data-nosnippet>293</a>                    );
-<a href=#294 id=294 data-nosnippet>294</a>                    <span class="kw">let </span>key = <span class="kw">crate</span>::formula_support::expression(
-<a href=#295 id=295 data-nosnippet>295</a>                        <span class="kw-2">&amp;</span>expression,
-<a href=#296 id=296 data-nosnippet>296</a>                        <span class="kw-2">&amp;</span>fields,
-<a href=#297 id=297 data-nosnippet>297</a>                        computation,
-<a href=#298 id=298 data-nosnippet>298</a>                        <span class="kw-2">&amp;</span>FormulaLimits::default(),
-<a href=#299 id=299 data-nosnippet>299</a>                        counters,
-<a href=#300 id=300 data-nosnippet>300</a>                        location(),
-<a href=#301 id=301 data-nosnippet>301</a>                    )
-<a href=#302 id=302 data-nosnippet>302</a>                    .unwrap();
-<a href=#303 id=303 data-nosnippet>303</a>                    <span class="kw">let </span>result = computation.read().term(<span class="kw-2">&amp;</span>key).unwrap();
-<a href=#304 id=304 data-nosnippet>304</a>                    <span class="macro">assert_eq!</span>(
-<a href=#305 id=305 data-nosnippet>305</a>                        result.child(<span class="number">0</span>).unwrap().descriptor(),
-<a href=#306 id=306 data-nosnippet>306</a>                        ValueNodeRef::Number(input)
-<a href=#307 id=307 data-nosnippet>307</a>                    );
-<a href=#308 id=308 data-nosnippet>308</a>                }
-<a href=#309 id=309 data-nosnippet>309</a>            }
-<a href=#310 id=310 data-nosnippet>310</a>        });
-<a href=#311 id=311 data-nosnippet>311</a>    }
-<a href=#312 id=312 data-nosnippet>312</a>}
+<a href=#268 id=268 data-nosnippet>268</a>        <span class="kw">let </span>expression = Expression::new(<span class="macro">vec!</span>[
+<a href=#269 id=269 data-nosnippet>269</a>            Operation::Variable(<span class="number">1</span>),
+<a href=#270 id=270 data-nosnippet>270</a>            Operation::Constructor(Box::new(Constructor {
+<a href=#271 id=271 data-nosnippet>271</a>                shape: fixture.constructor(
+<a href=#272 id=272 data-nosnippet>272</a>                    ValueNodeRef::Function {
+<a href=#273 id=273 data-nosnippet>273</a>                        name: <span class="string">"f"</span>,
+<a href=#274 id=274 data-nosnippet>274</a>                        sign: Sign::Positive,
+<a href=#275 id=275 data-nosnippet>275</a>                        arity: <span class="number">1</span>,
+<a href=#276 id=276 data-nosnippet>276</a>                    },
+<a href=#277 id=277 data-nosnippet>277</a>                    location(),
+<a href=#278 id=278 data-nosnippet>278</a>                ),
+<a href=#279 id=279 data-nosnippet>279</a>                arguments: <span class="macro">vec!</span>[<span class="number">0</span>],
+<a href=#280 id=280 data-nosnippet>280</a>            })),
+<a href=#281 id=281 data-nosnippet>281</a>        ]);
+<a href=#282 id=282 data-nosnippet>282</a>        <span class="macro">assert_eq!</span>(expression.inputs().collect::&lt;Vec&lt;<span class="kw">_</span>&gt;&gt;(), <span class="macro">vec!</span>[<span class="number">1</span>]);
+<a href=#283 id=283 data-nosnippet>283</a>        fixture.with(location(), |<span class="kw">_</span>, computation, counters| {
+<a href=#284 id=284 data-nosnippet>284</a>            <span class="kw">for </span>ignored <span class="kw">in </span>-<span class="number">4</span>..=<span class="number">4 </span>{
+<a href=#285 id=285 data-nosnippet>285</a>                <span class="kw">for </span>input <span class="kw">in </span>-<span class="number">4</span>..=<span class="number">4 </span>{
+<a href=#286 id=286 data-nosnippet>286</a>                    <span class="kw">let </span>fields = binding(
+<a href=#287 id=287 data-nosnippet>287</a>                        <span class="kw-2">&amp;</span>[<span class="prelude-val">Some</span>(Value::Number(ignored)), <span class="prelude-val">Some</span>(Value::Number(input))],
+<a href=#288 id=288 data-nosnippet>288</a>                        computation,
+<a href=#289 id=289 data-nosnippet>289</a>                        counters,
+<a href=#290 id=290 data-nosnippet>290</a>                        location(),
+<a href=#291 id=291 data-nosnippet>291</a>                    );
+<a href=#292 id=292 data-nosnippet>292</a>                    <span class="kw">let </span>key = <span class="kw">crate</span>::formula_support::expression(
+<a href=#293 id=293 data-nosnippet>293</a>                        <span class="kw-2">&amp;</span>expression,
+<a href=#294 id=294 data-nosnippet>294</a>                        <span class="kw-2">&amp;</span>fields,
+<a href=#295 id=295 data-nosnippet>295</a>                        computation,
+<a href=#296 id=296 data-nosnippet>296</a>                        <span class="kw-2">&amp;</span>FormulaLimits::default(),
+<a href=#297 id=297 data-nosnippet>297</a>                        counters,
+<a href=#298 id=298 data-nosnippet>298</a>                        location(),
+<a href=#299 id=299 data-nosnippet>299</a>                    )
+<a href=#300 id=300 data-nosnippet>300</a>                    .unwrap();
+<a href=#301 id=301 data-nosnippet>301</a>                    <span class="kw">let </span>result = computation.read().term(<span class="kw-2">&amp;</span>key).unwrap();
+<a href=#302 id=302 data-nosnippet>302</a>                    <span class="macro">assert_eq!</span>(
+<a href=#303 id=303 data-nosnippet>303</a>                        result.child(<span class="number">0</span>).unwrap().descriptor(),
+<a href=#304 id=304 data-nosnippet>304</a>                        ValueNodeRef::Number(input)
+<a href=#305 id=305 data-nosnippet>305</a>                    );
+<a href=#306 id=306 data-nosnippet>306</a>                }
+<a href=#307 id=307 data-nosnippet>307</a>            }
+<a href=#308 id=308 data-nosnippet>308</a>        });
+<a href=#309 id=309 data-nosnippet>309</a>    }
+<a href=#310 id=310 data-nosnippet>310</a>}
 </code></pre></div></section></main></body></html>

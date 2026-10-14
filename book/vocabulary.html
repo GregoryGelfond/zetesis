@@ -35,10 +35,10 @@
             const path_to_root = "";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "searchindex-8b33e208.js";
+            window.path_to_searchindex_js = "searchindex-fbb9e008.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="toc-2436da5c.js"></script>
+        <script src="toc-5c747b16.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -207,7 +207,12 @@ representations. A representation name does not confer a semantic property.</p>
 <tr><td>A region visited as a leaf</td><td><code>RegionStatistics::leaves</code>, the carrier’s <code>regions_leaves</code>, the proposers’ <code>leaves</code></td><td><code>decided_leaf_models</code></td></tr>
 <tr><td>The carrier’s narrowing by its two closures</td><td><code>NarrowingState</code>, <code>narrowing_passes</code>, <code>narrowing_stop</code>, <code>root_refuted</code>; the record key <code>carrier_narrowing</code></td><td><code>Bounds.lean</code></td></tr>
 <tr><td>An argument’s bound</td><td><code>argument_bounds::infer</code>, <code>Bound</code></td><td>None; the inference serves preparation</td></tr>
+<tr><td>An integer comparison form: a comparison literal’s operands compiled once, when the compiler constructs the literal, for deciding it with machine integers</td><td><code>formula_ir::Comparison</code>, <code>formula_ir::integer</code> (<code>IntegerComparison</code>) and <code>formula_support::integer_comparisons</code>; the grounding counters <code>integer_comparisons</code> and <code>integer_comparison_declines</code> (rows decided and declined); <code>ComparisonForms</code> (the prepared program’s literals with a form, <code>with_form</code>, and without one by reason)</td><td>None; the form’s verdict is the ASP order restricted to numbers</td></tr>
+<tr><td>A checked numeric index: one immutable relation snapshot indexed by a column-mapped expression’s integer value; equality and range probes retain source row order</td><td><code>formula_support::queries::expression_keys</code>; <code>numeric_index_builds</code> and <code>numeric_index_declines</code> count completed certificates and data declines; <code>expression_key_probes</code>/<code>range_probes</code> count queries and <code>expression_key_rows</code>/<code>range_probe_rows</code> count visited rows</td><td>The residual comparison and first-new partition remain required; index totality is checked at build time</td></tr>
 <tr><td>A tuple, a block of tuples sharing a bound prefix, the pending marks of a layout</td><td>the dense relations’ <code>Tuple</code>, <code>Block</code> and <code>block_steps</code>, <code>PendingMarks</code></td><td>None</td></tr>
+<tr><td>A fact block: one predicate’s fact rows at one position of the prepared program, in a product or run layout</td><td><code>formula_facts::FactBlock</code>, traversed through <code>Item::Facts</code>; its <a href="architecture/grounding.html#facts-as-fact-blocks">layout rule</a> preserves the fact rules’ order</td><td>None; each row is a body-free ground rule</td></tr>
+<tr><td>A positive body atom named from a held matched row, with an unchanged-prefix node reused when current</td><td><code>formula_support::witnesses::WitnessRow</code>, <code>formula_ground::matched_nodes::MatchedNodes</code>; <code>row_atoms</code> counts successful ordinary-emission/capture names and <code>row_atom_reuses</code> its reused subset, excluding the producer and element joins</td><td><code>AtomCatalogs.identity_determines_position</code>, <code>DagSharing.intern_stable_under_extension</code>; matching, lifetime and cache currency remain runtime obligations</td></tr>
+<tr><td>A complete answer count: the size of the selected full answer-set family, or its optimal ties, established only after exhaustion</td><td><code>SemanticOutcome::complete_answer_count</code>, <code>SessionBuilder::counting</code>, <code>PublicationMode::Count</code> and <code>CountRenderer</code>; <code>--count</code> prints the count and ignores display/projection identity</td><td>Original answer-set membership and complete selected-family coverage are both required</td></tr>
 <tr><td>A statistics record; an admission’s usage; a receipt</td><td><code>RegionCounts</code> and its kin; <code>ExpansionUsage</code>; a <code>receipt</code> in <code>zetesis-core</code> is a value proving an operation completed</td><td>None</td></tr>
 <tr><td>This solver’s run and the reference solver</td><td><code>native</code> and <code>reference</code> in the series view; clingo is the tool filling the reference’s role</td><td>None</td></tr>
 <tr><td>A requested solver configuration</td><td>a validation <code>profile</code>, a request for a <code>SolveConfig</code></td><td>None</td></tr>
@@ -216,6 +221,8 @@ representations. A representation name does not confer a semantic property.</p>
 </tbody>
 </table>
 </div>
+<p>A fact block stores source facts. The dense relation’s block above groups
+execution tuples sharing a bound prefix; it is a separate representation.</p>
 <p>An ordinary Rust <code>Model</code> or <code>logical::AnswerSet</code> is a collection, not by itself
 a sealed answer-set certificate. Likewise, a <code>Check</code> value describing a decision should
 not be attached to another subject; the checked-owner APIs preserve that

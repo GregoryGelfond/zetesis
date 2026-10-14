@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
+            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2436da5c.js"></script>
+        <script src="../toc-5c747b16.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -201,9 +201,11 @@ Use the tables below to find a specific capability.</p>
 <tr><td>Admit ASP source</td><td><code>zetesis_themelios::{admit, admit_extended, prepare_formula, admit_formula}</code> and bundle counterparts</td><td><a href="source.html">Source preparation</a></td></tr>
 <tr><td>Prepare or admit a logical formula program</td><td><code>zetesis_themelios::{prepare_program_formula, admit_program_formula, ProgramAdmissionOptions, PreparedFormula, ProgramSite}</code></td><td><a href="source.html#prepare-a-logical-formula-program">Typed formula preparation</a></td></tr>
 <tr><td>Prepare an owned logical relational program</td><td><code>zetesis_themelios::{prepare_program_relational, ProgramRelationalOptions, PreparedRelational}</code></td><td><a href="source.html#admit-an-existing-logical-program">Owned relational preparation</a></td></tr>
+<tr><td>Choose extended or formula admission once per input door</td><td><code>ParsedSource::admit_automatic_with_cancellation</code>, <code>admit_bundle_automatic_with_cancellation</code>, <code>prepare_program_automatic</code>, <code>AutomaticAdmission</code>, <code>AutomaticAdmissionFailure</code></td><td><a href="source.html#reuse-original-input-across-profiles">Parsed-source transfer</a> and <a href="source.html#admit-an-existing-logical-program">logical programs</a></td></tr>
 <tr><td>Admit a logical program under S0</td><td><code>zetesis_themelios::{admit_program, ProgramAdmissionOptions, AdmittedProgram}</code></td><td><a href="source.html#borrow-the-strict-relational-input">Typed program admission</a></td></tr>
 <tr><td>Configure ordinary resource policy</td><td><code>zetesis_solve::Resources</code></td><td><a href="sessions.html">Sessions</a></td></tr>
 <tr><td>Solve admitted input</td><td><code>zetesis_solve::{PreparedInput, Session, SessionBuilder, SolveConfig}</code></td><td><a href="sessions.html">Sessions</a></td></tr>
+<tr><td>Count full answer sets or optimal ties</td><td><code>zetesis_solve::{SessionBuilder::counting, SemanticOutcome::complete_answer_count}</code></td><td><a href="outcomes.html#replace-answer-presentation">Counting</a></td></tr>
 <tr><td>Collect a complete native family</td><td><code>zetesis_solve::WorldView::collect</code>, <code>SessionBuilder::collect</code>, <code>WorldViewLimits</code></td><td><a href="outcomes.html">Completion and output</a></td></tr>
 <tr><td>Inspect an answer or interpretation</td><td><code>AnswerSet</code>, <code>zetesis_core::{Interpretation, Model}</code>, <code>catalog::{AtomRef, TermRef}</code></td><td><a href="models.html">Interpretations and atoms</a></td></tr>
 <tr><td>Evaluate costs and source displays</td><td><code>zetesis_objective</code>, admitted-owner observation APIs</td><td><a href="costs-and-output.html">Costs and shown terms</a></td></tr>
@@ -230,7 +232,7 @@ retain the contracts documented in the themelios manual.</p>
 <tr><th>Task</th><th>Public library entry points</th><th>Contract or example</th></tr>
 </thead>
 <tbody>
-<tr><td>Construct finite relational programs</td><td><code>zetesis_core::{Program, Template, Atom, Seed}</code></td><td><a href="parallel.html">Parallel and lazy checking</a></td></tr>
+<tr><td>Construct finite relational programs</td><td><code>zetesis_core::{Program, Template, FactTables, FactSegment, Atom, Seed}</code></td><td><a href="parallel.html">Parallel and lazy checking</a></td></tr>
 <tr><td>Share admitted template components</td><td><code>TemplateCatalogBuilder</code>, <code>TemplateCatalog</code>, <code>TemplateRef</code>, <code>PatternRef</code>, <code>TemplateTerm</code></td><td><a href="../architecture/ownership.html">Canonical ownership</a></td></tr>
 <tr><td>Read or explicitly export canonical values</td><td><code>catalog::{AtomRef, PredicateRef, TermRef}</code>, <code>TermRef::nodes</code>, <code>TermRef::write_with</code>, <code>AtomRef::to_atom</code></td><td><a href="models.html#borrowing-and-explicit-copies">Borrowing and explicit copies</a></td></tr>
 <tr><td>Build typed vocabulary without a program or atom population</td><td><code>catalog::{VocabularyBuilder, Vocabulary}</code></td><td><a href="models.html#scoped-term-workspaces">Scoped term workspaces</a></td></tr>
@@ -310,6 +312,61 @@ semantic solver libraries. Record checks, physical tests and Lean proofs have
 different scopes; none alone certifies the complete Rust/WGSL implementation.
 See <a href="../reference/validation.html">validation</a> and
 <a href="../lean/correspondence.html">proof correspondence</a> before extending those claims.</p>
+<h2 id="migrating-from-050"><a class="header" href="#migrating-from-050">Migrating from 0.5.0</a></h2>
+<p>The changes below affect direct library callers. Source syntax is unchanged;
+aggregate admission and execution/resource behavior are described in the
+<a href="../reference/language.html#numeric-boundaries-and-refusal-meaning">language reference</a>
+and <a href="outcomes.html#resource-contracts">resource contracts</a>.</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Previous use</th><th>Migration</th></tr>
+</thead>
+<tbody>
+<tr><td><code>zetesis_core::Program::new(templates, limits)</code></td><td>Pass <code>FactTables::default()</code> as the second argument, or supply explicit facts. Use <code>rules()</code> for all original rule occurrences and <code>templates()</code> for the separate template sequence. See <a href="parallel.html#construct-templates-and-explicit-facts">explicit facts</a>.</td></tr>
+<tr><td>Matching <code>zetesis_core::AdmissionError</code></td><td>Replace <code>Canonical { error, template }</code> with <code>Canonical { error, origin }</code> and handle <code>FactLimitExceeded</code>. <code>template_index()</code> and <code>fact_index()</code> resolve their separate input sequences; see <a href="parallel.html#construct-templates-and-explicit-facts">explicit facts</a>.</td></tr>
+<tr><td>Matching <code>DomainObservation::Inapplicable</code> or reading its former <code>Analyzed(&amp;Analysis)</code> payload</td><td>Remove the <code>Inapplicable</code> arm. <code>Analyzed</code> carries <code>NumericAnalysis</code>: use <code>analysis()</code> for bounds/statistics, <code>catalog()</code> for canonical keys, and <code>arguments()</code> for predicate coordinates. Finite-guard applicability is separate; see <a href="source.html#optional-numeric-analysis-and-domain-guards">domain observation</a>.</td></tr>
+<tr><td>Exhaustive <code>zetesis_ferraris::NodeView</code> matches</td><td>Handle <code>Threshold</code> and <code>ExtremumCut</code>. Formula storage now includes shared numeric arenas; preserve them when copying. See <a href="reducts.html#numeric-formula-storage">finite formulas</a>.</td></tr>
+<tr><td>Exhaustive <code>zetesis_ferraris::AdmissionError</code> matches</td><td>Handle <code>ThresholdShape</code>, <code>ThresholdMeasure</code>, <code>NumericShape</code>, <code>NumericDomain</code>, <code>OrdinalRank</code> and <code>OrdinalCut</code>. These distinguish numeric shape/measure refusals from allocation and configured limits.</td></tr>
+<tr><td>Calling <code>zetesis_ferraris::Knowledge::preferred_atom_reserved</code></td><td>Pass <code>&amp;ChoiceHeads</code> before cancellation. <code>ChoiceHeads::default()</code> preserves the previous ranking; <code>Extraction::choice_heads</code> supplies the extracted choice heads. <code>OriginalSubject::with_choices</code> selects the same ranking for narrowing that chooses its own split.</td></tr>
+<tr><td>Constructing or destructuring <code>zetesis_sat::RegionSearchStatistics</code></td><td>It now has <code>workers</code> and is non-exhaustive. Construct with <code>Default::default()</code> and assign fields; destructure with <code>..</code>. The new <code>RegionWorkerStatistics</code> is also non-exhaustive.</td></tr>
+<tr><td>Selecting or matching worker engagement</td><td><code>StableModels::with_region_workers_engaging</code> accepts <code>Engagement</code>; <code>Immediate</code> starts workers at the first pull. <code>Engagement</code> and the reported <code>RegionWalkEngagement</code> are non-exhaustive, so external matches need a fallback arm. See <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-sat/README.md#walking-the-tree-with-several-workers">parallel walks</a>.</td></tr>
+<tr><td>Exhaustive <code>zetesis_cli::RunError</code> or <code>zetesis_validation::performance::matrix::Decision</code> matches</td><td>Handle <code>GpuExecutableUnavailable</code>, meaning the installed CPU front could not run its GPU executable. This remains separate from unavailable compiled backend support.</td></tr>
+<tr><td>Exhaustive <code>zetesis_validation::curated::Error</code> or <code>zetesis_validation::examples::Error</code> matches</td><td>Handle <code>Irregular(PathBuf)</code> for a resolved input that is not a regular file. These cases previously used <code>Path</code>; that variant still reports paths outside the selected root.</td></tr>
+<tr><td>Injecting a diagnostics writer whose behavior depends on write-call boundaries</td><td>Records and styled diagnostic lines now reach <code>write_all</code> as complete units. Bytes are unchanged; see <a href="outcomes.html#diagnostic-writer-boundaries">writer boundaries</a>.</td></tr>
+</tbody>
+</table>
+</div>
+<p><code>GroundingObserver::domain_diagnostics_enabled()</code> defaults to true, preserving
+existing domain callbacks. An observer may return false to omit the callback,
+integer-certificate requests and census work; this does not disable the shared
+analysis or finite-domain guards. Delegating observers can delegate that request
+alongside the callback. See <a href="source.html#optional-numeric-analysis-and-domain-guards">domain observation</a>.</p>
+<h3 id="removed-and-private-helpers"><a class="header" href="#removed-and-private-helpers">Removed and private helpers</a></h3>
+<p>Replace <code>zetesis_wgpu::{GpuOracle, GpuTightOracle, GpuFormulaOracle}::new_metal</code>
+with <code>new_selected(options, GpuSelection { api: GpuApi::Metal })</code>.
+For <code>GpuFormulaOracle::new_metal_with_projection</code>, use
+<code>new_selected_with_projection</code> with the same selection and projection.
+<code>zetesis_core::catalog::CatalogRead::constructor_of_predicate</code> is removed.</p>
+<p>The following helpers were public in 0.5.0 and are now crate-private:</p>
+<div class="table-wrapper">
+<table>
+<thead>
+<tr><th>Crate</th><th>Helpers</th></tr>
+</thead>
+<tbody>
+<tr><td><code>zetesis-cli</code></td><td><code>RunFailure::into_cause</code></td></tr>
+<tr><td><code>zetesis-core</code></td><td><code>AtomKey::compare_ref</code>, <code>AtomRef::compare_key_with</code>, <code>Model::selection_payload_bytes</code>, <code>Predicate::shares_name</code></td></tr>
+<tr><td><code>zetesis-cpu</code></td><td><code>CONSTRAINT_HEAD</code>, <code>InstanceAtomIter</code></td></tr>
+<tr><td><code>zetesis-engine</code></td><td><code>OutputLimits::for_resources</code></td></tr>
+<tr><td><code>zetesis-maintenance</code></td><td><code>is_record</code></td></tr>
+<tr><td><code>zetesis-sat</code></td><td><code>CompletionExecutor::DEFAULT_SCRATCH_BYTES</code>, <code>ReductPreparationLimits::DEFAULT_BYTES</code></td></tr>
+<tr><td><code>zetesis-themelios</code></td><td><code>SourceBundle::working_directory</code>, <code>Encoded::into_text</code>, <code>ProgramSite::with_location</code>, <code>ProgramSite::with_statement</code></td></tr>
+<tr><td><code>zetesis-validation</code></td><td><code>Contract::with_witnesses</code>, <code>Contract::optimal_family</code>, <code>Capture::stderr_text</code>, <code>process::invoke_supervised_with_cancellation</code></td></tr>
+<tr><td><code>zetesis-wgpu</code></td><td><code>GpuLazyOracle::check_batch_with_source</code>, <code>GpuTightOracle::from_context_with_support</code></td></tr>
+</tbody>
+</table>
+</div>
 <h2 id="migrating-from-040"><a class="header" href="#migrating-from-040">Migrating from 0.4.0</a></h2>
 <p>Lazy formula grounding now accepts objectives and GPU backends. The <code>zetesis</code>
 facade remains CPU enumeration of unscored, unprojected answer sets; these

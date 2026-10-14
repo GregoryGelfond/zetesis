@@ -83,7 +83,7 @@
 <a href=#83 id=83 data-nosnippet>83</a>            .map(|range| <span class="kw-2">&amp;</span><span class="self">self</span>.entries[range[<span class="number">0</span>]..range[<span class="number">1</span>]])
 <a href=#84 id=84 data-nosnippet>84</a>    }
 <a href=#85 id=85 data-nosnippet>85</a>
-<a href=#86 id=86 data-nosnippet>86</a>    <span class="attr">#[cfg(test)]
+<a href=#86 id=86 data-nosnippet>86</a>    <span class="doccomment">/// Owned header and actual vector capacity, without allocator metadata.
 <a href=#87 id=87 data-nosnippet>87</a>    </span><span class="kw">pub</span>(<span class="kw">super</span>) <span class="kw">fn </span>retained_bytes(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; u128 {
 <a href=#88 id=88 data-nosnippet>88</a>        std::mem::size_of::&lt;<span class="self">Self</span>&gt;() <span class="kw">as </span>u128
 <a href=#89 id=89 data-nosnippet>89</a>            + (<span class="self">self</span>.offsets.capacity() <span class="kw">as </span>u128 + <span class="self">self</span>.entries.capacity() <span class="kw">as </span>u128)

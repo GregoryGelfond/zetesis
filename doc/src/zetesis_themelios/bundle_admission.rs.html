@@ -7,47 +7,47 @@
 <a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span>themelios_base::diagnostic::Diagnostic;
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span>themelios_base::span::Location;
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use </span>themelios_program::program::{Program <span class="kw">as </span>SourceProgram, Statement};
-<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>themelios_program::raise::raise;
-<a href=#11 id=11 data-nosnippet>11</a><span class="kw">use </span>zetesis_core::{AdmissionLimits, Program};
-<a href=#12 id=12 data-nosnippet>12</a>
-<a href=#13 id=13 data-nosnippet>13</a><span class="kw">use crate</span>::{
-<a href=#14 id=14 data-nosnippet>14</a>    AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionUsage,
-<a href=#15 id=15 data-nosnippet>15</a>    InputLimit, SourceBundle, SourceMetadata, extended, metadata, profile,
-<a href=#16 id=16 data-nosnippet>16</a>};
-<a href=#17 id=17 data-nosnippet>17</a>
-<a href=#18 id=18 data-nosnippet>18</a><span class="doccomment">/// Admission budgets across an already bounded, loaded source graph. File,
-<a href=#19 id=19 data-nosnippet>19</a>/// byte, and include-depth limits belong to [`crate::BundleLimits`] at loading.
-<a href=#20 id=20 data-nosnippet>20</a></span><span class="attr">#[derive(Clone, Copy, Debug)]
-<a href=#21 id=21 data-nosnippet>21</a></span><span class="kw">pub struct </span>BundleAdmissionOptions {
-<a href=#22 id=22 data-nosnippet>22</a>    <span class="doccomment">/// Total syntax nodes visited across all unique original files.
-<a href=#23 id=23 data-nosnippet>23</a>    </span><span class="kw">pub </span>max_syntax_nodes: usize,
-<a href=#24 id=24 data-nosnippet>24</a>    <span class="doccomment">/// Maximum syntax depth within any original file.
-<a href=#25 id=25 data-nosnippet>25</a>    </span><span class="kw">pub </span>max_syntax_depth: usize,
-<a href=#26 id=26 data-nosnippet>26</a>    <span class="doccomment">/// Maximum original body elements in each rule, before deduplication.
-<a href=#27 id=27 data-nosnippet>27</a>    </span><span class="kw">pub </span>max_body_elements: usize,
-<a href=#28 id=28 data-nosnippet>28</a>    <span class="doccomment">/// Independent limits on the compiled relational program.
-<a href=#29 id=29 data-nosnippet>29</a>    </span><span class="kw">pub </span>core_limits: AdmissionLimits,
-<a href=#30 id=30 data-nosnippet>30</a>}
-<a href=#31 id=31 data-nosnippet>31</a>
-<a href=#32 id=32 data-nosnippet>32</a><span class="kw">impl </span>Default <span class="kw">for </span>BundleAdmissionOptions {
-<a href=#33 id=33 data-nosnippet>33</a>    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
-<a href=#34 id=34 data-nosnippet>34</a>        <span class="kw">let </span>single = AdmissionOptions::default();
-<a href=#35 id=35 data-nosnippet>35</a>        <span class="self">Self </span>{
-<a href=#36 id=36 data-nosnippet>36</a>            max_syntax_nodes: single.max_syntax_nodes,
-<a href=#37 id=37 data-nosnippet>37</a>            max_syntax_depth: single.max_syntax_depth,
-<a href=#38 id=38 data-nosnippet>38</a>            max_body_elements: single.max_body_elements,
-<a href=#39 id=39 data-nosnippet>39</a>            core_limits: single.core_limits,
-<a href=#40 id=40 data-nosnippet>40</a>        }
-<a href=#41 id=41 data-nosnippet>41</a>    }
-<a href=#42 id=42 data-nosnippet>42</a>}
-<a href=#43 id=43 data-nosnippet>43</a>
-<a href=#44 id=44 data-nosnippet>44</a><span class="doccomment">/// An admitted relational program and its complete original source catalog.
-<a href=#45 id=45 data-nosnippet>45</a>/// Every template origin resolves through [`Self::bundle`].
-<a href=#46 id=46 data-nosnippet>46</a></span><span class="attr">#[derive(Debug)]
-<a href=#47 id=47 data-nosnippet>47</a></span><span class="kw">pub struct </span>AdmittedBundle {
-<a href=#48 id=48 data-nosnippet>48</a>    program: Program,
-<a href=#49 id=49 data-nosnippet>49</a>    bundle: SourceBundle,
-<a href=#50 id=50 data-nosnippet>50</a>    template_origins: Vec&lt;Vec&lt;Location&gt;&gt;,
+<a href=#10 id=10 data-nosnippet>10</a><span class="kw">use </span>zetesis_core::{AdmissionLimits, Program};
+<a href=#11 id=11 data-nosnippet>11</a>
+<a href=#12 id=12 data-nosnippet>12</a><span class="kw">use crate</span>::{
+<a href=#13 id=13 data-nosnippet>13</a>    AdmissionFailure, AdmissionOptions, ExpansionFailure, ExpansionLimits, ExpansionUsage,
+<a href=#14 id=14 data-nosnippet>14</a>    InputLimit, SourceBundle, SourceMetadata, extended, metadata, profile,
+<a href=#15 id=15 data-nosnippet>15</a>};
+<a href=#16 id=16 data-nosnippet>16</a>
+<a href=#17 id=17 data-nosnippet>17</a><span class="doccomment">/// Admission budgets across an already bounded, loaded source graph. File,
+<a href=#18 id=18 data-nosnippet>18</a>/// byte, and include-depth limits belong to [`crate::BundleLimits`] at loading.
+<a href=#19 id=19 data-nosnippet>19</a></span><span class="attr">#[derive(Clone, Copy, Debug)]
+<a href=#20 id=20 data-nosnippet>20</a></span><span class="kw">pub struct </span>BundleAdmissionOptions {
+<a href=#21 id=21 data-nosnippet>21</a>    <span class="doccomment">/// Total syntax nodes visited across all unique original files.
+<a href=#22 id=22 data-nosnippet>22</a>    </span><span class="kw">pub </span>max_syntax_nodes: usize,
+<a href=#23 id=23 data-nosnippet>23</a>    <span class="doccomment">/// Maximum syntax depth within any original file.
+<a href=#24 id=24 data-nosnippet>24</a>    </span><span class="kw">pub </span>max_syntax_depth: usize,
+<a href=#25 id=25 data-nosnippet>25</a>    <span class="doccomment">/// Maximum original body elements in each rule, before deduplication.
+<a href=#26 id=26 data-nosnippet>26</a>    </span><span class="kw">pub </span>max_body_elements: usize,
+<a href=#27 id=27 data-nosnippet>27</a>    <span class="doccomment">/// Independent limits on the compiled relational program.
+<a href=#28 id=28 data-nosnippet>28</a>    </span><span class="kw">pub </span>core_limits: AdmissionLimits,
+<a href=#29 id=29 data-nosnippet>29</a>}
+<a href=#30 id=30 data-nosnippet>30</a>
+<a href=#31 id=31 data-nosnippet>31</a><span class="kw">impl </span>Default <span class="kw">for </span>BundleAdmissionOptions {
+<a href=#32 id=32 data-nosnippet>32</a>    <span class="kw">fn </span>default() -&gt; <span class="self">Self </span>{
+<a href=#33 id=33 data-nosnippet>33</a>        <span class="kw">let </span>single = AdmissionOptions::default();
+<a href=#34 id=34 data-nosnippet>34</a>        <span class="self">Self </span>{
+<a href=#35 id=35 data-nosnippet>35</a>            max_syntax_nodes: single.max_syntax_nodes,
+<a href=#36 id=36 data-nosnippet>36</a>            max_syntax_depth: single.max_syntax_depth,
+<a href=#37 id=37 data-nosnippet>37</a>            max_body_elements: single.max_body_elements,
+<a href=#38 id=38 data-nosnippet>38</a>            core_limits: single.core_limits,
+<a href=#39 id=39 data-nosnippet>39</a>        }
+<a href=#40 id=40 data-nosnippet>40</a>    }
+<a href=#41 id=41 data-nosnippet>41</a>}
+<a href=#42 id=42 data-nosnippet>42</a>
+<a href=#43 id=43 data-nosnippet>43</a><span class="doccomment">/// An admitted relational program and its complete original source catalog.
+<a href=#44 id=44 data-nosnippet>44</a>/// Every template origin resolves through [`Self::bundle`].
+<a href=#45 id=45 data-nosnippet>45</a></span><span class="attr">#[derive(Debug)]
+<a href=#46 id=46 data-nosnippet>46</a></span><span class="kw">pub struct </span>AdmittedBundle {
+<a href=#47 id=47 data-nosnippet>47</a>    program: Program,
+<a href=#48 id=48 data-nosnippet>48</a>    bundle: SourceBundle,
+<a href=#49 id=49 data-nosnippet>49</a>    template_origins: Vec&lt;Vec&lt;Location&gt;&gt;,
+<a href=#50 id=50 data-nosnippet>50</a>    fact_origins: Vec&lt;Vec&lt;Location&gt;&gt;,
 <a href=#51 id=51 data-nosnippet>51</a>    metadata: SourceMetadata,
 <a href=#52 id=52 data-nosnippet>52</a>    expansion: ExpansionUsage,
 <a href=#53 id=53 data-nosnippet>53</a>}
@@ -69,394 +69,419 @@
 <a href=#69 id=69 data-nosnippet>69</a>    </span><span class="kw">pub fn </span>template_origins(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[Vec&lt;Location&gt;] {
 <a href=#70 id=70 data-nosnippet>70</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.template_origins
 <a href=#71 id=71 data-nosnippet>71</a>    }
-<a href=#72 id=72 data-nosnippet>72</a>    <span class="doccomment">/// Global source declarations and display policy, retaining every original
-<a href=#73 id=73 data-nosnippet>73</a>    /// metadata occurrence. The underlying program and model identity are full.
+<a href=#72 id=72 data-nosnippet>72</a>
+<a href=#73 id=73 data-nosnippet>73</a>    <span class="doccomment">/// Parsed origins parallel to the native program's fact occurrences.
 <a href=#74 id=74 data-nosnippet>74</a>    </span><span class="attr">#[must_use]
-<a href=#75 id=75 data-nosnippet>75</a>    </span><span class="kw">pub fn </span>metadata(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>SourceMetadata {
-<a href=#76 id=76 data-nosnippet>76</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.metadata
+<a href=#75 id=75 data-nosnippet>75</a>    </span><span class="kw">pub fn </span>fact_origins(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>[Vec&lt;Location&gt;] {
+<a href=#76 id=76 data-nosnippet>76</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.fact_origins
 <a href=#77 id=77 data-nosnippet>77</a>    }
-<a href=#78 id=78 data-nosnippet>78</a>    <span class="doccomment">/// Expansion charges this admission accepted, each under its ceiling.
-<a href=#79 id=79 data-nosnippet>79</a>    </span><span class="attr">#[must_use]
-<a href=#80 id=80 data-nosnippet>80</a>    </span><span class="kw">pub fn </span>expansion_usage(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>ExpansionUsage {
-<a href=#81 id=81 data-nosnippet>81</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.expansion
-<a href=#82 id=82 data-nosnippet>82</a>    }
-<a href=#83 id=83 data-nosnippet>83</a>    <span class="doccomment">/// Consume the result when original source evidence is no longer required.
-<a href=#84 id=84 data-nosnippet>84</a>    </span><span class="attr">#[must_use]
-<a href=#85 id=85 data-nosnippet>85</a>    </span><span class="kw">pub fn </span>into_program(<span class="self">self</span>) -&gt; Program {
-<a href=#86 id=86 data-nosnippet>86</a>        <span class="self">self</span>.program
-<a href=#87 id=87 data-nosnippet>87</a>    }
-<a href=#88 id=88 data-nosnippet>88</a>}
-<a href=#89 id=89 data-nosnippet>89</a>
-<a href=#90 id=90 data-nosnippet>90</a><span class="doccomment">/// A typed semantic bundle refusal, separate from source-graph loading errors.
-<a href=#91 id=91 data-nosnippet>91</a></span><span class="attr">#[derive(Debug)]
-<a href=#92 id=92 data-nosnippet>92</a></span><span class="kw">pub enum </span>BundleAdmissionError {
-<a href=#93 id=93 data-nosnippet>93</a>    <span class="doccomment">/// The extended source or independent core admission door refused its stage.
-<a href=#94 id=94 data-nosnippet>94</a>    </span>Expansion(ExpansionFailure),
-<a href=#95 id=95 data-nosnippet>95</a>    <span class="doccomment">/// A later explicit root has a different lexical identity from the same
-<a href=#96 id=96 data-nosnippet>96</a>    /// source's first root or include occurrence.
-<a href=#97 id=97 data-nosnippet>97</a>    </span>RootAlias {
-<a href=#98 id=98 data-nosnippet>98</a>        <span class="doccomment">/// First selected lexical filename.
-<a href=#99 id=99 data-nosnippet>99</a>        </span>first: PathBuf,
-<a href=#100 id=100 data-nosnippet>100</a>        <span class="doccomment">/// Later original root spelling.
-<a href=#101 id=101 data-nosnippet>101</a>        </span>repeated: PathBuf,
-<a href=#102 id=102 data-nosnippet>102</a>        <span class="doccomment">/// Original source span of the repeated root.
-<a href=#103 id=103 data-nosnippet>103</a>        </span>location: Location,
-<a href=#104 id=104 data-nosnippet>104</a>    },
-<a href=#105 id=105 data-nosnippet>105</a>    <span class="doccomment">/// Different lexical include paths refer to the same canonical source.
-<a href=#106 id=106 data-nosnippet>106</a>    /// clingo can parse these separately, which the deduplicated graph does not
-<a href=#107 id=107 data-nosnippet>107</a>    /// represent; admission refuses instead of dropping repeated definitions.
-<a href=#108 id=108 data-nosnippet>108</a>    </span>IncludeAlias {
-<a href=#109 id=109 data-nosnippet>109</a>        <span class="doccomment">/// First resolved lexical path in include traversal order.
-<a href=#110 id=110 data-nosnippet>110</a>        </span>first: PathBuf,
-<a href=#111 id=111 data-nosnippet>111</a>        <span class="doccomment">/// Later resolved lexical path to the same canonical source.
-<a href=#112 id=112 data-nosnippet>112</a>        </span>repeated: PathBuf,
-<a href=#113 id=113 data-nosnippet>113</a>        <span class="doccomment">/// Original include occurrence that revisits the source.
-<a href=#114 id=114 data-nosnippet>114</a>        </span>location: Location,
-<a href=#115 id=115 data-nosnippet>115</a>    },
-<a href=#116 id=116 data-nosnippet>116</a>    <span class="doccomment">/// A lexical path's dot-normalized identity differs from the canonical
-<a href=#117 id=117 data-nosnippet>117</a>    /// source, for example through a symlink. Relative include semantics under
-<a href=#118 id=118 data-nosnippet>118</a>    /// that spelling are not represented by the canonical graph.
-<a href=#119 id=119 data-nosnippet>119</a>    </span>IncludeRedirection {
-<a href=#120 id=120 data-nosnippet>120</a>        <span class="doccomment">/// Original include path resolved from its including lexical path.
-<a href=#121 id=121 data-nosnippet>121</a>        </span>requested: PathBuf,
-<a href=#122 id=122 data-nosnippet>122</a>        <span class="doccomment">/// Canonical source identity retained by the loader.
-<a href=#123 id=123 data-nosnippet>123</a>        </span>canonical: PathBuf,
-<a href=#124 id=124 data-nosnippet>124</a>        <span class="doccomment">/// Original include occurrence.
-<a href=#125 id=125 data-nosnippet>125</a>        </span>location: Location,
-<a href=#126 id=126 data-nosnippet>126</a>    },
-<a href=#127 id=127 data-nosnippet>127</a>}
-<a href=#128 id=128 data-nosnippet>128</a>
-<a href=#129 id=129 data-nosnippet>129</a><span class="kw">impl </span>From&lt;ExpansionFailure&gt; <span class="kw">for </span>BundleAdmissionError {
-<a href=#130 id=130 data-nosnippet>130</a>    <span class="kw">fn </span>from(error: ExpansionFailure) -&gt; <span class="self">Self </span>{
-<a href=#131 id=131 data-nosnippet>131</a>        <span class="self">Self</span>::Expansion(error)
-<a href=#132 id=132 data-nosnippet>132</a>    }
+<a href=#78 id=78 data-nosnippet>78</a>    <span class="doccomment">/// Global source declarations and display policy, retaining every original
+<a href=#79 id=79 data-nosnippet>79</a>    /// metadata occurrence. The underlying program and model identity are full.
+<a href=#80 id=80 data-nosnippet>80</a>    </span><span class="attr">#[must_use]
+<a href=#81 id=81 data-nosnippet>81</a>    </span><span class="kw">pub fn </span>metadata(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>SourceMetadata {
+<a href=#82 id=82 data-nosnippet>82</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.metadata
+<a href=#83 id=83 data-nosnippet>83</a>    }
+<a href=#84 id=84 data-nosnippet>84</a>    <span class="doccomment">/// Expansion charges this admission accepted, each under its ceiling.
+<a href=#85 id=85 data-nosnippet>85</a>    </span><span class="attr">#[must_use]
+<a href=#86 id=86 data-nosnippet>86</a>    </span><span class="kw">pub fn </span>expansion_usage(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>ExpansionUsage {
+<a href=#87 id=87 data-nosnippet>87</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.expansion
+<a href=#88 id=88 data-nosnippet>88</a>    }
+<a href=#89 id=89 data-nosnippet>89</a>    <span class="doccomment">/// Consume the result when original source evidence is no longer required.
+<a href=#90 id=90 data-nosnippet>90</a>    </span><span class="attr">#[must_use]
+<a href=#91 id=91 data-nosnippet>91</a>    </span><span class="kw">pub fn </span>into_program(<span class="self">self</span>) -&gt; Program {
+<a href=#92 id=92 data-nosnippet>92</a>        <span class="self">self</span>.program
+<a href=#93 id=93 data-nosnippet>93</a>    }
+<a href=#94 id=94 data-nosnippet>94</a>}
+<a href=#95 id=95 data-nosnippet>95</a>
+<a href=#96 id=96 data-nosnippet>96</a><span class="doccomment">/// A typed semantic bundle refusal, separate from source-graph loading errors.
+<a href=#97 id=97 data-nosnippet>97</a></span><span class="attr">#[derive(Debug)]
+<a href=#98 id=98 data-nosnippet>98</a></span><span class="kw">pub enum </span>BundleAdmissionError {
+<a href=#99 id=99 data-nosnippet>99</a>    <span class="doccomment">/// The extended source or independent core admission door refused its stage.
+<a href=#100 id=100 data-nosnippet>100</a>    </span>Expansion(ExpansionFailure),
+<a href=#101 id=101 data-nosnippet>101</a>    <span class="doccomment">/// A later explicit root has a different lexical identity from the same
+<a href=#102 id=102 data-nosnippet>102</a>    /// source's first root or include occurrence.
+<a href=#103 id=103 data-nosnippet>103</a>    </span>RootAlias {
+<a href=#104 id=104 data-nosnippet>104</a>        <span class="doccomment">/// First selected lexical filename.
+<a href=#105 id=105 data-nosnippet>105</a>        </span>first: PathBuf,
+<a href=#106 id=106 data-nosnippet>106</a>        <span class="doccomment">/// Later original root spelling.
+<a href=#107 id=107 data-nosnippet>107</a>        </span>repeated: PathBuf,
+<a href=#108 id=108 data-nosnippet>108</a>        <span class="doccomment">/// Original source span of the repeated root.
+<a href=#109 id=109 data-nosnippet>109</a>        </span>location: Location,
+<a href=#110 id=110 data-nosnippet>110</a>    },
+<a href=#111 id=111 data-nosnippet>111</a>    <span class="doccomment">/// Different lexical include paths refer to the same canonical source.
+<a href=#112 id=112 data-nosnippet>112</a>    /// clingo can parse these separately, which the deduplicated graph does not
+<a href=#113 id=113 data-nosnippet>113</a>    /// represent; admission refuses instead of dropping repeated definitions.
+<a href=#114 id=114 data-nosnippet>114</a>    </span>IncludeAlias {
+<a href=#115 id=115 data-nosnippet>115</a>        <span class="doccomment">/// First resolved lexical path in include traversal order.
+<a href=#116 id=116 data-nosnippet>116</a>        </span>first: PathBuf,
+<a href=#117 id=117 data-nosnippet>117</a>        <span class="doccomment">/// Later resolved lexical path to the same canonical source.
+<a href=#118 id=118 data-nosnippet>118</a>        </span>repeated: PathBuf,
+<a href=#119 id=119 data-nosnippet>119</a>        <span class="doccomment">/// Original include occurrence that revisits the source.
+<a href=#120 id=120 data-nosnippet>120</a>        </span>location: Location,
+<a href=#121 id=121 data-nosnippet>121</a>    },
+<a href=#122 id=122 data-nosnippet>122</a>    <span class="doccomment">/// A lexical path's dot-normalized identity differs from the canonical
+<a href=#123 id=123 data-nosnippet>123</a>    /// source, for example through a symlink. Relative include semantics under
+<a href=#124 id=124 data-nosnippet>124</a>    /// that spelling are not represented by the canonical graph.
+<a href=#125 id=125 data-nosnippet>125</a>    </span>IncludeRedirection {
+<a href=#126 id=126 data-nosnippet>126</a>        <span class="doccomment">/// Original include path resolved from its including lexical path.
+<a href=#127 id=127 data-nosnippet>127</a>        </span>requested: PathBuf,
+<a href=#128 id=128 data-nosnippet>128</a>        <span class="doccomment">/// Canonical source identity retained by the loader.
+<a href=#129 id=129 data-nosnippet>129</a>        </span>canonical: PathBuf,
+<a href=#130 id=130 data-nosnippet>130</a>        <span class="doccomment">/// Original include occurrence.
+<a href=#131 id=131 data-nosnippet>131</a>        </span>location: Location,
+<a href=#132 id=132 data-nosnippet>132</a>    },
 <a href=#133 id=133 data-nosnippet>133</a>}
-<a href=#134 id=134 data-nosnippet>134</a><span class="kw">impl </span>From&lt;AdmissionFailure&gt; <span class="kw">for </span>BundleAdmissionError {
-<a href=#135 id=135 data-nosnippet>135</a>    <span class="kw">fn </span>from(error: AdmissionFailure) -&gt; <span class="self">Self </span>{
-<a href=#136 id=136 data-nosnippet>136</a>        <span class="self">Self</span>::Expansion(error.into())
-<a href=#137 id=137 data-nosnippet>137</a>    }
-<a href=#138 id=138 data-nosnippet>138</a>}
-<a href=#139 id=139 data-nosnippet>139</a>
-<a href=#140 id=140 data-nosnippet>140</a><span class="kw">impl </span>BundleAdmissionError {
-<a href=#141 id=141 data-nosnippet>141</a>    <span class="doccomment">/// Located diagnostics whose identities resolve in the retained bundle.
-<a href=#142 id=142 data-nosnippet>142</a>    </span><span class="attr">#[must_use]
-<a href=#143 id=143 data-nosnippet>143</a>    </span><span class="kw">pub fn </span>diagnostics(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;Diagnostic&gt; {
-<a href=#144 id=144 data-nosnippet>144</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#145 id=145 data-nosnippet>145</a>            <span class="self">Self</span>::Expansion(error) =&gt; error.diagnostics(),
-<a href=#146 id=146 data-nosnippet>146</a>            <span class="self">Self</span>::RootAlias { location, .. }
-<a href=#147 id=147 data-nosnippet>147</a>            | <span class="self">Self</span>::IncludeAlias { location, .. }
-<a href=#148 id=148 data-nosnippet>148</a>            | <span class="self">Self</span>::IncludeRedirection { location, .. } =&gt; {
-<a href=#149 id=149 data-nosnippet>149</a>                <span class="macro">vec!</span>[<span class="kw">crate</span>::diagnostic::diagnostic(
-<a href=#150 id=150 data-nosnippet>150</a>                    <span class="string">"include-identity"</span>,
-<a href=#151 id=151 data-nosnippet>151</a>                    <span class="self">self</span>.to_string(),
-<a href=#152 id=152 data-nosnippet>152</a>                    <span class="kw-2">*</span>location,
-<a href=#153 id=153 data-nosnippet>153</a>                )]
-<a href=#154 id=154 data-nosnippet>154</a>            }
-<a href=#155 id=155 data-nosnippet>155</a>        }
-<a href=#156 id=156 data-nosnippet>156</a>    }
-<a href=#157 id=157 data-nosnippet>157</a>}
-<a href=#158 id=158 data-nosnippet>158</a>
-<a href=#159 id=159 data-nosnippet>159</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>BundleAdmissionError {
-<a href=#160 id=160 data-nosnippet>160</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
-<a href=#161 id=161 data-nosnippet>161</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#162 id=162 data-nosnippet>162</a>            <span class="self">Self</span>::Expansion(error) =&gt; error.fmt(f),
-<a href=#163 id=163 data-nosnippet>163</a>            <span class="self">Self</span>::RootAlias {
-<a href=#164 id=164 data-nosnippet>164</a>                first, repeated, ..
-<a href=#165 id=165 data-nosnippet>165</a>            } =&gt; <span class="macro">write!</span>(
-<a href=#166 id=166 data-nosnippet>166</a>                f,
-<a href=#167 id=167 data-nosnippet>167</a>                <span class="string">"bundle admission cannot merge lexical root aliases {} and {}"</span>,
-<a href=#168 id=168 data-nosnippet>168</a>                first.display(),
-<a href=#169 id=169 data-nosnippet>169</a>                repeated.display()
-<a href=#170 id=170 data-nosnippet>170</a>            ),
-<a href=#171 id=171 data-nosnippet>171</a>            <span class="self">Self</span>::IncludeAlias {
-<a href=#172 id=172 data-nosnippet>172</a>                first, repeated, ..
-<a href=#173 id=173 data-nosnippet>173</a>            } =&gt; <span class="macro">write!</span>(
-<a href=#174 id=174 data-nosnippet>174</a>                f,
-<a href=#175 id=175 data-nosnippet>175</a>                <span class="string">"bundle admission cannot merge lexical include aliases {} and {}"</span>,
-<a href=#176 id=176 data-nosnippet>176</a>                first.display(),
-<a href=#177 id=177 data-nosnippet>177</a>                repeated.display()
-<a href=#178 id=178 data-nosnippet>178</a>            ),
-<a href=#179 id=179 data-nosnippet>179</a>            <span class="self">Self</span>::IncludeRedirection {
-<a href=#180 id=180 data-nosnippet>180</a>                requested,
-<a href=#181 id=181 data-nosnippet>181</a>                canonical,
-<a href=#182 id=182 data-nosnippet>182</a>                ..
-<a href=#183 id=183 data-nosnippet>183</a>            } =&gt; <span class="macro">write!</span>(
-<a href=#184 id=184 data-nosnippet>184</a>                f,
-<a href=#185 id=185 data-nosnippet>185</a>                <span class="string">"bundle admission cannot redirect lexical include {} to {}"</span>,
-<a href=#186 id=186 data-nosnippet>186</a>                requested.display(),
-<a href=#187 id=187 data-nosnippet>187</a>                canonical.display()
-<a href=#188 id=188 data-nosnippet>188</a>            ),
-<a href=#189 id=189 data-nosnippet>189</a>        }
-<a href=#190 id=190 data-nosnippet>190</a>    }
-<a href=#191 id=191 data-nosnippet>191</a>}
-<a href=#192 id=192 data-nosnippet>192</a><span class="kw">impl </span>std::error::Error <span class="kw">for </span>BundleAdmissionError {
-<a href=#193 id=193 data-nosnippet>193</a>    <span class="kw">fn </span>source(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>(<span class="kw">dyn </span>std::error::Error + <span class="lifetime">'static</span>)&gt; {
-<a href=#194 id=194 data-nosnippet>194</a>        <span class="kw">match </span><span class="self">self </span>{
-<a href=#195 id=195 data-nosnippet>195</a>            <span class="self">Self</span>::Expansion(error) =&gt; <span class="prelude-val">Some</span>(error),
-<a href=#196 id=196 data-nosnippet>196</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
-<a href=#197 id=197 data-nosnippet>197</a>        }
-<a href=#198 id=198 data-nosnippet>198</a>    }
-<a href=#199 id=199 data-nosnippet>199</a>}
-<a href=#200 id=200 data-nosnippet>200</a>
-<a href=#201 id=201 data-nosnippet>201</a><span class="doccomment">/// A failure retains the full loaded source catalog, so diagnostics never lose
-<a href=#202 id=202 data-nosnippet>202</a>/// the original bytes behind their source identities. No partial core program
-<a href=#203 id=203 data-nosnippet>203</a>/// is returned.
-<a href=#204 id=204 data-nosnippet>204</a></span><span class="attr">#[derive(Debug)]
-<a href=#205 id=205 data-nosnippet>205</a></span><span class="kw">pub struct </span>BundleAdmissionFailure {
-<a href=#206 id=206 data-nosnippet>206</a>    bundle: SourceBundle,
-<a href=#207 id=207 data-nosnippet>207</a>    error: Box&lt;BundleAdmissionError&gt;,
-<a href=#208 id=208 data-nosnippet>208</a>}
-<a href=#209 id=209 data-nosnippet>209</a><span class="kw">impl </span>BundleAdmissionFailure {
-<a href=#210 id=210 data-nosnippet>210</a>    <span class="doccomment">/// Original files needed to render every diagnostic.
-<a href=#211 id=211 data-nosnippet>211</a>    </span><span class="attr">#[must_use]
-<a href=#212 id=212 data-nosnippet>212</a>    </span><span class="kw">pub fn </span>bundle(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>SourceBundle {
-<a href=#213 id=213 data-nosnippet>213</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.bundle
-<a href=#214 id=214 data-nosnippet>214</a>    }
-<a href=#215 id=215 data-nosnippet>215</a>    <span class="doccomment">/// The typed semantic refusal.
-<a href=#216 id=216 data-nosnippet>216</a>    </span><span class="attr">#[must_use]
-<a href=#217 id=217 data-nosnippet>217</a>    </span><span class="kw">pub fn </span>error(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>BundleAdmissionError {
-<a href=#218 id=218 data-nosnippet>218</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.error
-<a href=#219 id=219 data-nosnippet>219</a>    }
-<a href=#220 id=220 data-nosnippet>220</a>    <span class="doccomment">/// Source-qualified diagnostic view.
-<a href=#221 id=221 data-nosnippet>221</a>    </span><span class="attr">#[must_use]
-<a href=#222 id=222 data-nosnippet>222</a>    </span><span class="kw">pub fn </span>diagnostics(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;Diagnostic&gt; {
-<a href=#223 id=223 data-nosnippet>223</a>        <span class="self">self</span>.error.diagnostics()
-<a href=#224 id=224 data-nosnippet>224</a>    }
-<a href=#225 id=225 data-nosnippet>225</a>    <span class="doccomment">/// Recover the loaded sources, for example to retry with different budgets.
-<a href=#226 id=226 data-nosnippet>226</a>    </span><span class="attr">#[must_use]
-<a href=#227 id=227 data-nosnippet>227</a>    </span><span class="kw">pub fn </span>into_bundle(<span class="self">self</span>) -&gt; SourceBundle {
-<a href=#228 id=228 data-nosnippet>228</a>        <span class="self">self</span>.bundle
-<a href=#229 id=229 data-nosnippet>229</a>    }
-<a href=#230 id=230 data-nosnippet>230</a>}
-<a href=#231 id=231 data-nosnippet>231</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>BundleAdmissionFailure {
-<a href=#232 id=232 data-nosnippet>232</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
-<a href=#233 id=233 data-nosnippet>233</a>        <span class="self">self</span>.error.fmt(f)
-<a href=#234 id=234 data-nosnippet>234</a>    }
-<a href=#235 id=235 data-nosnippet>235</a>}
-<a href=#236 id=236 data-nosnippet>236</a><span class="kw">impl </span>std::error::Error <span class="kw">for </span>BundleAdmissionFailure {
-<a href=#237 id=237 data-nosnippet>237</a>    <span class="kw">fn </span>source(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>(<span class="kw">dyn </span>std::error::Error + <span class="lifetime">'static</span>)&gt; {
-<a href=#238 id=238 data-nosnippet>238</a>        <span class="prelude-val">Some</span>(<span class="self">self</span>.error.as_ref())
-<a href=#239 id=239 data-nosnippet>239</a>    }
-<a href=#240 id=240 data-nosnippet>240</a>}
-<a href=#241 id=241 data-nosnippet>241</a>
-<a href=#242 id=242 data-nosnippet>242</a><span class="doccomment">/// Admit the extended profile across an original include graph, interpreting
-<a href=#243 id=243 data-nosnippet>243</a>/// its ordered roots and captured include resolutions. Rules remain in the
-<a href=#244 id=244 data-nosnippet>244</a>/// parameter-free base part, whether implicit or explicitly declared. Every file
-<a href=#245 id=245 data-nosnippet>245</a>/// is checked before raising; owned statements are combined
-<a href=#246 id=246 data-nosnippet>246</a>/// through themelios's provenance-merging constructor without concatenating or
-<a href=#247 id=247 data-nosnippet>247</a>/// regenerating text. Scalar constants are global, unambiguous, and acyclic.
-<a href=#248 id=248 data-nosnippet>248</a>///
-<a href=#249 id=249 data-nosnippet>249</a>/// Identical resolved lexical include paths are included once, as clingo does.
-<a href=#250 id=250 data-nosnippet>250</a>/// Alias paths and symlink redirections are conservatively refused because the
-<a href=#251 id=251 data-nosnippet>251</a>/// canonical loader cannot recover their separate parse occurrences. Ordinary
-<a href=#252 id=252 data-nosnippet>252</a>/// `..` traversal to a unique source is supported. Positive `#defined` and
-<a href=#253 id=253 data-nosnippet>253</a>/// signature/empty `#show` are global source/display metadata. Named or
-<a href=#254 id=254 data-nosnippet>254</a>/// parameterized `#program` parts and other unsupported constructs are refused.
-<a href=#255 id=255 data-nosnippet>255</a>/// No external engine is invoked.
-<a href=#256 id=256 data-nosnippet>256</a>///
-<a href=#257 id=257 data-nosnippet>257</a>/// # Errors
-<a href=#258 id=258 data-nosnippet>258</a>/// Returns a typed refusal together with the complete original source bundle.
-<a href=#259 id=259 data-nosnippet>259</a>/// Syntax/expansion budgets count globally; no successful partial program is
-<a href=#260 id=260 data-nosnippet>260</a>/// exposed after a refusal.
-<a href=#261 id=261 data-nosnippet>261</a></span><span class="kw">pub fn </span>admit_bundle_extended(
-<a href=#262 id=262 data-nosnippet>262</a>    bundle: SourceBundle,
-<a href=#263 id=263 data-nosnippet>263</a>    options: BundleAdmissionOptions,
-<a href=#264 id=264 data-nosnippet>264</a>    limits: ExpansionLimits,
-<a href=#265 id=265 data-nosnippet>265</a>) -&gt; <span class="prelude-ty">Result</span>&lt;AdmittedBundle, BundleAdmissionFailure&gt; {
-<a href=#266 id=266 data-nosnippet>266</a>    admit_bundle_with_control(bundle, options, limits, <span class="prelude-val">None</span>)
-<a href=#267 id=267 data-nosnippet>267</a>}
-<a href=#268 id=268 data-nosnippet>268</a>
-<a href=#269 id=269 data-nosnippet>269</a><span class="doccomment">/// Admit the original bundle with shared cancellation and deadline control.
-<a href=#270 id=270 data-nosnippet>270</a>/// Each bounded upstream source inspection is bracketed by polls; expansion
-<a href=#271 id=271 data-nosnippet>271</a>/// uses the same token throughout its existing checked operations.
-<a href=#272 id=272 data-nosnippet>272</a>///
-<a href=#273 id=273 data-nosnippet>273</a>/// # Errors
-<a href=#274 id=274 data-nosnippet>274</a>/// Retains the original bundle with ordinary admission errors or interruption.
-<a href=#275 id=275 data-nosnippet>275</a></span><span class="kw">pub fn </span>admit_bundle_extended_with_cancellation(
-<a href=#276 id=276 data-nosnippet>276</a>    bundle: SourceBundle,
-<a href=#277 id=277 data-nosnippet>277</a>    options: BundleAdmissionOptions,
-<a href=#278 id=278 data-nosnippet>278</a>    limits: ExpansionLimits,
-<a href=#279 id=279 data-nosnippet>279</a>    cancellation: <span class="kw-2">&amp;</span>zetesis_cpu::Cancellation,
-<a href=#280 id=280 data-nosnippet>280</a>) -&gt; <span class="prelude-ty">Result</span>&lt;AdmittedBundle, BundleAdmissionFailure&gt; {
-<a href=#281 id=281 data-nosnippet>281</a>    admit_bundle_with_control(bundle, options, limits, <span class="prelude-val">Some</span>(cancellation.clone()))
-<a href=#282 id=282 data-nosnippet>282</a>}
-<a href=#283 id=283 data-nosnippet>283</a>
-<a href=#284 id=284 data-nosnippet>284</a><span class="kw">fn </span>admit_bundle_with_control(
-<a href=#285 id=285 data-nosnippet>285</a>    bundle: SourceBundle,
-<a href=#286 id=286 data-nosnippet>286</a>    options: BundleAdmissionOptions,
-<a href=#287 id=287 data-nosnippet>287</a>    limits: ExpansionLimits,
-<a href=#288 id=288 data-nosnippet>288</a>    cancellation: <span class="prelude-ty">Option</span>&lt;zetesis_cpu::Cancellation&gt;,
-<a href=#289 id=289 data-nosnippet>289</a>) -&gt; <span class="prelude-ty">Result</span>&lt;AdmittedBundle, BundleAdmissionFailure&gt; {
-<a href=#290 id=290 data-nosnippet>290</a>    <span class="kw">match </span>compile_bundle(<span class="kw-2">&amp;</span>bundle, options, limits, cancellation) {
-<a href=#291 id=291 data-nosnippet>291</a>        <span class="prelude-val">Ok</span>(compiled) =&gt; <span class="prelude-val">Ok</span>(AdmittedBundle {
-<a href=#292 id=292 data-nosnippet>292</a>            program: compiled.program,
-<a href=#293 id=293 data-nosnippet>293</a>            bundle,
-<a href=#294 id=294 data-nosnippet>294</a>            template_origins: compiled.template_origins,
-<a href=#295 id=295 data-nosnippet>295</a>            metadata: compiled.metadata,
-<a href=#296 id=296 data-nosnippet>296</a>            expansion: compiled.expansion,
-<a href=#297 id=297 data-nosnippet>297</a>        }),
-<a href=#298 id=298 data-nosnippet>298</a>        <span class="prelude-val">Err</span>(error) =&gt; <span class="prelude-val">Err</span>(BundleAdmissionFailure {
-<a href=#299 id=299 data-nosnippet>299</a>            bundle,
-<a href=#300 id=300 data-nosnippet>300</a>            error: Box::new(error),
-<a href=#301 id=301 data-nosnippet>301</a>        }),
-<a href=#302 id=302 data-nosnippet>302</a>    }
-<a href=#303 id=303 data-nosnippet>303</a>}
-<a href=#304 id=304 data-nosnippet>304</a>
-<a href=#305 id=305 data-nosnippet>305</a><span class="kw">fn </span>compile_bundle(
-<a href=#306 id=306 data-nosnippet>306</a>    bundle: <span class="kw-2">&amp;</span>SourceBundle,
-<a href=#307 id=307 data-nosnippet>307</a>    options: BundleAdmissionOptions,
-<a href=#308 id=308 data-nosnippet>308</a>    limits: ExpansionLimits,
-<a href=#309 id=309 data-nosnippet>309</a>    cancellation: <span class="prelude-ty">Option</span>&lt;zetesis_cpu::Cancellation&gt;,
-<a href=#310 id=310 data-nosnippet>310</a>) -&gt; <span class="prelude-ty">Result</span>&lt;extended::Compilation, BundleAdmissionError&gt; {
-<a href=#311 id=311 data-nosnippet>311</a>    <span class="kw">let </span>budget = <span class="kw">crate</span>::expansion::Budget::new(limits, options.core_limits.max_templates)
-<a href=#312 id=312 data-nosnippet>312</a>        .with_cancellation(cancellation);
-<a href=#313 id=313 data-nosnippet>313</a>    budget.poll(<span class="kw">crate</span>::ProgramSite::program())<span class="question-mark">?</span>;
-<a href=#314 id=314 data-nosnippet>314</a>    check_include_identity(bundle)<span class="question-mark">?</span>;
-<a href=#315 id=315 data-nosnippet>315</a>    <span class="kw">let </span><span class="kw-2">mut </span>definitions = BTreeMap::new();
-<a href=#316 id=316 data-nosnippet>316</a>    <span class="kw">let </span><span class="kw-2">mut </span>statements = Vec::new();
-<a href=#317 id=317 data-nosnippet>317</a>    <span class="kw">let </span><span class="kw-2">mut </span>visited_nodes = <span class="number">0</span>;
-<a href=#318 id=318 data-nosnippet>318</a>    <span class="kw">let </span><span class="kw-2">mut </span>metadata_count = <span class="number">0</span>;
-<a href=#319 id=319 data-nosnippet>319</a>    <span class="kw">let </span><span class="kw-2">mut </span>source_metadata = metadata::Builder::default();
-<a href=#320 id=320 data-nosnippet>320</a>    <span class="kw">for </span>source <span class="kw">in </span>bundle.sources() {
-<a href=#321 id=321 data-nosnippet>321</a>        budget.poll(<span class="kw">crate</span>::ProgramSite::source(Location {
-<a href=#322 id=322 data-nosnippet>322</a>            source: source.id(),
-<a href=#323 id=323 data-nosnippet>323</a>            span: source.source().span(),
-<a href=#324 id=324 data-nosnippet>324</a>        }))<span class="question-mark">?</span>;
-<a href=#325 id=325 data-nosnippet>325</a>        <span class="kw">let </span>local = AdmissionOptions {
-<a href=#326 id=326 data-nosnippet>326</a>            source_id: source.id(),
-<a href=#327 id=327 data-nosnippet>327</a>            max_source_bytes: <span class="number">0</span>,
-<a href=#328 id=328 data-nosnippet>328</a>            max_syntax_nodes: options.max_syntax_nodes - visited_nodes,
-<a href=#329 id=329 data-nosnippet>329</a>            max_syntax_depth: options.max_syntax_depth,
-<a href=#330 id=330 data-nosnippet>330</a>            max_body_elements: options.max_body_elements,
-<a href=#331 id=331 data-nosnippet>331</a>            core_limits: options.core_limits,
-<a href=#332 id=332 data-nosnippet>332</a>        };
-<a href=#333 id=333 data-nosnippet>333</a>        <span class="kw">let </span>nodes = profile::check_bundle(source.parsed(), local).map_err(|error| <span class="kw">match </span>error {
-<a href=#334 id=334 data-nosnippet>334</a>            AdmissionFailure::Limit {
-<a href=#335 id=335 data-nosnippet>335</a>                resource: InputLimit::SyntaxNodes,
-<a href=#336 id=336 data-nosnippet>336</a>                observed,
-<a href=#337 id=337 data-nosnippet>337</a>                location,
-<a href=#338 id=338 data-nosnippet>338</a>                ..
-<a href=#339 id=339 data-nosnippet>339</a>            } =&gt; AdmissionFailure::Limit {
-<a href=#340 id=340 data-nosnippet>340</a>                resource: InputLimit::SyntaxNodes,
-<a href=#341 id=341 data-nosnippet>341</a>                limit: options.max_syntax_nodes,
-<a href=#342 id=342 data-nosnippet>342</a>                observed: visited_nodes.saturating_add(observed),
-<a href=#343 id=343 data-nosnippet>343</a>                location,
-<a href=#344 id=344 data-nosnippet>344</a>            },
-<a href=#345 id=345 data-nosnippet>345</a>            other =&gt; other,
-<a href=#346 id=346 data-nosnippet>346</a>        })<span class="question-mark">?</span>;
-<a href=#347 id=347 data-nosnippet>347</a>        visited_nodes += nodes;
-<a href=#348 id=348 data-nosnippet>348</a>        extended::check_definitions_in(source.parsed(), limits, <span class="kw-2">&amp;mut </span>definitions)<span class="question-mark">?</span>;
-<a href=#349 id=349 data-nosnippet>349</a>        metadata::check_count(source.parsed(), limits, <span class="kw-2">&amp;mut </span>metadata_count)<span class="question-mark">?</span>;
-<a href=#350 id=350 data-nosnippet>350</a>        <span class="kw">let </span>raised = raise(source.parsed());
-<a href=#351 id=351 data-nosnippet>351</a>        <span class="kw">if </span>!raised.diagnostics().is_empty() {
-<a href=#352 id=352 data-nosnippet>352</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(AdmissionFailure::Raise(raised.diagnostics().to_vec()).into());
-<a href=#353 id=353 data-nosnippet>353</a>        }
-<a href=#354 id=354 data-nosnippet>354</a>        budget.poll(<span class="kw">crate</span>::ProgramSite::source(Location {
-<a href=#355 id=355 data-nosnippet>355</a>            source: source.id(),
-<a href=#356 id=356 data-nosnippet>356</a>            span: source.source().span(),
-<a href=#357 id=357 data-nosnippet>357</a>        }))<span class="question-mark">?</span>;
-<a href=#358 id=358 data-nosnippet>358</a>        metadata::collect(raised.program(), <span class="kw-2">&amp;mut </span>source_metadata)<span class="question-mark">?</span>;
-<a href=#359 id=359 data-nosnippet>359</a>        statements.extend(
-<a href=#360 id=360 data-nosnippet>360</a>            raised
-<a href=#361 id=361 data-nosnippet>361</a>                .program()
-<a href=#362 id=362 data-nosnippet>362</a>                .statements()
-<a href=#363 id=363 data-nosnippet>363</a>                .filter(|carrier| !<span class="macro">matches!</span>(carrier.get(), Statement::Include(<span class="kw">_</span>)))
-<a href=#364 id=364 data-nosnippet>364</a>                .cloned(),
-<a href=#365 id=365 data-nosnippet>365</a>        );
-<a href=#366 id=366 data-nosnippet>366</a>    }
-<a href=#367 id=367 data-nosnippet>367</a>    <span class="kw">let </span>entry = bundle
-<a href=#368 id=368 data-nosnippet>368</a>        .get(bundle.entry())
-<a href=#369 id=369 data-nosnippet>369</a>        .expect(<span class="string">"a loaded bundle has its entry"</span>);
-<a href=#370 id=370 data-nosnippet>370</a>    <span class="kw">let </span>location = Location {
-<a href=#371 id=371 data-nosnippet>371</a>        source: entry.id(),
-<a href=#372 id=372 data-nosnippet>372</a>        span: entry.source().span(),
-<a href=#373 id=373 data-nosnippet>373</a>    };
-<a href=#374 id=374 data-nosnippet>374</a>    <span class="kw">let </span>source = SourceProgram::of_nodes(statements);
-<a href=#375 id=375 data-nosnippet>375</a>    <span class="prelude-val">Ok</span>(extended::compile_owned(
-<a href=#376 id=376 data-nosnippet>376</a>        <span class="kw-2">&amp;</span>source,
-<a href=#377 id=377 data-nosnippet>377</a>        options.core_limits,
-<a href=#378 id=378 data-nosnippet>378</a>        budget,
-<a href=#379 id=379 data-nosnippet>379</a>        location.into(),
-<a href=#380 id=380 data-nosnippet>380</a>        source_metadata.finish(location.into())<span class="question-mark">?</span>,
-<a href=#381 id=381 data-nosnippet>381</a>    )<span class="question-mark">?</span>)
-<a href=#382 id=382 data-nosnippet>382</a>}
-<a href=#383 id=383 data-nosnippet>383</a>
-<a href=#384 id=384 data-nosnippet>384</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>check_include_identity(bundle: <span class="kw-2">&amp;</span>SourceBundle) -&gt; <span class="prelude-ty">Result</span>&lt;(), BundleAdmissionError&gt; {
-<a href=#385 id=385 data-nosnippet>385</a>    <span class="kw">let </span><span class="kw-2">mut </span>paths = BTreeMap::new();
-<a href=#386 id=386 data-nosnippet>386</a>    <span class="kw">for </span>root <span class="kw">in </span>bundle.roots() {
-<a href=#387 id=387 data-nosnippet>387</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(first) = paths.get(<span class="kw-2">&amp;</span>root.id()) {
-<a href=#388 id=388 data-nosnippet>388</a>            <span class="kw">let </span>first: <span class="kw-2">&amp;</span>PathBuf = first;
-<a href=#389 id=389 data-nosnippet>389</a>            <span class="kw">if </span>first.as_os_str() != root.requested_path().as_os_str() {
-<a href=#390 id=390 data-nosnippet>390</a>                <span class="kw">let </span>source = bundle.get(root.id()).expect(<span class="string">"a loaded root has a source"</span>);
-<a href=#391 id=391 data-nosnippet>391</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(BundleAdmissionError::RootAlias {
-<a href=#392 id=392 data-nosnippet>392</a>                    first: first.clone(),
-<a href=#393 id=393 data-nosnippet>393</a>                    repeated: root.requested_path().to_path_buf(),
-<a href=#394 id=394 data-nosnippet>394</a>                    location: Location {
-<a href=#395 id=395 data-nosnippet>395</a>                        source: source.id(),
-<a href=#396 id=396 data-nosnippet>396</a>                        span: source.source().span(),
-<a href=#397 id=397 data-nosnippet>397</a>                    },
-<a href=#398 id=398 data-nosnippet>398</a>                });
-<a href=#399 id=399 data-nosnippet>399</a>            }
-<a href=#400 id=400 data-nosnippet>400</a>            <span class="kw">continue</span>;
-<a href=#401 id=401 data-nosnippet>401</a>        }
-<a href=#402 id=402 data-nosnippet>402</a>        paths.insert(root.id(), root.requested_path().to_path_buf());
-<a href=#403 id=403 data-nosnippet>403</a>        <span class="kw">let </span><span class="kw-2">mut </span>pending = <span class="macro">vec!</span>[(root.id(), <span class="number">0</span>)];
-<a href=#404 id=404 data-nosnippet>404</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>((id, next)) = pending.last_mut() {
-<a href=#405 id=405 data-nosnippet>405</a>            <span class="kw">let </span>source = bundle.get(<span class="kw-2">*</span>id).expect(<span class="string">"a loaded graph has every source"</span>);
-<a href=#406 id=406 data-nosnippet>406</a>            <span class="kw">let </span><span class="prelude-val">Some</span>(edge) = source.includes().get(<span class="kw-2">*</span>next) <span class="kw">else </span>{
-<a href=#407 id=407 data-nosnippet>407</a>                pending.pop();
-<a href=#408 id=408 data-nosnippet>408</a>                <span class="kw">continue</span>;
-<a href=#409 id=409 data-nosnippet>409</a>            };
-<a href=#410 id=410 data-nosnippet>410</a>            <span class="kw-2">*</span>next += <span class="number">1</span>;
-<a href=#411 id=411 data-nosnippet>411</a>            <span class="kw">let </span>requested = edge.resolved_path();
-<a href=#412 id=412 data-nosnippet>412</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(first) = paths.get(<span class="kw-2">&amp;</span>edge.target()) {
-<a href=#413 id=413 data-nosnippet>413</a>                <span class="kw">if </span>first.as_os_str() != requested.as_os_str() {
-<a href=#414 id=414 data-nosnippet>414</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(BundleAdmissionError::IncludeAlias {
-<a href=#415 id=415 data-nosnippet>415</a>                        first: first.clone(),
-<a href=#416 id=416 data-nosnippet>416</a>                        repeated: requested.to_path_buf(),
-<a href=#417 id=417 data-nosnippet>417</a>                        location: edge.location(),
-<a href=#418 id=418 data-nosnippet>418</a>                    });
-<a href=#419 id=419 data-nosnippet>419</a>                }
-<a href=#420 id=420 data-nosnippet>420</a>                <span class="kw">continue</span>;
-<a href=#421 id=421 data-nosnippet>421</a>            }
-<a href=#422 id=422 data-nosnippet>422</a>            <span class="kw">let </span>target = bundle
-<a href=#423 id=423 data-nosnippet>423</a>                .get(edge.target())
-<a href=#424 id=424 data-nosnippet>424</a>                .expect(<span class="string">"a loaded include has its target"</span>);
-<a href=#425 id=425 data-nosnippet>425</a>            <span class="kw">let </span>checked = <span class="kw">match </span>edge.resolution() {
-<a href=#426 id=426 data-nosnippet>426</a>                <span class="kw">crate</span>::IncludeResolution::IncludingDirectory =&gt; source
-<a href=#427 id=427 data-nosnippet>427</a>                    .path()
-<a href=#428 id=428 data-nosnippet>428</a>                    .parent()
-<a href=#429 id=429 data-nosnippet>429</a>                    .expect(<span class="string">"a canonical source has a parent"</span>)
-<a href=#430 id=430 data-nosnippet>430</a>                    .join(edge.requested_path()),
-<a href=#431 id=431 data-nosnippet>431</a>                <span class="kw">crate</span>::IncludeResolution::Absolute | <span class="kw">crate</span>::IncludeResolution::WorkingDirectory =&gt; {
-<a href=#432 id=432 data-nosnippet>432</a>                    bundle.working_directory().join(edge.requested_path())
-<a href=#433 id=433 data-nosnippet>433</a>                }
+<a href=#134 id=134 data-nosnippet>134</a>
+<a href=#135 id=135 data-nosnippet>135</a><span class="kw">impl </span>From&lt;ExpansionFailure&gt; <span class="kw">for </span>BundleAdmissionError {
+<a href=#136 id=136 data-nosnippet>136</a>    <span class="kw">fn </span>from(error: ExpansionFailure) -&gt; <span class="self">Self </span>{
+<a href=#137 id=137 data-nosnippet>137</a>        <span class="self">Self</span>::Expansion(error)
+<a href=#138 id=138 data-nosnippet>138</a>    }
+<a href=#139 id=139 data-nosnippet>139</a>}
+<a href=#140 id=140 data-nosnippet>140</a><span class="kw">impl </span>From&lt;AdmissionFailure&gt; <span class="kw">for </span>BundleAdmissionError {
+<a href=#141 id=141 data-nosnippet>141</a>    <span class="kw">fn </span>from(error: AdmissionFailure) -&gt; <span class="self">Self </span>{
+<a href=#142 id=142 data-nosnippet>142</a>        <span class="self">Self</span>::Expansion(error.into())
+<a href=#143 id=143 data-nosnippet>143</a>    }
+<a href=#144 id=144 data-nosnippet>144</a>}
+<a href=#145 id=145 data-nosnippet>145</a>
+<a href=#146 id=146 data-nosnippet>146</a><span class="kw">impl </span>BundleAdmissionError {
+<a href=#147 id=147 data-nosnippet>147</a>    <span class="doccomment">/// Located diagnostics whose identities resolve in the retained bundle.
+<a href=#148 id=148 data-nosnippet>148</a>    </span><span class="attr">#[must_use]
+<a href=#149 id=149 data-nosnippet>149</a>    </span><span class="kw">pub fn </span>diagnostics(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;Diagnostic&gt; {
+<a href=#150 id=150 data-nosnippet>150</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#151 id=151 data-nosnippet>151</a>            <span class="self">Self</span>::Expansion(error) =&gt; error.diagnostics(),
+<a href=#152 id=152 data-nosnippet>152</a>            <span class="self">Self</span>::RootAlias { location, .. }
+<a href=#153 id=153 data-nosnippet>153</a>            | <span class="self">Self</span>::IncludeAlias { location, .. }
+<a href=#154 id=154 data-nosnippet>154</a>            | <span class="self">Self</span>::IncludeRedirection { location, .. } =&gt; {
+<a href=#155 id=155 data-nosnippet>155</a>                <span class="macro">vec!</span>[<span class="kw">crate</span>::diagnostic::diagnostic(
+<a href=#156 id=156 data-nosnippet>156</a>                    <span class="string">"include-identity"</span>,
+<a href=#157 id=157 data-nosnippet>157</a>                    <span class="self">self</span>.to_string(),
+<a href=#158 id=158 data-nosnippet>158</a>                    <span class="kw-2">*</span>location,
+<a href=#159 id=159 data-nosnippet>159</a>                )]
+<a href=#160 id=160 data-nosnippet>160</a>            }
+<a href=#161 id=161 data-nosnippet>161</a>        }
+<a href=#162 id=162 data-nosnippet>162</a>    }
+<a href=#163 id=163 data-nosnippet>163</a>}
+<a href=#164 id=164 data-nosnippet>164</a>
+<a href=#165 id=165 data-nosnippet>165</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>BundleAdmissionError {
+<a href=#166 id=166 data-nosnippet>166</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#167 id=167 data-nosnippet>167</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#168 id=168 data-nosnippet>168</a>            <span class="self">Self</span>::Expansion(error) =&gt; error.fmt(f),
+<a href=#169 id=169 data-nosnippet>169</a>            <span class="self">Self</span>::RootAlias {
+<a href=#170 id=170 data-nosnippet>170</a>                first, repeated, ..
+<a href=#171 id=171 data-nosnippet>171</a>            } =&gt; <span class="macro">write!</span>(
+<a href=#172 id=172 data-nosnippet>172</a>                f,
+<a href=#173 id=173 data-nosnippet>173</a>                <span class="string">"bundle admission cannot merge lexical root aliases {} and {}"</span>,
+<a href=#174 id=174 data-nosnippet>174</a>                first.display(),
+<a href=#175 id=175 data-nosnippet>175</a>                repeated.display()
+<a href=#176 id=176 data-nosnippet>176</a>            ),
+<a href=#177 id=177 data-nosnippet>177</a>            <span class="self">Self</span>::IncludeAlias {
+<a href=#178 id=178 data-nosnippet>178</a>                first, repeated, ..
+<a href=#179 id=179 data-nosnippet>179</a>            } =&gt; <span class="macro">write!</span>(
+<a href=#180 id=180 data-nosnippet>180</a>                f,
+<a href=#181 id=181 data-nosnippet>181</a>                <span class="string">"bundle admission cannot merge lexical include aliases {} and {}"</span>,
+<a href=#182 id=182 data-nosnippet>182</a>                first.display(),
+<a href=#183 id=183 data-nosnippet>183</a>                repeated.display()
+<a href=#184 id=184 data-nosnippet>184</a>            ),
+<a href=#185 id=185 data-nosnippet>185</a>            <span class="self">Self</span>::IncludeRedirection {
+<a href=#186 id=186 data-nosnippet>186</a>                requested,
+<a href=#187 id=187 data-nosnippet>187</a>                canonical,
+<a href=#188 id=188 data-nosnippet>188</a>                ..
+<a href=#189 id=189 data-nosnippet>189</a>            } =&gt; <span class="macro">write!</span>(
+<a href=#190 id=190 data-nosnippet>190</a>                f,
+<a href=#191 id=191 data-nosnippet>191</a>                <span class="string">"bundle admission cannot redirect lexical include {} to {}"</span>,
+<a href=#192 id=192 data-nosnippet>192</a>                requested.display(),
+<a href=#193 id=193 data-nosnippet>193</a>                canonical.display()
+<a href=#194 id=194 data-nosnippet>194</a>            ),
+<a href=#195 id=195 data-nosnippet>195</a>        }
+<a href=#196 id=196 data-nosnippet>196</a>    }
+<a href=#197 id=197 data-nosnippet>197</a>}
+<a href=#198 id=198 data-nosnippet>198</a><span class="kw">impl </span>std::error::Error <span class="kw">for </span>BundleAdmissionError {
+<a href=#199 id=199 data-nosnippet>199</a>    <span class="kw">fn </span>source(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>(<span class="kw">dyn </span>std::error::Error + <span class="lifetime">'static</span>)&gt; {
+<a href=#200 id=200 data-nosnippet>200</a>        <span class="kw">match </span><span class="self">self </span>{
+<a href=#201 id=201 data-nosnippet>201</a>            <span class="self">Self</span>::Expansion(error) =&gt; <span class="prelude-val">Some</span>(error),
+<a href=#202 id=202 data-nosnippet>202</a>            <span class="kw">_ </span>=&gt; <span class="prelude-val">None</span>,
+<a href=#203 id=203 data-nosnippet>203</a>        }
+<a href=#204 id=204 data-nosnippet>204</a>    }
+<a href=#205 id=205 data-nosnippet>205</a>}
+<a href=#206 id=206 data-nosnippet>206</a>
+<a href=#207 id=207 data-nosnippet>207</a><span class="doccomment">/// A failure retains the full loaded source catalog, so diagnostics never lose
+<a href=#208 id=208 data-nosnippet>208</a>/// the original bytes behind their source identities. No partial core program
+<a href=#209 id=209 data-nosnippet>209</a>/// is returned.
+<a href=#210 id=210 data-nosnippet>210</a></span><span class="attr">#[derive(Debug)]
+<a href=#211 id=211 data-nosnippet>211</a></span><span class="kw">pub struct </span>BundleAdmissionFailure {
+<a href=#212 id=212 data-nosnippet>212</a>    bundle: SourceBundle,
+<a href=#213 id=213 data-nosnippet>213</a>    error: Box&lt;BundleAdmissionError&gt;,
+<a href=#214 id=214 data-nosnippet>214</a>}
+<a href=#215 id=215 data-nosnippet>215</a><span class="kw">impl </span>BundleAdmissionFailure {
+<a href=#216 id=216 data-nosnippet>216</a>    <span class="doccomment">/// Original files needed to render every diagnostic.
+<a href=#217 id=217 data-nosnippet>217</a>    </span><span class="attr">#[must_use]
+<a href=#218 id=218 data-nosnippet>218</a>    </span><span class="kw">pub fn </span>bundle(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>SourceBundle {
+<a href=#219 id=219 data-nosnippet>219</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.bundle
+<a href=#220 id=220 data-nosnippet>220</a>    }
+<a href=#221 id=221 data-nosnippet>221</a>    <span class="doccomment">/// The typed semantic refusal.
+<a href=#222 id=222 data-nosnippet>222</a>    </span><span class="attr">#[must_use]
+<a href=#223 id=223 data-nosnippet>223</a>    </span><span class="kw">pub fn </span>error(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="kw-2">&amp;</span>BundleAdmissionError {
+<a href=#224 id=224 data-nosnippet>224</a>        <span class="kw-2">&amp;</span><span class="self">self</span>.error
+<a href=#225 id=225 data-nosnippet>225</a>    }
+<a href=#226 id=226 data-nosnippet>226</a>    <span class="doccomment">/// Source-qualified diagnostic view.
+<a href=#227 id=227 data-nosnippet>227</a>    </span><span class="attr">#[must_use]
+<a href=#228 id=228 data-nosnippet>228</a>    </span><span class="kw">pub fn </span>diagnostics(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; Vec&lt;Diagnostic&gt; {
+<a href=#229 id=229 data-nosnippet>229</a>        <span class="self">self</span>.error.diagnostics()
+<a href=#230 id=230 data-nosnippet>230</a>    }
+<a href=#231 id=231 data-nosnippet>231</a>    <span class="doccomment">/// Recover the loaded sources, for example to retry with different budgets.
+<a href=#232 id=232 data-nosnippet>232</a>    </span><span class="attr">#[must_use]
+<a href=#233 id=233 data-nosnippet>233</a>    </span><span class="kw">pub fn </span>into_bundle(<span class="self">self</span>) -&gt; SourceBundle {
+<a href=#234 id=234 data-nosnippet>234</a>        <span class="self">self</span>.bundle
+<a href=#235 id=235 data-nosnippet>235</a>    }
+<a href=#236 id=236 data-nosnippet>236</a>}
+<a href=#237 id=237 data-nosnippet>237</a><span class="kw">impl </span>fmt::Display <span class="kw">for </span>BundleAdmissionFailure {
+<a href=#238 id=238 data-nosnippet>238</a>    <span class="kw">fn </span>fmt(<span class="kw-2">&amp;</span><span class="self">self</span>, f: <span class="kw-2">&amp;mut </span>fmt::Formatter&lt;<span class="lifetime">'_</span>&gt;) -&gt; fmt::Result {
+<a href=#239 id=239 data-nosnippet>239</a>        <span class="self">self</span>.error.fmt(f)
+<a href=#240 id=240 data-nosnippet>240</a>    }
+<a href=#241 id=241 data-nosnippet>241</a>}
+<a href=#242 id=242 data-nosnippet>242</a><span class="kw">impl </span>std::error::Error <span class="kw">for </span>BundleAdmissionFailure {
+<a href=#243 id=243 data-nosnippet>243</a>    <span class="kw">fn </span>source(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;</span>(<span class="kw">dyn </span>std::error::Error + <span class="lifetime">'static</span>)&gt; {
+<a href=#244 id=244 data-nosnippet>244</a>        <span class="prelude-val">Some</span>(<span class="self">self</span>.error.as_ref())
+<a href=#245 id=245 data-nosnippet>245</a>    }
+<a href=#246 id=246 data-nosnippet>246</a>}
+<a href=#247 id=247 data-nosnippet>247</a>
+<a href=#248 id=248 data-nosnippet>248</a><span class="doccomment">/// Admit the extended profile across an original include graph, interpreting
+<a href=#249 id=249 data-nosnippet>249</a>/// its ordered roots and captured include resolutions. Rules remain in the
+<a href=#250 id=250 data-nosnippet>250</a>/// parameter-free base part, whether implicit or explicitly declared. Every file
+<a href=#251 id=251 data-nosnippet>251</a>/// is checked before raising; owned statements are combined
+<a href=#252 id=252 data-nosnippet>252</a>/// through themelios's provenance-merging constructor without concatenating or
+<a href=#253 id=253 data-nosnippet>253</a>/// regenerating text. Scalar constants are global, unambiguous, and acyclic.
+<a href=#254 id=254 data-nosnippet>254</a>///
+<a href=#255 id=255 data-nosnippet>255</a>/// Identical resolved lexical include paths are included once, as clingo does.
+<a href=#256 id=256 data-nosnippet>256</a>/// Alias paths and symlink redirections are conservatively refused because the
+<a href=#257 id=257 data-nosnippet>257</a>/// canonical loader cannot recover their separate parse occurrences. Ordinary
+<a href=#258 id=258 data-nosnippet>258</a>/// `..` traversal to a unique source is supported. Positive `#defined` and
+<a href=#259 id=259 data-nosnippet>259</a>/// signature/empty `#show` are global source/display metadata. Named or
+<a href=#260 id=260 data-nosnippet>260</a>/// parameterized `#program` parts and other unsupported constructs are refused.
+<a href=#261 id=261 data-nosnippet>261</a>/// No external engine is invoked.
+<a href=#262 id=262 data-nosnippet>262</a>///
+<a href=#263 id=263 data-nosnippet>263</a>/// # Errors
+<a href=#264 id=264 data-nosnippet>264</a>/// Returns a typed refusal together with the complete original source bundle.
+<a href=#265 id=265 data-nosnippet>265</a>/// Syntax/expansion budgets count globally; no successful partial program is
+<a href=#266 id=266 data-nosnippet>266</a>/// exposed after a refusal.
+<a href=#267 id=267 data-nosnippet>267</a></span><span class="kw">pub fn </span>admit_bundle_extended(
+<a href=#268 id=268 data-nosnippet>268</a>    bundle: SourceBundle,
+<a href=#269 id=269 data-nosnippet>269</a>    options: BundleAdmissionOptions,
+<a href=#270 id=270 data-nosnippet>270</a>    limits: ExpansionLimits,
+<a href=#271 id=271 data-nosnippet>271</a>) -&gt; <span class="prelude-ty">Result</span>&lt;AdmittedBundle, BundleAdmissionFailure&gt; {
+<a href=#272 id=272 data-nosnippet>272</a>    admit_bundle_with_control(bundle, options, limits, <span class="prelude-val">None</span>)
+<a href=#273 id=273 data-nosnippet>273</a>}
+<a href=#274 id=274 data-nosnippet>274</a>
+<a href=#275 id=275 data-nosnippet>275</a><span class="doccomment">/// Admit the original bundle with shared cancellation and deadline control.
+<a href=#276 id=276 data-nosnippet>276</a>/// Each bounded upstream source inspection is bracketed by polls; expansion
+<a href=#277 id=277 data-nosnippet>277</a>/// uses the same token throughout its existing checked operations.
+<a href=#278 id=278 data-nosnippet>278</a>///
+<a href=#279 id=279 data-nosnippet>279</a>/// # Errors
+<a href=#280 id=280 data-nosnippet>280</a>/// Retains the original bundle with ordinary admission errors or interruption.
+<a href=#281 id=281 data-nosnippet>281</a></span><span class="kw">pub fn </span>admit_bundle_extended_with_cancellation(
+<a href=#282 id=282 data-nosnippet>282</a>    bundle: SourceBundle,
+<a href=#283 id=283 data-nosnippet>283</a>    options: BundleAdmissionOptions,
+<a href=#284 id=284 data-nosnippet>284</a>    limits: ExpansionLimits,
+<a href=#285 id=285 data-nosnippet>285</a>    cancellation: <span class="kw-2">&amp;</span>zetesis_cpu::Cancellation,
+<a href=#286 id=286 data-nosnippet>286</a>) -&gt; <span class="prelude-ty">Result</span>&lt;AdmittedBundle, BundleAdmissionFailure&gt; {
+<a href=#287 id=287 data-nosnippet>287</a>    admit_bundle_with_control(bundle, options, limits, <span class="prelude-val">Some</span>(cancellation.clone()))
+<a href=#288 id=288 data-nosnippet>288</a>}
+<a href=#289 id=289 data-nosnippet>289</a>
+<a href=#290 id=290 data-nosnippet>290</a><span class="kw">fn </span>admit_bundle_with_control(
+<a href=#291 id=291 data-nosnippet>291</a>    bundle: SourceBundle,
+<a href=#292 id=292 data-nosnippet>292</a>    options: BundleAdmissionOptions,
+<a href=#293 id=293 data-nosnippet>293</a>    limits: ExpansionLimits,
+<a href=#294 id=294 data-nosnippet>294</a>    cancellation: <span class="prelude-ty">Option</span>&lt;zetesis_cpu::Cancellation&gt;,
+<a href=#295 id=295 data-nosnippet>295</a>) -&gt; <span class="prelude-ty">Result</span>&lt;AdmittedBundle, BundleAdmissionFailure&gt; {
+<a href=#296 id=296 data-nosnippet>296</a>    admit_bundle_recording(bundle, options, limits, cancellation, <span class="prelude-val">None</span>)
+<a href=#297 id=297 data-nosnippet>297</a>}
+<a href=#298 id=298 data-nosnippet>298</a>
+<a href=#299 id=299 data-nosnippet>299</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>admit_bundle_recording(
+<a href=#300 id=300 data-nosnippet>300</a>    bundle: SourceBundle,
+<a href=#301 id=301 data-nosnippet>301</a>    options: BundleAdmissionOptions,
+<a href=#302 id=302 data-nosnippet>302</a>    limits: ExpansionLimits,
+<a href=#303 id=303 data-nosnippet>303</a>    cancellation: <span class="prelude-ty">Option</span>&lt;zetesis_cpu::Cancellation&gt;,
+<a href=#304 id=304 data-nosnippet>304</a>    recorder: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span><span class="kw">crate</span>::automatic::handoff::Recorder&gt;,
+<a href=#305 id=305 data-nosnippet>305</a>) -&gt; <span class="prelude-ty">Result</span>&lt;AdmittedBundle, BundleAdmissionFailure&gt; {
+<a href=#306 id=306 data-nosnippet>306</a>    <span class="kw">match </span>compile_bundle(<span class="kw-2">&amp;</span>bundle, options, limits, cancellation, recorder) {
+<a href=#307 id=307 data-nosnippet>307</a>        <span class="prelude-val">Ok</span>(compiled) =&gt; <span class="prelude-val">Ok</span>(AdmittedBundle {
+<a href=#308 id=308 data-nosnippet>308</a>            program: compiled.program,
+<a href=#309 id=309 data-nosnippet>309</a>            bundle,
+<a href=#310 id=310 data-nosnippet>310</a>            template_origins: compiled.template_origins,
+<a href=#311 id=311 data-nosnippet>311</a>            fact_origins: compiled.fact_origins,
+<a href=#312 id=312 data-nosnippet>312</a>            metadata: compiled.metadata,
+<a href=#313 id=313 data-nosnippet>313</a>            expansion: compiled.expansion,
+<a href=#314 id=314 data-nosnippet>314</a>        }),
+<a href=#315 id=315 data-nosnippet>315</a>        <span class="prelude-val">Err</span>(error) =&gt; <span class="prelude-val">Err</span>(BundleAdmissionFailure {
+<a href=#316 id=316 data-nosnippet>316</a>            bundle,
+<a href=#317 id=317 data-nosnippet>317</a>            error: Box::new(error),
+<a href=#318 id=318 data-nosnippet>318</a>        }),
+<a href=#319 id=319 data-nosnippet>319</a>    }
+<a href=#320 id=320 data-nosnippet>320</a>}
+<a href=#321 id=321 data-nosnippet>321</a>
+<a href=#322 id=322 data-nosnippet>322</a><span class="kw">fn </span>compile_bundle(
+<a href=#323 id=323 data-nosnippet>323</a>    bundle: <span class="kw-2">&amp;</span>SourceBundle,
+<a href=#324 id=324 data-nosnippet>324</a>    options: BundleAdmissionOptions,
+<a href=#325 id=325 data-nosnippet>325</a>    limits: ExpansionLimits,
+<a href=#326 id=326 data-nosnippet>326</a>    cancellation: <span class="prelude-ty">Option</span>&lt;zetesis_cpu::Cancellation&gt;,
+<a href=#327 id=327 data-nosnippet>327</a>    <span class="kw-2">mut </span>recorder: <span class="prelude-ty">Option</span>&lt;<span class="kw-2">&amp;mut </span><span class="kw">crate</span>::automatic::handoff::Recorder&gt;,
+<a href=#328 id=328 data-nosnippet>328</a>) -&gt; <span class="prelude-ty">Result</span>&lt;extended::Compilation, BundleAdmissionError&gt; {
+<a href=#329 id=329 data-nosnippet>329</a>    <span class="kw">let </span>budget = <span class="kw">crate</span>::expansion::Budget::new(limits, options.core_limits.max_templates)
+<a href=#330 id=330 data-nosnippet>330</a>        .with_cancellation(cancellation);
+<a href=#331 id=331 data-nosnippet>331</a>    budget.poll(<span class="kw">crate</span>::ProgramSite::program())<span class="question-mark">?</span>;
+<a href=#332 id=332 data-nosnippet>332</a>    check_include_identity(bundle)<span class="question-mark">?</span>;
+<a href=#333 id=333 data-nosnippet>333</a>    <span class="kw">let </span><span class="kw-2">mut </span>definitions = BTreeMap::new();
+<a href=#334 id=334 data-nosnippet>334</a>    <span class="kw">let </span><span class="kw-2">mut </span>statements = Vec::new();
+<a href=#335 id=335 data-nosnippet>335</a>    <span class="kw">let </span><span class="kw-2">mut </span>visited_nodes = <span class="number">0</span>;
+<a href=#336 id=336 data-nosnippet>336</a>    <span class="kw">let </span><span class="kw-2">mut </span>metadata_count = <span class="number">0</span>;
+<a href=#337 id=337 data-nosnippet>337</a>    <span class="kw">let </span><span class="kw-2">mut </span>source_metadata = metadata::Builder::default();
+<a href=#338 id=338 data-nosnippet>338</a>    <span class="kw">for </span>source <span class="kw">in </span>bundle.sources() {
+<a href=#339 id=339 data-nosnippet>339</a>        budget.poll(<span class="kw">crate</span>::ProgramSite::source(Location {
+<a href=#340 id=340 data-nosnippet>340</a>            source: source.id(),
+<a href=#341 id=341 data-nosnippet>341</a>            span: source.source().span(),
+<a href=#342 id=342 data-nosnippet>342</a>        }))<span class="question-mark">?</span>;
+<a href=#343 id=343 data-nosnippet>343</a>        <span class="kw">let </span>local = AdmissionOptions {
+<a href=#344 id=344 data-nosnippet>344</a>            source_id: source.id(),
+<a href=#345 id=345 data-nosnippet>345</a>            max_source_bytes: <span class="number">0</span>,
+<a href=#346 id=346 data-nosnippet>346</a>            max_syntax_nodes: options.max_syntax_nodes - visited_nodes,
+<a href=#347 id=347 data-nosnippet>347</a>            max_syntax_depth: options.max_syntax_depth,
+<a href=#348 id=348 data-nosnippet>348</a>            max_body_elements: options.max_body_elements,
+<a href=#349 id=349 data-nosnippet>349</a>            core_limits: options.core_limits,
+<a href=#350 id=350 data-nosnippet>350</a>        };
+<a href=#351 id=351 data-nosnippet>351</a>        <span class="kw">let </span>nodes = <span class="kw">if let </span><span class="prelude-val">Some</span>(recorder) = recorder.as_deref_mut() {
+<a href=#352 id=352 data-nosnippet>352</a>            recorder.check_profile(source.parsed(), local, <span class="bool-val">true</span>)
+<a href=#353 id=353 data-nosnippet>353</a>        } <span class="kw">else </span>{
+<a href=#354 id=354 data-nosnippet>354</a>            profile::check_bundle(source.parsed(), local)
+<a href=#355 id=355 data-nosnippet>355</a>        }
+<a href=#356 id=356 data-nosnippet>356</a>        .map_err(|error| <span class="kw">match </span>error {
+<a href=#357 id=357 data-nosnippet>357</a>            AdmissionFailure::Limit {
+<a href=#358 id=358 data-nosnippet>358</a>                resource: InputLimit::SyntaxNodes,
+<a href=#359 id=359 data-nosnippet>359</a>                observed,
+<a href=#360 id=360 data-nosnippet>360</a>                location,
+<a href=#361 id=361 data-nosnippet>361</a>                ..
+<a href=#362 id=362 data-nosnippet>362</a>            } =&gt; AdmissionFailure::Limit {
+<a href=#363 id=363 data-nosnippet>363</a>                resource: InputLimit::SyntaxNodes,
+<a href=#364 id=364 data-nosnippet>364</a>                limit: options.max_syntax_nodes,
+<a href=#365 id=365 data-nosnippet>365</a>                observed: visited_nodes.saturating_add(observed),
+<a href=#366 id=366 data-nosnippet>366</a>                location,
+<a href=#367 id=367 data-nosnippet>367</a>            },
+<a href=#368 id=368 data-nosnippet>368</a>            other =&gt; other,
+<a href=#369 id=369 data-nosnippet>369</a>        })<span class="question-mark">?</span>;
+<a href=#370 id=370 data-nosnippet>370</a>        visited_nodes += nodes;
+<a href=#371 id=371 data-nosnippet>371</a>        extended::check_definitions_in(source.parsed(), limits, <span class="kw-2">&amp;mut </span>definitions)<span class="question-mark">?</span>;
+<a href=#372 id=372 data-nosnippet>372</a>        metadata::check_count(source.parsed(), limits, <span class="kw-2">&amp;mut </span>metadata_count)<span class="question-mark">?</span>;
+<a href=#373 id=373 data-nosnippet>373</a>        <span class="kw">let </span>raised = <span class="kw">crate</span>::automatic::handoff::raise(source.parsed(), recorder.as_deref_mut())<span class="question-mark">?</span>;
+<a href=#374 id=374 data-nosnippet>374</a>        budget.poll(<span class="kw">crate</span>::ProgramSite::source(Location {
+<a href=#375 id=375 data-nosnippet>375</a>            source: source.id(),
+<a href=#376 id=376 data-nosnippet>376</a>            span: source.source().span(),
+<a href=#377 id=377 data-nosnippet>377</a>        }))<span class="question-mark">?</span>;
+<a href=#378 id=378 data-nosnippet>378</a>        metadata::collect(<span class="kw-2">&amp;</span>raised, <span class="kw-2">&amp;mut </span>source_metadata)<span class="question-mark">?</span>;
+<a href=#379 id=379 data-nosnippet>379</a>        statements.extend(
+<a href=#380 id=380 data-nosnippet>380</a>            raised
+<a href=#381 id=381 data-nosnippet>381</a>                .statements()
+<a href=#382 id=382 data-nosnippet>382</a>                .filter(|carrier| !<span class="macro">matches!</span>(carrier.get(), Statement::Include(<span class="kw">_</span>)))
+<a href=#383 id=383 data-nosnippet>383</a>                .cloned(),
+<a href=#384 id=384 data-nosnippet>384</a>        );
+<a href=#385 id=385 data-nosnippet>385</a>    }
+<a href=#386 id=386 data-nosnippet>386</a>    <span class="kw">let </span>entry = bundle
+<a href=#387 id=387 data-nosnippet>387</a>        .get(bundle.entry())
+<a href=#388 id=388 data-nosnippet>388</a>        .expect(<span class="string">"a loaded bundle has its entry"</span>);
+<a href=#389 id=389 data-nosnippet>389</a>    <span class="kw">let </span>location = Location {
+<a href=#390 id=390 data-nosnippet>390</a>        source: entry.id(),
+<a href=#391 id=391 data-nosnippet>391</a>        span: entry.source().span(),
+<a href=#392 id=392 data-nosnippet>392</a>    };
+<a href=#393 id=393 data-nosnippet>393</a>    <span class="kw">let </span>source = SourceProgram::of_nodes(statements);
+<a href=#394 id=394 data-nosnippet>394</a>    <span class="kw">let </span>result = extended::compile_owned(
+<a href=#395 id=395 data-nosnippet>395</a>        <span class="kw-2">&amp;</span>source,
+<a href=#396 id=396 data-nosnippet>396</a>        options.core_limits,
+<a href=#397 id=397 data-nosnippet>397</a>        budget,
+<a href=#398 id=398 data-nosnippet>398</a>        location.into(),
+<a href=#399 id=399 data-nosnippet>399</a>        source_metadata.finish(location.into())<span class="question-mark">?</span>,
+<a href=#400 id=400 data-nosnippet>400</a>    );
+<a href=#401 id=401 data-nosnippet>401</a>    <span class="kw">if </span>result.is_err()
+<a href=#402 id=402 data-nosnippet>402</a>        &amp;&amp; <span class="kw">let </span><span class="prelude-val">Some</span>(recorder) = recorder
+<a href=#403 id=403 data-nosnippet>403</a>    {
+<a href=#404 id=404 data-nosnippet>404</a>        recorder.retain_program(source);
+<a href=#405 id=405 data-nosnippet>405</a>    }
+<a href=#406 id=406 data-nosnippet>406</a>    <span class="prelude-val">Ok</span>(result<span class="question-mark">?</span>)
+<a href=#407 id=407 data-nosnippet>407</a>}
+<a href=#408 id=408 data-nosnippet>408</a>
+<a href=#409 id=409 data-nosnippet>409</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>check_include_identity(bundle: <span class="kw-2">&amp;</span>SourceBundle) -&gt; <span class="prelude-ty">Result</span>&lt;(), BundleAdmissionError&gt; {
+<a href=#410 id=410 data-nosnippet>410</a>    <span class="kw">let </span><span class="kw-2">mut </span>paths = BTreeMap::new();
+<a href=#411 id=411 data-nosnippet>411</a>    <span class="kw">for </span>root <span class="kw">in </span>bundle.roots() {
+<a href=#412 id=412 data-nosnippet>412</a>        <span class="kw">if let </span><span class="prelude-val">Some</span>(first) = paths.get(<span class="kw-2">&amp;</span>root.id()) {
+<a href=#413 id=413 data-nosnippet>413</a>            <span class="kw">let </span>first: <span class="kw-2">&amp;</span>PathBuf = first;
+<a href=#414 id=414 data-nosnippet>414</a>            <span class="kw">if </span>first.as_os_str() != root.requested_path().as_os_str() {
+<a href=#415 id=415 data-nosnippet>415</a>                <span class="kw">let </span>source = bundle.get(root.id()).expect(<span class="string">"a loaded root has a source"</span>);
+<a href=#416 id=416 data-nosnippet>416</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(BundleAdmissionError::RootAlias {
+<a href=#417 id=417 data-nosnippet>417</a>                    first: first.clone(),
+<a href=#418 id=418 data-nosnippet>418</a>                    repeated: root.requested_path().to_path_buf(),
+<a href=#419 id=419 data-nosnippet>419</a>                    location: Location {
+<a href=#420 id=420 data-nosnippet>420</a>                        source: source.id(),
+<a href=#421 id=421 data-nosnippet>421</a>                        span: source.source().span(),
+<a href=#422 id=422 data-nosnippet>422</a>                    },
+<a href=#423 id=423 data-nosnippet>423</a>                });
+<a href=#424 id=424 data-nosnippet>424</a>            }
+<a href=#425 id=425 data-nosnippet>425</a>            <span class="kw">continue</span>;
+<a href=#426 id=426 data-nosnippet>426</a>        }
+<a href=#427 id=427 data-nosnippet>427</a>        paths.insert(root.id(), root.requested_path().to_path_buf());
+<a href=#428 id=428 data-nosnippet>428</a>        <span class="kw">let </span><span class="kw-2">mut </span>pending = <span class="macro">vec!</span>[(root.id(), <span class="number">0</span>)];
+<a href=#429 id=429 data-nosnippet>429</a>        <span class="kw">while let </span><span class="prelude-val">Some</span>((id, next)) = pending.last_mut() {
+<a href=#430 id=430 data-nosnippet>430</a>            <span class="kw">let </span>source = bundle.get(<span class="kw-2">*</span>id).expect(<span class="string">"a loaded graph has every source"</span>);
+<a href=#431 id=431 data-nosnippet>431</a>            <span class="kw">let </span><span class="prelude-val">Some</span>(edge) = source.includes().get(<span class="kw-2">*</span>next) <span class="kw">else </span>{
+<a href=#432 id=432 data-nosnippet>432</a>                pending.pop();
+<a href=#433 id=433 data-nosnippet>433</a>                <span class="kw">continue</span>;
 <a href=#434 id=434 data-nosnippet>434</a>            };
-<a href=#435 id=435 data-nosnippet>435</a>            <span class="kw">if </span>dot_normalized(<span class="kw-2">&amp;</span>checked) != target.path() {
-<a href=#436 id=436 data-nosnippet>436</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(BundleAdmissionError::IncludeRedirection {
-<a href=#437 id=437 data-nosnippet>437</a>                    requested: requested.to_path_buf(),
-<a href=#438 id=438 data-nosnippet>438</a>                    canonical: target.path().to_path_buf(),
-<a href=#439 id=439 data-nosnippet>439</a>                    location: edge.location(),
-<a href=#440 id=440 data-nosnippet>440</a>                });
-<a href=#441 id=441 data-nosnippet>441</a>            }
-<a href=#442 id=442 data-nosnippet>442</a>            paths.insert(edge.target(), requested.to_path_buf());
-<a href=#443 id=443 data-nosnippet>443</a>            pending.push((edge.target(), <span class="number">0</span>));
-<a href=#444 id=444 data-nosnippet>444</a>        }
-<a href=#445 id=445 data-nosnippet>445</a>    }
-<a href=#446 id=446 data-nosnippet>446</a>    <span class="prelude-val">Ok</span>(())
-<a href=#447 id=447 data-nosnippet>447</a>}
-<a href=#448 id=448 data-nosnippet>448</a>
-<a href=#449 id=449 data-nosnippet>449</a><span class="kw">fn </span>dot_normalized(path: <span class="kw-2">&amp;</span>Path) -&gt; PathBuf {
-<a href=#450 id=450 data-nosnippet>450</a>    <span class="kw">let </span><span class="kw-2">mut </span>result = PathBuf::new();
-<a href=#451 id=451 data-nosnippet>451</a>    <span class="kw">for </span>component <span class="kw">in </span>path.components() {
-<a href=#452 id=452 data-nosnippet>452</a>        <span class="kw">match </span>component {
-<a href=#453 id=453 data-nosnippet>453</a>            Component::CurDir =&gt; {}
-<a href=#454 id=454 data-nosnippet>454</a>            Component::ParentDir =&gt; {
-<a href=#455 id=455 data-nosnippet>455</a>                result.pop();
-<a href=#456 id=456 data-nosnippet>456</a>            }
-<a href=#457 id=457 data-nosnippet>457</a>            other =&gt; result.push(other.as_os_str()),
-<a href=#458 id=458 data-nosnippet>458</a>        }
-<a href=#459 id=459 data-nosnippet>459</a>    }
-<a href=#460 id=460 data-nosnippet>460</a>    result
-<a href=#461 id=461 data-nosnippet>461</a>}
+<a href=#435 id=435 data-nosnippet>435</a>            <span class="kw-2">*</span>next += <span class="number">1</span>;
+<a href=#436 id=436 data-nosnippet>436</a>            <span class="kw">let </span>requested = edge.resolved_path();
+<a href=#437 id=437 data-nosnippet>437</a>            <span class="kw">if let </span><span class="prelude-val">Some</span>(first) = paths.get(<span class="kw-2">&amp;</span>edge.target()) {
+<a href=#438 id=438 data-nosnippet>438</a>                <span class="kw">if </span>first.as_os_str() != requested.as_os_str() {
+<a href=#439 id=439 data-nosnippet>439</a>                    <span class="kw">return </span><span class="prelude-val">Err</span>(BundleAdmissionError::IncludeAlias {
+<a href=#440 id=440 data-nosnippet>440</a>                        first: first.clone(),
+<a href=#441 id=441 data-nosnippet>441</a>                        repeated: requested.to_path_buf(),
+<a href=#442 id=442 data-nosnippet>442</a>                        location: edge.location(),
+<a href=#443 id=443 data-nosnippet>443</a>                    });
+<a href=#444 id=444 data-nosnippet>444</a>                }
+<a href=#445 id=445 data-nosnippet>445</a>                <span class="kw">continue</span>;
+<a href=#446 id=446 data-nosnippet>446</a>            }
+<a href=#447 id=447 data-nosnippet>447</a>            <span class="kw">let </span>target = bundle
+<a href=#448 id=448 data-nosnippet>448</a>                .get(edge.target())
+<a href=#449 id=449 data-nosnippet>449</a>                .expect(<span class="string">"a loaded include has its target"</span>);
+<a href=#450 id=450 data-nosnippet>450</a>            <span class="kw">let </span>checked = <span class="kw">match </span>edge.resolution() {
+<a href=#451 id=451 data-nosnippet>451</a>                <span class="kw">crate</span>::IncludeResolution::IncludingDirectory =&gt; source
+<a href=#452 id=452 data-nosnippet>452</a>                    .path()
+<a href=#453 id=453 data-nosnippet>453</a>                    .parent()
+<a href=#454 id=454 data-nosnippet>454</a>                    .expect(<span class="string">"a canonical source has a parent"</span>)
+<a href=#455 id=455 data-nosnippet>455</a>                    .join(edge.requested_path()),
+<a href=#456 id=456 data-nosnippet>456</a>                <span class="kw">crate</span>::IncludeResolution::Absolute | <span class="kw">crate</span>::IncludeResolution::WorkingDirectory =&gt; {
+<a href=#457 id=457 data-nosnippet>457</a>                    bundle.working_directory().join(edge.requested_path())
+<a href=#458 id=458 data-nosnippet>458</a>                }
+<a href=#459 id=459 data-nosnippet>459</a>            };
+<a href=#460 id=460 data-nosnippet>460</a>            <span class="kw">if </span>dot_normalized(<span class="kw-2">&amp;</span>checked) != target.path() {
+<a href=#461 id=461 data-nosnippet>461</a>                <span class="kw">return </span><span class="prelude-val">Err</span>(BundleAdmissionError::IncludeRedirection {
+<a href=#462 id=462 data-nosnippet>462</a>                    requested: requested.to_path_buf(),
+<a href=#463 id=463 data-nosnippet>463</a>                    canonical: target.path().to_path_buf(),
+<a href=#464 id=464 data-nosnippet>464</a>                    location: edge.location(),
+<a href=#465 id=465 data-nosnippet>465</a>                });
+<a href=#466 id=466 data-nosnippet>466</a>            }
+<a href=#467 id=467 data-nosnippet>467</a>            paths.insert(edge.target(), requested.to_path_buf());
+<a href=#468 id=468 data-nosnippet>468</a>            pending.push((edge.target(), <span class="number">0</span>));
+<a href=#469 id=469 data-nosnippet>469</a>        }
+<a href=#470 id=470 data-nosnippet>470</a>    }
+<a href=#471 id=471 data-nosnippet>471</a>    <span class="prelude-val">Ok</span>(())
+<a href=#472 id=472 data-nosnippet>472</a>}
+<a href=#473 id=473 data-nosnippet>473</a>
+<a href=#474 id=474 data-nosnippet>474</a><span class="kw">fn </span>dot_normalized(path: <span class="kw-2">&amp;</span>Path) -&gt; PathBuf {
+<a href=#475 id=475 data-nosnippet>475</a>    <span class="kw">let </span><span class="kw-2">mut </span>result = PathBuf::new();
+<a href=#476 id=476 data-nosnippet>476</a>    <span class="kw">for </span>component <span class="kw">in </span>path.components() {
+<a href=#477 id=477 data-nosnippet>477</a>        <span class="kw">match </span>component {
+<a href=#478 id=478 data-nosnippet>478</a>            Component::CurDir =&gt; {}
+<a href=#479 id=479 data-nosnippet>479</a>            Component::ParentDir =&gt; {
+<a href=#480 id=480 data-nosnippet>480</a>                result.pop();
+<a href=#481 id=481 data-nosnippet>481</a>            }
+<a href=#482 id=482 data-nosnippet>482</a>            other =&gt; result.push(other.as_os_str()),
+<a href=#483 id=483 data-nosnippet>483</a>        }
+<a href=#484 id=484 data-nosnippet>484</a>    }
+<a href=#485 id=485 data-nosnippet>485</a>    result
+<a href=#486 id=486 data-nosnippet>486</a>}
 </code></pre></div></section></main></body></html>

@@ -303,7 +303,7 @@
 <a href=#303 id=303 data-nosnippet>303</a>                    &amp;&amp; prefix.matched == <span class="self">self</span>.join.plan.patterns.len()
 <a href=#304 id=304 data-nosnippet>304</a>            });
 <a href=#305 id=305 data-nosnippet>305</a>            <span class="kw">let </span>positives = prefix.map(|prefix| PositiveRows {
-<a href=#306 id=306 data-nosnippet>306</a>                literals: <span class="self">self</span>.join.literals,
+<a href=#306 id=306 data-nosnippet>306</a>                literals: <span class="self">self</span>.join.literals.get(),
 <a href=#307 id=307 data-nosnippet>307</a>                truth: prefix
 <a href=#308 id=308 data-nosnippet>308</a>                    .pivot
 <a href=#309 id=309 data-nosnippet>309</a>                    .map_or(PositiveTruth::Held, |pivot| PositiveTruth::Open {

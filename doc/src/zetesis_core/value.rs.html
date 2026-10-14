@@ -160,7 +160,7 @@
 <a href=#160 id=160 data-nosnippet>160</a>    <span class="doccomment">/// Whether the two predicates share one name allocation, as a program's
 <a href=#161 id=161 data-nosnippet>161</a>    /// atoms of one predicate do after admission.
 <a href=#162 id=162 data-nosnippet>162</a>    </span><span class="attr">#[must_use]
-<a href=#163 id=163 data-nosnippet>163</a>    </span><span class="kw">pub fn </span>shares_name(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span><span class="self">Self</span>) -&gt; bool {
+<a href=#163 id=163 data-nosnippet>163</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>shares_name(<span class="kw-2">&amp;</span><span class="self">self</span>, other: <span class="kw-2">&amp;</span><span class="self">Self</span>) -&gt; bool {
 <a href=#164 id=164 data-nosnippet>164</a>        std::sync::Arc::ptr_eq(<span class="kw-2">&amp;</span><span class="self">self</span>.name, <span class="kw-2">&amp;</span>other.name)
 <a href=#165 id=165 data-nosnippet>165</a>    }
 <a href=#166 id=166 data-nosnippet>166</a>    <span class="doccomment">/// The exact predicate name.

@@ -4,7 +4,7 @@
 <a href=#4 id=4 data-nosnippet>4</a><span class="kw">use crate</span>::{Sign, ValueNodeRef, ValueResource};
 <a href=#5 id=5 data-nosnippet>5</a>
 <a href=#6 id=6 data-nosnippet>6</a><span class="kw">use </span><span class="kw">super</span>::control::Work;
-<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span><span class="kw">super</span>::nodes::{Compound, Kind, arity, ceiling, node_measures, normalized};
+<a href=#7 id=7 data-nosnippet>7</a><span class="kw">use </span><span class="kw">super</span>::nodes::{Compound, Kind, ceiling, node_measures, normalized};
 <a href=#8 id=8 data-nosnippet>8</a><span class="kw">use </span><span class="kw">super</span>::segments::{Columns, Locator, Signature, Text};
 <a href=#9 id=9 data-nosnippet>9</a><span class="kw">use super</span>::{AtomId, Failure, Fault, PredicateId, Store, TermId, TextId, budget, next_id};
 <a href=#10 id=10 data-nosnippet>10</a>
@@ -145,7 +145,7 @@
 <a href=#145 id=145 data-nosnippet>145</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;TermId, Failure&lt;E&gt;&gt; {
 <a href=#146 id=146 data-nosnippet>146</a>        work.step()<span class="question-mark">?</span>;
 <a href=#147 id=147 data-nosnippet>147</a>        <span class="self">self</span>.budget.check()<span class="question-mark">?</span>;
-<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">if </span>arity(descriptor) != children.len() {
+<a href=#148 id=148 data-nosnippet>148</a>        <span class="kw">if </span>descriptor.arity() != children.len() {
 <a href=#149 id=149 data-nosnippet>149</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Fault::Shape.into());
 <a href=#150 id=150 data-nosnippet>150</a>        }
 <a href=#151 id=151 data-nosnippet>151</a>        <span class="kw">let </span>descriptor = normalized(descriptor)<span class="question-mark">?</span>;
@@ -254,7 +254,7 @@
 <a href=#254 id=254 data-nosnippet>254</a>        work: <span class="kw-2">&amp;mut </span>Work&lt;<span class="lifetime">'_</span>, E&gt;,
 <a href=#255 id=255 data-nosnippet>255</a>    ) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;TermId&gt;, Failure&lt;E&gt;&gt; {
 <a href=#256 id=256 data-nosnippet>256</a>        work.step()<span class="question-mark">?</span>;
-<a href=#257 id=257 data-nosnippet>257</a>        <span class="kw">if </span>arity(descriptor) != children.len() {
+<a href=#257 id=257 data-nosnippet>257</a>        <span class="kw">if </span>descriptor.arity() != children.len() {
 <a href=#258 id=258 data-nosnippet>258</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(Fault::Shape.into());
 <a href=#259 id=259 data-nosnippet>259</a>        }
 <a href=#260 id=260 data-nosnippet>260</a>        <span class="kw">let </span>descriptor = normalized(descriptor)<span class="question-mark">?</span>;

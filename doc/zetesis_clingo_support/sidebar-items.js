@@ -1,1 +1,1 @@
-window.SIDEBAR_ITEMS = {"constant":["DECIDED","ENUMERATION","REPORT_BYTES","VERSION"],"fn":["answers","atoms","costs","executable","json","model_records","records","run","run_accepting","run_in"],"struct":["Limits","Run"]};
+window.SIDEBAR_ITEMS = {"constant":["DECIDED","ENUMERATION","REPORT_BYTES","VERSION"],"fn":["answers","atoms","costs","executable","full_models","json","model_records","objective_free_models","records","run","run_accepting","run_in"],"struct":["Limits","Run"]};

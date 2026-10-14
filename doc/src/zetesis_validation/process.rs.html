@@ -255,7 +255,7 @@
 <a href=#255 id=255 data-nosnippet>255</a>    ///
 <a href=#256 id=256 data-nosnippet>256</a>    /// # Errors
 <a href=#257 id=257 data-nosnippet>257</a>    /// Returns the first invalid UTF-8 sequence.
-<a href=#258 id=258 data-nosnippet>258</a>    </span><span class="kw">pub fn </span>stderr_text(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;</span>str, std::str::Utf8Error&gt; {
+<a href=#258 id=258 data-nosnippet>258</a>    </span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>stderr_text(<span class="kw-2">&amp;</span><span class="self">self</span>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="kw-2">&amp;</span>str, std::str::Utf8Error&gt; {
 <a href=#259 id=259 data-nosnippet>259</a>        std::str::from_utf8(<span class="kw-2">&amp;</span><span class="self">self</span>.stderr)
 <a href=#260 id=260 data-nosnippet>260</a>    }
 <a href=#261 id=261 data-nosnippet>261</a>    <span class="doccomment">/// Primary capture fault, without replacing a preceding limit/deadline stop.
@@ -409,7 +409,7 @@
 <a href=#409 id=409 data-nosnippet>409</a>///
 <a href=#410 id=410 data-nosnippet>410</a>/// # Errors
 <a href=#411 id=411 data-nosnippet>411</a>/// Returns the same pre-spawn refusals as [`invoke_with_cancellation`].
-<a href=#412 id=412 data-nosnippet>412</a></span><span class="kw">pub fn </span>invoke_supervised_with_cancellation(
+<a href=#412 id=412 data-nosnippet>412</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>invoke_supervised_with_cancellation(
 <a href=#413 id=413 data-nosnippet>413</a>    invocation: Invocation&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#414 id=414 data-nosnippet>414</a>    limits: Limits,
 <a href=#415 id=415 data-nosnippet>415</a>    cancelled: <span class="kw-2">&amp;</span>AtomicBool,

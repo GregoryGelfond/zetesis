@@ -234,67 +234,73 @@
 <a href=#234 id=234 data-nosnippet>234</a>    }
 <a href=#235 id=235 data-nosnippet>235</a>}
 <a href=#236 id=236 data-nosnippet>236</a>
-<a href=#237 id=237 data-nosnippet>237</a><span class="doccomment">/// Check clingo's JSON complete-enumeration or optN report convention.
-<a href=#238 id=238 data-nosnippet>238</a>/// Object decoding keeps the last occurrence of a duplicate key, as in
-<a href=#239 id=239 data-nosnippet>239</a>/// [`native_json`]. Validation applies to that decoded document and does not
-<a href=#240 id=240 data-nosnippet>240</a>/// establish unique key spelling in the original bytes.
-<a href=#241 id=241 data-nosnippet>241</a>///
-<a href=#242 id=242 data-nosnippet>242</a>/// Exactly the first final-cost incumbent discovery is removed in optN. Its
-<a href=#243 id=243 data-nosnippet>243</a>/// complete display multiset must recur among the declared optimal witnesses.
-<a href=#244 id=244 data-nosnippet>244</a>/// Every incumbent is checked for valid symbols, dimensions, and cost ordering.
-<a href=#245 id=245 data-nosnippet>245</a>///
-<a href=#246 id=246 data-nosnippet>246</a>/// # Errors
-<a href=#247 id=247 data-nosnippet>247</a>/// Refuses invalid UTF-8/JSON, limits, incomplete reports, and inconsistent
-<a href=#248 id=248 data-nosnippet>248</a>/// status, costs, witness multiplicities or declared counts.
-<a href=#249 id=249 data-nosnippet>249</a></span><span class="kw">pub fn </span>clingo_json(bytes: <span class="kw-2">&amp;</span>[u8], limits: Limits) -&gt; <span class="prelude-ty">Result</span>&lt;ReportedAnswers, Error&gt; {
-<a href=#250 id=250 data-nosnippet>250</a>    clingo::parse(text(bytes, limits)<span class="question-mark">?</span>, limits)
-<a href=#251 id=251 data-nosnippet>251</a>}
-<a href=#252 id=252 data-nosnippet>252</a>
-<a href=#253 id=253 data-nosnippet>253</a><span class="doccomment">/// Check a complete plain native report used by the correctness adapter.
-<a href=#254 id=254 data-nosnippet>254</a>///
-<a href=#255 id=255 data-nosnippet>255</a>/// Current summaries require an unqualified numeric `Models:` count and one
-<a href=#256 id=256 data-nosnippet>256</a>/// terminal status. Historical summaries instead require the unique
-<a href=#257 id=257 data-nosnippet>257</a>/// `Coverage: exhausted` record and may append statistics to their model count.
-<a href=#258 id=258 data-nosnippet>258</a>/// `optimized` is the caller's objective contract. Exhausted weighted native
-<a href=#259 id=259 data-nosnippet>259</a>/// enumeration retains the exact best vector and all ties. This presentation
-<a href=#260 id=260 data-nosnippet>260</a>/// protocol is distinct from the native typed model-record interface.
-<a href=#261 id=261 data-nosnippet>261</a>///
-<a href=#262 id=262 data-nosnippet>262</a>/// # Errors
-<a href=#263 id=263 data-nosnippet>263</a>/// Refuses invalid UTF-8, limits, missing/contradictory completion summaries,
-<a href=#264 id=264 data-nosnippet>264</a>/// inconsistent witness counts, and absent or malformed objective vectors.
-<a href=#265 id=265 data-nosnippet>265</a></span><span class="kw">pub fn </span>native_text(
-<a href=#266 id=266 data-nosnippet>266</a>    bytes: <span class="kw-2">&amp;</span>[u8],
-<a href=#267 id=267 data-nosnippet>267</a>    optimized: bool,
-<a href=#268 id=268 data-nosnippet>268</a>    limits: Limits,
-<a href=#269 id=269 data-nosnippet>269</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ReportedAnswers, Error&gt; {
-<a href=#270 id=270 data-nosnippet>270</a>    native::parse(text(bytes, limits)<span class="question-mark">?</span>, optimized, limits)
-<a href=#271 id=271 data-nosnippet>271</a>}
-<a href=#272 id=272 data-nosnippet>272</a>
-<a href=#273 id=273 data-nosnippet>273</a><span class="doccomment">/// Tokenize one printed display without interpreting ASP syntax.
-<a href=#274 id=274 data-nosnippet>274</a>///
-<a href=#275 id=275 data-nosnippet>275</a>/// Parentheses and quoted strings prevent internal separators from splitting
-<a href=#276 id=276 data-nosnippet>276</a>/// symbols. `comma_separated` additionally accepts top-level commas, as used by
-<a href=#277 id=277 data-nosnippet>277</a>/// the legacy annotation contract. Symbol occurrences are sorted and retained.
-<a href=#278 id=278 data-nosnippet>278</a>///
-<a href=#279 id=279 data-nosnippet>279</a>/// # Errors
-<a href=#280 id=280 data-nosnippet>280</a>/// Refuses the input/symbol ceiling, unmatched parentheses, or unterminated text.
-<a href=#281 id=281 data-nosnippet>281</a></span><span class="kw">pub fn </span>split_display(
-<a href=#282 id=282 data-nosnippet>282</a>    value: <span class="kw-2">&amp;</span>str,
-<a href=#283 id=283 data-nosnippet>283</a>    comma_separated: bool,
-<a href=#284 id=284 data-nosnippet>284</a>    limits: Limits,
-<a href=#285 id=285 data-nosnippet>285</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;String&gt;, Error&gt; {
-<a href=#286 id=286 data-nosnippet>286</a>    text(value.as_bytes(), limits)<span class="question-mark">?</span>;
-<a href=#287 id=287 data-nosnippet>287</a>    <span class="kw">let </span>display = display::split_atoms(value, comma_separated)<span class="question-mark">?</span>;
-<a href=#288 id=288 data-nosnippet>288</a>    check(Resource::Symbols, limits.max_symbols, display.len())<span class="question-mark">?</span>;
-<a href=#289 id=289 data-nosnippet>289</a>    <span class="prelude-val">Ok</span>(display)
-<a href=#290 id=290 data-nosnippet>290</a>}
-<a href=#291 id=291 data-nosnippet>291</a>
-<a href=#292 id=292 data-nosnippet>292</a><span class="doccomment">/// Parse a whitespace-separated signed 64-bit reported objective vector.
-<a href=#293 id=293 data-nosnippet>293</a>///
-<a href=#294 id=294 data-nosnippet>294</a>/// # Errors
-<a href=#295 id=295 data-nosnippet>295</a>/// Refuses the input/dimension ceiling or a nonrepresentable integer.
-<a href=#296 id=296 data-nosnippet>296</a></span><span class="kw">pub fn </span>parse_costs(value: <span class="kw-2">&amp;</span>str, limits: Limits) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;i64&gt;, Error&gt; {
-<a href=#297 id=297 data-nosnippet>297</a>    text(value.as_bytes(), limits)<span class="question-mark">?</span>;
-<a href=#298 id=298 data-nosnippet>298</a>    display::integers(value, limits)
-<a href=#299 id=299 data-nosnippet>299</a>}
+<a href=#237 id=237 data-nosnippet>237</a><span class="doccomment">/// The exit statuses of a clingo run that decided its program: satisfiable
+<a href=#238 id=238 data-nosnippet>238</a>/// (10), unsatisfiable (20), or satisfiable with its search space exhausted
+<a href=#239 id=239 data-nosnippet>239</a>/// (30). A caller's exit policy for the reference uses them; a report's
+<a href=#240 id=240 data-nosnippet>240</a>/// contents establish nothing about the exit.
+<a href=#241 id=241 data-nosnippet>241</a></span><span class="kw">pub const </span>CLINGO_DECIDED_EXITS: [i32; <span class="number">3</span>] = [<span class="number">10</span>, <span class="number">20</span>, <span class="number">30</span>];
+<a href=#242 id=242 data-nosnippet>242</a>
+<a href=#243 id=243 data-nosnippet>243</a><span class="doccomment">/// Check clingo's JSON complete-enumeration or optN report convention.
+<a href=#244 id=244 data-nosnippet>244</a>/// Object decoding keeps the last occurrence of a duplicate key, as in
+<a href=#245 id=245 data-nosnippet>245</a>/// [`native_json`]. Validation applies to that decoded document and does not
+<a href=#246 id=246 data-nosnippet>246</a>/// establish unique key spelling in the original bytes.
+<a href=#247 id=247 data-nosnippet>247</a>///
+<a href=#248 id=248 data-nosnippet>248</a>/// Exactly the first final-cost incumbent discovery is removed in optN. Its
+<a href=#249 id=249 data-nosnippet>249</a>/// complete display multiset must recur among the declared optimal witnesses.
+<a href=#250 id=250 data-nosnippet>250</a>/// Every incumbent is checked for valid symbols, dimensions, and cost ordering.
+<a href=#251 id=251 data-nosnippet>251</a>///
+<a href=#252 id=252 data-nosnippet>252</a>/// # Errors
+<a href=#253 id=253 data-nosnippet>253</a>/// Refuses invalid UTF-8/JSON, limits, incomplete reports, and inconsistent
+<a href=#254 id=254 data-nosnippet>254</a>/// status, costs, witness multiplicities or declared counts.
+<a href=#255 id=255 data-nosnippet>255</a></span><span class="kw">pub fn </span>clingo_json(bytes: <span class="kw-2">&amp;</span>[u8], limits: Limits) -&gt; <span class="prelude-ty">Result</span>&lt;ReportedAnswers, Error&gt; {
+<a href=#256 id=256 data-nosnippet>256</a>    clingo::parse(text(bytes, limits)<span class="question-mark">?</span>, limits)
+<a href=#257 id=257 data-nosnippet>257</a>}
+<a href=#258 id=258 data-nosnippet>258</a>
+<a href=#259 id=259 data-nosnippet>259</a><span class="doccomment">/// Check a complete plain native report used by the correctness adapter.
+<a href=#260 id=260 data-nosnippet>260</a>///
+<a href=#261 id=261 data-nosnippet>261</a>/// Current summaries require an unqualified numeric `Models:` count and one
+<a href=#262 id=262 data-nosnippet>262</a>/// terminal status. Historical summaries instead require the unique
+<a href=#263 id=263 data-nosnippet>263</a>/// `Coverage: exhausted` record and may append statistics to their model count.
+<a href=#264 id=264 data-nosnippet>264</a>/// `optimized` is the caller's objective contract. Exhausted weighted native
+<a href=#265 id=265 data-nosnippet>265</a>/// enumeration retains the exact best vector and all ties. This presentation
+<a href=#266 id=266 data-nosnippet>266</a>/// protocol is distinct from the native typed model-record interface.
+<a href=#267 id=267 data-nosnippet>267</a>///
+<a href=#268 id=268 data-nosnippet>268</a>/// # Errors
+<a href=#269 id=269 data-nosnippet>269</a>/// Refuses invalid UTF-8, limits, missing/contradictory completion summaries,
+<a href=#270 id=270 data-nosnippet>270</a>/// inconsistent witness counts, and absent or malformed objective vectors.
+<a href=#271 id=271 data-nosnippet>271</a></span><span class="kw">pub fn </span>native_text(
+<a href=#272 id=272 data-nosnippet>272</a>    bytes: <span class="kw-2">&amp;</span>[u8],
+<a href=#273 id=273 data-nosnippet>273</a>    optimized: bool,
+<a href=#274 id=274 data-nosnippet>274</a>    limits: Limits,
+<a href=#275 id=275 data-nosnippet>275</a>) -&gt; <span class="prelude-ty">Result</span>&lt;ReportedAnswers, Error&gt; {
+<a href=#276 id=276 data-nosnippet>276</a>    native::parse(text(bytes, limits)<span class="question-mark">?</span>, optimized, limits)
+<a href=#277 id=277 data-nosnippet>277</a>}
+<a href=#278 id=278 data-nosnippet>278</a>
+<a href=#279 id=279 data-nosnippet>279</a><span class="doccomment">/// Tokenize one printed display without interpreting ASP syntax.
+<a href=#280 id=280 data-nosnippet>280</a>///
+<a href=#281 id=281 data-nosnippet>281</a>/// Parentheses and quoted strings prevent internal separators from splitting
+<a href=#282 id=282 data-nosnippet>282</a>/// symbols. `comma_separated` additionally accepts top-level commas, as used by
+<a href=#283 id=283 data-nosnippet>283</a>/// the legacy annotation contract. Symbol occurrences are sorted and retained.
+<a href=#284 id=284 data-nosnippet>284</a>///
+<a href=#285 id=285 data-nosnippet>285</a>/// # Errors
+<a href=#286 id=286 data-nosnippet>286</a>/// Refuses the input/symbol ceiling, unmatched parentheses, or unterminated text.
+<a href=#287 id=287 data-nosnippet>287</a></span><span class="kw">pub fn </span>split_display(
+<a href=#288 id=288 data-nosnippet>288</a>    value: <span class="kw-2">&amp;</span>str,
+<a href=#289 id=289 data-nosnippet>289</a>    comma_separated: bool,
+<a href=#290 id=290 data-nosnippet>290</a>    limits: Limits,
+<a href=#291 id=291 data-nosnippet>291</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;String&gt;, Error&gt; {
+<a href=#292 id=292 data-nosnippet>292</a>    text(value.as_bytes(), limits)<span class="question-mark">?</span>;
+<a href=#293 id=293 data-nosnippet>293</a>    <span class="kw">let </span>display = display::split_atoms(value, comma_separated)<span class="question-mark">?</span>;
+<a href=#294 id=294 data-nosnippet>294</a>    check(Resource::Symbols, limits.max_symbols, display.len())<span class="question-mark">?</span>;
+<a href=#295 id=295 data-nosnippet>295</a>    <span class="prelude-val">Ok</span>(display)
+<a href=#296 id=296 data-nosnippet>296</a>}
+<a href=#297 id=297 data-nosnippet>297</a>
+<a href=#298 id=298 data-nosnippet>298</a><span class="doccomment">/// Parse a whitespace-separated signed 64-bit reported objective vector.
+<a href=#299 id=299 data-nosnippet>299</a>///
+<a href=#300 id=300 data-nosnippet>300</a>/// # Errors
+<a href=#301 id=301 data-nosnippet>301</a>/// Refuses the input/dimension ceiling or a nonrepresentable integer.
+<a href=#302 id=302 data-nosnippet>302</a></span><span class="kw">pub fn </span>parse_costs(value: <span class="kw-2">&amp;</span>str, limits: Limits) -&gt; <span class="prelude-ty">Result</span>&lt;Vec&lt;i64&gt;, Error&gt; {
+<a href=#303 id=303 data-nosnippet>303</a>    text(value.as_bytes(), limits)<span class="question-mark">?</span>;
+<a href=#304 id=304 data-nosnippet>304</a>    display::integers(value, limits)
+<a href=#305 id=305 data-nosnippet>305</a>}
 </code></pre></div></section></main></body></html>

@@ -84,13 +84,13 @@
 <a href=#84 id=84 data-nosnippet>84</a>}
 <a href=#85 id=85 data-nosnippet>85</a>
 <a href=#86 id=86 data-nosnippet>86</a><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">fn </span>specialize(
-<a href=#87 id=87 data-nosnippet>87</a>    program: <span class="kw-2">&amp;</span>Program,
+<a href=#87 id=87 data-nosnippet>87</a>    program: <span class="kw-2">&amp;</span><span class="kw">crate</span>::formula_analysis::Summary,
 <a href=#88 id=88 data-nosnippet>88</a>    owners: <span class="kw-2">&amp;</span>Owners,
 <a href=#89 id=89 data-nosnippet>89</a>    facts: <span class="kw-2">&amp;mut </span>FixedFacts&lt;<span class="lifetime">'_</span>&gt;,
 <a href=#90 id=90 data-nosnippet>90</a>    budget: <span class="kw-2">&amp;mut </span>Budget,
 <a href=#91 id=91 data-nosnippet>91</a>    site: ProgramSite,
 <a href=#92 id=92 data-nosnippet>92</a>) -&gt; <span class="prelude-ty">Result</span>&lt;Replacements, FormulaFailure&gt; {
-<a href=#93 id=93 data-nosnippet>93</a>    with_policy(program, owners, facts, budget, site, POLICY)
+<a href=#93 id=93 data-nosnippet>93</a>    with_policy(program.program(), owners, facts, budget, site, POLICY)
 <a href=#94 id=94 data-nosnippet>94</a>}
 <a href=#95 id=95 data-nosnippet>95</a>
 <a href=#96 id=96 data-nosnippet>96</a><span class="kw">fn </span>with_policy(
@@ -438,154 +438,159 @@
 <a href=#438 id=438 data-nosnippet>438</a>        };
 <a href=#439 id=439 data-nosnippet>439</a>        <span class="comment">// Only a flat anchor with two distinct named variables can project.
 <a href=#440 id=440 data-nosnippet>440</a>        // Its fixed rows still come from the same authoritative whole program.
-<a href=#441 id=441 data-nosnippet>441</a>        </span><span class="kw">let </span>index = facts.read(reading.work).map_err(|<span class="kw">_</span>| Failure::Optional)<span class="question-mark">?</span>;
-<a href=#442 id=442 data-nosnippet>442</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(block) = block(literals, anchor, <span class="kw-2">&amp;</span>variables, index, reading)<span class="question-mark">? </span><span class="kw">else </span>{
-<a href=#443 id=443 data-nosnippet>443</a>            <span class="kw">continue</span>;
-<a href=#444 id=444 data-nosnippet>444</a>        };
-<a href=#445 id=445 data-nosnippet>445</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(selected) = project(literals, <span class="kw-2">&amp;</span>block, maximum, reading)<span class="question-mark">? </span><span class="kw">else </span>{
-<a href=#446 id=446 data-nosnippet>446</a>            <span class="kw">continue</span>;
-<a href=#447 id=447 data-nosnippet>447</a>        };
-<a href=#448 id=448 data-nosnippet>448</a>        <span class="kw">return </span>emit(literals, <span class="kw-2">&amp;</span>block, <span class="kw-2">&amp;</span>selected, reading);
-<a href=#449 id=449 data-nosnippet>449</a>    }
-<a href=#450 id=450 data-nosnippet>450</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
-<a href=#451 id=451 data-nosnippet>451</a>}
-<a href=#452 id=452 data-nosnippet>452</a>
-<a href=#453 id=453 data-nosnippet>453</a><span class="doccomment">/// Check the named retained and overlapping construction payload before
-<a href=#454 id=454 data-nosnippet>454</a>/// cloning a residual and building its typed substitution. This admits storage;
-<a href=#455 id=455 data-nosnippet>455</a>/// the later compiler and value constructors keep their own capacity checks.
-<a href=#456 id=456 data-nosnippet>456</a></span><span class="kw">fn </span>admit_residual_storage(
-<a href=#457 id=457 data-nosnippet>457</a>    literals: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>Literal],
-<a href=#458 id=458 data-nosnippet>458</a>    block: <span class="kw-2">&amp;</span>Block&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
-<a href=#459 id=459 data-nosnippet>459</a>    selected: <span class="kw-2">&amp;</span>Selected&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#460 id=460 data-nosnippet>460</a>    bytes: u128,
-<a href=#461 id=461 data-nosnippet>461</a>    reading: <span class="kw-2">&amp;mut </span>Reading&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#462 id=462 data-nosnippet>462</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;u128&gt;, Failure&gt; {
-<a href=#463 id=463 data-nosnippet>463</a>    <span class="kw">let </span>anchor = atom(literals[block.anchor]);
-<a href=#464 id=464 data-nosnippet>464</a>    <span class="comment">// Bound copied source cells and substituted atomic text before calling
-<a href=#465 id=465 data-nosnippet>465</a>    // the dependency's total, iterative typed substitution operation.
-<a href=#466 id=466 data-nosnippet>466</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>payload = size_of::&lt;Rule&gt;() <span class="kw">as </span>u128;
-<a href=#467 id=467 data-nosnippet>467</a>    <span class="kw">let </span>max_value = selected
-<a href=#468 id=468 data-nosnippet>468</a>        .witness
-<a href=#469 id=469 data-nosnippet>469</a>        .iter()
-<a href=#470 id=470 data-nosnippet>470</a>        .filter_map(|term| {
-<a href=#471 id=471 data-nosnippet>471</a>            <span class="kw">if let </span>Term::Symbolic(value) = term {
-<a href=#472 id=472 data-nosnippet>472</a>                <span class="prelude-val">Some</span>(<span class="kw">crate</span>::structural_value::symbol_bytes(value))
-<a href=#473 id=473 data-nosnippet>473</a>            } <span class="kw">else </span>{
-<a href=#474 id=474 data-nosnippet>474</a>                <span class="prelude-val">None
-<a href=#475 id=475 data-nosnippet>475</a>            </span>}
-<a href=#476 id=476 data-nosnippet>476</a>        })
-<a href=#477 id=477 data-nosnippet>477</a>        .max()
-<a href=#478 id=478 data-nosnippet>478</a>        .unwrap_or(<span class="number">0</span>);
-<a href=#479 id=479 data-nosnippet>479</a>    <span class="kw">for </span>(position, literal) <span class="kw">in </span>literals.iter().enumerate() {
-<a href=#480 id=480 data-nosnippet>480</a>        reading.step()<span class="question-mark">?</span>;
-<a href=#481 id=481 data-nosnippet>481</a>        <span class="kw">if </span>position == block.anchor || block.guards.iter().any(|(guard, <span class="kw">_</span>, <span class="kw">_</span>)| <span class="kw-2">*</span>guard == position) {
-<a href=#482 id=482 data-nosnippet>482</a>            <span class="kw">continue</span>;
-<a href=#483 id=483 data-nosnippet>483</a>        }
-<a href=#484 id=484 data-nosnippet>484</a>        <span class="kw">let </span>atom = atom(literal);
-<a href=#485 id=485 data-nosnippet>485</a>        payload = payload.saturating_add(
-<a href=#486 id=486 data-nosnippet>486</a>            size_of::&lt;BodyElement&gt;() <span class="kw">as </span>u128
-<a href=#487 id=487 data-nosnippet>487</a>                + size_of::&lt;Atom&gt;() <span class="kw">as </span>u128
-<a href=#488 id=488 data-nosnippet>488</a>                + atom.name.as_str().len() <span class="kw">as </span>u128,
-<a href=#489 id=489 data-nosnippet>489</a>        );
-<a href=#490 id=490 data-nosnippet>490</a>        <span class="kw">for </span>term <span class="kw">in </span>terms(atom).iter().flat_map(Term::subterms) {
-<a href=#491 id=491 data-nosnippet>491</a>            reading.step()<span class="question-mark">?</span>;
-<a href=#492 id=492 data-nosnippet>492</a>            payload = payload.saturating_add(
-<a href=#493 id=493 data-nosnippet>493</a>                size_of::&lt;Term&gt;() <span class="kw">as </span>u128
-<a href=#494 id=494 data-nosnippet>494</a>                    + <span class="kw">match </span>term {
-<a href=#495 id=495 data-nosnippet>495</a>                        Term::Symbolic(value) =&gt; <span class="kw">crate</span>::structural_value::symbol_bytes(value),
-<a href=#496 id=496 data-nosnippet>496</a>                        Term::Variable(Variable::Named(name)) =&gt; {
-<a href=#497 id=497 data-nosnippet>497</a>                            max_value + name.as_str().len() <span class="kw">as </span>u128
-<a href=#498 id=498 data-nosnippet>498</a>                        }
-<a href=#499 id=499 data-nosnippet>499</a>                        Term::Function { name, .. } =&gt; name.as_str().len() <span class="kw">as </span>u128,
-<a href=#500 id=500 data-nosnippet>500</a>                        <span class="kw">_ </span>=&gt; <span class="number">0</span>,
-<a href=#501 id=501 data-nosnippet>501</a>                    },
-<a href=#502 id=502 data-nosnippet>502</a>            );
-<a href=#503 id=503 data-nosnippet>503</a>        }
-<a href=#504 id=504 data-nosnippet>504</a>    }
-<a href=#505 id=505 data-nosnippet>505</a>    <span class="kw">let </span>anchor_bytes = terms(anchor).len() <span class="kw">as </span>u128
-<a href=#506 id=506 data-nosnippet>506</a>        * (size_of::&lt;Term&gt;() <span class="kw">as </span>u128 + max_value + size_of::&lt;Variable&gt;() <span class="kw">as </span>u128)
-<a href=#507 id=507 data-nosnippet>507</a>        + anchor.name.as_str().len() <span class="kw">as </span>u128;
-<a href=#508 id=508 data-nosnippet>508</a>    <span class="comment">// The cloned residual and substitution's output overlap; the anchor
-<a href=#509 id=509 data-nosnippet>509</a>    // witness and unifier's finite argument/binding cells coexist with both.
-<a href=#510 id=510 data-nosnippet>510</a>    </span><span class="kw">let </span>temporary = payload
-<a href=#511 id=511 data-nosnippet>511</a>        .saturating_mul(<span class="number">2</span>)
-<a href=#512 id=512 data-nosnippet>512</a>        .saturating_add(anchor_bytes.saturating_mul(<span class="number">4</span>));
-<a href=#513 id=513 data-nosnippet>513</a>    <span class="kw">if </span>!reading.family(bytes.saturating_add(temporary))<span class="question-mark">? </span>{
-<a href=#514 id=514 data-nosnippet>514</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
-<a href=#515 id=515 data-nosnippet>515</a>    }
-<a href=#516 id=516 data-nosnippet>516</a>    reading
-<a href=#517 id=517 data-nosnippet>517</a>        .budget
-<a href=#518 id=518 data-nosnippet>518</a>        .charge(ExpansionResource::ScalarBytes, temporary, reading.site)<span class="question-mark">?</span>;
-<a href=#519 id=519 data-nosnippet>519</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(bytes.saturating_add(payload)))
-<a href=#520 id=520 data-nosnippet>520</a>}
-<a href=#521 id=521 data-nosnippet>521</a>
-<a href=#522 id=522 data-nosnippet>522</a><span class="kw">fn </span>emit(
-<a href=#523 id=523 data-nosnippet>523</a>    literals: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>Literal],
-<a href=#524 id=524 data-nosnippet>524</a>    block: <span class="kw-2">&amp;</span>Block&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
-<a href=#525 id=525 data-nosnippet>525</a>    selected: <span class="kw-2">&amp;</span>[Selected&lt;<span class="lifetime">'_</span>&gt;],
-<a href=#526 id=526 data-nosnippet>526</a>    reading: <span class="kw-2">&amp;mut </span>Reading&lt;<span class="lifetime">'_</span>&gt;,
-<a href=#527 id=527 data-nosnippet>527</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;Vec&lt;Rule&gt;&gt;, Failure&gt; {
-<a href=#528 id=528 data-nosnippet>528</a>    <span class="kw">let </span><span class="kw-2">mut </span>rules = Vec::new();
-<a href=#529 id=529 data-nosnippet>529</a>    <span class="kw">let </span><span class="kw-2">mut </span>bytes = <span class="number">0_u128</span>;
-<a href=#530 id=530 data-nosnippet>530</a>    <span class="kw">for </span>selected <span class="kw">in </span>selected {
-<a href=#531 id=531 data-nosnippet>531</a>        reading.step()<span class="question-mark">?</span>;
-<a href=#532 id=532 data-nosnippet>532</a>        <span class="kw">let </span>anchor = atom(literals[block.anchor]);
-<a href=#533 id=533 data-nosnippet>533</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(admitted_bytes) =
-<a href=#534 id=534 data-nosnippet>534</a>            admit_residual_storage(literals, block, selected, bytes, reading)<span class="question-mark">?
-<a href=#535 id=535 data-nosnippet>535</a>        </span><span class="kw">else </span>{
-<a href=#536 id=536 data-nosnippet>536</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
-<a href=#537 id=537 data-nosnippet>537</a>        };
-<a href=#538 id=538 data-nosnippet>538</a>        bytes = admitted_bytes;
-<a href=#539 id=539 data-nosnippet>539</a>        <span class="kw">let </span><span class="kw-2">mut </span>body = Vec::new();
-<a href=#540 id=540 data-nosnippet>540</a>        <span class="kw">for </span>(position, literal) <span class="kw">in </span>literals.iter().enumerate() {
-<a href=#541 id=541 data-nosnippet>541</a>            <span class="kw">if </span>position != block.anchor
-<a href=#542 id=542 data-nosnippet>542</a>                &amp;&amp; !block.guards.iter().any(|(guard, <span class="kw">_</span>, <span class="kw">_</span>)| <span class="kw-2">*</span>guard == position)
-<a href=#543 id=543 data-nosnippet>543</a>            {
-<a href=#544 id=544 data-nosnippet>544</a>                reading.push(<span class="kw-2">&amp;mut </span>body, BodyElement::Literal((<span class="kw-2">*</span>literal).clone()))<span class="question-mark">?</span>;
-<a href=#545 id=545 data-nosnippet>545</a>            }
-<a href=#546 id=546 data-nosnippet>546</a>        }
-<a href=#547 id=547 data-nosnippet>547</a>        <span class="kw">let </span>witness = Atom {
-<a href=#548 id=548 data-nosnippet>548</a>            sign: anchor.sign,
-<a href=#549 id=549 data-nosnippet>549</a>            name: anchor.name.clone(),
-<a href=#550 id=550 data-nosnippet>550</a>            arguments: Arguments::Single(selected.witness.to_vec()),
-<a href=#551 id=551 data-nosnippet>551</a>        };
-<a href=#552 id=552 data-nosnippet>552</a>        <span class="kw">let </span>substitution = mgu(anchor, <span class="kw-2">&amp;</span>witness)
-<a href=#553 id=553 data-nosnippet>553</a>            .expect(<span class="string">"flat atomic anchor is a pattern"</span>)
-<a href=#554 id=554 data-nosnippet>554</a>            .expect(<span class="string">"selected matching witness"</span>);
-<a href=#555 id=555 data-nosnippet>555</a>        <span class="kw">let </span>rule = substitute(Rule::new(Head::Falsum, Body::new(body)), <span class="kw-2">&amp;</span>substitution);
-<a href=#556 id=556 data-nosnippet>556</a>        <span class="comment">// The pinned typed substitution canonicalizes every newly ground function
-<a href=#557 id=557 data-nosnippet>557</a>        // and tuple into one Symbolic value (including its entire subtree).
-<a href=#558 id=558 data-nosnippet>558</a>        // Validate that whole value before it can move admission earlier than
-<a href=#559 id=559 data-nosnippet>559</a>        // a support row. Logical refusal leaves the original rule intact;
-<a href=#560 id=560 data-nosnippet>560</a>        // fallible validation storage still reports its typed allocation fault.
-<a href=#561 id=561 data-nosnippet>561</a>        </span><span class="kw">for </span>element <span class="kw">in </span>rule.body().get().elements() {
-<a href=#562 id=562 data-nosnippet>562</a>            <span class="kw">let </span>BodyElement::Literal(literal) = element.get() <span class="kw">else </span>{
-<a href=#563 id=563 data-nosnippet>563</a>                <span class="macro">unreachable!</span>(<span class="string">"positive residual"</span>)
-<a href=#564 id=564 data-nosnippet>564</a>            };
-<a href=#565 id=565 data-nosnippet>565</a>            <span class="kw">for </span>term <span class="kw">in </span>atom(literal).argument_terms().flat_map(Term::subterms) {
-<a href=#566 id=566 data-nosnippet>566</a>                reading.step()<span class="question-mark">?</span>;
-<a href=#567 id=567 data-nosnippet>567</a>                <span class="kw">if let </span>Term::Symbolic(value) = term {
-<a href=#568 id=568 data-nosnippet>568</a>                    <span class="kw">match </span><span class="kw">crate</span>::compile::validate_scalar(value, reading.site) {
-<a href=#569 id=569 data-nosnippet>569</a>                        <span class="prelude-val">Ok</span>(()) =&gt; {}
-<a href=#570 id=570 data-nosnippet>570</a>                        <span class="prelude-val">Err</span>(
-<a href=#571 id=571 data-nosnippet>571</a>                            error @ <span class="kw">crate</span>::AdmissionFailure::Construction {
-<a href=#572 id=572 data-nosnippet>572</a>                                error:
-<a href=#573 id=573 data-nosnippet>573</a>                                    zetesis_core::ConstructionError::Value(
-<a href=#574 id=574 data-nosnippet>574</a>                                        zetesis_core::ValueError::Allocation,
-<a href=#575 id=575 data-nosnippet>575</a>                                    ),
-<a href=#576 id=576 data-nosnippet>576</a>                                ..
-<a href=#577 id=577 data-nosnippet>577</a>                            },
-<a href=#578 id=578 data-nosnippet>578</a>                        ) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Source(error.into())),
-<a href=#579 id=579 data-nosnippet>579</a>                        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>),
-<a href=#580 id=580 data-nosnippet>580</a>                    }
-<a href=#581 id=581 data-nosnippet>581</a>                }
-<a href=#582 id=582 data-nosnippet>582</a>            }
-<a href=#583 id=583 data-nosnippet>583</a>        }
-<a href=#584 id=584 data-nosnippet>584</a>        reading.push(<span class="kw-2">&amp;mut </span>rules, rule)<span class="question-mark">?</span>;
-<a href=#585 id=585 data-nosnippet>585</a>    }
-<a href=#586 id=586 data-nosnippet>586</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(rules))
-<a href=#587 id=587 data-nosnippet>587</a>}
-<a href=#588 id=588 data-nosnippet>588</a>
-<a href=#589 id=589 data-nosnippet>589</a><span class="attr">#[cfg(test)]
-<a href=#590 id=590 data-nosnippet>590</a></span><span class="kw">mod </span>tests;
+<a href=#441 id=441 data-nosnippet>441</a>        </span><span class="kw">let </span>index = facts
+<a href=#442 id=442 data-nosnippet>442</a>            .read(reading.work, reading.budget, reading.site)
+<a href=#443 id=443 data-nosnippet>443</a>            .map_err(|failure| <span class="kw">match </span>failure {
+<a href=#444 id=444 data-nosnippet>444</a>                <span class="kw">crate</span>::formula_rewrite::FactFailure::Stopped(<span class="kw">_</span>) =&gt; Failure::Optional,
+<a href=#445 id=445 data-nosnippet>445</a>                <span class="kw">crate</span>::formula_rewrite::FactFailure::Source(error) =&gt; Failure::Source(error),
+<a href=#446 id=446 data-nosnippet>446</a>            })<span class="question-mark">?</span>;
+<a href=#447 id=447 data-nosnippet>447</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(block) = block(literals, anchor, <span class="kw-2">&amp;</span>variables, index, reading)<span class="question-mark">? </span><span class="kw">else </span>{
+<a href=#448 id=448 data-nosnippet>448</a>            <span class="kw">continue</span>;
+<a href=#449 id=449 data-nosnippet>449</a>        };
+<a href=#450 id=450 data-nosnippet>450</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(selected) = project(literals, <span class="kw-2">&amp;</span>block, maximum, reading)<span class="question-mark">? </span><span class="kw">else </span>{
+<a href=#451 id=451 data-nosnippet>451</a>            <span class="kw">continue</span>;
+<a href=#452 id=452 data-nosnippet>452</a>        };
+<a href=#453 id=453 data-nosnippet>453</a>        <span class="kw">return </span>emit(literals, <span class="kw-2">&amp;</span>block, <span class="kw-2">&amp;</span>selected, reading);
+<a href=#454 id=454 data-nosnippet>454</a>    }
+<a href=#455 id=455 data-nosnippet>455</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>)
+<a href=#456 id=456 data-nosnippet>456</a>}
+<a href=#457 id=457 data-nosnippet>457</a>
+<a href=#458 id=458 data-nosnippet>458</a><span class="doccomment">/// Check the named retained and overlapping construction payload before
+<a href=#459 id=459 data-nosnippet>459</a>/// cloning a residual and building its typed substitution. This admits storage;
+<a href=#460 id=460 data-nosnippet>460</a>/// the later compiler and value constructors keep their own capacity checks.
+<a href=#461 id=461 data-nosnippet>461</a></span><span class="kw">fn </span>admit_residual_storage(
+<a href=#462 id=462 data-nosnippet>462</a>    literals: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>Literal],
+<a href=#463 id=463 data-nosnippet>463</a>    block: <span class="kw-2">&amp;</span>Block&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
+<a href=#464 id=464 data-nosnippet>464</a>    selected: <span class="kw-2">&amp;</span>Selected&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#465 id=465 data-nosnippet>465</a>    bytes: u128,
+<a href=#466 id=466 data-nosnippet>466</a>    reading: <span class="kw-2">&amp;mut </span>Reading&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#467 id=467 data-nosnippet>467</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;u128&gt;, Failure&gt; {
+<a href=#468 id=468 data-nosnippet>468</a>    <span class="kw">let </span>anchor = atom(literals[block.anchor]);
+<a href=#469 id=469 data-nosnippet>469</a>    <span class="comment">// Bound copied source cells and substituted atomic text before calling
+<a href=#470 id=470 data-nosnippet>470</a>    // the dependency's total, iterative typed substitution operation.
+<a href=#471 id=471 data-nosnippet>471</a>    </span><span class="kw">let </span><span class="kw-2">mut </span>payload = size_of::&lt;Rule&gt;() <span class="kw">as </span>u128;
+<a href=#472 id=472 data-nosnippet>472</a>    <span class="kw">let </span>max_value = selected
+<a href=#473 id=473 data-nosnippet>473</a>        .witness
+<a href=#474 id=474 data-nosnippet>474</a>        .iter()
+<a href=#475 id=475 data-nosnippet>475</a>        .filter_map(|term| {
+<a href=#476 id=476 data-nosnippet>476</a>            <span class="kw">if let </span>Term::Symbolic(value) = term {
+<a href=#477 id=477 data-nosnippet>477</a>                <span class="prelude-val">Some</span>(<span class="kw">crate</span>::structural_value::symbol_bytes(value))
+<a href=#478 id=478 data-nosnippet>478</a>            } <span class="kw">else </span>{
+<a href=#479 id=479 data-nosnippet>479</a>                <span class="prelude-val">None
+<a href=#480 id=480 data-nosnippet>480</a>            </span>}
+<a href=#481 id=481 data-nosnippet>481</a>        })
+<a href=#482 id=482 data-nosnippet>482</a>        .max()
+<a href=#483 id=483 data-nosnippet>483</a>        .unwrap_or(<span class="number">0</span>);
+<a href=#484 id=484 data-nosnippet>484</a>    <span class="kw">for </span>(position, literal) <span class="kw">in </span>literals.iter().enumerate() {
+<a href=#485 id=485 data-nosnippet>485</a>        reading.step()<span class="question-mark">?</span>;
+<a href=#486 id=486 data-nosnippet>486</a>        <span class="kw">if </span>position == block.anchor || block.guards.iter().any(|(guard, <span class="kw">_</span>, <span class="kw">_</span>)| <span class="kw-2">*</span>guard == position) {
+<a href=#487 id=487 data-nosnippet>487</a>            <span class="kw">continue</span>;
+<a href=#488 id=488 data-nosnippet>488</a>        }
+<a href=#489 id=489 data-nosnippet>489</a>        <span class="kw">let </span>atom = atom(literal);
+<a href=#490 id=490 data-nosnippet>490</a>        payload = payload.saturating_add(
+<a href=#491 id=491 data-nosnippet>491</a>            size_of::&lt;BodyElement&gt;() <span class="kw">as </span>u128
+<a href=#492 id=492 data-nosnippet>492</a>                + size_of::&lt;Atom&gt;() <span class="kw">as </span>u128
+<a href=#493 id=493 data-nosnippet>493</a>                + atom.name.as_str().len() <span class="kw">as </span>u128,
+<a href=#494 id=494 data-nosnippet>494</a>        );
+<a href=#495 id=495 data-nosnippet>495</a>        <span class="kw">for </span>term <span class="kw">in </span>terms(atom).iter().flat_map(Term::subterms) {
+<a href=#496 id=496 data-nosnippet>496</a>            reading.step()<span class="question-mark">?</span>;
+<a href=#497 id=497 data-nosnippet>497</a>            payload = payload.saturating_add(
+<a href=#498 id=498 data-nosnippet>498</a>                size_of::&lt;Term&gt;() <span class="kw">as </span>u128
+<a href=#499 id=499 data-nosnippet>499</a>                    + <span class="kw">match </span>term {
+<a href=#500 id=500 data-nosnippet>500</a>                        Term::Symbolic(value) =&gt; <span class="kw">crate</span>::structural_value::symbol_bytes(value),
+<a href=#501 id=501 data-nosnippet>501</a>                        Term::Variable(Variable::Named(name)) =&gt; {
+<a href=#502 id=502 data-nosnippet>502</a>                            max_value + name.as_str().len() <span class="kw">as </span>u128
+<a href=#503 id=503 data-nosnippet>503</a>                        }
+<a href=#504 id=504 data-nosnippet>504</a>                        Term::Function { name, .. } =&gt; name.as_str().len() <span class="kw">as </span>u128,
+<a href=#505 id=505 data-nosnippet>505</a>                        <span class="kw">_ </span>=&gt; <span class="number">0</span>,
+<a href=#506 id=506 data-nosnippet>506</a>                    },
+<a href=#507 id=507 data-nosnippet>507</a>            );
+<a href=#508 id=508 data-nosnippet>508</a>        }
+<a href=#509 id=509 data-nosnippet>509</a>    }
+<a href=#510 id=510 data-nosnippet>510</a>    <span class="kw">let </span>anchor_bytes = terms(anchor).len() <span class="kw">as </span>u128
+<a href=#511 id=511 data-nosnippet>511</a>        * (size_of::&lt;Term&gt;() <span class="kw">as </span>u128 + max_value + size_of::&lt;Variable&gt;() <span class="kw">as </span>u128)
+<a href=#512 id=512 data-nosnippet>512</a>        + anchor.name.as_str().len() <span class="kw">as </span>u128;
+<a href=#513 id=513 data-nosnippet>513</a>    <span class="comment">// The cloned residual and substitution's output overlap; the anchor
+<a href=#514 id=514 data-nosnippet>514</a>    // witness and unifier's finite argument/binding cells coexist with both.
+<a href=#515 id=515 data-nosnippet>515</a>    </span><span class="kw">let </span>temporary = payload
+<a href=#516 id=516 data-nosnippet>516</a>        .saturating_mul(<span class="number">2</span>)
+<a href=#517 id=517 data-nosnippet>517</a>        .saturating_add(anchor_bytes.saturating_mul(<span class="number">4</span>));
+<a href=#518 id=518 data-nosnippet>518</a>    <span class="kw">if </span>!reading.family(bytes.saturating_add(temporary))<span class="question-mark">? </span>{
+<a href=#519 id=519 data-nosnippet>519</a>        <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
+<a href=#520 id=520 data-nosnippet>520</a>    }
+<a href=#521 id=521 data-nosnippet>521</a>    reading
+<a href=#522 id=522 data-nosnippet>522</a>        .budget
+<a href=#523 id=523 data-nosnippet>523</a>        .charge(ExpansionResource::ScalarBytes, temporary, reading.site)<span class="question-mark">?</span>;
+<a href=#524 id=524 data-nosnippet>524</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(bytes.saturating_add(payload)))
+<a href=#525 id=525 data-nosnippet>525</a>}
+<a href=#526 id=526 data-nosnippet>526</a>
+<a href=#527 id=527 data-nosnippet>527</a><span class="kw">fn </span>emit(
+<a href=#528 id=528 data-nosnippet>528</a>    literals: <span class="kw-2">&amp;</span>[<span class="kw-2">&amp;</span>Literal],
+<a href=#529 id=529 data-nosnippet>529</a>    block: <span class="kw-2">&amp;</span>Block&lt;<span class="lifetime">'_</span>, <span class="lifetime">'_</span>&gt;,
+<a href=#530 id=530 data-nosnippet>530</a>    selected: <span class="kw-2">&amp;</span>[Selected&lt;<span class="lifetime">'_</span>&gt;],
+<a href=#531 id=531 data-nosnippet>531</a>    reading: <span class="kw-2">&amp;mut </span>Reading&lt;<span class="lifetime">'_</span>&gt;,
+<a href=#532 id=532 data-nosnippet>532</a>) -&gt; <span class="prelude-ty">Result</span>&lt;<span class="prelude-ty">Option</span>&lt;Vec&lt;Rule&gt;&gt;, Failure&gt; {
+<a href=#533 id=533 data-nosnippet>533</a>    <span class="kw">let </span><span class="kw-2">mut </span>rules = Vec::new();
+<a href=#534 id=534 data-nosnippet>534</a>    <span class="kw">let </span><span class="kw-2">mut </span>bytes = <span class="number">0_u128</span>;
+<a href=#535 id=535 data-nosnippet>535</a>    <span class="kw">for </span>selected <span class="kw">in </span>selected {
+<a href=#536 id=536 data-nosnippet>536</a>        reading.step()<span class="question-mark">?</span>;
+<a href=#537 id=537 data-nosnippet>537</a>        <span class="kw">let </span>anchor = atom(literals[block.anchor]);
+<a href=#538 id=538 data-nosnippet>538</a>        <span class="kw">let </span><span class="prelude-val">Some</span>(admitted_bytes) =
+<a href=#539 id=539 data-nosnippet>539</a>            admit_residual_storage(literals, block, selected, bytes, reading)<span class="question-mark">?
+<a href=#540 id=540 data-nosnippet>540</a>        </span><span class="kw">else </span>{
+<a href=#541 id=541 data-nosnippet>541</a>            <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>);
+<a href=#542 id=542 data-nosnippet>542</a>        };
+<a href=#543 id=543 data-nosnippet>543</a>        bytes = admitted_bytes;
+<a href=#544 id=544 data-nosnippet>544</a>        <span class="kw">let </span><span class="kw-2">mut </span>body = Vec::new();
+<a href=#545 id=545 data-nosnippet>545</a>        <span class="kw">for </span>(position, literal) <span class="kw">in </span>literals.iter().enumerate() {
+<a href=#546 id=546 data-nosnippet>546</a>            <span class="kw">if </span>position != block.anchor
+<a href=#547 id=547 data-nosnippet>547</a>                &amp;&amp; !block.guards.iter().any(|(guard, <span class="kw">_</span>, <span class="kw">_</span>)| <span class="kw-2">*</span>guard == position)
+<a href=#548 id=548 data-nosnippet>548</a>            {
+<a href=#549 id=549 data-nosnippet>549</a>                reading.push(<span class="kw-2">&amp;mut </span>body, BodyElement::Literal((<span class="kw-2">*</span>literal).clone()))<span class="question-mark">?</span>;
+<a href=#550 id=550 data-nosnippet>550</a>            }
+<a href=#551 id=551 data-nosnippet>551</a>        }
+<a href=#552 id=552 data-nosnippet>552</a>        <span class="kw">let </span>witness = Atom {
+<a href=#553 id=553 data-nosnippet>553</a>            sign: anchor.sign,
+<a href=#554 id=554 data-nosnippet>554</a>            name: anchor.name.clone(),
+<a href=#555 id=555 data-nosnippet>555</a>            arguments: Arguments::Single(selected.witness.to_vec()),
+<a href=#556 id=556 data-nosnippet>556</a>        };
+<a href=#557 id=557 data-nosnippet>557</a>        <span class="kw">let </span>substitution = mgu(anchor, <span class="kw-2">&amp;</span>witness)
+<a href=#558 id=558 data-nosnippet>558</a>            .expect(<span class="string">"flat atomic anchor is a pattern"</span>)
+<a href=#559 id=559 data-nosnippet>559</a>            .expect(<span class="string">"selected matching witness"</span>);
+<a href=#560 id=560 data-nosnippet>560</a>        <span class="kw">let </span>rule = substitute(Rule::new(Head::Falsum, Body::new(body)), <span class="kw-2">&amp;</span>substitution);
+<a href=#561 id=561 data-nosnippet>561</a>        <span class="comment">// The pinned typed substitution canonicalizes every newly ground function
+<a href=#562 id=562 data-nosnippet>562</a>        // and tuple into one Symbolic value (including its entire subtree).
+<a href=#563 id=563 data-nosnippet>563</a>        // Validate that whole value before it can move admission earlier than
+<a href=#564 id=564 data-nosnippet>564</a>        // a support row. Logical refusal leaves the original rule intact;
+<a href=#565 id=565 data-nosnippet>565</a>        // fallible validation storage still reports its typed allocation fault.
+<a href=#566 id=566 data-nosnippet>566</a>        </span><span class="kw">for </span>element <span class="kw">in </span>rule.body().get().elements() {
+<a href=#567 id=567 data-nosnippet>567</a>            <span class="kw">let </span>BodyElement::Literal(literal) = element.get() <span class="kw">else </span>{
+<a href=#568 id=568 data-nosnippet>568</a>                <span class="macro">unreachable!</span>(<span class="string">"positive residual"</span>)
+<a href=#569 id=569 data-nosnippet>569</a>            };
+<a href=#570 id=570 data-nosnippet>570</a>            <span class="kw">for </span>term <span class="kw">in </span>atom(literal).argument_terms().flat_map(Term::subterms) {
+<a href=#571 id=571 data-nosnippet>571</a>                reading.step()<span class="question-mark">?</span>;
+<a href=#572 id=572 data-nosnippet>572</a>                <span class="kw">if let </span>Term::Symbolic(value) = term {
+<a href=#573 id=573 data-nosnippet>573</a>                    <span class="kw">match </span><span class="kw">crate</span>::compile::validate_scalar(value, reading.site) {
+<a href=#574 id=574 data-nosnippet>574</a>                        <span class="prelude-val">Ok</span>(()) =&gt; {}
+<a href=#575 id=575 data-nosnippet>575</a>                        <span class="prelude-val">Err</span>(
+<a href=#576 id=576 data-nosnippet>576</a>                            error @ <span class="kw">crate</span>::AdmissionFailure::Construction {
+<a href=#577 id=577 data-nosnippet>577</a>                                error:
+<a href=#578 id=578 data-nosnippet>578</a>                                    zetesis_core::ConstructionError::Value(
+<a href=#579 id=579 data-nosnippet>579</a>                                        zetesis_core::ValueError::Allocation,
+<a href=#580 id=580 data-nosnippet>580</a>                                    ),
+<a href=#581 id=581 data-nosnippet>581</a>                                ..
+<a href=#582 id=582 data-nosnippet>582</a>                            },
+<a href=#583 id=583 data-nosnippet>583</a>                        ) =&gt; <span class="kw">return </span><span class="prelude-val">Err</span>(Failure::Source(error.into())),
+<a href=#584 id=584 data-nosnippet>584</a>                        <span class="prelude-val">Err</span>(<span class="kw">_</span>) =&gt; <span class="kw">return </span><span class="prelude-val">Ok</span>(<span class="prelude-val">None</span>),
+<a href=#585 id=585 data-nosnippet>585</a>                    }
+<a href=#586 id=586 data-nosnippet>586</a>                }
+<a href=#587 id=587 data-nosnippet>587</a>            }
+<a href=#588 id=588 data-nosnippet>588</a>        }
+<a href=#589 id=589 data-nosnippet>589</a>        reading.push(<span class="kw-2">&amp;mut </span>rules, rule)<span class="question-mark">?</span>;
+<a href=#590 id=590 data-nosnippet>590</a>    }
+<a href=#591 id=591 data-nosnippet>591</a>    <span class="prelude-val">Ok</span>(<span class="prelude-val">Some</span>(rules))
+<a href=#592 id=592 data-nosnippet>592</a>}
+<a href=#593 id=593 data-nosnippet>593</a>
+<a href=#594 id=594 data-nosnippet>594</a><span class="attr">#[cfg(test)]
+<a href=#595 id=595 data-nosnippet>595</a></span><span class="kw">mod </span>tests;
 </code></pre></div></section></main></body></html>

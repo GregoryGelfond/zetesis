@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
+            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2436da5c.js"></script>
+        <script src="../toc-5c747b16.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -184,6 +184,45 @@
 <p>There are two different opportunities to share work: execute independent checks
 concurrently, or share source traversal while preserving independent worlds.
 Choose a library boundary that makes the distinction explicit.</p>
+<h2 id="construct-templates-and-explicit-facts"><a class="header" href="#construct-templates-and-explicit-facts">Construct templates and explicit facts</a></h2>
+<p><code>zetesis_core::Program::new(templates, facts, limits)</code> consumes a <code>Vec&lt;Template&gt;</code>
+and <code>FactTables</code>. Pass <code>FactTables::default()</code> when the caller supplies every
+rule as a template. Core admission preserves that choice: a body-free ground
+<code>Template</code> stays a template. The source admission doors classify closed facts
+once and retain their own provenance beside the table occurrences.</p>
+<p><code>FactTables::push_row(before, predicate, values)</code> appends one original occurrence.
+The anchor <code>before</code> is the number of templates preceding it, between zero and
+<code>templates.len()</code> inclusive. Anchors cannot decrease. Compatible consecutive
+rows share column vectors; <code>push_product</code> retains argument alternatives and
+inclusive <code>i32</code> intervals, with the last argument varying fastest. An empty
+column produces no fact, while a nullary product produces one. A failed push
+poisons the construction owner so later admission cannot accept its prefix.</p>
+<p><code>Program::templates()</code> returns only the supplied templates. <code>rules()</code> merges
+those templates with anchored facts in original order, and <code>is_empty()</code> tests
+both streams. <code>facts()</code> preserves original occurrences and duplicates;
+<code>fact_relations()</code> borrows the distinct canonical rows, columns and sorted runs.
+<code>FactRef::atom</code>, <code>pattern</code> and <code>as_template</code> borrow the same payload without
+rebuilding owned values. Fact and template indices belong to separate evidence
+sequences; <code>AdmissionError::fact_index()</code> and <code>template_index()</code> distinguish them.
+The <code>max_templates</code> limit counts their total original occurrences.
+Canonical storage refusals use one <code>AdmissionError::Canonical { error, origin }</code>
+variant. Its <code>AdmissionOrigin</code> is <code>Program</code>, <code>Template(index)</code> or <code>Fact(index)</code>;
+it identifies native input, not a parsed source coordinate. This replaces the
+former <code>template: Option&lt;usize&gt;</code> field. Prefer <code>template_index()</code> and
+<code>fact_index()</code> when resolving boundary evidence. The typed cause stays inline,
+so reporting an allocation refusal requires no new error allocation.
+Exhaustive error matches must also handle <code>AdmissionError::FactLimitExceeded</code>.
+It carries a fact-occurrence index; <code>LimitExceeded</code> retains its optional template
+index for template or whole-program count refusals. Neither index is a source
+coordinate.</p>
+<p>Admission adds fact signatures to <code>predicates()</code> and whole fact arguments to
+<code>domain()</code>; interned subterms alone remain outside the domain. Facts contribute
+no gate signature. <code>fact_catalog()</code> exposes the shared closed authority, whose
+storage presence establishes no candidate truth. Admission still visits every
+fact occurrence and forms its canonical key. It removes per-occurrence owned
+atom payload and template topology; it retains occurrence positions, one
+canonical payload per distinct atom, relation columns and indexes. Intervals
+save expanded construction input, not all scalar or tuple work.</p>
 <h2 id="reuse-preparation-across-scalar-checks"><a class="header" href="#reuse-preparation-across-scalar-checks">Reuse preparation across scalar checks</a></h2>
 <p><code>PreparedQueries::new</code> inspects one admitted relational <code>Program</code> and retains
 its shared immutable owner plus the dimensions needed by the closure joins.
@@ -238,6 +277,7 @@ fn main() -&gt; Result&lt;(), Box&lt;dyn std::error::Error&gt;&gt; {
                 vec![],
             ),
         ],
+        zetesis_core::FactTables::default(),
         AdmissionLimits::default(),
     )?;
     let assignment = [Value::Number(1)];
@@ -282,14 +322,18 @@ receipt. The one-shot <code>check</code> charges preparation and evaluation toge
 equal completed results do not imply identical resource cutoffs. These separate
 per-call limits do not bound an entire sequence of checks.</p>
 <p><code>ClosureWorkspace</code> retains a canonical tuple authority over the Program’s frozen
-vocabulary, plus relation and reference-free cursor/undo capacity. A completed
+vocabulary and, when present, its closed fact store, plus relation and
+reference-free cursor/undo capacity. A completed
 <code>Check</code> retains a selection over its immutable prefix. The workspace clears
 relation membership, frontiers and pending marks before reuse; retained identity
 supplies no previous candidate truth. Failed evaluation discards dirty workspace
 state. A different <code>PreparedQueries</code> owner retires the old workspace, even
 for the same Program, because its inferred dense layouts can differ.
-Its <code>retained_bytes()</code> includes the authority’s shared frozen vocabulary and
-workspace metadata. Other source/preparation storage, separately retained results
+Its <code>retained_bytes()</code> includes the authority’s shared frozen vocabulary, closed
+fact rows and indexes, and workspace metadata. Every check admits that full base.
+The batch cache counts its preparation-owned closed rows and indexes once and
+subtracts that exact shared subtotal from each workspace; vocabulary keeps its
+existing per-workspace accounting. Other source/preparation storage, separately retained results
 and documented container/allocator overhead remain outside that receipt;
 it is not RSS. Retained capacity is admitted again under each check’s limits.
 Independent workers need separate mutable workspaces and may share the immutable
@@ -368,9 +412,14 @@ deliver the owned closure after acceptance.</p>
 Its worker setting is distinct from the relational closure pool. Scalar outer
 candidate search does not become parallel simply because residual membership
 queries use Rayon.</p>
-<p>The formula CPU route with several region workers performs candidate generation
-and membership checking in each worker. Each worker removes the newest region
-from its own deque; an idle worker tries to steal the oldest region from a peer.
+<p>The formula CPU route with several configured region workers begins candidate
+generation and membership checking on the calling thread. This coordinator
+walks the first deque in the scalar walk’s order until the engagement delay has
+passed, then starts the workers on the remaining frontier. The delay counts wall
+time since the first pull, including the caller’s time between pulls, and is
+checked on each pull and between steps. A walk that ends before engagement
+starts no thread. Afterwards each worker removes the newest region from its own
+deque; an idle worker tries to steal the oldest region from a peer.
 Each deque has its own mutex. A thief skips a busy deque, and narrowing, payload
 cloning, reduct checks and model sends hold no deque lock. Slot growth uses
 fallible reservation before either split child is published; refusal leaves
@@ -387,7 +436,8 @@ Cancellation observed by the coordinator can end a pull immediately; explicit
 <code>stop</code> or dropping the enumerator joins any remaining workers.
 Local depth-first order bounds each deque’s live entries by the atom count plus
 one; capacity grows with the observed frontier instead of reserving that worst
-case for every worker. Joining releases abandoned entries and queue capacity,
+case for every worker. Teardown releases the coordinator’s retained workspace,
+abandoned entries and queue capacity, and joins every worker that started,
 including after a partially successful worker start.</p>
 <p>The device route uses a different execution boundary: an owned Rayon pool
 produces a bounded candidate batch, joins, and then submits that batch for device

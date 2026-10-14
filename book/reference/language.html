@@ -35,10 +35,10 @@
             const path_to_root = "../";
             const default_light_theme = "light";
             const default_dark_theme = "navy";
-            window.path_to_searchindex_js = "../searchindex-8b33e208.js";
+            window.path_to_searchindex_js = "../searchindex-fbb9e008.js";
         </script>
         <!-- Start loading toc.js asap -->
-        <script src="../toc-2436da5c.js"></script>
+        <script src="../toc-5c747b16.js"></script>
     </head>
     <body>
     <div id="mdbook-help-container">
@@ -862,6 +862,30 @@ binding. In <code>d(0;1). e(0,0). e(1,1). {p(K,X):e(K,X),1/X=1} :- d(K).</code>,
 the defined <code>K=1</code> family does not rescue it. If no <code>e(0,X)</code> fact is present, that
 local family is empty and has no arithmetic error. An absent fact is not an
 undefined arithmetic value.</p>
+<p>An aggregate assignment such as <code>N = #count{...}</code> substitutes, under each fixed
+outer binding, its <em>carrier</em>: the measure of every selection of its tuples that
+contains the <em>required</em> tuples and lies within the possible ones. A tuple is
+required when one of its elements’ conditions consists only of comparisons,
+intervals and <code>#true</code>/<code>#false</code>, with no atom of either sign; such a condition
+holds for every binding its element yields. So
+<code>p(M+1) :- M = #min{1; 5}.</code> substitutes <code>M = 1</code> alone and answers <code>p(2)</code>
+without evaluating <code>#sup + 1</code>; <code>q :- N = #count{1}, 1/N &lt;= #count{}.</code> evaluates
+only <code>N = 1</code> and retains no warning; and <code>q(Y) :- N = #count{1}, Y = 1/(N-1).</code>
+has the single instance <code>N = 1</code>, which divides by zero, so its family is
+entirely undefined and refused. The heads an assignment publishes are taken over
+the same values, so the families of the rules that read them follow:
+<code>p(M) :- M = #count{1}. q(1/(X-1)) :- p(X).</code> is refused for the same reason, and
+<code>p(M) :- M = #min{1; 5}. r(X+1) :- p(X).</code> answers with <code>p(1)</code> and <code>r(2)</code>.</p>
+<p>The required tuples under-approximate those present in every interpretation. In
+<code>{p}. q(Y) :- N = #count{1 : p; 1 : not p}, Y = 1/(N-1).</code> the tuple <code>1</code> is
+present through <code>p</code> or through <code>not p</code>, but neither condition is atom-free, so
+<code>N = 0</code> is substituted too, divides by zero, and the program is admitted with a
+warning. A sum’s values are checked as values:
+<code>{p; q}. x(V) :- V = #sum{-10,a; 2147483647,b : p; 1,c : q}.</code> is admitted,
+since each of its values <code>-10</code>, <code>-9</code>, <code>2147483637</code> and <code>2147483638</code> fits the
+32-bit range although its two optional weights alone exceed it, while
+<code>{p}. x(V) :- V = #sum{2147483647,a; 1,b : p}.</code> is refused because
+<code>2147483648</code> does not fit.</p>
 <p>Overflow, arithmetic on nonnumeric values and invalid exponents remain hard
 errors. They cannot be hidden by a defined instance elsewhere. Within a reached
 evaluation phase, a zero divisor does not stop checks of independent branches: an
@@ -891,15 +915,16 @@ contribution checks retain their own scopes.
 The <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/arithmetic_validation.rs">arithmetic validation contracts</a>
 check defined complete families, incomplete joins, required failures and explicit
 clingo differences.</p>
-<p>There is also a conservative <strong>zetesis extrema guard</strong>: numeric values
+<p>There is also a conservative <strong>numeric endpoint guard</strong>: numeric values
 <code>-2147483648</code> and <code>2147483647</code> are refused when reached as <code>#min</code>/<code>#max</code> bounds or
-the first component of a possible aggregate tuple, including assignment values.
+as the first component of a possible <code>#min</code>/<code>#max</code> tuple, including assignment
+values.
 It does not ban these integers as ordinary data, later tuple-key components or
 integers nested inside a structured value. The guard applies independently of
 the comparison operator or recursion.</p>
 <p>The typed refusal is <code>AdmissionFailure::ExtremumEndpoint</code>, with the evaluated
 value and its source location. Its diagnostic code is <code>zetesis::extremum-endpoint</code>;
-the message names the numeric endpoint and the zetesis guard.</p>
+the message names the numeric endpoint and the guard.</p>
 <p>This is an internal source-admission guard, not a themelios parser rejection.
 Separately, the pinned themelios program raiser cannot represent the unsigned
 magnitude in the literal <code>-2147483648</code>; <code>(-2147483647-1)</code> can reach that value by
@@ -909,7 +934,7 @@ limitation and the latter a zetesis refusal. Neither is a syntax error.</p>
 and the native formula interpretation. It is not proof that every guarded input
 is undefined or a modeling error. The lower-level finite formula library can
 represent endpoint formulas. The
-<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment.rs">admission predicate</a>
+<a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_assignment.rs">numeric endpoint guard</a>
 and <a href="https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/tests/integration/extrema_source.rs">source regressions</a>
 locate the current boundary.</p>
 <p><code>#inf</code> and <code>#sup</code> are distinct extremal terms. Empty minimum and maximum results

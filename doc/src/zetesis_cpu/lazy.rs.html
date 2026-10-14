@@ -30,7 +30,7 @@
 <a href=#30 id=30 data-nosnippet>30</a><span class="doccomment">/// Rule header words: head tag and three antecedent lengths.
 <a href=#31 id=31 data-nosnippet>31</a></span><span class="kw">pub const </span>RECORD_HEADER_WORDS: usize = <span class="number">4</span>;
 <a href=#32 id=32 data-nosnippet>32</a><span class="doccomment">/// A head tag of zero denotes a constraint; atom IDs are encoded plus one.
-<a href=#33 id=33 data-nosnippet>33</a></span><span class="kw">pub const </span>CONSTRAINT_HEAD: u32 = <span class="number">0</span>;
+<a href=#33 id=33 data-nosnippet>33</a></span><span class="kw">pub</span>(<span class="kw">crate</span>) <span class="kw">const </span>CONSTRAINT_HEAD: u32 = <span class="number">0</span>;
 <a href=#34 id=34 data-nosnippet>34</a>
 <a href=#35 id=35 data-nosnippet>35</a><span class="comment">// Snapshots, frozen seeds, pending deltas, one result and offered-head validation.
 <a href=#36 id=36 data-nosnippet>36</a></span><span class="kw">const </span>ROUND_MASK_VECTORS: usize = <span class="number">5</span>;

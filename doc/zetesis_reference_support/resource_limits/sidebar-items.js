@@ -1,0 +1,1 @@
+window.SIDEBAR_ITEMS = {"fn":["admission","admission_core","admission_formula","aggregate","bundle","bundle_loading","expansion","expansion_default","formula","formula_aggregate","formula_default","formula_objective","formula_observation","objective_plan","observation","observation_evaluation","program","program_core"]};

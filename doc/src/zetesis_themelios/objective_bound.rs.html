@@ -39,9 +39,9 @@
 <a href=#39 id=39 data-nosnippet>39</a>    </span><span class="kw">pub </span>max_key_bytes: usize,
 <a href=#40 id=40 data-nosnippet>40</a>    <span class="doccomment">/// Explicit scalar tuple width per objective key.
 <a href=#41 id=41 data-nosnippet>41</a>    </span><span class="kw">pub </span>max_tuple_width: usize,
-<a href=#42 id=42 data-nosnippet>42</a>    <span class="doccomment">/// Eligibility DAG nodes.
+<a href=#42 id=42 data-nosnippet>42</a>    <span class="doccomment">/// Eligibility DAG nodes, contribution rows and threshold descriptors, each.
 <a href=#43 id=43 data-nosnippet>43</a>    </span><span class="kw">pub </span>max_nodes: usize,
-<a href=#44 id=44 data-nosnippet>44</a>    <span class="doccomment">/// Logical operand occurrences and retained arena cells.
+<a href=#44 id=44 data-nosnippet>44</a>    <span class="doccomment">/// Logical child occurrences, Boolean operands, conditions and weights, each.
 <a href=#45 id=45 data-nosnippet>45</a>    </span><span class="kw">pub </span>max_operands: usize,
 <a href=#46 id=46 data-nosnippet>46</a>    <span class="doccomment">/// Local binding slots per lifted objective.
 <a href=#47 id=47 data-nosnippet>47</a>    </span><span class="kw">pub </span>max_variables: usize,
@@ -384,52 +384,79 @@
 <a href=#384 id=384 data-nosnippet>384</a>            NodeView::And([]) =&gt; (<span class="number">2</span>, <span class="number">2</span>),
 <a href=#385 id=385 data-nosnippet>385</a>            NodeView::And([<span class="kw">_</span>]) | NodeView::Or([<span class="kw">_</span>]) =&gt; (<span class="number">0</span>, <span class="number">0</span>),
 <a href=#386 id=386 data-nosnippet>386</a>            NodeView::And(row) | NodeView::Or(row) =&gt; (<span class="number">1</span>, row.len()),
-<a href=#387 id=387 data-nosnippet>387</a>            NodeView::Implies(<span class="kw">_</span>, <span class="kw">_</span>) =&gt; (<span class="number">1</span>, <span class="number">2</span>),
-<a href=#388 id=388 data-nosnippet>388</a>            NodeView::Atom(<span class="kw">_</span>) | NodeView::False =&gt; (<span class="number">1</span>, <span class="number">0</span>),
-<a href=#389 id=389 data-nosnippet>389</a>        };
-<a href=#390 id=390 data-nosnippet>390</a>        <span class="kw">let </span>count = nodes
-<a href=#391 id=391 data-nosnippet>391</a>            .view()
-<a href=#392 id=392 data-nosnippet>392</a>            .len()
-<a href=#393 id=393 data-nosnippet>393</a>            .checked_add(added_nodes)
-<a href=#394 id=394 data-nosnippet>394</a>            .ok_or_else(|| <span class="self">self</span>.error(ObjectiveBoundErrorKind::Overflow))<span class="question-mark">?</span>;
-<a href=#395 id=395 data-nosnippet>395</a>        <span class="kw">if </span>count &gt; <span class="self">self</span>.limits.max_nodes {
-<a href=#396 id=396 data-nosnippet>396</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="self">self</span>.limit(ObjectiveBoundResource::Nodes));
-<a href=#397 id=397 data-nosnippet>397</a>        }
-<a href=#398 id=398 data-nosnippet>398</a>        <span class="kw">let </span>occurrences = nodes
-<a href=#399 id=399 data-nosnippet>399</a>            .parts()
-<a href=#400 id=400 data-nosnippet>400</a>            .occurrences()
-<a href=#401 id=401 data-nosnippet>401</a>            .checked_add(edges)
-<a href=#402 id=402 data-nosnippet>402</a>            .ok_or_else(|| <span class="self">self</span>.error(ObjectiveBoundErrorKind::Overflow))<span class="question-mark">?</span>;
-<a href=#403 id=403 data-nosnippet>403</a>        <span class="kw">if </span>occurrences &gt; <span class="self">self</span>.limits.max_operands {
-<a href=#404 id=404 data-nosnippet>404</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="self">self</span>.limit(ObjectiveBoundResource::Operands));
-<a href=#405 id=405 data-nosnippet>405</a>        }
-<a href=#406 id=406 data-nosnippet>406</a>        <span class="comment">// Charge child validation and copied arena cells before publication.
-<a href=#407 id=407 data-nosnippet>407</a>        // The builder has no independent execution-work owner.
-<a href=#408 id=408 data-nosnippet>408</a>        </span><span class="kw">let </span>copies = <span class="kw">match </span>node {
-<a href=#409 id=409 data-nosnippet>409</a>            NodeView::And([<span class="kw">_</span>]) | NodeView::Or([<span class="kw">_</span>]) =&gt; <span class="number">1</span>,
-<a href=#410 id=410 data-nosnippet>410</a>            NodeView::And(row) | NodeView::Or(row) <span class="kw">if </span>row.len() &gt;= <span class="number">3 </span>=&gt; row.len(),
-<a href=#411 id=411 data-nosnippet>411</a>            <span class="kw">_ </span>=&gt; <span class="number">0</span>,
-<a href=#412 id=412 data-nosnippet>412</a>        };
-<a href=#413 id=413 data-nosnippet>413</a>        <span class="kw">for _ in </span><span class="number">0</span>..edges {
-<a href=#414 id=414 data-nosnippet>414</a>            <span class="self">self</span>.tick()<span class="question-mark">?</span>;
-<a href=#415 id=415 data-nosnippet>415</a>        }
-<a href=#416 id=416 data-nosnippet>416</a>        <span class="kw">for _ in </span><span class="number">0</span>..copies {
-<a href=#417 id=417 data-nosnippet>417</a>            <span class="self">self</span>.tick()<span class="question-mark">?</span>;
-<a href=#418 id=418 data-nosnippet>418</a>        }
-<a href=#419 id=419 data-nosnippet>419</a>        <span class="kw">let </span><span class="kw-2">mut </span>transaction = nodes.transaction();
-<a href=#420 id=420 data-nosnippet>420</a>        <span class="kw">let </span>index = transaction
-<a href=#421 id=421 data-nosnippet>421</a>            .push(node, <span class="self">self</span>.limits.max_nodes, <span class="self">self</span>.limits.max_operands)
-<a href=#422 id=422 data-nosnippet>422</a>            .map_err(|error| {
-<a href=#423 id=423 data-nosnippet>423</a>                <span class="self">self</span>.error(<span class="kw">match </span>error {
-<a href=#424 id=424 data-nosnippet>424</a>                    zetesis_ferraris::AdmissionError::Allocation =&gt; {
-<a href=#425 id=425 data-nosnippet>425</a>                        ObjectiveBoundErrorKind::Allocation
-<a href=#426 id=426 data-nosnippet>426</a>                    }
-<a href=#427 id=427 data-nosnippet>427</a>                    <span class="kw">_ </span>=&gt; ObjectiveBoundErrorKind::Theory(error),
-<a href=#428 id=428 data-nosnippet>428</a>                })
-<a href=#429 id=429 data-nosnippet>429</a>            })<span class="question-mark">?</span>;
-<a href=#430 id=430 data-nosnippet>430</a>        transaction.commit();
-<a href=#431 id=431 data-nosnippet>431</a>        <span class="self">self</span>.statistics.nodes = nodes.view().len();
-<a href=#432 id=432 data-nosnippet>432</a>        <span class="prelude-val">Ok</span>(index)
-<a href=#433 id=433 data-nosnippet>433</a>    }
-<a href=#434 id=434 data-nosnippet>434</a>}
+<a href=#387 id=387 data-nosnippet>387</a>            NodeView::Threshold(row) =&gt; (<span class="number">1</span>, row.conditions.len()),
+<a href=#388 id=388 data-nosnippet>388</a>            NodeView::ExtremumCut(cut) =&gt; (<span class="number">1</span>, cut.row.conditions.len()),
+<a href=#389 id=389 data-nosnippet>389</a>            NodeView::Implies(<span class="kw">_</span>, <span class="kw">_</span>) =&gt; (<span class="number">1</span>, <span class="number">2</span>),
+<a href=#390 id=390 data-nosnippet>390</a>            NodeView::Atom(<span class="kw">_</span>) | NodeView::False =&gt; (<span class="number">1</span>, <span class="number">0</span>),
+<a href=#391 id=391 data-nosnippet>391</a>        };
+<a href=#392 id=392 data-nosnippet>392</a>        <span class="kw">let </span>count = nodes
+<a href=#393 id=393 data-nosnippet>393</a>            .view()
+<a href=#394 id=394 data-nosnippet>394</a>            .len()
+<a href=#395 id=395 data-nosnippet>395</a>            .checked_add(added_nodes)
+<a href=#396 id=396 data-nosnippet>396</a>            .ok_or_else(|| <span class="self">self</span>.error(ObjectiveBoundErrorKind::Overflow))<span class="question-mark">?</span>;
+<a href=#397 id=397 data-nosnippet>397</a>        <span class="kw">if </span>count &gt; <span class="self">self</span>.limits.max_nodes {
+<a href=#398 id=398 data-nosnippet>398</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="self">self</span>.limit(ObjectiveBoundResource::Nodes));
+<a href=#399 id=399 data-nosnippet>399</a>        }
+<a href=#400 id=400 data-nosnippet>400</a>        <span class="kw">let </span>occurrences = nodes
+<a href=#401 id=401 data-nosnippet>401</a>            .parts()
+<a href=#402 id=402 data-nosnippet>402</a>            .occurrences()
+<a href=#403 id=403 data-nosnippet>403</a>            .checked_add(edges)
+<a href=#404 id=404 data-nosnippet>404</a>            .ok_or_else(|| <span class="self">self</span>.error(ObjectiveBoundErrorKind::Overflow))<span class="question-mark">?</span>;
+<a href=#405 id=405 data-nosnippet>405</a>        <span class="kw">if </span>occurrences &gt; <span class="self">self</span>.limits.max_operands {
+<a href=#406 id=406 data-nosnippet>406</a>            <span class="kw">return </span><span class="prelude-val">Err</span>(<span class="self">self</span>.limit(ObjectiveBoundResource::Operands));
+<a href=#407 id=407 data-nosnippet>407</a>        }
+<a href=#408 id=408 data-nosnippet>408</a>        <span class="comment">// Charge child validation and copied arena cells before publication.
+<a href=#409 id=409 data-nosnippet>409</a>        // Numeric copies include both columns and row/threshold descriptors.
+<a href=#410 id=410 data-nosnippet>410</a>        // The range-returning append allocates no root vector. The builder has
+<a href=#411 id=411 data-nosnippet>411</a>        // no independent work owner.
+<a href=#412 id=412 data-nosnippet>412</a>        </span><span class="kw">let </span>copies = <span class="kw">match </span>node {
+<a href=#413 id=413 data-nosnippet>413</a>            NodeView::And([<span class="kw">_</span>]) | NodeView::Or([<span class="kw">_</span>]) =&gt; <span class="number">1</span>,
+<a href=#414 id=414 data-nosnippet>414</a>            NodeView::And(row) | NodeView::Or(row) <span class="kw">if </span>row.len() &gt;= <span class="number">3 </span>=&gt; row.len(),
+<a href=#415 id=415 data-nosnippet>415</a>            NodeView::Threshold(row) =&gt; row
+<a href=#416 id=416 data-nosnippet>416</a>                .conditions
+<a href=#417 id=417 data-nosnippet>417</a>                .len()
+<a href=#418 id=418 data-nosnippet>418</a>                .checked_mul(<span class="number">2</span>)
+<a href=#419 id=419 data-nosnippet>419</a>                .and_then(|cells| cells.checked_add(<span class="number">2</span>))
+<a href=#420 id=420 data-nosnippet>420</a>                .ok_or_else(|| <span class="self">self</span>.error(ObjectiveBoundErrorKind::Overflow))<span class="question-mark">?</span>,
+<a href=#421 id=421 data-nosnippet>421</a>            NodeView::ExtremumCut(cut) =&gt; cut
+<a href=#422 id=422 data-nosnippet>422</a>                .row
+<a href=#423 id=423 data-nosnippet>423</a>                .conditions
+<a href=#424 id=424 data-nosnippet>424</a>                .len()
+<a href=#425 id=425 data-nosnippet>425</a>                .checked_mul(<span class="number">2</span>)
+<a href=#426 id=426 data-nosnippet>426</a>                .and_then(|cells| cells.checked_add(<span class="number">2</span>))
+<a href=#427 id=427 data-nosnippet>427</a>                .ok_or_else(|| <span class="self">self</span>.error(ObjectiveBoundErrorKind::Overflow))<span class="question-mark">?</span>,
+<a href=#428 id=428 data-nosnippet>428</a>            <span class="kw">_ </span>=&gt; <span class="number">0</span>,
+<a href=#429 id=429 data-nosnippet>429</a>        };
+<a href=#430 id=430 data-nosnippet>430</a>        <span class="kw">if </span><span class="macro">matches!</span>(node, NodeView::Threshold(<span class="kw">_</span>) | NodeView::ExtremumCut(<span class="kw">_</span>)) {
+<a href=#431 id=431 data-nosnippet>431</a>            <span class="self">self</span>.charge(
+<a href=#432 id=432 data-nosnippet>432</a>                u64::try_from(nodes.parts().pending_numeric_validation_work())
+<a href=#433 id=433 data-nosnippet>433</a>                    .map_err(|<span class="kw">_</span>| <span class="self">self</span>.error(ObjectiveBoundErrorKind::Overflow))<span class="question-mark">?</span>,
+<a href=#434 id=434 data-nosnippet>434</a>            )<span class="question-mark">?</span>;
+<a href=#435 id=435 data-nosnippet>435</a>        }
+<a href=#436 id=436 data-nosnippet>436</a>        <span class="comment">// Ordinal publication also validates its independently supplied cut rule.
+<a href=#437 id=437 data-nosnippet>437</a>        </span><span class="kw">if </span><span class="macro">matches!</span>(node, NodeView::ExtremumCut(<span class="kw">_</span>)) {
+<a href=#438 id=438 data-nosnippet>438</a>            <span class="self">self</span>.tick()<span class="question-mark">?</span>;
+<a href=#439 id=439 data-nosnippet>439</a>        }
+<a href=#440 id=440 data-nosnippet>440</a>        <span class="kw">for _ in </span><span class="number">0</span>..edges {
+<a href=#441 id=441 data-nosnippet>441</a>            <span class="self">self</span>.tick()<span class="question-mark">?</span>;
+<a href=#442 id=442 data-nosnippet>442</a>        }
+<a href=#443 id=443 data-nosnippet>443</a>        <span class="kw">for _ in </span><span class="number">0</span>..copies {
+<a href=#444 id=444 data-nosnippet>444</a>            <span class="self">self</span>.tick()<span class="question-mark">?</span>;
+<a href=#445 id=445 data-nosnippet>445</a>        }
+<a href=#446 id=446 data-nosnippet>446</a>        <span class="kw">let </span><span class="kw-2">mut </span>transaction = nodes.transaction();
+<a href=#447 id=447 data-nosnippet>447</a>        <span class="kw">let </span>index = transaction
+<a href=#448 id=448 data-nosnippet>448</a>            .push(node, <span class="self">self</span>.limits.max_nodes, <span class="self">self</span>.limits.max_operands)
+<a href=#449 id=449 data-nosnippet>449</a>            .map_err(|error| {
+<a href=#450 id=450 data-nosnippet>450</a>                <span class="self">self</span>.error(<span class="kw">match </span>error {
+<a href=#451 id=451 data-nosnippet>451</a>                    zetesis_ferraris::AdmissionError::Allocation =&gt; {
+<a href=#452 id=452 data-nosnippet>452</a>                        ObjectiveBoundErrorKind::Allocation
+<a href=#453 id=453 data-nosnippet>453</a>                    }
+<a href=#454 id=454 data-nosnippet>454</a>                    <span class="kw">_ </span>=&gt; ObjectiveBoundErrorKind::Theory(error),
+<a href=#455 id=455 data-nosnippet>455</a>                })
+<a href=#456 id=456 data-nosnippet>456</a>            })<span class="question-mark">?</span>;
+<a href=#457 id=457 data-nosnippet>457</a>        transaction.commit();
+<a href=#458 id=458 data-nosnippet>458</a>        <span class="self">self</span>.statistics.nodes = nodes.view().len();
+<a href=#459 id=459 data-nosnippet>459</a>        <span class="prelude-val">Ok</span>(index)
+<a href=#460 id=460 data-nosnippet>460</a>    }
+<a href=#461 id=461 data-nosnippet>461</a>}
 </code></pre></div></section></main></body></html>

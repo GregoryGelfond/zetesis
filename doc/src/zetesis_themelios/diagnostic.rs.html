@@ -208,7 +208,7 @@
 <a href=#208 id=208 data-nosnippet>208</a>        <span class="doccomment">/// Logical subject and any real source position.
 <a href=#209 id=209 data-nosnippet>209</a>        </span>location: ProgramSite,
 <a href=#210 id=210 data-nosnippet>210</a>    },
-<a href=#211 id=211 data-nosnippet>211</a>    <span class="doccomment">/// A finite numeric endpoint excluded by the extremum representation guard.
+<a href=#211 id=211 data-nosnippet>211</a>    <span class="doccomment">/// A finite numeric endpoint excluded by the numeric endpoint guard.
 <a href=#212 id=212 data-nosnippet>212</a>    /// This is a zetesis admission policy, not a parser or resource failure.
 <a href=#213 id=213 data-nosnippet>213</a>    </span>ExtremumEndpoint {
 <a href=#214 id=214 data-nosnippet>214</a>        <span class="doccomment">/// The evaluated endpoint, either `i32::MIN` or `i32::MAX`.
@@ -314,7 +314,7 @@
 <a href=#314 id=314 data-nosnippet>314</a>            <span class="self">Self</span>::Profile { feature, .. } =&gt; <span class="macro">write!</span>(f, <span class="string">"source profile does not admit {feature}"</span>),
 <a href=#315 id=315 data-nosnippet>315</a>            <span class="self">Self</span>::ExtremumEndpoint { value, .. } =&gt; <span class="macro">write!</span>(
 <a href=#316 id=316 data-nosnippet>316</a>                f,
-<a href=#317 id=317 data-nosnippet>317</a>                <span class="string">"numeric extremum endpoint {value} is excluded by the zetesis endpoint guard"
+<a href=#317 id=317 data-nosnippet>317</a>                <span class="string">"numeric extremum endpoint {value} is excluded by the numeric endpoint guard"
 <a href=#318 id=318 data-nosnippet>318</a>            </span>),
 <a href=#319 id=319 data-nosnippet>319</a>            <span class="self">Self</span>::Construction { error, .. } =&gt; error.fmt(f),
 <a href=#320 id=320 data-nosnippet>320</a>            <span class="self">Self</span>::Metadata { error, .. } =&gt; error.fmt(f),
