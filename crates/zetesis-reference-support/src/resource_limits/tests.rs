@@ -258,9 +258,15 @@ fn the_admission_forms_bound_only_their_nested_field() {
 }
 
 #[test]
-#[should_panic(expected = "counted against the core admission limits")]
+#[should_panic(expected = "is counted against the core admission limits: see admission_formula")]
 fn a_core_counted_formula_resource_has_no_formula_field() {
     let _ = formula(FormulaResource::Variables, 1);
+}
+
+#[test]
+#[should_panic(expected = "is not counted against the core admission limits")]
+fn a_formula_bounded_resource_has_no_core_admission_field() {
+    let _ = admission_formula(FormulaResource::Atoms, 1);
 }
 
 #[test]

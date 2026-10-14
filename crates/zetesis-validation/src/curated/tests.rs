@@ -247,7 +247,7 @@ fn an_existing_file_read_obeys_the_inclusive_byte_ceiling() {
     ));
 }
 #[test]
-fn a_directory_is_not_a_source_file() {
+fn a_directory_is_refused_as_not_a_regular_file() {
     let root = tempfile::tempdir().unwrap();
     assert!(matches!(
         Files::read(Path::new(root.path()), 10, Resource::SourceBytes),

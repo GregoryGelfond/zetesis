@@ -214,7 +214,7 @@ fn source_symlinks_cannot_escape_the_corpus() {
 }
 
 #[test]
-fn a_directory_in_place_of_a_source_is_not_a_regular_file() {
+fn a_directory_in_place_of_a_source_is_refused_as_not_a_regular_file() {
     let directory = isolated();
     let source = directory.path().join(verified().files()[0].path());
     fs::remove_file(&source).unwrap();

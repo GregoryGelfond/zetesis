@@ -318,7 +318,7 @@ fn a_source_symlink_cannot_escape_the_corpus_root() {
 }
 
 #[test]
-fn a_directory_in_place_of_a_source_is_not_a_regular_file() {
+fn a_directory_in_place_of_a_source_is_refused_as_not_a_regular_file() {
     let directory = isolated();
     let first = verified().cases()[0].path().to_owned();
     let source = directory.path().join(&first);
