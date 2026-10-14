@@ -225,6 +225,12 @@ Notable changes by release. Versions follow Semantic Versioning.
   the candidate regions, and its `Parallel regions` line now reads "up to N
   workers, started once the walk outlasts their start".
 
+### Fixed
+
+- A parallel region walk reports the largest countermodel workspace any one of
+  its workers retained as `ReductStatistics::peak_workspace_bytes`, which it
+  reported as zero.
+
 ### Compatibility
 
 - `RegionSearchStatistics` has a new `workers` field and, like the new

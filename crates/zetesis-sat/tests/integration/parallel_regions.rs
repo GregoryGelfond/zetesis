@@ -327,7 +327,7 @@ fn four_workers_report_the_scalar_walks_reading_work() {
 #[test]
 fn an_unengaged_walk_reports_the_scalar_walks_receipts() {
     // The walk that never engages steps the scalar walk's order on the
-    // calling thread with one retained workspace, so its receipts are the
+    // calling thread with one retained workspace, so every receipt is the
     // scalar walk's, checking work and peak check storage included.
     for (theory, certified) in [(mixed(), false), (choices(6), false), (choices(5), true)] {
         let mut scalar = StableModels::with_method(
@@ -376,16 +376,25 @@ fn an_unengaged_walk_reports_the_scalar_walks_receipts() {
             )
         );
         assert_eq!(coordinator.certified, one.certified);
-        assert_eq!(
-            (coordinator.reduct.original_work, coordinator.reduct.regions),
-            (one.reduct.original_work, one.reduct.regions)
-        );
+        assert_eq!(coordinator.reduct, one.reduct);
         assert_eq!(
             coordinator.regions.unwrap().counts,
             one.regions.unwrap().counts
         );
         assert_eq!(coordinator.search, one.search);
     }
+}
+
+#[test]
+fn region_workers_report_their_largest_countermodel_workspace() {
+    // Each worker retains its own countermodel workspace; the receipt is the
+    // largest any one of them retained, as the scalar walk's is its one's.
+    let mut parallel = engaged(&mixed(), 4, Limits::default());
+    family(&mut parallel);
+    assert_route(&parallel, Engagement::Immediate, 4);
+    let statistics = parallel.statistics();
+    assert!(statistics.countermodel_queries > 0);
+    assert!(statistics.reduct.peak_workspace_bytes > 0);
 }
 
 #[test]

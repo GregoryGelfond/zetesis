@@ -1325,8 +1325,9 @@ impl Drop for ParallelRegions {
 
 /// Merge a joined worker's certificate and reduct receipts; its candidate,
 /// query and countermodel counts reached the live counters as it went, and
-/// the coordinator counts the stable models it returns. A sum beyond its
-/// counter's width is the counter refusal.
+/// the coordinator counts the stable models it returns. A peak is the largest
+/// of any one workspace's. A sum beyond its counter's width is the counter
+/// refusal.
 fn merge_membership(into: &mut Statistics, from: &Statistics) -> Result<(), Incomplete> {
     fn add(counter: &mut u64, value: u64) -> Result<(), Incomplete> {
         *counter = counter
@@ -1335,6 +1336,10 @@ fn merge_membership(into: &mut Statistics, from: &Statistics) -> Result<(), Inco
         Ok(())
     }
     add(&mut into.reduct.original_work, from.reduct.original_work)?;
+    into.reduct.peak_workspace_bytes = into
+        .reduct
+        .peak_workspace_bytes
+        .max(from.reduct.peak_workspace_bytes);
     if let Some(from) = from.certified.as_ref() {
         let into = into.certified.get_or_insert_default();
         add(&mut into.checks, from.checks)?;

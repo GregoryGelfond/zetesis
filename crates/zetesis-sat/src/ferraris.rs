@@ -876,6 +876,7 @@ impl StableModels {
                     ),
                     reduct: crate::ReductStatistics {
                         original_work: merged.reduct.original_work,
+                        peak_workspace_bytes: merged.reduct.peak_workspace_bytes,
                         regions: merged.reduct.regions,
                         ..self.statistics.reduct
                     },
