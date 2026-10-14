@@ -15,15 +15,19 @@ use crate::{curated, process};
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Decision {
-    /// Both complete producer reports agree with every recorded model occurrence.
+    /// Both complete producer reports agree with every recorded model
+    /// occurrence, and the native report's statistics are accepted as evidence
+    /// of the executable that did its work ([`InvalidReport`](Decision::InvalidReport)
+    /// names the reports refused).
     Pass,
     /// A child did not start, complete capture, or exit with an accepted code.
     InvocationFailure,
     /// A producer report is malformed, incomplete or exceeds normalization
-    /// limits; or a passing native report carries no statistics object, or the
-    /// executable its statistics name was refused: none (`null`, or a value
-    /// that is not a path), a third one, beside the invoked executable and the
-    /// one an earlier run named, or one that could not be sealed.
+    /// limits; or an otherwise passing native report carries no statistics
+    /// object, or the executable its statistics name was refused: none (`null`,
+    /// or a value that is not a path), a third one, beside the invoked
+    /// executable and the one an earlier run named, or one that could not be
+    /// sealed.
     InvalidReport,
     /// A complete report differs from the full-model or helper contract.
     ModelMismatch,
