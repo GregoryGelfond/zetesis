@@ -6,7 +6,7 @@
 [![Source release: v0.6.0](https://img.shields.io/badge/source-v0.6.0-blue?style=flat-square)](https://github.com/GregoryGelfond/zetesis/releases/tag/v0.6.0)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue?style=flat-square)](LICENSE)
 ![Rust 1.97+](https://img.shields.io/badge/rust-1.97%2B-orange?style=flat-square)
-[![Line coverage: 92.88% (portable)](https://img.shields.io/badge/coverage-92.88%25%20%28portable%29-brightgreen?style=flat-square)](https://gregorygelfond.github.io/zetesis/book/reference/coverage-0.5.0.html)
+[![Line coverage: 93.18% (portable)](https://img.shields.io/badge/coverage-93.18%25%20%28portable%29-brightgreen?style=flat-square)](https://gregorygelfond.github.io/zetesis/book/reference/coverage-0.6.0.html)
 
 **[Read the zetesis Book](https://gregorygelfond.github.io/zetesis/book/)**
 
@@ -122,42 +122,41 @@ output options.
 
 ## Performance at a glance
 
-Measurements of the release candidate on an Apple M4 Pro compare zetesis with
+Measurements of the 0.6.0 candidate on an Apple M4 Pro compare zetesis with
 **14 threads** against clingo 5.8.2 with **one thread**, enumerating all answers
-or all tied optima. Automatic grounding was eager on these cases. Each zetesis time averages
-two campaign medians of three runs; clingo averages four. Times include startup,
-input, grounding, solving and captured output; zetesis statistics are enabled.
+or all tied optima. Automatic grounding was eager on these cases. Times are
+medians of three runs, including startup, input, grounding, solving and captured
+output; zetesis statistics are enabled.
 
 The examples below cover all six corpus families and all six queens encodings.
 “Close” means within 3%; wins and losses use the same descriptive band.
 
 | Workload | zetesis (ms) | clingo (ms) | vs clingo |
 | --- | ---: | ---: | --- |
-| [Equality/generalized TSP, basic](examples/correctness/scenarios/equality-generalized-tsp/01-basic.lp) | 4.769 | 4.840 | Close |
-| [Shortest path, basic](examples/correctness/scenarios/shortest-path/variant-01/01-basic.lp) | 3.920 | 4.802 | zetesis 1.22× faster |
-| [Shortest path, layered with order and budget](examples/correctness/scenarios/shortest-path/variant-04/06-layered-dag-ordering-cap.lp) | 6.227 | 6.229 | Close |
-| [Task allocation, larger mix](examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 27.993 | 184.992 | zetesis 6.61× faster |
-| [Traveling salesman, three depots](examples/correctness/scenarios/traveling-salesman/variant-03/05-larger-three-depots.lp) | 4.704 | 4.798 | Close |
-| [Traveling salesman, windows and revisits](examples/correctness/scenarios/traveling-salesman/variant-05/05-three-depots-mixed.lp) | 6.221 | 5.180 | clingo 1.20× faster |
-| [Eight queens, variant 1](examples/correctness/standalone/n-queens/variant-01.lp) | 4.681 | 5.936 | zetesis 1.27× faster |
-| [Eight queens, variant 2](examples/correctness/standalone/n-queens/variant-02.lp) | 32.069 | 120.441 | zetesis 3.76× faster |
-| [Eight queens, variant 3](examples/correctness/standalone/n-queens/variant-03.lp) | 6.311 | 6.298 | Close |
-| [Eight queens, variant 4](examples/correctness/standalone/n-queens/variant-04.lp) | 6.264 | 5.963 | clingo 1.05× faster |
-| [Eight queens, variant 5](examples/correctness/standalone/n-queens/variant-05.lp) | 7.808 | 6.291 | clingo 1.24× faster |
-| [Eight queens, variant 6](examples/correctness/standalone/n-queens/variant-06.lp) | 7.754 | 6.277 | clingo 1.24× faster |
-| [SEND + MORE = MONEY](examples/correctness/standalone/send-money/send-money.lp) | 9.334 | 12.373 | zetesis 1.33× faster |
-| **All 94 programs: sum of per-case estimates** | **499.265** | **811.996** | **zetesis 1.63× faster on the sum** |
+| [Equality/generalized TSP, basic](examples/correctness/scenarios/equality-generalized-tsp/01-basic.lp) | 4.829 | 4.726 | Close |
+| [Shortest path, basic](examples/correctness/scenarios/shortest-path/variant-01/01-basic.lp) | 4.779 | 4.675 | Close |
+| [Shortest path, layered with order and budget](examples/correctness/scenarios/shortest-path/variant-04/06-layered-dag-ordering-cap.lp) | 6.331 | 6.217 | Close |
+| [Task allocation, larger mix](examples/correctness/scenarios/task-allocation/variant-04/05-larger-mix.lp) | 28.263 | 176.552 | zetesis 6.25× faster |
+| [Traveling salesman, three depots](examples/correctness/scenarios/traveling-salesman/variant-03/05-larger-three-depots.lp) | 4.724 | 4.682 | Close |
+| [Traveling salesman, windows and revisits](examples/correctness/scenarios/traveling-salesman/variant-05/05-three-depots-mixed.lp) | 6.293 | 6.179 | Close |
+| [Eight queens, variant 1](examples/correctness/standalone/n-queens/variant-01.lp) | 6.247 | 6.209 | Close |
+| [Eight queens, variant 2](examples/correctness/standalone/n-queens/variant-02.lp) | 25.926 | 122.510 | zetesis 4.73× faster |
+| [Eight queens, variant 3](examples/correctness/standalone/n-queens/variant-03.lp) | 6.415 | 6.255 | Close |
+| [Eight queens, variant 4](examples/correctness/standalone/n-queens/variant-04.lp) | 6.377 | 6.219 | Close |
+| [Eight queens, variant 5](examples/correctness/standalone/n-queens/variant-05.lp) | 7.870 | 6.237 | clingo 1.26× faster |
+| [Eight queens, variant 6](examples/correctness/standalone/n-queens/variant-06.lp) | 7.897 | 6.263 | clingo 1.26× faster |
+| [SEND + MORE = MONEY](examples/correctness/standalone/send-money/send-money.lp) | 10.949 | 12.257 | zetesis 1.12× faster |
+| **All 94 programs: sum of per-case medians** | **520.523** | **803.673** | **zetesis 1.54× faster on the sum** |
 
-Across all 94 cases, zetesis is faster on **48**, within 3% on **32**, and
-slower on **14**. Of the 32 close cases, **31 favor zetesis**: it has the lower
-measured time on **79 of 94 programs**. All cases completed and agreed on shown answers and costs,
-including optimum ties. In the same comparison, released 0.5.0 won on 4 cases;
-the candidate reduces zetesis's summed time by **36%**. The total sums per-case
-estimates; it is not one timed combined run.
-The [complete 14 October results](https://gregorygelfond.github.io/zetesis/book/reference/cpu-corpus-20261014.html)
-include every case, one- and fourteen-thread profiles, the released 0.5.0
-comparison, memory, identities, limits and reproduction commands. GPU execution
-and clingo's parallel modes are outside this comparison.
+Across all 94 cases, zetesis is faster on **16**, within 3% on **65**, and
+slower on **13**. All completed and agreed on displayed answers and costs,
+including optimal ties. The summed time is about **33% below** the recorded
+0.5.0 result of 777.447 ms; that baseline comes from an earlier campaign, not
+a simultaneous comparison. The sum is not one timed combined run.
+The [complete final results](https://gregorygelfond.github.io/zetesis/book/reference/cpu-corpus-final-20261014.html)
+include every case, one- and fourteen-thread profiles, memory, identities,
+reproduction commands and the earlier comparison. GPU execution and clingo's
+parallel modes are outside this comparison.
 
 ## Use from Rust
 

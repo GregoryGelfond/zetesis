@@ -2,6 +2,8 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+The [final 0.6.0 check](cpu-corpus-final-20261014.md) measures the subsequent lookup correction. This page preserves the earlier repeated study and its measured snapshot.
+
 This study compares released **0.5.0** with a frozen **pre-release candidate** on the complete 94-program correctness corpus. The candidate has no assigned release version or tag; its executable and source-manifest hashes below identify the measured snapshot. It is a cumulative comparison, not an experiment isolating one optimization.
 
 The candidate’s summed process-time estimate is 35.48% lower at one worker and 35.78% lower at fourteen. All 94 case estimates are more than 3% lower than the release at each worker count. The [portable observations](observations/cpu-corpus-20261014.json) retain individual timed values, common internal stages, memory observations, counts, costs and input hashes; the [TSV](observations/cpu-corpus-20261014.tsv) contains the derived per-case tables.

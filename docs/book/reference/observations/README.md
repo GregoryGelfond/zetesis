@@ -2,6 +2,11 @@
 
 <!-- A dated record: its commands keep the spellings of the binaries it records. -->
 
+The [final 0.6.0 CPU check](../cpu-corpus-final-20261014.md) retains
+[all timed observations](cpu-corpus-final-20261014.json) and the
+[complete table](cpu-corpus-final-20261014.tsv), separately from the earlier
+[repeated comparison](../cpu-corpus-20261014.md).
+
 The [7 October 2026 CPU corpus comparison](../cpu-corpus-20261007.md) retains a
 [portable 94-case record](cpu-corpus-20261007.json) for a 0.4.0 release-preparation
 candidate. Exact binary and workspace source hashes identify the measurement;
@@ -15,6 +20,11 @@ covers the [94-case corpus](foundation-reuse-120fadfb-corpus.json),
 retains input report hashes, timing and memory observations, actual execution
 routes and qualification scope. Non-completed cells retain their reasons.
 These CPU observations do not establish Metal performance or qualification.
+
+The [0.6.0 coverage snapshot](../coverage-0.6.0.md) records the current portable,
+combined workspace and independent CPU-only populations. Its
+[receipt](coverage-0.6.0.json) identifies tools, reports and all 63 physical tests;
+the [source manifest](coverage-0.6.0-sources.json) identifies the measured contents.
 
 The [0.5.0 coverage snapshot](../coverage-0.5.0.md) records portable workspace,
 combined portable-plus-Metal workspace and independent CPU-only coverage. Its

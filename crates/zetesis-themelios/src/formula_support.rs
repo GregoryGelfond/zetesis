@@ -2757,18 +2757,21 @@ impl<'a, 'source> Join<'a, 'source> {
                 )?);
                 return Ok(());
             }
-            if let Some(probe) = self.expression_key_probe(
-                pattern,
-                source,
-                Context::new(&*computation, limits, counters, location),
-            )? {
-                self.probes[self.depth] = Some(probe);
-                return Ok(());
-            }
+            // Covered computed domains may combine several restrictions. Keep
+            // their selection before the numeric fallback, whose ordinary
+            // posting can otherwise replace it with a broader candidate set.
             if let Some(probe) = self.computed_probe(
                 pattern.pattern,
                 source,
                 Context::new(computation, limits, counters, location),
+            )? {
+                self.probes[self.depth] = Some(probe);
+                return Ok(());
+            }
+            if let Some(probe) = self.expression_key_probe(
+                pattern,
+                source,
+                Context::new(&*computation, limits, counters, location),
             )? {
                 self.probes[self.depth] = Some(probe);
                 return Ok(());

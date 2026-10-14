@@ -282,9 +282,10 @@ Stage 2 continues to use its existing checked index and residual filtering contr
 Computed keys become the one-column case of Stage 2's expression keys. Today they invert one-variable expressions under
 the totality certificate (`Projections::total_body`, `formula_support/projections/totality.rs`) and a cover built from
 every distinct input of the column (`formula_support/projections/domains.rs`). Stage 2 has one index structure and one
-planner rule: an ordinary posting key first, then an exact expression key, then a covering range probe whose superset
-the residual comparison filters. The computed-key path is retired once Stage 2's acceptance shows identical routes on
-the programs it serves today.
+fallback rule: an ordinary posting key first, then an exact expression key, then a covering range probe whose superset
+the residual comparison filters. An available computed-domain selection keeps precedence over this fallback because
+it can combine restrictions on several columns. The computed-key path is retired once Stage 2's acceptance shows
+identical routes on the programs it serves today.
 
 ### Diagnostic census and occurrence correspondence
 

@@ -7,6 +7,13 @@ their own source revisions, workloads and measurement conditions.
 
 ## Recorded comparisons
 
+The [final 0.6.0 CPU check](cpu-corpus-final-20261014.md) records all 94 cases at
+one and fourteen threads. At fourteen, summed process time is 520.523 ms against
+clingo’s 803.673 ms, with 16 wins, 65 close cases and 13 losses under a 3% band.
+The final total is about 33% below the earlier recorded 0.5.0 total; the baseline
+was not rerun in this final check. The page includes complete tables, individual
+observations, memory, identities and reproduction commands.
+
 The [14 October CPU corpus comparison](cpu-corpus-20261014.md) compares released
 0.5.0 with a frozen pre-release candidate at one and fourteen workers. Summed
 process-time estimates fall 35.48% and 35.78%, respectively, including the

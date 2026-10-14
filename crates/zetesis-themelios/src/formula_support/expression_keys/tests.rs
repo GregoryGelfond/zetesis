@@ -173,11 +173,24 @@ fn hybrid_capture_keeps_its_original_rows() {
 }
 
 #[test]
-fn repeated_columns_remain_residual_equalities() {
+fn computed_domains_preserve_repeated_column_matching() {
     let reference = controlled(true, || ground(testing::prepare(ALIAS), None, None)).unwrap();
     let receipts = Receipts::default();
     let selected = ground(testing::prepare(ALIAS), Some(&receipts), None).unwrap();
     assert_same_program(&reference, &selected);
+    // The covered one-variable expression now uses computed-domain selection.
+    assert!(receipts.emission.get().table_probes.unwrap() > 0);
+    assert_eq!(receipts.emission.get().numeric_index_builds, Some(0));
+}
+
+#[test]
+fn expression_postings_preserve_repeated_column_matching() {
+    let source = include_str!("../../../tests/fixtures/expression-keys/alias-expression.lp");
+    let reference = controlled(true, || ground(testing::prepare(source), None, None)).unwrap();
+    let receipts = Receipts::default();
+    let selected = ground(testing::prepare(source), Some(&receipts), None).unwrap();
+    assert_same_program(&reference, &selected);
+    // Both selected rows have X+Y=2, but p(1,2,1) fails the repeated X binding.
     assert_eq!(receipts.emission.get().numeric_index_builds, Some(1));
     assert_eq!(receipts.emission.get().expression_key_probes, Some(1));
     assert_eq!(receipts.emission.get().expression_key_rows, Some(2));
@@ -271,3 +284,29 @@ fn arithmetic_heads_keep_the_original_traversal() {
 
 mod ranges;
 mod rounds;
+
+#[test]
+fn computed_domains_keep_priority_over_an_ordinary_numeric_posting() {
+    let source = include_str!("../../../../../examples/sudoku.lp");
+    let reference_receipts = Receipts::default();
+    let reference = controlled(true, || {
+        ground(testing::prepare(source), Some(&reference_receipts), None)
+    })
+    .unwrap();
+    let receipts = Receipts::default();
+    let selected = ground(testing::prepare(source), Some(&receipts), None).unwrap();
+    assert_same_program(&reference, &selected);
+
+    // For each of the two block constraints, every first digit has nine
+    // same-block candidates. The ordinary posting for its bound V has 81;
+    // returning that posting before computed selection loses both block bounds.
+    let work = receipts.emission.get();
+    assert_eq!(work.table_preparations, Some(1));
+    assert_eq!(work.table_probes, Some(2 * 729));
+    assert_eq!(work.table_rows, Some(2 * 729 * 9));
+    assert_eq!(work.join_rows, Some(17_037));
+    assert_eq!(work.join_rows, reference_receipts.emission.get().join_rows);
+    assert_eq!(work.numeric_index_builds, Some(0));
+    assert_eq!(work.expression_key_probes, Some(0));
+    assert_eq!(work.range_probes, Some(0));
+}

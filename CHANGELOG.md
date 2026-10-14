@@ -2,7 +2,7 @@
 
 Notable changes by release. Versions follow Semantic Versioning.
 
-## Unreleased
+## 0.6.0 — 2026-10-14
 
 ### Added
 
@@ -46,9 +46,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   256-unit work boundaries. Work and storage receipts reflect the new execution
   routes, so resource ceilings can be reached at different points. See
   [resource contracts](docs/book/rust/outcomes.md#resource-contracts).
-- The recorded 94-program CPU comparison shows 36% lower summed command time
-  than 0.5.0 at fourteen threads, and lower measured time than clingo on 79
-  programs. See the [measurements and method](docs/book/reference/cpu-corpus-20261014.md).
+- The final 94-program CPU check records 521 ms in summed command time at
+  fourteen threads, against clingo’s 804 ms. This is about 33% below the earlier
+  recorded 0.5.0 result. See the [measurements and method](docs/book/reference/cpu-corpus-final-20261014.md).
 
 ### Fixed
 
