@@ -106,6 +106,39 @@ const AGGREGATE: [AggregateErrorKind; 6] = [
     AggregateErrorKind::SubsetLimit,
 ];
 
+const LOADING: [BundleResource; 5] = [
+    BundleResource::Roots,
+    BundleResource::Files,
+    BundleResource::FileBytes,
+    BundleResource::TotalBytes,
+    BundleResource::IncludeDepth,
+];
+
+const OBJECTIVE_PLAN: [ObjectiveBoundResource; 10] = [
+    ObjectiveBoundResource::Atoms,
+    ObjectiveBoundResource::Bindings,
+    ObjectiveBoundResource::Keys,
+    ObjectiveBoundResource::KeyBytes,
+    ObjectiveBoundResource::TupleWidth,
+    ObjectiveBoundResource::Nodes,
+    ObjectiveBoundResource::Operands,
+    ObjectiveBoundResource::Variables,
+    ObjectiveBoundResource::BodyAtoms,
+    ObjectiveBoundResource::Work,
+];
+
+const EVALUATION: [observation::Resource; 9] = [
+    observation::Resource::Work,
+    observation::Resource::Bindings,
+    observation::Resource::Terms,
+    observation::Resource::Nodes,
+    observation::Resource::Depth,
+    observation::Resource::Bytes,
+    observation::Resource::OutputBytes,
+    observation::Resource::LocalBytes,
+    observation::Resource::TermStorageBytes,
+];
+
 /// The limit `independent` bounds each resource by. No field of these tables
 /// defaults to it, and `independent` checks that: two resources sharing a
 /// field that defaulted to it would each still read their default.
@@ -189,6 +222,21 @@ fn each_objective_admission_resource_has_a_field_of_its_own() {
 #[test]
 fn each_aggregate_ceiling_has_a_field_of_its_own() {
     independent(&AGGREGATE, aggregate_field);
+}
+
+#[test]
+fn each_bundle_loading_resource_has_a_field_of_its_own() {
+    independent(&LOADING, loading_field);
+}
+
+#[test]
+fn each_objective_plan_resource_has_a_field_of_its_own() {
+    independent(&OBJECTIVE_PLAN, objective_plan_field);
+}
+
+#[test]
+fn each_observation_evaluation_resource_has_a_field_of_its_own() {
+    independent(&EVALUATION, evaluation_field);
 }
 
 /// Whether every field of `limits` that `field` names for `resources` holds
@@ -285,4 +333,28 @@ fn an_evaluation_resource_has_no_admission_field() {
 #[should_panic(expected = "fixed capacity of binding analysis")]
 fn a_fixed_capacity_has_no_formula_field() {
     let _ = formula(FormulaResource::BindingBoundBits, 1);
+}
+
+#[test]
+#[should_panic(expected = "fixed width of the source model")]
+fn a_fixed_source_width_has_no_loading_field() {
+    let _ = bundle_loading(BundleResource::SourceCoordinates, 1);
+}
+
+#[test]
+#[should_panic(expected = "bounded by prepare_choice_bounds' max_bytes")]
+fn the_choice_proof_storage_has_no_plan_field() {
+    let _ = objective_plan(ObjectiveBoundResource::ChoiceBytes, 1);
+}
+
+#[test]
+#[should_panic(expected = "counted when observation directives are admitted")]
+fn an_admission_resource_has_no_evaluation_field() {
+    let _ = observation_evaluation(observation::Resource::Directives, 1);
+}
+
+#[test]
+#[should_panic(expected = "bounded by the observation construction limits")]
+fn the_construction_bytes_have_no_evaluation_field() {
+    let _ = observation_evaluation(observation::Resource::ConstructionBytes, 1);
 }

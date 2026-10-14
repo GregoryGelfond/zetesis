@@ -1,5 +1,6 @@
 //! The limit each typed resource is counted against, set by resource, for the
-//! limits an admission takes.
+//! limits an admission takes and for those of three other operations whose
+//! tests span crates.
 //!
 //! A refusal at a limit reports the resource it met. The view holds a family
 //! of limits when a `zetesis-themelios` admission takes it, directly or nested
@@ -13,19 +14,22 @@
 //! core admission limits, so those two formula resources are set through
 //! [`admission_formula`].
 //!
-//! The limits of other operations are outside the view, though their refusals
-//! report typed resources too. Among them are loading a bundle
-//! (`BundleLimits`), compiling a program's metadata through its own door
-//! (`MetadataLimits`), planning counts and objective bounds (`CountPlanLimits`,
-//! `ObjectiveBoundLimits`, `ObjectivePlanLimits`), and evaluating an admitted
-//! program's observations (`observation::Limits`, and the constructed-symbol
-//! limits of `observation::ConstructionLimits`). Evaluation also reports
-//! `Nodes`, `Depth` and `Bytes` against its constructed-symbol limits, while the
-//! view pairs those three resources with their admission fields;
-//! [`observation()`] refuses the resources counted only while observations are
-//! evaluated. No admission takes these limits, so a test sets them where it runs
-//! that operation, and a helper that sets one of them for one crate's tests
-//! stays in that crate's `tests/integration/support`.
+//! The view also holds the limits of three operations other than admission,
+//! because the tests of more than one crate set them one at a time: loading a
+//! bundle ([`bundle_loading`]), building an objective plan
+//! ([`objective_plan`]), and evaluating an admitted program's observations
+//! ([`observation_evaluation`]). Evaluation counts `Nodes`, `Depth` and `Bytes`
+//! per constructed symbol against fields of its own, while [`observation()`]
+//! pairs those three resources with their admission fields and refuses the
+//! resources counted only while observations are evaluated.
+//!
+//! The limits of operations that only one crate's tests set are paired in that
+//! crate's `tests/integration/support`. In `zetesis-themelios` these are
+//! compiling a program's metadata through its own door
+//! (`metadata_resources`), planning counts (`count_plan_resources`), bounding
+//! an objective (`objective_bound_resources`, which sets its aggregate ceilings
+//! through [`aggregate`]), and constructing observation symbols
+//! (`observation_construction`).
 //!
 //! The view stands above `zetesis-themelios`, so it serves the tests that use
 //! that crate as a dependency, its own integration tests among them. A unit
@@ -49,10 +53,12 @@
 //! and set as `u64` whatever the field's width.
 
 use zetesis_ferraris::{AggregateErrorKind, AggregateLimits};
+use zetesis_themelios::objective_bound::{ObjectiveBoundResource, ObjectivePlanLimits};
 use zetesis_themelios::observation;
 use zetesis_themelios::{
-    AdmissionOptions, BundleAdmissionOptions, ExpansionLimits, ExpansionResource, FormulaLimits,
-    FormulaResource, InputLimit, ProgramAdmissionOptions, ProgramResource,
+    AdmissionOptions, BundleAdmissionOptions, BundleLimits, BundleResource, ExpansionLimits,
+    ExpansionResource, FormulaLimits, FormulaResource, InputLimit, ProgramAdmissionOptions,
+    ProgramResource,
 };
 
 /// A limit field, at the width its limits declare.
@@ -284,6 +290,89 @@ fn objective_field(
     }
 }
 
+/// The field of `limits` that bounds `resource` when a bundle is loaded.
+///
+/// # Panics
+/// Panics for a fixed width of the source model, which no loading limit
+/// bounds.
+fn loading_field(limits: &mut BundleLimits, resource: BundleResource) -> Field<'_> {
+    match resource {
+        BundleResource::Roots => Field::Size(&mut limits.max_roots),
+        BundleResource::Files => Field::Size(&mut limits.max_files),
+        BundleResource::FileBytes => Field::Size(&mut limits.max_file_bytes),
+        BundleResource::TotalBytes => Field::Size(&mut limits.max_total_bytes),
+        BundleResource::IncludeDepth => Field::Size(&mut limits.max_include_depth),
+        BundleResource::SourceCoordinates | BundleResource::SourceIdentities => {
+            panic!("{resource:?} is a fixed width of the source model, not a loading limit")
+        }
+    }
+}
+
+/// The field of `limits` that bounds `resource` when an objective plan is
+/// built.
+///
+/// # Panics
+/// Panics for the choice proof's storage, which the `max_bytes` that
+/// `prepare_choice_bounds` takes bounds.
+fn objective_plan_field(
+    limits: &mut ObjectivePlanLimits,
+    resource: ObjectiveBoundResource,
+) -> Field<'_> {
+    match resource {
+        ObjectiveBoundResource::Atoms => Field::Size(&mut limits.max_atoms),
+        ObjectiveBoundResource::Bindings => Field::Count(&mut limits.max_bindings),
+        ObjectiveBoundResource::Keys => Field::Size(&mut limits.max_keys),
+        ObjectiveBoundResource::KeyBytes => Field::Size(&mut limits.max_key_bytes),
+        ObjectiveBoundResource::TupleWidth => Field::Size(&mut limits.max_tuple_width),
+        ObjectiveBoundResource::Nodes => Field::Size(&mut limits.max_nodes),
+        ObjectiveBoundResource::Operands => Field::Size(&mut limits.max_operands),
+        ObjectiveBoundResource::Variables => Field::Size(&mut limits.max_variables),
+        ObjectiveBoundResource::BodyAtoms => Field::Size(&mut limits.max_body_atoms),
+        ObjectiveBoundResource::Work => Field::Count(&mut limits.max_work),
+        ObjectiveBoundResource::ChoiceBytes => {
+            panic!("{resource:?} is bounded by prepare_choice_bounds' max_bytes, not a plan limit")
+        }
+    }
+}
+
+/// The field of `limits` that bounds `resource` while an admitted program's
+/// observations are evaluated. Evaluation counts `Nodes`, `Depth` and `Bytes`
+/// per constructed symbol, against these fields rather than the admission's.
+///
+/// # Panics
+/// Panics for a resource counted only when observation directives are
+/// admitted, or for the construction bytes, which the construction limits
+/// bound.
+fn evaluation_field(
+    limits: &mut observation::Limits,
+    resource: observation::Resource,
+) -> Field<'_> {
+    use observation::Resource;
+    match resource {
+        Resource::Work => Field::Count(&mut limits.max_work),
+        Resource::Bindings => Field::Count(&mut limits.max_bindings),
+        Resource::Terms => Field::Size(&mut limits.max_terms),
+        Resource::Nodes => Field::Size(&mut limits.max_symbol_nodes),
+        Resource::Depth => Field::Size(&mut limits.max_symbol_depth),
+        Resource::Bytes => Field::Size(&mut limits.max_symbol_bytes),
+        Resource::OutputBytes => Field::Size(&mut limits.max_output_bytes),
+        Resource::LocalBytes => Field::Size(&mut limits.max_local_bytes),
+        Resource::TermStorageBytes => Field::Size(&mut limits.max_term_storage_bytes),
+        Resource::ConstructionBytes => {
+            panic!("{resource:?} is bounded by the observation construction limits")
+        }
+        Resource::Directives
+        | Resource::Variables
+        | Resource::BodyElements
+        | Resource::Arity
+        | Resource::Origins => {
+            panic!(
+                "{resource:?} is counted when observation directives are admitted, not evaluated"
+            )
+        }
+    }
+}
+
 /// The field of `limits` whose ceiling an aggregate refusal of `kind` reports.
 ///
 /// # Panics
@@ -496,6 +585,44 @@ pub fn formula_aggregate(kind: AggregateErrorKind, limit: u64) -> FormulaLimits 
         aggregate: aggregate(kind, limit),
         ..FormulaLimits::default()
     }
+}
+
+/// The default bundle loading limits, with `resource` bounded by `limit`.
+///
+/// # Panics
+/// Panics for a fixed width of the source model, or a `limit` that does not
+/// fit the field's width.
+#[must_use]
+pub fn bundle_loading(resource: BundleResource, limit: u64) -> BundleLimits {
+    let mut limits = BundleLimits::default();
+    loading_field(&mut limits, resource).set(limit);
+    limits
+}
+
+/// The default objective plan limits, with `resource` bounded by `limit`.
+///
+/// # Panics
+/// Panics for the choice proof's storage, or a `limit` that does not fit the
+/// field's width.
+#[must_use]
+pub fn objective_plan(resource: ObjectiveBoundResource, limit: u64) -> ObjectivePlanLimits {
+    let mut limits = ObjectivePlanLimits::default();
+    objective_plan_field(&mut limits, resource).set(limit);
+    limits
+}
+
+/// The default observation evaluation limits, with `resource` bounded by
+/// `limit`.
+///
+/// # Panics
+/// Panics for a resource counted only when observation directives are
+/// admitted, for the construction bytes, or for a `limit` that does not fit the
+/// field's width.
+#[must_use]
+pub fn observation_evaluation(resource: observation::Resource, limit: u64) -> observation::Limits {
+    let mut limits = observation::Limits::default();
+    evaluation_field(&mut limits, resource).set(limit);
+    limits
 }
 
 #[cfg(test)]

@@ -6,7 +6,7 @@
 //! fixture; no alternative report parser or representative-selection rule is used.
 
 use std::{collections::BTreeSet, ffi::OsStr, num::NonZeroUsize, path::Path};
-use zetesis_reference_support::formula;
+use zetesis_reference_support::{formula, resource_limits};
 
 use zetesis_clingo_support as oracle;
 use zetesis_clingo_support::REPORT_BYTES;
@@ -157,10 +157,10 @@ fn model_symbols(model: &Model) -> Vec<String> {
         .render(
             model,
             &OutputSelection::default(),
-            observation::Limits {
-                max_output_bytes: REPORT_BYTES,
-                ..observation::Limits::default()
-            },
+            resource_limits::observation_evaluation(
+                observation::Resource::OutputBytes,
+                u64::try_from(REPORT_BYTES).unwrap(),
+            ),
             &Cancellation::default(),
         )
         .unwrap();

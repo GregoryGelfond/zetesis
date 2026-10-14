@@ -1,6 +1,7 @@
 //! Objective restrictions constrain classical candidates; the original reduct
 //! and independently verified complete stable-model/cost contracts stay fixed.
 
+use crate::support::objective_bound_resources;
 use crate::support::objective_plans::exact as plan;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -465,10 +466,7 @@ fn optional_bound_refusals_leave_the_original_available_for_complete_search() {
     let error = plan
         .bound(
             &score(&input, baseline[0]),
-            ObjectiveBoundLimits {
-                max_work: 0,
-                ..ObjectiveBoundLimits::default()
-            },
+            objective_bound_resources::limits(ObjectiveBoundResource::Work, 0),
             &Cancellation::default(),
         )
         .unwrap_err();

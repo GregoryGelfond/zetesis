@@ -7,7 +7,7 @@ use zetesis_core::{Model, Term, Value};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, models};
 use zetesis_objective::{ObjectiveProgram, ObjectiveTemplate, Score, WeightPolarity, evaluate};
-use zetesis_reference_support::{admit, formula};
+use zetesis_reference_support::{admit, formula, resource_limits};
 use zetesis_sat::StableModels;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
@@ -146,10 +146,8 @@ fn verified_incumbent_pruning_preserves_every_optimal_model_and_original_reduct(
 fn optional_plan_refusal_is_typed_and_preserves_work_and_original_theory() {
     let input = formula("{a}. #maximize{2@7,k:a}.");
     let plan = plan(&input);
-    let limits = ObjectivePlanLimits {
-        max_work: plan.statistics().work - 1,
-        ..ObjectivePlanLimits::default()
-    };
+    let limits =
+        resource_limits::objective_plan(ObjectiveBoundResource::Work, plan.statistics().work - 1);
     let error = ObjectivePlan::new(
         input.theory(),
         input.atoms(),

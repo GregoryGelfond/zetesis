@@ -1,6 +1,8 @@
 //! Necessary source-choice costs preserve every original model at an admissible
 //! lexicographic cost, including ties and conditional group activation.
 
+use crate::support::count_plan_resources;
+use crate::support::objective_bound_resources;
 use crate::support::objective_plans::exact;
 use std::cmp::Ordering;
 
@@ -12,7 +14,7 @@ use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
     ObjectivePlanLimits,
 };
-use zetesis_themelios::{AdmittedFormula, CountPlanStatus, RequiredChoices};
+use zetesis_themelios::{AdmittedFormula, CountPlanResource, CountPlanStatus, RequiredChoices};
 
 const DERIVED: &str = include_str!("../fixtures/required-choice-objectives/derived.lp");
 const SHARED_KEY: &str = include_str!("../fixtures/required-choice-objectives/shared-key.lp");
@@ -229,10 +231,10 @@ fn failed_strengthening_returns_the_exact_bound() {
         )
         .unwrap();
     prepare(&mut plan, input.required_choices().unwrap());
-    let limits = ObjectiveBoundLimits {
-        max_work: exact_bound.statistics().work,
-        ..ObjectiveBoundLimits::default()
-    };
+    let limits = objective_bound_resources::limits(
+        ObjectiveBoundResource::Work,
+        exact_bound.statistics().work,
+    );
     let fallback = plan
         .bound(&incumbent, limits, &Cancellation::default())
         .unwrap();
@@ -309,10 +311,7 @@ fn failed_repreparation_retains_certified_choice_costs() {
 fn source_capture_refusal_keeps_exact_admission() {
     let input = prepared(DERIVED)
         .ground_with_count_plan(
-            zetesis_themelios::CountPlanLimits {
-                max_groups: 0,
-                ..zetesis_themelios::CountPlanLimits::default()
-            },
+            count_plan_resources::limits(CountPlanResource::Groups, 0),
             &Cancellation::default(),
             None,
         )
@@ -509,10 +508,8 @@ fn bound_reuses_prepared_activation_closure() {
             .unwrap();
         assert!(bound.choice_failure().is_none());
         if let Some(&earlier) = bounds.first() {
-            let exact_allowance = ObjectiveBoundLimits {
-                max_work: earlier,
-                ..ObjectiveBoundLimits::default()
-            };
+            let exact_allowance =
+                objective_bound_resources::limits(ObjectiveBoundResource::Work, earlier);
             let repeated = plan
                 .bound(&incumbent, exact_allowance, &Cancellation::default())
                 .unwrap();

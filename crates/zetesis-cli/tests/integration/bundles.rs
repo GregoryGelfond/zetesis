@@ -4,13 +4,13 @@ use crate::support::bundles::process;
 use std::fs;
 use std::io::Write;
 use std::process::{Command, Stdio};
-use zetesis_reference_support::BundleFixture;
+use zetesis_reference_support::{BundleFixture, resource_limits};
 
 use crate::support::human::before_timing;
 use crate::support::options::enumerating as options;
 use zetesis_cli::{Completion, RunError, run_bundle_with_diagnostics, run_with_diagnostics};
 use zetesis_cpu::Cancellation;
-use zetesis_themelios::{BundleLimits, SourceBundle};
+use zetesis_themelios::{BundleResource, SourceBundle};
 
 const MALFORMED_CHOICE: &str = "{a,b :- q.\nq :- c.\n";
 
@@ -22,10 +22,7 @@ fn typed_include_depth_bounds_the_loaded_graph() {
     fixture.write("leaf.lp", "a.");
     let refused = SourceBundle::load(
         fixture.path("entry.lp"),
-        BundleLimits {
-            max_include_depth: 1,
-            ..BundleLimits::default()
-        },
+        resource_limits::bundle_loading(BundleResource::IncludeDepth, 1),
     )
     .unwrap_err();
     assert!(matches!(
@@ -37,10 +34,7 @@ fn typed_include_depth_bounds_the_loaded_graph() {
     ));
     let complete_bundle = SourceBundle::load(
         fixture.path("entry.lp"),
-        BundleLimits {
-            max_include_depth: 2,
-            ..BundleLimits::default()
-        },
+        resource_limits::bundle_loading(BundleResource::IncludeDepth, 2),
     )
     .unwrap();
     assert_eq!(complete_bundle.sources().len(), 3);
@@ -322,10 +316,7 @@ fn typed_file_byte_limit_applies_to_included_files() {
     fixture.write("large.lp", &format!("% {}\np.", "padding ".repeat(10)));
     let error = SourceBundle::load(
         fixture.path("entry.lp"),
-        BundleLimits {
-            max_file_bytes: 32,
-            ..BundleLimits::default()
-        },
+        resource_limits::bundle_loading(BundleResource::FileBytes, 32),
     )
     .unwrap_err();
     assert!(matches!(

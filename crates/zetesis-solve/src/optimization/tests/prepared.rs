@@ -5,17 +5,16 @@ use crate::{Interruption, SolveConfig};
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::Interpretation;
-use zetesis_reference_support::formula as admitted;
-use zetesis_themelios::objective_bound::{ObjectivePlan, ObjectivePlanLimits};
+use zetesis_reference_support::{formula as admitted, resource_limits};
+use zetesis_themelios::objective_bound::{
+    ObjectiveBoundResource, ObjectivePlan, ObjectivePlanLimits,
+};
 
 #[test]
 fn exhausted_preparation_prevents_fallback_success() {
     let owner = admitted("{a;b}. #minimize {1,a:a;2,b:b}.");
     let cancellation = Cancellation::default();
-    let limits = ObjectivePlanLimits {
-        max_work: 1,
-        ..Default::default()
-    };
+    let limits = resource_limits::objective_plan(ObjectiveBoundResource::Work, 1);
     let refused = ObjectivePlan::new(
         owner.theory(),
         owner.atom_catalog().atoms(),

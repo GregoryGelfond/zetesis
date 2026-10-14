@@ -1,5 +1,6 @@
 //! Optional source-count plans preserve the original reduct subject.
 
+use crate::support::count_plan_resources;
 use crate::support::finite_bindings as reference;
 use zetesis_reference_support::{BundleFixture, canonical, prepared, resource_limits};
 
@@ -7,8 +8,8 @@ use reference::{exhaustive, external, holds, native, values};
 use zetesis_clingo_support as oracle;
 use zetesis_cpu::Cancellation;
 use zetesis_themelios::{
-    AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanStatus, ExpansionLimits,
-    FormulaLimits, FormulaResource, prepare_formula,
+    AdmissionOptions, AdmittedFormula, CountPlanLimits, CountPlanResource, CountPlanStatus,
+    ExpansionLimits, FormulaLimits, FormulaResource, prepare_formula,
 };
 
 const SOURCES: &[&str] = &[
@@ -598,10 +599,7 @@ fn stopped_bundle_planning_keeps_original_sources() {
     )
     .unwrap()
     .ground_with_count_plan(
-        CountPlanLimits {
-            max_groups: 0,
-            ..CountPlanLimits::default()
-        },
+        count_plan_resources::limits(CountPlanResource::Groups, 0),
         &Cancellation::default(),
         None,
     )
@@ -638,10 +636,7 @@ fn source_tuple_payload_is_not_retained_by_count_planning() {
     let short = admitted(&source("first"), true);
     let bytes = plan(&short).statistics().storage_bytes;
     assert!(bytes > 0);
-    let limits = CountPlanLimits {
-        max_bytes: bytes,
-        ..CountPlanLimits::default()
-    };
+    let limits = count_plan_resources::limits(CountPlanResource::Bytes, bytes);
     let long = planned_with(
         &source(&"long_key".repeat(128)),
         limits,

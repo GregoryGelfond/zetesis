@@ -4,6 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use themelios_base::source::{SourceId, Sources, check_sources_laws};
+use zetesis_reference_support::resource_limits;
 use zetesis_test_support::repository;
 use zetesis_themelios::{
     AdmissionOptions, BundleError, BundleLimits, BundleResource, BundleSource, SourceBundle, admit,
@@ -116,17 +117,11 @@ fn file_and_depth_limits_are_independent() {
     fixture.write("child.lp", "c.");
     for (limits, expected) in [
         (
-            BundleLimits {
-                max_files: 1,
-                ..BundleLimits::default()
-            },
+            resource_limits::bundle_loading(BundleResource::Files, 1),
             BundleResource::Files,
         ),
         (
-            BundleLimits {
-                max_include_depth: 0,
-                ..BundleLimits::default()
-            },
+            resource_limits::bundle_loading(BundleResource::IncludeDepth, 0),
             BundleResource::IncludeDepth,
         ),
     ] {
@@ -146,10 +141,7 @@ fn shared_subtrees_do_not_evade_the_maximum_path_depth() {
     fixture.write("shared.lp", "#include \"leaf.lp\".");
     fixture.write("leaf.lp", "leaf.");
     fixture.write("branch.lp", "#include \"shared.lp\".");
-    let limits = BundleLimits {
-        max_include_depth: 2,
-        ..BundleLimits::default()
-    };
+    let limits = resource_limits::bundle_loading(BundleResource::IncludeDepth, 2);
     assert!(matches!(
         SourceBundle::load(fixture.path("entry.lp"), limits),
         Err(BundleError::Limit {
@@ -164,10 +156,7 @@ fn shared_subtrees_do_not_evade_the_maximum_path_depth() {
 fn byte_limits_precede_parsing_and_apply_across_the_graph() {
     let fixture = Fixture::new();
     fixture.write("oversize.lp", "deliberately invalid syntax");
-    let small = BundleLimits {
-        max_file_bytes: 2,
-        ..BundleLimits::default()
-    };
+    let small = resource_limits::bundle_loading(BundleResource::FileBytes, 2);
     assert!(matches!(
         SourceBundle::load(fixture.path("oversize.lp"), small),
         Err(BundleError::Limit {
@@ -178,10 +167,10 @@ fn byte_limits_precede_parsing_and_apply_across_the_graph() {
     let entry = "#include \"child.lp\".";
     fixture.write("entry.lp", entry);
     fixture.write("child.lp", "child.");
-    let total = BundleLimits {
-        max_total_bytes: entry.len() + 5,
-        ..BundleLimits::default()
-    };
+    let total = resource_limits::bundle_loading(
+        BundleResource::TotalBytes,
+        u64::try_from(entry.len() + 5).unwrap(),
+    );
     assert!(matches!(
         SourceBundle::load(fixture.path("entry.lp"), total),
         Err(BundleError::Limit {

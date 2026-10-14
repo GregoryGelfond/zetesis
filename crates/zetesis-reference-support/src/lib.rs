@@ -3,7 +3,8 @@
 //! with clingo (every answer set of a small program, found by checking each
 //! candidate against the reduct), preparation and hybrid grounding,
 //! source-bundle fixtures, and, by the resource a refusal reports, the limits
-//! an admission takes ([`resource_limits`] states which).
+//! an admission takes and those of three other operations whose tests span
+//! crates ([`resource_limits`] states which).
 //!
 //! [`admit`] admits a source under given formula limits, the rest at their
 //! defaults, [`formula`] under the default limits throughout and [`normal`] on

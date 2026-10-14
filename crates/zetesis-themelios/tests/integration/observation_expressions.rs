@@ -1,14 +1,13 @@
 //! Pure expression evaluation observes full models without extending logical grounding.
 
+use crate::support::observation_construction;
 use crate::support::observation_reference;
 use crate::support::observation_rendering::shown as terms;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::{admit, formula};
 use zetesis_themelios::FormulaLimits;
-use zetesis_themelios::observation::{
-    ConstructionLimits, ErrorKind, EvaluationError, Limits, Resource,
-};
+use zetesis_themelios::observation::{ErrorKind, EvaluationError, Limits, Resource};
 
 #[test]
 fn checked_integer_operators_construct_their_scalar_results() {
@@ -93,7 +92,7 @@ fn comparison_operands_share_the_construction_ceiling() {
             .evaluate_with_construction_limits(
                 &Model::default(),
                 Limits::default(),
-                ConstructionLimits { max_bytes },
+                observation_construction::limits(Resource::ConstructionBytes, max_bytes),
                 &Cancellation::default(),
             )
     };

@@ -7,6 +7,7 @@ use zetesis_core::{
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Node, Theory, models};
 use zetesis_objective::{Condition, ConditionNode, ObjectiveProgram, ObjectiveTemplate, evaluate};
+use zetesis_reference_support::resource_limits;
 use zetesis_test_support::programs::signed as atom;
 use zetesis_themelios::objective_bound::{
     ObjectiveBoundErrorKind, ObjectiveBoundLimits, ObjectiveBoundResource, ObjectivePlan,
@@ -432,10 +433,7 @@ fn joined_planning_refuses_every_incomplete_work_prefix() {
             &original,
             catalog.atoms(),
             &objectives,
-            ObjectivePlanLimits {
-                max_work,
-                ..ObjectivePlanLimits::default()
-            },
+            resource_limits::objective_plan(ObjectiveBoundResource::Work, max_work),
             &Cancellation::default(),
         )
     };

@@ -199,9 +199,11 @@ without compiling a solver. `zetesis-reference-support`, over
 a small program's answer sets through the reduct check, prepares a source and
 grounds it for hybrid execution, writes the temporary source bundles several
 crates' tests load or run, and names, by the resource a refusal reports, the
-limits an admission takes, as its `resource_limits` module states. A helper
-that only one crate's tests use stays in that crate's
-`tests/integration/support`. The support crates are not published, and every
+limits an admission takes and those of loading a bundle, building an objective
+plan and evaluating observations, as its `resource_limits` module states. A
+helper that only one crate's tests use stays in that crate's
+`tests/integration/support`, as the pairings of limits only one crate's tests
+set do. The support crates are not published, and every
 coverage report skips their sources.
 
 The data a crate's tests read, unit or integration, lives in its

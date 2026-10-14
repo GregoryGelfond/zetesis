@@ -1,5 +1,6 @@
 //! Logical observation payload depends on term identity, not input allocation.
 
+use crate::support::observation_construction;
 use zetesis_core::{Atom, Model, Predicate, Sign, Value, ValueLimits, ValueNode};
 use zetesis_cpu::Cancellation;
 use zetesis_reference_support::formula;
@@ -127,7 +128,7 @@ fn logical_output_limit_is_inclusive() {
 
 #[test]
 fn construction_limit_includes_conversion_stack() {
-    use zetesis_themelios::observation::{ConstructionLimits, Symbol};
+    use zetesis_themelios::observation::Symbol;
     let admitted = observation();
     let program = admitted.metadata().observations();
     let required = 4 * std::mem::size_of::<Symbol>() + 2;
@@ -138,22 +139,20 @@ fn construction_limit_includes_conversion_stack() {
                 .evaluate_with_construction_limits(
                     &model,
                     Limits::default(),
-                    ConstructionLimits {
-                        max_bytes: required
-                    },
+                    observation_construction::limits(Resource::ConstructionBytes, required),
                     &Cancellation::default()
                 )
                 .is_ok()
         );
         assert!(
-            matches!(program.evaluate_with_construction_limits(&model, Limits::default(), ConstructionLimits { max_bytes: required - 1 }, &Cancellation::default()).unwrap_err().kind(), ErrorKind::Limit { resource: Resource::ConstructionBytes, observed, limit } if *observed == required as u128 && *limit == (required - 1) as u128)
+            matches!(program.evaluate_with_construction_limits(&model, Limits::default(), observation_construction::limits(Resource::ConstructionBytes, required - 1), &Cancellation::default()).unwrap_err().kind(), ErrorKind::Limit { resource: Resource::ConstructionBytes, observed, limit } if *observed == required as u128 && *limit == (required - 1) as u128)
         );
     }
 }
 
 #[test]
 fn template_construction_uses_storage_preflight() {
-    use zetesis_themelios::observation::{ConstructionLimits, Symbol};
+    use zetesis_themelios::observation::Symbol;
     let admitted = formula("#show f(1).");
     let required = 4 * std::mem::size_of::<Symbol>() + 2;
     let program = admitted.metadata().observations();
@@ -162,9 +161,7 @@ fn template_construction_uses_storage_preflight() {
             .evaluate_with_construction_limits(
                 &Model::new([]).unwrap(),
                 Limits::default(),
-                ConstructionLimits {
-                    max_bytes: required
-                },
+                observation_construction::limits(Resource::ConstructionBytes, required),
                 &Cancellation::default()
             )
             .is_ok()
@@ -174,9 +171,7 @@ fn template_construction_uses_storage_preflight() {
             .evaluate_with_construction_limits(
                 &Model::new([]).unwrap(),
                 Limits::default(),
-                ConstructionLimits {
-                    max_bytes: required - 1
-                },
+                observation_construction::limits(Resource::ConstructionBytes, required - 1),
                 &Cancellation::default()
             )
             .unwrap_err()
@@ -214,7 +209,6 @@ fn rendered_atoms_ignore_input_capacity() {
 
 #[test]
 fn model_view_respects_construction_refusal() {
-    use zetesis_themelios::observation::ConstructionLimits;
     let admitted = observation();
     let model = term_model(2);
     let selection = zetesis_themelios::AtomSelection::all();
@@ -226,7 +220,7 @@ fn model_view_respects_construction_refusal() {
             &selection,
             None,
             Limits::default(),
-            ConstructionLimits { max_bytes: 0 },
+            observation_construction::limits(Resource::ConstructionBytes, 0),
             &Cancellation::default(),
         );
     let Err(error) = result else {
@@ -245,7 +239,6 @@ fn model_view_respects_construction_refusal() {
 
 #[test]
 fn rendered_observations_respect_storage_refusal() {
-    use zetesis_themelios::observation::ConstructionLimits;
     let admitted = observation();
     let error = admitted
         .metadata()
@@ -254,7 +247,7 @@ fn rendered_observations_respect_storage_refusal() {
             &term_model(2),
             &zetesis_themelios::AtomSelection::all(),
             Limits::default(),
-            ConstructionLimits { max_bytes: 0 },
+            observation_construction::limits(Resource::ConstructionBytes, 0),
             &Cancellation::default(),
         )
         .unwrap_err();
@@ -271,7 +264,7 @@ fn rendered_observations_respect_storage_refusal() {
 
 #[test]
 fn construction_covers_name_validation_copy() {
-    use zetesis_themelios::observation::{ConstructionLimits, Symbol};
+    use zetesis_themelios::observation::Symbol;
     let admitted = observation();
     let name = "a".repeat(1_024);
     let required = 2 * std::mem::size_of::<Symbol>() + 2 * name.len();
@@ -284,9 +277,7 @@ fn construction_covers_name_validation_copy() {
     let result = program.evaluate_with_construction_limits(
         &model,
         Limits::default(),
-        ConstructionLimits {
-            max_bytes: old_bound,
-        },
+        observation_construction::limits(Resource::ConstructionBytes, old_bound),
         &Cancellation::default(),
     );
     assert!(
@@ -297,9 +288,7 @@ fn construction_covers_name_validation_copy() {
             .evaluate_with_construction_limits(
                 &model,
                 Limits::default(),
-                ConstructionLimits {
-                    max_bytes: required
-                },
+                observation_construction::limits(Resource::ConstructionBytes, required),
                 &Cancellation::default()
             )
             .is_ok()

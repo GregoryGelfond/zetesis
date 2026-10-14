@@ -12,7 +12,8 @@ use serde_json::Value as Json;
 use zetesis_cli::Options;
 use zetesis_clingo_support as oracle;
 use zetesis_clingo_support::costs;
-use zetesis_reference_support::BundleFixture;
+use zetesis_reference_support::{BundleFixture, resource_limits};
+use zetesis_themelios::BundleResource;
 
 type Records = Vec<(BTreeSet<String>, Option<Vec<i64>>)>;
 struct Fixture(BundleFixture);
@@ -238,24 +239,15 @@ fn cumulative_source_and_root_limits_refuse_before_model_output() {
     fixture.write("b.lp", "q.");
     for (limits, resource) in [
         (
-            zetesis_themelios::BundleLimits {
-                max_roots: 1,
-                ..Default::default()
-            },
+            resource_limits::bundle_loading(BundleResource::Roots, 1),
             zetesis_themelios::BundleResource::Roots,
         ),
         (
-            zetesis_themelios::BundleLimits {
-                max_files: 1,
-                ..Default::default()
-            },
+            resource_limits::bundle_loading(BundleResource::Files, 1),
             zetesis_themelios::BundleResource::Files,
         ),
         (
-            zetesis_themelios::BundleLimits {
-                max_total_bytes: 3,
-                ..Default::default()
-            },
+            resource_limits::bundle_loading(BundleResource::TotalBytes, 3),
             zetesis_themelios::BundleResource::TotalBytes,
         ),
     ] {

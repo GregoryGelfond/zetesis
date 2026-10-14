@@ -1,7 +1,7 @@
 [package]
 name = "zetesis-reference-support"
 version.workspace = true
-description = "Test support over zetesis-themelios: admission under default or given limits, the native reference the workspace's tests compare with clingo, preparation and hybrid grounding, source-bundle fixtures, and, by the resource a refusal reports, the limits an admission takes."
+description = "Test support over zetesis-themelios: admission under default or given limits, the native reference the workspace's tests compare with clingo, preparation and hybrid grounding, source-bundle fixtures, and, by the resource a refusal reports, the limits an admission takes and those of bundle loading, objective plans and observation evaluation."
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true

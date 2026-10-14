@@ -555,10 +555,7 @@ fn observation_bindings_preserve_symbol_string_and_infinite_value_identity() {
             .render(
                 &model,
                 input.metadata().output(),
-                observation::Limits {
-                    max_symbol_nodes: 2,
-                    ..Default::default()
-                },
+                resource_limits::observation_evaluation(observation::Resource::Nodes, 2),
                 &Cancellation::default(),
             )
             .unwrap();
@@ -567,10 +564,7 @@ fn observation_bindings_preserve_symbol_string_and_infinite_value_identity() {
             .render(
                 &model,
                 input.metadata().output(),
-                observation::Limits {
-                    max_symbol_nodes: 1,
-                    ..Default::default()
-                },
+                resource_limits::observation_evaluation(observation::Resource::Nodes, 1),
                 &Cancellation::default(),
             )
             .unwrap_err();

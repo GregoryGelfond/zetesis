@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use themelios_base::source::SourceId;
-use zetesis_reference_support::BundleFixture;
+use zetesis_reference_support::{BundleFixture, resource_limits};
 use zetesis_test_support::harness;
 use zetesis_themelios::{
     BundleAdmissionError, BundleAdmissionOptions, BundleError, BundleLimits, BundleResource,
@@ -119,10 +119,7 @@ fn root_occurrences_have_an_independent_inclusive_bound() {
     for maximum in [0, 1, 2] {
         let loaded = SourceBundle::load_many(
             [&path, &path],
-            BundleLimits {
-                max_roots: maximum,
-                ..BundleLimits::default()
-            },
+            resource_limits::bundle_loading(BundleResource::Roots, maximum),
         );
         if maximum == 2 {
             let bundle = loaded.unwrap();
@@ -132,7 +129,7 @@ fn root_occurrences_have_an_independent_inclusive_bound() {
         } else {
             assert!(matches!(loaded, Err(BundleError::Limit {
                 resource: BundleResource::Roots, observed, limit, ..
-            }) if limit == maximum as u128 && observed == limit + 1));
+            }) if limit == u128::from(maximum) && observed == limit + 1));
         }
     }
     fixture.close();
@@ -145,17 +142,11 @@ fn file_and_byte_allowances_apply_across_all_roots_before_parsing() {
     let second = fixture.write("second.lp", "broken");
     for (limits, resource) in [
         (
-            BundleLimits {
-                max_files: 1,
-                ..BundleLimits::default()
-            },
+            resource_limits::bundle_loading(BundleResource::Files, 1),
             BundleResource::Files,
         ),
         (
-            BundleLimits {
-                max_total_bytes: 7,
-                ..BundleLimits::default()
-            },
+            resource_limits::bundle_loading(BundleResource::TotalBytes, 7),
             BundleResource::TotalBytes,
         ),
     ] {
