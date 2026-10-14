@@ -69,8 +69,11 @@ fn variable_producers_defer_all_facts_of_their_signature() {
             .collect::<Vec<_>>(),
         [1, 1]
     );
-    // The facts p(1) and q(2) stay: two fact products and no rule.
+    // The facts p(1) and q(2) stay: two fact products and no rule. The
+    // deferred products are no longer the base's items.
     assert_eq!(base.program.items().len(), 2);
+    assert_eq!(base.program.items().products().count(), 2);
+    assert_eq!(base.program.items().occurrences(), 2);
     assert!(base.program.rules_without_facts().is_empty());
     let names: Vec<_> = base
         .program

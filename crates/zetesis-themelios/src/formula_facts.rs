@@ -89,11 +89,15 @@ impl Items {
         self.order.iter().map(|&slot| self.item(slot))
     }
 
-    /// Every fact product, in item order.
+    /// Every fact product, in item order. A block another sequence took by
+    /// [`Self::split_off`] is no longer an item, and is not listed.
     pub(crate) fn products(&self) -> impl Iterator<Item = FactProduct<'_>> + '_ {
-        (0..self.facts.blocks.len()).map(|block| FactProduct {
-            arena: &self.facts,
-            block,
+        self.order.iter().filter_map(|&slot| match slot {
+            Slot::Facts(block) => Some(FactProduct {
+                arena: &self.facts,
+                block,
+            }),
+            Slot::Rule(_) => None,
         })
     }
 
@@ -182,7 +186,8 @@ impl Items {
     /// Move the items `selected` marks (one flag per item, nonzero to move) into
     /// a new sequence, keeping both sequences' order. The moved fact blocks are
     /// copied into the new sequence's own arena, which holds no lease: its
-    /// retained bytes are the caller's to charge.
+    /// retained bytes are the caller's to charge. Their storage stays in this
+    /// arena, which keeps its capacity and lease; they are no longer its items.
     ///
     /// # Errors
     /// Refuses an allocation failure before anything moves.
