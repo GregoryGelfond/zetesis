@@ -57,6 +57,7 @@ mod prepared_boundaries;
 mod prepared_cpu;
 mod process_output;
 mod queens;
+mod record_writes;
 mod sat;
 mod scalability_commands;
 mod sessions;

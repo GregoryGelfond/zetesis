@@ -3,3 +3,4 @@ mod objective_diagnostic_tests;
 mod backend_diagnostic_tests;
 
 mod quiet_tests;
+mod unit_writer_tests;

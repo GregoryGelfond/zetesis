@@ -481,10 +481,11 @@ pub fn run(
     run_with_diagnostics(source, options, output, &mut io::sink(), cancellation)
 }
 
-/// Admit and stream models with a separate injected backend-diagnostics sink.
-/// This is the process adapter's entry point: model output goes to stdout and
-/// backend selection/fallback reasons go to stderr. [`run`] keeps its original
-/// signature and discards backend diagnostics for callers that do not need them.
+/// Admit and stream models with a separate injected backend-diagnostics sink:
+/// model output goes to `output`, and backend selection and fallback reasons go
+/// to `diagnostics`. [`run`] keeps its original signature and discards backend
+/// diagnostics for callers that do not need them.
+/// Writes its diagnostics under the same contract as [`run_with_renderer`].
 ///
 /// # Errors
 /// Returns [`RunError`] for source, backend, observation/view, model-output, or
@@ -524,6 +525,7 @@ pub fn run_detailed(
 /// A failed Answer is excluded from the published count even if its prefix escaped.
 /// Search, objective, and incumbent-retention stops return an interrupted [`Report`]
 /// unless a later observation/view or reporting operation fails.
+/// Writes its diagnostics under the same contract as [`run_with_renderer`].
 ///
 /// # Errors
 /// Returns [`RunFailure`] for source, backend, observation/view, or output failures.
@@ -560,6 +562,7 @@ pub fn run_finalized(
 }
 
 /// Run with finalized semantic evidence independent of publication.
+/// Writes its diagnostics under the same contract as [`run_with_renderer`].
 ///
 /// # Errors
 /// Retains the original cause, semantic outcome, and separate reporting failures.
@@ -594,6 +597,7 @@ pub(crate) fn run_source_with_writer(
 ///
 /// Oracle selection follows the supported source constructs. String entry
 /// points never resolve includes from implicit paths.
+/// Writes its diagnostics under the same contract as [`run_with_renderer`].
 ///
 /// # Errors
 /// Returns [`RunError`] for source, backend, observation/view, model-output, or
@@ -614,6 +618,7 @@ pub fn run_bundle_with_diagnostics(
 
 /// Original-bundle counterpart of [`run_detailed_with_diagnostics`].
 /// Source identities, global constants and existing loading limits are preserved.
+/// Writes its diagnostics under the same contract as [`run_with_renderer`].
 ///
 /// # Errors
 /// Returns the original typed failure with any trustworthy execution evidence.
@@ -634,6 +639,7 @@ pub fn run_bundle_detailed_with_diagnostics(
 }
 
 /// Run with finalized semantic evidence independent of publication.
+/// Writes its diagnostics under the same contract as [`run_with_renderer`].
 ///
 /// # Errors
 /// Retains the original cause, semantic outcome, and separate reporting failures.
@@ -665,6 +671,16 @@ pub(crate) fn run_bundle_with_writer(
 /// Renderer selection is independent of `options.json`; that legacy field only
 /// selects the default renderer in the writer convenience APIs. Observation
 /// limits, source/execution configuration and diagnostics remain explicit.
+///
+/// The diagnostics writer receives each execution-detail record (metadata,
+/// information and execution observations) in one `write_all` call. A styled
+/// source diagnostic takes one call for its heading, one per rendered line and
+/// one for its closing newline. A plain one writes its `zetesis: ` prefix and
+/// each fragment of its rendering as they are produced, then its final newline
+/// in one call. The statistics report is one call. The bytes do not depend on
+/// the writer: one whose acceptance and failure depend only on the bytes it is
+/// given, in order, fails at the same byte however they are divided into calls,
+/// and one that depends on call boundaries sees whole units.
 ///
 /// # Errors
 /// Preserves source, solver, view and external publication failures, including
@@ -705,6 +721,7 @@ fn run_source_with_renderer(
 }
 
 /// Admit an original source bundle using the same replaceable typed view stream.
+/// Writes its diagnostics under the same contract as [`run_with_renderer`].
 ///
 /// # Errors
 /// Returns the same retained failures and cooperative publication outcomes as
@@ -746,6 +763,11 @@ fn run_bundle_renderer_inner(
 /// Publish an already admitted input without reparsing or collecting its family.
 /// The same session controller and renderer lifecycle serve source and prepared
 /// inputs; semantic membership stays in `zetesis-solve`.
+///
+/// Its diagnostics writer receives only the records that report a stop or an
+/// unavailable step: the key analysis stopping, objective preparation or a
+/// required-choice objective bound unavailable, and objective pruning stopped.
+/// Each is plain and handed to the writer in one `write_all` call.
 ///
 /// # Errors
 /// Retains execution and publication evidence under the same contract as
@@ -793,21 +815,18 @@ fn report_progress_statistics(
         if !options.stats {
             return result;
         }
-        // The report is rendered whole, then written once at this point: its
-        // fragments would otherwise each be a write on unbuffered stderr. Order
-        // relative to other diagnostics is unchanged, and a write failure
-        // surfaces at this one write.
-        let mut report = Vec::new();
-        let rendered = match options.statistics_view {
+        // The report is one write unit: rendered whole, then written once.
+        let layout = diagnostics.layout();
+        let emitted = diagnostics.write_whole(|report| match options.statistics_view {
             crate::StatisticsView::Records => crate::statistics::write_progress(
-                &mut report,
+                report,
                 options,
                 result.as_ref(),
                 timings.driver_elapsed,
             )
-            .and_then(|()| crate::stage_timing::write(&mut report, &timings.stages))
-            .and_then(|()| crate::phase_timing::write(&mut report, &timings))
-            .and_then(|()| crate::grounding_timing::write(&mut report, &timings.grounding)),
+            .and_then(|()| crate::stage_timing::write(report, &timings.stages))
+            .and_then(|()| crate::phase_timing::write(report, &timings))
+            .and_then(|()| crate::grounding_timing::write(report, &timings.grounding)),
             crate::StatisticsView::Human => {
                 let view = crate::PublicationView {
                     result: result.as_ref(),
@@ -820,11 +839,9 @@ fn report_progress_statistics(
                     publication: view.publication(),
                     failed: view.failure().is_some(),
                 };
-                let layout = diagnostics.layout();
-                writeln!(report).and_then(|()| statistics.write_human(&mut report, layout))
+                writeln!(report).and_then(|()| statistics.write_human(report, layout))
             }
-        };
-        let emitted = rendered.and_then(|()| diagnostics.write_all(&report));
+        });
         if let Err(error) = emitted {
             return Err(match result {
                 Ok(progress) => progress.fail(RunError::Output(error)),
