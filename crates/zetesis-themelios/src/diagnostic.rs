@@ -208,7 +208,7 @@ pub enum AdmissionFailure {
         /// Logical subject and any real source position.
         location: ProgramSite,
     },
-    /// A finite numeric endpoint excluded by the extremum representation guard.
+    /// A finite numeric endpoint excluded by the numeric endpoint guard.
     /// This is a zetesis admission policy, not a parser or resource failure.
     ExtremumEndpoint {
         /// The evaluated endpoint, either `i32::MIN` or `i32::MAX`.
@@ -314,7 +314,7 @@ impl fmt::Display for AdmissionFailure {
             Self::Profile { feature, .. } => write!(f, "source profile does not admit {feature}"),
             Self::ExtremumEndpoint { value, .. } => write!(
                 f,
-                "numeric extremum endpoint {value} is excluded by the zetesis endpoint guard"
+                "numeric extremum endpoint {value} is excluded by the numeric endpoint guard"
             ),
             Self::Construction { error, .. } => error.fmt(f),
             Self::Metadata { error, .. } => error.fmt(f),

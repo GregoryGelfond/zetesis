@@ -170,7 +170,7 @@ fn extremum_diagnostics_explain_the_retained_guard() {
         located(admission, &source);
         assert_eq!(
             admission.to_string(),
-            format!("numeric extremum endpoint {value} is excluded by the zetesis endpoint guard")
+            format!("numeric extremum endpoint {value} is excluded by the numeric endpoint guard")
         );
     }
 }

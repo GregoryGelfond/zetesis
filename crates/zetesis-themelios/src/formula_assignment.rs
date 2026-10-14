@@ -113,9 +113,11 @@ pub(crate) enum Kind {
 }
 
 impl Kind {
-    /// The kind of `function`: the one place an aggregate function is mapped
-    /// to its contribution kind, which final grounding's coalescing and
-    /// nonbinding guards read as well as the carrier.
+    /// The kind of `function`, as the carrier and final grounding's coalescing
+    /// and nonbinding guards read it. Three other sites split the functions
+    /// the same way with their own match: the IR lowering, whose refusal of an
+    /// empty `#min` or `#max` tuple guarantees the first value the extremum
+    /// readers take, objective presence, and head aggregates.
     pub(crate) fn of(function: AggregateFunction) -> Self {
         match function {
             AggregateFunction::Count => Self::Numeric(Numeric::Count),
@@ -340,8 +342,9 @@ pub(crate) fn tuple(
     )
 }
 
-/// The numeric endpoint guard: refuses `value`, a `#min` or `#max` bound or a
-/// possible tuple's first value, when it is `i32::MIN` or `i32::MAX`
+/// The numeric endpoint guard: refuses `value`, a `#min` or `#max` bound or the
+/// first value of a possible `#min` or `#max` tuple, when it is `i32::MIN` or
+/// `i32::MAX`
 /// ([`AdmissionFailure::ExtremumEndpoint`](crate::AdmissionFailure::ExtremumEndpoint)).
 pub(crate) fn endpoint_guard(
     value: TermRef<'_>,

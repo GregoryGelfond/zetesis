@@ -109,6 +109,10 @@ Notable changes by release. Versions follow Semantic Versioning.
   its carrier values leaves the 32-bit range, whatever the order of its weights.
   Answer sets are unchanged. On the maintained nested
   Mastermind workload, grounding keeps 654 possible atoms instead of 5,162.
+- The refusal of a `#min` or `#max` endpoint value names the guard as the manual
+  and the code do: "is excluded by the numeric endpoint guard", where it said
+  "the zetesis endpoint guard". Its diagnostic code,
+  `zetesis::extremum-endpoint`, is unchanged.
 - Read the host's memory on macOS with one `sysctlbyname` call for `hw.memsize`
   instead of running `/usr/sbin/sysctl`, so no invocation starts a child
   process. It is the one foreign call in zetesis's own source, named in the

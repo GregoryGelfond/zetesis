@@ -812,7 +812,8 @@ clingo differences.
 
 There is also a conservative **numeric endpoint guard**: numeric values
 `-2147483648` and `2147483647` are refused when reached as `#min`/`#max` bounds or
-the first component of a possible aggregate tuple, including assignment values.
+as the first component of a possible `#min`/`#max` tuple, including assignment
+values.
 It does not ban these integers as ordinary data, later tuple-key components or
 integers nested inside a structured value. The guard applies independently of
 the comparison operator or recursion.
