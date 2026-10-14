@@ -50,6 +50,14 @@ pub(super) struct Plan<'a> {
     steps: Vec<Step>,
 }
 
+#[cfg(test)]
+impl Plan<'_> {
+    /// The plan's steps and the room reserved for them.
+    pub(super) fn step_room(&self) -> (usize, usize) {
+        (self.steps.len(), self.steps.capacity())
+    }
+}
+
 impl<'a> Plan<'a> {
     pub(super) fn new(
         items: &Items,
@@ -105,7 +113,15 @@ impl<'a> Plan<'a> {
         let fixed = fixed
             .checked_add(plan.terms.capacity() * size_of::<TemplateTerm<'_>>())
             .ok_or_else(|| super::super::storage::overflow(work.location))?;
-        work.reserve(&mut plan.steps, items.len(), &mut lease, fixed, writer)?;
+        // One step per producer occurrence: each rule, and each row of each
+        // fact block, which `facts` pushes one by one.
+        work.reserve(
+            &mut plan.steps,
+            items.occurrences(),
+            &mut lease,
+            fixed,
+            writer,
+        )?;
         for item in items.iter() {
             let rule = match item {
                 Item::Rule(_, rule) => rule,

@@ -88,3 +88,23 @@ fn a_reused_plan_is_charged_before_opening_a_writer() {
             } if observed == before_plan + plan_bytes)
     ));
 }
+
+#[test]
+fn a_plan_reserves_a_step_for_every_deferred_row() {
+    // The variable producers of d defer its two rules and d(2..6)'s five-row
+    // fact block: three items and seven producer occurrences, a step each.
+    // Room for the items alone would grow past seven by doubling.
+    let FormulaMaterialization::Terminal(owner) =
+        prepared("p(1). q(2). d(2..6). d(X):-p(X). d(X):-q(X).")
+            .ground_adaptive()
+            .unwrap()
+    else {
+        panic!("terminal profile required")
+    };
+    let model = selection(&owner);
+    let mut cursor = owner.reconstruction().unwrap();
+    cursor
+        .reconstruct(&model, &Cancellation::default())
+        .unwrap();
+    assert_eq!(cursor.plan.as_ref().unwrap().step_room(), (7, 7));
+}
