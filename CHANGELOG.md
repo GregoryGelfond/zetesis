@@ -37,17 +37,18 @@ Notable changes by release. Versions follow Semantic Versioning.
 ### Changed
 
 - Each execution-detail record (metadata, information and execution
-  observations, and the `test` workflow's lines) is rendered whole and handed to
-  the diagnostics writer in one `write_all` call, where it took one write per
-  formatted fragment; on unbuffered standard error that was one system call per
-  fragment. A styled source diagnostic takes one call for its heading, one per
-  rendered line and one for its closing newline. These units, and a plain
-  source diagnostic's final newline, reach the writer's `write_all` rather than
-  its `write_fmt`; a plain source diagnostic otherwise writes as before, and the
-  statistics report is still one call. The bytes are unchanged, and a writer
-  that fails at a byte position fails at the same byte. A writer that fails by
-  the content of a call, such as `zetesis_test_support::io::FailAt`, now fails
-  at whole units: a whole record, or a whole styled heading, line or closing
+  observations, and the `test` workflow's lines when the `zetesis` command
+  runs it) is rendered whole and handed to the diagnostics writer in one
+  `write_all` call, where it took one write per formatted fragment; on
+  unbuffered standard error that was one system call per fragment. A styled
+  source diagnostic takes one call for its heading, one per rendered line and
+  one for its closing newline. These units, and a plain source diagnostic's
+  final newline, reach the writer's `write_all` rather than its `write_fmt`; a
+  plain source diagnostic otherwise writes as before, and the statistics
+  report is still one call. The bytes are unchanged, and a writer that fails
+  at a byte position fails at the same byte. A writer that fails by the
+  content of a call, such as `zetesis_test_support::io::FailAt`, now fails at
+  whole units: a whole record, or a whole styled heading, line or closing
   newline. A record or statistics report whose formatting fails while the
   writer did not returns an `Other` error, and writes nothing of the unit,
   where the standard library panicked.

@@ -7,7 +7,7 @@
 //! - each heading, rendered line and closing newline of a styled source
 //!   diagnostic;
 //! - a plain source diagnostic's final newline. Its `zetesis: ` prefix and each
-//!   fragment of its rendering pass through unchanged, as before;
+//!   fragment of its rendering pass through unchanged;
 //! - the statistics report, which the driver writes through `write_whole`.
 //!
 //! `write_whole` renders a unit whole into a transient buffer, then hands it to
@@ -17,17 +17,17 @@
 //! writer would make one write per call, so such a unit is rendered inside
 //! `write_whole` instead.
 //!
-//! The transient buffer belongs to one call. It holds 256 bytes before it first
-//! grows, enough for every record the maintained programs write, and a longer
-//! unit grows by doubling. It is dropped on return, so no unit's bytes reach the
-//! writer after its call has returned, and no capacity outlives the unit.
+//! The transient buffer belongs to one call. It is sized for the records of an
+//! ordinary run, and a longer unit grows by doubling. It is dropped on return,
+//! so no unit's bytes reach the writer after its call has returned, and no
+//! capacity outlives the unit.
 //!
 //! A writer whose acceptance and failure depend only on the bytes it is given,
 //! in order, such as a full disk, a closed pipe, a blocking pipe or a regular
-//! file, sees the same bytes, fails at the same byte and fails in the same
-//! unit's call as when records were written fragment by fragment. A writer
-//! that depends on call boundaries sees whole units. A unit whose rendering
-//! fails writes nothing and returns an `Other` error.
+//! file, sees the same bytes and fails at the same byte however the bytes are
+//! divided into calls; a writer that depends on call boundaries sees whole
+//! units. A unit whose rendering fails writes nothing and returns an `Other`
+//! error.
 
 mod unit_writer;
 

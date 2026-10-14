@@ -5,11 +5,10 @@ use std::{
     io::{self, Write},
 };
 
-/// The bytes a unit's buffer holds before it first grows. Every execution-detail
-/// record the maintained corpus and scalability programs write fits whole, plain
-/// or styled: the longest is 123 bytes plain, and styling adds at most 16. A
-/// longer unit, such as the statistics report or a record carrying an error's
-/// text, grows as a `Vec` does, at least doubling.
+/// The bytes a unit's buffer holds before it first grows, sized for the
+/// execution-detail records of an ordinary run. A longer unit, such as the
+/// statistics report or a record carrying an error's text, grows as a `Vec`
+/// does, at least doubling.
 const UNIT_CAPACITY: usize = 256;
 
 /// The diagnostics writer. It admits whole write units, and slices passed
@@ -36,7 +35,7 @@ impl<W: Write> UnitWriter<W> {
     /// The unit's buffer belongs to this call: it is created here with
     /// [`UNIT_CAPACITY`] bytes and dropped on return. So no unit's bytes reach
     /// the writer after its call has returned, and no capacity outlives the
-    /// unit; a buffer kept across units would keep the largest unit's capacity.
+    /// unit.
     pub(super) fn write_whole(
         &mut self,
         render: impl FnOnce(&mut UnitBuffer) -> io::Result<()>,
