@@ -318,7 +318,14 @@ fn qualify_full_width(oracle: &mut GpuFormulaOracle) {
 }
 
 fn qualify_wide_ordinals(oracle: &mut GpuFormulaOracle) {
-    for bound in [0, 1, 1u64 << 32, (1u64 << 32) + 1, u64::MAX - 1, u64::MAX] {
+    let cases = [0, 1, 1u64 << 32, (1u64 << 32) + 1, u64::MAX - 1, u64::MAX]
+        .map(|bound| (bound, u64::MAX, [0, 1u64 << 32, u64::MAX - 1]))
+        .into_iter()
+        .chain([
+            (1, 1u64 << 32, [0, u64::from(u32::MAX), 1]),
+            (1, (1u64 << 32) + 1, [0, 1u64 << 32, 1]),
+        ]);
+    for (bound, rank_count, ranks) in cases {
         for rule in [
             ExtremumCutRule::Prefix(bound),
             ExtremumCutRule::Suffix(bound),
@@ -335,8 +342,8 @@ fn qualify_wide_ordinals(oracle: &mut GpuFormulaOracle) {
                 .push_extremum_cut_family_range(
                     ExtremumRow {
                         conditions: &[0, 1, 2],
-                        ranks: &[0, 1u64 << 32, u64::MAX - 1],
-                        rank_count: u64::MAX,
+                        ranks: &ranks,
+                        rank_count,
                     },
                     &[rule],
                     usize::MAX,

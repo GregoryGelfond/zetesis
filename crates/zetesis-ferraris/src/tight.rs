@@ -269,7 +269,10 @@ impl TightPlan {
     /// the entries bounded from the theory; so a build either allowance cannot
     /// complete spends nothing. It is also attempted only for a plan of at most
     /// `u32::MAX` producers, so that the support count an update keeps per atom
-    /// holds every head's count. Returns whether the index exists afterwards. A
+    /// holds every head's count, and only when numeric-row and occurrence IDs
+    /// fit the index's two 31-bit fields. The numeric condition-column length
+    /// conservatively bounds all row extents. Returns whether the index exists
+    /// afterwards. Oversized numeric storage keeps complete evaluation. A
     /// plan past `u32::MAX` producers never receives it; when an allowance falls
     /// short, the plan keeps complete evaluation, and a later call with larger
     /// limits may build it. Construction work, construction bytes and resident
@@ -289,7 +292,10 @@ impl TightPlan {
                 work: 0,
             };
         }
-        if !Self::index_admitted(
+        if !readers::Reader::rows_fit(
+            self.theory.parts().rows().len(),
+            self.theory.parts().conditions().len(),
+        ) || !Self::index_admitted(
             self.producers.len(),
             self.index_work_bound(),
             self.index_byte_bound(),
@@ -334,7 +340,8 @@ impl TightPlan {
     /// producers whose build is bounded by `work_bound` and `byte_bound`: every
     /// head's support count fits [`SupportCount`], since no head has more
     /// producers than the plan, and both allowances cover the build. The one
-    /// decision [`Self::prepare_updates`] makes before it starts.
+    /// resource decision [`Self::prepare_updates`] makes before it starts,
+    /// alongside the packed numeric-incidence representation check.
     fn index_admitted(
         producers: usize,
         work_bound: u128,
@@ -374,7 +381,7 @@ impl TightPlan {
     /// are missing, applies the changed words and propagates. An update
     /// evaluates each node at most once, reads each operand and numeric
     /// condition at most once per evaluation, and visits each reader entry and
-    /// each guard of a withdrawn row at most once per change of its input.
+    /// each guard of an updated row at most once per change of its input.
     #[must_use]
     pub fn check_work_bound(&self) -> u128 {
         self.complete_work_bound()

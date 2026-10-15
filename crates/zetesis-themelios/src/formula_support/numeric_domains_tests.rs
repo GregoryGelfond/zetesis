@@ -21,6 +21,8 @@ use crate::grounding_observer::{Profile, Work};
 
 const STATIC_TOTALITY: &str =
     include_str!("../../tests/fixtures/numeric-domains/static-totality.lp");
+const TOTAL_OPERATIONS: &str =
+    include_str!("../../tests/fixtures/numeric-domains/static-totality-operations.lp");
 
 fn total_bodies(source: &str) -> usize {
     total_bodies_with_limits(source, DomainLimits::default())
@@ -58,6 +60,92 @@ fn total_bodies_with_limits(source: &str, domains: DomainLimits) -> usize {
 #[test]
 fn static_totality_is_available_without_diagnostics() {
     assert_eq!(total_bodies(STATIC_TOTALITY), 1);
+}
+
+#[test]
+fn bounded_operations_certify_real_source_bodies() {
+    // Every rule contains division, so ordinary support traversal would retain
+    // complete-family coverage without this all-producer certificate.
+    assert_eq!(total_bodies(TOTAL_OPERATIONS), 4);
+}
+
+fn surviving_rows(
+    join: &mut super::Join<'_, '_>,
+    computation: &mut Computation<'_, '_>,
+    limits: &crate::FormulaLimits,
+    counters: &mut Counters,
+    location: crate::ProgramSite,
+) -> (Vec<Vec<String>>, usize) {
+    let mut rows = Vec::new();
+    let mut offered = 0;
+    let mut budget = testing::budget();
+    while let Some(row) = join
+        .next_row(computation, limits, &mut budget, counters, location)
+        .unwrap()
+    {
+        offered += 1;
+        if row.passes {
+            rows.push(
+                (0..row.values.len())
+                    .map(|slot| {
+                        row.values
+                            .read(slot, computation.read(), location)
+                            .unwrap()
+                            .to_string()
+                    })
+                    .collect(),
+            );
+        }
+    }
+    (rows, offered)
+}
+
+#[test]
+fn bounded_operations_select_the_same_surviving_rows() {
+    // Source preparation admits compact facts; completed support publishes
+    // their tuples for the real cursor, as well as the possible heads.
+    testing::with_completed_source(
+        TOTAL_OPERATIONS,
+        |program, support, computation, counters| {
+            let limits = crate::FormulaLimits::default();
+            let rules = program.rules_without_facts();
+            assert_eq!(rules.len(), 4);
+            let domains = crate::formula_domains::analyze(
+                program,
+                Some(DomainLimits::default()),
+                &Profile::new(None),
+                Context::new(&mut *computation, &limits, counters, rules[0].location),
+            )
+            .unwrap()
+            .unwrap();
+            for (index, rule) in rules.iter().enumerate() {
+                let totality = domains.total_body(index, rule).unwrap().unwrap();
+                let mut collect = |selected| {
+                    let mut join = super::Join::variant_rule(
+                        rule,
+                        super::delta::Variant::Full,
+                        support,
+                        None,
+                        &mut testing::budget(),
+                        Context::new(&*computation, &limits, counters, rule.location),
+                    )
+                    .unwrap();
+                    assert!(join.coverage == super::Coverage::Complete);
+                    if selected {
+                        join.select_static_total_body(rule, totality, &limits, counters)
+                            .unwrap();
+                        assert!(join.coverage == super::Coverage::Selected);
+                    }
+                    surviving_rows(&mut join, computation, &limits, counters, rule.location)
+                };
+                let (complete, complete_rows) = collect(false);
+                let (selected, selected_rows) = collect(true);
+                assert_eq!(complete.len(), 2, "rule {index}");
+                assert_eq!(selected, complete, "rule {index}");
+                assert!(selected_rows < complete_rows, "rule {index}");
+            }
+        },
+    );
 }
 
 #[test]

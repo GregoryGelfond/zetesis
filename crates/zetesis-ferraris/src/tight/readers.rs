@@ -20,7 +20,7 @@ use zetesis_cpu::{Meter, Stop};
 pub(super) enum ReaderKind {
     /// A conjunction, disjunction or implication reading the node as an operand.
     Node,
-    /// A numeric row reading the node as a condition; its guards read the row.
+    /// One numeric-row occurrence reading the node; its guards read the row.
     Row,
     /// A producer whose body is the node.
     Producer,
@@ -28,12 +28,39 @@ pub(super) enum ReaderKind {
     Root,
 }
 
-/// One reader, packed as its kind in the top two bits over its index.
+/// One reader, packed as its kind in the top two bits over its index. A row
+/// reader divides the remaining bits equally between row and occurrence IDs.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct Reader(u64);
 
 impl Reader {
     const SHIFT: u32 = u64::BITS - 2;
+    const ROW_SHIFT: u32 = Self::SHIFT / 2;
+    const ROW_MASK: u64 = (1 << Self::ROW_SHIFT) - 1;
+
+    /// Optional index admission uses lengths, so the last possible index is
+    /// one smaller. The condition-column length bounds every admitted row's
+    /// extent, even for overlapping spans and unused rows at raw ingress.
+    pub(super) fn rows_fit(rows: usize, conditions: usize) -> bool {
+        rows as u128 <= 1_u128 << Self::ROW_SHIFT && conditions as u128 <= 1_u128 << Self::ROW_SHIFT
+    }
+
+    fn row(row: usize, occurrence: usize) -> Result<Self, TightError> {
+        let row = u64::try_from(row).map_err(|_| Stop::InvalidProgram)?;
+        let occurrence = u64::try_from(occurrence).map_err(|_| Stop::InvalidProgram)?;
+        if row > Self::ROW_MASK || occurrence > Self::ROW_MASK {
+            return Err(Stop::InvalidProgram.into());
+        }
+        Ok(Self(1 << Self::SHIFT | row << Self::ROW_SHIFT | occurrence))
+    }
+
+    /// The row and position within it, under this reader's `Row` tag.
+    pub(super) fn row_occurrence(self) -> (usize, usize) {
+        (
+            usize::try_from((self.0 >> Self::ROW_SHIFT) & Self::ROW_MASK).unwrap_or(usize::MAX),
+            usize::try_from(self.0 & Self::ROW_MASK).unwrap_or(usize::MAX),
+        )
+    }
 
     fn new(kind: ReaderKind, index: usize) -> Result<Self, TightError> {
         let index = u64::try_from(index).map_err(|_| Stop::InvalidProgram)?;
@@ -63,6 +90,9 @@ impl Reader {
         usize::try_from(self.0 & ((1 << Self::SHIFT) - 1)).unwrap_or(usize::MAX)
     }
 }
+
+#[cfg(test)]
+mod tests;
 
 /// Ordered lists over one entry vector, one per slot: list `s` is
 /// `entries[offsets[s]..offsets[s + 1]]`. A slot is a node, an atom or a numeric
@@ -249,12 +279,9 @@ fn incidences(
                 let row = numeric_row(theory, index)?;
                 emit(Incidence::Guard(row, index))?;
                 if first(&mut seen, row)? {
-                    for &condition in threshold.conditions {
+                    for (position, &condition) in threshold.conditions.iter().enumerate() {
                         meter.tick()?;
-                        emit(Incidence::Reader(
-                            condition,
-                            Reader::new(ReaderKind::Row, row)?,
-                        ))?;
+                        emit(Incidence::Reader(condition, Reader::row(row, position)?))?;
                     }
                 }
             }
@@ -262,12 +289,9 @@ fn incidences(
                 let row = numeric_row(theory, index)?;
                 emit(Incidence::Guard(row, index))?;
                 if first(&mut seen, row)? {
-                    for &condition in cut.row.conditions {
+                    for (position, &condition) in cut.row.conditions.iter().enumerate() {
                         meter.tick()?;
-                        emit(Incidence::Reader(
-                            condition,
-                            Reader::new(ReaderKind::Row, row)?,
-                        ))?;
+                        emit(Incidence::Reader(condition, Reader::row(row, position)?))?;
                     }
                 }
             }

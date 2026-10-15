@@ -8,10 +8,12 @@ const RECURSIVE: &str = include_str!("../../fixtures/numeric-domains/static-tota
 const CHOICE: &str = include_str!("../../fixtures/numeric-domains/static-totality-choice-zero.lp");
 const DISJUNCTION: &str =
     include_str!("../../fixtures/numeric-domains/static-totality-disjunction-zero.lp");
+const OPERATIONS: &str =
+    include_str!("../../fixtures/numeric-domains/static-totality-operations.lp");
 
 #[test]
 fn support_selection_preserves_complete_ground_formulas() {
-    for source in [PRIME, PREFIX, RECURSIVE, CHOICE, DISJUNCTION] {
+    for source in [PRIME, PREFIX, RECURSIVE, CHOICE, DISJUNCTION, OPERATIONS] {
         for strategy in [JoinStrategy::Indexed, JoinStrategy::Table] {
             compared(source, strategy);
         }
@@ -20,22 +22,24 @@ fn support_selection_preserves_complete_ground_formulas() {
 
 #[test]
 fn numeric_diagnostics_do_not_enable_support_selection() {
-    let plain = prepare(PRIME)
-        .unwrap()
-        .with_domain_analysis(Some(DomainLimits::default()))
-        .ground()
-        .unwrap();
-    let reported = prepare(PRIME)
-        .unwrap()
-        .with_domain_analysis(Some(DomainLimits::default()))
-        .ground_with_observer(Some(&Observation::default()))
-        .unwrap();
-    equal(&plain, &reported);
+    for source in [PRIME, OPERATIONS] {
+        let plain = prepare(source)
+            .unwrap()
+            .with_domain_analysis(Some(DomainLimits::default()))
+            .ground()
+            .unwrap();
+        let reported = prepare(source)
+            .unwrap()
+            .with_domain_analysis(Some(DomainLimits::default()))
+            .ground_with_observer(Some(&Observation::default()))
+            .unwrap();
+        equal(&plain, &reported);
+    }
 }
 
 #[test]
 fn hybrid_preparation_uses_the_same_static_support_contract() {
-    for source in [PRIME, PREFIX, RECURSIVE] {
+    for source in [PRIME, PREFIX, RECURSIVE, OPERATIONS] {
         let ordinary = prepare(source).unwrap().ground_hybrid().unwrap();
         let selected = prepare(source)
             .unwrap()

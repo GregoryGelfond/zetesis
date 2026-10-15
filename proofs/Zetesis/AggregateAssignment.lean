@@ -85,6 +85,38 @@ def selectedSum (weights : List Int) (selected : Nat → Bool) : Int :=
   | weight :: rest =>
       (if selected 0 then weight else 0) + selectedSum rest (fun index => selected (index + 1))
 
+/-- Changing a finite selection updates its sum by adding the newly selected
+    positions and subtracting those no longer selected. Repeated weights and
+    positions controlled by the same condition retain their multiplicity; no
+    distinctness premise or nonnegative-weight premise is needed. Unit weights
+    give the corresponding count law.
+
+    Proof: the head position has four possible before/after selections. In each
+    case its contribution obeys the update identity. Induction gives the same
+    identity for the remaining positions, and adding them establishes the whole
+    sum. This integer law does not establish machine-width bounds, occurrence
+    indexing or interruption-safe publication in an implementation. -/
+theorem selected_sum_update (weights : List Int) (before after : Nat → Bool) :
+    selectedSum weights after = selectedSum weights before +
+      selectedSum weights (fun index => after index && !before index) -
+      selectedSum weights (fun index => before index && !after index) := by
+  induction weights generalizing before after with
+  | nil => simp [selectedSum]
+  | cons weight rest induction =>
+    have tail_update :
+        selectedSum rest (fun index => after (index + 1)) =
+          selectedSum rest (fun index => before (index + 1)) +
+          selectedSum rest (fun index => after (index + 1) && !before (index + 1)) -
+          selectedSum rest (fun index => before (index + 1) && !after (index + 1)) := by
+      exact induction (fun index => before (index + 1)) (fun index => after (index + 1))
+    have head_update :
+        (if after 0 then weight else 0) = (if before 0 then weight else 0) +
+          (if after 0 && !before 0 then weight else 0) -
+          (if before 0 && !after 0 then weight else 0) := by
+      cases before 0 <;> cases after 0 <;> simp
+    simp only [selectedSum]
+    omega
+
 /-- A direct include/exclude interpretation always appears in the finite generator. -/
 theorem selected_sum_is_candidate (weights : List Int) (selected : Nat → Bool) :
     selectedSum weights selected ∈ subsetSums weights := by

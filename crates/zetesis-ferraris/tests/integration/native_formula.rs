@@ -111,7 +111,8 @@ fn every_partial_operand_scan_returns_its_work_without_truth() {
         AdmissionLimits::default(),
     )
     .unwrap();
-    let candidate = world(&theory, 0);
+    // No decisive operand: the whole occurrence row remains necessary.
+    let candidate = world(&theory, 1);
     let complete_work = u64::try_from(2 + width + 1).unwrap();
     let mut workspace = EvaluationWorkspace::default();
     for max_work in 0..=complete_work {
@@ -125,13 +126,33 @@ fn every_partial_operand_scan_returns_its_work_without_truth() {
         );
         assert_eq!(attempt.work, max_work);
         if max_work == complete_work {
-            assert!(!attempt.result.unwrap().is_model());
+            assert!(attempt.result.unwrap().is_model());
         } else {
             assert_eq!(
                 attempt.result.unwrap_err(),
                 EvaluationError::Stopped(Stop::WorkLimit)
             );
         }
+    }
+}
+
+#[test]
+fn decisive_prefixes_preserve_complete_node_truth() {
+    let theory = shared(129, 4);
+    let candidate = world(&theory, 0);
+    let cancellation = Cancellation::default();
+    let mut workspace = EvaluationWorkspace::default();
+    let attempt = workspace.evaluate(&candidate, EvaluationLimits::default(), &cancellation);
+    // Eight nodes, one conjunct, one disjunct, two implication pairs,
+    // two final disjuncts, and one root. No numeric rows exist.
+    assert_eq!(attempt.work, 17);
+    let truth = attempt.result.unwrap();
+    assert!(!truth.is_model());
+    for index in 0..theory.nodes().len() {
+        assert_eq!(
+            truth.node_truth(index),
+            Some(eval(theory.view(), index, 0, None))
+        );
     }
 }
 

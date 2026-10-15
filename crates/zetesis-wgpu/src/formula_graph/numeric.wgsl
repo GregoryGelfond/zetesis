@@ -69,9 +69,12 @@ fn row_less(width: u32, a: vec4<u32>, b: vec4<u32>) -> bool {
 fn numeric_condition(node: Node, index: u32) -> u32 {
     return nodes[numeric_row(node) + index];
 }
-fn numeric_value(node: Node, index: u32) -> vec4<u32> {
+fn numeric_value(node: Node, index: u32, width: u32) -> vec4<u32> {
     let start = numeric_row(node) + node.right;
-    return vec4<u32>(nodes[start + index], nodes[start + node.right + index], 0u, 0u);
+    let low = nodes[start + index];
+    // A complete-row certificate makes the omitted high column exactly zero.
+    if (width == 1u) { return vec4<u32>(low, 0u, 0u, 0u); }
+    return vec4<u32>(low, nodes[start + node.right + index], 0u, 0u);
 }
 fn numeric_bound(node: Node) -> vec4<u32> {
     let start = params.nodes * 4u + node.left + 1u;
@@ -94,7 +97,7 @@ fn numeric_constant(node: Node) -> u32 {
     return 0u;
 }
 fn numeric_qualifies(node: Node, index: u32, width: u32) -> bool {
-    let less = row_less(width, numeric_value(node, index), numeric_bound(node));
+    let less = row_less(width, numeric_value(node, index, width), numeric_bound(node));
     return select(!less, less, node.tag == 8u);
 }
 // One owner reduces each authoritative row and writes every nonconstant guard.
@@ -119,7 +122,7 @@ fn numeric_original(base: u32, index: u32, node: Node) {
     }
     for (var position = 0u; position < node.right; position++) {
         if (frozen[base + numeric_condition(node, position)] != 0u) {
-            let value = numeric_value(node, position);
+            let value = numeric_value(node, position, width);
             if (node.tag == 7u) {
                 sum = row_add(width, sum, value);
             } else {
@@ -128,7 +131,7 @@ fn numeric_original(base: u32, index: u32, node: Node) {
             }
         }
     }
-    let guards = row + 3u * node.right;
+    let guards = row + (1u + min(width, 2u)) * node.right;
     for (var position = 0u; position < count; position++) {
         let guard = nodes[guards + position];
         let guard_node = node_at(guard);

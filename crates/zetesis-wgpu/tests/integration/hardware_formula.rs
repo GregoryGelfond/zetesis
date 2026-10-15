@@ -337,6 +337,7 @@ fn qualify_kernel_options(oracle: &mut GpuFormulaOracle) {
                 assert_eq!(configured.compiled_profile().kernel_options(), options);
                 println!("formula qualified options={options:?}");
                 qualify_subset_strides(&mut configured);
+                qualify_bidirectional_propagation(&mut configured);
                 for theory in scheduled_theories() {
                     compare(&mut configured, &theory);
                     assert_eq!(
@@ -527,6 +528,69 @@ fn qualify_root_propagation(oracle: &mut GpuFormulaOracle) {
         assert_eq!(results[0].verdict(), FormulaVerdict::NoProperSubset);
         assert_eq!(results[0].statistics().rounds, 1);
         assert_eq!(results[0].statistics().work, work);
+    }
+}
+
+fn qualify_bidirectional_propagation(oracle: &mut GpuFormulaOracle) {
+    let mut nodes = vec![Node::atom(0), Node::atom(1)];
+    let mut prior = 0;
+    for _ in 0..128 {
+        nodes.push(Node::and_pair([prior, prior]));
+        prior = nodes.len() - 1;
+    }
+    nodes.push(Node::implies(prior, 1));
+    let root = nodes.len() - 1;
+    let graph = theory(2, nodes, vec![0, root]);
+    let candidate = Interpretation::new(&graph, [0, 1]).unwrap();
+    assert!(
+        check(
+            &graph,
+            &candidate,
+            Limits::default(),
+            &Cancellation::default()
+        )
+        .unwrap()
+        .accepted()
+    );
+    // a and (C -> b), where C is a long chain of repeated conjunctions of a.
+    // The downward sweep settles only the first conjunction; strict subset
+    // requires b false. The upward sweep carries a through C and refutes that
+    // requirement. Reverse-only sweeps would advance one chain link at a time.
+    let propagation = oracle.compiled_profile().kernel_options().propagation;
+    let (setup, sweep) = propagation_work(&graph, propagation);
+    for (rounds, work, expected, completed_rounds) in [
+        (
+            1,
+            setup + sweep,
+            FormulaVerdict::Residual(ResidualReason::RoundLimit),
+            1,
+        ),
+        (
+            2,
+            setup + 2 * sweep - 1,
+            FormulaVerdict::Residual(ResidualReason::WorkLimit),
+            1,
+        ),
+        (2, setup + 2 * sweep, FormulaVerdict::NoProperSubset, 2),
+    ] {
+        let checks = oracle
+            .propagate_batch(
+                &graph,
+                std::slice::from_ref(&candidate),
+                FormulaLimits {
+                    max_rounds: rounds,
+                    max_work_per_candidate: work,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(oracle.last_batch_stats().unwrap().propagation, propagation);
+        assert_eq!(checks[0].verdict(), expected);
+        assert_eq!(checks[0].statistics().rounds, completed_rounds);
+        assert_eq!(
+            checks[0].statistics().work,
+            setup + completed_rounds * sweep
+        );
     }
 }
 

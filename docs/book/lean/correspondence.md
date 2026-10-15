@@ -48,9 +48,15 @@ and both endpoints. The shared
 retains one completed reduction per authoritative row during a whole-theory CPU
 pass: either a checked weighted sum or a pair of extrema, interpreted by the
 row's domain. Reuse requires completed predecessor truth. A complete pass
-invalidates every row first; an update of a retained tight evaluation
-invalidates exactly the rows whose conditions changed, before re-evaluating any
-of their guards. Every frozen guard separately applies its original truth gate.
+invalidates every row first. A retained tight evaluation adjusts a valid sum
+once per changed contribution and invalidates changed extrema. Ascending node
+order applies every changed condition before any guard reads the row; repeated
+conditions retain their separate weights. Interrupted updates invalidate their
+owning evaluation. `AggregateAssignment.selected_sum_update` proves the integer
+identity behind adding newly selected positions and subtracting deselected ones,
+including repeated contributions. It does not establish Rust occurrence indexing,
+finite-width bounds or interruption handling. Every frozen guard separately
+applies its original truth gate.
 Admission records whether any numeric node is present, so unused raw descriptors
 alone require no workspace. This shape flag, compact slot encoding, completed-only
 publication and reset/work/storage receipts are additional Rust obligations;
@@ -275,7 +281,7 @@ unsupported-atom sets. `TightEvaluation.updated_values_exact` proves the
 node-table rule: re-evaluating, in table order, exactly the nodes whose inputs
 changed and keeping every other node's retained truth yields
 `TightEvaluation.values` of the new candidate. The worklist and reverse index
-that realize the rule, row re-reduction and the maintained support counts and
+that realize the rule, numeric updates and the maintained support counts and
 sets are argued in the source documentation of `TightWorkspace` and its update
 and checked by a differential property against complete evaluation; no Lean law
 covers them.
@@ -288,8 +294,15 @@ route, and the update units `TightCheckLimits::max_work` lists on the update
 route. Existing `TightEvaluation` laws still require exact
 original truth, complete producers and valid ranks. They do not prove the Rust
 workspace's allocation, packing, reset or retained-capacity behavior; those
-boundaries have regression checks. The separately extracted general evaluator
-still reads every operand, with its recorded N+E correspondence unchanged.
+boundaries have regression checks. General original and frozen evaluation now
+use the same decisive-prefix Boolean reduction as tight checking.
+`OperandArena.reduce_prefix_exact` proves the reduction's truth law, and
+`OperandArena.prefix_reads_le` bounds its operand reads by the complete row.
+Every DAG node is still evaluated; only redundant reads of completed child
+truths are skipped. The retained extracted general evaluator reads every
+operand: its recorded N+E equality applies to that older generation, not this
+changed loop. Refreshing the concrete extraction and work correspondence remains
+separate from these semantic laws and the differential Rust checks.
 
 `TightClassification.completed_semantics` connects the retained binary generation's
 tight-body classifier to `TightBodyRecognition`: successful classification covers every
@@ -1487,7 +1500,8 @@ Constructing its packed levels, preserving node
 IDs and proving concurrent writes and barriers refine the sequential schedule
 remain implementation obligations. A cached order does not cache candidate truth.
 
-The general kernel also visits those levels in reverse during frozen propagation.
+The general kernel starts frozen propagation with a reverse visit to those levels,
+then alternates reverse and forward visits.
 This is not an application of the evaluation theorem: the local operations are
 sound domain intersections, rather than assignments of original truth. Every
 transfer must preserve all satisfying completions, including under stale sibling
@@ -3066,6 +3080,15 @@ diagnostic: it does not remove literals or bypass arithmetic-family admission.
 proves the signed variable-divisor envelope and the corresponding scalar fault
 conditions. Analyzer soundness, occurrence mapping and the certificate walk
 remain Rust correspondence obligations.
+
+The same certificate walk uses the checked `Range` transfers for variable
+products and quotients, absolute value and powers with a singleton nonnegative
+exponent. Both children must already be certified, even when a zero factor or
+exponent makes the final mathematical value constant. Divisor domains exclude
+zero and possible `MIN / -1`; absolute value excludes `MIN`, and every
+intermediate must fit i32. Finite-domain tests compare successful certificates
+with checked scalar results. Those tests do not establish a Lean refinement of
+these additional transfers; their implementation correspondence remains open.
 
 Static totality also enables ordinary prefix filtering during support completion
 for eligible flat normal producers, independently of diagnostic requests. Its

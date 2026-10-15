@@ -106,7 +106,9 @@ successful evaluation can report a nonmodel. It does not establish an answer set
 
 The workspace retains capacity across candidates and independently admitted
 theories, recomputing all values on every call. Work counts node and operand
-visits, root tests, and numeric scratch initialization and resets. Each shared
+visits, root tests, and numeric scratch initialization and resets. Conjunctions
+stop reading operands at the first false value, and disjunctions at the first
+true value; all DAG nodes still receive their own truth. Each shared
 weighted or ordinal row is reduced once per pass. One 16-byte measure slot holds
 either its checked sum or its minimum and maximum ranks, with packed validity
 bits; the admitted row domain determines the reading. Bytes include the header
@@ -480,8 +482,8 @@ the connectives, numeric rows, producer bodies and root positions that read it;
 for every atom, its atom nodes; for every row, its guards. A `TightWorkspace`
 that completed a check under such a plan keeps that evaluation and updates it for
 the next candidate of the same theory: it re-evaluates, in ascending node order,
-exactly the nodes with an input whose value changed, withdraws the measures of
-rows whose conditions changed, and maintains support counts and the
+exactly the nodes with an input whose value changed, adjusts weighted sums by
+the changed contributions, withdraws changed extrema, and maintains support counts and the
 unsupported-atom and false-root sets. Readers have larger indices than what they
 read, so every re-evaluation reads final inputs and each node is re-evaluated at
 most once; each summary is a count over its inputs and moves with each changed
@@ -492,12 +494,18 @@ before its evaluation begins changes nothing. `TightPlan::check_work_bound`
 bounds a check by either route. The mechanism comments in
 [the workspace](src/tight/evaluate.rs) carry the full argument.
 
+Each numeric reader records its row and occurrence in two 31-bit fields of the
+existing eight-byte entry. Repeated conditions keep separate weights; updates
+read them from the authoritative row. If the numeric columns exceed that optional
+index's representation, checking retains complete evaluation. The theory itself
+has no new admission restriction, and reader storage does not grow.
+
 `proofs/Zetesis/TightPlans.lean` proves the formula-level satisfaction/support
 characterization for this grammar, including original choices in both branch
 orders. It does not prove the Rust extractor, rank implementation or missing
 lazy source coverage. `proofs/Zetesis/TightEvaluation.lean` proves that
 re-evaluating exactly the nodes whose inputs changed yields the new candidate's
-node truth (`updated_values_exact`); the worklist, the index, row re-reduction
+node truth (`updated_values_exact`); the worklist, the index, numeric updates
 and the maintained summaries are Rust obligations, checked by a differential
 property against complete evaluation. Tests compare finite trees and their materialized reducts,
 validate rank/root/identity/resource boundaries, and exercise the ordinary

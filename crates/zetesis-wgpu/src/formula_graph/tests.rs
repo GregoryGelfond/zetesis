@@ -410,7 +410,12 @@ fn numeric_truth(words: &[u32], count: u32, node: &[u32], values: &[bool]) -> bo
         })
     };
     let value = |index: usize| {
-        u64::from(words[row + length + index]) | (u64::from(words[row + 2 * length + index]) << 32)
+        let low = u64::from(words[row + length + index]);
+        if words[row - 1] == 1 {
+            low
+        } else {
+            low | (u64::from(words[row + 2 * length + index]) << 32)
+        }
     };
     if node[0] == 7 {
         let sum: u128 = (0..length)

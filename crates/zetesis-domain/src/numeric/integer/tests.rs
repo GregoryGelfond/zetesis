@@ -8,6 +8,8 @@ use super::*;
 type Engine<'a> = Input<'a, Reader, u8>;
 type Failure = Error<&'static str>;
 
+mod operations;
+
 fn number(input: &mut Engine<'_>, number: i32) -> Result<ExpressionId, Failure> {
     let key = input.constant(Key::Number(number))?;
     input.expression(Expression::Constant(key))
@@ -259,17 +261,13 @@ fn checked_intermediates_precede_a_zero_factor() {
 
 #[test]
 fn unsupported_operations_decline_with_bounded_operands() {
-    for kind in 0..8 {
+    for kind in 0..4 {
         let (result, id) = analyze_ranges(Limits::default(), &[(2, 2)], |input, slots| {
             let value = slots[0];
             let node = match kind {
-                0 => Expression::Absolute(value),
-                1 => Expression::Unary(UnaryOp::BitwiseNot, value),
-                2 => Expression::Binary(BinaryOp::Mul, value, value),
-                3 => Expression::Binary(BinaryOp::Div, value, value),
-                4 => Expression::Binary(BinaryOp::Pow, value, value),
-                5 => Expression::Binary(BinaryOp::BitAnd, value, value),
-                6 => Expression::Binary(BinaryOp::BitOr, value, value),
+                0 => Expression::Unary(UnaryOp::BitwiseNot, value),
+                1 => Expression::Binary(BinaryOp::BitAnd, value, value),
+                2 => Expression::Binary(BinaryOp::BitOr, value, value),
                 _ => Expression::Binary(BinaryOp::BitXor, value, value),
             };
             Ok(vec![input.expression(node)?])

@@ -200,7 +200,7 @@ impl Rows {
             entry.offset = self.tail_words;
             let length = address(theory.parts().rows()[entry.source].length)?;
             self.tail_words = length
-                .checked_mul(3)
+                .checked_mul(1 + entry.summary.value_words())
                 .and_then(|n| n.checked_add(3))
                 .and_then(|n| n.checked_add(u32::try_from(entry.guards.len()).ok()?))
                 .and_then(|n| self.tail_words.checked_add(n))
@@ -305,7 +305,7 @@ pub(super) fn append(
             cancellation.poll().map_err(GpuError::interrupted)?;
             super::append(words, &[address(condition)?])?;
         }
-        for limb in 0..2 {
+        for limb in 0..entry.summary.value_words() as usize {
             for &value in &theory.parts().numeric_values()[span.clone()] {
                 cancellation.poll().map_err(GpuError::interrupted)?;
                 super::append(words, &[limbs(u128::from(value))[limb]])?;

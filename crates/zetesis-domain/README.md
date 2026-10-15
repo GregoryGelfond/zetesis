@@ -228,8 +228,11 @@ Unbounded. Tighter aggregate envelopes remain open.
 
 `Rule::integer_queries` requests separate integer-totality checks in that rule's
 scope. `RuleBounds::integer` lends a certificate only when every intermediate
-is defined over the complete-binding domains. It also covers remainder with a
-bounded variable divisor, excluding zero and the minimum-integer/-1 overflow.
+is defined over the complete-binding domains. Checked interval transfers cover
+variable products, division and remainder, absolute value and a power whose
+exponent has one nonnegative value throughout its domain. Zero divisors,
+minimum-integer/-1 division or remainder, and possible intermediate overflow
+decline; bitwise expressions remain outside the certificate grammar.
 A declined request proves neither undefinedness nor impossibility. A successful
 one does not establish that a binding exists or cover earlier join prefixes.
 The prepared-IR observer uses these certificates for diagnostic reports; no

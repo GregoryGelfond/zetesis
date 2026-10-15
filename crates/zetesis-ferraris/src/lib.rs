@@ -17,6 +17,7 @@ mod extremum_cut;
 pub mod extremum_lowering;
 mod normal;
 mod numeric_evaluation;
+mod operand_evaluation;
 mod oracle;
 pub mod partition;
 mod positive;

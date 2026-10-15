@@ -64,13 +64,15 @@ condition. Their counts and last eligible positions are merged before a zero
 count refutes the query or a unique eligible atom is required to be false.
 Auxiliary nodes never witness strict removal. This uses 24 bytes of workgroup
 storage; a sweep reserves `9*nodes+2*edges+atoms+65+levels` policy work units, including 64
-summary merges, one application and the reverse dependency-level walk. A 32-lane
+summary merges, one application and the dependency-level walk. A 32-lane
 profile retains this conservative allowance. These units are not GPU instruction counts.
 Original truth is evaluated before propagation. A cold graph groups original
 node IDs by dependency level; both formula and tight checkers reuse this layout.
 Nodes in a level run in parallel and a barrier precedes dependent reads. General
-propagation visits levels in reverse to carry root requirements toward operands,
-using the same frozen gates and atomic domain intersections. Pure chains retain serial evaluation because they
+propagation starts by visiting levels in reverse to carry root requirements toward
+operands, then alternates with forward visits to carry deductions back toward
+roots. Both directions use the same frozen gates and atomic domain intersections.
+Pure chains retain serial evaluation because they
 contain no independent node work. Other narrow levels may still pay more in
 synchronization than they gain in parallel work. Setup charges
 `2*nodes+edges+atoms+roots+levels` policy units, with zero level units on the serial
@@ -219,9 +221,11 @@ by their primitive after a failed call, independently of shared context health.
 
 Ordinary formula checking retains nonnegative thresholds and ordinal min/max
 cuts directly. Each original node keeps its ID; guards share condition and
-low/high value columns. A complete-row bound certifies whether arithmetic fits
-in 32, 64 or 128 bits; no candidate-dependent sample justifies narrowing. Four
-u32 wire limbs still preserve the full admitted weighted-sum range. Supported
+value columns. A complete-row bound certifies whether arithmetic fits
+in 32, 64 or 128 bits; no candidate-dependent sample justifies narrowing.
+Certified 32-bit rows store one value column; other rows store the two limbs
+of each u64 contribution. Guard bounds and arithmetic retain four u32 limbs
+for the full admitted weighted-sum range. Supported
 integer-64 instructions operate on two limbs for full-width values or one for
 certified 64-bit values; the portable implementation retains exact carry and
 borrow operations. Ordinal certificates include the empty-minimum sentinel.

@@ -11,6 +11,7 @@ import Zetesis
 #print axioms Zetesis.AggregateAssignment.mem_unique
 #print axioms Zetesis.AggregateAssignment.unique_nodup
 #print axioms Zetesis.AggregateAssignment.unique_length_le
+#print axioms Zetesis.AggregateAssignment.selected_sum_update
 #print axioms Zetesis.AggregateAssignment.selected_sum_is_candidate
 #print axioms Zetesis.AggregateAssignment.subset_sums_nodup
 #print axioms Zetesis.AggregateAssignment.subset_sums_length_le_pow
@@ -961,6 +962,8 @@ import Zetesis
 #print axioms Zetesis.Refinement.OperandArena.read_appended
 #print axioms Zetesis.Refinement.OperandArena.validate_exact
 #print axioms Zetesis.Refinement.OperandArena.gather_exact
+#print axioms Zetesis.Refinement.OperandArena.reduce_prefix_exact
+#print axioms Zetesis.Refinement.OperandArena.prefix_reads_le
 #print axioms Zetesis.Refinement.OperandArena.satisfies_disjunction_fold
 #print axioms Zetesis.Refinement.OperandArena.reduct_disjunction_fold
 #print axioms Zetesis.Refinement.OperandArena.satisfies_disjunction

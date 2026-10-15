@@ -40,6 +40,13 @@ original and frozen evaluator call graph. Its row-domain interpretation,
 completed-only publication, reset and resource receipts need new correspondence;
 refreshing historical source hashes would not establish it.
 
+The current general evaluator also shares tight evaluation's decisive-prefix
+Boolean reduction: it stops after a false conjunct or true disjunct while still
+evaluating every table node. The retained extracted loop reads every operand;
+its exact N+E charge is a property of that generation. `OperandArena` supplies
+the prefix reduction's truth and work-bound laws, but the changed Rust loop
+still requires refreshed extraction and correspondence.
+
 ## Native operand-row getters
 
 [`NativeRows`](NativeRows.lean) proves the actual generated `read_span`,

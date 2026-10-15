@@ -288,7 +288,7 @@ impl Plan {
             transport,
             accounted,
             setup: schedule.setup_work,
-            // One gate visit per node plus the reverse dependency-level walk.
+            // One gate visit per node plus the dependency-level walk.
             // Like setup's level charge, this is an authored work measure, not
             // a count of GPU instructions or elapsed barrier cycles.
             sweep: shape

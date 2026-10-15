@@ -709,11 +709,12 @@ exactness (`DomainBindings.guarded_continuations_exact`) and the family policy (
    `|MIN|` excluded; and the remainder's sign. Each is stated over the integers with the i32 confinement as a
    hypothesis, as `Range` declines a result that leaves i32.
 
-The requested certificate grammar is constants and bounded integer slots, unary minus, `+`, `−`, multiplication by
-a literal factor, division by a nonzero literal, and truncating remainder over a divisor interval excluding zero.
-The remainder also declines a possible `MIN / −1` pair. Every intermediate is checked, including both children of
-correlated subtraction. Absolute value, bitwise operations, powers and variable multiplication/division decline in
-this certificate producer even where the run-time `Range` implementation has a transfer. Ordinary defined-value
+The requested certificate grammar is constants and bounded integer slots, unary minus, `+`, `−`, variable
+multiplication, division and truncating remainder, absolute value, and powers with a fixed nonnegative exponent.
+Division and remainder require a divisor interval excluding zero and a possible `MIN / −1` pair; absolute value
+excludes `MIN`. The exponent may be an expression whose complete-binding interval is a singleton. Every
+intermediate is checked, including both children of correlated subtraction and the base of a zero power.
+Bitwise expressions remain outside this certificate grammar. Ordinary defined-value
 propagation keeps its separate precision and does not establish expression totality. Static-totality support selection
 retains the original source-family checks; measured-route evidence and its concrete Rust correspondence remain separate
 obligations. Separated comparison decisions remain diagnostic.

@@ -185,24 +185,26 @@ fn propagate_node(base: u32, mask_base: u32, index: u32) {
         else if (node.tag >= 2u) { gate(base, node); }
     }
 }
-// Asserted roots constrain their operands. Reuse original truth's dependency
-// levels in reverse so each level observes the preceding parent intersections.
-// Within a level, shared operands still use the same sound atomic transfers.
+// Start downward so asserted roots constrain their operands, then alternate
+// upward sweeps so child consequences can reach parents within one traversal.
+// Both directions reuse original truth's levels and the same atomic transfers.
+// A level observes all preceding levels in the selected direction.
 // A dense sweep visits every node once. Changed-dependency execution filters
 // those visits by the candidate's current generation; an output is a dependency
 // as well as every operand. Upward consequences may require another sweep.
 // Neither this order nor a fixed point establishes a countermodel.
-fn propagate_levels(base: u32, mask_base: u32, lane: u32) {
+fn propagate_levels(base: u32, mask_base: u32, lane: u32, upward: bool) {
     if (params.levels == 0u) {
         if (lane == 0u) {
-            for (var remaining = params.nodes; remaining > 0u; remaining--) {
-                propagate_node(base, mask_base, remaining - 1u);
+            for (var position = 0u; position < params.nodes; position++) {
+                let index = select(params.nodes - position - 1u, position, upward);
+                propagate_node(base, mask_base, index);
             }
         }
     } else {
         let order = params.roots + params.levels + 1u;
-        for (var remaining = params.levels; remaining > 0u; remaining--) {
-            let level = remaining - 1u;
+        for (var position = 0u; position < params.levels; position++) {
+            let level = select(params.levels - position - 1u, position, upward);
             let start = roots[params.roots + level];
             let end = roots[params.roots + level + 1u];
             for (var offset = start + lane; offset < end; offset += WORKGROUP_SIZE) {
@@ -298,7 +300,7 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
         }
         if (params.incidence != 0u) { storageBarrier(); }
         workgroupBarrier();
-        propagate_levels(base, mask_base, lane);
+        propagate_levels(base, mask_base, lane, (rounds & 1u) != 0u);
         storageBarrier();
         workgroupBarrier();
         // J is already constrained to M. Only M-true semantic atoms, never

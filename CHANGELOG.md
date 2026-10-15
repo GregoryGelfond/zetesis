@@ -17,19 +17,24 @@ Notable changes by release. Versions follow Semantic Versioning.
   them into Boolean formulas. Original satisfaction and reduct membership keep
   their existing meaning; unresolved device checks still receive exact CPU checks.
 - GPU tight checking evaluates independent formulas in parallel. General reduct
-  propagation uses the same dependency schedule to carry root constraints toward
-  their operands; bounded checks retain exact CPU completion.
+  propagation alternates directions through the same dependency schedule, carrying
+  deductions between parents and operands; bounded checks retain exact CPU completion.
 - GPU checks compute each shared aggregate row once when testing the original
   program, and skip backward scans when the inputs already determine the result.
 - GPU candidate batches reuse host validation and upload storage, with retained
   capacity included in their existing memory allowances.
 - Numeric GPU rows use narrower exact arithmetic when their bounds permit it.
+  Rows certified to fit 32 bits also omit the unused high-value column.
   Supported devices can use 64-bit instructions and subgroup reductions; portable
   implementations remain available.
+- Retained CPU aggregate checks update sums and counts from changed contributions.
+  Shared Boolean evaluation stops reading operands once their result is known.
 - Lazy constraint checks avoid revisiting the same binding through several newly
   held atoms or repeated body occurrences.
 - Eligible grounding joins use completed numeric-domain analysis to filter bindings
   earlier, while retaining checked arithmetic and complete source validation.
+  Certificates also cover bounded multiplication, division, absolute values and
+  fixed nonnegative powers when every intermediate operation is defined.
 
 ## 0.6.0 — 2026-10-14
 

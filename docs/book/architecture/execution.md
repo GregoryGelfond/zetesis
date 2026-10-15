@@ -495,8 +495,8 @@ disjunction remains one node with its ordered, repeated child occurrences.
 No binary expansion or per-candidate graph copy is made. This immutable view
 is retained for one exact theory identity. Unused raw arena cells are omitted;
 overlapping raw Boolean spans are copied once per logical row. Numeric guards
-retain their original node IDs and share condition, low-word and high-word
-columns by the admitted row's identity. Each variable guard has a five-word
+retain their original node IDs and share condition and value columns by the
+admitted row's identity. Each variable guard has a five-word
 descriptor. Constant thresholds and extremum endpoints or impossible cuts need
 only a constant header. No host eligibility masks are substituted for formulas.
 
@@ -505,8 +505,10 @@ arithmetic width. The complete nonnegative weight total bounds every partial
 sum; an ordinal row's greatest rank bounds its selected and empty extrema.
 After constant bounds are removed, those bounds justify exact 32- or 64-bit
 operations where possible, with the full 128-bit path retained otherwise.
-Original evaluation and frozen propagation use the same certificate. This
-selects arithmetic operations without changing the value columns or ASP order.
+Original evaluation and frozen propagation use the same certificate. It also
+omits the high-word column for 32-bit rows; wider rows retain both value words.
+This reduces their contribution payload from three words to two without changing
+condition identity, guard bounds or ASP order.
 
 For `N` nodes and `W` appended operand/descriptor words, packing checks `4*N+W` against
 the 32-bit word-address range. The padded byte size `4*max(4,4*N+W)` is checked
@@ -531,13 +533,15 @@ truth is recomputed for every candidate. A chain with one node per level keeps
 the serial fold because it contains no independent node work. Other narrow
 levels may still pay more in barriers than they gain in parallel evaluation.
 
-General frozen-reduct propagation reuses those levels in reverse order. Asserted
-roots can therefore constrain operands across several depths in one sweep.
+General frozen-reduct propagation reuses those levels, starting downward and
+alternating direction each sweep. Asserted roots can constrain operands across
+several depths in a downward sweep; an upward sweep carries child consequences
+toward parents.
 Every node still receives one transfer per complete sweep; only the order changes.
 Nodes in a level may share operands, so their transfers retain atomic domain
 intersections and the existing protection against stale reads. Every lane reaches
-the barrier before the next level. Pure chains run the reverse fold on one lane.
-Consequences flowing back toward parents can require another sweep; this schedule
+the barrier before the next level. Pure chains run the selected fold on one lane.
+Consequences flowing against the current direction can require another sweep; this schedule
 does not promise fewer rounds for every graph or make a fixed point a proof of
 membership.
 

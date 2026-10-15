@@ -101,6 +101,31 @@ fn transported_width_covers_each_live_threshold_family() {
         transaction.commit();
         let theory = Theory::new(2, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap();
         let (shape, words) = packed(&theory);
+        // Two live descriptors and guards share one row. Width changes only
+        // its stored contribution columns, not occurrence-based work receipts.
+        let columns = 1 + width.min(2);
+        assert_eq!(shape.wide_words, 2 * 5 + 3 + columns * 3 + 2);
+        assert_eq!(shape.numeric_work, 2 * (3 * 48 + 32));
+        assert_eq!(words.len() as u64 * 4, shape.bytes);
+        let exact_device = wgpu::Limits {
+            max_buffer_size: shape.bytes,
+            max_storage_buffer_binding_size: shape.bytes,
+            ..wgpu::Limits::default()
+        };
+        assert!(Shape::new(&theory, &exact_device).is_ok());
+        assert_eq!(
+            Shape::new(
+                &theory,
+                &wgpu::Limits {
+                    max_storage_buffer_binding_size: shape.bytes - 1,
+                    ..exact_device
+                },
+            )
+            .err()
+            .unwrap()
+            .kind(),
+            GpuErrorKind::Capacity
+        );
         let tail = shape.nodes as usize * 4;
         let mut live = 0;
         for &root in theory.roots() {
@@ -127,6 +152,80 @@ fn transported_width_covers_each_live_threshold_family() {
 }
 
 #[test]
+fn packed_ordinal_columns_preserve_sentinel_boundaries() {
+    use zetesis_ferraris::{ExtremumRow, FormulaNodes};
+
+    for (rank_count, width) in [
+        (u64::from(u32::MAX), 1),
+        (u64::from(u32::MAX) + 1, 1),
+        (u64::from(u32::MAX) + 2, 2),
+        (u64::MAX, 2),
+    ] {
+        let conditions = [0, 0, 1];
+        let ranks = [1, rank_count - 2, 0];
+        let rules: Vec<_> = [0, 1, rank_count - 1, rank_count]
+            .into_iter()
+            .flat_map(|bound| {
+                [
+                    ExtremumCutRule::Prefix(bound),
+                    ExtremumCutRule::Suffix(bound),
+                ]
+            })
+            .collect();
+        let mut nodes = FormulaNodes::new(
+            FormulaParts::new(vec![Node::atom(0), Node::atom(1)], vec![]).unwrap(),
+        );
+        let mut transaction = nodes.transaction();
+        let roots = transaction
+            .push_extremum_cut_family_range(
+                ExtremumRow {
+                    conditions: &conditions,
+                    ranks: &ranks,
+                    rank_count,
+                },
+                &rules,
+                usize::MAX,
+                usize::MAX,
+            )
+            .unwrap();
+        transaction.commit();
+        let theory = Theory::new(
+            2,
+            nodes.into_parts(),
+            roots.collect(),
+            AdmissionLimits::default(),
+        )
+        .unwrap();
+        let (shape, words) = packed(&theory);
+        assert_eq!(shape.wide_words, 3 * 5 + 3 + (1 + width) * 3 + 3);
+        assert_eq!(words.len() as u64 * 4, shape.bytes);
+        let tail = shape.nodes as usize * 4;
+        for &root in theory.roots() {
+            if matches!(words[root * 4], 8 | 9) {
+                let row = tail + words[tail + words[root * 4 + 1] as usize] as usize;
+                assert_eq!(words[row + 2], width);
+            }
+        }
+        for candidate in 0..4 {
+            let original = physical_truth(&words, shape.nodes, candidate, None);
+            for tested in 0..4 {
+                let reduced = physical_truth(&words, shape.nodes, tested, Some(&original));
+                let measure = ExtremumRow {
+                    conditions: &conditions,
+                    ranks: &ranks,
+                    rank_count,
+                }
+                .reduce(|child| Ok::<_, zetesis_cpu::Stop>(reduced[child]))
+                .unwrap();
+                for (&root, rule) in theory.roots().iter().zip(&rules) {
+                    assert_eq!(reduced[root], original[root] && rule.holds(measure));
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn live_guards_share_one_dependency_level() {
     for theory in [interleaved(), ordinal_theory()] {
         let (shape, mut words) = packed(&theory);
@@ -146,7 +245,8 @@ fn live_guards_share_one_dependency_level() {
             let owner = words[row] as usize;
             assert!(owner <= index);
             let depth = words[owner * 4 + 3];
-            let guards = row + 3 + 3 * node[2] as usize;
+            let columns = 1 + words[row + 2].min(2) as usize;
+            let guards = row + 3 + columns * node[2] as usize;
             for &guard in &words[guards..guards + words[row + 1] as usize] {
                 assert_eq!(words[guard as usize * 4 + 3], depth);
             }

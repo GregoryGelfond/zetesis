@@ -71,6 +71,11 @@ pub(super) fn qualify(oracle: &mut GpuTightOracle) {
             qualify_ordinal(oracle, rule, u64::MAX, &[1u64 << 32, u64::MAX - 1]);
         }
     }
+    for rank_count in [1u64 << 32, (1u64 << 32) + 1] {
+        for rule in [ExtremumCutRule::Prefix(1), ExtremumCutRule::Suffix(1)] {
+            qualify_ordinal(oracle, rule, rank_count, &[0, rank_count - 1]);
+        }
+    }
 }
 
 fn qualify_ordinal(

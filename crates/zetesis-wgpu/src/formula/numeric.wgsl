@@ -9,7 +9,7 @@ fn threshold_gate(base: u32, node: Node) {
     for (var index = 0u; index < node.right; index++) {
         let slot = node_at(numeric_condition(node, index)).output;
         let domain = atomicLoad(&domains[base + slot]);
-        let weight = numeric_value(node, index);
+        let weight = numeric_value(node, index, width);
         empty = empty || domain == 0u;
         if (domain == 2u) { minimum = row_add(width, minimum, weight); }
         if ((domain & 2u) != 0u) { maximum = row_add(width, maximum, weight); }
@@ -29,7 +29,7 @@ fn threshold_gate(base: u32, node: Node) {
         // An undecided slot was undecided in the first pass as well. Its
         // weight is in maximum and absent from minimum, even with stale reads.
         if (atomicLoad(&domains[base + slot]) == 3u) {
-            let weight = numeric_value(node, index);
+            let weight = numeric_value(node, index, width);
             if (output == 2u && row_less(width, row_sub(width, maximum, weight), bound)) {
                 narrow(base + slot, 2u);
             }

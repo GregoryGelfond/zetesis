@@ -68,7 +68,7 @@ fn node_truth_describes_the_exact_interpretation() {
                 None
             }
         );
-        assert_eq!(attempt.work, if a || b { 17 } else { 16 });
+        assert_eq!(attempt.work, [15, 16, 17, 16][usize::from(bits)]);
     }
 }
 
@@ -77,7 +77,7 @@ fn root_scan_exhaustion_exposes_no_truth() {
     let program = theory(vec![4, 6]);
     let candidate = Interpretation::new(&program, [0]).unwrap();
     let mut workspace = EvaluationWorkspace::default();
-    for max_work in 0..17 {
+    for max_work in 0..16 {
         let attempt = workspace.evaluate(
             &candidate,
             EvaluationLimits {
@@ -95,13 +95,13 @@ fn root_scan_exhaustion_exposes_no_truth() {
     let attempt = workspace.evaluate(
         &candidate,
         EvaluationLimits {
-            max_work: 17,
+            max_work: 16,
             ..EvaluationLimits::default()
         },
         &Cancellation::default(),
     );
     assert!(attempt.result.unwrap().is_model());
-    assert_eq!(attempt.work, 17);
+    assert_eq!(attempt.work, 16);
 }
 
 #[test]

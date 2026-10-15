@@ -78,6 +78,12 @@ impl Summary {
             4
         }
     }
+
+    /// Contributions are u64; a complete 32-bit row needs no high value column.
+    /// Wider sums still read only the two limbs of each admitted contribution.
+    pub(super) fn value_words(&self) -> u32 {
+        self.width().min(2)
+    }
 }
 
 pub(super) fn endpoint(node: NodeView<'_>) -> Option<bool> {

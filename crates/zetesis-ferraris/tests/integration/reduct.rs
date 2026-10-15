@@ -187,14 +187,14 @@ fn disjunctive_reduct_has_incomparable_minimal_models() {
 #[test]
 fn first_countermodel_needs_no_following_carry() {
     let program = theory(&[Expr::Or(Box::new(Expr::Atom(0)), Box::new(Expr::Atom(1)))]);
-    // Original node/operand evaluation and roots cost six, the atom scan two,
-    // the empty subset six, its carry one, and the first countermodel six. No carry
+    // Original node/operand evaluation and roots cost five, the atom scan two,
+    // the empty subset six, its carry one, and the first countermodel five. No carry
     // may follow the witness: the exact allowance is already consumed.
     let result = check(
         &program,
         &interpretation(&program, 3),
         Limits {
-            max_work: 21,
+            max_work: 19,
             max_subsets: 2,
         },
         &Cancellation::default(),
@@ -204,7 +204,7 @@ fn first_countermodel_needs_no_following_carry() {
         panic!("expected first proper-subset countermodel")
     };
     assert_eq!(witness.atoms().collect::<Vec<_>>(), vec![0]);
-    assert_eq!(result.statistics().work, 21);
+    assert_eq!(result.statistics().work, 19);
     assert_eq!(result.statistics().subsets, 2);
 }
 
@@ -471,7 +471,9 @@ fn exhaustive_subset_carries_cross_sparse_machine_word_boundaries() {
     // All fifteen proper subsets fail the conjunction. Four selected bits
     // require 26 bit flips to advance the binary counter from 0 to 15.
     assert_eq!(complete.statistics().subsets, 15);
-    assert_eq!(complete.statistics().work, 14 + 130 + 15 * 14 + 26);
+    // The three binary conjunctions omit 8, 8 and 12 second-child reads
+    // across the proper subsets.
+    assert_eq!(complete.statistics().work, 14 + 130 + 15 * 14 + 26 - 28);
     let exact = Limits {
         max_work: complete.statistics().work,
         max_subsets: 15,

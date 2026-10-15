@@ -109,6 +109,46 @@ fn weighted_read_failures_do_not_publish_cached_measures() {
 }
 
 #[test]
+fn changing_an_unmeasured_sum_does_not_publish_it() {
+    let theory = weighted(&[3], false);
+    let mut scratch = NumericRowScratch::default();
+    scratch.reserve(&theory).unwrap();
+    scratch.reset(&theory, || Ok::<_, Stop>(())).unwrap();
+    scratch.change_condition(&theory, 0, 0, true).unwrap();
+    scratch.change_condition(&theory, 0, 1, true).unwrap();
+    assert_eq!(scratch.valid, [0]);
+    let mut reads = 0;
+    assert!(
+        scratch
+            .threshold(&theory, 2, threshold(&theory, 2), |_| {
+                reads += 1;
+                Ok::<_, Stop>(true)
+            })
+            .unwrap()
+    );
+    assert_eq!(reads, 3);
+    // The two repeated occurrences must both leave the sum; the zero-weight
+    // occurrence is still present and has its own authoritative position.
+    for occurrence in 0..3 {
+        scratch
+            .change_condition(&theory, 0, occurrence, false)
+            .unwrap();
+    }
+    assert!(
+        !scratch
+            .threshold(
+                &theory,
+                2,
+                threshold(&theory, 2),
+                |_| -> Result<bool, Stop> {
+                    panic!("a completed sum update must not rescan its row")
+                }
+            )
+            .unwrap()
+    );
+}
+
+#[test]
 fn every_fresh_weighted_work_prefix_can_retry() {
     let theory = weighted(&[1, 2, 3], true);
     let candidate = world(&theory, 3);

@@ -16,6 +16,8 @@ mod incremental_tests;
 mod tests;
 #[cfg(test)]
 mod update_tests;
+#[cfg(test)]
+mod weighted_update_tests;
 
 impl TightPlan {
     /// Check original satisfaction and every present atom's producer support.
@@ -65,7 +67,8 @@ impl TightPlan {
 /// are its atom's membership for an atom node, the truth of its row's
 /// conditions for a numeric guard, and its operands' truth otherwise. The update
 /// re-evaluates, in ascending node order, exactly the nodes with an input whose
-/// value changed, keeps the measures of rows none of whose conditions changed,
+/// value changed, adjusts sums by each changed contribution and invalidates
+/// changed extrema (all other row measures survive),
 /// and maintains a four-byte support count per atom and the unsupported-atom and
 /// false-root sets, so its verdict and witness are those of a complete
 /// evaluation of the new candidate. A candidate that differs in more atoms than
@@ -491,7 +494,7 @@ impl TightWorkspace {
         // Invariant: every node below the least queued node holds its truth under
         // the new candidate, and a node is queued exactly when one of its inputs
         // changed: an atom node's membership, a condition of a guard's row (the
-        // row is withdrawn then, before any of its guards is re-evaluated), or an
+        // sum is adjusted or the extremum withdrawn before any guard runs), or an
         // operand's truth. A reader has a larger index than everything it reads,
         // so ascending pops re-evaluate each node from final inputs, and a popped
         // node is never queued again: each is re-evaluated at most once.
@@ -516,8 +519,10 @@ impl TightWorkspace {
                 match reader.kind() {
                     ReaderKind::Node => self.queue(index, plan, limits)?,
                     ReaderKind::Row => {
-                        self.numeric.invalidate(index)?;
-                        for &guard in readers.guards(index) {
+                        let (row, occurrence) = reader.row_occurrence();
+                        self.numeric
+                            .change_condition(&plan.theory, row, occurrence, truth)?;
+                        for &guard in readers.guards(row) {
                             meter.tick()?;
                             self.queue(guard, plan, limits)?;
                         }
@@ -812,14 +817,8 @@ fn evaluate_operands(
     conjunction: bool,
     meter: &mut Meter<'_>,
 ) -> Result<bool, TightError> {
-    for &child in operands {
+    crate::operand_evaluation::reduce(operands, conjunction, |child| {
         meter.tick()?;
-        let truth = values[child] != 0;
-        // A false conjunct or true disjunct determines this node, irrespective
-        // of the remaining operands. Other DAG nodes still get their own truth.
-        if truth != conjunction {
-            return Ok(truth);
-        }
-    }
-    Ok(conjunction)
+        Ok(values[child] != 0)
+    })
 }

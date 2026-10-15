@@ -159,6 +159,29 @@ impl Tree {
     }
 }
 
+// This generator uses binary nodes. Independently expanded child trees identify
+// the one redundant read in a decisive conjunction/disjunction; every other
+// node and occurrence is still charged, including under a false frozen parent.
+fn node_work(theory: &Theory, tested: u8, candidate: Option<u8>) -> u64 {
+    let view = theory.view();
+    let saved = (0..view.len())
+        .filter(|&index| {
+            let (first, decisive) = match view.node(index).unwrap() {
+                zetesis_ferraris::NodeView::And(children) => (children[0], false),
+                zetesis_ferraris::NodeView::Or(children) => (children[0], true),
+                _ => return false,
+            };
+            let child = Tree::expand(view, first);
+            let truth = candidate.map_or_else(
+                || child.eval(tested),
+                |outer| child.reduct(outer).eval(tested),
+            );
+            truth == decisive
+        })
+        .count();
+    u64::try_from(theory.nodes().len() + theory.parts().occurrences() - saved).unwrap()
+}
+
 fn interpretation(theory: &Theory, world: u8) -> Interpretation {
     Interpretation::new(
         theory,
@@ -232,11 +255,12 @@ zetesis_ferraris::FormulaParts::new(case.nodes, vec![]).unwrap(), case.roots, Ad
             .unwrap();
         let candidate = interpretation(&theory, case.candidate);
         let tested = interpretation(&theory, case.tested);
-        let node_work = u64::try_from(theory.nodes().len() + theory.parts().occurrences()).unwrap();
-        let tested_work = node_work + u64::try_from(root_tests).unwrap();
+        let original_work = node_work(&theory, case.candidate, None);
+        let tested_work = node_work(&theory, case.tested, Some(case.candidate))
+            + u64::try_from(root_tests).unwrap();
         let limits = |max_work| Limits { max_work, max_subsets: 0 };
         let cancellation = Cancellation::default();
-        let frozen = FrozenReduct::new(&candidate, limits(node_work), &cancellation).unwrap();
+        let frozen = FrozenReduct::new(&candidate, limits(original_work), &cancellation).unwrap();
         let expected = reduct.iter().all(|root| root.eval(case.tested));
         prop_assert_eq!(frozen.is_satisfied_by(&tested, limits(tested_work), &cancellation).unwrap(), expected);
         prop_assert_eq!(
@@ -244,11 +268,11 @@ zetesis_ferraris::FormulaParts::new(case.nodes, vec![]).unwrap(), case.roots, Ad
             zetesis_cpu::Stop::WorkLimit
         );
         prop_assert_eq!(
-            models_reduct(&theory, &candidate, &tested, limits(node_work + tested_work), &cancellation).unwrap(),
+            models_reduct(&theory, &candidate, &tested, limits(original_work + tested_work), &cancellation).unwrap(),
             expected
         );
         prop_assert_eq!(
-            models_reduct(&theory, &candidate, &tested, limits(node_work + tested_work - 1), &cancellation).unwrap_err(),
+            models_reduct(&theory, &candidate, &tested, limits(original_work + tested_work - 1), &cancellation).unwrap_err(),
             zetesis_cpu::Stop::WorkLimit
         );
     }

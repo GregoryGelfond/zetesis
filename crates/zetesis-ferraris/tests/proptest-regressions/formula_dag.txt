@@ -1,3 +1,4 @@
 # Proptest appends failing seeds here and replays them before new generated cases.
 # Commit new failure entries after fixing their cause. No failing seed has been
 # observed yet; deterministic boundary cases live in tests/integration/reduct.rs.
+cc a9fca4f551d809505f5458584724129d7cef862d7fc93b5619bdebf5ea6199d7 # shrinks to case = Case { atoms: 1, nodes: [Node(Atom(0)), Node(AndPair([0, 0]))], roots: [0], candidate: 0, tested: 0 }

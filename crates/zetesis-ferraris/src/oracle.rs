@@ -180,25 +180,18 @@ fn evaluate_node(
     }
 }
 
-/// Read every operand, including duplicates and operands after the result is
-/// decided. A failed tick leaves the enclosing node unpublished in the output.
+/// Read the decisive operand prefix. A failed tick leaves the enclosing node
+/// unpublished; every DAG node still receives its own complete truth value.
 fn evaluate_operands(
     operands: &[usize],
     values: &[bool],
     conjunction: bool,
     work: &mut Work<'_, '_>,
 ) -> Result<bool, Stop> {
-    let mut value = conjunction;
-    for &operand in operands {
+    crate::operand_evaluation::reduce(operands, conjunction, |operand| {
         work.tick()?;
-        let child = values[operand];
-        value = if conjunction {
-            value & child
-        } else {
-            value | child
-        };
-    }
-    Ok(value)
+        Ok(values[operand])
+    })
 }
 
 pub(super) fn failed_root(
