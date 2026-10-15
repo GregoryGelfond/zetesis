@@ -13,14 +13,22 @@ fn cooperative_formula_shader_validates_without_optional_capabilities() {
     let module = naga::front::wgsl::parse_str(concat!(
         include_str!("../../src/formula.wgsl"),
         include_str!("../../src/formula_graph/numeric.wgsl"),
-        include_str!("../../src/formula/numeric.wgsl")
+        include_str!("../../src/formula/numeric.wgsl"),
+        include_str!("../../src/formula/subset.wgsl")
     ))
     .unwrap();
-    naga::valid::Validator::new(
+    let info = naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::empty(),
     )
     .validate(&module)
+    .unwrap();
+    let (module, _) = naga::back::pipeline_constants::process_overrides(
+        &module,
+        &info,
+        None,
+        &naga::back::PipelineConstants::default(),
+    )
     .unwrap();
     assert_eq!(module.entry_points[0].name, "propagate");
     assert_eq!(module.entry_points[0].workgroup_size, [64, 1, 1]);

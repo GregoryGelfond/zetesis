@@ -24,6 +24,7 @@ use zetesis_ferraris::{Interpretation, Theory};
 pub struct GpuFormulaOracle {
     profile: GpuFormulaProfile,
     resident: Option<Resident>,
+    candidates: crate::candidates::Staging,
     epoch: u32,
     last: Option<FormulaBatchStats>,
     last_submission_candidates: Option<usize>,
@@ -33,7 +34,6 @@ pub struct GpuFormulaOracle {
 struct PreparedCall {
     fresh: Option<PreparedGraph>,
     plan: Plan,
-    seeds: Vec<u32>,
     stats: FormulaBatchStats,
 }
 impl GpuFormulaOracle {
@@ -145,6 +145,7 @@ impl GpuFormulaOracle {
         Self {
             profile,
             resident: None,
+            candidates: crate::candidates::Staging::default(),
             epoch: 0,
             last: None,
             last_submission_candidates: None,
@@ -188,6 +189,7 @@ impl GpuFormulaOracle {
     /// Clears the last batch and submission receipts.
     pub fn clear_residency(&mut self) {
         self.resident = None;
+        self.candidates.release();
         self.last = None;
         self.last_submission_candidates = None;
         self.last_compute_time = None;
@@ -196,6 +198,10 @@ impl GpuFormulaOracle {
     /// subset query. Results retain input order and no partial batch is returned.
     /// Clones of one Theory reuse its graph; independent equal theories do not.
     /// Exact candidate-count transport is replaced when that count changes.
+    /// Host candidate words reuse initialized scratch for the same subject/count;
+    /// replacement releases the old scratch before cold preparation. Actual
+    /// capacity is charged on every call, and a smaller allowance can replace an
+    /// oversized optional allocation. Explicit clearing releases this scratch too.
     /// A cold subject is prepared in O(nodes + edges + roots + levels) host work, outside
     /// the per-candidate device-work limit. One buffer retains fixed headers and
     /// complete native operand rows; no binary expansion or per-candidate graph
@@ -252,12 +258,8 @@ impl GpuFormulaOracle {
         let epoch = self.epoch.checked_add(1).ok_or_else(|| {
             GpuError::new(GpuErrorKind::Capacity, "formula epoch counter exhausted")
         })?;
-        let PreparedCall {
-            fresh,
-            plan,
-            seeds,
-            stats,
-        } = self.prepare(theory, candidates, limits, cancellation, epoch)?;
+        let PreparedCall { fresh, plan, stats } =
+            self.prepare(theory, candidates, limits, cancellation, epoch)?;
         cancellation.poll().map_err(GpuError::interrupted)?;
         let scopes = ErrorScopes::new(self.profile.runtime.device());
         if let Some(prepared) = fresh {
@@ -271,7 +273,7 @@ impl GpuFormulaOracle {
             .and_then(|resident| {
                 resident.dispatch(
                     &self.profile.runtime,
-                    &seeds,
+                    self.candidates.words(),
                     &plan,
                     limits.timeout,
                     cancellation,
@@ -311,25 +313,20 @@ impl GpuFormulaOracle {
                     "formula timestamp storage exceeds the batch byte allowance",
                 )
             })?;
-        let (fresh, plan) = if self
-            .resident
-            .as_ref()
-            .is_some_and(|resident| resident.graph.shape.theory.same_instance(theory))
-        {
-            let resident = self.resident.as_ref().ok_or_else(|| {
-                GpuError::new(GpuErrorKind::Device, "missing admitted formula resident")
-            })?;
-            let plan = Plan::new(
-                &resident.graph,
-                candidates.len(),
-                limits,
-                self.profile.runtime.limits(),
-                false,
-                epoch,
-            )?;
+        // Old scratch must not coexist with a cold graph's temporary directory.
+        // Releasing it does not change the resident device subject on refusal.
+        if self.resident.as_ref().is_none_or(|resident| {
+            !resident.graph.shape.theory.same_instance(theory)
+                || !resident.matches_count(candidates.len())
+        }) {
+            self.candidates.release();
+        }
+        let retained = self.retained_plan(theory, candidates.len(), limits, epoch)?;
+        let (fresh, plan) = if let Some(plan) = retained {
             identities(theory, candidates)?;
             (None, plan)
         } else {
+            self.candidates.release();
             let preparation = Preparation::with_control(
                 theory,
                 candidates.len(),
@@ -337,7 +334,8 @@ impl GpuFormulaOracle {
                 self.profile.runtime.limits(),
                 epoch,
                 cancellation,
-            )?;
+            )?
+            .with_propagation(self.profile.kernel_options().propagation);
             identities(theory, candidates)?;
             self.resident = None;
             let (prepared, plan) =
@@ -354,7 +352,8 @@ impl GpuFormulaOracle {
             .map(|prepared| &prepared.graph)
             .or_else(|| self.resident.as_ref().map(|resident| &resident.graph))
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing formula graph"))?;
-        let stats = FormulaBatchStats {
+        let mut stats = FormulaBatchStats {
+            propagation: graph.schedule.propagation(),
             theory_uploaded: fresh.is_some(),
             transport_allocated: fresh.is_some()
                 || self
@@ -375,13 +374,50 @@ impl GpuFormulaOracle {
             .map(|prepared| &prepared.graph)
             .or_else(|| self.resident.as_ref().map(|resident| &resident.graph))
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing formula packing graph"))?;
-        let seeds = plan.pack(graph, candidates, cancellation)?;
-        Ok(PreparedCall {
-            fresh,
-            plan,
-            seeds,
-            stats,
-        })
+        stats.accounted_bytes = plan.pack(
+            graph,
+            candidates,
+            &mut self.candidates,
+            limits.max_batch_bytes,
+            cancellation,
+        )? + timing_bytes;
+        Ok(PreparedCall { fresh, plan, stats })
+    }
+
+    // Optional indexing must not turn a smaller caller allowance into a new
+    // mandatory representation. A capacity refusal re-enters cold admission;
+    // only after its minimum and identities pass is the old resident retired.
+    fn retained_plan(
+        &self,
+        theory: &Theory,
+        worlds: usize,
+        limits: FormulaLimits,
+        epoch: u32,
+    ) -> Result<Option<Plan>, GpuError> {
+        let Some(resident) = self
+            .resident
+            .as_ref()
+            .filter(|resident| resident.graph.shape.theory.same_instance(theory))
+        else {
+            return Ok(None);
+        };
+        match Plan::new(
+            &resident.graph,
+            worlds,
+            limits,
+            self.profile.runtime.limits(),
+            false,
+            epoch,
+        ) {
+            Ok(plan) => Ok(Some(plan)),
+            Err(error)
+                if resident.graph.schedule.incidence.is_some()
+                    && error.kind() == GpuErrorKind::Capacity =>
+            {
+                Ok(None)
+            }
+            Err(error) => Err(error),
+        }
     }
 }
 

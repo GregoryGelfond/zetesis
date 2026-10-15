@@ -67,11 +67,63 @@ fn row_owners_preserve_source_identity_and_original_ids() {
         first,
         "equal contents do not merge distinct admitted rows"
     );
-    assert_eq!(&words[first..first + 2], &[3, 2]);
-    assert_eq!(&words[first + 11..first + 13], &[3, 6]);
-    assert_eq!(&words[row(5)..row(5) + 2], &[5, 1]);
+    assert_eq!(&words[first..first + 3], &[3, 2, 4]);
+    assert_eq!(&words[first + 12..first + 14], &[3, 6]);
+    assert_eq!(&words[row(5)..row(5) + 3], &[5, 1, 4]);
     assert_eq!(words[2 * 4], 10, "constant guard is not a row owner");
     assert_eq!(&words[7 * 4..8 * 4], &[4, 6, 1, 0]);
+}
+
+#[test]
+fn transported_width_covers_each_live_threshold_family() {
+    use zetesis_ferraris::FormulaNodes;
+
+    for (weights, width) in [
+        ([u64::from(u32::MAX) - 1, 1, 0], 1),
+        ([u64::from(u32::MAX), 1, 0], 2),
+        ([u64::MAX - 1, 1, 0], 2),
+        ([u64::MAX, 1, 0], 4),
+    ] {
+        let total: i128 = weights.iter().copied().map(i128::from).sum();
+        let mut nodes = FormulaNodes::new(
+            FormulaParts::new(vec![Node::atom(0), Node::atom(1)], vec![]).unwrap(),
+        );
+        let mut transaction = nodes.transaction();
+        let roots = transaction
+            .push_threshold_family(
+                &[0, 1, 0],
+                &weights,
+                &[0, 1, total, total + 1],
+                usize::MAX,
+                usize::MAX,
+            )
+            .unwrap();
+        transaction.commit();
+        let theory = Theory::new(2, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap();
+        let (shape, words) = packed(&theory);
+        let tail = shape.nodes as usize * 4;
+        let mut live = 0;
+        for &root in theory.roots() {
+            if words[root * 4] == 7 {
+                let row = tail + words[tail + words[root * 4 + 1] as usize] as usize;
+                assert_eq!(words[row + 2], width);
+                live += 1;
+            }
+        }
+        assert_eq!(live, 2);
+        for bits in 0..4 {
+            let truth = physical_truth(&words, shape.nodes, bits, None);
+            let sum: i128 = weights
+                .iter()
+                .zip([0, 1, 0])
+                .filter(|(_, atom)| bits & (1 << atom) != 0)
+                .map(|(&weight, _)| i128::from(weight))
+                .sum();
+            for (&root, bound) in theory.roots().iter().zip([0, 1, total, total + 1]) {
+                assert_eq!(truth[root], sum >= bound);
+            }
+        }
+    }
 }
 
 #[test]
@@ -94,11 +146,11 @@ fn live_guards_share_one_dependency_level() {
             let owner = words[row] as usize;
             assert!(owner <= index);
             let depth = words[owner * 4 + 3];
-            let guards = row + 2 + 3 * node[2] as usize;
+            let guards = row + 3 + 3 * node[2] as usize;
             for &guard in &words[guards..guards + words[row + 1] as usize] {
                 assert_eq!(words[guard as usize * 4 + 3], depth);
             }
-            for &child in &words[row + 2..row + 2 + node[2] as usize] {
+            for &child in &words[row + 3..row + 3 + node[2] as usize] {
                 assert!(words[child as usize * 4 + 3] < depth);
             }
         }

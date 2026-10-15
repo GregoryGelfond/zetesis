@@ -4,11 +4,14 @@ use std::fmt;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 
-use super::{CompletionExecutor, IndexedTheory, StableModels, verification};
+use super::{CompletionExecutor, IndexedTheory, StableModels};
 use crate::Incomplete;
 use crate::search::{Budget, increment};
 use crate::timing::{self, Phase};
-use zetesis_ferraris::{Interpretation, Theory, models};
+use zetesis_ferraris::{Interpretation, Theory};
+
+mod validation;
+use validation::Validation;
 
 /// Verdict data supplied through the trusted batch-checker protocol. The caller
 /// must supply a sound decision about the exact original candidate and its frozen
@@ -29,12 +32,13 @@ pub enum BatchVerdict {
     NotModel,
 }
 
-/// Bounds on explicitly retained, not-yet-committed candidate interpretations.
+/// Bounds on pending candidate interpretations and their validation workspace.
 #[derive(Clone, Copy, Debug)]
 pub struct BatchLimits {
     /// Maximum candidates proposed for one checker call.
     pub max_candidates: NonZeroUsize,
-    /// Logical payload allowance for pending/result vectors and interpretation words.
+    /// Logical payload allowance for pending/result vectors, interpretation words,
+    /// and the original-validation workspace's header and actual retained capacity.
     /// Shared theory storage, allocator overhead and checker-private storage are excluded.
     pub max_pending_bytes: u64,
 }
@@ -42,6 +46,12 @@ pub struct BatchLimits {
 /// Proposal/check/commit counters, including unresolved work after a failure.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct BatchStatistics {
+    /// Original-satisfaction evaluation work, including failed attempts. This is
+    /// separate from cumulative candidate-search and exact-reduct work.
+    pub original_validation_work: u64,
+    /// Current original-validation workspace header and actual retained capacity.
+    /// Previously temporary validation storage is included in `max_pending_bytes`.
+    pub original_validation_bytes: u128,
     /// Calls made to the injected checker, including failed calls.
     pub checker_calls: u64,
     /// Exact completion attempts entered, including scratch refusals.
@@ -100,6 +110,7 @@ impl<E: std::error::Error + 'static> std::error::Error for BatchError<E> {
 #[derive(Debug, Default)]
 pub(super) struct State {
     pub(super) pending: Vec<Interpretation>,
+    validation: Validation,
     exhausted: bool,
     statistics: BatchStatistics,
 }
@@ -111,6 +122,8 @@ impl StableModels {
     pub fn batch_statistics(&self) -> BatchStatistics {
         BatchStatistics {
             pending: self.batch.pending.len(),
+            original_validation_work: self.batch.validation.work(),
+            original_validation_bytes: self.batch.validation.retained_bytes(),
             ..self.batch.statistics
         }
     }
@@ -207,9 +220,11 @@ impl StableModels {
         }
         // Retained vector capacity can exceed the number of rows in a partial
         // batch. Do not silently waive its payload on a smaller retry request.
-        if self.pending_row_bytes() * self.batch.pending.capacity() as u128
-            > u128::from(limits.max_pending_bytes)
-        {
+        let available = self
+            .validation_allowance(limits)
+            .map_err(BatchError::Limits)?;
+        self.batch.validation.release_excess(available);
+        if self.batch.validation.retained_bytes() > available as u128 {
             return Err(BatchError::Limits(Incomplete::PendingBytes));
         }
         increment(&mut self.batch.statistics.checker_calls).map_err(BatchError::Search)?;
@@ -271,15 +286,7 @@ impl StableModels {
         if self.batch.exhausted {
             return Ok(());
         }
-        if self.pending_row_bytes() * limits.max_candidates.get() as u128
-            > u128::from(limits.max_pending_bytes)
-        {
-            return Err(Incomplete::PendingBytes);
-        }
-        self.batch
-            .pending
-            .try_reserve_exact(limits.max_candidates.get())
-            .map_err(|_| Incomplete::Allocation)?;
+        let available = self.prepare_pending(limits)?;
         let index = self.walk_index()?;
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
@@ -320,7 +327,7 @@ impl StableModels {
                 started,
             );
             self.statistics.search = budget.statistics;
-            self.admit_produced(&produced);
+            self.admit_produced(&produced, available);
             return Ok(());
         }
         while self.batch.pending.len() < limits.max_candidates.get() {
@@ -337,6 +344,17 @@ impl StableModels {
                 &mut self.statistics,
             ) {
                 Ok(Some(candidate)) => {
+                    if let Err(error) = self.batch.validation.admit(
+                        &self.theory,
+                        &candidate,
+                        self.limits,
+                        available,
+                        &self.cancellation,
+                        &mut self.statistics,
+                    ) {
+                        self.pending_error = Some(error);
+                        break;
+                    }
                     // The interpretation is retained even if its exact block cannot fit.
                     let started = timing::start(self.statistics.phase_timings.as_ref());
                     let block = self.proposer.exclude(&candidate, &mut budget);
@@ -393,18 +411,18 @@ impl StableModels {
     /// decides membership. Every completed classical leaf crosses the same
     /// independent original-satisfaction boundary as scalar proposals before
     /// the external batch checker receives it.
-    fn admit_produced(&mut self, produced: &super::region_proposals::Produced) {
+    fn admit_produced(&mut self, produced: &super::region_proposals::Produced, available: usize) {
         self.batch.exhausted = produced.exhausted;
         self.pending_error = produced.stopped;
         for (validated, candidate) in self.batch.pending.iter().enumerate() {
-            let result = validate_proposal(
+            let result = self.batch.validation.admit(
                 &self.theory,
                 candidate,
                 self.limits,
+                available,
                 &self.cancellation,
                 &mut self.statistics,
-            )
-            .and_then(|()| increment(&mut self.statistics.candidates));
+            );
             if let Err(error) = result {
                 // Only the validated prefix crossed the proposal boundary.
                 // The stopped suffix establishes no coverage, even when
@@ -422,6 +440,38 @@ impl StableModels {
             + (self.theory.atom_count().div_ceil(64) as u128) * 8
             + std::mem::size_of::<BatchVerdict>() as u128
             + 1
+    }
+
+    fn prepare_pending(&mut self, limits: BatchLimits) -> Result<usize, Incomplete> {
+        let requested = self.pending_row_bytes() * limits.max_candidates.get() as u128;
+        let available = u128::from(limits.max_pending_bytes)
+            .checked_sub(requested)
+            .ok_or(Incomplete::PendingBytes)?;
+        let available = usize::try_from(available).unwrap_or(usize::MAX);
+        // Release optional old validation storage before reserving a larger
+        // pending vector, so the two allocations cannot exceed the request
+        // merely because the previous call retained oversized scratch.
+        self.batch.validation.release_excess(available);
+        if self.batch.validation.retained_bytes() > available as u128 {
+            return Err(Incomplete::PendingBytes);
+        }
+        self.batch
+            .pending
+            .try_reserve_exact(limits.max_candidates.get())
+            .map_err(|_| Incomplete::Allocation)?;
+        let actual_available = self.validation_allowance(limits)?;
+        self.batch.validation.release_excess(actual_available);
+        if self.batch.validation.retained_bytes() > actual_available as u128 {
+            return Err(Incomplete::PendingBytes);
+        }
+        Ok(actual_available)
+    }
+
+    fn validation_allowance(&self, limits: BatchLimits) -> Result<usize, Incomplete> {
+        let available = u128::from(limits.max_pending_bytes)
+            .checked_sub(self.pending_row_bytes() * self.batch.pending.capacity() as u128)
+            .ok_or(Incomplete::PendingBytes)?;
+        Ok(usize::try_from(available).unwrap_or(usize::MAX))
     }
 
     fn commit(
@@ -506,30 +556,7 @@ fn proposal(
         Some(super::Proposal::Candidate(candidate)) => candidate,
         Some(super::Proposal::Stable(_)) => return Err(Incomplete::InvalidWitness),
     };
-    // Proposals cross to an external checker, so they are validated here
-    // under their own limit and phase before that boundary, whatever the
-    // proposer's construction promises.
-    validate_proposal(theory, &candidate, limits, budget.cancellation, statistics)?;
-    increment(&mut statistics.candidates)?;
+    // The batch owner validates this candidate before blocking or publication,
+    // using the same workspace and boundary as a joined production round.
     Ok(Some(candidate))
-}
-
-fn validate_proposal(
-    theory: &Theory,
-    candidate: &Interpretation,
-    limits: super::Limits,
-    cancellation: &crate::Cancellation,
-    statistics: &mut super::Statistics,
-) -> Result<(), Incomplete> {
-    let started = timing::start(statistics.phase_timings.as_ref());
-    let original = models(theory, candidate, verification(limits), cancellation);
-    timing::finish(
-        &mut statistics.phase_timings,
-        Phase::OriginalValidation,
-        started,
-    );
-    if !original? {
-        return Err(Incomplete::InvalidWitness);
-    }
-    Ok(())
 }

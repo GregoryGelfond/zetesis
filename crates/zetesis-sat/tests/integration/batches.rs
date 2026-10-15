@@ -114,6 +114,7 @@ fn failed_checker_retains_exact_order_and_retries_without_reproposal() {
     assert!(matches!(result, Err(BatchError::Checker("device lost"))));
     assert_eq!(search.batch_statistics().pending, 3);
     let before = search.statistics().candidates;
+    let validation_before = search.batch_statistics().original_validation_work;
     let result = search
         .next_batch(limits(3), |original, candidates| {
             assert_eq!(
@@ -128,9 +129,89 @@ fn failed_checker_retains_exact_order_and_retries_without_reproposal() {
         .unwrap();
     assert_eq!(result.len(), 3);
     assert_eq!(search.statistics().candidates, before);
+    assert_eq!(
+        search.batch_statistics().original_validation_work,
+        validation_before
+    );
     assert_eq!(search.batch_statistics().checker_calls, 2);
     assert_eq!(search.batch_statistics().committed, 3);
     assert!(!search.exhausted());
+}
+
+#[test]
+fn scalar_and_joined_batches_validate_every_original_independently_of_timing() {
+    let owner = three_choices();
+    let family = expected(&owner);
+    let expected_work: u64 = family
+        .iter()
+        .map(|atoms| {
+            let candidate =
+                zetesis_ferraris::Interpretation::new(&owner, atoms.iter().copied()).unwrap();
+            let mut workspace = zetesis_ferraris::EvaluationWorkspace::default();
+            let attempt = workspace.evaluate(
+                &candidate,
+                zetesis_ferraris::EvaluationLimits::default(),
+                &Cancellation::default(),
+            );
+            assert!(attempt.result.unwrap().is_model());
+            attempt.work
+        })
+        .sum();
+    for workers in [1, 3] {
+        for timed in [false, true] {
+            let mut search = StableModels::with_region_producers(
+                &owner,
+                zetesis_test_support::counts::nonzero(workers),
+                Limits::default(),
+                Cancellation::default(),
+            )
+            .unwrap();
+            if timed {
+                search.enable_phase_timing();
+            }
+            let mut actual = BTreeSet::new();
+            while !search.exhausted() {
+                let batch = search
+                    .next_batch(limits(3), |original, candidates| {
+                        assert!(original.same_instance(&owner));
+                        for candidate in candidates {
+                            assert!(candidate.theory().same_instance(&owner));
+                            assert!(
+                                zetesis_ferraris::check(
+                                    original,
+                                    candidate,
+                                    zetesis_ferraris::Limits::default(),
+                                    &Cancellation::default()
+                                )
+                                .unwrap()
+                                .accepted()
+                            );
+                        }
+                        Ok::<_, Infallible>(vec![BatchVerdict::NoProperSubset; candidates.len()])
+                    })
+                    .unwrap();
+                for model in batch {
+                    assert!(actual.insert(model.atoms().collect()));
+                }
+            }
+            assert_eq!(actual, family);
+            assert_eq!(
+                search.batch_statistics().original_validation_work,
+                expected_work
+            );
+            assert!(
+                search.batch_statistics().original_validation_bytes
+                    > std::mem::size_of::<zetesis_ferraris::EvaluationWorkspace>() as u128
+            );
+            assert_eq!(
+                search
+                    .statistics()
+                    .phase_timings
+                    .map(|timings| timings.original_validation.calls),
+                timed.then_some(8)
+            );
+        }
+    }
 }
 
 #[test]

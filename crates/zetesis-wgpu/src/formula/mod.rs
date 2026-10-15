@@ -24,7 +24,9 @@ pub struct FormulaLimits {
     /// schedule and actual retained node/root upload-vector element capacities.
     /// These staging buffers coexist with device copies during upload and are
     /// released afterward. The directory is charged by capacity and released once
-    /// node packing finishes. Seed/result host allowances remain requested sizes.
+    /// node packing finishes. Candidate upload scratch is retained only for an
+    /// unchanged subject and batch shape, and charged by actual element capacity.
+    /// Result host allowances remain requested sizes.
     /// Caller-owned inputs, allocator overhead and driver-private allocations
     /// or deferred retirement are excluded; this is not an RSS bound.
     pub max_batch_bytes: u64,
@@ -45,6 +47,11 @@ pub struct FormulaLimits {
     /// condition visits and portable limb arithmetic; constant guards carry no
     /// numeric row charge. These are policy units, not raw GPU instructions.
     /// Inactive nodes still consume their allowance.
+    /// Opt-in changed-dependency execution additionally charges `2*W` setup
+    /// and `W+nodes+4*variables+6*incidences` per sweep, where `W` is the
+    /// ceiling of `nodes/32`. This bounds two-bit domain shrink events, their
+    /// incident gate visits, dirty tests and generation clears; it does not
+    /// discount skipped gates. A smaller allowance can select dense execution.
     /// A budget below mandatory setup is refused before dispatch.
     pub max_work_per_candidate: u32,
     /// Maximum host wait for submitted work; not GPU preemption or a deadline
@@ -118,6 +125,9 @@ impl FormulaCheck {
 /// Residency and allocation diagnostics for a successful nonempty batch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct FormulaBatchStats {
+    /// Actual gate scheduling after optional storage/work admission. This can
+    /// be dense even when the compiled profile requests changed dependencies.
+    pub propagation: crate::GpuPropagation,
     /// Whether this call uploaded a different immutable Theory instance.
     pub theory_uploaded: bool,
     /// Whether this call allocated its exact candidate-count transport shape.

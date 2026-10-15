@@ -14,6 +14,7 @@ pub(super) struct Preparation {
     shape: Shape,
     minimum: Plan,
     limits: FormulaLimits,
+    propagation: crate::GpuPropagation,
 }
 
 pub(super) struct PreparedGraph {
@@ -56,7 +57,13 @@ impl Preparation {
             shape,
             minimum,
             limits,
+            propagation: crate::GpuPropagation::Dense,
         })
+    }
+
+    pub(super) fn with_propagation(mut self, propagation: crate::GpuPropagation) -> Self {
+        self.propagation = propagation;
+        self
     }
 
     pub(super) fn finish(
@@ -98,7 +105,90 @@ impl Preparation {
             cancellation,
         )?;
         let levels = dependency::parallel_levels(self.shape.nodes, depth_count);
-        let schedule = Schedule::new(&self.shape, levels, device)?;
+        let (schedule, plan, mut roots) =
+            self.schedule(levels, &nodes, device, cancellation, &mut reserve)?;
+        dependency::pack(
+            &self.shape.theory,
+            self.shape.nodes,
+            schedule.levels,
+            &nodes,
+            &mut roots,
+            cancellation,
+        )?;
+        finalize_outputs(&self.shape, &mut nodes, cancellation)?;
+        if let Some(incidence) = &schedule.incidence {
+            incidence.pack(&nodes, self.shape.nodes, &mut roots, cancellation)?;
+        }
+        poll(cancellation)?;
+        Ok((
+            PreparedGraph {
+                graph: Graph {
+                    shape: self.shape,
+                    schedule,
+                },
+                nodes,
+                roots,
+            },
+            plan,
+        ))
+    }
+
+    fn schedule(
+        &self,
+        levels: u32,
+        nodes: &Vec<u32>,
+        device: &wgpu::Limits,
+        cancellation: &Cancellation,
+        reserve: &mut impl FnMut(usize) -> Result<Vec<u32>, GpuError>,
+    ) -> Result<(Schedule, Plan, Vec<u32>), GpuError> {
+        poll(cancellation)?;
+        let node_capacity = retained_bytes(nodes)?;
+        if self.propagation == crate::GpuPropagation::ChangedDependencies {
+            let indexed = (|| {
+                let schedule = Schedule::new(&self.shape, levels, device)?;
+                let offset = u32::try_from(schedule.root_bytes / 4)
+                    .map_err(|_| capacity("formula incidence offset exceeds u32"))?;
+                let Some(incidence) = crate::formula_graph::incidence::Layout::new(
+                    nodes,
+                    self.shape.nodes,
+                    self.shape.variables,
+                    offset,
+                    cancellation,
+                )?
+                else {
+                    return Ok(None);
+                };
+                let schedule = schedule.with_incidence(incidence, device)?;
+                self.reserve_schedule(schedule, node_capacity, device, reserve)
+                    .map(Some)
+            })();
+            match indexed {
+                Ok(Some(prepared)) => return Ok(prepared),
+                Ok(None) => {}
+                Err(error)
+                    if matches!(
+                        error.kind(),
+                        GpuErrorKind::Capacity | GpuErrorKind::Allocation
+                    ) => {}
+                Err(error) => return Err(error),
+            }
+        }
+        poll(cancellation)?;
+        self.reserve_schedule(
+            Schedule::new(&self.shape, levels, device)?,
+            node_capacity,
+            device,
+            reserve,
+        )
+    }
+
+    fn reserve_schedule(
+        &self,
+        schedule: Schedule,
+        node_capacity: u64,
+        device: &wgpu::Limits,
+        reserve: &mut impl FnMut(usize) -> Result<Vec<u32>, GpuError>,
+    ) -> Result<(Schedule, Plan, Vec<u32>), GpuError> {
         let mut plan = Plan::layout(
             &self.shape,
             &schedule,
@@ -114,35 +204,14 @@ impl Preparation {
             0,
             self.limits.max_batch_bytes,
         )?;
-        poll(cancellation)?;
-        let mut roots = reserve_words(&mut reserve, schedule.root_bytes)?;
+        let roots = reserve_words(reserve, schedule.root_bytes)?;
         plan.staging(
             schedule.root_bytes,
             0,
             retained_bytes(&roots)?,
             self.limits.max_batch_bytes,
         )?;
-        dependency::pack(
-            &self.shape.theory,
-            self.shape.nodes,
-            schedule.levels,
-            &nodes,
-            &mut roots,
-            cancellation,
-        )?;
-        finalize_outputs(&self.shape, &mut nodes, cancellation)?;
-        poll(cancellation)?;
-        Ok((
-            PreparedGraph {
-                graph: Graph {
-                    shape: self.shape,
-                    schedule,
-                },
-                nodes,
-                roots,
-            },
-            plan,
-        ))
+        Ok((schedule, plan, roots))
     }
 }
 

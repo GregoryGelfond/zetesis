@@ -23,6 +23,7 @@ mod candidates;
 mod context;
 mod formula;
 mod formula_graph;
+mod kernel;
 mod lazy;
 mod packing;
 mod relation;
@@ -43,6 +44,7 @@ use residency::ResidentGraph;
 use runtime::{DeviceProfile, ErrorScopes, Runtime};
 
 pub use context::GpuContext;
+pub use kernel::{GpuKernelOptions, GpuPropagation, GpuWorkgroupSize};
 
 pub use formula::{
     FormulaBatchStats, FormulaCheck, FormulaLimits, FormulaStatistics, FormulaVerdict,
@@ -318,6 +320,7 @@ impl GpuOracle {
             pipeline_label: "zetesis static batch",
             shader: SHADER.into(),
             entry_point: "check",
+            kernel: crate::kernel::Kernel::Fixed,
             validate_limits: check_adapter_limits,
         }
     }

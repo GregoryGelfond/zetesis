@@ -12,8 +12,9 @@ use zetesis_ferraris::{
 };
 use zetesis_theory_support::theories::theory;
 use zetesis_wgpu::{
-    FormulaLimits, FormulaVerdict, GateProjection, GpuErrorKind, GpuFormulaOracle, GpuOptions,
-    GpuSelection, ResidualReason,
+    FormulaLimits, FormulaVerdict, GateProjection, GpuErrorKind, GpuFormulaOracle,
+    GpuFormulaProfile, GpuKernelOptions, GpuOptions, GpuPropagation, GpuSelection,
+    GpuWorkgroupSize, ResidualReason,
 };
 
 fn oracle(backend: GpuApi, projection: GateProjection) -> GpuFormulaOracle {
@@ -83,6 +84,35 @@ fn sweep_work(theory: &Theory) -> u32 {
     .unwrap()
 }
 
+fn propagation_work(theory: &Theory, propagation: GpuPropagation) -> (u32, u32) {
+    let mut setup = setup_work(theory);
+    let mut sweep = sweep_work(theory);
+    if propagation == GpuPropagation::ChangedDependencies {
+        let mut variables = theory.atom_count();
+        let mut incidences = 0;
+        for index in 0..theory.view().len() {
+            match theory.view().node(index).unwrap() {
+                NodeView::Atom(_) => {}
+                NodeView::False => variables += 1,
+                NodeView::Implies(..) => {
+                    variables += 1;
+                    incidences += 3;
+                }
+                NodeView::And(children) | NodeView::Or(children) => {
+                    variables += 1;
+                    incidences += children.len() + 1;
+                }
+                _ => panic!("work-receipt helper requires Boolean fixtures"),
+            }
+        }
+        let nodes = theory.view().len();
+        let words = nodes.div_ceil(32);
+        setup += u32::try_from(2 * words).unwrap();
+        sweep += u32::try_from(words + nodes + 4 * variables + 6 * incidences).unwrap();
+    }
+    (setup, sweep)
+}
+
 fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
     let inputs = candidates(theory);
     let checks = oracle
@@ -118,8 +148,7 @@ fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
             }
             FormulaVerdict::NotModel => {}
         }
-        let setup = setup_work(theory);
-        let sweep = sweep_work(theory);
+        let (setup, sweep) = propagation_work(theory, cold.propagation);
         assert_eq!(
             result.statistics().work,
             setup + result.statistics().rounds * sweep
@@ -281,9 +310,149 @@ fn qualify_frozen_queries(backend: GpuApi, projection: GateProjection) {
     assert!(totals.0 > 0 && totals.1 > 0);
     println!("completed refutations={} residuals={}", totals.0, totals.1);
     qualify_root_propagation(&mut oracle);
-    qualify_subset_strides(&mut oracle);
-    native::qualify(&mut oracle);
-    native::qualify_shared_ordinals(&mut oracle);
+    qualify_kernel_options(&mut oracle);
+}
+
+fn qualify_kernel_options(oracle: &mut GpuFormulaOracle) {
+    let context = oracle.context().clone();
+    println!("formula granted features={:?}", context.features());
+    for workgroup_size in [GpuWorkgroupSize::Threads32, GpuWorkgroupSize::Threads64] {
+        for optional_features in [false, true] {
+            for propagation in [GpuPropagation::Dense, GpuPropagation::ChangedDependencies] {
+                let options = GpuKernelOptions {
+                    workgroup_size,
+                    optional_features,
+                    propagation,
+                };
+                let profile = GpuFormulaProfile::from_context_with_kernel(
+                    &context,
+                    oracle.projection(),
+                    options,
+                )
+                .unwrap();
+                assert!(profile.context().same_instance(&context));
+                assert_eq!(profile.kernel_options(), options);
+                let mut configured = GpuFormulaOracle::from_profile(&profile).unwrap();
+                assert!(configured.context().same_instance(&context));
+                assert_eq!(configured.compiled_profile().kernel_options(), options);
+                println!("formula qualified options={options:?}");
+                qualify_subset_strides(&mut configured);
+                for theory in scheduled_theories() {
+                    compare(&mut configured, &theory);
+                    assert_eq!(
+                        configured.last_batch_stats().unwrap().propagation,
+                        propagation
+                    );
+                }
+                native::qualify(&mut configured);
+                native::qualify_shared_ordinals(&mut configured);
+                if propagation == GpuPropagation::ChangedDependencies {
+                    for theory in frozen_theories() {
+                        compare(&mut configured, &theory);
+                    }
+                    qualify_next_generation(&mut configured);
+                    qualify_incidence_fallback(&mut configured);
+                }
+            }
+        }
+    }
+}
+
+fn qualify_next_generation(oracle: &mut GpuFormulaOracle) {
+    let graph = theory(
+        2,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::or_pair([1, 1]),
+            Node::implies(0, 2),
+            Node::and_pair([0, 0]),
+        ],
+        vec![3, 4],
+    );
+    let candidate = Interpretation::new(&graph, [0, 1]).unwrap();
+    assert!(
+        check(
+            &graph,
+            &candidate,
+            Limits::default(),
+            &Cancellation::default()
+        )
+        .unwrap()
+        .accepted()
+    );
+    // The implication precedes the lower-level conjunction that forces a.
+    // Strict-subset projection then forces b false. Only the next generation
+    // can revisit the implication and or(b,b) and discover the contradiction.
+    // N=5, E=6, A=2, R=2, L=3 gives dense setup23/sweep127.
+    // W=1, V=5, I=9 adds setup2 and sweep(1+5+20+54)=80.
+    for (rounds, expected) in [
+        (1, FormulaVerdict::Residual(ResidualReason::RoundLimit)),
+        (2, FormulaVerdict::NoProperSubset),
+    ] {
+        let work = 25 + rounds * 207;
+        let checks = oracle
+            .propagate_batch(
+                &graph,
+                std::slice::from_ref(&candidate),
+                FormulaLimits {
+                    max_rounds: rounds,
+                    max_work_per_candidate: work,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            oracle.last_batch_stats().unwrap().propagation,
+            GpuPropagation::ChangedDependencies
+        );
+        assert_eq!(checks[0].verdict(), expected);
+        assert_eq!(checks[0].statistics().rounds, rounds);
+        assert_eq!(checks[0].statistics().work, work);
+    }
+}
+
+fn qualify_incidence_fallback(oracle: &mut GpuFormulaOracle) {
+    let theory = theory(
+        2,
+        vec![Node::atom(0), Node::atom(1), Node::and_pair([0, 1])],
+        vec![2],
+    );
+    let inputs = candidates(&theory);
+    oracle
+        .propagate_batch(&theory, &inputs, FormulaLimits::default())
+        .unwrap();
+    assert_eq!(
+        oracle.last_batch_stats().unwrap().propagation,
+        GpuPropagation::ChangedDependencies
+    );
+    // Tighten mandatory work below indexed setup but exactly to dense setup.
+    // The owned indexed graph must retire without converting refusal into proof.
+    let results = oracle
+        .propagate_batch(
+            &theory,
+            &inputs,
+            FormulaLimits {
+                max_work_per_candidate: setup_work(&theory),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        oracle.last_batch_stats().unwrap().propagation,
+        GpuPropagation::Dense
+    );
+    for result in &results[..3] {
+        assert_eq!(result.verdict(), FormulaVerdict::NotModel);
+    }
+    assert_eq!(
+        results[3].verdict(),
+        FormulaVerdict::Residual(ResidualReason::WorkLimit)
+    );
+    assert_eq!(
+        oracle.compiled_profile().kernel_options().propagation,
+        GpuPropagation::ChangedDependencies
+    );
 }
 
 fn scheduled_theories() -> [Theory; 2] {

@@ -114,6 +114,7 @@ impl GpuLazyOracle {
             pipeline_label: "zetesis lazy consequence pipeline",
             shader: Cow::Borrowed(SHADER),
             entry_point: "consequence",
+            kernel: crate::kernel::Kernel::Fixed,
             validate_limits: check_limits,
         }
     }

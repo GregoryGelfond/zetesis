@@ -1,7 +1,7 @@
 //! Device ownership for a separately checked complete-theory certificate.
 
 use super::admission::Admission;
-use super::packing::Packing;
+use super::packing::{Graph, Packed, Packing, Plan};
 use super::transport::{Execution, Resident};
 use super::{
     SHADER, TightGpuActivity, TightGpuBatchStats, TightGpuCheck, TightGpuError, TightGpuLimits,
@@ -43,11 +43,19 @@ pub struct GpuTightOracle {
     runtime: Runtime,
     support: TightSupport,
     resident: Option<Resident>,
+    candidates: crate::candidates::Staging,
     epoch: u32,
     last: Option<TightGpuBatchStats>,
     activity: TightGpuActivity,
     last_compute_time: Option<Duration>,
 }
+
+struct PreparedCall {
+    fresh: Option<(Graph, Packed)>,
+    plan: Plan,
+    stats: TightGpuBatchStats,
+}
+
 impl GpuTightOracle {
     /// Create an independently owned device/pipeline using hard adapter filters.
     /// Construction and compilation costs are outside per-batch limits.
@@ -128,11 +136,41 @@ impl GpuTightOracle {
         &self.runtime.context
     }
 
+    /// Compile explicit physical choices on an existing context.
+    ///
+    /// The original-truth and support contracts are unchanged. Optional integer
+    /// instructions require granted features and retain exact wide arithmetic.
+    ///
+    /// # Errors
+    /// Reports the failures of [`Self::from_context`], including an unsupported
+    /// workgroup width. No different device or support policy is substituted.
+    pub fn from_context_with_kernel(
+        context: &crate::GpuContext,
+        support: TightSupport,
+        options: crate::GpuKernelOptions,
+    ) -> Result<Self, GpuError> {
+        let mut profile = Self::profile(support);
+        profile.kernel = crate::kernel::Kernel::Tight(options);
+        let runtime = pollster::block_on(Runtime::from_context(context, profile))?;
+        Ok(Self::with_runtime(runtime, support))
+    }
+
+    /// Physical options retained by this kernel; no device operation.
+    ///
+    /// # Panics
+    /// Panics if the internal runtime is not a tight kernel. Every public
+    /// constructor establishes this invariant; callers cannot replace it.
+    #[must_use]
+    pub fn kernel_options(&self) -> crate::GpuKernelOptions {
+        self.runtime.kernel.options().expect("tight kernel")
+    }
+
     fn with_runtime(runtime: Runtime, support: TightSupport) -> Self {
         Self {
             runtime,
             support,
             resident: None,
+            candidates: crate::candidates::Staging::default(),
             epoch: 0,
             last: None,
             activity: TightGpuActivity::default(),
@@ -151,6 +189,7 @@ impl GpuTightOracle {
                 TightSupport::Grouped => "check_grouped",
             },
             validate_limits: check_limits,
+            kernel: crate::kernel::Kernel::Tight(crate::GpuKernelOptions::default()),
         }
     }
     /// Fixed physical support-construction policy; no device operation.
@@ -186,6 +225,7 @@ impl GpuTightOracle {
     /// a device invalidated by timeout, control interruption or execution failure.
     pub fn clear_residency(&mut self) {
         self.resident = None;
+        self.candidates.release();
         self.last = None;
         self.last_compute_time = None;
     }
@@ -201,6 +241,10 @@ impl GpuTightOracle {
     /// roots, independently of the particular valid ranks. Thus theory identity
     /// is sufficient for this producer cache; arbitrary supplied producers are
     /// never accepted. Transport is replaced when candidate count changes.
+    /// Host upload words reuse initialized scratch for that same subject/count.
+    /// Their actual capacity is charged, and an oversized optional allocation is
+    /// replaced when a smaller allowance fits fresh storage. Replacement drops
+    /// old scratch before cold preparation; explicit clearing releases it too.
     ///
     /// # Errors
     /// Returns no partial result vector on foreign identity, capacity, work,
@@ -241,12 +285,68 @@ impl GpuTightOracle {
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
+        let PreparedCall { fresh, plan, stats } =
+            self.prepare(certificate, candidates, limits, cancellation)?;
+        poll(cancellation)?;
+        let scopes = ErrorScopes::new(self.runtime.device());
+        if let Some((mut graph, packed)) = fresh {
+            graph.rows.release();
+            self.activity.uploaded_bytes = graph.bytes;
+            self.resident = Some(Resident::new(self.runtime.device(), graph, &packed));
+        }
+        self.epoch = plan.epoch;
+        let outcome = self
+            .resident
+            .as_mut()
+            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident tight graph"))
+            .and_then(|resident| {
+                resident.dispatch(
+                    &Execution {
+                        device: self.runtime.device(),
+                        queue: self.runtime.queue(),
+                        pipeline: &self.runtime.pipeline,
+                        timeout: limits.timeout,
+                        cancellation,
+                    },
+                    self.candidates.words(),
+                    &plan,
+                    &mut self.activity,
+                    &mut self.last_compute_time,
+                )
+            });
+        let result = self.runtime.complete(scopes, outcome).and_then(|checks| {
+            poll(cancellation)?;
+            Ok(checks)
+        });
+        if result.is_ok() {
+            self.last = Some(stats);
+        } else {
+            self.last_compute_time = None;
+        }
+        result
+    }
+
+    fn prepare(
+        &mut self,
+        certificate: &TightPlan,
+        candidates: &[Interpretation],
+        limits: TightGpuLimits,
+        cancellation: &Cancellation,
+    ) -> Result<PreparedCall, GpuError> {
         let timed = self
             .runtime
             .device()
             .features()
             .contains(wgpu::Features::TIMESTAMP_QUERY);
         let (admitted_limits, timing_bytes) = reserve_timing(limits, timed)?;
+        // Admission can prepare a numeric-row directory. Drop unrelated host
+        // scratch first while leaving the existing device-refusal policy intact.
+        if self.resident.as_ref().is_none_or(|resident| {
+            !resident.graph.theory.same_instance(certificate.theory())
+                || !resident.matches_count(candidates.len())
+        }) {
+            self.candidates.release();
+        }
         let mut admission = Admission::new(
             certificate,
             candidates,
@@ -286,7 +386,6 @@ impl GpuTightOracle {
             plan,
             mut stats,
         } = admission;
-        stats.accounted_bytes += timing_bytes;
         stats.resident_transport_bytes += timing_bytes;
         stats.downloaded_bytes += if timed {
             crate::timing::READBACK_BYTES
@@ -297,44 +396,18 @@ impl GpuTightOracle {
             .as_ref()
             .or_else(|| self.resident.as_ref().map(|r| &r.graph))
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing tight packing graph"))?;
-        let seeds = plan.pack(graph, candidates, cancellation)?;
-        poll(cancellation)?;
-        let scopes = ErrorScopes::new(self.runtime.device());
-        if let Some((mut graph, packed)) = fresh.zip(packed) {
-            graph.rows.release();
-            self.activity.uploaded_bytes = graph.bytes;
-            self.resident = Some(Resident::new(self.runtime.device(), graph, &packed));
-        }
-        self.epoch = plan.epoch;
-        let outcome = self
-            .resident
-            .as_mut()
-            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident tight graph"))
-            .and_then(|resident| {
-                resident.dispatch(
-                    &Execution {
-                        device: self.runtime.device(),
-                        queue: self.runtime.queue(),
-                        pipeline: &self.runtime.pipeline,
-                        timeout: limits.timeout,
-                        cancellation,
-                    },
-                    &seeds,
-                    &plan,
-                    &mut self.activity,
-                    &mut self.last_compute_time,
-                )
-            });
-        let result = self.runtime.complete(scopes, outcome).and_then(|checks| {
-            poll(cancellation)?;
-            Ok(checks)
-        });
-        if result.is_ok() {
-            self.last = Some(stats);
-        } else {
-            self.last_compute_time = None;
-        }
-        result
+        stats.accounted_bytes = plan.pack(
+            graph,
+            candidates,
+            &mut self.candidates,
+            admitted_limits.max_batch_bytes,
+            cancellation,
+        )? + timing_bytes;
+        Ok(PreparedCall {
+            fresh: fresh.zip(packed),
+            plan,
+            stats,
+        })
     }
 }
 

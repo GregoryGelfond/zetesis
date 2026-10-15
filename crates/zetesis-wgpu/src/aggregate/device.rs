@@ -73,6 +73,7 @@ impl GpuAggregateOracle {
             pipeline_label: "original and frozen aggregate guards",
             shader: SHADER.into(),
             entry_point: "reduce",
+            kernel: crate::kernel::Kernel::Fixed,
             validate_limits: check_limits,
         }
     }

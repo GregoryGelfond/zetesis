@@ -1,8 +1,9 @@
 // One workgroup per frozen candidate. Domains are sets {false,true} encoded
 // as 1,2,3. Every atomic intersection preserves all satisfying completions.
+override WORKGROUP_SIZE: u32 = 64u;
 struct Params {
     atoms: u32, nodes: u32, roots: u32, variables: u32,
-    words: u32, worlds: u32, max_rounds: u32, max_work: u32,
+    words: u32, incidence: u32, max_rounds: u32, max_work: u32,
     setup_work: u32, sweep_work: u32, epoch: u32, levels: u32,
 }
 struct Node { tag: u32, left: u32, right: u32, output: u32, }
@@ -19,6 +20,39 @@ var<workgroup> bad_root: atomic<u32>;
 var<workgroup> stage: u32;
 var<workgroup> subset_count: atomic<u32>;
 var<workgroup> subset_last: atomic<u32>;
+var<private> domain_base: u32;
+var<private> dirty_generation: u32;
+
+fn dirty_words() -> u32 {
+    return select(0u, (params.nodes + 31u) / 32u, params.incidence != 0u);
+}
+fn dirty_base(generation: u32) -> u32 {
+    return domain_base + params.variables + generation * dirty_words();
+}
+// A wake reaches both generations. A gate can consume the current bit before
+// a same-level writer finishes; the next bit survives until the next sweep.
+// Each buffer is cleared only at a uniform boundary where no writer is active.
+fn wake(index: u32) {
+    if (params.incidence == 0u) { return; }
+    let slot = index - domain_base;
+    let start = roots[params.incidence + slot];
+    let end = roots[params.incidence + slot + 1u];
+    let order = params.incidence + params.variables + 1u;
+    let current = dirty_base(dirty_generation);
+    let next = dirty_base(1u - dirty_generation);
+    for (var position = start; position < end; position++) {
+        let gate = roots[order + position];
+        let bit = 1u << (gate % 32u);
+        atomicOr(&domains[current + gate / 32u], bit);
+        atomicOr(&domains[next + gate / 32u], bit);
+    }
+}
+fn take_dirty(index: u32) -> bool {
+    if (params.incidence == 0u) { return true; }
+    let bit = 1u << (index % 32u);
+    let previous = atomicAnd(&domains[dirty_base(dirty_generation) + index / 32u], ~bit);
+    return (previous & bit) != 0u;
+}
 
 // Headers occupy 4*N words; wide rows occupy the checked appended tail.
 fn node_at(index: u32) -> Node {
@@ -62,7 +96,10 @@ fn original(world: u32, mask_base: u32, index: u32) {
 fn narrow(index: u32, allowed: u32) {
     let previous = atomicAnd(&domains[index], allowed);
     let next = previous & allowed;
-    if (next != previous) { atomicStore(&changed, 1u); }
+    if (next != previous) {
+        atomicStore(&changed, 1u);
+        wake(index);
+    }
     if (next == 0u) { atomicStore(&conflict, 1u); }
 }
 // Native groups retain every operand occurrence. A composite output has its
@@ -136,6 +173,7 @@ fn finish(world: u32, status: u32, rounds: u32, work: u32) {
     results[base + 5u] = 0x46525031u;
 }
 fn propagate_node(base: u32, mask_base: u32, index: u32) {
+    if (!take_dirty(index)) { return; }
     let node = node_at(index);
     // Crucial reduct boundary: an M-false composite is just false.
     // Its original connective must not constrain the children.
@@ -150,8 +188,10 @@ fn propagate_node(base: u32, mask_base: u32, index: u32) {
 // Asserted roots constrain their operands. Reuse original truth's dependency
 // levels in reverse so each level observes the preceding parent intersections.
 // Within a level, shared operands still use the same sound atomic transfers.
-// One sweep visits every node once; upward consequences may require another
-// sweep. Neither this order nor a fixed point establishes a countermodel.
+// A dense sweep visits every node once. Changed-dependency execution filters
+// those visits by the candidate's current generation; an output is a dependency
+// as well as every operand. Upward consequences may require another sweep.
+// Neither this order nor a fixed point establishes a countermodel.
 fn propagate_levels(base: u32, mask_base: u32, lane: u32) {
     if (params.levels == 0u) {
         if (lane == 0u) {
@@ -165,7 +205,7 @@ fn propagate_levels(base: u32, mask_base: u32, lane: u32) {
             let level = remaining - 1u;
             let start = roots[params.roots + level];
             let end = roots[params.roots + level + 1u];
-            for (var offset = start + lane; offset < end; offset += 64u) {
+            for (var offset = start + lane; offset < end; offset += WORKGROUP_SIZE) {
                 propagate_node(base, mask_base, roots[order + offset]);
             }
             storageBarrier();
@@ -173,12 +213,14 @@ fn propagate_levels(base: u32, mask_base: u32, lane: u32) {
         }
     }
 }
-@compute @workgroup_size(64)
+@compute @workgroup_size(WORKGROUP_SIZE)
 fn propagate(@builtin(workgroup_id) group: vec3<u32>,
              @builtin(local_invocation_index) lane: u32) {
     let world = group.x;
     let mask_base = world * params.nodes;
-    let base = world * params.variables;
+    let base = world * (params.variables + 2u * dirty_words());
+    domain_base = base;
+    dirty_generation = 0u;
     // Original truth precedes every frozen simplification. Pure chains retain
     // serial order; other DAGs visit each original node in its dependency level.
     if (lane == 0u) { atomicStore(&bad_root, 0u); }
@@ -193,7 +235,7 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
         for (var level = 0u; level < params.levels; level++) {
             let start = roots[params.roots + level];
             let end = roots[params.roots + level + 1u];
-            for (var offset = start + lane; offset < end; offset += 64u) {
+            for (var offset = start + lane; offset < end; offset += WORKGROUP_SIZE) {
                 original(world, mask_base, roots[order + offset]);
             }
             storageBarrier();
@@ -202,10 +244,10 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
     }
     storageBarrier();
     workgroupBarrier();
-    for (var atom = lane; atom < params.atoms; atom += 64u) {
+    for (var atom = lane; atom < params.atoms; atom += WORKGROUP_SIZE) {
         atomicStore(&domains[base + atom], select(1u, 3u, contains(world, atom)));
     }
-    for (var index = lane; index < params.nodes; index += 64u) {
+    for (var index = lane; index < params.nodes; index += WORKGROUP_SIZE) {
         let node = node_at(index);
         // Atom nodes already share the initialized semantic atom slot. All
         // other outputs occupy distinct dense auxiliary positions.
@@ -214,8 +256,14 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
                 select(1u, 3u, frozen[mask_base + index] != 0u));
         }
     }
+    // The first sweep sees every gate, including constraints already asserted
+    // by roots. Thereafter every strict-subset intersection uses `narrow` too.
+    for (var word = lane; word < dirty_words(); word += WORKGROUP_SIZE) {
+        atomicStore(&domains[dirty_base(0u) + word], 0xffffffffu);
+        atomicStore(&domains[dirty_base(1u) + word], 0u);
+    }
     storageBarrier();
-    for (var index = lane; index < params.roots; index += 64u) {
+    for (var index = lane; index < params.roots; index += WORKGROUP_SIZE) {
         let root = roots[index];
         if (frozen[mask_base + root] == 0u) { atomicStore(&bad_root, 1u); }
         atomicAnd(&domains[base + node_at(root).output], 2u);
@@ -238,30 +286,34 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
             if (lane == 0u) { finish(world, 5u, rounds, work); }
             return;
         }
+        dirty_generation = rounds & 1u;
+        for (var word = lane; word < dirty_words(); word += WORKGROUP_SIZE) {
+            atomicStore(&domains[dirty_base(1u - dirty_generation) + word], 0u);
+        }
         if (lane == 0u) {
             atomicStore(&changed, 0u);
             atomicStore(&conflict, 0u);
             atomicStore(&subset_count, 0u);
             atomicStore(&subset_last, 0u);
         }
+        if (params.incidence != 0u) { storageBarrier(); }
         workgroupBarrier();
         propagate_levels(base, mask_base, lane);
         storageBarrier();
         workgroupBarrier();
         // J is already constrained to M. Only M-true semantic atoms, never
-        // auxiliary gates, can witness a strict subset. All 64 lanes merge a
+        // auxiliary gates, can witness a strict subset. All workgroup lanes merge a
         // summary, including empty final strides. The last index is used only
         // when exactly one atom remains available across the entire group.
         var available = 0u;
         var last = 0u;
-        for (var atom = lane; atom < params.atoms; atom += 64u) {
+        for (var atom = lane; atom < params.atoms; atom += WORKGROUP_SIZE) {
             if (contains(world, atom) && (atomicLoad(&domains[base + atom]) & 1u) != 0u) {
                 available += 1u;
                 last = atom;
             }
         }
-        atomicAdd(&subset_count, available);
-        atomicMax(&subset_last, last);
+        merge_subset(lane, available, last);
         workgroupBarrier();
         if (lane == 0u) {
             let total = atomicLoad(&subset_count);

@@ -7,16 +7,25 @@ fn module() -> naga::Module {
     let module = naga::front::wgsl::parse_str(concat!(
         include_str!("../../src/formula.wgsl"),
         include_str!("../../src/formula_graph/numeric.wgsl"),
-        include_str!("../../src/formula/numeric.wgsl")
+        include_str!("../../src/formula/numeric.wgsl"),
+        include_str!("../../src/formula/subset.wgsl")
     ))
     .expect("production WGSL parses");
-    naga::valid::Validator::new(
+    let info = naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::empty(),
     )
     .validate(&module)
     .expect("production WGSL validates");
-    module
+    naga::back::pipeline_constants::process_overrides(
+        &module,
+        &info,
+        None,
+        &naga::back::PipelineConstants::default(),
+    )
+    .expect("default width resolves")
+    .0
+    .into_owned()
 }
 
 #[test]
@@ -75,7 +84,7 @@ fn formula_parameters_keep_the_packed_word_layout() {
         "roots",
         "variables",
         "words",
-        "worlds",
+        "incidence",
         "max_rounds",
         "max_work",
         "setup_work",

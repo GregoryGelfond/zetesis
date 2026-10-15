@@ -40,9 +40,12 @@ impl Resident {
         }
     }
     pub(super) fn matches(&self, plan: &Plan) -> bool {
+        self.matches_count(plan.worlds as usize)
+    }
+    pub(super) fn matches_count(&self, count: usize) -> bool {
         self.transport
             .as_ref()
-            .is_some_and(|transport| transport.worlds == plan.worlds)
+            .is_some_and(|transport| transport.worlds as usize == count)
     }
     pub(super) fn dispatch(
         &mut self,

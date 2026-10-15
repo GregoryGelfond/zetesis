@@ -29,6 +29,108 @@ fn preparation(theory: &Theory, limits: FormulaLimits) -> Result<Preparation, Gp
 }
 
 #[test]
+fn incidence_keeps_aliases_outputs_and_exact_receipts() {
+    let (prepared, plan) = preparation(&fixture(), FormulaLimits::default())
+        .unwrap()
+        .with_propagation(crate::GpuPropagation::ChangedDependencies)
+        .finish(&wgpu::Limits::default(), &Cancellation::default())
+        .unwrap();
+    let incidence = prepared.graph.schedule.incidence.as_ref().unwrap();
+    assert_eq!(incidence.offset, 15);
+    assert_eq!(
+        &prepared.roots[15..],
+        &[
+            0, 3, 5, 7, 9, 10, 11, 12, 1, 1, 7, 3, 7, 1, 3, 3, 5, 5, 5, 7,
+        ]
+    );
+    assert_eq!((plan.setup, plan.sweep), (34, 268));
+    assert_eq!(plan.domains, 2 * 9 * 4);
+    assert_eq!(plan.params(&prepared.graph)[5], 15);
+    let row = [
+        plan.epoch,
+        0,
+        2,
+        1,
+        plan.setup + plan.sweep,
+        super::super::packing::MAGIC,
+    ];
+    let mut words = row.to_vec();
+    let mut second = row;
+    second[1] = 1;
+    words.extend(second);
+    assert!(super::super::packing::decode(&words, &plan).is_ok());
+    words[4] -= 1;
+    assert_eq!(
+        super::super::packing::decode(&words, &plan)
+            .unwrap_err()
+            .kind(),
+        GpuErrorKind::Readback
+    );
+}
+
+#[test]
+fn optional_incidence_preserves_dense_admission() {
+    let device = wgpu::Limits::default();
+    let (_, dense) = preparation(&fixture(), FormulaLimits::default())
+        .unwrap()
+        .finish(&device, &Cancellation::default())
+        .unwrap();
+    for limits in [
+        FormulaLimits {
+            max_batch_bytes: dense.accounted,
+            ..Default::default()
+        },
+        FormulaLimits {
+            max_work_per_candidate: dense.setup,
+            ..Default::default()
+        },
+    ] {
+        let (prepared, plan) = preparation(&fixture(), limits)
+            .unwrap()
+            .with_propagation(crate::GpuPropagation::ChangedDependencies)
+            .finish(&device, &Cancellation::default())
+            .unwrap();
+        assert_eq!(
+            prepared.graph.schedule.propagation(),
+            crate::GpuPropagation::Dense
+        );
+        assert_eq!(
+            (plan.setup, plan.sweep, plan.domains),
+            (dense.setup, dense.sweep, dense.domains)
+        );
+    }
+}
+
+#[test]
+fn optional_incidence_allocation_failure_keeps_dense() {
+    let mut calls = 0;
+    let (prepared, _) = preparation(&fixture(), FormulaLimits::default())
+        .unwrap()
+        .with_propagation(crate::GpuPropagation::ChangedDependencies)
+        .finish_with(
+            &wgpu::Limits::default(),
+            &Cancellation::default(),
+            |length| {
+                calls += 1;
+                if calls == 2 {
+                    Err(GpuError::new(
+                        GpuErrorKind::Allocation,
+                        "optional reservation failed",
+                    ))
+                } else {
+                    vector(length)
+                }
+            },
+        )
+        .unwrap();
+    assert_eq!(calls, 3);
+    assert_eq!(
+        prepared.graph.schedule.propagation(),
+        crate::GpuPropagation::Dense
+    );
+}
+
+#[test]
 fn shared_interleaved_nodes_have_literal_stable_levels() {
     let (prepared, plan) = preparation(&fixture(), FormulaLimits::default())
         .unwrap()

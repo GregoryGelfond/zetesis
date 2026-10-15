@@ -1,6 +1,27 @@
 use super::*;
 
 #[test]
+fn only_supported_kernel_features_are_requested() {
+    for supported in [
+        wgpu::Features::empty(),
+        wgpu::Features::SUBGROUP,
+        wgpu::Features::SHADER_INT64,
+    ] {
+        assert_eq!(requested_features(supported, false), supported);
+    }
+    let supported =
+        wgpu::Features::SUBGROUP | wgpu::Features::TIMESTAMP_QUERY | wgpu::Features::SHADER_F16;
+    assert_eq!(
+        requested_features(supported, false),
+        wgpu::Features::SUBGROUP
+    );
+    assert_eq!(
+        requested_features(supported, true),
+        wgpu::Features::SUBGROUP | wgpu::Features::TIMESTAMP_QUERY
+    );
+}
+
+#[test]
 fn timestamps_require_an_explicit_supported_request() {
     use zetesis_backend::ComputeTimingStatus;
     assert_eq!(

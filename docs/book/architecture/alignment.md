@@ -83,6 +83,16 @@ and ordinal min/max rows. The separate `GpuAggregateOracle` remains an explicit
 library capability over supplied eligibility masks; ordinary solving does not
 route through that interface.
 
+Both membership checkers reuse initialized host candidate-upload storage while
+the theory owner and batch size stay unchanged. The existing owner-checked
+exporter still writes every candidate word, preserving order and repetitions.
+Actual retained capacity counts against each batch's allowance; a smaller
+allowance can replace an oversized optional buffer. Subject or batch-size changes
+release old scratch before cold preparation. Tight result decoding retains those
+same words until it has checked any unsupported-atom witness. This removes
+repeated host allocation and zero filling, without changing device uploads or
+the checking algorithm.
+
 ## Positive inference is a composition with a fixed point
 
 Consider `reachable(Y) :- reachable(X), open(X,Y), not blocked(Y).`

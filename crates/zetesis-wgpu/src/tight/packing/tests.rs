@@ -52,6 +52,17 @@ fn plan(graph: &Graph, count: usize, fresh: bool) -> Plan {
     .unwrap()
 }
 
+fn candidate_words(
+    plan: &Plan,
+    graph: &Graph,
+    candidates: &[Interpretation],
+    cancellation: &Cancellation,
+) -> Result<Vec<u32>, GpuError> {
+    let mut staging = crate::candidates::Staging::default();
+    plan.pack(graph, candidates, &mut staging, u64::MAX, cancellation)?;
+    Ok(staging.words().to_vec())
+}
+
 #[test]
 fn tight_dispatch_requires_a_positive_wait() {
     let graph = graph();
@@ -159,13 +170,13 @@ fn candidate_packing_preserves_repeated_occurrences() {
         Interpretation::new(&graph.theory, [2, 0]).unwrap(),
         Interpretation::new(&graph.theory, [1]).unwrap(),
     ];
-    let packed = plan(&graph, 3, true)
-        .pack(
-            &graph,
-            &[input[0].clone(), input[1].clone(), input[0].clone()],
-            &Cancellation::default(),
-        )
-        .unwrap();
+    let packed = candidate_words(
+        &plan(&graph, 3, true),
+        &graph,
+        &[input[0].clone(), input[1].clone(), input[0].clone()],
+        &Cancellation::default(),
+    )
+    .unwrap();
     assert_eq!(packed, [5, 2, 5]);
 }
 
@@ -174,10 +185,14 @@ fn candidate_identity_is_checked_before_encoding() {
     let graph = graph();
     let foreign = Interpretation::new(certificate().theory(), []).unwrap();
     assert_eq!(
-        plan(&graph, 1, true)
-            .pack(&graph, &[foreign], &Cancellation::default())
-            .unwrap_err()
-            .kind(),
+        candidate_words(
+            &plan(&graph, 1, true),
+            &graph,
+            &[foreign],
+            &Cancellation::default()
+        )
+        .unwrap_err()
+        .kind(),
         GpuErrorKind::Seed
     );
 }
@@ -186,10 +201,14 @@ fn candidate_identity_is_checked_before_encoding() {
 fn candidate_count_must_match_the_admitted_transport() {
     let graph = graph();
     assert_eq!(
-        plan(&graph, 1, true)
-            .pack(&graph, &[], &Cancellation::default())
-            .unwrap_err()
-            .kind(),
+        candidate_words(
+            &plan(&graph, 1, true),
+            &graph,
+            &[],
+            &Cancellation::default()
+        )
+        .unwrap_err()
+        .kind(),
         GpuErrorKind::Capacity
     );
 }
@@ -217,13 +236,13 @@ fn empty_carriers_keep_only_required_buffer_padding() {
     assert_eq!(graph.bytes, 36);
     assert_eq!(graph.work, 0);
     assert_eq!(
-        plan(&graph, 1, true)
-            .pack(
-                &graph,
-                &[Interpretation::new(&theory, []).unwrap()],
-                &Cancellation::default()
-            )
-            .unwrap(),
+        candidate_words(
+            &plan(&graph, 1, true),
+            &graph,
+            &[Interpretation::new(&theory, []).unwrap()],
+            &Cancellation::default()
+        )
+        .unwrap(),
         [0]
     );
 }
@@ -249,9 +268,13 @@ fn candidate_word_tails_never_introduce_atoms() {
             Interpretation::new(&theory, 0..count).unwrap(),
             Interpretation::new(&theory, [count - 1]).unwrap(),
         ];
-        let packed = plan(&graph, 2, true)
-            .pack(&graph, &input, &Cancellation::default())
-            .unwrap();
+        let packed = candidate_words(
+            &plan(&graph, 2, true),
+            &graph,
+            &input,
+            &Cancellation::default(),
+        )
+        .unwrap();
         let width = count.div_ceil(32);
         assert_eq!(packed.len(), 2 * width);
         assert_eq!(packed[width - 1], u32::MAX >> (31 - (count - 1) % 32));
@@ -588,7 +611,7 @@ fn cancellation_prevents_completed_results() {
     let input = [Interpretation::new(&graph.theory, []).unwrap()];
     for error in [
         graph.pack(&certificate, &cancellation).err().unwrap(),
-        plan.pack(&graph, &input, &cancellation).unwrap_err(),
+        candidate_words(&plan, &graph, &input, &cancellation).unwrap_err(),
         decode_present(
             &[7, 0, 0, 0, 28, RESULT_MAGIC],
             &graph,
@@ -606,10 +629,48 @@ fn absent_residual_witnesses_are_readback_failures() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
     let records = [7, 0, 2, 2, 28, RESULT_MAGIC, 7, 1, 2, 2, 28, RESULT_MAGIC];
-    let error =
-        super::decode(&records, &graph, &plan, &[7, 3], &Cancellation::default()).unwrap_err();
+    let present = Interpretation::new(&graph.theory, [0, 1, 2]).unwrap();
+    let absent = Interpretation::new(&graph.theory, [0, 1]).unwrap();
+    let mut staging = crate::candidates::Staging::default();
+    plan.pack(
+        &graph,
+        &[present.clone(), absent],
+        &mut staging,
+        u64::MAX,
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let error = super::decode(
+        &records,
+        &graph,
+        &plan,
+        staging.words(),
+        &Cancellation::default(),
+    )
+    .unwrap_err();
     assert_eq!(error.kind(), GpuErrorKind::Readback);
-    assert!(super::decode(&records, &graph, &plan, &[7, 4], &Cancellation::default()).is_ok());
+    let capacity = staging.capacity();
+    let next = Interpretation::new(&graph.theory, [2]).unwrap();
+    plan.pack(
+        &graph,
+        &[present, next],
+        &mut staging,
+        u64::MAX,
+        &Cancellation::default(),
+    )
+    .unwrap();
+    assert_eq!(staging.capacity(), capacity);
+    assert_eq!(staging.words(), [7, 4]);
+    assert!(
+        super::decode(
+            &records,
+            &graph,
+            &plan,
+            staging.words(),
+            &Cancellation::default()
+        )
+        .is_ok()
+    );
 }
 
 #[test]

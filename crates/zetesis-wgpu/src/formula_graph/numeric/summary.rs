@@ -6,7 +6,11 @@ use zetesis_ferraris::{ExtremumCutRule, NodeView};
 
 pub(super) enum Summary {
     Weights(i128),
-    Ordinal { minimum: u64, maximum: u64 },
+    Ordinal {
+        minimum: u64,
+        maximum: u64,
+        sentinel: u64,
+    },
 }
 impl Summary {
     pub(super) fn new(node: NodeView<'_>, cancellation: &Cancellation) -> Result<Self, GpuError> {
@@ -28,7 +32,11 @@ impl Summary {
                     minimum = minimum.min(rank);
                     maximum = maximum.max(rank);
                 }
-                Ok(Self::Ordinal { minimum, maximum })
+                Ok(Self::Ordinal {
+                    minimum,
+                    maximum,
+                    sentinel: cut.row.rank_count - 1,
+                })
             }
             _ => unreachable!("only numeric rows have summaries"),
         }
@@ -38,7 +46,12 @@ impl Summary {
             (Self::Weights(total), NodeView::Threshold(threshold)) => {
                 (threshold.bound > *total).then_some(false)
             }
-            (Self::Ordinal { minimum, maximum }, NodeView::ExtremumCut(cut)) => {
+            (
+                Self::Ordinal {
+                    minimum, maximum, ..
+                },
+                NodeView::ExtremumCut(cut),
+            ) => {
                 let impossible = match cut.rule {
                     ExtremumCutRule::Prefix(bound) => minimum >= bound,
                     ExtremumCutRule::Suffix(bound) => maximum < bound,
@@ -46,6 +59,23 @@ impl Summary {
                 impossible.then_some(false)
             }
             _ => unreachable!("an admitted row retains its numeric domain"),
+        }
+    }
+
+    /// Every measure and live bound fits this many u32 limbs. Threshold bounds
+    /// outside (0, total] were folded to constants; ordinal endpoints were too.
+    /// The ordinal empty-minimum sentinel must fit even when every rank is small.
+    pub(super) fn width(&self) -> u32 {
+        let largest = match self {
+            Self::Weights(total) => u128::try_from(*total).expect("nonnegative admitted total"),
+            Self::Ordinal { sentinel, .. } => u128::from(*sentinel),
+        };
+        if largest <= u128::from(u32::MAX) {
+            1
+        } else if largest <= u128::from(u64::MAX) {
+            2
+        } else {
+            4
         }
     }
 }
@@ -78,3 +108,6 @@ pub(super) fn constant(
     };
     Ok(summary.constant(node))
 }
+
+#[cfg(test)]
+mod tests;

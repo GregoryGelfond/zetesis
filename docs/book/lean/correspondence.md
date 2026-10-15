@@ -64,8 +64,12 @@ including its empty endpoints. The earliest nonconstant guard owns those writes;
 followers do not overwrite them. The shared dependency level must place every
 condition before the owner and every guard before its parents. Frozen propagation
 still applies each guard's original truth gate before projecting its witnesses.
-Cold row summaries justify only constant classification and are released after
-packing, or immediately when all guards are constant. Portable limb comparison, owner/guard coverage, physical addresses,
+Cold row summaries justify constant classification and arithmetic width, then
+are released after packing, or immediately when all guards are constant. The
+width includes the empty-minimum sentinel, not just ranks present in the row.
+Computing `rank_count - 1` still requires exact subtraction before narrowing;
+for example, a carrier of size `2^32` has a 32-bit sentinel. Portable limb
+comparison, owner/guard coverage, physical addresses,
 barriers, atomic observations and resource receipts remain unproved executable
 correspondences. The retained extracted
 evaluator does not yet cover ordinal nodes.
@@ -101,8 +105,12 @@ with repeated condition identities, and the corresponding formula consequences.
 These are general laws over complete rows and truth bounds.
 
 The ordinary GPU formula and tight checkers retain shared native threshold rows.
-Four little-endian `u32` limbs preserve admitted nonnegative sums and signed-bound
-constants without optional device integer features. Original-truth evaluation
+Four little-endian `u32` wire limbs preserve admitted nonnegative sums and signed-bound
+constants. The complete nonnegative row total, or ordinal empty-minimum sentinel,
+certifies arithmetic width; every retained live bound and every intermediate
+must fit that certificate. Optional integer-64 operations preserve the same wire
+values, with portable carry/borrow operations when unavailable. These width and
+instruction selections remain executable refinement obligations. Original-truth evaluation
 reduces each authoritative row once and publishes all its live bound results at
 the original node IDs; no candidate measure cache is retained. The packing must
 choose the earliest live owner, cover each live guard exactly once, preserve
@@ -1463,7 +1471,9 @@ proves that exact finite partitioning preserves an eligible-atom count and maxim
 index. Zero availability excludes a fitting strict-subset completion; one
 available atom must be false in every such completion. The maximum names that
 atom only under the count-one premise. The formula kernel distributes this scan
-over 64 lanes and merges their summaries. Its strided coverage, bounded `u32`
+over 32 or 64 lanes and merges their summaries. Supported subgroup reductions
+may combine summaries first; no subgroup width is assumed and the final
+workgroup barrier remains. Its strided coverage, bounded `u32`
 arithmetic, immutable scan inputs, atom correspondence and synchronization remain
 Rust/WGSL obligations. The laws justify domain narrowing, not answer-set acceptance.
 
@@ -1482,11 +1492,20 @@ This is not an application of the evaluation theorem: the local operations are
 sound domain intersections, rather than assignments of original truth. Every
 transfer must preserve all satisfying completions, including under stale sibling
 reads, and original-false connectives remain disabled. Reordering such transfers
-retains that invariant. A complete sweep visits every gate and then checks strict
+retains that invariant. A dense sweep visits every gate and then checks strict
 subset availability; a fixed point or bounded stop remains a residual for exact
 completion. Packed-level coverage, collective barriers, atomic refinement and
 the changed work receipts remain Rust/WGSL obligations. No new shader-verification
 claim follows from reusing the schedule.
+
+Optional changed-dependency propagation requires a separate wakeup argument. Its
+directory covers every operand and output domain, including atom aliases. Every
+gate starts eligible; an intersection marks both current and next generations,
+including intersections made by the strict-subset check. Consuming a current
+entry must not lose a concurrent wake for the next sweep. These directory, atomic
+and generation invariants, and the extra storage and conservative work charges,
+remain executable obligations. This mode preserves the same sound local transfers
+and exact residual completion; existing Lean laws do not verify its implementation.
 
 The CPU oracle's [`Work::charge`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle.rs)
 charges a payload amount before the corresponding comparison or copy.
@@ -1925,6 +1944,17 @@ is zetesis's own and is qualified with it. Exact residual completion uses the
 existing host checker; an interruption or fault cannot discharge its pending
 candidates. Rust ownership, resource compliance and transport identities remain
 implementation obligations.
+
+Scalar and joined batch proposals retain one original `EvaluationWorkspace`
+per owner. Every new candidate checks exact theory identity and recomputes original
+truth, resetting numeric validity; capacity reuse supplies no semantic receipt.
+Failed validation retains only the checked prefix. External-checker retry uses
+that pending prefix without evaluating it again. Actual workspace capacity and
+its header share the pending-byte allowance, and optional oversized scratch can
+be released when that allowance decreases. Validation work is recorded apart
+from search and reduct work. The existing evaluation and batch laws express the
+required truth and occurrence invariants; they do not verify these Rust resets,
+failure paths, retained-capacity charges or their composition with publication.
 
 ## Representation and source laws
 

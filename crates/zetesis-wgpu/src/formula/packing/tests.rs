@@ -38,6 +38,17 @@ fn plan(graph: &Graph, limits: FormulaLimits, fresh: bool) -> Plan {
     Plan::new(graph, 2, limits, &device(), fresh, 7).unwrap()
 }
 
+fn candidate_words(
+    plan: &Plan,
+    graph: &Graph,
+    candidates: &[Interpretation],
+    cancellation: &zetesis_cpu::Cancellation,
+) -> Result<Vec<u32>, GpuError> {
+    let mut staging = crate::candidates::Staging::default();
+    plan.pack(graph, candidates, &mut staging, u64::MAX, cancellation)?;
+    Ok(staging.words().to_vec())
+}
+
 #[test]
 fn formula_dispatch_requires_a_positive_wait() {
     let graph = graph(&theory(), &device()).unwrap();
@@ -85,18 +96,24 @@ fn packed_nodes_preserve_topology_shared_atom_ids_and_original_operators() {
     let plan = plan(&graph, limits, true);
     assert_eq!(
         plan.params(&graph),
-        [2, 6, 1, 6, 1, 2, 64, 100_000_000, 24, 136, 7, 3]
+        [2, 6, 1, 6, 1, 0, 64, 100_000_000, 24, 136, 7, 3]
     );
     let a = Interpretation::new(&graph.shape.theory, [0]).unwrap();
     let b = Interpretation::new(&graph.shape.theory, [1]).unwrap();
     assert_eq!(
-        plan.pack(&graph, &[a, b], &zetesis_cpu::Cancellation::default())
-            .unwrap(),
+        candidate_words(
+            &plan,
+            &graph,
+            &[a, b],
+            &zetesis_cpu::Cancellation::default()
+        )
+        .unwrap(),
         vec![1, 2]
     );
     let foreign = Interpretation::new(&theory(), []).unwrap();
     assert_eq!(
-        plan.pack(
+        candidate_words(
+            &plan,
             &graph,
             &[foreign.clone(), foreign],
             &zetesis_cpu::Cancellation::default()
@@ -192,9 +209,13 @@ fn device_limits_zero_atoms_and_word_boundaries_have_explicit_layouts() {
         let graph = prepared.graph;
         let plan = Plan::new(&graph, 1, FormulaLimits::default(), &device(), true, 1).unwrap();
         let candidate = Interpretation::new(&theory, 0..count).unwrap();
-        let packed = plan
-            .pack(&graph, &[candidate], &zetesis_cpu::Cancellation::default())
-            .unwrap();
+        let packed = candidate_words(
+            &plan,
+            &graph,
+            &[candidate],
+            &zetesis_cpu::Cancellation::default(),
+        )
+        .unwrap();
         assert_eq!(packed.len(), count.div_ceil(32).max(1));
         if count > 0 {
             assert_eq!(

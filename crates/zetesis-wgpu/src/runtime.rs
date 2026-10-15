@@ -14,6 +14,7 @@ pub(crate) struct DeviceProfile {
     pub(crate) shader: std::borrow::Cow<'static, str>,
     pub(crate) entry_point: &'static str,
     pub(crate) validate_limits: fn(&wgpu::Limits) -> Result<(), GpuError>,
+    pub(crate) kernel: crate::kernel::Kernel,
 }
 
 // Compiled immutable resources only. Formula profiles share this owner while
@@ -21,6 +22,7 @@ pub(crate) struct DeviceProfile {
 pub(crate) struct Runtime {
     pub(crate) context: GpuContext,
     pub(crate) pipeline: wgpu::ComputePipeline,
+    pub(crate) kernel: crate::kernel::Kernel,
 }
 
 impl Runtime {
@@ -65,24 +67,36 @@ impl Runtime {
     // Both entry points retain their context lease through all scopes. The
     // independent path already checked advertised and granted profile limits.
     async fn compile(context: &GpuContext, profile: DeviceProfile) -> Result<Self, GpuError> {
+        profile.kernel.validate(context.limits())?;
+        let source = profile.kernel.source(profile.shader, context.features())?;
+        let constants = profile.kernel.options().map(|options| {
+            [(
+                "WORKGROUP_SIZE",
+                f64::from(options.workgroup_size.invocations()),
+            )]
+        });
         let device = context.device();
         let scopes = ErrorScopes::new(device);
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(profile.shader_label),
-            source: wgpu::ShaderSource::Wgsl(profile.shader),
+            source: wgpu::ShaderSource::Wgsl(source),
         });
         let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
             label: Some(profile.pipeline_label),
             layout: None,
             module: &shader,
             entry_point: Some(profile.entry_point),
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            compilation_options: wgpu::PipelineCompilationOptions {
+                constants: constants.as_ref().map_or(&[], |values| values.as_slice()),
+                ..Default::default()
+            },
             cache: None,
         });
         context.complete(scopes.finish().await, Ok(()), Effects::MayBeLive)?;
         Ok(Self {
             context: context.clone(),
             pipeline,
+            kernel: profile.kernel,
         })
     }
 

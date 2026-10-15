@@ -110,10 +110,10 @@ impl GpuContext {
 
     /// Optional wgpu features granted at device creation.
     ///
-    /// These can be a strict subset of [`GpuInfo::features`]. The current
-    /// constructors request none unless [`Self::new_selected_with_timing`] asks
-    /// for supported timestamps. Adapter support must not be mistaken for
-    /// enabling an optimized kernel. Observation
+    /// These can be a strict subset of [`GpuInfo::features`]. Constructors request
+    /// supported subgroup and integer-64 instructions. Timestamps are requested
+    /// only by [`Self::new_selected_with_timing`]. Kernel configuration and row
+    /// certificates determine which granted instructions are actually used. Observation
     /// performs no submission and does not establish context health.
     #[must_use]
     pub fn features(&self) -> wgpu::Features {
@@ -175,11 +175,7 @@ impl GpuContext {
         let (adapter, info) = selection::select_adapter(options, selection, validate).await?;
         let limits = adapter.limits();
         let compute_timing = timing_status(timing, adapter.features());
-        let required_features = if compute_timing == zetesis_backend::ComputeTimingStatus::Enabled {
-            wgpu::Features::TIMESTAMP_QUERY
-        } else {
-            wgpu::Features::empty()
-        };
+        let required_features = requested_features(adapter.features(), timing);
         let (device, queue) = adapter
             .request_device(&wgpu::DeviceDescriptor {
                 label: Some(label),
@@ -243,6 +239,17 @@ fn timing_status(
     } else {
         ComputeTimingStatus::Unsupported
     }
+}
+
+/// Request only optional capabilities with maintained integer kernel consumers.
+/// Unsupported capabilities leave the portable kernels available. Timestamp
+/// queries remain opt-in because instrumentation has its own runtime cost.
+fn requested_features(supported: wgpu::Features, timing: bool) -> wgpu::Features {
+    let mut features = supported & (wgpu::Features::SUBGROUP | wgpu::Features::SHADER_INT64);
+    if timing {
+        features |= supported & wgpu::Features::TIMESTAMP_QUERY;
+    }
+    features
 }
 
 struct Lifecycle {

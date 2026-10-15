@@ -122,6 +122,7 @@ impl Graph {
         let nodes = graph.nodes;
         let roots = address(theory.roots().len())?;
         let producers = address(certificate.producers().len())?;
+        // Reserve the maximum kernel stride after each loop's last valid address.
         if [atoms, nodes, roots, producers]
             .into_iter()
             .any(|n| n > u32::MAX - 64)
@@ -427,18 +428,22 @@ impl Plan {
         &self,
         graph: &Graph,
         candidates: &[Interpretation],
-        cancellation: &Cancellation,
-    ) -> Result<Vec<u32>, GpuError> {
+        staging: &mut crate::candidates::Staging,
+        ceiling: u64,
+        cancellation: &zetesis_cpu::Cancellation,
+    ) -> Result<u64, GpuError> {
         if candidates.len() != self.worlds as usize {
-            return Err(capacity("tight candidate count differs from plan"));
+            staging.release();
+            return Err(capacity("tight candidate count differs from admitted plan"));
         }
-        let mut output = words(self.seeds)?;
-        output.resize(
-            usize::try_from(self.seeds / 4).map_err(|_| capacity("tight seeds exceed host"))?,
-            0,
-        );
-        crate::candidates::pack(&graph.theory, candidates, &mut output, cancellation)?;
-        Ok(output)
+        staging.pack(
+            &graph.theory,
+            candidates,
+            self.seeds,
+            self.accounted,
+            ceiling,
+            cancellation,
+        )
     }
 }
 

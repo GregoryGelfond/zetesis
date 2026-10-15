@@ -12,6 +12,7 @@ pub(super) fn qualify(oracle: &mut GpuTightOracle) {
         ([1, 2], 2),
         ([1, 2], 3),
         ([1, 2], 4),
+        ([u64::from(u32::MAX), 1], i128::from(u32::MAX) + 1),
         ([u64::MAX, u64::MAX], i128::MIN),
         ([u64::MAX, 0], 0),
         ([u64::MAX, u64::MAX], 1i128 << 32),

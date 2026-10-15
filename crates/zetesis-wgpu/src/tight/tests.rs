@@ -4,12 +4,19 @@ use std::error::Error as _;
 #[test]
 fn support_shader_validates_without_optional_features() {
     let module = naga::front::wgsl::parse_str(SHADER).expect("support WGSL parses");
-    naga::valid::Validator::new(
+    let info = naga::valid::Validator::new(
         naga::valid::ValidationFlags::all(),
         naga::valid::Capabilities::empty(),
     )
     .validate(&module)
     .expect("topology and cooperative barriers validate");
+    let (module, _) = naga::back::pipeline_constants::process_overrides(
+        &module,
+        &info,
+        None,
+        &naga::back::PipelineConstants::default(),
+    )
+    .unwrap();
     assert_eq!(module.entry_points.len(), 2);
     for (entry, name) in module.entry_points.iter().zip(["check", "check_grouped"]) {
         assert_eq!(entry.name, name);
@@ -20,8 +27,16 @@ fn support_shader_validates_without_optional_features() {
 #[test]
 fn shader_constants_preserve_the_wire_contract() {
     let module = naga::front::wgsl::parse_str(SHADER).unwrap();
+    let (_, width) = module
+        .overrides
+        .iter()
+        .find(|(_, value)| value.name.as_deref() == Some("WORKGROUP_SIZE"))
+        .unwrap();
+    assert!(matches!(
+        module.global_expressions[width.init.unwrap()],
+        naga::Expression::Literal(naga::Literal::U32(64))
+    ));
     for (name, expected) in [
-        ("WORKGROUP_SIZE", 64),
         ("NODE_FALSE", 0),
         ("NODE_ATOM", 1),
         ("NODE_AND", 2),

@@ -10,6 +10,7 @@ use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{ExtremumCutRule, NodeView, Theory};
 
 pub(crate) mod dependency;
+pub(crate) mod incidence;
 mod numeric;
 pub(crate) use numeric::Rows;
 

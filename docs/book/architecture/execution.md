@@ -228,10 +228,19 @@ One output slot is reserved for every active producer region. Refutation or
 splitting returns the reservation; an emitted leaf consumes it. The batch is
 bounded even when workers finish together. A stopped validation retains its
 admitted prefix and reports the unfinished suffix explicitly. Every producer
-joins before membership begins, so these stages share one cumulative work
-allowance without concurrent resets. This schedule does not overlap production
-with device execution. Pending-byte limits cover candidate transport, not the
-entire region frontier, thread stacks or process memory.
+joins and settles its work before membership begins. Original validation has
+its own per-candidate work allowance. This schedule does not overlap production
+with device execution. Pending-byte limits cover pending/result storage and
+original-validation scratch, not the entire region frontier, thread stacks or
+process memory.
+
+Scalar and joined batch proposals reuse one `EvaluationWorkspace` per owner.
+Each candidate still receives an independent full original-formula evaluation;
+only allocated capacity survives between candidates. The pending-byte allowance
+includes the workspace header and actual capacity. A smaller allowance can drop
+optional scratch without invalidating previously checked pending candidates.
+Retrying their external checker does not repeat original validation. Separate
+receipts report validation work and retained bytes.
 
 The executor and its producer slots persist between batches. Each slot keeps
 its narrowing worklists and, when needed, one checker for the immutable source.
@@ -239,8 +248,8 @@ Slots are used exclusively, may move between executor threads and number at
 most the requested workers. The retained checker borrows one stable owner;
 stopping or completing production drops the checkers before that owner.
 Candidate truth and support knowledge still travel with each region, so reuse
-does not transfer deductions between unrelated candidates. The coordinator's
-separate singleton validation can still prepare a checker per operation.
+does not transfer deductions between unrelated candidates. Source-filter
+callbacks retain their own checker lifetime, separate from formula evaluation.
 
 The original CPU `with_region_workers` operation remains useful when each
 worker should perform both operations. The two schedules share the original
@@ -490,6 +499,14 @@ retain their original node IDs and share condition, low-word and high-word
 columns by the admitted row's identity. Each variable guard has a five-word
 descriptor. Constant thresholds and extremum endpoints or impossible cuts need
 only a constant header. No host eligibility masks are substituted for formulas.
+
+Each live numeric row also records its owner, guard count and certified
+arithmetic width. The complete nonnegative weight total bounds every partial
+sum; an ordinal row's greatest rank bounds its selected and empty extrema.
+After constant bounds are removed, those bounds justify exact 32- or 64-bit
+operations where possible, with the full 128-bit path retained otherwise.
+Original evaluation and frozen propagation use the same certificate. This
+selects arithmetic operations without changing the value columns or ASP order.
 
 For `N` nodes and `W` appended operand/descriptor words, packing checks `4*N+W` against
 the 32-bit word-address range. The padded byte size `4*max(4,4*N+W)` is checked

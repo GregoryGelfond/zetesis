@@ -2,7 +2,7 @@
 // The host accepts only an opaque, checked TightPlan for the complete theory.
 // Wire constants mirror tight/packing.rs. Zero remains ordinary Boolean false.
 // Support bit a denotes an enabled producer for a in this candidate's row.
-const WORKGROUP_SIZE: u32 = 64u;
+override WORKGROUP_SIZE: u32 = 64u;
 const NODE_FALSE: u32 = 0u;
 const NODE_ATOM: u32 = 1u;
 const NODE_AND: u32 = 2u;

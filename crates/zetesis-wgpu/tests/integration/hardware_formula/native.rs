@@ -5,6 +5,7 @@ use zetesis_ferraris::{ExtremumCutRule, ExtremumRow, FormulaNodes, FormulaParts}
 
 pub(super) fn qualify(oracle: &mut GpuFormulaOracle) {
     qualify_full_width(oracle);
+    qualify_carry_and_borrow(oracle);
     qualify_settled_rows(oracle);
     for bound in -1..=8 {
         let mut nodes = FormulaNodes::new(
@@ -73,6 +74,45 @@ pub(super) fn qualify(oracle: &mut GpuFormulaOracle) {
         }
     }
     qualify_wide_ordinals(oracle);
+}
+
+// Upper sums cross the u32/u64 boundaries. Removing either contribution during
+// backward forcing borrows across them; both atoms remain true in every model.
+fn qualify_carry_and_borrow(oracle: &mut GpuFormulaOracle) {
+    for weight in [u64::from(u32::MAX), u64::MAX] {
+        qualify_carry_and_borrow_at(oracle, weight);
+    }
+}
+
+fn qualify_carry_and_borrow_at(oracle: &mut GpuFormulaOracle, weight: u64) {
+    let mut nodes =
+        FormulaNodes::new(FormulaParts::new(vec![Node::atom(0), Node::atom(1)], vec![]).unwrap());
+    let mut transaction = nodes.transaction();
+    let root = transaction
+        .push(
+            NodeView::Threshold(zetesis_ferraris::Threshold {
+                conditions: &[0, 1],
+                weights: &[weight, 1],
+                bound: i128::from(weight) + 1,
+            }),
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
+    transaction.commit();
+    let theory = Theory::new(
+        2,
+        nodes.into_parts(),
+        vec![root],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    compare_native(oracle, &theory);
+    let both = Interpretation::new(&theory, [0, 1]).unwrap();
+    let result = oracle
+        .propagate_batch(&theory, &[both], FormulaLimits::default())
+        .unwrap();
+    assert_eq!(result[0].verdict(), FormulaVerdict::NoProperSubset);
 }
 
 // The same result must survive both entailed rows and rows still requiring a

@@ -12,8 +12,8 @@ use zetesis_ferraris::{
     TightPlanLimits, TightVerdict, Verdict, check,
 };
 use zetesis_wgpu::{
-    GpuErrorKind, GpuOptions, GpuSelection, GpuTightOracle, TightGpuActivity, TightGpuError,
-    TightGpuLimits, TightSupport,
+    GpuErrorKind, GpuKernelOptions, GpuOptions, GpuSelection, GpuTightOracle, GpuWorkgroupSize,
+    TightGpuActivity, TightGpuError, TightGpuLimits, TightSupport,
 };
 
 fn certificate(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> TightPlan {
@@ -339,8 +339,30 @@ fn qualify_support_matches_exact_reduct_semantics(backend: GpuApi, support: Tigh
         .sum();
     assert_eq!(compared, 370);
     println!("tight support exact candidate occurrences={compared}");
-    native::qualify(&mut oracle);
-    qualify_dependency_schedules(&mut oracle);
+    qualify_kernel_options(&oracle);
+}
+
+fn qualify_kernel_options(oracle: &GpuTightOracle) {
+    let context = oracle.context().clone();
+    println!("tight granted features={:?}", context.features());
+    for workgroup_size in [GpuWorkgroupSize::Threads32, GpuWorkgroupSize::Threads64] {
+        for optional_features in [false, true] {
+            let options = GpuKernelOptions {
+                workgroup_size,
+                optional_features,
+                ..GpuKernelOptions::default()
+            };
+            let mut configured =
+                GpuTightOracle::from_context_with_kernel(&context, oracle.support(), options)
+                    .unwrap();
+            assert!(configured.context().same_instance(&context));
+            assert_eq!(configured.kernel_options(), options);
+            assert_eq!(configured.support(), oracle.support());
+            println!("tight qualified options={options:?}");
+            native::qualify(&mut configured);
+            qualify_dependency_schedules(&mut configured);
+        }
+    }
 }
 
 #[test]
@@ -555,6 +577,7 @@ fn qualify_support_refusals_preserve_reusable_residency(backend: GpuApi, support
             &Cancellation::default(),
         )
         .unwrap();
+    check_staging_reuse(&mut oracle, &certificate);
     oracle
         .check_batch(
             &certificate,
@@ -725,6 +748,38 @@ fn qualify_support_residency_tracks_theory_identity(backend: GpuApi, support: Ti
         expected
     );
     assert!(oracle.last_batch_stats().unwrap().theory_uploaded);
+}
+
+fn check_staging_reuse(oracle: &mut GpuTightOracle, certificate: &TightPlan) {
+    let present = Interpretation::new(certificate.theory(), [0]).unwrap();
+    let empty = Interpretation::new(certificate.theory(), []).unwrap();
+    for candidates in [
+        [present.clone(), empty.clone(), present.clone()],
+        [empty.clone(), present, empty],
+    ] {
+        let checks = oracle
+            .check_batch(
+                certificate,
+                &candidates,
+                TightGpuLimits::default(),
+                &Cancellation::default(),
+            )
+            .unwrap();
+        for (candidate, result) in candidates.iter().zip(checks) {
+            let expected = certificate
+                .check(
+                    candidate,
+                    TightCheckLimits::default(),
+                    &Cancellation::default(),
+                )
+                .unwrap();
+            assert_eq!(result.verdict(), expected.verdict);
+        }
+        assert!(!oracle.last_batch_stats().unwrap().theory_uploaded);
+    }
+    let stats = oracle.last_batch_stats().unwrap();
+    assert!(!stats.transport_allocated);
+    assert_eq!(stats.candidates, 3);
 }
 
 // The same original truth and producer checks run under both schedules. This

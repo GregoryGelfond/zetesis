@@ -35,6 +35,8 @@ pub struct TightGpuLimits {
     /// Candidate occurrences, also bounded by granted device dispatch limits.
     pub max_candidates: usize,
     /// Conservative authored graph, transport, packing and result payload bytes.
+    /// Candidate upload scratch is charged by actual element capacity and retained
+    /// only while the subject and candidate count stay unchanged.
     /// Shared caller-owned theory/certificate/candidates, allocator overhead,
     /// driver-private allocations and deferred retirement are excluded. Not RSS.
     pub max_batch_bytes: u64,

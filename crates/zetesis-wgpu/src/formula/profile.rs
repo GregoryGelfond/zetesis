@@ -103,10 +103,26 @@ impl GpuFormulaProfile {
         context: &GpuContext,
         projection: GateProjection,
     ) -> Result<Self, GpuError> {
-        let runtime = pollster::block_on(Runtime::from_context(
-            context,
-            Self::descriptor(projection)?,
-        ))?;
+        Self::from_context_with_kernel(context, projection, crate::GpuKernelOptions::default())
+    }
+
+    /// Compile explicit physical choices on the exact retained context.
+    ///
+    /// Workgroup width is checked against granted limits. Optional instructions
+    /// require granted features; otherwise the portable reduction is retained.
+    /// Neither choice changes the frozen reduct or its work allowance.
+    ///
+    /// # Errors
+    /// Reports the construction failures of [`Self::from_context`], including
+    /// a requested workgroup width exceeding the device's granted limits.
+    pub fn from_context_with_kernel(
+        context: &GpuContext,
+        projection: GateProjection,
+        options: crate::GpuKernelOptions,
+    ) -> Result<Self, GpuError> {
+        let mut descriptor = Self::descriptor(projection)?;
+        descriptor.kernel = crate::kernel::Kernel::Formula(options);
+        let runtime = pollster::block_on(Runtime::from_context(context, descriptor))?;
         Ok(Self {
             runtime: Arc::new(runtime),
             projection,
@@ -123,6 +139,16 @@ impl GpuFormulaProfile {
     #[must_use]
     pub const fn projection(&self) -> GateProjection {
         self.projection
+    }
+
+    /// Physical options retained by this exact compilation; no device operation.
+    ///
+    /// # Panics
+    /// Panics if the internal runtime is not a formula kernel. Every public
+    /// constructor establishes this invariant; callers cannot replace it.
+    #[must_use]
+    pub fn kernel_options(&self) -> crate::GpuKernelOptions {
+        self.runtime.kernel.options().expect("formula kernel")
     }
 
     /// Actual adapter metadata; inspection does not establish device health.
@@ -147,6 +173,7 @@ impl GpuFormulaProfile {
             shader: projection.shader()?,
             entry_point: "propagate",
             validate_limits: check_limits,
+            kernel: crate::kernel::Kernel::Formula(crate::GpuKernelOptions::default()),
         })
     }
 }

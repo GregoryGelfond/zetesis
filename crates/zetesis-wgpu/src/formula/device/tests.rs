@@ -69,7 +69,58 @@ fn busy_preserves_state(backend: GpuApi) {
     let stats = oracle.last_batch_stats().unwrap();
     assert!(!stats.theory_uploaded);
     assert!(!stats.transport_allocated);
+    staging_reuse(&mut oracle, &theory, &candidates);
     cold_preparation_refusals(&mut oracle, &theory, &candidates);
+}
+
+fn staging_reuse(oracle: &mut GpuFormulaOracle, theory: &Theory, original: &[Interpretation]) {
+    let empty = Interpretation::new(theory, []).unwrap();
+    for candidates in [
+        [original[0].clone(), empty.clone(), original[0].clone()],
+        [empty.clone(), original[0].clone(), empty],
+    ] {
+        let checks = oracle
+            .propagate_batch(theory, &candidates, FormulaLimits::default())
+            .unwrap();
+        let expected: Vec<_> = candidates
+            .iter()
+            .map(|candidate| {
+                if candidate.words32().next() == Some(1) {
+                    super::super::FormulaVerdict::NoProperSubset
+                } else {
+                    super::super::FormulaVerdict::NotModel
+                }
+            })
+            .collect();
+        assert_eq!(
+            checks
+                .iter()
+                .map(super::super::FormulaCheck::verdict)
+                .collect::<Vec<_>>(),
+            expected
+        );
+        let resident = oracle.resident.as_ref().unwrap();
+        let plan = Plan::new(
+            &resident.graph,
+            3,
+            FormulaLimits::default(),
+            oracle.context().limits(),
+            false,
+            1,
+        )
+        .unwrap();
+        assert_eq!(
+            oracle.last_batch_stats().unwrap().accounted_bytes,
+            plan.accounted - plan.seeds + u64::try_from(oracle.candidates.capacity()).unwrap() * 4,
+        );
+        assert_eq!(oracle.candidates.words().len(), 3);
+    }
+    assert!(!oracle.last_batch_stats().unwrap().transport_allocated);
+    oracle
+        .propagate_batch(theory, original, FormulaLimits::default())
+        .unwrap();
+    assert!(oracle.last_batch_stats().unwrap().transport_allocated);
+    assert_eq!(oracle.candidates.words(), [1]);
 }
 
 fn cold_preparation_refusals(
@@ -102,6 +153,7 @@ fn cold_preparation_refusals(
         )
         .unwrap_err();
     assert_eq!(error.kind(), GpuErrorKind::Capacity);
+    assert_eq!(oracle.candidates.capacity(), 0);
     assert!(
         oracle
             .resident
@@ -278,6 +330,7 @@ fn reused_profile(backend: GpuApi) {
             consumers.push(oracle);
         }
         consumers[0].clear_residency();
+        assert_eq!(consumers[0].candidates.capacity(), 0);
         assert!(consumers[1].resident.is_some());
         assert_eq!(
             previous
@@ -468,13 +521,18 @@ fn submitted_interruption(
         2,
     )
     .unwrap();
-    let seeds = plan
-        .pack(&resident.graph, candidates, &Cancellation::default())
-        .unwrap();
+    plan.pack(
+        &resident.graph,
+        candidates,
+        &mut oracle.candidates,
+        limits.max_batch_bytes,
+        &Cancellation::default(),
+    )
+    .unwrap();
     let scopes = ErrorScopes::new(runtime.device());
     let outcome = resident.dispatch(
         runtime,
-        &seeds,
+        oracle.candidates.words(),
         &plan,
         limits.timeout,
         cancelled,

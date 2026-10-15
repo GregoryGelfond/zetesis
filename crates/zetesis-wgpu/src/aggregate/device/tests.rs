@@ -56,6 +56,7 @@ fn corrupt_identity(selection: GpuSelection) -> GpuAggregateOracle {
             pipeline_label: "aggregate invalid result control",
             shader: shader.into(),
             entry_point: "reduce",
+            kernel: crate::kernel::Kernel::Fixed,
             validate_limits: check_limits,
         },
     ))

@@ -8,6 +8,8 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 - Requested GPU statistics include compute-pass time when the device supports
   timestamps, separately from host preparation and waiting.
+- The GPU library exposes checked workgroup choices and optional changed-dependency
+  propagation for controlled comparisons. Dense propagation remains the default.
 
 ### Changed
 
@@ -19,6 +21,11 @@ Notable changes by release. Versions follow Semantic Versioning.
   their operands; bounded checks retain exact CPU completion.
 - GPU checks compute each shared aggregate row once when testing the original
   program, and skip backward scans when the inputs already determine the result.
+- GPU candidate batches reuse host validation and upload storage, with retained
+  capacity included in their existing memory allowances.
+- Numeric GPU rows use narrower exact arithmetic when their bounds permit it.
+  Supported devices can use 64-bit instructions and subgroup reductions; portable
+  implementations remain available.
 - Lazy constraint checks avoid revisiting the same binding through several newly
   held atoms or repeated body occurrences.
 - Eligible grounding joins use completed numeric-domain analysis to filter bindings

@@ -250,6 +250,15 @@ result for these independently validated original-model proposals is an
 invalid-witness error.
 The callback must preserve ordering and semantic meaning; cardinality is checked.
 
+Scalar batch proposals and joined producer rounds share one original-validation
+`EvaluationWorkspace` per batch owner. Only capacity survives: every candidate's
+truth is recomputed against the exact original theory before the external checker
+runs. Numeric measures are shared within that evaluation, never across candidates.
+`max_pending_bytes` includes this workspace's header and actual retained capacities
+alongside pending/result storage. Validation storage was previously temporary and
+uncharged. A smaller allowance releases oversized optional scratch; validated
+pending candidates remain retryable without reevaluation.
+
 Exact semantic blocks are installed as candidates are proposed. A retained
 pending batch accounts for those candidates until the whole batch commits.
 Checker, shape and pending-capacity failures keep that batch retryable; retries
@@ -260,9 +269,11 @@ New objective restrictions apply only to future candidate generation and never
 modify the original reduct theory or discard pending proposals.
 
 `batch_statistics()` reports checker calls, committed candidates, propagated
-decisions, exact residual completions and pending proposals. These counters
-describe batch calls; the general candidate count can also include scalar
-iterator calls if a library caller alternates modes after draining each batch.
+decisions, exact residual completions and pending proposals. It also reports
+original-validation work, separately from search/reduct work, and the validation
+workspace's current retained bytes, including capacity from a failed attempt.
+These counters describe batch calls; the general candidate count can also
+include scalar iterator calls if a library caller alternates modes after draining each batch.
 Switching to scalar iteration with pending work is refused. The CLI uses one
 mode throughout a session. The [batch accounting laws](../../proofs/Zetesis/BatchAccounting.lean)
 prove semantic coverage and occurrence conservation under explicit producer and
@@ -348,9 +359,9 @@ The accounting uses the shared prepared owner and retained worker-vector
 capacities, plus a conservative allowance for transient and result storage. Hash-table
 bucket/control overhead, allocator metadata, Rayon scheduling storage, thread
 stacks, immutable original theory and the separate proposal/candidate cursor are
-excluded. It does not bound RSS or GPU memory. `max_pending_bytes` retains its
-independent pending-interpretation contract. No benchmark or device speedup is
-established by these portable completion tests.
+excluded. It does not bound RSS or GPU memory. `max_pending_bytes` separately
+bounds pending interpretations and their original-validation workspace. No
+benchmark or device speedup is established by these portable completion tests.
 
 `StableModels::enable_phase_timing()` optionally records coarse host wall intervals
 in `statistics().phase_timings`. Under several workers the intervals are

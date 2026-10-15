@@ -59,12 +59,13 @@ Frozen truth still has one value per original node. This removes four requested
 domain bytes per leaf per candidate (subject to the required empty-buffer
 padding), without changing original satisfaction or the frozen query.
 
-All 64 lanes scan distinct semantic-atom positions for the strict-subset
+All workgroup lanes scan distinct semantic-atom positions for the strict-subset
 condition. Their counts and last eligible positions are merged before a zero
 count refutes the query or a unique eligible atom is required to be false.
 Auxiliary nodes never witness strict removal. This uses 24 bytes of workgroup
 storage; a sweep reserves `9*nodes+2*edges+atoms+65+levels` policy work units, including 64
-summary merges, one application and the reverse dependency-level walk. These units are not GPU instruction counts.
+summary merges, one application and the reverse dependency-level walk. A 32-lane
+profile retains this conservative allowance. These units are not GPU instruction counts.
 Original truth is evaluated before propagation. A cold graph groups original
 node IDs by dependency level; both formula and tight checkers reuse this layout.
 Nodes in a level run in parallel and a barrier precedes dependent reads. General
@@ -88,6 +89,41 @@ residency; later cold preparation failure leaves a healthy context requiring a
 fresh upload. No incomplete graph, new epoch or submission is published. Driver
 retirement, allocator bookkeeping and the existing requested seed/result host
 allowance are separate from these measured staging capacities.
+
+`GpuKernelOptions` keeps physical choices below the semantic interface. Formula
+and tight profiles accept 32 or 64 cooperating invocations, checked against the
+context's granted limits and supplied through a WGSL pipeline constant. Sixty-four
+remains the default until measurements justify another choice. Supported subgroup
+instructions combine strict-subset summaries before their workgroup-wide merge;
+no subgroup width is assumed. The portable alternative uses the same integer
+reduction and barriers. This changes neither the frozen candidate nor the
+meaning of a residual. Optional instructions can be disabled for comparisons.
+
+General formula profiles can explicitly select the experimental
+`GpuPropagation::ChangedDependencies`; `Dense` remains the default. An immutable
+directory maps each physical domain slot to gates that read it as an operand or
+output. Atom aliases therefore share wakeups. Every gate is eligible in the first
+sweep; later sweeps skip transfers whose domains have not changed. Each narrowing,
+including strict-subset forcing, marks both the current and next candidate-local
+bitsets. A concurrent transfer cannot consume the only pending wakeup. The
+next-generation bitset is reset only at uniform sweep boundaries; dependency order,
+barriers and atomic intersections remain in force. Original truth and the rule
+that an original-false composite cannot constrain its children are unchanged.
+
+The directory adds host preparation and retained device storage; each candidate
+adds two bitsets of `ceil(nodes/32)` words. Admission includes these capacities
+with the complete batch, and work receipts retain the dense allowance plus
+conservative initialization, lookup and wakeup costs. Skipped transfers do not
+earn a smaller reported work charge. If optional storage or its work allowance
+cannot be admitted, preparation selects dense execution on the same device. A
+smaller allowance for an indexed resident can trigger fresh dense preparation;
+it need not preserve that residency. Batch statistics report the selected route.
+Tight checking has no frozen propagation and accepts only `Dense`.
+
+The refinement obligation is to preserve every compatible proper-subset reduct
+model while ensuring changed domains cannot lose their dependent transfers.
+Tests exercise that boundary; existing Lean laws do not establish this shader
+scheduler's correspondence. Exact host completion of residuals remains required.
 
 `FormulaVerdict::Residual` requires the exact host completion path. Candidate
 ordering, original theory identity and the frozen candidate are preserved across
@@ -183,8 +219,13 @@ by their primitive after a failed call, independently of shared context health.
 
 Ordinary formula checking retains nonnegative thresholds and ordinal min/max
 cuts directly. Each original node keeps its ID; guards share condition and
-low/high value columns. Four u32 limbs preserve the full admitted weighted-sum
-range, and two preserve ordinal ranks. Constants omit unused rows. Original
+low/high value columns. A complete-row bound certifies whether arithmetic fits
+in 32, 64 or 128 bits; no candidate-dependent sample justifies narrowing. Four
+u32 wire limbs still preserve the full admitted weighted-sum range. Supported
+integer-64 instructions operate on two limbs for full-width values or one for
+certified 64-bit values; the portable implementation retains exact carry and
+borrow operations. Ordinal certificates include the empty-minimum sentinel.
+Constants omit unused rows. Original
 truth is exact; frozen propagation uses conservative linear reductions with
 explicit CPU completion of residuals. This path does not require optional GPU
 integer features or supplied host eligibility masks.

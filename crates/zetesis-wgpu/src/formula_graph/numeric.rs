@@ -201,7 +201,7 @@ impl Rows {
             let length = address(theory.parts().rows()[entry.source].length)?;
             self.tail_words = length
                 .checked_mul(3)
-                .and_then(|n| n.checked_add(2))
+                .and_then(|n| n.checked_add(3))
                 .and_then(|n| n.checked_add(u32::try_from(entry.guards.len()).ok()?))
                 .and_then(|n| self.tail_words.checked_add(n))
                 .ok_or_else(|| capacity("numeric column offsets exceed u32"))?;
@@ -295,7 +295,10 @@ pub(super) fn append(
             continue;
         }
         let guards = &rows.guards[entry.guards.clone()];
-        super::append(words, &[guards[0].1, address(guards.len())?])?;
+        super::append(
+            words,
+            &[guards[0].1, address(guards.len())?, entry.summary.width()],
+        )?;
         let row = theory.parts().rows()[entry.source];
         let span = row.start..row.start + row.length;
         for &condition in &theory.parts().conditions()[span.clone()] {

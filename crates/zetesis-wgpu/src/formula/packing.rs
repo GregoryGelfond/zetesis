@@ -85,7 +85,7 @@ impl Shape {
         let variables = atoms
             .checked_add(auxiliary)
             .ok_or_else(|| capacity("formula variable addresses overflow"))?;
-        // Strided GPU loops increment by 64 after their last valid address.
+        // Strided GPU loops increment by at most 64 after their last valid address.
         if [atoms, nodes, roots, variables]
             .into_iter()
             .any(|n| n > u32::MAX - 64)
@@ -134,6 +134,7 @@ pub(super) struct Schedule {
     pub(super) root_bytes: u64,
     pub(super) bytes: u64,
     pub(super) setup_work: u32,
+    pub(super) incidence: Option<crate::formula_graph::incidence::Layout>,
 }
 impl Schedule {
     pub(super) fn new(shape: &Shape, levels: u32, device: &wgpu::Limits) -> Result<Self, GpuError> {
@@ -149,7 +150,38 @@ impl Schedule {
                 .setup_work
                 .checked_add(levels)
                 .ok_or_else(|| capacity("formula level work overflows"))?,
+            incidence: None,
         })
+    }
+
+    pub(super) fn with_incidence(
+        mut self,
+        incidence: crate::formula_graph::incidence::Layout,
+        device: &wgpu::Limits,
+    ) -> Result<Self, GpuError> {
+        if u64::from(incidence.offset) * 4 != self.root_bytes {
+            return Err(capacity(
+                "formula incidence offset differs from root prefix",
+            ));
+        }
+        let extra = mul(u64::from(incidence.words), 4)?;
+        self.root_bytes = sum(&[self.root_bytes, extra])?;
+        buffer(self.root_bytes, device)?;
+        self.bytes = sum(&[self.bytes, extra])?;
+        self.setup_work = self
+            .setup_work
+            .checked_add(incidence.setup_work)
+            .ok_or_else(|| capacity("formula dirty setup work overflows"))?;
+        self.incidence = Some(incidence);
+        Ok(self)
+    }
+
+    pub(super) fn propagation(&self) -> crate::GpuPropagation {
+        if self.incidence.is_some() {
+            crate::GpuPropagation::ChangedDependencies
+        } else {
+            crate::GpuPropagation::Dense
+        }
     }
 }
 
@@ -218,7 +250,11 @@ impl Plan {
         };
         let seeds = array(shape.words)?;
         let masks = array(shape.nodes)?;
-        let domains = array(shape.variables)?;
+        let domain_words = schedule.incidence.as_ref().map_or(
+            Ok(shape.variables),
+            crate::formula_graph::incidence::Layout::domain_words,
+        )?;
+        let domains = array(domain_words)?;
         let results = mul(u64::from(count.max(1)), 24)?;
         if u64::from(count) * 6 > u64::from(u32::MAX) {
             return Err(capacity("formula result offset exceeds u32"));
@@ -258,6 +294,9 @@ impl Plan {
             sweep: shape
                 .sweep_work
                 .checked_add(schedule.levels)
+                .and_then(|n| {
+                    n.checked_add(schedule.incidence.as_ref().map_or(0, |i| i.sweep_work))
+                })
                 .ok_or_else(|| capacity("formula sweep level work overflows"))?,
             max_rounds: limits.max_rounds,
             max_work: limits.max_work_per_candidate,
@@ -293,7 +332,7 @@ impl Plan {
             graph.shape.roots,
             graph.shape.variables,
             graph.shape.words,
-            self.worlds,
+            graph.schedule.incidence.as_ref().map_or(0, |i| i.offset),
             self.max_rounds,
             self.max_work,
             self.setup,
@@ -306,19 +345,24 @@ impl Plan {
         &self,
         graph: &Graph,
         candidates: &[Interpretation],
+        staging: &mut crate::candidates::Staging,
+        ceiling: u64,
         cancellation: &zetesis_cpu::Cancellation,
-    ) -> Result<Vec<u32>, GpuError> {
+    ) -> Result<u64, GpuError> {
         if candidates.len() != self.worlds as usize {
+            staging.release();
             return Err(capacity(
                 "formula candidate count differs from admitted plan",
             ));
         }
-        let length = usize::try_from(self.seeds / 4)
-            .map_err(|_| capacity("formula candidate bytes exceed host"))?;
-        let mut words = vector(length)?;
-        words.resize(length, 0u32);
-        crate::candidates::pack(&graph.shape.theory, candidates, &mut words, cancellation)?;
-        Ok(words)
+        staging.pack(
+            &graph.shape.theory,
+            candidates,
+            self.seeds,
+            self.accounted,
+            ceiling,
+            cancellation,
+        )
     }
 }
 
