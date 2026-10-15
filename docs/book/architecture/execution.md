@@ -209,17 +209,16 @@ oracle comparison of answer sets as sets, not on order or determinism.
 Candidate production and membership need not run on the same executor.
 `StableModels::with_region_producers` uses the same original-theory readings
 and disjoint splits in bounded Rayon rounds. A worker returns a classical leaf;
-the coordinator independently checks original satisfaction before admitting it
-to the membership batch. The device then checks the selected reduct-preserving
-plan, and native completion finishes any general-reduct residuals. Producers
-never complete membership merely to ask the device to repeat it.
+the coordinator retains it until original satisfaction and reduct membership
+have been established. Device execution checks both in one operation. Native
+completion finishes any general-reduct residuals. Producers never complete
+membership merely to ask the device to repeat it.
 
 ```text
 while candidate_frontier is unfinished:
     candidates := bounded_parallel_leaves(frontier, original_readings)
     join_producers_and_settle_work()
-    admitted := check_original_satisfaction(candidates)
-    verdicts := execute_selected_membership_plan(admitted)
+    verdicts := check_original_and_selected_membership_plan(candidates)
     answers := complete_residuals_and_commit(verdicts)
     yield answers
 ```
@@ -234,13 +233,23 @@ with device execution. Pending-byte limits cover pending/result storage and
 original-validation scratch, not the entire region frontier, thread stacks or
 process memory.
 
-Scalar and joined batch proposals reuse one `EvaluationWorkspace` per owner.
-Each candidate still receives an independent full original-formula evaluation;
-only allocated capacity survives between candidates. The pending-byte allowance
+The generic batch-checker API independently validates original satisfaction
+using one `EvaluationWorkspace` per owner. Each candidate receives a full
+original-formula evaluation; only allocated capacity survives between candidates. The pending-byte allowance
 includes the workspace header and actual capacity. A smaller allowance can drop
 optional scratch without invalidating previously checked pending candidates.
 Retrying their external checker does not repeat original validation. Separate
 receipts report validation work and retained bytes.
+
+Device execution uses the explicit joint-check protocol. A successful
+`CheckedBatch` binds decoded results to the exact theory and candidate slice;
+all non-`NotModel` results establish original satisfaction, including residuals.
+The coordinator consumes these receipts in order and commits only after the
+entire pending batch succeeds. A failed device call retains pending candidates;
+retrying through the generic API first performs independent original validation.
+`NotModel` is a producer invariant failure and cannot become exhaustion or a
+partially published batch. The trusted callback contract and actual device
+execution remain separate from mechanically proved correspondence.
 
 The executor and its producer slots persist between batches. Each slot keeps
 its narrowing worklists and, when needed, one checker for the immutable source.
@@ -417,11 +426,13 @@ question. Ordinary formula sessions with automatic membership policy select this
 primitive on an explicit device backend when complete tight preparation succeeds.
 
 The complete device-work allowance is
-`nodes + edges + roots + producers + 2 * ceil(atoms / 32) + levels`, where `edges`
-counts every child occurrence, including repetitions, inline pairs and
-implication. Original truth reads every operand; one word scan constructs or
-initializes support and one checks missing support. `levels` is zero for serial
-truth evaluation. Cold preparation uses a level schedule when its extra storage
+`nodes + edges + roots + producers + 2 * ceil(atoms / 32) + levels + numeric`,
+where `edges` counts every child occurrence, including repetitions, inline pairs
+and implication. `numeric` reserves `48*n+32` per variable threshold and `24*n+16`
+per variable extremum cut, for `n` condition occurrences. Complete original truth
+reads every operand; one word scan constructs or initializes support and one
+checks missing support. `levels` is zero for serial truth evaluation.
+Cold preparation uses a level schedule when its extra storage
 and work fit; otherwise it retains serial evaluation. A tighter work allowance
 can also select serial evaluation over an already retained graph. Retained
 schedule storage remains accounted even then, so reducing a later byte allowance
@@ -429,6 +440,23 @@ can still produce a typed capacity refusal. Work receipts and
 pre-dispatch admission use this same allowance: an exact allowance is admitted
 and one less is refused. Historical work counts need their source identity
 when compared. These counts do not measure latency or change membership.
+
+A later tight batch can reuse original truth from a successful batch with the
+same theory and candidate count. Each existing truth word holds its value and a
+change bit. In dependency order, unchanged operands preserve a gate's value;
+changed operands trigger the existing reduction. Shared numeric row owners update
+all their guards together. Every root and producer is still checked, and support
+is rebuilt. Reuse adds no buffers or bindings. Its optional allowance is
+`4 + 2*nodes + edges` beyond the complete scan; insufficient work selects complete
+evaluation. Change detection can add work when many values change, so reuse does
+not itself establish a speedup. `original_truth_reused` records the selected route.
+
+Only complete decoding, healthy context completion and the final cancellation
+check authorize reuse. Dispatch consumes that authority before queue writes;
+any failure, changed theory/count or explicit clear invalidates it. Without
+valid authority, the same encoder clears the prior result hints before computing.
+Epoch and slot headers alone never authorize retained truth. All consumers mask
+the value bit, including roots and producer bodies.
 
 Preparation shares the CPU certificate constructor and cumulative search budget,
 but does not activate CPU certificate checking. The executor is selected before
@@ -528,8 +556,10 @@ for level in dependency_order:
 ```
 
 This constructs the original truth used by the Ferraris reduct. Node and root
-identities remain unchanged. The order is reused for the same retained theory;
-truth is recomputed for every candidate. A chain with one node per level keeps
+identities remain unchanged. The order is reused for the same retained theory.
+General checking recomputes original truth for each candidate; tight checking may
+reuse unchanged values under the successful-batch contract above. A chain with
+one node per level keeps
 the serial fold because it contains no independent node work. Other narrow
 levels may still pay more in barriers than they gain in parallel evaluation.
 

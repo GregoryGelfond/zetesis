@@ -20,6 +20,7 @@
 mod adapter;
 mod aggregate;
 mod candidates;
+mod checked_batch;
 mod context;
 mod formula;
 mod formula_graph;
@@ -43,6 +44,7 @@ use packing::{BatchPlan, GraphPlan, PackedGraph, PackedSeeds};
 use residency::ResidentGraph;
 use runtime::{DeviceProfile, ErrorScopes, Runtime};
 
+pub use checked_batch::CheckedBatch;
 pub use context::GpuContext;
 pub use kernel::{GpuKernelOptions, GpuPropagation, GpuWorkgroupSize};
 

@@ -82,37 +82,53 @@ pub(crate) fn check(
     verdicts
         .try_reserve_exact(candidates.len())
         .map_err(|_| Failure::Search(Incomplete::Allocation))?;
-    let result = phases.measure(SolvePhase::GpuHostOracle, || {
-        oracle.check_batch(plan, candidates, limits, cancellation)
-    });
-    // The primitive submits one ordered batch, even if its readback fails.
-    // Retain that receipt before propagating the original device error.
-    let activity = oracle.activity();
-    let submission = record_submission(
-        statistics,
-        (activity.submissions != 0).then_some(candidates.len()),
-    );
-    let scheduled = add(
-        statistics.gpu_scheduled_work.get_or_insert(0),
-        activity.scheduled_work,
-    );
-    let checks = result.map_err(|error| match error {
-        TightGpuError::Stopped(stop) => Failure::Search(stop.into()),
-        TightGpuError::Gpu(error) => Failure::Run(SolveError::Gpu(error)),
-    })?;
-    submission?;
-    scheduled?;
-    statistics
-        .gpu_compute_timing
-        .record(oracle.last_compute_time());
-    if let Some(batch) = oracle.last_batch_stats() {
-        add(&mut statistics.gpu_batches, batch.dispatches)?;
-        add(&mut statistics.gpu_candidates, batch.candidates)?;
-        add(&mut statistics.gpu_work, batch.work)?;
-        statistics.peak_accounted_bytes =
-            statistics.peak_accounted_bytes.max(batch.accounted_bytes);
+    while verdicts.len() < candidates.len() {
+        let pending = &candidates[verdicts.len()..];
+        let result = phases.measure(SolvePhase::GpuHostOracle, || {
+            oracle.check_prefix(plan, pending, limits, cancellation)
+        });
+        // The primitive submits one ordered batch, even if its readback fails.
+        // Retain that receipt before propagating the original device error.
+        let activity = oracle.activity();
+        let submission = record_submission(
+            statistics,
+            (activity.submissions != 0).then_some(
+                usize::try_from(activity.submitted_candidates)
+                    .map_err(|_| Failure::Search(Incomplete::CounterOverflow))?,
+            ),
+        );
+        let scheduled = add(
+            statistics.gpu_scheduled_work.get_or_insert(0),
+            activity.scheduled_work,
+        );
+        let checks = result.map_err(|error| match error {
+            TightGpuError::Stopped(stop) => Failure::Search(stop.into()),
+            TightGpuError::Gpu(error) => Failure::Run(SolveError::Gpu(error)),
+        })?;
+        submission?;
+        scheduled?;
+        let count = checks.checks().len();
+        if count == 0 || count > pending.len() {
+            return Err(Failure::Run(SolveError::FormulaBatchShape {
+                expected: pending.len(),
+                actual: count,
+            }));
+        }
+        let checks = checks
+            .into_checks(plan.theory(), &pending[..count])
+            .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
+        statistics
+            .gpu_compute_timing
+            .record(oracle.last_compute_time());
+        if let Some(batch) = oracle.last_batch_stats() {
+            add(&mut statistics.gpu_batches, batch.dispatches)?;
+            add(&mut statistics.gpu_candidates, batch.candidates)?;
+            add(&mut statistics.gpu_work, batch.work)?;
+            statistics.peak_accounted_bytes =
+                statistics.peak_accounted_bytes.max(batch.accounted_bytes);
+        }
+        verdicts.extend(checks.into_iter().map(|check| verdict(check.verdict())));
     }
-    verdicts.extend(checks.into_iter().map(|check| verdict(check.verdict())));
     Ok(verdicts)
 }
 

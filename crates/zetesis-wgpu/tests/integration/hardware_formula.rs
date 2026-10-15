@@ -676,6 +676,7 @@ fn metal_formula_limits_resize_identity_and_word_boundaries_remain_explicit() {
 
 fn qualify_resources(backend: GpuApi, projection: GateProjection) {
     let mut oracle = oracle(backend, projection);
+    qualify_prefixes(&mut oracle);
     let graph = theory(1, vec![Node::atom(0)], vec![0]);
     let inputs = candidates(&graph);
     for (limits, expected) in [
@@ -837,4 +838,92 @@ fn vulkan_formula_resource_boundaries_remain_explicit() {
     for projection in GateProjection::ALL {
         qualify_resources(GpuApi::Vulkan, projection);
     }
+}
+
+fn qualify_prefixes(oracle: &mut GpuFormulaOracle) {
+    let graph = theory(
+        2,
+        vec![Node::atom(0), Node::atom(1), Node::implies(0, 1)],
+        vec![2],
+    );
+    let mut input = candidates(&graph);
+    input.push(input[1].clone());
+    let exact = oracle
+        .propagate_batch(&graph, &input, FormulaLimits::default())
+        .unwrap();
+    oracle.clear_residency();
+    oracle
+        .propagate_batch(&graph, &input[..2], FormulaLimits::default())
+        .unwrap();
+    let cold_bytes = oracle.last_batch_stats().unwrap().accounted_bytes;
+    oracle.clear_residency();
+    let first = oracle
+        .propagate_prefix_with_cancellation(
+            &graph,
+            &input,
+            FormulaLimits {
+                max_batch_bytes: cold_bytes,
+                ..Default::default()
+            },
+            &Cancellation::default(),
+        )
+        .unwrap();
+    assert_eq!(first.checks(), &exact[..2]);
+    assert!(std::ptr::eq(first.candidates(), &raw const input[..2]));
+    assert!(oracle.last_batch_stats().unwrap().theory_uploaded);
+    assert_eq!(oracle.last_submission_candidates(), Some(2));
+    let mut completed = first.checks().to_vec();
+    while completed.len() < input.len() {
+        let suffix = &input[completed.len()..];
+        let next = oracle
+            .propagate_prefix_with_cancellation(
+                &graph,
+                suffix,
+                FormulaLimits {
+                    max_candidates: 2,
+                    max_batch_bytes: cold_bytes,
+                    ..Default::default()
+                },
+                &Cancellation::default(),
+            )
+            .unwrap();
+        assert_eq!(next.checks().len(), suffix.len().min(2));
+        assert!(std::ptr::eq(
+            next.candidates(),
+            &raw const suffix[..next.checks().len()]
+        ));
+        assert!(!oracle.last_batch_stats().unwrap().theory_uploaded);
+        completed.extend_from_slice(next.checks());
+    }
+    assert_eq!(completed, exact);
+    let one_bytes = oracle.last_batch_stats().unwrap().accounted_bytes;
+    let error = oracle
+        .propagate_prefix_with_cancellation(
+            &graph,
+            &input,
+            FormulaLimits {
+                max_batch_bytes: one_bytes - 1,
+                ..Default::default()
+            },
+            &Cancellation::default(),
+        )
+        .err()
+        .unwrap();
+    assert_eq!(error.kind(), GpuErrorKind::Capacity);
+    assert_eq!(oracle.last_submission_candidates(), None);
+    assert!(oracle.last_batch_stats().is_none());
+    let empty = oracle
+        .propagate_prefix_with_cancellation(
+            &graph,
+            &[],
+            FormulaLimits {
+                max_candidates: 0,
+                max_batch_bytes: 0,
+                ..Default::default()
+            },
+            &Cancellation::default(),
+        )
+        .unwrap();
+    assert!(empty.checks().is_empty());
+    assert_eq!(oracle.last_submission_candidates(), None);
 }

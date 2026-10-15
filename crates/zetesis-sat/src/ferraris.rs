@@ -123,7 +123,7 @@ pub struct Statistics {
     /// Successful permanent restrictions and bound updates, cumulatively.
     /// This is an installation count, not the population of retained indexes.
     pub candidate_restrictions: u64,
-    /// Classical candidates admitted for membership checking, including retained
+    /// Owned candidates proposed for membership checking, including retained
     /// pending proposals in the batched protocol.
     pub candidates: u64,
     /// Frozen reduct SAT queries started.

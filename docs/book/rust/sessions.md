@@ -217,11 +217,14 @@ owner before enumeration. Theories without a complete tight certificate continue
 through general device propagation, as does explicit `Oracle::Countermodel`.
 A positive program may itself qualify for tight checking; positivity alone does
 not select the general route. Device failures are returned
-without CPU replacement. Tight device work counts a complete original-truth and
-support scan; `gpu_formula_rounds` only limits the general propagator.
+without CPU replacement. Tight device work reserves a complete original-truth
+and support scan, with an additional allowance when retained truth enables
+change detection. Insufficient optional work retains complete evaluation;
+`gpu_formula_rounds` only limits the general propagator.
 
 `completion_workers` bounds unresolved queries. Complete tight device results
-use scalar original validation and batch commit, preserving the configured
+establish original satisfaction on the device and use scalar batch commit,
+preserving the configured
 scratch limit without creating residual worker threads. Their completion receipt
 reports the selected scalar executor and zero effective residual workers.
 

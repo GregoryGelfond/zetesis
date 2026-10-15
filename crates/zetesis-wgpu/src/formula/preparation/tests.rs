@@ -502,3 +502,56 @@ fn constant_graph_admission_is_monotone_in_batch_bytes() {
     }
     assert!(admitted, "the complete preparation envelope was exercised");
 }
+
+#[test]
+fn threshold_outputs_wake_the_shared_owner() {
+    use zetesis_ferraris::{FormulaNodes, FormulaParts, NodeView};
+    let mut nodes = FormulaNodes::new(
+        FormulaParts::new(
+            vec![Node::atom(0), Node::atom(1), Node::atom(2), Node::falsum()],
+            vec![],
+        )
+        .unwrap(),
+    );
+    let mut transaction = nodes.transaction();
+    let guards = transaction
+        .push_threshold_family(&[0, 1, 2, 3], &[1; 4], &[1, 2], usize::MAX, usize::MAX)
+        .unwrap();
+    let mut roots = vec![guards[1]];
+    for atom in 0..3 {
+        roots.push(
+            transaction
+                .push(NodeView::Implies(guards[0], atom), usize::MAX, usize::MAX)
+                .unwrap(),
+        );
+    }
+    transaction.commit();
+    let theory = Theory::new(3, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap();
+    let device = wgpu::Limits::default();
+    let (_, dense) = preparation(&theory, FormulaLimits::default())
+        .unwrap()
+        .finish(&device, &Cancellation::default())
+        .unwrap();
+    let (prepared, dirty) = preparation(&theory, FormulaLimits::default())
+        .unwrap()
+        .with_propagation(crate::GpuPropagation::ChangedDependencies)
+        .finish(&device, &Cancellation::default())
+        .unwrap();
+    assert_eq!((dense.setup, dense.sweep), (490, 772));
+    assert_eq!((dirty.setup, dirty.sweep), (492, 938));
+    let incidence = prepared.graph.schedule.incidence.as_ref().unwrap();
+    let offset = incidence.offset as usize;
+    let slot = prepared.nodes[guards[1] * 4 + 3] as usize;
+    let start = prepared.roots[offset + slot] as usize;
+    let end = prepared.roots[offset + slot + 1] as usize;
+    let order = offset + prepared.graph.shape.variables as usize + 1;
+    let mut targets = prepared.roots[order + start..order + end].to_vec();
+    targets.sort_unstable();
+    assert_eq!(
+        targets,
+        [
+            u32::try_from(guards[0]).unwrap(),
+            u32::try_from(guards[1]).unwrap()
+        ]
+    );
+}

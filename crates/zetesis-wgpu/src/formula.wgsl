@@ -87,7 +87,7 @@ fn original(world: u32, mask_base: u32, index: u32) {
         }
     }
     if (node.tag >= 7u && node.tag <= 9u) {
-        numeric_original(mask_base, index, node);
+        numeric_original(mask_base, index, node, false);
         return;
     }
     if (node.tag == 10u) { value = true; }
@@ -175,6 +175,9 @@ fn finish(world: u32, status: u32, rounds: u32, work: u32) {
 fn propagate_node(base: u32, mask_base: u32, index: u32) {
     if (!take_dirty(index)) { return; }
     let node = node_at(index);
+    // A frozen-false owner can still carry other live guards of the same row.
+    // The family operation itself gates every source and target by original truth.
+    if (node.tag == 7u) { threshold_guard_family(base, mask_base, index, node); }
     // Crucial reduct boundary: an M-false composite is just false.
     // Its original connective must not constrain the children.
     if (frozen[mask_base + index] != 0u) {

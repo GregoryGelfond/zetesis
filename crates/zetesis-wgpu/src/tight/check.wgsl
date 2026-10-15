@@ -1,6 +1,7 @@
 // Complete original truth plus ranked producer support, one candidate/workgroup.
 // The host accepts only an opaque, checked TightPlan for the complete theory.
-// Wire constants mirror tight/packing.rs. Zero remains ordinary Boolean false.
+// Wire constants mirror tight/packing.rs. Truth bit 0 is the value; bit 1
+// records a change during this dispatch. Every truth reader masks bit 0.
 // Support bit a denotes an enabled producer for a in this candidate's row.
 override WORKGROUP_SIZE: u32 = 64u;
 const NODE_FALSE: u32 = 0u;
@@ -60,38 +61,64 @@ fn producer_at(index: u32) -> Producer {
 }
 
 fn enabled(producer: Producer, values: u32) -> bool {
-    if (producer.has_body != 0u) { return frozen[values + producer.body] != 0u; }
+    if (producer.has_body != 0u) { return (frozen[values + producer.body] & 1u) != 0u; }
     return true;
 }
 
 // Both schedules call the same scalar node transfer. Every child is visible
 // before its parent; native numeric rows read the same frozen truth columns.
-fn original(world: u32, values: u32, index: u32) {
+fn operands_changed(values: u32, node: Node) -> bool {
+    if (node.tag >= NODE_AND && node.tag <= NODE_IMPLIES) {
+        return ((frozen[values + node.left] | frozen[values + node.right]) & 2u) != 0u;
+    }
+    if (node.tag == NODE_ALL || node.tag == NODE_ANY) {
+        for (var child = 0u; child < node.right; child++) {
+            if ((frozen[values + operand_at(node, child)] & 2u) != 0u) { return true; }
+        }
+        return false;
+    }
+    // Atoms inspect current membership; constants clear their prior change bit.
+    return true;
+}
+
+fn original(world: u32, values: u32, index: u32, reuse: bool) {
     let node = node_at(index);
+    if (node.tag >= 7u && node.tag <= 9u) {
+        numeric_original(values, index, node, reuse);
+        return;
+    }
+    if (reuse && !operands_changed(values, node)) {
+        frozen[values + index] &= 1u;
+        return;
+    }
     var value = false;
     if (node.tag == NODE_ATOM) { value = contains(world, node.left); }
     if (node.tag >= NODE_AND && node.tag <= NODE_IMPLIES) {
-        value = operation(node.tag, frozen[values + node.left] != 0u,
-            frozen[values + node.right] != 0u);
+        value = operation(node.tag, (frozen[values + node.left] & 1u) != 0u,
+            (frozen[values + node.right] & 1u) != 0u);
     }
     if (node.tag == NODE_ALL || node.tag == NODE_ANY) {
         value = node.tag == NODE_ALL;
         for (var child = 0u; child < node.right; child++) {
-            let next = frozen[values + operand_at(node, child)] != 0u;
+            let next = (frozen[values + operand_at(node, child)] & 1u) != 0u;
             value = select(value || next, value && next, node.tag == NODE_ALL);
         }
     }
-    if (node.tag >= 7u && node.tag <= 9u) {
-        numeric_original(values, index, node);
-        return;
-    }
     if (node.tag == 10u) { value = true; }
-    frozen[values + index] = select(0u, 1u, value);
+    let next = select(0u, 1u, value);
+    let changed = reuse && next != (frozen[values + index] & 1u);
+    frozen[values + index] = next | select(0u, 2u, changed);
 }
 
 fn check_support(world: u32, lane: u32, grouped: bool) {
     let values = world * params.nodes;
     let supported = world * params.words;
+    let prior = world * RESULT_WORDS;
+    // The host either retained explicit successful ownership or cleared these
+    // hints in this same encoder. Epoch/slot/marker do not authorize reuse alone.
+    let reuse = params.epoch > 1u && results[prior] == params.epoch - 1u &&
+        results[prior + 1u] == world &&
+        results[prior + 5u] == select(RESULT_MAGIC, RESULT_GROUPED_MAGIC, grouped);
     if (lane == 0u) {
         atomicStore(&first_root, params.roots);
         atomicStore(&first_atom, params.atoms);
@@ -99,7 +126,7 @@ fn check_support(world: u32, lane: u32, grouped: bool) {
     if (params.levels == 0u) {
         if (lane == 0u) {
             for (var index = 0u; index < params.nodes; index++) {
-                original(world, values, index);
+                original(world, values, index, reuse);
             }
         }
     } else {
@@ -108,7 +135,7 @@ fn check_support(world: u32, lane: u32, grouped: bool) {
         for (var level = 0u; level < params.levels; level++) {
             let end = roots[offsets + level + 1u];
             for (var position = roots[offsets + level] + lane; position < end; position += WORKGROUP_SIZE) {
-                original(world, values, roots[order + position]);
+                original(world, values, roots[order + position], reuse);
             }
             storageBarrier();
             workgroupBarrier();
@@ -123,7 +150,7 @@ fn check_support(world: u32, lane: u32, grouped: bool) {
     storageBarrier();
     workgroupBarrier();
     for (var ordinal = lane; ordinal < params.roots; ordinal += WORKGROUP_SIZE) {
-        if (frozen[values + roots[ordinal]] == 0u) {
+        if ((frozen[values + roots[ordinal]] & 1u) == 0u) {
             atomicMin(&first_root, ordinal);
         }
     }

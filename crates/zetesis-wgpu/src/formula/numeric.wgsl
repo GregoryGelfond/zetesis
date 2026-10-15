@@ -1,3 +1,47 @@
+// One row owner propagates requirements among its M-true guards. For a common
+// sum S, S>=h entails S>=l when h>=l; S<u entails S<v when u<=v. False frozen
+// guards are constants, never requirements or targets. Stale reads only omit
+// stronger requirements; atomic intersections keep every compatible completion.
+// No condition sum is repeated here and no per-candidate row state is retained.
+fn threshold_guard_family(base: u32, mask_base: u32, index: u32, node: Node) {
+    let row = numeric_row(node);
+    if (nodes[row - 3u] != index) { return; }
+    let count = nodes[row - 2u];
+    if (count < 2u) { return; }
+    let width = numeric_width(node);
+    let guards = row + (1u + min(width, 2u)) * node.right;
+    var lower = vec4<u32>(0u);
+    var upper = vec4<u32>(0u);
+    var has_upper = false;
+    for (var position = 0u; position < count; position++) {
+        let guard = nodes[guards + position];
+        if (frozen[mask_base + guard] == 0u) { continue; }
+        let guard_node = node_at(guard);
+        let domain = atomicLoad(&domains[base + guard_node.output]);
+        let bound = numeric_bound(guard_node);
+        if (domain == 0u) { atomicStore(&conflict, 1u); return; }
+        if (domain == 2u && row_less(width, lower, bound)) { lower = bound; }
+        if (domain == 1u && (!has_upper || row_less(width, bound, upper))) {
+            upper = bound;
+            has_upper = true;
+        }
+    }
+    if (has_upper && !row_less(width, lower, upper)) {
+        atomicStore(&conflict, 1u);
+        return;
+    }
+    for (var position = 0u; position < count; position++) {
+        let guard = nodes[guards + position];
+        if (frozen[mask_base + guard] == 0u) { continue; }
+        let guard_node = node_at(guard);
+        let bound = numeric_bound(guard_node);
+        var allowed = 3u;
+        if (!row_less(width, lower, bound)) { allowed &= 2u; }
+        if (has_upper && !row_less(width, bound, upper)) { allowed &= 1u; }
+        narrow(base + guard_node.output, allowed);
+    }
+}
+
 // Two linear row passes. Bounds independently relax repeated condition slots;
 // they can lose deductions but cannot remove a satisfying completion. Atomic
 // domains only shrink, so stale lower/upper bounds remain conservative.

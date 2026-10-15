@@ -82,6 +82,7 @@ impl ResidentGraph {
                 result: &transport.result,
                 readback: &transport.readback,
                 result_bytes: plan.result_bytes,
+                clear_result: false,
                 timing: None,
             },
         );

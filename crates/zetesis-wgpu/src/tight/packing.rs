@@ -338,6 +338,7 @@ pub(super) struct Plan {
     pub(super) work: u32,
     pub(super) levels: u32,
     pub(super) epoch: u32,
+    pub(super) original_truth_reused: bool,
 }
 impl Plan {
     pub(super) fn new(
@@ -408,7 +409,25 @@ impl Plan {
             work,
             levels,
             epoch,
+            original_truth_reused: false,
         })
+    }
+
+    /// Keep the already-admitted complete scan when optional change detection
+    /// cannot fit. The bound includes a header decision, old-value comparisons,
+    /// changed-bit publication, and every operand-change inspection; dense
+    /// changes can still require the entire original reduction afterwards.
+    pub(super) fn reuse_original_truth(&mut self, graph: &Graph, ceiling: u64) {
+        let work = graph
+            .nodes
+            .checked_mul(2)
+            .and_then(|n| n.checked_add(graph.edges))
+            .and_then(|n| n.checked_add(4))
+            .and_then(|extra| self.work.checked_add(extra));
+        if let Some(work) = work.filter(|work| u64::from(*work) <= ceiling) {
+            self.work = work;
+            self.original_truth_reused = true;
+        }
     }
 
     pub(super) fn params(&self, graph: &Graph) -> [u32; 8] {

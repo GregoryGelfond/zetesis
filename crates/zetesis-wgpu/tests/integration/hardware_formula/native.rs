@@ -7,6 +7,7 @@ pub(super) fn qualify(oracle: &mut GpuFormulaOracle) {
     qualify_full_width(oracle);
     qualify_carry_and_borrow(oracle);
     qualify_settled_rows(oracle);
+    qualify_threshold_guard_families(oracle);
     for bound in -1..=8 {
         let mut nodes = FormulaNodes::new(
             FormulaParts::new(
@@ -430,4 +431,25 @@ pub(super) fn qualify_shared_ordinals(oracle: &mut GpuFormulaOracle) {
     )
     .unwrap();
     compare_native(oracle, &theory);
+}
+
+// The host characterization establishes the corresponding CPU frozen closure.
+// This assertion detects the missing cross-guard deduction: the old local
+// threshold transfers reached a fixed-point residual on the same candidate.
+fn qualify_threshold_guard_families(oracle: &mut GpuFormulaOracle) {
+    for weight in [1, u64::MAX] {
+        for order in [&[1, 2][..], &[2, 1], &[4, 1, 2]] {
+            let theory = crate::formula::frozen_guards::theory(weight, order);
+            compare_native(oracle, &theory);
+            let candidate = Interpretation::new(&theory, [0, 1, 2]).unwrap();
+            let result = oracle
+                .propagate_batch(&theory, &[candidate], FormulaLimits::default())
+                .unwrap();
+            assert_eq!(result[0].verdict(), FormulaVerdict::NoProperSubset);
+            assert_eq!(
+                oracle.last_batch_stats().unwrap().propagation,
+                oracle.compiled_profile().kernel_options().propagation
+            );
+        }
+    }
 }

@@ -241,6 +241,10 @@ impl GpuTightOracle {
     /// roots, independently of the particular valid ranks. Thus theory identity
     /// is sufficient for this producer cache; arbitrary supplied producers are
     /// never accepted. Transport is replaced when candidate count changes.
+    /// Original truth may reuse unchanged dependencies from a wholly successful
+    /// prior batch with that same subject/count. Every root and producer remains
+    /// checked. Change detection is optional: if its conservative work allowance
+    /// does not fit, the existing complete evaluation runs without new storage.
     /// Host upload words reuse initialized scratch for that same subject/count.
     /// Their actual capacity is charged, and an oversized optional allocation is
     /// replaced when a smaller allowance fits fresh storage. Replacement drops
@@ -267,8 +271,51 @@ impl GpuTightOracle {
         self.last = None;
         self.last_compute_time = None;
         self.activity = TightGpuActivity::default();
-        self.check(certificate, candidates, limits, cancellation)
-            .map_err(Into::into)
+        self.check(
+            certificate,
+            candidates,
+            limits,
+            cancellation,
+            crate::candidates::BatchSize::Exact(candidates.len()),
+        )
+        .map_err(Into::into)
+    }
+
+    /// Check the largest nonempty prefix admitted by the prepared tight layout.
+    ///
+    /// The input slice and `max_candidates` both cap the count. Cold certificate
+    /// packing occurs once, then the existing checked layout selects the largest
+    /// count for that schedule. The returned receipt borrows exactly the checked
+    /// prefix in its original order. Empty input still observes control and
+    /// context health. Statistics and submission activity name the actual prefix.
+    ///
+    /// # Errors
+    /// Preserves [`Self::check_batch`]'s typed failures and returns no partial
+    /// checks. A one-candidate capacity or mandatory-work refusal remains an
+    /// error. Allocation, cancellation and device faults never authorize retry
+    /// at a smaller count or CPU fallback.
+    pub fn check_prefix<'a>(
+        &mut self,
+        certificate: &'a TightPlan,
+        candidates: &'a [Interpretation],
+        limits: TightGpuLimits,
+        cancellation: &Cancellation,
+    ) -> Result<crate::CheckedBatch<'a, TightGpuCheck>, TightGpuError> {
+        self.last = None;
+        self.activity = TightGpuActivity::default();
+        self.last_compute_time = None;
+        let checks = self.check(
+            certificate,
+            candidates,
+            limits,
+            cancellation,
+            crate::candidates::BatchSize::Prefix(candidates.len()),
+        )?;
+        Ok(crate::CheckedBatch::new(
+            certificate.theory(),
+            &candidates[..checks.len()],
+            checks,
+        ))
     }
 
     fn check(
@@ -277,6 +324,24 @@ impl GpuTightOracle {
         candidates: &[Interpretation],
         limits: TightGpuLimits,
         cancellation: &Cancellation,
+        size: crate::candidates::BatchSize,
+    ) -> Result<Vec<TightGpuCheck>, GpuError> {
+        let result = self.check_inner(certificate, candidates, limits, cancellation, size);
+        if result.is_err()
+            && let Some(resident) = self.resident.as_mut()
+        {
+            resident.invalidate_original_truth();
+        }
+        result
+    }
+
+    fn check_inner(
+        &mut self,
+        certificate: &TightPlan,
+        candidates: &[Interpretation],
+        limits: TightGpuLimits,
+        cancellation: &Cancellation,
+        size: crate::candidates::BatchSize,
     ) -> Result<Vec<TightGpuCheck>, GpuError> {
         let context = self.runtime.context.clone();
         let _lease = context.lease()?;
@@ -286,7 +351,7 @@ impl GpuTightOracle {
             return Ok(Vec::new());
         }
         let PreparedCall { fresh, plan, stats } =
-            self.prepare(certificate, candidates, limits, cancellation)?;
+            self.prepare(certificate, candidates, limits, cancellation, size)?;
         poll(cancellation)?;
         let scopes = ErrorScopes::new(self.runtime.device());
         if let Some((mut graph, packed)) = fresh {
@@ -319,6 +384,9 @@ impl GpuTightOracle {
             Ok(checks)
         });
         if result.is_ok() {
+            if let Some(resident) = self.resident.as_mut() {
+                resident.complete_original_truth();
+            }
             self.last = Some(stats);
         } else {
             self.last_compute_time = None;
@@ -332,6 +400,7 @@ impl GpuTightOracle {
         candidates: &[Interpretation],
         limits: TightGpuLimits,
         cancellation: &Cancellation,
+        size: crate::candidates::BatchSize,
     ) -> Result<PreparedCall, GpuError> {
         let timed = self
             .runtime
@@ -343,13 +412,13 @@ impl GpuTightOracle {
         // scratch first while leaving the existing device-refusal policy intact.
         if self.resident.as_ref().is_none_or(|resident| {
             !resident.graph.theory.same_instance(certificate.theory())
-                || !resident.matches_count(candidates.len())
+                || (size.is_exact() && !resident.matches_count(candidates.len()))
         }) {
             self.candidates.release();
         }
         let mut admission = Admission::new(
             certificate,
-            candidates,
+            &candidates[..size.initial()],
             admitted_limits,
             Packing {
                 device: self.runtime.limits(),
@@ -370,10 +439,6 @@ impl GpuTightOracle {
         )?;
         if admission.fresh.is_some() {
             self.resident = None;
-        } else if admission.stats.transport_allocated
-            && let Some(resident) = self.resident.as_mut()
-        {
-            resident.transport = None;
         }
         let packed = admission.pack(
             certificate,
@@ -381,11 +446,18 @@ impl GpuTightOracle {
             self.runtime.limits(),
             cancellation,
         )?;
+        self.select_prefix(&mut admission, size, admitted_limits, timed, cancellation)?;
         let Admission {
             fresh,
-            plan,
+            mut plan,
             mut stats,
         } = admission;
+        if stats.transport_allocated {
+            self.candidates.release();
+            if let Some(resident) = self.resident.as_mut() {
+                resident.transport = None;
+            }
+        }
         stats.resident_transport_bytes += timing_bytes;
         stats.downloaded_bytes += if timed {
             crate::timing::READBACK_BYTES
@@ -396,9 +468,18 @@ impl GpuTightOracle {
             .as_ref()
             .or_else(|| self.resident.as_ref().map(|r| &r.graph))
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing tight packing graph"))?;
+        if self
+            .resident
+            .as_ref()
+            .is_some_and(Resident::original_truth_valid)
+        {
+            plan.reuse_original_truth(graph, admitted_limits.max_work_per_candidate);
+        }
+        stats.original_truth_reused = plan.original_truth_reused;
+        stats.work = u64::from(plan.worlds) * u64::from(plan.work);
         stats.accounted_bytes = plan.pack(
             graph,
-            candidates,
+            &candidates[..plan.worlds as usize],
             &mut self.candidates,
             admitted_limits.max_batch_bytes,
             cancellation,
@@ -408,6 +489,48 @@ impl GpuTightOracle {
             plan,
             stats,
         })
+    }
+    fn select_prefix(
+        &self,
+        admission: &mut Admission,
+        size: crate::candidates::BatchSize,
+        limits: TightGpuLimits,
+        timed: bool,
+        cancellation: &Cancellation,
+    ) -> Result<(), GpuError> {
+        if !size.is_exact() {
+            let graph = admission
+                .fresh
+                .as_ref()
+                .or_else(|| self.resident.as_ref().map(|resident| &resident.graph))
+                .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing tight layout graph"))?;
+            let plan = size.select(limits.max_candidates, cancellation, |count| {
+                let plan = super::packing::Plan::new(
+                    graph,
+                    count,
+                    limits,
+                    self.runtime.limits(),
+                    admission.fresh.is_some(),
+                    admission.plan.epoch,
+                )?;
+                crate::timing::readback_size(
+                    plan.results,
+                    timed,
+                    self.runtime.limits().max_buffer_size,
+                )?;
+                Ok(plan)
+            })?;
+            admission.stats = super::admission::batch_stats(
+                graph,
+                &plan,
+                admission.fresh.is_some(),
+                self.resident
+                    .as_ref()
+                    .is_none_or(|resident| !resident.matches_count(plan.worlds as usize)),
+            );
+            admission.plan = plan;
+        }
+        Ok(())
     }
 }
 

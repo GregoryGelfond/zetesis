@@ -23,6 +23,33 @@ pub(super) struct PreparedGraph {
     pub(super) roots: Vec<u32>,
 }
 
+impl PreparedGraph {
+    // Reuse the packed graph and its actual upload capacities when selecting a
+    // larger prefix. No depth calculation or graph packing is repeated.
+    pub(super) fn plan(
+        &self,
+        worlds: usize,
+        limits: FormulaLimits,
+        device: &wgpu::Limits,
+        epoch: u32,
+    ) -> Result<Plan, GpuError> {
+        let mut plan = Plan::new(&self.graph, worlds, limits, device, true, epoch)?;
+        plan.staging(
+            self.graph.shape.node_bytes,
+            retained_bytes(&self.nodes)?,
+            0,
+            limits.max_batch_bytes,
+        )?;
+        plan.staging(
+            self.graph.schedule.root_bytes,
+            0,
+            retained_bytes(&self.roots)?,
+            limits.max_batch_bytes,
+        )?;
+        Ok(plan)
+    }
+}
+
 impl Preparation {
     #[cfg(test)]
     pub(super) fn new(

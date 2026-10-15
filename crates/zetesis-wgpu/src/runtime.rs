@@ -169,6 +169,9 @@ pub(crate) struct Dispatch<'a> {
     pub(crate) result: &'a wgpu::Buffer,
     pub(crate) readback: &'a wgpu::Buffer,
     pub(crate) result_bytes: u64,
+    /// Clear prior receipt hints in this encoder before computing. The owning
+    /// oracle, not bytes from a previous dispatch, authorizes retained truth.
+    pub(crate) clear_result: bool,
     pub(crate) timing: Option<&'a crate::timing::PassTimer>,
 }
 
@@ -180,6 +183,9 @@ pub(crate) fn submit(
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some(dispatch.command_label),
     });
+    if dispatch.clear_result {
+        encoder.clear_buffer(dispatch.result, 0, Some(dispatch.result_bytes));
+    }
     {
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some(dispatch.pass_label),

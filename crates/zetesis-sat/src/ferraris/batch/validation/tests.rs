@@ -111,6 +111,31 @@ fn foreign_candidates_are_refused_before_evaluation() {
 }
 
 #[test]
+fn joint_admission_observes_control_before_counting() {
+    let owner = numeric_theory();
+    let candidate = Interpretation::new(&owner, [1]).unwrap();
+    let cancelled = Cancellation::default();
+    cancelled.cancel();
+    let mut validation = Validation::default();
+    let bytes = validation.retained_bytes();
+    let mut statistics = Statistics::default();
+    assert_eq!(
+        validation.admit(
+            &owner,
+            &candidate,
+            EvaluationLimits::default(),
+            &cancelled,
+            &mut statistics,
+            crate::ferraris::batch::OriginalCheck::Joint,
+        ),
+        Err(Incomplete::Cancelled)
+    );
+    assert_eq!(statistics.candidates, 0);
+    assert_eq!(validation.work(), 0);
+    assert_eq!(validation.retained_bytes(), bytes);
+}
+
+#[test]
 fn interrupted_validation_can_reuse_storage_without_a_receipt() {
     let owner = numeric_theory();
     let accepted = Interpretation::new(&owner, [1]).unwrap();
@@ -291,6 +316,81 @@ fn pending_retry_charges_the_workspace_header_but_can_release_optional_storage()
 }
 
 #[test]
+fn independent_retry_can_admit_new_validation_storage() {
+    use crate::{BatchError, BatchLimits, BatchVerdict, CompletionExecutor, Limits, StableModels};
+    use std::{convert::Infallible, num::NonZeroUsize};
+
+    let owner = numeric_theory();
+    let mut search = StableModels::new(&owner, Limits::default(), Cancellation::default()).unwrap();
+    search.enable_phase_timing();
+    let limits = BatchLimits {
+        max_candidates: NonZeroUsize::MIN,
+        max_pending_bytes: 4096,
+    };
+    let failed = search.next_batch_with_joint_completion(
+        limits,
+        &mut CompletionExecutor::default(),
+        |_, _| Err::<Vec<BatchVerdict>, _>("retry independently"),
+    );
+    assert!(matches!(failed, Err(BatchError::Checker(_))));
+    assert_eq!(search.statistics().candidates, 1);
+    assert_eq!(search.batch_statistics().original_validation_work, 0);
+    let atoms = search.batch.pending[0].atoms().collect::<Vec<_>>();
+    let rows = search.pending_row_bytes() * search.batch.pending.capacity() as u128;
+    let header = std::mem::size_of::<EvaluationWorkspace>() as u128;
+    let too_small = BatchLimits {
+        max_pending_bytes: u64::try_from(rows + header).unwrap(),
+        ..limits
+    };
+    assert!(matches!(
+        search.next_batch(too_small, |_, _| -> Result<Vec<BatchVerdict>, Infallible> {
+            panic!("new validation storage cannot fit")
+        }),
+        Err(BatchError::Limits(Incomplete::PendingBytes))
+    ));
+    // The header and pending rows fit: the refusal came from the newly needed
+    // original evaluation, rather than the retry's outer envelope check.
+    assert_eq!(
+        search
+            .statistics()
+            .phase_timings
+            .unwrap()
+            .original_validation
+            .calls,
+        1
+    );
+    assert_eq!(search.batch_statistics().pending, 1);
+    assert_eq!(search.batch_statistics().committed, 0);
+    assert_eq!(search.batch_statistics().checker_calls, 1);
+    assert_eq!(search.statistics().candidates, 1);
+    assert!(!search.exhausted());
+
+    let retried = search
+        .next_batch(limits, |original, candidates| {
+            assert!(original.same_instance(&owner));
+            assert_eq!(candidates[0].atoms().collect::<Vec<_>>(), atoms);
+            let accepted = zetesis_ferraris::check(
+                original,
+                &candidates[0],
+                zetesis_ferraris::Limits::default(),
+                &Cancellation::default(),
+            )
+            .unwrap()
+            .accepted();
+            Ok::<_, Infallible>(vec![if accepted {
+                BatchVerdict::NoProperSubset
+            } else {
+                BatchVerdict::Refuted
+            }])
+        })
+        .unwrap();
+    assert!(retried.len() <= 1);
+    assert_eq!(search.batch_statistics().committed, 1);
+    assert_eq!(search.statistics().candidates, 1);
+    assert!(search.batch_statistics().original_validation_work > 0);
+}
+
+#[test]
 fn joined_validation_retains_only_the_exact_validated_prefix_on_failure() {
     use crate::{Limits, StableModels};
 
@@ -308,6 +408,7 @@ fn joined_validation_retains_only_the_exact_validated_prefix_on_failure() {
             original_validation: crate::PhaseMeasurement::default(),
         },
         usize::MAX,
+        crate::ferraris::batch::OriginalCheck::Independent,
     );
     assert_eq!(search.batch.pending.len(), 1);
     assert_eq!(search.batch.pending[0].atoms().collect::<Vec<_>>(), vec![1]);

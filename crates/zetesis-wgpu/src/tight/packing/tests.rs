@@ -1202,3 +1202,73 @@ fn interrupted_schedule_preparation_retains_no_publishable_buffers() {
     );
     assert_eq!(graph.levels, 0);
 }
+
+#[test]
+fn prefix_admission_respects_independent_layout_ceilings() {
+    let graph = graph();
+    for fresh in [false, true] {
+        let bytes = plan(&graph, 3, fresh).accounted;
+        let limits = TightGpuLimits {
+            max_batch_bytes: bytes,
+            ..Default::default()
+        };
+        for (candidate_limit, device_limit, expected) in [(8, 8, 3), (2, 8, 2), (8, 1, 1)] {
+            let device = wgpu::Limits {
+                max_compute_workgroups_per_dimension: device_limit,
+                ..Default::default()
+            };
+            let limits = TightGpuLimits {
+                max_candidates: candidate_limit,
+                ..limits
+            };
+            let selected = crate::candidates::BatchSize::Prefix(8)
+                .select(limits.max_candidates, &Cancellation::default(), |count| {
+                    Plan::new(&graph, count, limits, &device, fresh, 1)
+                })
+                .unwrap();
+            assert_eq!(selected.worlds, expected);
+        }
+        let limits = TightGpuLimits {
+            max_work_per_candidate: u64::from(graph.work) - 1,
+            ..limits
+        };
+        assert!(
+            crate::candidates::BatchSize::Prefix(8)
+                .select(limits.max_candidates, &Cancellation::default(), |count| {
+                    Plan::new(&graph, count, limits, &wgpu::Limits::default(), fresh, 1)
+                })
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn retained_truth_work_falls_back_without_new_storage() {
+    let graph = graph();
+    let original = plan(&graph, 2, false);
+    let full_work = original.work;
+    assert_eq!(full_work, 28);
+    let extra = 32;
+    for (ceiling, reuse) in [
+        (u64::from(full_work), false),
+        (u64::from(full_work + extra), true),
+    ] {
+        let mut selected = plan(&graph, 2, false);
+        selected.reuse_original_truth(&graph, ceiling);
+        assert_eq!(selected.original_truth_reused, reuse);
+        assert_eq!(selected.work, full_work + if reuse { extra } else { 0 });
+        assert_eq!(selected.accounted, original.accounted);
+        assert_eq!(selected.transport, original.transport);
+        assert_eq!(selected.params(&graph)[6], selected.work);
+    }
+}
+
+#[test]
+fn retained_truth_work_overflow_keeps_complete_scan() {
+    let graph = graph();
+    let mut selected = plan(&graph, 2, false);
+    selected.work = u32::MAX;
+    selected.reuse_original_truth(&graph, u64::MAX);
+    assert!(!selected.original_truth_reused);
+    assert_eq!(selected.work, u32::MAX);
+}

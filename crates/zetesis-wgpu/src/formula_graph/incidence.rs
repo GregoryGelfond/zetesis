@@ -37,7 +37,7 @@ impl Layout {
         cancellation: &Cancellation,
     ) -> Result<Option<Self>, GpuError> {
         let mut entries = 0_u32;
-        for node in nodes.chunks_exact(4).take(node_count as usize) {
+        for (index, node) in nodes.chunks_exact(4).take(node_count as usize).enumerate() {
             poll(cancellation)?;
             let operands = match node[0] {
                 0 | 1 => continue,
@@ -46,8 +46,15 @@ impl Layout {
                 10 => 0,
                 _ => return Err(capacity("invalid formula incidence operation")),
             };
+            let family = threshold_family(
+                nodes,
+                node_count,
+                u32::try_from(index).map_err(|_| capacity("formula gate index exceeds u32"))?,
+            )
+            .map_or(0, |(_, count)| count - 1);
             entries = entries
-                .checked_add(operands)
+                .checked_add(family)
+                .and_then(|n| n.checked_add(operands))
                 .and_then(|n| n.checked_add(1))
                 .ok_or_else(|| capacity("formula incidence count overflows"))?;
         }
@@ -185,6 +192,15 @@ fn visit(
             insert(gate, value)
         };
         slot(node[3])?;
+        if let Some((guards, count)) = threshold_family(nodes, node_count, gate) {
+            for position in 0..count as usize {
+                poll(cancellation)?;
+                let guard = nodes[guards + position] as usize;
+                if guard != gate as usize {
+                    slot(nodes[guard * 4 + 3])?;
+                }
+            }
+        }
         match node[0] {
             2..=4 => {
                 slot(nodes[node[1] as usize * 4 + 3])?;
@@ -208,4 +224,21 @@ fn visit(
         }
     }
     Ok(())
+}
+
+/// A shared threshold row is visited only at its existing physical owner.
+/// The returned guard range is in the admitted packed numeric tail.
+fn threshold_family(nodes: &[u32], node_count: u32, gate: u32) -> Option<(usize, u32)> {
+    let node = &nodes[gate as usize * 4..gate as usize * 4 + 4];
+    if node[0] != 7 {
+        return None;
+    }
+    let tail = node_count as usize * 4;
+    let row = tail + nodes[tail + node[1] as usize] as usize;
+    let count = nodes[row + 1];
+    if nodes[row] != gate || count < 2 {
+        return None;
+    }
+    let width = nodes[row + 2].min(2) as usize;
+    Some((row + 3 + (1 + width) * node[2] as usize, count))
 }

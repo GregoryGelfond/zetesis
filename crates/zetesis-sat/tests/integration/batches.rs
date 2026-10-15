@@ -13,6 +13,194 @@ use zetesis_sat::{
 };
 use zetesis_theory_support::theories::theory;
 
+fn joint_check(
+    original: &Theory,
+    candidates: &[zetesis_ferraris::Interpretation],
+) -> Result<Vec<BatchVerdict>, zetesis_cpu::Stop> {
+    candidates
+        .iter()
+        .map(|candidate| {
+            let check = zetesis_ferraris::check(
+                original,
+                candidate,
+                zetesis_ferraris::Limits::default(),
+                &Cancellation::default(),
+            )?;
+            Ok(if check.accepted() {
+                BatchVerdict::NoProperSubset
+            } else {
+                BatchVerdict::Refuted
+            })
+        })
+        .collect()
+}
+
+#[test]
+fn joint_checks_preserve_complete_families_without_host_validation() {
+    let owner = three_choices();
+    for workers in [1, 3] {
+        let mut search = StableModels::with_region_producers(
+            &owner,
+            zetesis_test_support::counts::nonzero(workers),
+            Limits {
+                max_verification_work: 0,
+                ..Limits::default()
+            },
+            Cancellation::default(),
+        )
+        .unwrap();
+        let mut completion = zetesis_sat::CompletionExecutor::default();
+        let mut family = BTreeSet::new();
+        while !search.exhausted() {
+            for model in search
+                .next_batch_with_joint_completion(limits(3), &mut completion, joint_check)
+                .unwrap()
+            {
+                assert!(family.insert(model.atoms().collect()));
+            }
+        }
+        assert_eq!(family, expected(&owner));
+        assert_eq!(search.batch_statistics().original_validation_work, 0);
+        assert_eq!(search.statistics().candidates, 8);
+        assert_eq!(search.batch_statistics().committed, 8);
+    }
+}
+
+#[test]
+fn independent_retry_validates_joint_proposals_without_recounting() {
+    let owner = three_choices();
+    let mut search = StableModels::new(&owner, Limits::default(), Cancellation::default()).unwrap();
+    let mut completion = zetesis_sat::CompletionExecutor::default();
+    let failed = search.next_batch_with_joint_completion(limits(3), &mut completion, |_, _| {
+        Err::<Vec<BatchVerdict>, _>("lost device")
+    });
+    assert!(matches!(failed, Err(BatchError::Checker("lost device"))));
+    assert_eq!(search.statistics().candidates, 3);
+    assert_eq!(search.batch_statistics().original_validation_work, 0);
+    assert_eq!(search.next_batch(limits(3), joint_check).unwrap().len(), 3);
+    assert!(search.batch_statistics().original_validation_work > 0);
+    assert_eq!(search.statistics().candidates, 3);
+}
+
+#[test]
+fn joint_nonmodel_result_closes_without_publication_or_exhaustion() {
+    let owner = three_choices();
+    let mut search = StableModels::new(&owner, Limits::default(), Cancellation::default()).unwrap();
+    let result = search.next_batch_with_joint_completion(
+        limits(3),
+        &mut zetesis_sat::CompletionExecutor::default(),
+        |_, candidates| {
+            let mut verdicts = vec![BatchVerdict::NoProperSubset; candidates.len()];
+            verdicts[1] = BatchVerdict::NotModel;
+            Ok::<_, Infallible>(verdicts)
+        },
+    );
+    assert!(matches!(
+        result,
+        Err(BatchError::Search(Incomplete::InvalidWitness))
+    ));
+    assert_eq!(search.batch_statistics().committed, 0);
+    assert_eq!(search.statistics().stable_models, 0);
+    assert_eq!(search.batch_statistics().pending, 3);
+    assert!(!search.exhausted());
+}
+
+#[test]
+fn joint_shape_refusal_preserves_exact_pending_order() {
+    let owner = three_choices();
+    for length in [0, 4] {
+        let mut search =
+            StableModels::new(&owner, Limits::default(), Cancellation::default()).unwrap();
+        let mut completion = zetesis_sat::CompletionExecutor::default();
+        let mut first = Vec::new();
+        let failed =
+            search.next_batch_with_joint_completion(limits(3), &mut completion, |_, candidates| {
+                first = candidates
+                    .iter()
+                    .map(|candidate| candidate.atoms().collect::<Vec<_>>())
+                    .collect::<Vec<_>>();
+                Ok::<_, Infallible>(vec![BatchVerdict::NoProperSubset; length])
+            });
+        assert!(matches!(
+            failed,
+            Err(BatchError::Shape { expected: 3, actual }) if actual == length
+        ));
+        assert_eq!(search.batch_statistics().pending, 3);
+        assert_eq!(search.batch_statistics().committed, 0);
+        assert_eq!(search.statistics().stable_models, 0);
+        assert_eq!(search.statistics().candidates, 3);
+        assert!(!search.exhausted());
+        let retried = search
+            .next_batch_with_joint_completion(limits(3), &mut completion, |theory, candidates| {
+                assert_eq!(
+                    candidates
+                        .iter()
+                        .map(|candidate| candidate.atoms().collect::<Vec<_>>())
+                        .collect::<Vec<_>>(),
+                    first
+                );
+                joint_check(theory, candidates)
+            })
+            .unwrap();
+        assert_eq!(
+            retried
+                .iter()
+                .map(|candidate| candidate.atoms().collect::<Vec<_>>())
+                .collect::<Vec<_>>(),
+            first
+        );
+        assert_eq!(search.statistics().candidates, 3);
+        assert_eq!(search.batch_statistics().committed, 3);
+        assert_eq!(search.batch_statistics().checker_calls, 2);
+        assert_eq!(search.batch_statistics().original_validation_work, 0);
+    }
+}
+
+#[test]
+fn joint_batches_share_one_candidate_quota() {
+    let owner = three_choices();
+    for workers in [1, 3] {
+        let mut search = StableModels::with_region_producers(
+            &owner,
+            zetesis_test_support::counts::nonzero(workers),
+            Limits {
+                max_candidates: 5,
+                max_verification_work: 0,
+                ..Limits::default()
+            },
+            Cancellation::default(),
+        )
+        .unwrap();
+        let mut completion = zetesis_sat::CompletionExecutor::default();
+        let mut family = BTreeSet::new();
+        for expected_count in [3, 2] {
+            let batch = search
+                .next_batch_with_joint_completion(limits(3), &mut completion, joint_check)
+                .unwrap();
+            assert_eq!(batch.len(), expected_count);
+            for model in batch {
+                assert!(family.insert(model.atoms().collect::<Vec<_>>()));
+            }
+        }
+        assert_eq!(family.len(), 5);
+        assert_eq!(search.statistics().candidates, 5);
+        assert_eq!(search.batch_statistics().committed, 5);
+        assert_eq!(search.batch_statistics().original_validation_work, 0);
+        assert!(matches!(
+            search.next_batch_with_joint_completion(
+                limits(3),
+                &mut completion,
+                |_, _| -> Result<Vec<BatchVerdict>, Infallible> {
+                    panic!("exhausted candidate quota must not call the checker")
+                },
+            ),
+            Err(BatchError::Search(Incomplete::CandidateLimit))
+        ));
+        assert_eq!(search.batch_statistics().checker_calls, 2);
+        assert!(!search.exhausted());
+    }
+}
+
 fn collect(theory: &Theory, count: usize, propagate: bool) {
     let mut search = StableModels::new(theory, Limits::default(), Cancellation::default()).unwrap();
     let mut actual = BTreeSet::new();

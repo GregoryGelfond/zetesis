@@ -122,6 +122,7 @@ impl Shape {
             .and_then(|n| n.checked_add(atoms))
             .and_then(|n| n.checked_add(65))
             .and_then(|n| n.checked_add(graph.numeric_work))
+            .and_then(|n| n.checked_add(graph.threshold_guard_work))
             .ok_or_else(|| capacity("formula sweep work overflows"))?;
         Ok(shape)
     }

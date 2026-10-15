@@ -1498,7 +1498,8 @@ preserves ordered observations. This explains both formula kernels' shared
 original-truth schedule, before reduct masking or tight-support checking.
 Constructing its packed levels, preserving node
 IDs and proving concurrent writes and barriers refine the sequential schedule
-remain implementation obligations. A cached order does not cache candidate truth.
+remain implementation obligations. A cached order alone does not authorize
+candidate truth reuse; tight checking separately authenticates its retained batch.
 
 The general kernel starts frozen propagation with a reverse visit to those levels,
 then alternates reverse and forward visits.
@@ -3293,6 +3294,38 @@ original-root truth, completed scans and decoded verdict identity must satisfy
 the respective laws; missing certificates and interrupted or malformed device
 results establish none of their conclusions. Rust certificate compilation and
 WGSL execution remain outside the proved correspondence.
+
+Tight device truth reuse follows the local principle in
+`TightEvaluation.unchanged_inputs_keep_truth`; `updated_values_exact` establishes
+the complete update rule for that module's binary Boolean DAG. The shader uses
+its existing dependency order, a value bit and a change bit, recomputing gates
+whose inputs changed. Native row owners compare the same complete condition
+values and preserve every contribution occurrence when retaining their guards.
+`DependencySchedule.ReadsOnly` states the local dependency obligation, but neither
+module verifies these native row transfers or the two-bit device representation.
+Full root and producer scans remain mandatory. Correct truth masking, exact
+subject/count ownership, invalidation before mutation, final-success publication,
+barriers and conservative work accounting remain Rust/WGSL obligations. Existing
+host and physical checks supply evidence at those boundaries; the reuse law does
+not establish full executable refinement or a performance improvement.
+
+The device coordinator uses `StableModels::next_batch_with_joint_completion`:
+its checker establishes original satisfaction and the reduct verdict together.
+An opaque `CheckedBatch` retains the exact theory and ordered candidate slice
+until the coordinator consumes it. `BatchAccounting` still requires exact
+classification before commit; moving original evaluation to the device does
+not weaken that premise. The generic callback API retains independent host
+validation, including a retry after a failed joint check. Receipt construction,
+subject checks, complete decoding and device execution are Rust/WGSL obligations.
+
+Within one native threshold row, GPU frozen propagation also transfers required
+lower and forbidden upper bounds between guards true in the original candidate.
+`ThresholdPrefixes.frozen_implies` and `frozen_contrapositive`, with an empty
+suffix, justify these same-row implications. False original guards are frozen
+constants and supply no numeric requirement. The physical owner may itself be
+false while serving other live guards; ownership grants no semantic premise.
+Atomic intersections, dirty notifications, finite-width comparisons and charged
+sweep work remain implementation obligations checked by host and device tests.
 
 The static closure transport validates a nonzero submission epoch, input-world
 ordinal and completion marker before publishing any batch. The marker is written

@@ -245,6 +245,59 @@ impl GpuFormulaOracle {
         limits: FormulaLimits,
         cancellation: &Cancellation,
     ) -> Result<Vec<FormulaCheck>, GpuError> {
+        self.propagate(
+            theory,
+            candidates,
+            limits,
+            cancellation,
+            crate::candidates::BatchSize::Exact(candidates.len()),
+        )
+    }
+
+    /// Check the largest nonempty prefix admitted by the prepared device layout.
+    ///
+    /// The prefix is bounded by both the supplied slice and `max_candidates`.
+    /// Cold graph packing occurs once; admission then selects a count using the
+    /// same storage, address and work checks as the exact batch operation. The
+    /// receipt borrows exactly the checked prefix and retains input order.
+    /// An empty slice still observes control and context health before returning.
+    /// No completed prefix is returned after an interrupted or failed operation.
+    ///
+    /// # Errors
+    /// Preserves [`Self::propagate_batch_with_cancellation`]'s typed failures.
+    /// If one candidate cannot fit, returns that refusal without dispatch. Only
+    /// capacity limits reduce the selected count; allocation and device failures
+    /// do not select a fallback. The chosen schedule is not changed to enlarge
+    /// the prefix. Subsequent calls may reuse the prepared subject.
+    pub fn propagate_prefix_with_cancellation<'a>(
+        &mut self,
+        theory: &'a Theory,
+        candidates: &'a [Interpretation],
+        limits: FormulaLimits,
+        cancellation: &Cancellation,
+    ) -> Result<crate::CheckedBatch<'a, FormulaCheck>, GpuError> {
+        let checks = self.propagate(
+            theory,
+            candidates,
+            limits,
+            cancellation,
+            crate::candidates::BatchSize::Prefix(candidates.len()),
+        )?;
+        Ok(crate::CheckedBatch::new(
+            theory,
+            &candidates[..checks.len()],
+            checks,
+        ))
+    }
+
+    fn propagate(
+        &mut self,
+        theory: &Theory,
+        candidates: &[Interpretation],
+        limits: FormulaLimits,
+        cancellation: &Cancellation,
+        size: crate::candidates::BatchSize,
+    ) -> Result<Vec<FormulaCheck>, GpuError> {
         self.last = None;
         self.last_submission_candidates = None;
         self.last_compute_time = None;
@@ -259,7 +312,7 @@ impl GpuFormulaOracle {
             GpuError::new(GpuErrorKind::Capacity, "formula epoch counter exhausted")
         })?;
         let PreparedCall { fresh, plan, stats } =
-            self.prepare(theory, candidates, limits, cancellation, epoch)?;
+            self.prepare(theory, candidates, limits, cancellation, epoch, size)?;
         cancellation.poll().map_err(GpuError::interrupted)?;
         let scopes = ErrorScopes::new(self.profile.runtime.device());
         if let Some(prepared) = fresh {
@@ -296,6 +349,7 @@ impl GpuFormulaOracle {
         mut limits: FormulaLimits,
         cancellation: &Cancellation,
         epoch: u32,
+        size: crate::candidates::BatchSize,
     ) -> Result<PreparedCall, GpuError> {
         let timed =
             self.context().compute_timing() == zetesis_backend::ComputeTimingStatus::Enabled;
@@ -317,11 +371,11 @@ impl GpuFormulaOracle {
         // Releasing it does not change the resident device subject on refusal.
         if self.resident.as_ref().is_none_or(|resident| {
             !resident.graph.shape.theory.same_instance(theory)
-                || !resident.matches_count(candidates.len())
+                || (size.is_exact() && !resident.matches_count(candidates.len()))
         }) {
             self.candidates.release();
         }
-        let retained = self.retained_plan(theory, candidates.len(), limits, epoch)?;
+        let retained = self.retained_plan(theory, size, limits, epoch, timed, cancellation)?;
         let (fresh, plan) = if let Some(plan) = retained {
             identities(theory, candidates)?;
             (None, plan)
@@ -329,7 +383,7 @@ impl GpuFormulaOracle {
             self.candidates.release();
             let preparation = Preparation::with_control(
                 theory,
-                candidates.len(),
+                size.initial(),
                 limits,
                 self.profile.runtime.limits(),
                 epoch,
@@ -338,8 +392,22 @@ impl GpuFormulaOracle {
             .with_propagation(self.profile.kernel_options().propagation);
             identities(theory, candidates)?;
             self.resident = None;
-            let (prepared, plan) =
+            let (prepared, exact) =
                 preparation.finish(self.profile.runtime.limits(), cancellation)?;
+            let plan = if size.is_exact() {
+                exact
+            } else {
+                size.select(limits.max_candidates, cancellation, |count| {
+                    let plan =
+                        prepared.plan(count, limits, self.profile.runtime.limits(), epoch)?;
+                    crate::timing::readback_size(
+                        plan.results,
+                        timed,
+                        self.profile.runtime.limits().max_buffer_size,
+                    )?;
+                    Ok(plan)
+                })?
+            };
             (Some(prepared), plan)
         };
         crate::timing::readback_size(
@@ -347,6 +415,18 @@ impl GpuFormulaOracle {
             timed,
             self.profile.runtime.limits().max_buffer_size,
         )?;
+        self.stage_candidates(fresh, plan, candidates, limits, timing_bytes, cancellation)
+    }
+
+    fn stage_candidates(
+        &mut self,
+        fresh: Option<PreparedGraph>,
+        plan: Plan,
+        candidates: &[Interpretation],
+        limits: FormulaLimits,
+        timing_bytes: u64,
+        cancellation: &Cancellation,
+    ) -> Result<PreparedCall, GpuError> {
         let graph = fresh
             .as_ref()
             .map(|prepared| &prepared.graph)
@@ -364,10 +444,11 @@ impl GpuFormulaOracle {
             resident_transport_bytes: plan.transport + timing_bytes,
             accounted_bytes: plan.accounted + timing_bytes,
         };
-        if stats.transport_allocated
-            && let Some(resident) = self.resident.as_mut()
-        {
-            resident.transport = None;
+        if stats.transport_allocated {
+            self.candidates.release();
+            if let Some(resident) = self.resident.as_mut() {
+                resident.transport = None;
+            }
         }
         let graph = fresh
             .as_ref()
@@ -376,7 +457,7 @@ impl GpuFormulaOracle {
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing formula packing graph"))?;
         stats.accounted_bytes = plan.pack(
             graph,
-            candidates,
+            &candidates[..plan.worlds as usize],
             &mut self.candidates,
             limits.max_batch_bytes,
             cancellation,
@@ -390,9 +471,11 @@ impl GpuFormulaOracle {
     fn retained_plan(
         &self,
         theory: &Theory,
-        worlds: usize,
+        size: crate::candidates::BatchSize,
         limits: FormulaLimits,
         epoch: u32,
+        timed: bool,
+        cancellation: &Cancellation,
     ) -> Result<Option<Plan>, GpuError> {
         let Some(resident) = self
             .resident
@@ -401,14 +484,22 @@ impl GpuFormulaOracle {
         else {
             return Ok(None);
         };
-        match Plan::new(
-            &resident.graph,
-            worlds,
-            limits,
-            self.profile.runtime.limits(),
-            false,
-            epoch,
-        ) {
+        match size.select(limits.max_candidates, cancellation, |count| {
+            let plan = Plan::new(
+                &resident.graph,
+                count,
+                limits,
+                self.profile.runtime.limits(),
+                false,
+                epoch,
+            )?;
+            crate::timing::readback_size(
+                plan.results,
+                timed,
+                self.profile.runtime.limits().max_buffer_size,
+            )?;
+            Ok(plan)
+        }) {
             Ok(plan) => Ok(Some(plan)),
             Err(error)
                 if resident.graph.schedule.incidence.is_some()

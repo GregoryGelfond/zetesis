@@ -19,6 +19,15 @@ pub(crate) struct BatchQueue {
     ready: VecDeque<Interpretation>,
     completion: CompletionExecutor,
     accounting: crate::formula_execution::CompletionAccounting,
+    original_check: OriginalCheck,
+}
+
+#[derive(Default)]
+enum OriginalCheck {
+    #[default]
+    Independent,
+    #[cfg(feature = "gpu")]
+    Joint,
 }
 
 impl BatchQueue {
@@ -27,11 +36,23 @@ impl BatchQueue {
     }
 
     /// A complete oracle leaves no unresolved query for residual workers.
-    /// Scalar completion still admits result storage, validates original
-    /// satisfaction and commits the checked batch under the same limits.
+    /// Scalar completion still admits result storage and commits the checked
+    /// batch under the same limits. The oracle establishes original satisfaction.
     #[cfg(feature = "gpu")]
     pub(crate) fn for_complete_oracle(options: &SolveConfig) -> Result<Self, SolveError> {
-        Self::with_completion_workers(options, NonZeroUsize::MIN)
+        Self::joint(options, NonZeroUsize::MIN)
+    }
+
+    #[cfg(feature = "gpu")]
+    pub(crate) fn for_joint_oracle(options: &SolveConfig) -> Result<Self, SolveError> {
+        Self::joint(options, options.completion_workers)
+    }
+
+    #[cfg(feature = "gpu")]
+    fn joint(options: &SolveConfig, workers: NonZeroUsize) -> Result<Self, SolveError> {
+        let mut queue = Self::with_completion_workers(options, workers)?;
+        queue.original_check = OriginalCheck::Joint;
+        Ok(queue)
     }
 
     fn with_completion_workers(
@@ -88,15 +109,20 @@ impl BatchQueue {
             // The stream's explicit completion-attempt count prevents counting
             // a previous executor snapshot again when proposals remain pending.
             let prior_completion = models.batch_statistics().completion_calls;
-            let result = models.next_batch_with_completion(
-                limits,
-                &mut self.completion,
-                |theory, candidates| {
-                    checker(CandidateBatch::new(theory, candidates))?
-                        .into_verdicts(theory, candidates)
-                        .map_err(Failure::from)
-                },
-            );
+            let check = |theory: &zetesis_ferraris::Theory, candidates: &[Interpretation]| {
+                checker(CandidateBatch::new(theory, candidates))?
+                    .into_verdicts(theory, candidates)
+                    .map_err(Failure::from)
+            };
+            let result = match self.original_check {
+                OriginalCheck::Independent => {
+                    models.next_batch_with_completion(limits, &mut self.completion, check)
+                }
+                #[cfg(feature = "gpu")]
+                OriginalCheck::Joint => {
+                    models.next_batch_with_joint_completion(limits, &mut self.completion, check)
+                }
+            };
             if models.batch_statistics().completion_calls != prior_completion
                 && let Some(progress) = self.completion.last_statistics()
             {
@@ -161,5 +187,68 @@ mod tests {
             queue.completion.scratch_limit(),
             options.max_completion_scratch_bytes
         );
+    }
+
+    #[cfg(feature = "gpu")]
+    #[test]
+    fn failed_later_prefix_keeps_the_whole_batch_pending() {
+        use crate::batch_executor::CandidateBatch;
+        use crate::formula_execution::{Failure, FormulaExecutionStatistics, record_submission};
+        use zetesis_sat::{BatchVerdict, Incomplete, Limits, StableModels};
+
+        let admitted = zetesis_reference_support::formula("{a;b;c}.");
+        let cancellation = zetesis_cpu::Cancellation::default();
+        let mut models = StableModels::new(
+            admitted.theory(),
+            Limits {
+                max_verification_work: 0,
+                ..Limits::default()
+            },
+            cancellation.clone(),
+        )
+        .unwrap();
+        let options = SolveConfig {
+            batch_size: NonZeroUsize::new(3).unwrap(),
+            ..Default::default()
+        };
+        let mut queue = BatchQueue::for_joint_oracle(&options).unwrap();
+        let mut statistics = FormulaExecutionStatistics::default();
+        let result = queue.next(&mut models, &options, &cancellation, |batch| {
+            assert_eq!(batch.candidates().len(), 3);
+            let prefix = &batch.candidates()[..1];
+            let checked = zetesis_ferraris::check(
+                batch.theory(),
+                &prefix[0],
+                zetesis_ferraris::Limits::default(),
+                &cancellation,
+            )
+            .unwrap();
+            assert!(checked.accepted());
+            let receipt = CandidateBatch::new(batch.theory(), prefix)
+                .finish(vec![BatchVerdict::NoProperSubset])?;
+            let verdicts = receipt.into_verdicts(batch.theory(), prefix)?;
+            assert_eq!(verdicts, [BatchVerdict::NoProperSubset]);
+            // Inject completed-prefix observations at the host boundary. This
+            // tests retained bookkeeping and publication, not device execution.
+            record_submission(&mut statistics, Some(prefix.len()))?;
+            statistics.gpu_batches += 1;
+            statistics.gpu_candidates += u64::try_from(prefix.len()).unwrap();
+            Err(Failure::Search(Incomplete::Allocation))
+        });
+        assert!(matches!(
+            result,
+            Some(Err(Failure::Search(Incomplete::Allocation)))
+        ));
+        assert_eq!(statistics.gpu_submitted_batches, 1);
+        assert_eq!(statistics.gpu_submitted_candidates, 1);
+        assert_eq!(statistics.gpu_batches, 1);
+        assert_eq!(statistics.gpu_candidates, 1);
+        assert_eq!(models.batch_statistics().pending, 3);
+        assert_eq!(models.batch_statistics().committed, 0);
+        assert_eq!(models.batch_statistics().original_validation_work, 0);
+        assert_eq!(models.statistics().candidates, 3);
+        assert_eq!(models.statistics().stable_models, 0);
+        assert_eq!(queue.len(), 0);
+        assert!(!models.exhausted());
     }
 }

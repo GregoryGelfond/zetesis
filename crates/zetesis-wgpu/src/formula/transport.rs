@@ -84,6 +84,7 @@ impl Resident {
                 result: &transport.results,
                 readback: &transport.readback,
                 result_bytes: plan.results,
+                clear_result: false,
                 timing: transport.timing.as_ref(),
             },
         );

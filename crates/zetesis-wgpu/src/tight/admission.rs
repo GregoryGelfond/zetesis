@@ -84,7 +84,7 @@ impl Admission {
     }
 }
 
-fn batch_stats(
+pub(super) fn batch_stats(
     graph: &Graph,
     plan: &Plan,
     fresh: bool,
@@ -100,6 +100,7 @@ fn batch_stats(
         work: u64::from(plan.worlds) * u64::from(plan.work),
         dispatches: 1,
         truth_levels: plan.levels,
+        original_truth_reused: plan.original_truth_reused,
         uploaded_bytes: PARAM_BYTES + plan.seeds + if fresh { graph.bytes } else { 0 },
         downloaded_bytes: plan.results,
     }

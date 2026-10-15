@@ -11,10 +11,11 @@ use std::{error::Error, fmt};
 use zetesis_ferraris::{Interpretation, Theory};
 use zetesis_sat::BatchVerdict;
 
-/// Original models borrowed for one membership check, in proposal order.
+/// Original candidates borrowed for one membership check, in proposal order.
 ///
-/// The host already checked original satisfaction. Each interpretation belongs
-/// to `theory()`, and remains the candidate fixing its reduct.
+/// Each interpretation belongs to `theory()`, and fixes its reduct. A joint
+/// route must establish original satisfaction as well as its reduct verdict;
+/// the independent route has already checked original satisfaction on the host.
 pub(crate) struct CandidateBatch<'a> {
     theory: &'a Theory,
     candidates: &'a [Interpretation],

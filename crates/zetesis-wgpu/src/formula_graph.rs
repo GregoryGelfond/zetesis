@@ -19,6 +19,7 @@ pub(crate) struct Shape {
     pub(crate) nodes: u32,
     pub(crate) rows: Rows,
     pub(crate) numeric_work: u32,
+    pub(crate) threshold_guard_work: u32,
     pub(crate) edges: u32,
     pub(crate) wide_words: u32,
     pub(crate) auxiliary: u32,
@@ -121,6 +122,7 @@ impl Shape {
                     .ok_or_else(|| capacity("formula wide operand count exceeds u32"))?;
             }
         }
+        let threshold_guard_work = rows.threshold_guard_work(cancellation)?;
         rows.locate(theory, wide_words, cancellation)?;
         wide_words = rows.tail_words;
         let bytes = bytes(nodes, wide_words)?;
@@ -132,6 +134,7 @@ impl Shape {
             nodes,
             rows,
             numeric_work,
+            threshold_guard_work,
             edges,
             wide_words,
             auxiliary,

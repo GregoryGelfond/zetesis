@@ -1,7 +1,7 @@
 //! One bounded original-truth workspace for the model-only batch boundary.
 
 use crate::timing::{self, Phase};
-use crate::{Cancellation, Incomplete, Limits, SearchPhaseTimings, Statistics};
+use crate::{Cancellation, Incomplete, SearchPhaseTimings, Statistics};
 use zetesis_ferraris::{
     EvaluationError, EvaluationLimits, EvaluationWorkspace, Interpretation, Theory,
 };
@@ -32,31 +32,35 @@ impl Validation {
         }
     }
 
-    /// Both proposal routes count a candidate only after the same independent
-    /// original-satisfaction check has succeeded.
+    /// Count each owned proposal once. The independent protocol establishes
+    /// original truth here; a joint checker establishes it before commit.
     pub(super) fn admit(
         &mut self,
         theory: &Theory,
         candidate: &Interpretation,
-        limits: Limits,
-        available: usize,
+        limits: EvaluationLimits,
         cancellation: &Cancellation,
         statistics: &mut Statistics,
+        original: super::OriginalCheck,
     ) -> Result<(), Incomplete> {
-        self.check(
-            theory,
-            candidate,
-            EvaluationLimits {
-                max_work: limits.max_verification_work,
-                max_bytes: available,
-            },
-            cancellation,
-            &mut statistics.phase_timings,
-        )?;
+        if !theory.same_instance(candidate.theory()) {
+            return Err(Incomplete::WrongTheory);
+        }
+        if original == super::OriginalCheck::Independent {
+            self.check(
+                theory,
+                candidate,
+                limits,
+                cancellation,
+                &mut statistics.phase_timings,
+            )?;
+        } else {
+            cancellation.poll().map_err(Incomplete::from)?;
+        }
         crate::search::increment(&mut statistics.candidates)
     }
 
-    fn check(
+    pub(super) fn check(
         &mut self,
         theory: &Theory,
         candidate: &Interpretation,

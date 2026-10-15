@@ -324,3 +324,55 @@ fn reused_empty_carrier_staging_still_checks_every_owner() {
         .unwrap();
     assert_eq!(staging.words(), [0]);
 }
+
+#[test]
+fn prefix_selection_preserves_noncapacity_failures() {
+    for kind in [
+        GpuErrorKind::Allocation,
+        GpuErrorKind::Device,
+        GpuErrorKind::Seed,
+    ] {
+        let mut calls = 0;
+        let error = BatchSize::Prefix(16)
+            .select(16, &Cancellation::default(), |count| {
+                calls += 1;
+                if count == 1 {
+                    Ok(count)
+                } else {
+                    Err(GpuError::new(kind, "sentinel failure"))
+                }
+            })
+            .unwrap_err();
+        assert_eq!(error.kind(), kind);
+        assert_eq!(calls, 2);
+    }
+}
+
+#[test]
+fn stopped_prefix_selection_never_evaluates_layout() {
+    let cancellation = Cancellation::default();
+    cancellation.cancel();
+    let error = BatchSize::Prefix(16)
+        .select(16, &cancellation, |_| -> Result<(), GpuError> {
+            panic!("stopped layout")
+        })
+        .unwrap_err();
+    assert_eq!(error.interruption(), Some(Stop::Cancelled));
+}
+
+#[test]
+fn prefix_selection_is_bounded_at_host_count_maximum() {
+    let mut calls = 0_u32;
+    let count = BatchSize::Prefix(usize::MAX)
+        .select(usize::MAX, &Cancellation::default(), |count| {
+            calls += 1;
+            if count <= 7 {
+                Ok(count)
+            } else {
+                Err(capacity("fixture ceiling"))
+            }
+        })
+        .unwrap();
+    assert_eq!(count, 7);
+    assert!(calls <= usize::BITS + 2);
+}

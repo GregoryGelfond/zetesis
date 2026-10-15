@@ -224,6 +224,7 @@ fn cancelled_shape_preserves_residency(
             FormulaLimits::default(),
             &cancelled,
             epoch + 1,
+            crate::candidates::BatchSize::Exact(inputs.len()),
         )
         .err()
         .unwrap();

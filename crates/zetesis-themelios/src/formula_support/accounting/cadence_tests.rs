@@ -27,6 +27,84 @@ fn refusal(site: ProgramSite) -> FormulaFailure {
 }
 
 #[test]
+fn control_handoff_reuses_the_workspace() {
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
+    let mut account = Accounting::with_allowance(allowance.clone());
+    account.work = 7;
+    account.substitutions = 1;
+    let pending = account.allowance.as_mut().unwrap();
+    pending.work(7);
+    pending.substitution();
+    let mut lease = account.workspace.lease();
+    lease.observe(32, location()).unwrap();
+
+    let mut active = account.take_for_control();
+    // Both handles identify the existing workspace. The placeholder owns no
+    // charge history, so its retirement cannot publish or duplicate receipts.
+    assert!(active.workspace.owns(&lease));
+    assert!(account.workspace.owns(&lease));
+    assert_eq!((account.work, account.substitutions), (0, 0));
+    assert!(account.allowance.is_none());
+    assert!(account.generated_values.is_none());
+    drop(account);
+    assert_eq!(allowance.statistics().work, 0);
+    assert_eq!(allowance.statistics().substitutions, 0);
+    assert_eq!(active.workspace.bytes(), 32);
+    assert_eq!((active.work, active.substitutions), (7, 1));
+    active.settle();
+    assert_eq!(allowance.statistics().work, 7);
+    assert_eq!(allowance.statistics().substitutions, 1);
+    active.settle();
+    assert_eq!(allowance.statistics().work, 7);
+    assert_eq!(allowance.statistics().substitutions, 1);
+    drop(lease);
+    assert_eq!(active.workspace.bytes(), 0);
+}
+
+#[test]
+fn refused_control_restores_live_workspace_and_charges() {
+    let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
+    let mut account = Accounting::with_allowance(allowance.clone());
+    let mut lease = account.workspace.lease();
+    lease.observe(32, location()).unwrap();
+    let limits = FormulaLimits {
+        max_work: 3,
+        ..Default::default()
+    };
+    let result = run(&mut account, &Cancellation::default(), |counters| {
+        assert!(counters.accounting.workspace.owns(&lease));
+        counters.charge_work(2, &limits, location())?;
+        counters.substitution(&limits, location())?;
+        counters.charge_work(2, &limits, location())
+    });
+    assert!(matches!(
+        result,
+        Err(FormulaFailure::Limit {
+            resource: FormulaResource::Work,
+            observed: 4,
+            limit: 3,
+            ..
+        })
+    ));
+    assert!(account.workspace.owns(&lease));
+    assert_eq!(account.workspace.bytes(), 32);
+    assert_eq!((account.work, account.substitutions), (2, 1));
+    assert_eq!(allowance.statistics().work, 2);
+    assert_eq!(allowance.statistics().substitutions, 1);
+
+    run(&mut account, &Cancellation::default(), |counters| {
+        assert!(counters.accounting.workspace.owns(&lease));
+        counters.work(&limits, location())
+    })
+    .unwrap();
+    assert_eq!((account.work, account.substitutions), (3, 1));
+    assert_eq!(allowance.statistics().work, 3);
+    assert_eq!(allowance.statistics().substitutions, 1);
+    drop(lease);
+    assert_eq!(account.workspace.bytes(), 0);
+}
+
+#[test]
 fn charged_ranges_observe_the_boundary_and_preserve_counts() {
     for initial in [0, 1, 7, 255, 256, 257] {
         for amount in [0_u64, 1, 255, 256, 257, 1024] {
@@ -302,16 +380,33 @@ fn nonresource_failures_keep_their_original_meaning() {
 fn settled_unwind_restores_the_shared_receipt() {
     let allowance = crate::ConstraintAllowance::new(crate::ConstraintCheckLimits::default());
     let mut account = Accounting::with_allowance(allowance.clone());
+    let mut lease = account.workspace.lease();
+    lease.observe(32, location()).unwrap();
     let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
         let _: Result<(), FormulaFailure> =
             run(&mut account, &Cancellation::default(), |counters| {
+                assert!(counters.accounting.workspace.owns(&lease));
                 counters.charge_work(257, &FormulaLimits::default(), location())?;
+                counters.substitution(&FormulaLimits::default(), location())?;
                 panic!("after accepted work");
             });
     }));
     assert!(result.is_err());
-    assert_eq!(account.work, 257);
+    assert!(account.workspace.owns(&lease));
+    assert_eq!(account.workspace.bytes(), 32);
+    assert_eq!((account.work, account.substitutions), (257, 1));
     assert_eq!(allowance.statistics().work, 257);
+    assert_eq!(allowance.statistics().substitutions, 1);
+    run(&mut account, &Cancellation::default(), |counters| {
+        assert!(counters.accounting.workspace.owns(&lease));
+        counters.work(&FormulaLimits::default(), location())
+    })
+    .unwrap();
+    assert_eq!(account.work, 258);
+    assert_eq!(allowance.statistics().work, 258);
+    assert_eq!(allowance.statistics().substitutions, 1);
+    drop(lease);
+    assert_eq!(account.workspace.bytes(), 0);
 }
 
 #[cfg(debug_assertions)]

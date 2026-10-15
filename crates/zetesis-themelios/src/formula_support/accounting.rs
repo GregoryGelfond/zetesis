@@ -130,6 +130,20 @@ impl Accounting {
         })
     }
 
+    /// Move the sole charge history into a controlled scope without allocating
+    /// another workspace. The inaccessible placeholder retains only the same
+    /// workspace handle; `Active` restores the history on return or unwind.
+    fn take_for_control(&mut self) -> Self {
+        let placeholder = Self {
+            workspace: self.workspace.clone(),
+            work: 0,
+            substitutions: 0,
+            generated_values: None,
+            allowance: None,
+        };
+        mem::replace(self, placeholder)
+    }
+
     /// Run one synchronous operation under its sole control-bearing account.
     /// Entry and exit observe control; at exit only a resource refusal can be
     /// replaced, preserving its source site and original-program envelope.
@@ -145,7 +159,7 @@ impl Accounting {
         let control = AccountControl::new(cancellation);
         #[cfg(debug_assertions)]
         let _scope = Scope(std::rc::Rc::clone(&control.open));
-        let mut counters = Counters::resume(mem::take(self), observed);
+        let mut counters = Counters::resume(self.take_for_control(), observed);
         counters.control = Some(control);
         let mut active = Active {
             counters,
@@ -181,7 +195,7 @@ impl Accounting {
         action: impl FnOnce(&mut Counters) -> T,
     ) -> T {
         let mut active = Active {
-            counters: Counters::resume(mem::take(self), super::Work::default())
+            counters: Counters::resume(self.take_for_control(), super::Work::default())
                 .with_cancellation(Some(cancellation)),
             retained: self,
         };

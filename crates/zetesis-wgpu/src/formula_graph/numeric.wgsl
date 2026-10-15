@@ -105,11 +105,27 @@ fn numeric_qualifies(node: Node, index: u32, width: u32) -> bool {
 // level. All guards read identical children, so the existing level barrier makes
 // the complete family visible before any parent. Serial order uses the earliest
 // nonconstant guard as owner. No truth scratch or extra dispatch is needed.
-fn numeric_original(base: u32, index: u32, node: Node) {
+fn numeric_original(base: u32, index: u32, node: Node, reuse: bool) {
     let row = numeric_row(node);
     if (nodes[row - 3u] != index) { return; }
     let count = nodes[row - 2u];
     let width = nodes[row - 1u];
+    let guards = row + (1u + min(width, 2u)) * node.right;
+    if (reuse) {
+        var changed = false;
+        for (var position = 0u; position < node.right; position++) {
+            if ((frozen[base + numeric_condition(node, position)] & 2u) != 0u) {
+                changed = true;
+                break;
+            }
+        }
+        if (!changed) {
+            for (var position = 0u; position < count; position++) {
+                frozen[base + nodes[guards + position]] &= 1u;
+            }
+            return;
+        }
+    }
     var sum = vec4<u32>(0u);
     let descriptor = params.nodes * 4u + node.left;
     var minimum = vec4<u32>(0u);
@@ -121,7 +137,7 @@ fn numeric_original(base: u32, index: u32, node: Node) {
             vec4<u32>(1u, 0u, 0u, 0u));
     }
     for (var position = 0u; position < node.right; position++) {
-        if (frozen[base + numeric_condition(node, position)] != 0u) {
+        if ((frozen[base + numeric_condition(node, position)] & 1u) != 0u) {
             let value = numeric_value(node, position, width);
             if (node.tag == 7u) {
                 sum = row_add(width, sum, value);
@@ -131,7 +147,6 @@ fn numeric_original(base: u32, index: u32, node: Node) {
             }
         }
     }
-    let guards = row + (1u + min(width, 2u)) * node.right;
     for (var position = 0u; position < count; position++) {
         let guard = nodes[guards + position];
         let guard_node = node_at(guard);
@@ -140,6 +155,8 @@ fn numeric_original(base: u32, index: u32, node: Node) {
         if (guard_node.tag == 7u) { value = !row_less(width, sum, bound); }
         if (guard_node.tag == 8u) { value = row_less(width, minimum, bound); }
         if (guard_node.tag == 9u) { value = !row_less(width, maximum, bound); }
-        frozen[base + guard] = select(0u, 1u, value);
+        let next = select(0u, 1u, value);
+        let changed = reuse && next != (frozen[base + guard] & 1u);
+        frozen[base + guard] = next | select(0u, 2u, changed);
     }
 }

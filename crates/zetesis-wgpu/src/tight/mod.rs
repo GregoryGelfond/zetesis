@@ -90,7 +90,7 @@ impl TightGpuCheck {
         self.verdict
     }
 
-    /// Completed full-scan operations under [`TightGpuLimits`].
+    /// Conservative completed operation allowance under [`TightGpuLimits`].
     #[must_use]
     pub const fn work(&self) -> u64 {
         self.work
@@ -112,12 +112,15 @@ pub struct TightGpuBatchStats {
     pub accounted_bytes: u64,
     /// Fully checked input occurrences, preserving repetitions.
     pub candidates: u64,
-    /// Sum of completed full-scan operations across candidates.
+    /// Sum of conservative completed operation allowances across candidates.
     pub work: u64,
     /// Actual compute submissions; one for this nonempty successful batch.
     pub dispatches: u64,
     /// Dependency levels evaluated cooperatively; zero selects serial original truth.
     pub truth_levels: u32,
+    /// A wholly successful same-subject/count batch supplied original truth.
+    /// This selects change detection; it does not assert that any gate was skipped.
+    pub original_truth_reused: bool,
     /// Authored initialized/write-buffer payload, not measured bus traffic.
     pub uploaded_bytes: u64,
     /// Successfully decoded readback payload, not measured bus traffic.
@@ -135,11 +138,11 @@ pub struct TightGpuActivity {
     pub submissions: u64,
     /// Input occurrences included in those submissions.
     pub submitted_candidates: u64,
-    /// Full-scan work scheduled by submitted commands.
+    /// Conservative work allowance scheduled by submitted commands.
     pub scheduled_work: u64,
     /// Occurrences whose complete records were validated before return.
     pub completed_candidates: u64,
-    /// Full-scan work reported by those validated device records.
+    /// Conservative work allowance reported by validated device records.
     pub completed_work: u64,
     /// Authored initialization/write-buffer bytes issued in this attempt.
     pub uploaded_bytes: u64,

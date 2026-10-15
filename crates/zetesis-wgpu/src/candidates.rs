@@ -4,6 +4,74 @@ use crate::{GpuError, GpuErrorKind};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
 
+/// Whether one dispatch checks the complete supplied slice or its largest
+/// admitted nonempty prefix. This selects a physical batch size, not semantics.
+#[derive(Clone, Copy)]
+pub(crate) enum BatchSize {
+    Exact(usize),
+    Prefix(usize),
+}
+
+impl BatchSize {
+    pub(crate) const fn initial(self) -> usize {
+        match self {
+            Self::Exact(count) => count,
+            Self::Prefix(_) => 1,
+        }
+    }
+
+    pub(crate) const fn is_exact(self) -> bool {
+        matches!(self, Self::Exact(_))
+    }
+
+    /// The predicate is the existing checked layout for one fixed prepared graph.
+    /// Its capacity constraints are monotone in the positive candidate count.
+    /// Non-capacity faults never authorize shrinking or a second execution path.
+    pub(crate) fn select<T>(
+        self,
+        maximum: usize,
+        cancellation: &Cancellation,
+        mut admit: impl FnMut(usize) -> Result<T, GpuError>,
+    ) -> Result<T, GpuError> {
+        cancellation.poll().map_err(GpuError::interrupted)?;
+        let Self::Prefix(count) = self else {
+            return admit(self.initial());
+        };
+        let maximum = count.min(maximum);
+        if maximum == 0 {
+            return Err(capacity(
+                "nonempty candidate prefix has a zero count ceiling",
+            ));
+        }
+        let mut selected = admit(1)?;
+        if maximum == 1 {
+            return Ok(selected);
+        }
+        // The common retained layout admits the requested count whole. Avoid
+        // searching smaller prefixes unless its checked ceiling requires it.
+        match admit(maximum) {
+            Ok(plan) => return Ok(plan),
+            Err(error) if error.kind() == GpuErrorKind::Capacity => {}
+            Err(error) => return Err(error),
+        }
+        let mut lower = 1;
+        let mut upper = maximum - 1;
+        while lower < upper {
+            cancellation.poll().map_err(GpuError::interrupted)?;
+            let middle = lower + (upper - lower).div_ceil(2);
+            match admit(middle) {
+                Ok(plan) => {
+                    lower = middle;
+                    selected = plan;
+                }
+                Err(error) if error.kind() == GpuErrorKind::Capacity => upper = middle - 1,
+                Err(error) => return Err(error),
+            }
+        }
+        Ok(selected)
+    }
+}
+
 /// One oracle's initialized candidate upload storage. It carries no theory
 /// ownership: the oracle releases it before changing subject or batch shape.
 /// A failed export clears its length, so no incomplete prefix is dispatchable.

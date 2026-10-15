@@ -45,6 +45,26 @@ impl Resident {
             .is_some_and(|t| t.worlds as usize == candidates)
     }
 
+    pub(super) fn original_truth_valid(&self) -> bool {
+        self.transport
+            .as_ref()
+            .is_some_and(|transport| transport.original_truth_valid)
+    }
+
+    pub(super) fn invalidate_original_truth(&mut self) {
+        if let Some(transport) = self.transport.as_mut() {
+            transport.original_truth_valid = false;
+        }
+    }
+
+    /// Called only after decode, context health and the final control poll all
+    /// succeeded. An earlier successful readback alone is insufficient.
+    pub(super) fn complete_original_truth(&mut self) {
+        if let Some(transport) = self.transport.as_mut() {
+            transport.original_truth_valid = true;
+        }
+    }
+
     pub(super) fn dispatch(
         &mut self,
         execution: &Execution<'_>,
@@ -65,8 +85,12 @@ impl Resident {
         }
         let transport = self
             .transport
-            .as_ref()
+            .as_mut()
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing tight transport"))?;
+        // Consume the host authority before the first queue write. Every error
+        // after this point leaves retained truth unavailable to the next call.
+        let retained = std::mem::take(&mut transport.original_truth_valid);
+        let clear_result = !retained || !plan.original_truth_reused;
         poll(cancellation)?;
         queue.write_buffer(
             &transport.params,
@@ -87,6 +111,7 @@ impl Resident {
                 result: &transport.results,
                 readback: &transport.readback,
                 result_bytes: plan.results,
+                clear_result,
                 timing: transport.timing.as_ref(),
             },
         );
@@ -143,6 +168,7 @@ pub(super) struct Transport {
     readback: wgpu::Buffer,
     group: wgpu::BindGroup,
     timing: Option<crate::timing::PassTimer>,
+    original_truth_valid: bool,
 }
 impl Transport {
     fn new(
@@ -185,7 +211,9 @@ impl Transport {
             device,
             "tight outcomes",
             plan.results,
-            wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_SRC,
+            wgpu::BufferUsages::STORAGE
+                | wgpu::BufferUsages::COPY_SRC
+                | wgpu::BufferUsages::COPY_DST,
         );
         let readback = buffer(
             device,
@@ -215,6 +243,7 @@ impl Transport {
             readback,
             group,
             timing,
+            original_truth_valid: false,
         })
     }
 }

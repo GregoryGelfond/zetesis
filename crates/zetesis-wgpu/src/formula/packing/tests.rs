@@ -421,3 +421,65 @@ fn empty_domains_keep_only_the_required_storage_padding() {
     assert_eq!(plan.domains, 4);
     assert_eq!((prepared.nodes, prepared.roots), (vec![0; 4], vec![0]));
 }
+
+#[test]
+fn prefix_admission_selects_the_complete_layout_boundary() {
+    let device = device();
+    let prepared = prepared(&theory(), &device).unwrap();
+    for fresh in [false, true] {
+        let layout = |count, limits| {
+            if fresh {
+                prepared.plan(count, limits, &device, 1)
+            } else {
+                Plan::new(&prepared.graph, count, limits, &device, false, 1)
+            }
+        };
+        for maximum in 1..=8 {
+            let bytes = layout(maximum, FormulaLimits::default()).unwrap().accounted;
+            let limits = FormulaLimits {
+                max_batch_bytes: bytes,
+                ..Default::default()
+            };
+            let selected = crate::candidates::BatchSize::Prefix(9)
+                .select(
+                    limits.max_candidates,
+                    &zetesis_cpu::Cancellation::default(),
+                    |count| layout(count, limits),
+                )
+                .unwrap();
+            assert_eq!(selected.worlds as usize, maximum);
+            assert!(selected.accounted <= bytes);
+            assert!(layout(maximum + 1, limits).is_err());
+        }
+        let bytes = layout(1, FormulaLimits::default()).unwrap().accounted;
+        assert!(
+            crate::candidates::BatchSize::Prefix(9)
+                .select(9, &zetesis_cpu::Cancellation::default(), |count| layout(
+                    count,
+                    FormulaLimits {
+                        max_batch_bytes: bytes - 1,
+                        ..Default::default()
+                    }
+                ))
+                .is_err()
+        );
+    }
+}
+
+#[test]
+fn prefix_admission_includes_the_timestamp_readback_tail() {
+    let mut device = device();
+    let graph = graph(&theory(), &device).unwrap();
+    device.max_buffer_size = 144;
+    device.max_storage_buffer_binding_size = 144;
+    for (timed, expected) in [(false, 6), (true, 5)] {
+        let selected = crate::candidates::BatchSize::Prefix(20)
+            .select(20, &zetesis_cpu::Cancellation::default(), |count| {
+                let plan = Plan::new(&graph, count, FormulaLimits::default(), &device, false, 1)?;
+                crate::timing::readback_size(plan.results, timed, device.max_buffer_size)?;
+                Ok(plan)
+            })
+            .unwrap();
+        assert_eq!(selected.worlds, expected);
+    }
+}

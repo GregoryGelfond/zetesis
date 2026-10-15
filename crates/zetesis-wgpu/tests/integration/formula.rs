@@ -3,6 +3,7 @@
 use zetesis_ferraris::{AdmissionLimits, Node, NodeView, Theory};
 use zetesis_wgpu::{FormulaLimits, FormulaVerdict, GateProjection, ResidualReason};
 
+pub(crate) mod frozen_guards;
 mod gate_transfer;
 mod numeric_settled;
 mod projection;

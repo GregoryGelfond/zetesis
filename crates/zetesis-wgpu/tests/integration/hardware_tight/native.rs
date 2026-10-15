@@ -215,6 +215,16 @@ fn qualify_shared_extrema(oracle: &mut GpuTightOracle) {
 // selected, then compares the actual result against the scalar certificate.
 fn compare_shared_schedules(oracle: &mut GpuTightOracle, certificate: &TightPlan) {
     assert_eq!(compare(oracle, certificate), 18);
+    oracle.clear_residency();
+    let cold = inputs(certificate.theory());
+    oracle
+        .check_batch(
+            certificate,
+            &cold,
+            TightGpuLimits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
     let previous = *oracle.last_batch_stats().unwrap();
     assert!(previous.truth_levels > 0);
     assert!(previous.candidates > 0);

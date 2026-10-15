@@ -8,7 +8,7 @@ use super::{CompletionExecutor, IndexedTheory, StableModels};
 use crate::Incomplete;
 use crate::search::{Budget, increment};
 use crate::timing::{self, Phase};
-use zetesis_ferraris::{Interpretation, Theory};
+use zetesis_ferraris::{EvaluationLimits, Interpretation, Theory};
 
 mod validation;
 use validation::Validation;
@@ -111,8 +111,15 @@ impl<E: std::error::Error + 'static> std::error::Error for BatchError<E> {
 pub(super) struct State {
     pub(super) pending: Vec<Interpretation>,
     validation: Validation,
+    original_checked: bool,
     exhausted: bool,
     statistics: BatchStatistics,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum OriginalCheck {
+    Independent,
+    Joint,
 }
 
 impl StableModels {
@@ -178,13 +185,51 @@ impl StableModels {
         completion: &mut CompletionExecutor,
         checker: impl FnOnce(&Theory, &[Interpretation]) -> Result<Vec<BatchVerdict>, E>,
     ) -> Result<Vec<Interpretation>, BatchError<E>> {
+        self.checked_batch(limits, completion, OriginalCheck::Independent, checker)
+    }
+
+    /// Check original satisfaction and frozen-reduct membership together.
+    ///
+    /// This is a trusted checker protocol like [`Self::next_batch`], with the
+    /// additional obligation to check original satisfaction for every candidate.
+    /// Every result other than `NotModel`, including `Residual` and `Refuted`,
+    /// must establish that the exact candidate satisfies the original theory.
+    /// No independent original evaluation precedes this checker. Exact ownership,
+    /// pending storage, candidate quotas and residual completion remain checked
+    /// by this enumeration. Objective restrictions never enter the theory.
+    ///
+    /// A device coordinator can discharge this contract with subject-bound
+    /// results from a joint original/reduct operation. Arbitrary verdict data
+    /// alone is not evidence that the obligation was checked.
+    ///
+    /// # Errors
+    /// Uses the same failures and retry rules as [`Self::next_batch`]. A
+    /// `NotModel` result terminates with `InvalidWitness`; it never establishes
+    /// exhaustion. After a checker failure, switching to the independent
+    /// protocol validates retained candidates before calling its checker.
+    pub fn next_batch_with_joint_completion<E>(
+        &mut self,
+        limits: BatchLimits,
+        completion: &mut CompletionExecutor,
+        checker: impl FnOnce(&Theory, &[Interpretation]) -> Result<Vec<BatchVerdict>, E>,
+    ) -> Result<Vec<Interpretation>, BatchError<E>> {
+        self.checked_batch(limits, completion, OriginalCheck::Joint, checker)
+    }
+
+    fn checked_batch<E>(
+        &mut self,
+        limits: BatchLimits,
+        completion: &mut CompletionExecutor,
+        original: OriginalCheck,
+        checker: impl FnOnce(&Theory, &[Interpretation]) -> Result<Vec<BatchVerdict>, E>,
+    ) -> Result<Vec<Interpretation>, BatchError<E>> {
         if self.exhausted {
             return Ok(Vec::new());
         }
         if self.terminal {
             return Err(BatchError::Search(Incomplete::ClosedEnumerator));
         }
-        let result = self.batch_step(limits, completion, checker);
+        let result = self.batch_step(limits, completion, original, checker);
         if matches!(result, Err(BatchError::Search(_))) {
             self.terminal = true;
             let _ = self.proposer.finish_production();
@@ -196,6 +241,7 @@ impl StableModels {
         &mut self,
         limits: BatchLimits,
         completion: &mut CompletionExecutor,
+        original: OriginalCheck,
         checker: impl FnOnce(&Theory, &[Interpretation]) -> Result<Vec<BatchVerdict>, E>,
     ) -> Result<Vec<Interpretation>, BatchError<E>> {
         self.cancellation
@@ -205,7 +251,7 @@ impl StableModels {
             if let Some(error) = self.pending_error.take() {
                 return Err(BatchError::Search(error));
             }
-            self.propose(limits).map_err(BatchError::Search)?;
+            self.propose(limits, original).map_err(BatchError::Search)?;
         }
         if self.batch.pending.is_empty() {
             if let Some(error) = self.pending_error.take() {
@@ -227,6 +273,27 @@ impl StableModels {
         if self.batch.validation.retained_bytes() > available as u128 {
             return Err(BatchError::Limits(Incomplete::PendingBytes));
         }
+        if original == OriginalCheck::Independent && !self.batch.original_checked {
+            for candidate in &self.batch.pending {
+                self.batch
+                    .validation
+                    .check(
+                        &self.theory,
+                        candidate,
+                        validation_limits(self.limits, available),
+                        &self.cancellation,
+                        &mut self.statistics.phase_timings,
+                    )
+                    .map_err(|error| {
+                        if error == Incomplete::PendingBytes {
+                            BatchError::Limits(error)
+                        } else {
+                            BatchError::Search(error)
+                        }
+                    })?;
+            }
+            self.batch.original_checked = true;
+        }
         increment(&mut self.batch.statistics.checker_calls).map_err(BatchError::Search)?;
         let mut verdicts =
             checker(&self.theory, &self.batch.pending).map_err(BatchError::Checker)?;
@@ -236,6 +303,10 @@ impl StableModels {
                 actual: verdicts.len(),
             });
         }
+        if original == OriginalCheck::Joint && verdicts.contains(&BatchVerdict::NotModel) {
+            return Err(BatchError::Search(Incomplete::InvalidWitness));
+        }
+        self.batch.original_checked = true;
         self.certify_pending(&mut verdicts)
             .map_err(BatchError::Search)?;
         self.commit(&verdicts, completion).map_err(|error| {
@@ -282,11 +353,13 @@ impl StableModels {
         result
     }
 
-    fn propose(&mut self, limits: BatchLimits) -> Result<(), Incomplete> {
+    fn propose(&mut self, limits: BatchLimits, original: OriginalCheck) -> Result<(), Incomplete> {
         if self.batch.exhausted {
             return Ok(());
         }
         let available = self.prepare_pending(limits)?;
+        self.batch.original_checked = original == OriginalCheck::Independent;
+        let validation = validation_limits(self.limits, available);
         let index = self.walk_index()?;
         let mut budget = Budget {
             quota: crate::search::LocalQuota,
@@ -327,7 +400,7 @@ impl StableModels {
                 started,
             );
             self.statistics.search = budget.statistics;
-            self.admit_produced(&produced, available);
+            self.admit_produced(&produced, available, original);
             return Ok(());
         }
         while self.batch.pending.len() < limits.max_candidates.get() {
@@ -347,10 +420,10 @@ impl StableModels {
                     if let Err(error) = self.batch.validation.admit(
                         &self.theory,
                         &candidate,
-                        self.limits,
-                        available,
+                        validation,
                         &self.cancellation,
                         &mut self.statistics,
+                        original,
                     ) {
                         self.pending_error = Some(error);
                         break;
@@ -408,20 +481,25 @@ impl StableModels {
     }
 
     /// Admit a joined production round's pending candidates. No producer
-    /// decides membership. Every completed classical leaf crosses the same
-    /// independent original-satisfaction boundary as scalar proposals before
-    /// the external batch checker receives it.
-    fn admit_produced(&mut self, produced: &super::region_proposals::Produced, available: usize) {
+    /// decides membership. Each owned leaf follows the selected original-check
+    /// contract, just as a scalar proposal does. An independent validation
+    /// failure retains only the already validated prefix.
+    fn admit_produced(
+        &mut self,
+        produced: &super::region_proposals::Produced,
+        available: usize,
+        original: OriginalCheck,
+    ) {
         self.batch.exhausted = produced.exhausted;
         self.pending_error = produced.stopped;
         for (validated, candidate) in self.batch.pending.iter().enumerate() {
             let result = self.batch.validation.admit(
                 &self.theory,
                 candidate,
-                self.limits,
-                available,
+                validation_limits(self.limits, available),
                 &self.cancellation,
                 &mut self.statistics,
+                original,
             );
             if let Err(error) = result {
                 // Only the validated prefix crossed the proposal boundary.
@@ -556,7 +634,14 @@ fn proposal(
         Some(super::Proposal::Candidate(candidate)) => candidate,
         Some(super::Proposal::Stable(_)) => return Err(Incomplete::InvalidWitness),
     };
-    // The batch owner validates this candidate before blocking or publication,
-    // using the same workspace and boundary as a joined production round.
+    // The batch owner checks exact ownership before blocking, then establishes
+    // original truth under the selected contract before publication.
     Ok(Some(candidate))
+}
+
+fn validation_limits(limits: super::Limits, available: usize) -> EvaluationLimits {
+    EvaluationLimits {
+        max_work: limits.max_verification_work,
+        max_bytes: available,
+    }
 }

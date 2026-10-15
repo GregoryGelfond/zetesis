@@ -60,7 +60,7 @@ pub struct FormulaExecutionStatistics {
     /// Complete tight-support scan work ceiling. Present only for that device
     /// primitive; propagation sweep limits do not apply to a support scan.
     pub tight_work_per_candidate: Option<u64>,
-    /// Scheduled full-scan work, including unreturned submitted tight batches.
+    /// Scheduled conservative work, including unreturned submitted tight batches.
     /// Propagation has candidate-dependent work and leaves this absent.
     pub gpu_scheduled_work: Option<u64>,
     /// Batches actually submitted, including submissions without a decoded result.
@@ -236,7 +236,7 @@ impl Execution {
             zetesis_backend::ComputeTiming::new(oracle.context().compute_timing());
         Ok(Self::Hybrid {
             oracle: Box::new(oracle),
-            queue: Box::new(crate::formula_queue::BatchQueue::new(options)?),
+            queue: Box::new(crate::formula_queue::BatchQueue::for_joint_oracle(options)?),
             statistics: Box::new(FormulaExecutionStatistics {
                 adapter,
                 gpu_limits: Some(options.into()),
@@ -357,39 +357,53 @@ fn propagate(
     verdicts
         .try_reserve_exact(candidates.len())
         .map_err(|_| Failure::Search(Incomplete::Allocation))?;
-    let result = phases.measure(SolvePhase::GpuHostOracle, || {
-        oracle.propagate_batch_with_cancellation(theory, candidates, limits, cancellation)
-    });
-    // Submission is observable even when mapping or decoding fails. Preserve
-    // that operation's original error over a secondary accounting overflow.
-    let submitted = record_submission(statistics, oracle.last_submission_candidates());
-    let checks = result.map_err(|error| match error.interruption() {
-        Some(stop) => Failure::Search(stop.into()),
-        None => Failure::Run(SolveError::Gpu(error)),
-    })?;
-    submitted?;
-    statistics
-        .gpu_compute_timing
-        .record(oracle.last_compute_time());
-    add(&mut statistics.gpu_batches, 1)?;
-    add(
-        &mut statistics.gpu_candidates,
-        u64::try_from(checks.len()).map_err(|_| Failure::Search(Incomplete::CounterOverflow))?,
-    )?;
-    if let Some(batch) = oracle.last_batch_stats() {
-        statistics.peak_accounted_bytes =
-            statistics.peak_accounted_bytes.max(batch.accounted_bytes);
-    }
-    for check in checks {
-        add(&mut statistics.gpu_work, u64::from(check.statistics().work))?;
+    while verdicts.len() < candidates.len() {
+        let pending = &candidates[verdicts.len()..];
+        let result = phases.measure(SolvePhase::GpuHostOracle, || {
+            oracle.propagate_prefix_with_cancellation(theory, pending, limits, cancellation)
+        });
+        // Submission is observable even when mapping or decoding fails. Preserve
+        // that operation's original error over a secondary accounting overflow.
+        let submitted = record_submission(statistics, oracle.last_submission_candidates());
+        let checks = result.map_err(|error| match error.interruption() {
+            Some(stop) => Failure::Search(stop.into()),
+            None => Failure::Run(SolveError::Gpu(error)),
+        })?;
+        submitted?;
+        let count = checks.checks().len();
+        if count == 0 || count > pending.len() {
+            return Err(Failure::Run(SolveError::FormulaBatchShape {
+                expected: pending.len(),
+                actual: count,
+            }));
+        }
+        let checks = checks
+            .into_checks(theory, &pending[..count])
+            .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
+        statistics
+            .gpu_compute_timing
+            .record(oracle.last_compute_time());
+        add(&mut statistics.gpu_batches, 1)?;
         add(
-            &mut statistics.gpu_rounds,
-            u64::from(check.statistics().rounds),
+            &mut statistics.gpu_candidates,
+            u64::try_from(checks.len())
+                .map_err(|_| Failure::Search(Incomplete::CounterOverflow))?,
         )?;
-        verdicts.push(decoded_verdict(
-            statistics.gpu_residuals.get_or_insert_default(),
-            check.verdict(),
-        )?);
+        if let Some(batch) = oracle.last_batch_stats() {
+            statistics.peak_accounted_bytes =
+                statistics.peak_accounted_bytes.max(batch.accounted_bytes);
+        }
+        for check in checks {
+            add(&mut statistics.gpu_work, u64::from(check.statistics().work))?;
+            add(
+                &mut statistics.gpu_rounds,
+                u64::from(check.statistics().rounds),
+            )?;
+            verdicts.push(decoded_verdict(
+                statistics.gpu_residuals.get_or_insert_default(),
+                check.verdict(),
+            )?);
+        }
     }
     Ok(verdicts)
 }

@@ -209,6 +209,35 @@ impl Rows {
         Ok(())
     }
 
+    /// Conservative frozen-query work for the existing threshold guard family.
+    /// Every live guard checks ownership; a shared owner scans G bounds twice.
+    /// The 64 units per guard cover four-limb comparisons, descriptor/mask
+    /// reads and one intersection. No row contribution or extra storage is read.
+    pub(super) fn threshold_guard_work(
+        &self,
+        cancellation: &Cancellation,
+    ) -> Result<u32, GpuError> {
+        let mut work = 0_u32;
+        for entry in &self.entries {
+            poll(cancellation)?;
+            if !matches!(entry.summary, Summary::Weights(_)) {
+                continue;
+            }
+            let guards = address(entry.guards.len())?;
+            let checks = guards.checked_mul(4);
+            let family = if guards > 1 {
+                guards.checked_mul(64).and_then(|n| n.checked_add(8))
+            } else {
+                Some(0)
+            };
+            work = checks
+                .and_then(|n| family.and_then(|family| n.checked_add(family)))
+                .and_then(|n| work.checked_add(n))
+                .ok_or_else(|| capacity("threshold guard work overflows"))?;
+        }
+        Ok(work)
+    }
+
     pub(crate) fn release(&mut self) {
         self.entries = Vec::new();
         self.guards = Vec::new();

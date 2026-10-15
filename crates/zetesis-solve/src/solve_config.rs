@@ -87,7 +87,7 @@ pub struct SolveConfig {
     pub workers: NonZeroUsize,
     /// Worker count for unresolved formula queries: under the clauses search,
     /// and under regions with one CPU walker or general device propagation.
-    /// Complete device certificates use scalar validation with no residual
+    /// Complete device certificates use scalar batch commit with no residual
     /// pool. Multiple CPU region workers decide their own leaves in `workers`.
     pub completion_workers: NonZeroUsize,
     /// Named cold reduct preparation and each query's retained capacity.
