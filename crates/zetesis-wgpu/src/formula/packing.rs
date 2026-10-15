@@ -4,7 +4,7 @@ use super::{FormulaCheck, FormulaLimits, FormulaStatistics, FormulaVerdict, Resi
 use crate::{GpuError, GpuErrorKind};
 use zetesis_ferraris::{Interpretation, Theory};
 
-pub(super) const PARAM_BYTES: u64 = 48;
+pub(super) const PARAM_BYTES: u64 = 64;
 pub(super) const RESULT_WORDS: usize = 6;
 pub(super) const MAGIC: u32 = 0x4652_5031;
 
@@ -178,10 +178,10 @@ impl Schedule {
     }
 
     pub(super) fn propagation(&self) -> crate::GpuPropagation {
-        if self.incidence.is_some() {
-            crate::GpuPropagation::ChangedDependencies
-        } else {
-            crate::GpuPropagation::Dense
+        match &self.incidence {
+            Some(incidence) if incidence.group_map != 0 => crate::GpuPropagation::IncrementalGroups,
+            Some(_) => crate::GpuPropagation::ChangedDependencies,
+            None => crate::GpuPropagation::Dense,
         }
     }
 }
@@ -289,9 +289,9 @@ impl Plan {
             transport,
             accounted,
             setup: schedule.setup_work,
-            // One gate visit per node plus the dependency-level walk.
-            // Like setup's level charge, this is an authored work measure, not
-            // a count of GPU instructions or elapsed barrier cycles.
+            // Bound one gate visit per node plus the dependency-level walk.
+            // Active-word execution retains this allowance even when it skips
+            // gates and levels; it is not a count of instructions or barriers.
             sweep: shape
                 .sweep_work
                 .checked_add(schedule.levels)
@@ -326,7 +326,7 @@ impl Plan {
         }
         Ok(())
     }
-    pub(super) fn params(&self, graph: &Graph) -> [u32; 12] {
+    pub(super) fn params(&self, graph: &Graph) -> [u32; 16] {
         [
             graph.shape.atoms,
             graph.shape.nodes,
@@ -340,6 +340,10 @@ impl Plan {
             self.sweep,
             self.epoch,
             graph.schedule.levels,
+            graph.schedule.incidence.as_ref().map_or(0, |i| i.group_map),
+            0,
+            0,
+            0,
         ]
     }
     pub(super) fn pack(

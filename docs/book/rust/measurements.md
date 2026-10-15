@@ -117,7 +117,8 @@ Unsupported timestamps do not prevent solving.
 
 `FormulaExecutionStatistics::gpu_compute_timing` sums valid durations from
 successfully decoded batches. `elapsed` stays absent until a valid sample is
-recorded; a measured zero duration remains distinct from unavailable timing.
+recorded. Equal device counter readings are unavailable: they do not distinguish
+an unresolved interval from zero compute cost.
 `is_complete()` requires at least one valid sample and no missing sample or
 accounting overflow among decoded batches. Submitted batches that fail before
 decoding retain their submission receipts separately. Neither timing completeness

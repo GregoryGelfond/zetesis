@@ -87,9 +87,11 @@ fn sweep_work(theory: &Theory) -> u32 {
 fn propagation_work(theory: &Theory, propagation: GpuPropagation) -> (u32, u32) {
     let mut setup = setup_work(theory);
     let mut sweep = sweep_work(theory);
-    if propagation == GpuPropagation::ChangedDependencies {
+    if propagation != GpuPropagation::Dense {
         let mut variables = theory.atom_count();
         let mut incidences = 0;
+        let mut groups = 0;
+        let mut group_edges = 0;
         for index in 0..theory.view().len() {
             match theory.view().node(index).unwrap() {
                 NodeView::Atom(_) => {}
@@ -101,6 +103,10 @@ fn propagation_work(theory: &Theory, propagation: GpuPropagation) -> (u32, u32) 
                 NodeView::And(children) | NodeView::Or(children) => {
                     variables += 1;
                     incidences += children.len() + 1;
+                    if children.len() > 2 {
+                        groups += 1;
+                        group_edges += children.len();
+                    }
                 }
                 _ => panic!("work-receipt helper requires Boolean fixtures"),
             }
@@ -109,8 +115,27 @@ fn propagation_work(theory: &Theory, propagation: GpuPropagation) -> (u32, u32) 
         let words = nodes.div_ceil(32);
         setup += u32::try_from(2 * words).unwrap();
         sweep += u32::try_from(words + nodes + 4 * variables + 6 * incidences).unwrap();
+        if propagation == GpuPropagation::IncrementalGroups {
+            assert!(groups != 0, "selected counters require a group");
+            setup += u32::try_from(4 * nodes + 6 * group_edges + 3 * groups).unwrap();
+            sweep += u32::try_from(14 * incidences + 4 * nodes).unwrap();
+        }
     }
     (setup, sweep)
+}
+
+fn requested_groups(oracle: &GpuFormulaOracle, theory: &Theory) -> GpuPropagation {
+    let requested = oracle.compiled_profile().kernel_options().propagation;
+    if requested == GpuPropagation::IncrementalGroups
+        && !(0..theory.view().len()).any(|index| {
+            matches!(theory.view().node(index).unwrap(),
+            NodeView::And(children) | NodeView::Or(children) if children.len() > 2)
+        })
+    {
+        GpuPropagation::ChangedDependencies
+    } else {
+        requested
+    }
 }
 
 fn compare(oracle: &mut GpuFormulaOracle, theory: &Theory) -> (usize, usize) {
@@ -318,7 +343,11 @@ fn qualify_kernel_options(oracle: &mut GpuFormulaOracle) {
     println!("formula granted features={:?}", context.features());
     for workgroup_size in [GpuWorkgroupSize::Threads32, GpuWorkgroupSize::Threads64] {
         for optional_features in [false, true] {
-            for propagation in [GpuPropagation::Dense, GpuPropagation::ChangedDependencies] {
+            for propagation in [
+                GpuPropagation::Dense,
+                GpuPropagation::ChangedDependencies,
+                GpuPropagation::IncrementalGroups,
+            ] {
                 let options = GpuKernelOptions {
                     workgroup_size,
                     optional_features,
@@ -337,22 +366,38 @@ fn qualify_kernel_options(oracle: &mut GpuFormulaOracle) {
                 assert_eq!(configured.compiled_profile().kernel_options(), options);
                 println!("formula qualified options={options:?}");
                 qualify_subset_strides(&mut configured);
-                qualify_bidirectional_propagation(&mut configured);
+                if propagation == GpuPropagation::Dense {
+                    qualify_bidirectional_propagation(&mut configured);
+                } else {
+                    qualify_active_frontier(&mut configured);
+                }
                 for theory in scheduled_theories() {
                     compare(&mut configured, &theory);
                     assert_eq!(
                         configured.last_batch_stats().unwrap().propagation,
-                        propagation
+                        requested_groups(&configured, &theory)
                     );
                 }
                 native::qualify(&mut configured);
                 native::qualify_shared_ordinals(&mut configured);
-                if propagation == GpuPropagation::ChangedDependencies {
+                if propagation != GpuPropagation::Dense {
                     for theory in frozen_theories() {
                         compare(&mut configured, &theory);
+                        if (0..theory.view().len()).any(|index| {
+                            matches!(theory.view().node(index).unwrap(),
+                            NodeView::And(children) | NodeView::Or(children) if children.len() > 2)
+                        }) {
+                            assert_eq!(
+                                configured.last_batch_stats().unwrap().propagation,
+                                requested_groups(&configured, &theory)
+                            );
+                        }
                     }
                     qualify_next_generation(&mut configured);
                     qualify_incidence_fallback(&mut configured);
+                    if propagation == GpuPropagation::IncrementalGroups {
+                        qualify_group_fallback(&mut configured);
+                    }
                 }
             }
         }
@@ -365,11 +410,11 @@ fn qualify_next_generation(oracle: &mut GpuFormulaOracle) {
         vec![
             Node::atom(0),
             Node::atom(1),
-            Node::or_pair([1, 1]),
-            Node::implies(0, 2),
             Node::and_pair([0, 0]),
+            Node::or_pair([1, 1]),
+            Node::implies(0, 3),
         ],
-        vec![3, 4],
+        vec![2, 4],
     );
     let candidate = Interpretation::new(&graph, [0, 1]).unwrap();
     assert!(
@@ -382,9 +427,10 @@ fn qualify_next_generation(oracle: &mut GpuFormulaOracle) {
         .unwrap()
         .accepted()
     );
-    // The implication precedes the lower-level conjunction that forces a.
-    // Strict-subset projection then forces b false. Only the next generation
-    // can revisit the implication and or(b,b) and discover the contradiction.
+    // In the first descending word visit, the implication precedes the
+    // conjunction that forces a. Its current bit stays set but the local seen
+    // mask prevents a second visit. Strict subset then forces b false. The next
+    // generation must revisit the implication/or(b,b) and find the conflict.
     // N=5, E=6, A=2, R=2, L=3 gives dense setup23/sweep127.
     // W=1, V=5, I=9 adds setup2 and sweep(1+5+20+54)=80.
     for (rounds, expected) in [
@@ -413,7 +459,59 @@ fn qualify_next_generation(oracle: &mut GpuFormulaOracle) {
     }
 }
 
+fn qualify_active_frontier(oracle: &mut GpuFormulaOracle) {
+    // Exact word ends and partial final words, with repeated physical children.
+    // Every upward pass can advance through its local word. Cross-word races
+    // may defer the next word, but its wake must survive into the next pass.
+    for links in [29, 30, 61, 62, 125, 126] {
+        let mut nodes = vec![Node::atom(0), Node::atom(1)];
+        let mut prior = 0;
+        for _ in 0..links {
+            nodes.push(Node::and_pair([prior, prior]));
+            prior = nodes.len() - 1;
+        }
+        nodes.push(Node::implies(prior, 1));
+        let root = nodes.len() - 1;
+        let graph = theory(2, nodes, vec![0, root]);
+        let candidate = Interpretation::new(&graph, [0, 1]).unwrap();
+        assert!(
+            check(
+                &graph,
+                &candidate,
+                Limits::default(),
+                &Cancellation::default()
+            )
+            .unwrap()
+            .accepted()
+        );
+        let (setup, sweep) = propagation_work(&graph, GpuPropagation::ChangedDependencies);
+        let rounds = u32::try_from(2 * graph.nodes().len().div_ceil(32) + 2).unwrap();
+        let checks = oracle
+            .propagate_batch(
+                &graph,
+                &[candidate],
+                FormulaLimits {
+                    max_rounds: rounds,
+                    max_work_per_candidate: setup + rounds * sweep,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        assert_eq!(
+            oracle.last_batch_stats().unwrap().propagation,
+            GpuPropagation::ChangedDependencies
+        );
+        assert_eq!(checks[0].verdict(), FormulaVerdict::NoProperSubset);
+        assert!(checks[0].statistics().rounds <= rounds);
+        assert_eq!(
+            checks[0].statistics().work,
+            setup + checks[0].statistics().rounds * sweep
+        );
+    }
+}
+
 fn qualify_incidence_fallback(oracle: &mut GpuFormulaOracle) {
+    let requested = oracle.compiled_profile().kernel_options().propagation;
     let theory = theory(
         2,
         vec![Node::atom(0), Node::atom(1), Node::and_pair([0, 1])],
@@ -452,7 +550,46 @@ fn qualify_incidence_fallback(oracle: &mut GpuFormulaOracle) {
     );
     assert_eq!(
         oracle.compiled_profile().kernel_options().propagation,
+        requested
+    );
+}
+
+fn qualify_group_fallback(oracle: &mut GpuFormulaOracle) {
+    let theory = crate::formula::wide::theories().remove(0);
+    compare(oracle, &theory);
+    assert_eq!(
+        oracle.last_batch_stats().unwrap().propagation,
+        GpuPropagation::IncrementalGroups
+    );
+    let active_setup = propagation_work(&theory, GpuPropagation::ChangedDependencies).0;
+    let results = oracle
+        .propagate_batch(
+            &theory,
+            &candidates(&theory),
+            FormulaLimits {
+                max_work_per_candidate: active_setup,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    assert_eq!(
+        oracle.last_batch_stats().unwrap().propagation,
         GpuPropagation::ChangedDependencies
+    );
+    assert!(
+        results
+            .iter()
+            .any(|result| result.verdict() == FormulaVerdict::Residual(ResidualReason::WorkLimit))
+    );
+    assert!(results.iter().all(|result| matches!(
+        result.verdict(),
+        FormulaVerdict::NotModel | FormulaVerdict::Residual(ResidualReason::WorkLimit)
+    )));
+    oracle.clear_residency();
+    compare(oracle, &theory);
+    assert_eq!(
+        oracle.last_batch_stats().unwrap().propagation,
+        GpuPropagation::IncrementalGroups
     );
 }
 

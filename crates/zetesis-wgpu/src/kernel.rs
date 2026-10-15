@@ -34,10 +34,15 @@ pub enum GpuPropagation {
     /// Visit every gate each sweep; the established execution route.
     #[default]
     Dense,
-    /// Revisit gates affected by changed physical domains, retaining dense work
-    /// charges plus a conservative directory/bitmap allowance. If optional
+    /// Visit active bits of gates affected by changed physical domains, without
+    /// walking inactive nodes or dependency levels. Retain dense work charges
+    /// plus a conservative directory/bitmap allowance. If optional
     /// storage cannot be admitted, use dense propagation on the same device.
     ChangedDependencies,
+    /// Active traversal with retained AND/OR permission counts. If the optional
+    /// counters cannot fit the complete memory/work envelope, retain scanned
+    /// groups under [`Self::ChangedDependencies`], then its dense fallback.
+    IncrementalGroups,
 }
 
 /// Physical choices shared by the original-truth and frozen-reduct kernels.

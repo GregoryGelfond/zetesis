@@ -315,7 +315,7 @@ impl MembershipExecution for Execution {
                     cancellation,
                     phases,
                 )?;
-                batch.finish(verdicts).map_err(Failure::from)
+                verdicts.finish(batch).map_err(Failure::from)
             }),
             #[cfg(feature = "gpu")]
             Self::Tight {
@@ -333,7 +333,7 @@ impl MembershipExecution for Execution {
                     cancellation,
                     phases,
                 )?;
-                batch.finish(verdicts).map_err(Failure::from)
+                verdicts.finish(batch).map_err(Failure::from)
             }),
         }
     }
@@ -348,17 +348,18 @@ fn propagate(
     options: &SolveConfig,
     cancellation: &zetesis_cpu::Cancellation,
     phases: &Recorder,
-) -> Result<Vec<zetesis_sat::BatchVerdict>, Failure> {
-    let limits = device_limits(options);
+) -> Result<crate::batch_executor::DeviceVerdicts, Failure> {
+    let mut limits = device_limits(options);
+    if options.gpu_batching == crate::GpuBatching::Adaptive {
+        limits.max_candidates = candidates.len();
+    }
     // The device API returns one ordered verdict per candidate. Reserve its
     // host conversion before dispatch so allocation failure cannot hide a
     // successfully decoded batch from the execution counters.
-    let mut verdicts = Vec::new();
-    verdicts
-        .try_reserve_exact(candidates.len())
-        .map_err(|_| Failure::Search(Incomplete::Allocation))?;
-    while verdicts.len() < candidates.len() {
-        let pending = &candidates[verdicts.len()..];
+    let mut verdicts =
+        crate::batch_executor::DeviceVerdicts::new(candidates.len()).map_err(Failure::Search)?;
+    while verdicts.values.len() < candidates.len() {
+        let pending = &candidates[verdicts.values.len()..];
         let result = phases.measure(SolvePhase::GpuHostOracle, || {
             oracle.propagate_prefix_with_cancellation(theory, pending, limits, cancellation)
         });
@@ -377,6 +378,7 @@ fn propagate(
                 actual: count,
             }));
         }
+        verdicts.record_prefix(pending.len(), count);
         let checks = checks
             .into_checks(theory, &pending[..count])
             .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
@@ -399,7 +401,7 @@ fn propagate(
                 &mut statistics.gpu_rounds,
                 u64::from(check.statistics().rounds),
             )?;
-            verdicts.push(decoded_verdict(
+            verdicts.values.push(decoded_verdict(
                 statistics.gpu_residuals.get_or_insert_default(),
                 check.verdict(),
             )?);

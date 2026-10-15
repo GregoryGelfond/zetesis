@@ -448,7 +448,7 @@ fn qualify_threshold_guard_families(oracle: &mut GpuFormulaOracle) {
             assert_eq!(result[0].verdict(), FormulaVerdict::NoProperSubset);
             assert_eq!(
                 oracle.last_batch_stats().unwrap().propagation,
-                oracle.compiled_profile().kernel_options().propagation
+                super::requested_groups(oracle, &theory)
             );
         }
     }

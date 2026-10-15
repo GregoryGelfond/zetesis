@@ -170,34 +170,42 @@ impl Preparation {
     ) -> Result<(Schedule, Plan, Vec<u32>), GpuError> {
         poll(cancellation)?;
         let node_capacity = retained_bytes(nodes)?;
-        if self.propagation == crate::GpuPropagation::ChangedDependencies {
-            let indexed = (|| {
-                let schedule = Schedule::new(&self.shape, levels, device)?;
-                let offset = u32::try_from(schedule.root_bytes / 4)
-                    .map_err(|_| capacity("formula incidence offset exceeds u32"))?;
-                let Some(incidence) = crate::formula_graph::incidence::Layout::new(
-                    nodes,
-                    self.shape.nodes,
-                    self.shape.variables,
-                    offset,
-                    cancellation,
-                )?
-                else {
-                    return Ok(None);
-                };
-                let schedule = schedule.with_incidence(incidence, device)?;
-                self.reserve_schedule(schedule, node_capacity, device, reserve)
-                    .map(Some)
-            })();
-            match indexed {
-                Ok(Some(prepared)) => return Ok(prepared),
-                Ok(None) => {}
-                Err(error)
-                    if matches!(
-                        error.kind(),
-                        GpuErrorKind::Capacity | GpuErrorKind::Allocation
-                    ) => {}
-                Err(error) => return Err(error),
+        if self.propagation != crate::GpuPropagation::Dense {
+            for groups in [true, false] {
+                if groups && self.propagation != crate::GpuPropagation::IncrementalGroups {
+                    continue;
+                }
+                let indexed = (|| {
+                    let schedule = Schedule::new(&self.shape, levels, device)?;
+                    let offset = u32::try_from(schedule.root_bytes / 4)
+                        .map_err(|_| capacity("formula incidence offset exceeds u32"))?;
+                    let Some(mut incidence) = crate::formula_graph::incidence::Layout::new(
+                        nodes,
+                        self.shape.nodes,
+                        self.shape.variables,
+                        offset,
+                        cancellation,
+                    )?
+                    else {
+                        return Ok(None);
+                    };
+                    if groups {
+                        incidence = incidence.with_groups()?;
+                    }
+                    let schedule = schedule.with_incidence(incidence, device)?;
+                    self.reserve_schedule(schedule, node_capacity, device, reserve)
+                        .map(Some)
+                })();
+                match indexed {
+                    Ok(Some(prepared)) => return Ok(prepared),
+                    Ok(None) => break,
+                    Err(error)
+                        if matches!(
+                            error.kind(),
+                            GpuErrorKind::Capacity | GpuErrorKind::Allocation
+                        ) => {}
+                    Err(error) => return Err(error),
+                }
             }
         }
         poll(cancellation)?;

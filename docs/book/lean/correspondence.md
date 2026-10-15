@@ -1516,11 +1516,27 @@ claim follows from reusing the schedule.
 Optional changed-dependency propagation requires a separate wakeup argument. Its
 directory covers every operand and output domain, including atom aliases. Every
 gate starts eligible; an intersection marks both current and next generations,
-including intersections made by the strict-subset check. Consuming a current
-entry must not lose a concurrent wake for the next sweep. These directory, atomic
-and generation invariants, and the extra storage and conservative work charges,
-remain executable obligations. This mode preserves the same sound local transfers
+including intersections made by the strict-subset check. Active-word traversal
+assigns disjoint words to lanes and uses private seen masks to visit a gate at
+most once per sweep. Word reloads may discover new unvisited gates; wakes of
+already visited gates or completed words must survive in the next generation.
+If a sweep changes no domain, every pending transfer has observed that unchanged
+state; quiescence still leaves an exact residual query. These directory, atomic,
+coverage and generation invariants, and the extra storage and conservative work
+charges, remain executable obligations. This mode preserves the same sound local transfers
 and exact residual completion; existing Lean laws do not verify its implementation.
+
+Optional incremental group propagation retains permission counts for native
+AND/OR operand occurrences. Initial counts follow frozen-domain and root setup
+at a uniform barrier. Each uniquely removed physical-domain bit decrements all
+of its operand incidences before publishing wakes; the gate's separate output
+dependency does not decrement those counts. Delayed notifications leave counts
+as overapproximations, so they can postpone deductions but must preserve every
+compatible completion. Distinct physical slots still determine unique witnesses,
+even when one atom occupies several operand positions. Initialization, occurrence
+multiplicity, atomic no-underflow, notification ordering, candidate isolation and
+admitted storage/work remain implementation obligations; `FormulaChains` does
+not by itself verify this concurrent representation.
 
 The CPU oracle's [`Work::charge`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-cpu/src/oracle.rs)
 charges a payload amount before the corresponding comparison or copy.
@@ -1950,8 +1966,9 @@ they introduce no new answer-set law and are not established by the existing
 batch theorems.
 
 The CPU batched completion and the GPU formula routes share one internal batch
-boundary. Original satisfaction is checked before a route sees a candidate, and
-the host receipt consumer retains exact theory and candidate-slice association
+boundary. Independent routes check original satisfaction before invoking a
+checker; joint routes establish it together with the reduct verdict. The
+host receipt consumer retains exact theory and candidate-slice association
 and checks the result count. Neither check proves the soundness of a verdict or
 its association with the right position within that slice, so the batch laws
 take a sound route for the selected operation as an explicit premise; each route
@@ -1959,6 +1976,14 @@ is zetesis's own and is qualified with it. Exact residual completion uses the
 existing host checker; an interruption or fault cannot discharge its pending
 candidates. Rust ownership, resource compliance and transport identities remain
 implementation obligations.
+
+Optional adaptive GPU batching changes the next proposal target only after a
+complete successful commit. The existing pending owner supplies the memory
+capacity; a shortened checked device prefix supplies a physical ceiling.
+Neither observation is semantic evidence. Failed checks preserve pending
+candidates and the prior target. The existing batch laws still require exact
+classification of every occurrence before commit. Checked sizing, allocation
+refusals and propagation of prefix observations remain Rust obligations.
 
 Scalar and joined batch proposals retain one original `EvaluationWorkspace`
 per owner. Every new candidate checks exact theory identity and recomputes original
@@ -3298,8 +3323,10 @@ WGSL execution remain outside the proved correspondence.
 Tight device truth reuse follows the local principle in
 `TightEvaluation.unchanged_inputs_keep_truth`; `updated_values_exact` establishes
 the complete update rule for that module's binary Boolean DAG. The shader uses
-its existing dependency order, a value bit and a change bit, recomputing gates
-whose inputs changed. Native row owners compare the same complete condition
+its existing dependency order, a value bit and a change bit. Boolean gates
+recompute their value in one pass and publish whether it changed. An absorbing
+value can end a wide Boolean reduction after all children have been evaluated;
+this does not skip a child transfer. Native row owners compare the same complete condition
 values and preserve every contribution occurrence when retaining their guards.
 `DependencySchedule.ReadsOnly` states the local dependency obligation, but neither
 module verifies these native row transfers or the two-bit device representation.

@@ -139,10 +139,13 @@ fn compare(oracle: &mut GpuTightOracle, certificate: &TightPlan) -> usize {
             )
             .unwrap();
         assert_eq!(results.len(), candidates.len());
-        assert_eq!(
-            oracle.last_compute_time().is_some(),
-            oracle.context().compute_timing() == zetesis_backend::ComputeTimingStatus::Enabled
-        );
+        if let Some(elapsed) = oracle.last_compute_time() {
+            assert_eq!(
+                oracle.context().compute_timing(),
+                zetesis_backend::ComputeTimingStatus::Enabled
+            );
+            assert!(!elapsed.is_zero());
+        }
         let stats = *oracle.last_batch_stats().unwrap();
         assert_eq!(stats.dispatches, 1);
         assert_eq!(stats.candidates, candidates.len() as u64);
@@ -570,6 +573,7 @@ fn qualify_support_refusals_preserve_reusable_residency(backend: GpuApi, support
     let mut oracle = oracle(backend, support);
     qualify_prefixes(&mut oracle);
     qualify_original_truth_reuse(&mut oracle);
+    qualify_boolean_change_bits(&mut oracle);
     let certificate = certificate(1, vec![Node::atom(0)], vec![0]);
     let candidate = Interpretation::new(certificate.theory(), [0]).unwrap();
     let input = [candidate];
@@ -992,6 +996,127 @@ fn qualify_original_truth_reuse(oracle: &mut GpuTightOracle) {
     assert!(!oracle.last_batch_stats().unwrap().original_truth_reused);
     assert!(fallback.iter().all(|check| check.work() == cold_work));
     qualify_truth_invalidation(oracle, &certificate, &input);
+}
+
+// An absorbing first operand can hide a changing later operand. The native
+// parent consumes the Boolean output's change bit on the next retained pass.
+fn qualify_boolean_change_bits(oracle: &mut GpuTightOracle) {
+    for conjunction in [false, true] {
+        let certificate = wide_boolean_parent(conjunction);
+        let theory = certificate.theory();
+        let mut cold_work = 0;
+        let mut levels = 0;
+        // Bits 0 and 1 are optional atoms; bit 2 needs the numeric body's support.
+        // The second candidate changes only an operand behind an absorbing value.
+        let bits = if conjunction {
+            [4, 6, 7, 3, 5, 4]
+        } else {
+            [5, 7, 6, 2, 4, 5]
+        };
+        for (index, bits) in bits.into_iter().enumerate() {
+            let candidate =
+                Interpretation::new(theory, (0..3).filter(|atom| bits & (1 << atom) != 0)).unwrap();
+            let expected = certificate
+                .check(
+                    &candidate,
+                    TightCheckLimits::default(),
+                    &Cancellation::default(),
+                )
+                .unwrap();
+            let actual = oracle
+                .check_batch(
+                    &certificate,
+                    &[candidate],
+                    TightGpuLimits::default(),
+                    &Cancellation::default(),
+                )
+                .unwrap();
+            assert_eq!(actual[0].verdict(), expected.verdict);
+            let stats = oracle.last_batch_stats().unwrap();
+            assert_eq!(stats.original_truth_reused, index != 0);
+            if index == 0 {
+                cold_work = actual[0].work();
+                levels = stats.truth_levels;
+                assert!(levels > 0);
+            }
+        }
+        let candidate = Interpretation::new(theory, [0, 1, 2]).unwrap();
+        let serial = oracle
+            .check_batch(
+                &certificate,
+                &[candidate],
+                TightGpuLimits {
+                    max_work_per_candidate: cold_work - u64::from(levels),
+                    ..TightGpuLimits::default()
+                },
+                &Cancellation::default(),
+            )
+            .unwrap();
+        assert_eq!(oracle.last_batch_stats().unwrap().truth_levels, 0);
+        assert!(!oracle.last_batch_stats().unwrap().original_truth_reused);
+        assert_eq!(serial[0].verdict(), TightVerdict::Stable);
+    }
+}
+
+fn wide_boolean_parent(conjunction: bool) -> TightPlan {
+    use zetesis_ferraris::{FormulaNodes, FormulaParts, NodeView, Threshold};
+    let mut nodes = FormulaNodes::new(
+        FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(1),
+                Node::atom(2),
+                Node::falsum(),
+                Node::implies(0, 3),
+                Node::or_pair([0, 4]),
+                Node::implies(1, 3),
+                Node::or_pair([1, 6]),
+            ],
+            vec![],
+        )
+        .unwrap(),
+    );
+    let operands: Vec<_> = (0..65).map(|index| index % 2).collect();
+    let mut transaction = nodes.transaction();
+    let body = transaction
+        .push(
+            if conjunction {
+                NodeView::And(&operands)
+            } else {
+                NodeView::Or(&operands)
+            },
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
+    let numeric = transaction
+        .push(
+            NodeView::Threshold(Threshold {
+                conditions: &[body, body],
+                weights: &[1, 1],
+                bound: 2,
+            }),
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
+    let root = transaction
+        .push(NodeView::Implies(numeric, 2), usize::MAX, usize::MAX)
+        .unwrap();
+    transaction.commit();
+    let theory = Theory::new(
+        3,
+        nodes.into_parts(),
+        vec![5, 7, root],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    TightPlan::compile(
+        &theory,
+        TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap()
 }
 
 fn qualify_truth_invalidation(

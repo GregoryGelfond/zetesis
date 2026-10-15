@@ -135,6 +135,32 @@ impl StableModels {
         }
     }
 
+    /// Candidate capacity of the current joint-check pending-memory envelope.
+    ///
+    /// Uses this theory's interpretation width, the existing pending/result row
+    /// charge and actual retained validation storage. Returns zero if the current
+    /// pending-vector capacity itself cannot fit. The query allocates nothing,
+    /// releases no scratch and does not change pending candidates or counters.
+    ///
+    /// This is a proposal-sizing bound, not a reservation: allocation can fail
+    /// or return excess capacity, which the batch operation still checks. It
+    /// does not admit independent original evaluation, checker-private storage,
+    /// exact completion, or additional search work.
+    #[must_use]
+    pub fn joint_batch_capacity(&self, max_pending_bytes: u64) -> usize {
+        let Some(available) =
+            u128::from(max_pending_bytes).checked_sub(self.batch.validation.retained_bytes())
+        else {
+            return 0;
+        };
+        let count = (available / self.pending_row_bytes())
+            .min((isize::MAX as usize / size_of::<Interpretation>()) as u128);
+        if count < self.batch.pending.capacity() as u128 {
+            return 0;
+        }
+        usize::try_from(count).unwrap_or(usize::MAX)
+    }
+
     /// Propose a bounded batch with the retained native cursor, check its original
     /// candidates, then return its stable members in proposal order. An empty
     /// result alone is not exhaustion; consult [`Self::exhausted`].

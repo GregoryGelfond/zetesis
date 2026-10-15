@@ -2,6 +2,21 @@
 //!
 //! The execution backend is the shared vocabulary [`crate::Backend`].
 
+/// Candidate proposal scheduling for general and tight GPU formula checks.
+/// Relational closure and CPU execution keep their configured batch size.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GpuBatching {
+    /// Keep [`crate::SolveConfig::batch_size`] as the proposal ceiling.
+    #[default]
+    Fixed,
+    /// Start at [`crate::SolveConfig::batch_size`] and double a filled batch's
+    /// target only after every verdict has been committed. Pending-memory
+    /// capacity and an observed smaller device prefix bound further growth.
+    /// Larger batches can delay the first answer in a batch and objective-bound
+    /// feedback; they do not change membership or partial-publication rules.
+    Adaptive,
+}
+
 /// Materialization policy, independent of execution hardware.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Grounder {

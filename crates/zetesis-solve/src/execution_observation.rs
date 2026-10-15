@@ -129,7 +129,8 @@ pub enum ExecutionObservation<'a> {
         grounder: Grounder,
         /// How candidates are proposed and the reduct queried.
         search: SearchMethod,
-        /// Candidate batch ceiling.
+        /// Configured candidate batch size: a fixed ceiling or adaptive initial
+        /// target according to [`crate::SolveConfig::gpu_batching`].
         batch_size: NonZeroUsize,
         /// Requested CPU completion population.
         completion_workers: NonZeroUsize,
@@ -144,7 +145,8 @@ pub enum ExecutionObservation<'a> {
         grounder: Grounder,
         /// Candidate proposal method; membership uses the tight certificate.
         search: SearchMethod,
-        /// Candidate batch ceiling.
+        /// Configured candidate batch size: a fixed ceiling or adaptive initial
+        /// target according to [`crate::SolveConfig::gpu_batching`].
         batch_size: NonZeroUsize,
     },
     /// Formula search is about to be prepared over this admitted population.

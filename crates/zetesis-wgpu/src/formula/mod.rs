@@ -50,8 +50,14 @@ pub struct FormulaLimits {
     /// Opt-in changed-dependency execution additionally charges `2*W` setup
     /// and `W+nodes+4*variables+6*incidences` per sweep, where `W` is the
     /// ceiling of `nodes/32`. This bounds two-bit domain shrink events, their
-    /// incident gate visits, dirty tests and generation clears; it does not
-    /// discount skipped gates. A smaller allowance can select dense execution.
+    /// incident gate visits, active-word reads and generation clears. Each node
+    /// is visited at most once per sweep; skipped gates and dependency levels
+    /// do not earn a smaller charge. A smaller allowance can select dense execution.
+    /// Incremental group reduction additionally reserves `4*nodes+6*group_edges+3*groups`
+    /// setup units and `14*incidences+4*nodes` per sweep, covering initialized
+    /// occurrence counts and uniquely removed-bit notifications. It retains
+    /// the scanned-group allowance; it does not report actual active work.
+    /// If this optional envelope cannot fit, groups retain direct scans.
     /// A budget below mandatory setup is refused before dispatch.
     pub max_work_per_candidate: u32,
     /// Maximum host wait for submitted work; not GPU preemption or a deadline

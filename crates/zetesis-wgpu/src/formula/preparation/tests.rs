@@ -207,14 +207,14 @@ fn zero_roots_still_cover_every_duplicate_leaf() {
 #[test]
 fn retained_upload_capacities_are_admitted_in_the_cold_peak() {
     for below in [0, 1] {
-        // Fixed graph: node128 + roots60; two-world transport272. Staging uses
+        // Fixed graph: node128 + roots60; two-world transport288. Staging uses
         // real u32 vectors with deliberate slack, observed before admission.
         let nodes = vector::<u32>(32 + 17).unwrap();
         let roots = vector::<u32>(15 + 19).unwrap();
         let pointers = (nodes.as_ptr(), roots.as_ptr());
         let staging = retained_bytes(&nodes).unwrap() + retained_bytes(&roots).unwrap();
         let exact =
-            188 + 272 + 48 + 8 + 2 * size_of::<super::super::FormulaCheck>() as u64 + staging;
+            188 + 288 + 64 + 8 + 2 * size_of::<super::super::FormulaCheck>() as u64 + staging;
         let mut allocations = [nodes, roots].into_iter();
         let result = preparation(
             &fixture(),
@@ -553,5 +553,180 @@ fn threshold_outputs_wake_the_shared_owner() {
             u32::try_from(guards[0]).unwrap(),
             u32::try_from(guards[1]).unwrap()
         ]
+    );
+}
+
+fn grouped_fixture() -> Theory {
+    use zetesis_ferraris::{FormulaParts, OperandSpan};
+    Theory::new(
+        2,
+        FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(0),
+                Node::atom(1),
+                Node::and_span(OperandSpan {
+                    start: 0,
+                    length: 3,
+                }),
+                Node::or_span(OperandSpan {
+                    start: 3,
+                    length: 4,
+                }),
+                Node::implies(3, 4),
+            ],
+            vec![0, 1, 2, 0, 1, 2, 3],
+        )
+        .unwrap(),
+        vec![5],
+        AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+#[test]
+fn group_state_preserves_occurrences_and_exact_layout() {
+    let (prepared, plan) = preparation(&grouped_fixture(), FormulaLimits::default())
+        .unwrap()
+        .with_propagation(crate::GpuPropagation::IncrementalGroups)
+        .finish(&wgpu::Limits::default(), &Cancellation::default())
+        .unwrap();
+    let incidence = prepared.graph.schedule.incidence.as_ref().unwrap();
+    assert_eq!(
+        prepared.graph.schedule.propagation(),
+        crate::GpuPropagation::IncrementalGroups
+    );
+    assert_eq!(incidence.group_map, 30);
+    assert_eq!(
+        &prepared.roots[30..],
+        &[2, u32::MAX, u32::MAX, u32::MAX, 0, 1, u32::MAX]
+    );
+    // The shared atom slot appears twice in each group; its removed bit must
+    // notify both occurrences, not just one gate ID.
+    let offset = incidence.offset as usize;
+    let order = offset + prepared.graph.shape.variables as usize + 1;
+    let begin = prepared.roots[offset] as usize;
+    let end = prepared.roots[offset + 1] as usize;
+    assert_eq!(&prepared.roots[order + begin..order + end], &[3, 3, 4, 4]);
+    assert_eq!(plan.params(&prepared.graph)[12], 30);
+    assert_eq!((plan.setup, plan.sweep, plan.domains), (102, 434, 88));
+}
+
+#[test]
+fn group_state_falls_back_to_scans_within_the_active_envelope() {
+    let theory = grouped_fixture();
+    let device = wgpu::Limits::default();
+    let (active, expected) = preparation(&theory, FormulaLimits::default())
+        .unwrap()
+        .with_propagation(crate::GpuPropagation::ChangedDependencies)
+        .finish(&device, &Cancellation::default())
+        .unwrap();
+    for limits in [
+        FormulaLimits {
+            max_batch_bytes: expected.accounted,
+            ..Default::default()
+        },
+        FormulaLimits {
+            max_work_per_candidate: expected.setup,
+            ..Default::default()
+        },
+    ] {
+        let (prepared, plan) = preparation(&theory, limits)
+            .unwrap()
+            .with_propagation(crate::GpuPropagation::IncrementalGroups)
+            .finish(&device, &Cancellation::default())
+            .unwrap();
+        assert_eq!(
+            prepared.graph.schedule.propagation(),
+            crate::GpuPropagation::ChangedDependencies
+        );
+        assert_eq!(prepared.roots, active.roots);
+        assert_eq!(
+            (plan.setup, plan.sweep, plan.domains),
+            (expected.setup, expected.sweep, expected.domains)
+        );
+    }
+}
+
+#[test]
+fn group_state_allocation_failure_retains_active_scans() {
+    let mut calls = 0;
+    let (prepared, _) = preparation(&grouped_fixture(), FormulaLimits::default())
+        .unwrap()
+        .with_propagation(crate::GpuPropagation::IncrementalGroups)
+        .finish_with(
+            &wgpu::Limits::default(),
+            &Cancellation::default(),
+            |length| {
+                calls += 1;
+                if calls == 2 {
+                    Err(GpuError::new(
+                        GpuErrorKind::Allocation,
+                        "optional group map refused",
+                    ))
+                } else {
+                    vector(length)
+                }
+            },
+        )
+        .unwrap();
+    assert_eq!(calls, 3);
+    assert_eq!(
+        prepared.graph.schedule.propagation(),
+        crate::GpuPropagation::ChangedDependencies
+    );
+}
+
+#[test]
+fn absent_groups_add_no_directory_state_or_work() {
+    let device = wgpu::Limits::default();
+    let build = |propagation| {
+        preparation(&fixture(), FormulaLimits::default())
+            .unwrap()
+            .with_propagation(propagation)
+            .finish(&device, &Cancellation::default())
+            .unwrap()
+    };
+    let (active, expected) = build(crate::GpuPropagation::ChangedDependencies);
+    let (prepared, plan) = build(crate::GpuPropagation::IncrementalGroups);
+    assert_eq!(
+        prepared.graph.schedule.propagation(),
+        crate::GpuPropagation::ChangedDependencies
+    );
+    assert_eq!(prepared.roots, active.roots);
+    assert_eq!(
+        (plan.setup, plan.sweep, plan.domains, plan.accounted),
+        (
+            expected.setup,
+            expected.sweep,
+            expected.domains,
+            expected.accounted
+        )
+    );
+}
+
+#[test]
+fn group_state_is_included_in_each_candidate_prefix() {
+    let device = wgpu::Limits::default();
+    let (prepared, _) = preparation(&grouped_fixture(), FormulaLimits::default())
+        .unwrap()
+        .with_propagation(crate::GpuPropagation::IncrementalGroups)
+        .finish(&device, &Cancellation::default())
+        .unwrap();
+    let graph = &prepared.graph;
+    let one = Plan::new(graph, 1, FormulaLimits::default(), &device, false, 1).unwrap();
+    let two = Plan::new(graph, 2, FormulaLimits::default(), &device, false, 1).unwrap();
+    assert_eq!(two.domains - one.domains, 44);
+    let limits = FormulaLimits {
+        max_batch_bytes: one.accounted,
+        ..Default::default()
+    };
+    assert!(Plan::new(graph, 1, limits, &device, false, 1).is_ok());
+    assert_eq!(
+        Plan::new(graph, 2, limits, &device, false, 1)
+            .err()
+            .unwrap()
+            .kind(),
+        GpuErrorKind::Capacity
     );
 }

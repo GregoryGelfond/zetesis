@@ -18,8 +18,12 @@ pub(crate) struct Layout {
     pub(crate) dirty_words: u32,
     pub(crate) setup_work: u32,
     pub(crate) sweep_work: u32,
+    pub(crate) group_map: u32,
     variables: u32,
     entries: u32,
+    nodes: u32,
+    groups: u32,
+    group_edges: u32,
 }
 
 fn poll(cancellation: &Cancellation) -> Result<(), GpuError> {
@@ -37,6 +41,8 @@ impl Layout {
         cancellation: &Cancellation,
     ) -> Result<Option<Self>, GpuError> {
         let mut entries = 0_u32;
+        let mut groups = 0_u32;
+        let mut group_edges = 0_u32;
         for (index, node) in nodes.chunks_exact(4).take(node_count as usize).enumerate() {
             poll(cancellation)?;
             let operands = match node[0] {
@@ -46,6 +52,14 @@ impl Layout {
                 10 => 0,
                 _ => return Err(capacity("invalid formula incidence operation")),
             };
+            if matches!(node[0], 5 | 6) {
+                groups = groups
+                    .checked_add(1)
+                    .ok_or_else(|| capacity("formula group count overflows"))?;
+                group_edges = group_edges
+                    .checked_add(node[2])
+                    .ok_or_else(|| capacity("formula group occurrences overflow"))?;
+            }
             let family = threshold_family(
                 nodes,
                 node_count,
@@ -78,8 +92,8 @@ impl Layout {
         let setup_work = dirty_words
             .checked_mul(2)
             .ok_or_else(|| capacity("formula dirty initialization work overflows"))?;
-        // Per sweep: clear the consumed generation, test every gate, and bound
-        // all wakes. A two-bit domain shrinks at most twice; each wake reads
+        // Per sweep: clear the next generation, bound active-word reads by
+        // one per node, and bound all wakes. A two-bit domain shrinks at most twice; each wake reads
         // two endpoints, then one ID and two atomic bit words per incidence.
         let sweep_work = variables
             .checked_mul(4)
@@ -95,13 +109,64 @@ impl Layout {
             sweep_work,
             variables,
             entries,
+            nodes: node_count,
+            groups,
+            group_edges,
+            group_map: 0,
         }))
+    }
+
+    /// Retain two permission counts per wide group, with a shared direct map.
+    /// No group means no map, candidate state or additional work reservation.
+    pub(crate) fn with_groups(mut self) -> Result<Self, GpuError> {
+        if self.groups == 0 {
+            return Ok(self);
+        }
+        self.group_map = self
+            .offset
+            .checked_add(self.words)
+            .ok_or_else(|| capacity("formula group map offset overflows"))?;
+        self.words = self
+            .words
+            .checked_add(self.nodes)
+            .and_then(|n| n.checked_add(1))
+            .ok_or_else(|| capacity("formula group map size overflows"))?;
+        self.offset
+            .checked_add(self.words)
+            .filter(|end| *end <= u32::MAX - 64)
+            .ok_or_else(|| capacity("formula group map addresses overflow"))?;
+        // One initialization scan: node headers, operand/domain reads, counters.
+        self.setup_work = self
+            .nodes
+            .checked_mul(4)
+            .and_then(|n| {
+                self.group_edges
+                    .checked_mul(6)
+                    .and_then(|e| n.checked_add(e))
+            })
+            .and_then(|n| self.groups.checked_mul(3).and_then(|g| n.checked_add(g)))
+            .and_then(|n| self.setup_work.checked_add(n))
+            .ok_or_else(|| capacity("formula group setup work overflows"))?;
+        // Each physical bit disappears once: at most two notifications per
+        // incidence, each with four header reads, a map read and two decrements.
+        // Keep the complete scanned-gate allowance as a conservative bound.
+        self.sweep_work = self
+            .entries
+            .checked_mul(14)
+            .and_then(|n| self.nodes.checked_mul(4).and_then(|g| n.checked_add(g)))
+            .and_then(|n| self.sweep_work.checked_add(n))
+            .ok_or_else(|| capacity("formula group notification work overflows"))?;
+        Ok(self)
     }
 
     pub(crate) fn domain_words(&self) -> Result<u32, GpuError> {
         self.dirty_words
             .checked_mul(2)
             .and_then(|n| n.checked_add(self.variables))
+            .and_then(|n| {
+                let groups = if self.group_map == 0 { 0 } else { self.groups };
+                groups.checked_mul(2).and_then(|g| n.checked_add(g))
+            })
             .filter(|n| *n <= u32::MAX - 64)
             .ok_or_else(|| capacity("formula dirty domain addresses overflow"))
     }
@@ -162,6 +227,32 @@ impl Layout {
         )?;
         roots[offset..order].rotate_left(1);
         roots[order - 1] = self.entries;
+        self.pack_groups(nodes, node_count, roots, cancellation)
+    }
+
+    fn pack_groups(
+        &self,
+        nodes: &[u32],
+        node_count: u32,
+        roots: &mut [u32],
+        cancellation: &Cancellation,
+    ) -> Result<(), GpuError> {
+        if self.group_map != 0 {
+            let map = self.group_map as usize;
+            roots[map] = self.groups;
+            roots[map + 1..].fill(u32::MAX);
+            let mut group = 0;
+            for (index, node) in nodes.chunks_exact(4).take(node_count as usize).enumerate() {
+                poll(cancellation)?;
+                if matches!(node[0], 5 | 6) {
+                    roots[map + 1 + index] = group;
+                    group += 1;
+                }
+            }
+            if group != self.groups {
+                return Err(capacity("formula group map coverage differs"));
+            }
+        }
         Ok(())
     }
 }

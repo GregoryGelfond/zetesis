@@ -404,15 +404,19 @@ fn tight(value: &Value, api: GpuApi, adapter: Option<&str>) -> Result<DeviceWork
     {
         return Err("tight support counters or limits contradict the reported primitive".into());
     }
-    // One immutable plan performs the same complete scan in every candidate.
-    // With no decoded candidate, submitted work remains a scheduling receipt;
-    // it must not be relabelled as completed work or propagation sweeps.
-    if activity.candidates > 0
-        && (activity.work % activity.candidates != 0
-            || u128::from(scheduled_work) * u128::from(activity.candidates)
-                != u128::from(activity.work) * u128::from(submitted_candidates))
+    // Each decoded batch contributes its dispatched plan's work allowance.
+    // Cold and retained-truth plans may charge differently, so their sum need
+    // not be divisible by the candidate count. Undecoded submissions retain
+    // separate receipts, bounded by their own candidate population.
+    let undecoded_batches = submitted_batches - activity.batches;
+    let undecoded_candidates = submitted_candidates - activity.candidates;
+    let undecoded_work = scheduled_work - activity.work;
+    if (undecoded_batches == 0) != (undecoded_candidates == 0)
+        || undecoded_batches > undecoded_candidates
+        || u128::from(undecoded_work)
+            > u128::from(undecoded_candidates) * u128::from(work_per_candidate_limit)
     {
-        return Err("tight support scan work disagrees across candidate counts".into());
+        return Err("tight support submitted and decoded receipts disagree".into());
     }
     Ok(DeviceWork::TightSupport {
         batches: activity.batches,

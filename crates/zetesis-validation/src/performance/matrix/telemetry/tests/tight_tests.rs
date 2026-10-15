@@ -1,4 +1,4 @@
-//! Complete support scans retain their own work and submission receipts.
+//! Complete support checks retain their own work and submission receipts.
 
 use super::*;
 
@@ -78,7 +78,81 @@ fn scheduled_tight_work_is_distinct_from_decoded_work() {
 }
 
 #[test]
-fn tight_counters_must_match_the_complete_scan_contract() {
+fn mixed_tight_batch_allowances_retain_their_sum() {
+    let (mut document, text) = tight_fixture();
+    let execution = &mut document["statistics"]["execution"];
+    // Two one-candidate batches: a cold plan charges five, and a warm plan
+    // charges eight, including optional retained-truth change detection.
+    execution["gpu_batches"] = json!(2);
+    execution["gpu_submitted_batches"] = json!(2);
+    execution["gpu_work"] = json!(13);
+    execution["gpu_scheduled_work"] = json!(13);
+    let observed = observe(&document, text.as_bytes(), metal()).unwrap();
+    assert!(matches!(
+        observed.execution.device,
+        DeviceWork::TightSupport {
+            batches: 2,
+            candidates: 2,
+            work: 13,
+            submitted_batches: 2,
+            submitted_candidates: 2,
+            scheduled_work: 13,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn undecoded_tight_batches_may_have_different_allowances() {
+    let (mut document, text) = tight_fixture();
+    let execution = &mut document["statistics"]["execution"];
+    // The decoded pair charged five each; the undecoded candidate charged nine.
+    execution["gpu_submitted_batches"] = json!(2);
+    execution["gpu_submitted_candidates"] = json!(3);
+    execution["gpu_scheduled_work"] = json!(19);
+    for ceiling in [100, u64::MAX] {
+        document["statistics"]["execution"]["tight_work_per_candidate"] = json!(ceiling);
+        let observed = observe(&document, text.as_bytes(), metal()).unwrap();
+        assert!(matches!(
+            observed.execution.device,
+            DeviceWork::TightSupport {
+                candidates: 2,
+                work: 10,
+                submitted_candidates: 3,
+                scheduled_work: 19,
+                ..
+            }
+        ));
+    }
+}
+
+#[test]
+fn undecoded_tight_receipts_need_their_own_population() {
+    let (mut document, text) = tight_fixture();
+    let execution = &mut document["statistics"]["execution"];
+    execution["gpu_submitted_batches"] = json!(2);
+    execution["gpu_submitted_candidates"] = json!(3);
+    execution["gpu_scheduled_work"] = json!(19);
+    for (field, value) in [
+        ("gpu_submitted_batches", json!(1)),
+        ("gpu_submitted_batches", json!(3)),
+        ("gpu_submitted_candidates", json!(2)),
+        // The total fits three candidates, but the remaining 101 units do not
+        // fit the one undecoded candidate's allowance of 100.
+        ("gpu_scheduled_work", json!(111)),
+    ] {
+        let mut invalid = document.clone();
+        invalid["statistics"]["execution"][field] = value;
+        assert_eq!(
+            observe(&invalid, text.as_bytes(), metal()).unwrap_err(),
+            "tight support submitted and decoded receipts disagree",
+            "{field}"
+        );
+    }
+}
+
+#[test]
+fn tight_counters_must_match_the_complete_check_contract() {
     let (document, text) = tight_fixture();
     for (field, value) in [
         ("gpu_rounds", json!(1)),

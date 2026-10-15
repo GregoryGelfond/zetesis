@@ -89,16 +89,22 @@ fn split_timestamps(words: &[u32], period_ns: f32) -> Result<(&[u32], Option<Dur
     Ok((results, duration(begin, end, period_ns)))
 }
 
-// wgpu timestamps can wrap. A reversed interval is unavailable: guessing its
-// device-specific counter width would manufacture a duration. Invalid timing
-// never turns an otherwise valid logical result into a rejection or a failure.
+// wgpu timestamps can wrap or fail to resolve a positive interval. Equal
+// readings cannot distinguish a sub-resolution interval from an unwritten
+// counter, so they do not establish zero compute cost. A reversed interval is
+// also unavailable: guessing its device-specific counter width would manufacture
+// a duration. Invalid timing never changes an otherwise valid logical result.
 fn duration(begin: u64, end: u64, period_ns: f32) -> Option<Duration> {
     if !period_ns.is_finite() || period_ns <= 0.0 {
         return None;
     }
     let ticks = end.checked_sub(begin)?;
+    if ticks == 0 {
+        return None;
+    }
     Duration::try_from_secs_f64(Duration::from_nanos(ticks).as_secs_f64() * f64::from(period_ns))
         .ok()
+        .filter(|elapsed| !elapsed.is_zero())
 }
 
 #[cfg(test)]
@@ -125,7 +131,19 @@ mod tests {
         for period in [0.0, -1.0, f32::NAN, f32::INFINITY] {
             assert_eq!(duration(10, 14, period), None);
         }
-        assert_eq!(duration(10, 10, 1.0), Some(Duration::ZERO));
+    }
+
+    #[test]
+    fn unresolved_intervals_are_unavailable() {
+        assert_eq!(duration(10, 11, 0.25), None);
+        for timestamp in [0, 10, u64::MAX] {
+            let low = u32::try_from(timestamp & u64::from(u32::MAX)).unwrap();
+            let high = u32::try_from(timestamp >> 32).unwrap();
+            let words = [7, low, high, low, high];
+            let (results, measured) = split_timestamps(&words, 1.0).unwrap();
+            assert_eq!(results, &[7]);
+            assert_eq!(measured, None);
+        }
     }
 
     #[test]

@@ -148,14 +148,20 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
             assert!(oracle.last_batch_stats().unwrap().transport_allocated);
             consumers.push(execution);
         }
-        qualify_prefix_orchestration(&profile, backend);
+        for policy in [crate::GpuBatching::Fixed, crate::GpuBatching::Adaptive] {
+            qualify_prefix_orchestration(&profile, backend, policy);
+        }
     }
 }
 
 // A logical five-candidate proposal crosses several physical two-candidate
 // prefixes. The ordinary coordinator must establish original satisfaction on
 // the device and publish only the complete ordered logical batch.
-fn qualify_prefix_orchestration(profile: &zetesis_wgpu::GpuFormulaProfile, backend: Backend) {
+fn qualify_prefix_orchestration(
+    profile: &zetesis_wgpu::GpuFormulaProfile,
+    backend: Backend,
+    policy: crate::GpuBatching,
+) {
     use std::collections::BTreeSet;
     use std::num::NonZeroUsize;
     use zetesis_sat::{Limits, StableModels};
@@ -167,10 +173,12 @@ fn qualify_prefix_orchestration(profile: &zetesis_wgpu::GpuFormulaProfile, backe
     let logical = SolveConfig {
         backend,
         batch_size: NonZeroUsize::new(5).unwrap(),
+        gpu_batching: policy,
         ..Default::default()
     };
     let physical = SolveConfig {
         batch_size: NonZeroUsize::new(2).unwrap(),
+        gpu_batching: crate::GpuBatching::Fixed,
         ..logical
     };
     let mut queue = crate::formula_queue::BatchQueue::for_joint_oracle(&logical).unwrap();
@@ -178,7 +186,9 @@ fn qualify_prefix_orchestration(profile: &zetesis_wgpu::GpuFormulaProfile, backe
     let mut statistics = super::FormulaExecutionStatistics::default();
     let phases = crate::phase_timing::Recorder::new(false);
     let mut family = BTreeSet::new();
+    let mut counts = Vec::new();
     while let Some(next) = queue.next(&mut models, &logical, &cancellation, |batch| {
+        counts.push(batch.candidates().len());
         let verdicts = super::propagate(
             &mut oracle,
             &mut statistics,
@@ -188,7 +198,7 @@ fn qualify_prefix_orchestration(profile: &zetesis_wgpu::GpuFormulaProfile, backe
             &cancellation,
             &phases,
         )?;
-        batch.finish(verdicts).map_err(super::Failure::from)
+        verdicts.finish(batch).map_err(super::Failure::from)
     }) {
         let model = next.unwrap_or_else(|_| panic!("joint prefix execution must complete"));
         assert!(family.insert(model.atoms().collect::<Vec<_>>()));
@@ -197,6 +207,13 @@ fn qualify_prefix_orchestration(profile: &zetesis_wgpu::GpuFormulaProfile, backe
         .map(|mask| (0..3).filter(|atom| mask & (1 << atom) != 0).collect())
         .collect();
     assert_eq!(family, expected);
+    assert_eq!(
+        counts,
+        match policy {
+            crate::GpuBatching::Fixed => vec![5, 3],
+            crate::GpuBatching::Adaptive => vec![5, 2, 1],
+        }
+    );
     assert_eq!(statistics.gpu_submitted_batches, 5);
     assert_eq!(statistics.gpu_batches, 5);
     assert_eq!(statistics.gpu_submitted_candidates, 8);

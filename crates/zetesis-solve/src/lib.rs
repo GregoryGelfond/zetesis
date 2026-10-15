@@ -130,7 +130,7 @@ pub use lazy_execution::{
 pub use model_construction::{ModelConstructionStatistics, ModelConstructionStop};
 pub use optimization::{Optimization, OptimizationStop};
 pub use phase_timing::{PhaseTimings, SolvePhase};
-pub use policy::{Grounder, Oracle, SourceBatching};
+pub use policy::{GpuBatching, Grounder, Oracle, SourceBatching};
 pub use projection::{ProjectionError, ProjectionLimits, ProjectionResource, ProjectionStatistics};
 pub use semantic_outcome::{AnswerSelection, SemanticOutcome};
 pub use session::{

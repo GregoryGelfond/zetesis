@@ -65,46 +65,38 @@ fn enabled(producer: Producer, values: u32) -> bool {
     return true;
 }
 
-// Both schedules call the same scalar node transfer. Every child is visible
-// before its parent; native numeric rows read the same frozen truth columns.
-fn operands_changed(values: u32, node: Node) -> bool {
+// Boolean evaluation is itself a cheap reduction. Compute the value and then
+// compare it with the retained value; a separate changed-operand scan would
+// reread the same row. Absorbing values end a wide reduction immediately.
+// Every child has already been evaluated in dependency order, so skipping its
+// value here does not skip a required child computation or diagnostic.
+fn boolean_original(world: u32, values: u32, node: Node) -> bool {
+    if (node.tag == NODE_ATOM) { return contains(world, node.left); }
     if (node.tag >= NODE_AND && node.tag <= NODE_IMPLIES) {
-        return ((frozen[values + node.left] | frozen[values + node.right]) & 2u) != 0u;
+        return operation(node.tag, (frozen[values + node.left] & 1u) != 0u,
+            (frozen[values + node.right] & 1u) != 0u);
     }
     if (node.tag == NODE_ALL || node.tag == NODE_ANY) {
+        let identity = node.tag == NODE_ALL;
         for (var child = 0u; child < node.right; child++) {
-            if ((frozen[values + operand_at(node, child)] & 2u) != 0u) { return true; }
+            let next = (frozen[values + operand_at(node, child)] & 1u) != 0u;
+            if (next != identity) { return !identity; }
         }
-        return false;
+        return identity;
     }
-    // Atoms inspect current membership; constants clear their prior change bit.
-    return true;
+    return node.tag == 10u;
 }
 
+// Both schedules call the same scalar transfer. The change bit records the
+// output change, including when another child changes behind an absorbing value.
+// Native row owners retain their separate, potentially cheaper reuse check.
 fn original(world: u32, values: u32, index: u32, reuse: bool) {
     let node = node_at(index);
     if (node.tag >= 7u && node.tag <= 9u) {
         numeric_original(values, index, node, reuse);
         return;
     }
-    if (reuse && !operands_changed(values, node)) {
-        frozen[values + index] &= 1u;
-        return;
-    }
-    var value = false;
-    if (node.tag == NODE_ATOM) { value = contains(world, node.left); }
-    if (node.tag >= NODE_AND && node.tag <= NODE_IMPLIES) {
-        value = operation(node.tag, (frozen[values + node.left] & 1u) != 0u,
-            (frozen[values + node.right] & 1u) != 0u);
-    }
-    if (node.tag == NODE_ALL || node.tag == NODE_ANY) {
-        value = node.tag == NODE_ALL;
-        for (var child = 0u; child < node.right; child++) {
-            let next = (frozen[values + operand_at(node, child)] & 1u) != 0u;
-            value = select(value || next, value && next, node.tag == NODE_ALL);
-        }
-    }
-    if (node.tag == 10u) { value = true; }
+    let value = boolean_original(world, values, node);
     let next = select(0u, 1u, value);
     let changed = reuse && next != (frozen[values + index] & 1u);
     frozen[values + index] = next | select(0u, 2u, changed);

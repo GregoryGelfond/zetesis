@@ -173,3 +173,89 @@ fn unique_witnesses_count_physical_slots_instead_of_occurrences() {
         );
     }
 }
+
+#[test]
+fn delayed_group_notifications_preserve_compatible_completions() {
+    // Every subset of notifications is a possible prefix of a racing delivery
+    // order. Enumerate those prefixes independently of the shader's traversal.
+    for conjunction in [false, true] {
+        let all = if conjunction { 2u8 } else { 1 };
+        let witness = 3 ^ all;
+        for ids in [[0usize, 0, 0], [0, 1, 0], [0, 0, 1], [0, 1, 1]] {
+            for removed in 0u8..16 {
+                let domains = [3 & !removed, 3 & !(removed >> 2)];
+                for delivered in 0u8..64 {
+                    let notices = [delivered & 3, (delivered >> 2) & 3, (delivered >> 4) & 3];
+                    if ids
+                        .iter()
+                        .zip(notices)
+                        .any(|(&slot, notice)| notice & domains[slot] != 0)
+                    {
+                        continue;
+                    }
+                    let mut counts = [ids.len(); 2];
+                    for notice in notices {
+                        counts[0] -= usize::from(notice & all != 0);
+                        counts[1] -= usize::from(notice & witness != 0);
+                    }
+                    let exact = [all, witness]
+                        .map(|bit| ids.iter().filter(|&&slot| domains[slot] & bit != 0).count());
+                    assert!(counts.iter().zip(exact).all(|(&old, now)| old >= now));
+                    if ids
+                        .iter()
+                        .zip(notices)
+                        .all(|(&slot, notice)| notice == (3 ^ domains[slot]))
+                    {
+                        assert_eq!(counts, exact);
+                    }
+                    let counted = if counts[0] == ids.len() { all } else { 0 }
+                        | if counts[1] != 0 { witness } else { 0 };
+                    for output in 0u8..4 {
+                        let (allowed, forced) = if counted == 3 && output == witness {
+                            group_allowed(conjunction, &ids, &ids.map(|slot| domains[slot]), output)
+                        } else {
+                            (
+                                counted,
+                                (counted == 3 && output == all).then_some((usize::MAX, all)),
+                            )
+                        };
+                        let mut narrowed = [domains[0], domains[1], output & allowed];
+                        if let Some((slot, bit)) = forced {
+                            if slot == usize::MAX {
+                                for &child in &ids {
+                                    narrowed[child] &= bit;
+                                }
+                            } else {
+                                narrowed[slot] &= bit;
+                            }
+                        }
+                        for bits in 0u8..8 {
+                            let assignment = [bits & 1 != 0, bits & 2 != 0, bits & 4 != 0];
+                            let truth = if conjunction {
+                                ids.iter().all(|&slot| assignment[slot])
+                            } else {
+                                ids.iter().any(|&slot| assignment[slot])
+                            };
+                            let before = [domains[0], domains[1], output];
+                            if truth == assignment[2]
+                                && before
+                                    .iter()
+                                    .zip(assignment)
+                                    .all(|(&domain, value)| domain & (1 << u8::from(value)) != 0)
+                            {
+                                assert!(
+                                    narrowed
+                                        .iter()
+                                        .zip(assignment)
+                                        .all(
+                                            |(&domain, value)| domain & (1 << u8::from(value)) != 0
+                                        )
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

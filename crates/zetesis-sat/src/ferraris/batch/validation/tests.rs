@@ -41,6 +41,72 @@ fn numeric_theory() -> Theory {
 }
 
 #[test]
+fn joint_capacity_uses_exact_row_and_workspace_bytes() {
+    let owner = numeric_theory();
+    let search =
+        crate::StableModels::new(&owner, crate::Limits::default(), Cancellation::default())
+            .unwrap();
+    let row = search.pending_row_bytes();
+    let header = search.batch.validation.retained_bytes();
+    for count in [0, 1, 3, 100] {
+        let bytes = u64::try_from(header + row * count as u128).unwrap();
+        assert_eq!(search.joint_batch_capacity(bytes), count);
+        if count > 0 {
+            assert_eq!(search.joint_batch_capacity(bytes - 1), count - 1);
+        }
+    }
+    assert_eq!(search.joint_batch_capacity(0), 0);
+    assert!(
+        search.joint_batch_capacity(u64::MAX) <= isize::MAX as usize / size_of::<Interpretation>()
+    );
+    assert_eq!(search.batch.pending.capacity(), 0);
+    assert_eq!(search.batch.validation.retained_bytes(), header);
+    assert_eq!(search.statistics().candidates, 0);
+}
+
+#[test]
+fn joint_capacity_observes_retained_scratch_and_retry_storage() {
+    use crate::{BatchError, BatchLimits, BatchVerdict, StableModels};
+    use std::num::NonZeroUsize;
+
+    let owner = numeric_theory();
+    let mut search =
+        StableModels::new(&owner, crate::Limits::default(), Cancellation::default()).unwrap();
+    let limits = BatchLimits {
+        max_candidates: NonZeroUsize::MIN,
+        max_pending_bytes: 4096,
+    };
+    assert!(matches!(
+        search.next_batch(limits, |_, _| Err::<Vec<BatchVerdict>, _>("retry")),
+        Err(BatchError::Checker("retry"))
+    ));
+    let before = search.batch_statistics();
+    let atoms = search.batch.pending[0].atoms().collect::<Vec<_>>();
+    let capacity = search.batch.pending.capacity();
+    let bytes = search.pending_row_bytes() * capacity as u128 + before.original_validation_bytes;
+    let bytes = u64::try_from(bytes).unwrap();
+    assert_eq!(search.joint_batch_capacity(bytes), capacity);
+    assert_eq!(search.joint_batch_capacity(bytes - 1), 0);
+    assert!(before.original_validation_bytes > size_of::<EvaluationWorkspace>() as u128);
+    assert_eq!(search.batch_statistics(), before);
+    assert_eq!(search.batch.pending[0].atoms().collect::<Vec<_>>(), atoms);
+    let retry = search.next_batch_with_joint_completion(
+        BatchLimits {
+            max_pending_bytes: bytes,
+            ..limits
+        },
+        &mut crate::CompletionExecutor::default(),
+        |_, candidates| {
+            assert_eq!(candidates[0].atoms().collect::<Vec<_>>(), atoms);
+            Err::<Vec<BatchVerdict>, _>("same retry")
+        },
+    );
+    assert!(matches!(retry, Err(BatchError::Checker("same retry"))));
+    assert_eq!(search.batch_statistics().pending, before.pending);
+    assert_eq!(search.batch_statistics().committed, before.committed);
+}
+
+#[test]
 fn retained_numeric_storage_never_retains_candidate_truth() {
     let owner = numeric_theory();
     let mut validation = Validation::default();

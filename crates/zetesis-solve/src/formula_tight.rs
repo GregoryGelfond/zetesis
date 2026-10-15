@@ -71,19 +71,20 @@ pub(crate) fn check(
     options: &SolveConfig,
     cancellation: &Cancellation,
     phases: &Recorder,
-) -> Result<Vec<BatchVerdict>, Failure> {
+) -> Result<crate::batch_executor::DeviceVerdicts, Failure> {
     let limits = TightGpuLimits {
-        max_candidates: options.batch_size.get(),
+        max_candidates: match options.gpu_batching {
+            crate::GpuBatching::Fixed => options.batch_size.get(),
+            crate::GpuBatching::Adaptive => candidates.len(),
+        },
         max_batch_bytes: options.max_batch_bytes,
         max_work_per_candidate: u64::from(options.gpu_formula_work),
         ..Default::default()
     };
-    let mut verdicts = Vec::new();
-    verdicts
-        .try_reserve_exact(candidates.len())
-        .map_err(|_| Failure::Search(Incomplete::Allocation))?;
-    while verdicts.len() < candidates.len() {
-        let pending = &candidates[verdicts.len()..];
+    let mut verdicts =
+        crate::batch_executor::DeviceVerdicts::new(candidates.len()).map_err(Failure::Search)?;
+    while verdicts.values.len() < candidates.len() {
+        let pending = &candidates[verdicts.values.len()..];
         let result = phases.measure(SolvePhase::GpuHostOracle, || {
             oracle.check_prefix(plan, pending, limits, cancellation)
         });
@@ -114,6 +115,7 @@ pub(crate) fn check(
                 actual: count,
             }));
         }
+        verdicts.record_prefix(pending.len(), count);
         let checks = checks
             .into_checks(plan.theory(), &pending[..count])
             .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
@@ -127,7 +129,9 @@ pub(crate) fn check(
             statistics.peak_accounted_bytes =
                 statistics.peak_accounted_bytes.max(batch.accounted_bytes);
         }
-        verdicts.extend(checks.into_iter().map(|check| verdict(check.verdict())));
+        verdicts
+            .values
+            .extend(checks.into_iter().map(|check| verdict(check.verdict())));
     }
     Ok(verdicts)
 }

@@ -58,6 +58,8 @@ impl<'a> CandidateBatch<'a> {
         Ok(BatchResult {
             batch: self,
             verdicts,
+            #[cfg(feature = "gpu")]
+            prefix_limit: None,
         })
     }
 }
@@ -66,9 +68,16 @@ impl<'a> CandidateBatch<'a> {
 pub(crate) struct BatchResult<'a> {
     batch: CandidateBatch<'a>,
     verdicts: Vec<BatchVerdict>,
+    #[cfg(feature = "gpu")]
+    prefix_limit: Option<std::num::NonZeroUsize>,
 }
 
 impl BatchResult<'_> {
+    #[cfg(feature = "gpu")]
+    pub(crate) const fn prefix_limit(&self) -> Option<std::num::NonZeroUsize> {
+        self.prefix_limit
+    }
+
     pub(crate) fn into_verdicts(
         self,
         theory: &Theory,
@@ -80,6 +89,46 @@ impl BatchResult<'_> {
             return Err(ExecutorError::ForeignBatch);
         }
         Ok(self.verdicts)
+    }
+}
+
+/// Device verdicts plus a capacity observation, not additional semantic evidence.
+#[cfg(feature = "gpu")]
+pub(crate) struct DeviceVerdicts {
+    pub(crate) values: Vec<BatchVerdict>,
+    prefix_limit: Option<std::num::NonZeroUsize>,
+}
+
+#[cfg(feature = "gpu")]
+impl DeviceVerdicts {
+    pub(crate) fn new(count: usize) -> Result<Self, zetesis_sat::Incomplete> {
+        let mut values = Vec::new();
+        values
+            .try_reserve_exact(count)
+            .map_err(|_| zetesis_sat::Incomplete::Allocation)?;
+        Ok(Self {
+            values,
+            prefix_limit: None,
+        })
+    }
+
+    /// Only a shortened nonempty prefix establishes a physical capacity limit;
+    /// the final remainder alone carries no such information.
+    pub(crate) fn record_prefix(&mut self, offered: usize, checked: usize) {
+        if checked < offered
+            && let Some(count) = std::num::NonZeroUsize::new(checked)
+        {
+            self.prefix_limit = Some(self.prefix_limit.map_or(count, |prior| prior.min(count)));
+        }
+    }
+
+    pub(crate) fn finish(
+        self,
+        batch: CandidateBatch<'_>,
+    ) -> Result<BatchResult<'_>, ExecutorError> {
+        let mut result = batch.finish(self.values)?;
+        result.prefix_limit = self.prefix_limit;
+        Ok(result)
     }
 }
 

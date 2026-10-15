@@ -148,22 +148,23 @@ pub enum DeviceWork {
         /// Peak logical accounted GPU bytes.
         peak_accounted_bytes: u64,
     },
-    /// Complete tight-support scans, with submitted work distinct from decoded
+    /// Complete tight-support checks, with submitted work distinct from decoded
     /// results. Propagation sweeps do not describe this primitive.
     TightSupport {
         /// Successfully decoded device batches.
         batches: u64,
         /// Candidates returned by decoded batches.
         candidates: u64,
-        /// Complete support-scan work in decoded results.
+        /// Sum of the dispatched plans' work allowances in decoded results.
+        /// Cold and retained-truth batches may charge differently.
         work: u64,
         /// Submitted batches, including any without a decoded result.
         submitted_batches: u64,
         /// Submitted candidates, including any without a decoded result.
         submitted_candidates: u64,
-        /// Scheduled complete-scan work, not a claim that readback completed.
+        /// Sum of submitted work allowances, not a claim that readback completed.
         scheduled_work: u64,
-        /// Configured complete support-scan work ceiling per candidate.
+        /// Configured work allowance ceiling per candidate.
         work_per_candidate_limit: u64,
         /// Peak logical accounted GPU bytes from decoded batches.
         peak_accounted_bytes: u64,

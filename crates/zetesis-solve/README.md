@@ -59,6 +59,12 @@ support is enabled by default; use `default-features = false` for a CPU-only
 consumer. Cargo feature unification can enable it through another dependency.
 Compiling GPU support does not select a device.
 
+GPU formula checks use fixed candidate batches by default. Library callers may
+select `GpuBatching::Adaptive`: `batch_size` becomes the initial target, with
+growth after successful batch commits bounded by pending memory and admitted
+device prefixes. Larger batches may delay answers and objective feedback; they
+do not alter membership or permit partial batch publication.
+
 `SessionBuilder` can accept shared `ExecutionResources`, optional
 `SolveMeasurements`, and an `ExecutionObserver`. Membership is always decided by
 zetesis's own reduct check. Shared resources do not reuse candidate truth, search

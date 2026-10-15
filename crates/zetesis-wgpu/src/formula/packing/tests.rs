@@ -96,7 +96,7 @@ fn packed_nodes_preserve_topology_shared_atom_ids_and_original_operators() {
     let plan = plan(&graph, limits, true);
     assert_eq!(
         plan.params(&graph),
-        [2, 6, 1, 6, 1, 0, 64, 100_000_000, 24, 136, 7, 3]
+        [2, 6, 1, 6, 1, 0, 64, 100_000_000, 24, 136, 7, 3, 0, 0, 0, 0]
     );
     let a = Interpretation::new(&graph.shape.theory, [0]).unwrap();
     let b = Interpretation::new(&graph.shape.theory, [1]).unwrap();
@@ -233,7 +233,7 @@ fn device_limits_zero_atoms_and_word_boundaries_have_explicit_layouts() {
     small.max_compute_workgroups_per_dimension = 1;
     assert!(Plan::new(&graph, 2, FormulaLimits::default(), &small, false, 1).is_err());
     small = device();
-    small.max_uniform_buffer_binding_size = 47;
+    small.max_uniform_buffer_binding_size = 63;
     assert!(Plan::new(&graph, 1, FormulaLimits::default(), &small, false, 1).is_err());
     small = device();
     small.max_buffer_size = 47;

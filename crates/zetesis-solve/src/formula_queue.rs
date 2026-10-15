@@ -11,6 +11,9 @@ use crate::batch_executor::{BatchResult, CandidateBatch};
 use crate::formula_execution::Failure;
 use crate::{SolveConfig, SolveError};
 
+#[cfg(feature = "gpu")]
+mod batching;
+
 #[derive(Default)]
 /// Owns only reduct-verified models awaiting objective scoring or output.
 /// `StableModels` separately owns unverified proposed candidates and their exact
@@ -20,6 +23,8 @@ pub(crate) struct BatchQueue {
     completion: CompletionExecutor,
     accounting: crate::formula_execution::CompletionAccounting,
     original_check: OriginalCheck,
+    #[cfg(feature = "gpu")]
+    batching: batching::Batching,
 }
 
 #[derive(Default)]
@@ -52,6 +57,7 @@ impl BatchQueue {
     fn joint(options: &SolveConfig, workers: NonZeroUsize) -> Result<Self, SolveError> {
         let mut queue = Self::with_completion_workers(options, workers)?;
         queue.original_check = OriginalCheck::Joint;
+        queue.batching = batching::Batching::new(options);
         Ok(queue)
     }
 
@@ -101,18 +107,32 @@ impl BatchQueue {
             if models.exhausted() {
                 return None;
             }
+            #[cfg(feature = "gpu")]
+            let max_candidates = self.batching.target(models, options);
+            #[cfg(not(feature = "gpu"))]
+            let max_candidates = options.batch_size;
             let limits = BatchLimits {
-                max_candidates: options.batch_size,
+                max_candidates,
                 max_pending_bytes: options.max_batch_bytes,
             };
             // Membership certification can stop after the injected checker.
             // The stream's explicit completion-attempt count prevents counting
             // a previous executor snapshot again when proposals remain pending.
             let prior_completion = models.batch_statistics().completion_calls;
+            #[cfg(feature = "gpu")]
+            let mut accepted_prefix = (0, None);
             let check = |theory: &zetesis_ferraris::Theory, candidates: &[Interpretation]| {
-                checker(CandidateBatch::new(theory, candidates))?
+                let result = checker(CandidateBatch::new(theory, candidates))?;
+                #[cfg(feature = "gpu")]
+                let prefix_limit = result.prefix_limit();
+                let verdicts = result
                     .into_verdicts(theory, candidates)
-                    .map_err(Failure::from)
+                    .map_err(Failure::from)?;
+                #[cfg(feature = "gpu")]
+                {
+                    accepted_prefix = (candidates.len(), prefix_limit);
+                }
+                Ok(verdicts)
             };
             let result = match self.original_check {
                 OriginalCheck::Independent => {
@@ -129,7 +149,15 @@ impl BatchQueue {
                 self.accounting.record(progress);
             }
             match result {
-                Ok(batch) => self.ready = batch.into(),
+                Ok(batch) => {
+                    #[cfg(feature = "gpu")]
+                    self.batching.committed(
+                        limits.max_candidates,
+                        accepted_prefix.0,
+                        accepted_prefix.1,
+                    );
+                    self.ready = batch.into();
+                }
                 Err(BatchError::Search(error) | BatchError::Limits(error)) => {
                     return Some(Err(Failure::Search(error)));
                 }

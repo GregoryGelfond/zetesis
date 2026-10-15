@@ -223,6 +223,13 @@ matrix runner for separately retained, caller-bounded JSON and stderr. It checks
 telemetry consistency only; callers still establish process completion and full
 answer-family qualification. It performs no solving or process invocation.
 
+Tight-support work totals sum the dispatched plans' allowances. Cold and
+retained-truth batches can charge differently; the total is not a fixed cost
+per candidate or a count of executed shader instructions. Submitted and decoded
+receipts remain distinct: each population respects the per-candidate ceiling,
+and when all submissions are decoded their work totals must agree. Older
+constant-charge records remain readable without a schema change.
+
 Host phase timings and process wall time are separate. Lazy grounding is
 interleaved with solving; a missing duration stays unavailable. Logical payload,
 transfer and authored allocation counts are not RSS. Neither successful parity

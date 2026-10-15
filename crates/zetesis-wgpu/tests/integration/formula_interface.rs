@@ -77,7 +77,7 @@ fn formula_parameters_keep_the_packed_word_layout() {
     let naga::TypeInner::Struct { members, span } = &parameters.inner else {
         panic!("parameters are a uniform structure");
     };
-    assert_eq!(*span, 48);
+    assert_eq!(*span, 64);
     let fields = [
         "atoms",
         "nodes",
@@ -91,6 +91,10 @@ fn formula_parameters_keep_the_packed_word_layout() {
         "sweep_work",
         "epoch",
         "levels",
+        "group_map",
+        "padding0",
+        "padding1",
+        "padding2",
     ];
     assert_eq!(members.len(), fields.len());
     for (index, (member, name)) in members.iter().zip(fields).enumerate() {

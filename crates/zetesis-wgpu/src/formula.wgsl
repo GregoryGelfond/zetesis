@@ -5,6 +5,7 @@ struct Params {
     atoms: u32, nodes: u32, roots: u32, variables: u32,
     words: u32, incidence: u32, max_rounds: u32, max_work: u32,
     setup_work: u32, sweep_work: u32, epoch: u32, levels: u32,
+    group_map: u32, padding0: u32, padding1: u32, padding2: u32,
 }
 struct Node { tag: u32, left: u32, right: u32, output: u32, }
 @group(0) @binding(0) var<uniform> params: Params;
@@ -22,6 +23,7 @@ var<workgroup> subset_count: atomic<u32>;
 var<workgroup> subset_last: atomic<u32>;
 var<private> domain_base: u32;
 var<private> dirty_generation: u32;
+var<private> group_state: u32;
 
 fn dirty_words() -> u32 {
     return select(0u, (params.nodes + 31u) / 32u, params.incidence != 0u);
@@ -29,10 +31,11 @@ fn dirty_words() -> u32 {
 fn dirty_base(generation: u32) -> u32 {
     return domain_base + params.variables + generation * dirty_words();
 }
-// A wake reaches both generations. A gate can consume the current bit before
-// a same-level writer finishes; the next bit survives until the next sweep.
-// Each buffer is cleared only at a uniform boundary where no writer is active.
-fn wake(index: u32) {
+// A wake reaches both generations. A word may finish before a writer wakes
+// one of its gates; the next bit survives until the next sweep. Current bits
+// stay set, while a private seen mask bounds each gate to one visit per sweep.
+// Only the next buffer is cleared, at a uniform boundary without active writers.
+fn wake(index: u32, removed: u32) {
     if (params.incidence == 0u) { return; }
     let slot = index - domain_base;
     let start = roots[params.incidence + slot];
@@ -42,18 +45,12 @@ fn wake(index: u32) {
     let next = dirty_base(1u - dirty_generation);
     for (var position = start; position < end; position++) {
         let gate = roots[order + position];
+        if (params.group_map != 0u) { update_group(gate, slot, removed); }
         let bit = 1u << (gate % 32u);
         atomicOr(&domains[current + gate / 32u], bit);
         atomicOr(&domains[next + gate / 32u], bit);
     }
 }
-fn take_dirty(index: u32) -> bool {
-    if (params.incidence == 0u) { return true; }
-    let bit = 1u << (index % 32u);
-    let previous = atomicAnd(&domains[dirty_base(dirty_generation) + index / 32u], ~bit);
-    return (previous & bit) != 0u;
-}
-
 // Headers occupy 4*N words; wide rows occupy the checked appended tail.
 fn node_at(index: u32) -> Node {
     let base = index * 4u;
@@ -98,19 +95,47 @@ fn narrow(index: u32, allowed: u32) {
     let next = previous & allowed;
     if (next != previous) {
         atomicStore(&changed, 1u);
-        wake(index);
+        wake(index, previous & ~next);
     }
     if (next == 0u) { atomicStore(&conflict, 1u); }
 }
-// Native groups retain every operand occurrence. A composite output has its
-// own slot; repeated atom nodes may share a physical child slot. The unique
-// witness test therefore counts distinct slots, never operand positions.
-// Concurrent intersections can only remove completions. This transfer is sound
-// with stale reads; it does not promise exact projection of racing snapshots.
-fn group_gate(base: u32, node: Node) {
-    let conjunction = node.tag == 5u;
-    let all_bit = select(1u, 2u, conjunction);
-    let witness_bit = select(2u, 1u, conjunction);
+// Each uniquely removed bit visits every operand occurrence before its wake.
+// The gate's own output is a separate dependency, never an operand of itself.
+// Counts can lag domain intersections, but cannot exclude a live permission.
+fn update_group(index: u32, slot: u32, removed: u32) {
+    let node = node_at(index);
+    if ((node.tag != 5u && node.tag != 6u) || node.output == slot) { return; }
+    let base = group_state + roots[params.group_map + 1u + index] * 2u;
+    let all_bit = select(1u, 2u, node.tag == 5u);
+    if ((removed & all_bit) != 0u) { atomicSub(&domains[base], 1u); }
+    if ((removed & (3u ^ all_bit)) != 0u) { atomicSub(&domains[base + 1u], 1u); }
+}
+fn initialize_groups(base: u32, lane: u32) {
+    if (params.group_map == 0u) { return; }
+    for (var index = lane; index < params.nodes; index += WORKGROUP_SIZE) {
+        let node = node_at(index);
+        if (node.tag != 5u && node.tag != 6u) { continue; }
+        let all_bit = select(1u, 2u, node.tag == 5u);
+        var all_count = 0u;
+        var witness_count = 0u;
+        for (var position = 0u; position < node.right; position++) {
+            let slot = node_at(operand_at(node, position)).output;
+            let domain = atomicLoad(&domains[base + slot]);
+            all_count += select(0u, 1u, (domain & all_bit) != 0u);
+            witness_count += select(0u, 1u, (domain & (3u ^ all_bit)) != 0u);
+        }
+        let state = group_state + roots[params.group_map + 1u + index] * 2u;
+        atomicStore(&domains[state], all_count);
+        atomicStore(&domains[state + 1u], witness_count);
+    }
+}
+struct GroupSummary { allowed: u32, witness: u32, unique: bool, }
+// Native groups retain every operand occurrence. Composite outputs are distinct;
+// repeated atom nodes can share a physical child slot. Count distinct witness
+// slots rather than positions. Stale observations only relax this projection.
+fn scan_group(base: u32, node: Node) -> GroupSummary {
+    let all_bit = select(1u, 2u, node.tag == 5u);
+    let witness_bit = 3u ^ all_bit;
     var all_possible = true;
     var empty = false;
     var has_witness = false;
@@ -130,16 +155,33 @@ fn group_gate(base: u32, node: Node) {
     var allowed = select(0u, all_bit, all_possible) |
         select(0u, witness_bit, has_witness);
     if (empty) { allowed = 0u; }
-    let output = atomicLoad(&domains[base + node.output]) & allowed;
-    narrow(base + node.output, allowed);
-    // The children already entail a settled output; forcing them adds nothing.
-    if (allowed != 3u) { return; }
+    return GroupSummary(allowed, witness, has_witness && !multiple);
+}
+fn group_gate(base: u32, index: u32, node: Node) {
+    let all_bit = select(1u, 2u, node.tag == 5u);
+    let witness_bit = 3u ^ all_bit;
+    var summary = GroupSummary(0u, 0u, false);
+    if (params.group_map != 0u) {
+        let state = group_state + roots[params.group_map + 1u + index] * 2u;
+        summary.allowed = select(0u, all_bit, atomicLoad(&domains[state]) == node.right) |
+            select(0u, witness_bit, atomicLoad(&domains[state + 1u]) != 0u);
+    }
+    var demanded = 0u;
+    if (params.group_map != 0u) { demanded = atomicLoad(&domains[base + node.output]); }
+    // Occurrence counts cannot establish a unique physical witness. Only that
+    // demanded unresolved case needs the scan on the incremental route.
+    if (params.group_map == 0u || (summary.allowed == 3u && demanded == witness_bit)) {
+        summary = scan_group(base, node);
+    }
+    let output = atomicLoad(&domains[base + node.output]) & summary.allowed;
+    narrow(base + node.output, summary.allowed);
+    if (summary.allowed != 3u) { return; }
     if (output == all_bit) {
-        for (var index = 0u; index < node.right; index++) {
-            narrow(base + node_at(operand_at(node, index)).output, all_bit);
+        for (var child = 0u; child < node.right; child++) {
+            narrow(base + node_at(operand_at(node, child)).output, all_bit);
         }
-    } else if (output == witness_bit && has_witness && !multiple) {
-        narrow(base + witness, witness_bit);
+    } else if (output == witness_bit && summary.unique) {
+        narrow(base + summary.witness, witness_bit);
     }
 }
 
@@ -173,7 +215,6 @@ fn finish(world: u32, status: u32, rounds: u32, work: u32) {
     results[base + 5u] = 0x46525031u;
 }
 fn propagate_node(base: u32, mask_base: u32, index: u32) {
-    if (!take_dirty(index)) { return; }
     let node = node_at(index);
     // A frozen-false owner can still carry other live guards of the same row.
     // The family operation itself gates every source and target by original truth.
@@ -184,7 +225,7 @@ fn propagate_node(base: u32, mask_base: u32, index: u32) {
         if (node.tag == 10u) { narrow(base + node.output, 2u); }
         else if (node.tag >= 8u) { extremum_gate(base, node); }
         else if (node.tag == 7u) { threshold_gate(base, node); }
-        else if (node.tag >= 5u) { group_gate(base, node); }
+        else if (node.tag >= 5u) { group_gate(base, index, node); }
         else if (node.tag >= 2u) { gate(base, node); }
     }
 }
@@ -192,9 +233,8 @@ fn propagate_node(base: u32, mask_base: u32, index: u32) {
 // upward sweeps so child consequences can reach parents within one traversal.
 // Both directions reuse original truth's levels and the same atomic transfers.
 // A level observes all preceding levels in the selected direction.
-// A dense sweep visits every node once. Changed-dependency execution filters
-// those visits by the candidate's current generation; an output is a dependency
-// as well as every operand. Upward consequences may require another sweep.
+// A dense sweep visits every node once. Changed-dependency execution uses the
+// active word traversal below instead. Either order may need another sweep.
 // Neither this order nor a fixed point establishes a countermodel.
 fn propagate_levels(base: u32, mask_base: u32, lane: u32, upward: bool) {
     if (params.levels == 0u) {
@@ -218,13 +258,42 @@ fn propagate_levels(base: u32, mask_base: u32, lane: u32, upward: bool) {
         }
     }
 }
+// The existing candidate-local bitmap is the active frontier: no queue or
+// duplicate node directory is needed. Each lane owns disjoint words for this
+// sweep, and each gate in one word is visited at most once. Reloading the word
+// admits wakes of not-yet-visited gates; a wake of a visited gate, or of a word
+// whose lane already finished, remains in the next generation.
+fn propagate_active(base: u32, mask_base: u32, lane: u32, upward: bool) {
+    let words = dirty_words();
+    let current = dirty_base(dirty_generation);
+    for (var position = lane; position < words; position += WORKGROUP_SIZE) {
+        let word = select(words - position - 1u, position, upward);
+        let start = word * 32u;
+        let valid = 0xffffffffu >> (32u - min(32u, params.nodes - start));
+        var seen = ~valid;
+        loop {
+            let pending = atomicLoad(&domains[current + word]) & ~seen;
+            if (pending == 0u) { break; }
+            let bit = select(31u - countLeadingZeros(pending),
+                countTrailingZeros(pending), upward);
+            seen |= 1u << bit;
+            propagate_node(base, mask_base, start + bit);
+            // This also bounds bitmap loads by the number of valid node bits:
+            // a non-full visit has a spare bit paying for its final empty load.
+            if (seen == 0xffffffffu) { break; }
+        }
+    }
+}
 @compute @workgroup_size(WORKGROUP_SIZE)
 fn propagate(@builtin(workgroup_id) group: vec3<u32>,
              @builtin(local_invocation_index) lane: u32) {
     let world = group.x;
     let mask_base = world * params.nodes;
-    let base = world * (params.variables + 2u * dirty_words());
+    var groups = 0u;
+    if (params.group_map != 0u) { groups = roots[params.group_map]; }
+    let base = world * (params.variables + 2u * dirty_words() + 2u * groups);
     domain_base = base;
+    group_state = base + params.variables + 2u * dirty_words();
     dirty_generation = 0u;
     // Original truth precedes every frozen simplification. Pure chains retain
     // serial order; other DAGs visit each original node in its dependency level.
@@ -280,6 +349,14 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
         if (lane == 0u) { finish(world, 1u, 0u, params.setup_work); }
         return;
     }
+    // No shrinking transfer may run until every group's initial permissions
+    // reflect the frozen domains and asserted roots. The barrier separates
+    // initialization stores from all later atomic decrement/wake operations.
+    if (params.group_map != 0u) {
+        initialize_groups(base, lane);
+        storageBarrier();
+        workgroupBarrier();
+    }
     var rounds = 0u;
     var work = params.setup_work;
     loop {
@@ -303,7 +380,11 @@ fn propagate(@builtin(workgroup_id) group: vec3<u32>,
         }
         if (params.incidence != 0u) { storageBarrier(); }
         workgroupBarrier();
-        propagate_levels(base, mask_base, lane, (rounds & 1u) != 0u);
+        if (params.incidence == 0u) {
+            propagate_levels(base, mask_base, lane, (rounds & 1u) != 0u);
+        } else {
+            propagate_active(base, mask_base, lane, (rounds & 1u) != 0u);
+        }
         storageBarrier();
         workgroupBarrier();
         // J is already constrained to M. Only M-true semantic atoms, never

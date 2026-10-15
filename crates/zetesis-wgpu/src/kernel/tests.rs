@@ -27,15 +27,20 @@ fn missing_authored_fragment_is_a_typed_failure() {
 
 #[test]
 fn tight_kernel_refuses_a_general_propagation_request() {
-    let kernel = Kernel::Tight(GpuKernelOptions {
-        propagation: GpuPropagation::ChangedDependencies,
-        ..GpuKernelOptions::default()
-    });
-    assert_eq!(
-        kernel
-            .validate(&wgpu::Limits::default())
-            .unwrap_err()
-            .kind(),
-        GpuErrorKind::Validation
-    );
+    for propagation in [
+        GpuPropagation::ChangedDependencies,
+        GpuPropagation::IncrementalGroups,
+    ] {
+        let kernel = Kernel::Tight(GpuKernelOptions {
+            propagation,
+            ..GpuKernelOptions::default()
+        });
+        assert_eq!(
+            kernel
+                .validate(&wgpu::Limits::default())
+                .unwrap_err()
+                .kind(),
+            GpuErrorKind::Validation
+        );
+    }
 }

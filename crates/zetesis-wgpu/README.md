@@ -105,12 +105,15 @@ General formula profiles can explicitly select the experimental
 `GpuPropagation::ChangedDependencies`; `Dense` remains the default. An immutable
 directory maps each physical domain slot to gates that read it as an operand or
 output. Atom aliases therefore share wakeups. Every gate is eligible in the first
-sweep; later sweeps skip transfers whose domains have not changed. Each narrowing,
-including strict-subset forcing, marks both the current and next candidate-local
-bitsets. A concurrent transfer cannot consume the only pending wakeup. The
-next-generation bitset is reset only at uniform sweep boundaries; dependency order,
-barriers and atomic intersections remain in force. Original truth and the rule
-that an original-false composite cannot constrain its children are unchanged.
+sweep; later sweeps visit active bits directly, without walking inactive nodes or
+dependency levels. Lanes own disjoint bitmap words; a private seen mask limits
+each gate to one visit per sweep. Reloading a word can pick up newly active gates
+not yet visited. Each narrowing, including strict-subset forcing, marks both the
+current and next candidate-local bitsets, so wakes after a visit or a word's
+completion survive into the next sweep. The next-generation bitset is reset only
+at uniform sweep boundaries. Original truth retains its dependency schedule;
+frozen transfers retain their sound atomic intersections and boundary barriers.
+An original-false composite still cannot constrain its children.
 
 The directory adds host preparation and retained device storage; each candidate
 adds two bitsets of `ceil(nodes/32)` words. Admission includes these capacities
@@ -121,6 +124,25 @@ cannot be admitted, preparation selects dense execution on the same device. A
 smaller allowance for an indexed resident can trigger fresh dense preparation;
 it need not preserve that residency. Batch statistics report the selected route.
 Tight checking has no frozen propagation and accepts only `Dense`.
+
+`GpuPropagation::IncrementalGroups` additionally retains two permission counts
+per native AND/OR group. Counts start after frozen domains and roots are set,
+then each uniquely removed domain bit updates every operand occurrence through
+the same incidence directory before publishing its wake. Counts can temporarily
+lag domain intersections, so they relax output possibilities rather than removing
+valid completions. A required unique witness still uses a distinct physical-slot
+scan; repeated atom occurrences are not distinct witnesses. Original-false groups
+remain disabled.
+
+The optional map adds one shared word per node and a group-count word; each
+candidate adds two words per group. The general uniform is padded to 64 bytes.
+No groups means no optional map, candidate counters or extra work. Initialization
+and notification costs are conservatively added to the existing dense receipt;
+skipped scans do not earn a refund. If the complete memory/work envelope cannot
+admit these counters, preparation reports `ChangedDependencies` with scanned
+groups, or its `Dense` fallback. The requested profile remains unchanged. These
+routes are independently selectable for comparison, not promises of fewer
+residual queries or faster execution.
 
 The refinement obligation is to preserve every compatible proper-subset reduct
 model while ensuring changed domains cannot lose their dependent transfers.

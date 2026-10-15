@@ -429,8 +429,9 @@ The complete device-work allowance is
 `nodes + edges + roots + producers + 2 * ceil(atoms / 32) + levels + numeric`,
 where `edges` counts every child occurrence, including repetitions, inline pairs
 and implication. `numeric` reserves `48*n+32` per variable threshold and `24*n+16`
-per variable extremum cut, for `n` condition occurrences. Complete original truth
-reads every operand; one word scan constructs or initializes support and one
+per variable extremum cut, for `n` condition occurrences. Original truth reserves
+a complete operand scan; Boolean reductions can stop at an absorbing value.
+One word scan constructs or initializes support and one
 checks missing support. `levels` is zero for serial truth evaluation.
 Cold preparation uses a level schedule when its extra storage
 and work fit; otherwise it retains serial evaluation. A tighter work allowance
@@ -443,9 +444,12 @@ when compared. These counts do not measure latency or change membership.
 
 A later tight batch can reuse original truth from a successful batch with the
 same theory and candidate count. Each existing truth word holds its value and a
-change bit. In dependency order, unchanged operands preserve a gate's value;
-changed operands trigger the existing reduction. Shared numeric row owners update
-all their guards together. Every root and producer is still checked, and support
+change bit. In dependency order, Boolean gates compute their value in one pass
+and compare it with the retained value. Wide conjunctions and disjunctions stop
+at the first false or true operand respectively. Their children have already
+been evaluated, so this skips only operand reads. Shared numeric row owners
+retain unchanged rows and update all their guards together when needed.
+Every root and producer is still checked, and support
 is rebuilt. Reuse adds no buffers or bindings. Its optional allowance is
 `4 + 2*nodes + edges` beyond the complete scan; insufficient work selects complete
 evaluation. Change detection can add work when many values change, so reuse does
@@ -482,6 +486,14 @@ in parallel and joins before its device checker starts. CPU production and
 device checking do not overlap. Membership, scoring and objective feedback keep
 the same original-theory and completed-batch boundaries. Failed device execution
 never triggers a hidden CPU replacement.
+
+GPU formula sessions use fixed candidate batches by default. Library callers can
+select `GpuBatching::Adaptive` in `SolveConfig`; `batch_size` then supplies the
+initial target. A filled, checked and committed batch can grow the next target
+within the pending-memory allowance. A smaller admitted device prefix bounds
+further growth. Failed checks retain the same pending candidates and target.
+Larger batches can reduce submissions but delay answer delivery and objective
+feedback; adaptive sizing is not a performance or allocation guarantee.
 
 The library also exposes `TightSupport::Grouped` through
 `GpuTightOracle::new_with_support`. Packing places each original producer in the
@@ -563,7 +575,7 @@ one node per level keeps
 the serial fold because it contains no independent node work. Other narrow
 levels may still pay more in barriers than they gain in parallel evaluation.
 
-General frozen-reduct propagation reuses those levels, starting downward and
+Dense frozen-reduct propagation reuses those levels, starting downward and
 alternating direction each sweep. Asserted roots can constrain operands across
 several depths in a downward sweep; an upward sweep carries child consequences
 toward parents.
@@ -574,6 +586,18 @@ the barrier before the next level. Pure chains run the selected fold on one lane
 Consequences flowing against the current direction can require another sweep; this schedule
 does not promise fewer rounds for every graph or make a fixed point a proof of
 membership.
+
+The optional `ChangedDependencies` schedule instead visits active bits in the
+existing slot-to-gate incidence. Two generations retain notifications arriving
+after a gate's turn; each gate runs at most once per sweep. `IncrementalGroups`
+adds two permission counts per wide AND/OR row, initialized after frozen domains
+and roots. Each removed domain bit updates every affected operand occurrence
+before waking the gate. Delayed updates only relax the possible outputs; a
+required unique witness still scans distinct physical slots. Both routes retain
+the same frozen gates and subset test. If optional storage or its conservative
+work reservation cannot fit, preparation reports the scanned or dense route it
+actually selected. These policies remain independently selectable for measurement;
+Dense is the default.
 
 During propagation, only semantic atoms can witness a proper subset. Each lane
 scans its atom positions and the workgroup combines exact summaries:
@@ -718,8 +742,9 @@ candidate generation, oracle calls, residual completion, scoring and output.
 Host elapsed time around a GPU call includes transport and waiting; it is not
 kernel time. When statistics are requested, a newly created device context also
 requests optional wgpu timestamp queries. Formula and tight batches then measure
-their compute pass through the existing submission and readback. Unsupported or
-invalid samples remain explicitly unavailable. Caller-supplied contexts retain
+their compute pass through the existing submission and readback. Unsupported,
+invalid or equal counter readings remain explicitly unavailable: equal readings
+do not establish zero compute cost. Caller-supplied contexts retain
 their granted features; statistics never replace them. Timing storage is accounted
 separately and absent when disabled. Logical storage budgets are not process RSS or total device memory.
 The [outcome contracts](../rust/outcomes.md) preserve these distinctions for

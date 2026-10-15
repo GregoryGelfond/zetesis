@@ -31,6 +31,20 @@ fn cooperative_formula_shader_validates_without_optional_capabilities() {
         &naga::back::PipelineConstants::default(),
     )
     .unwrap();
+    // The thirteen live/header words are explicitly padded to sixteen words,
+    // keeping the host uniform and WGSL struct at the same 16-byte boundary.
+    let uniform = module
+        .global_variables
+        .iter()
+        .find(|(_, variable)| variable.space == naga::AddressSpace::Uniform)
+        .unwrap()
+        .1;
+    let naga::TypeInner::Struct { ref members, span } = module.types[uniform.ty].inner else {
+        panic!("formula uniform must be a struct");
+    };
+    assert_eq!(span, 64);
+    assert_eq!(members[12].offset, 48);
+    assert_eq!(members[12].name.as_deref(), Some("group_map"));
     assert_eq!(module.entry_points[0].name, "propagate");
     assert_eq!(module.entry_points[0].workgroup_size, [64, 1, 1]);
     assert_eq!(
