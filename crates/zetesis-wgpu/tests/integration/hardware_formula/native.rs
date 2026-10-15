@@ -5,6 +5,7 @@ use zetesis_ferraris::{ExtremumCutRule, ExtremumRow, FormulaNodes, FormulaParts}
 
 pub(super) fn qualify(oracle: &mut GpuFormulaOracle) {
     qualify_full_width(oracle);
+    qualify_settled_rows(oracle);
     for bound in -1..=8 {
         let mut nodes = FormulaNodes::new(
             FormulaParts::new(
@@ -72,6 +73,84 @@ pub(super) fn qualify(oracle: &mut GpuFormulaOracle) {
         }
     }
     qualify_wide_ordinals(oracle);
+}
+
+// The same result must survive both entailed rows and rows still requiring a
+// backward transfer. One round makes an accidental skip of all forcing visible.
+fn qualify_settled_rows(oracle: &mut GpuFormulaOracle) {
+    for cut in [
+        None,
+        Some(ExtremumCutRule::Prefix(1)),
+        Some(ExtremumCutRule::Suffix(2)),
+    ] {
+        for settled in [false, true] {
+            let mut nodes = FormulaNodes::new(
+                FormulaParts::new(vec![Node::atom(0), Node::atom(1), Node::atom(2)], vec![])
+                    .unwrap(),
+            );
+            let mut transaction = nodes.transaction();
+            let row = if let Some(rule) = cut {
+                let ranks = match rule {
+                    ExtremumCutRule::Prefix(_) => [0, 0, 1, 2],
+                    ExtremumCutRule::Suffix(_) => [2, 2, 1, 0],
+                };
+                transaction
+                    .push_extremum_cut_family_range(
+                        ExtremumRow {
+                            conditions: &[0, 0, 1, 2],
+                            ranks: &ranks,
+                            rank_count: 3,
+                        },
+                        &[rule],
+                        usize::MAX,
+                        usize::MAX,
+                    )
+                    .unwrap()
+                    .start
+            } else {
+                transaction
+                    .push_threshold_family(
+                        &[0, 0, 1, 2],
+                        &[1, 1, 1, 1],
+                        &[4],
+                        usize::MAX,
+                        usize::MAX,
+                    )
+                    .unwrap()[0]
+            };
+            transaction.commit();
+            let mut roots = vec![row];
+            if settled {
+                roots.extend([0, 1, 2]);
+            } else if cut.is_some() {
+                // Only atom 0 qualifies, through two occurrences of one slot.
+                roots.extend([1, 2]);
+            }
+            let theory = Theory::new(
+                3,
+                nodes.into_parts(),
+                roots,
+                zetesis_ferraris::AdmissionLimits::default(),
+            )
+            .unwrap();
+            compare_native(oracle, &theory);
+            let candidate = Interpretation::new(&theory, [0, 1, 2]).unwrap();
+            let results = oracle
+                .propagate_batch(
+                    &theory,
+                    &[candidate],
+                    FormulaLimits {
+                        max_rounds: 1,
+                        ..FormulaLimits::default()
+                    },
+                )
+                .unwrap();
+            assert!(matches!(
+                results[0].verdict(),
+                FormulaVerdict::NoProperSubset
+            ));
+        }
+    }
 }
 
 fn compare_native(oracle: &mut GpuFormulaOracle, theory: &Theory) {
@@ -244,4 +323,64 @@ fn qualify_wide_ordinals(oracle: &mut GpuFormulaOracle) {
             compare_native(oracle, &theory);
         }
     }
+}
+
+// One shared carrier must produce both kinds of guard without overwriting its
+// followers. Some candidates make only one cut true; each original-false cut
+// retains its own reduct gate even though its row also serves a true guard.
+pub(super) fn qualify_shared_ordinals(oracle: &mut GpuFormulaOracle) {
+    let mut nodes = FormulaNodes::new(
+        FormulaParts::new(
+            vec![
+                Node::atom(0),
+                Node::atom(0),
+                Node::atom(1),
+                Node::falsum(),
+                Node::implies(0, 3),
+            ],
+            vec![],
+        )
+        .unwrap(),
+    );
+    let mut tx = nodes.transaction();
+    let family = tx
+        .push_extremum_cut_family_range(
+            ExtremumRow {
+                conditions: &[0, 1, 2, 4],
+                ranks: &[0, 1u64 << 32, u64::MAX - 1, 7],
+                rank_count: u64::MAX,
+            },
+            &[
+                ExtremumCutRule::Prefix(0),
+                ExtremumCutRule::Suffix(u64::MAX),
+                ExtremumCutRule::Prefix(1),
+                ExtremumCutRule::Suffix(u64::MAX - 1),
+                ExtremumCutRule::Prefix(u64::MAX),
+                ExtremumCutRule::Suffix(0),
+            ],
+            usize::MAX,
+            usize::MAX,
+        )
+        .unwrap();
+    let mut roots = Vec::new();
+    for guard in [family.start + 2, family.start + 3] {
+        let negated = tx
+            .push(NodeView::Implies(guard, 3), usize::MAX, usize::MAX)
+            .unwrap();
+        roots.push(
+            tx.push(NodeView::Or(&[guard, negated]), usize::MAX, usize::MAX)
+                .unwrap(),
+        );
+    }
+    tx.commit();
+    // An unused third atom supplies proper-subset witnesses for candidates
+    // containing it; the shared-cut test must preserve residual completion too.
+    let theory = Theory::new(
+        3,
+        nodes.into_parts(),
+        roots,
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap();
+    compare_native(oracle, &theory);
 }

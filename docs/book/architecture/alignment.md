@@ -277,7 +277,11 @@ bound. A family of bounds shares its condition and weight columns. The frozen
 reading retains the original threshold truth gate. Admitted whole-theory CPU
 passes reduce a shared weighted row once, then compare each bound separately;
 GPU transport preserves each guard and shares the authoritative row's condition
-and value columns. Portable integer limbs retain the admitted numeric range.
+and value columns. During original-truth evaluation, its earliest nonconstant
+guard reduces the row once and writes the truth of every live guard. Followers
+do not overwrite those values. All guards share the same predecessor level, so
+the existing barrier publishes their truth before any parent reads it. Portable
+integer limbs retain the admitted numeric range.
 The common source compiler uses this representation for nonnegative count and
 sum guards, including choice bounds. Shared counters propagate their necessary
 consequences. Signed sums retain their existing exact translation.
@@ -304,10 +308,17 @@ scratch when no numeric node is present. Fresh initialization, resets, physical
 row reads and actual retained capacities remain charged. Candidate propagation borrows prefixes of sorted distinct-condition columns and uses the
 existing connective counters. The authoritative row still retains every tuple
 occurrence. GPU transport retains the same ordinal cuts. Its original-truth
-consumer scans qualifying witnesses for each cut, and its frozen consumer
-propagates their necessary consequences. Each guard still scans its row; sharing
-the uploaded columns does not yet give the device the CPU's once-per-row measure
-reuse. Constant endpoints and impossible cuts omit unused row transport.
+consumer reduces both extrema once per shared row; its frozen consumer still
+propagates each guard's necessary consequences separately. Original-false guards
+retain their own frozen gate. Constant endpoints and impossible cuts omit unused
+row transport. Cold preparation summarizes each referenced row once, releases
+that summary after packing, and charges the retained owner and guard-ID columns.
+If all guards are constant, it releases the directory immediately and uses the
+allocation-free classifier during packing.
+Under an insufficient staging allowance, an allocation-free scan can still
+admit a graph whose numeric guards are all constant; a live row retains the typed
+capacity refusal. This compatibility path trades repeated scans for zero row
+staging. The per-guard propagation work allowance remains conservative.
 The [ordinal laws](../lean/correspondence.md#ordinal-extrema) describe the
 semantic contract. Runtime refinement and application speed remain separate
 obligations.

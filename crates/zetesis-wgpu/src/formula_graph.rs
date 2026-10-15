@@ -56,15 +56,14 @@ impl Shape {
         let mut wide_words = 0u32;
         let mut auxiliary = 0u32;
         let mut numeric_work = 0u32;
-        let mut numeric_nodes = 0usize;
+        let mut rows = Rows::new(theory, max_staging_bytes, cancellation)?;
         cancellation.poll().map_err(GpuError::interrupted)?;
         for index in 0..theory.view().len() {
             cancellation.poll().map_err(GpuError::interrupted)?;
             let node = theory.view().node(index).expect("admitted formula node");
             let (added_nodes, added_edges) = match node {
-                _ if numeric::constant(node, cancellation)?.is_some() => (1, 0),
+                _ if rows.constant(theory, index, cancellation)?.is_some() => (1, 0),
                 NodeView::Threshold(threshold) => {
-                    numeric_nodes += 1;
                     let length = address(threshold.conditions.len())?;
                     // Reserve condition visits and four-limb arithmetic for
                     // original evaluation and both linear projection passes.
@@ -84,7 +83,6 @@ impl Shape {
                 }
                 NodeView::ExtremumCut(cut) => {
                     // Ranked witness reduction and at most one forcing scan.
-                    numeric_nodes += 1;
                     let length = address(cut.row.conditions.len())?;
                     numeric_work = numeric_work
                         .checked_add(
@@ -122,13 +120,7 @@ impl Shape {
                     .ok_or_else(|| capacity("formula wide operand count exceeds u32"))?;
             }
         }
-        let rows = Rows::new(
-            theory,
-            wide_words,
-            numeric_nodes,
-            max_staging_bytes,
-            cancellation,
-        )?;
+        rows.locate(theory, wide_words, cancellation)?;
         wide_words = rows.tail_words;
         let bytes = bytes(nodes, wide_words)?;
         if bytes > device.max_buffer_size || bytes > device.max_storage_buffer_binding_size {
@@ -150,12 +142,12 @@ impl Shape {
 /// pairs are inline, wider rows use offsets relative to the appended tail.
 /// This does not revalidate topology. The caller traverses the same Theory for
 /// headers and operands and checks the final tail count against Shape.
-pub(crate) fn header(
+fn header(
     node: NodeView<'_>,
+    constant: Option<bool>,
     tail: &mut u32,
-    cancellation: &Cancellation,
 ) -> Result<[u32; 4], GpuError> {
-    if let Some(value) = numeric::constant(node, cancellation)? {
+    if let Some(value) = constant {
         return Ok([if value { 10 } else { 0 }, 0, 0, 0]);
     }
     Ok(match node {
@@ -221,8 +213,8 @@ pub(crate) fn pack(
             words,
             &header(
                 theory.view().node(index).expect("admitted node"),
+                rows.constant(theory, index, cancellation)?,
                 &mut tail,
-                cancellation,
             )?,
         )?;
     }

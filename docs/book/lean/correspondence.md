@@ -59,10 +59,15 @@ the laws do not verify them or the changed `Theory` data layout. The
 distinguishes these mathematical facts from the remaining proof of the Rust
 sort, row identity, packed validity, traversal and memory accounting. Ordinary
 GPU formula transport preserves native cut nodes and shared condition/rank
-columns. Original truth uses qualifying witnesses and endpoint constants; frozen
-propagation applies the original truth gate before projecting those witnesses.
-Portable limb comparison, physical addresses, atomic observations and resource
-receipts remain unproved executable correspondences. The retained extracted
+columns. Original truth reduces both extrema once per row and applies each cut,
+including its empty endpoints. The earliest nonconstant guard owns those writes;
+followers do not overwrite them. The shared dependency level must place every
+condition before the owner and every guard before its parents. Frozen propagation
+still applies each guard's original truth gate before projecting its witnesses.
+Cold row summaries justify only constant classification and are released after
+packing, or immediately when all guards are constant. Portable limb comparison, owner/guard coverage, physical addresses,
+barriers, atomic observations and resource receipts remain unproved executable
+correspondences. The retained extracted
 evaluator does not yet cover ordinal nodes.
 
 ## Ordinary resource policy
@@ -97,8 +102,12 @@ These are general laws over complete rows and truth bounds.
 
 The ordinary GPU formula and tight checkers retain shared native threshold rows.
 Four little-endian `u32` limbs preserve admitted nonnegative sums and signed-bound
-constants without optional device integer features. The general kernel's two
-linear scans use conservative lower/upper sums; repeated physical slots and
+constants without optional device integer features. Original-truth evaluation
+reduces each authoritative row once and publishes all its live bound results at
+the original node IDs; no candidate measure cache is retained. The packing must
+choose the earliest live owner, cover each live guard exactly once, preserve
+repeated contributions, and retain one dependency level for the whole family.
+The general kernel's two linear scans use conservative lower/upper sums; repeated physical slots and
 concurrent shrinking domains can weaken deductions. An original-false node stays
 false without constraining its children. A residual returns no narrowed atom
 region, so exact CPU completion retains the original proper-subset query. These

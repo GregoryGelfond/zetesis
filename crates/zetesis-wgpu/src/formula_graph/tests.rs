@@ -1,3 +1,5 @@
+mod shared_rows;
+
 use super::*;
 use zetesis_ferraris::{AdmissionLimits, FormulaParts, Node, OperandSpan};
 
@@ -401,7 +403,7 @@ fn ordinal_shape_scan_and_packing_preserve_cancellation() {
 fn numeric_truth(words: &[u32], count: u32, node: &[u32], values: &[bool]) -> bool {
     let descriptor = count as usize * 4 + node[1] as usize;
     let length = node[2] as usize;
-    let row = count as usize * 4 + words[descriptor] as usize;
+    let row = count as usize * 4 + words[descriptor] as usize + 2;
     let integer = |start: usize, limbs: usize| {
         (0..limbs).fold(0u128, |value, limb| {
             value | (u128::from(words[start + limb]) << (32 * limb))
@@ -453,7 +455,7 @@ fn shared_threshold_rows_keep_one_transported_column_set() {
     let theory = Theory::new(2, nodes.into_parts(), roots, AdmissionLimits::default()).unwrap();
     let shape = Shape::new(&theory, &wgpu::Limits::default()).unwrap();
     assert_eq!(shape.nodes, 5);
-    assert_eq!(shape.wide_words, 3 * 5 + 3 * 3);
+    assert_eq!(shape.wide_words, 3 * 5 + 2 + 3 * 3 + 3);
     let mut words = Vec::with_capacity(usize::try_from(shape.bytes).unwrap() / 4);
     pack(&theory, &shape.rows, &mut words, &Cancellation::default()).unwrap();
     let offsets: Vec<_> = theory

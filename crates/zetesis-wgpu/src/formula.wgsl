@@ -52,7 +52,10 @@ fn original(world: u32, mask_base: u32, index: u32) {
             value = select(value || next, value && next, node.tag == 5u);
         }
     }
-    if (node.tag >= 7u && node.tag <= 9u) { value = numeric_truth(mask_base, node); }
+    if (node.tag >= 7u && node.tag <= 9u) {
+        numeric_original(mask_base, index, node);
+        return;
+    }
     if (node.tag == 10u) { value = true; }
     frozen[mask_base + index] = select(0u, 1u, value);
 }
@@ -92,6 +95,8 @@ fn group_gate(base: u32, node: Node) {
     if (empty) { allowed = 0u; }
     let output = atomicLoad(&domains[base + node.output]) & allowed;
     narrow(base + node.output, allowed);
+    // The children already entail a settled output; forcing them adds nothing.
+    if (allowed != 3u) { return; }
     if (output == all_bit) {
         for (var index = 0u; index < node.right; index++) {
             narrow(base + node_at(operand_at(node, index)).output, all_bit);

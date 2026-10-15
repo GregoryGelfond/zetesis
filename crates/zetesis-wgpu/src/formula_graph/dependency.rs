@@ -68,7 +68,7 @@ pub(crate) fn label_depths(
                     poll(cancellation)?;
                     let tail = node_count as usize * 4;
                     let row = if header[0] >= 7 {
-                        nodes[tail + header[1] as usize]
+                        nodes[tail + header[1] as usize] + 2
                     } else {
                         header[1]
                     };

@@ -81,7 +81,10 @@ fn original(world: u32, values: u32, index: u32) {
             value = select(value || next, value && next, node.tag == NODE_ALL);
         }
     }
-    if (node.tag >= 7u && node.tag <= 9u) { value = numeric_truth(values, node); }
+    if (node.tag >= 7u && node.tag <= 9u) {
+        numeric_original(values, index, node);
+        return;
+    }
     if (node.tag == 10u) { value = true; }
     frozen[values + index] = select(0u, 1u, value);
 }

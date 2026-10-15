@@ -53,9 +53,10 @@ weighted counters; a queued value cannot advance a counter twice.
 
 Complete storage copies, selection and remapping preserve numeric columns and
 shared rows. Logical occurrence counts charge each threshold reference, while
-retained bytes count shared storage once. Backend transport uses one checked
-Boolean expansion with explicit physical capacity and work bounds. That expansion
-does not replace the original semantic theory.
+retained bytes count shared storage once. The GPU formula and tight checkers
+retain these rows and share the candidate's weight reduction across their bounds.
+Clause transport uses a checked Boolean expansion with explicit capacity and work
+bounds; it does not replace the original semantic theory.
 
 The common source compiler uses native thresholds for nonnegative count and sum
 guards, including choice bounds. Signed sums retain the full subset translation.
@@ -87,9 +88,11 @@ records whether any row anchor lies in a chain's same-kind cone, so discovery
 from a chain without one returns at once. Expanded discovery
 retains only proposals that can tighten a row's bounds, then authenticates their
 exact witness relationship before transport.
-GPU and clause
-transport still lower cuts to Boolean formulas; native CPU reduction does not
-establish native device reduction. The [manual's aggregate account](../../docs/book/architecture/alignment.md)
+GPU formula and tight checking retain ordinal rows and compute both extrema once
+per shared row for original satisfaction. Each cut keeps its own frozen truth.
+Clause transport still lowers cuts to Boolean formulas; physical device
+qualification remains separate from representation support.
+The [manual's aggregate account](../../docs/book/architecture/alignment.md)
 describes the storage, propagation and proof boundaries.
 
 ## Reusing original satisfaction work

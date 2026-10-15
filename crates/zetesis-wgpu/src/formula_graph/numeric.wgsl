@@ -34,7 +34,7 @@ fn wide_less(a: vec4<u32>, b: vec4<u32>) -> bool {
     return false;
 }
 fn numeric_row(node: Node) -> u32 {
-    return params.nodes * 4u + nodes[params.nodes * 4u + node.left];
+    return params.nodes * 4u + nodes[params.nodes * 4u + node.left] + 2u;
 }
 fn numeric_condition(node: Node, index: u32) -> u32 {
     return nodes[numeric_row(node) + index];
@@ -67,22 +67,43 @@ fn numeric_qualifies(node: Node, index: u32) -> bool {
     let less = wide_less(numeric_value(node, index), numeric_bound(node));
     return select(!less, less, node.tag == 8u);
 }
-fn numeric_truth(base: u32, node: Node) -> bool {
-    let constant = numeric_constant(node);
-    if (constant != 0u) { return constant == 2u; }
-    if (node.tag == 7u) {
-        var sum = vec4<u32>(0u);
-        for (var index = 0u; index < node.right; index++) {
-            if (frozen[base + numeric_condition(node, index)] != 0u) {
-                sum = wide_add(sum, numeric_value(node, index));
+// One owner reduces each authoritative row and writes every nonconstant guard.
+// Followers do not write: they may run before the owner in the same dependency
+// level. All guards read identical children, so the existing level barrier makes
+// the complete family visible before any parent. Serial order uses the earliest
+// nonconstant guard as owner. No truth scratch or extra dispatch is needed.
+fn numeric_original(base: u32, index: u32, node: Node) {
+    let row = numeric_row(node);
+    if (nodes[row - 2u] != index) { return; }
+    let count = nodes[row - 1u];
+    var sum = vec4<u32>(0u);
+    let descriptor = params.nodes * 4u + node.left;
+    var minimum = vec4<u32>(0u);
+    var maximum = vec4<u32>(0u);
+    if (node.tag != 7u) {
+        minimum = wide_sub(vec4<u32>(nodes[descriptor + 3u], nodes[descriptor + 4u], 0u, 0u),
+            vec4<u32>(1u, 0u, 0u, 0u));
+    }
+    for (var position = 0u; position < node.right; position++) {
+        if (frozen[base + numeric_condition(node, position)] != 0u) {
+            let value = numeric_value(node, position);
+            if (node.tag == 7u) {
+                sum = wide_add(sum, value);
+            } else {
+                if (wide_less(value, minimum)) { minimum = value; }
+                if (wide_less(maximum, value)) { maximum = value; }
             }
         }
-        return !wide_less(sum, numeric_bound(node));
     }
-    var value = false;
-    for (var index = 0u; index < node.right; index++) {
-        value = value || (numeric_qualifies(node, index) &&
-            frozen[base + numeric_condition(node, index)] != 0u);
+    let guards = row + 3u * node.right;
+    for (var position = 0u; position < count; position++) {
+        let guard = nodes[guards + position];
+        let guard_node = node_at(guard);
+        let bound = numeric_bound(guard_node);
+        var value = false;
+        if (guard_node.tag == 7u) { value = !wide_less(sum, bound); }
+        if (guard_node.tag == 8u) { value = wide_less(minimum, bound); }
+        if (guard_node.tag == 9u) { value = !wide_less(maximum, bound); }
+        frozen[base + guard] = select(0u, 1u, value);
     }
-    return value;
 }

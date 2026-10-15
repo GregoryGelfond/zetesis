@@ -342,3 +342,61 @@ fn native_tail_is_charged_in_actual_cold_staging() {
         assert_eq!(result.is_ok(), accepted);
     }
 }
+
+#[test]
+fn constant_graph_admission_is_monotone_in_batch_bytes() {
+    use zetesis_ferraris::{FormulaParts, NumericDomain, NumericRow, ThresholdDescriptor};
+    // Distinct empty rows maximize directory cost without transporting numeric
+    // columns. A smaller allowance used to choose the zero-directory path while
+    // a larger one admitted the directory, then failed the combined envelope.
+    let count = 128;
+    let parts = FormulaParts::from_numeric_raw(
+        (0..count).map(Node::threshold).collect(),
+        vec![],
+        vec![],
+        vec![],
+        (0..count)
+            .map(|_| NumericRow {
+                start: 0,
+                length: 0,
+                domain: NumericDomain::Weights,
+            })
+            .collect(),
+        (0..count)
+            .map(|row| ThresholdDescriptor { row, bound: 1 })
+            .collect(),
+        vec![],
+    )
+    .unwrap();
+    let theory = Theory::new(0, parts, vec![], AdmissionLimits::default()).unwrap();
+    let device = wgpu::Limits::default();
+    let mut admitted = false;
+    for max_batch_bytes in (0..=32_768).step_by(256) {
+        let result = Preparation::new(
+            &theory,
+            1,
+            FormulaLimits {
+                max_batch_bytes,
+                ..FormulaLimits::default()
+            },
+            &device,
+            1,
+        )
+        .and_then(|preparation| preparation.finish(&device, &Cancellation::default()));
+        match result {
+            Ok((prepared, plan)) => {
+                admitted = true;
+                assert_eq!(prepared.graph.shape.rows.bytes().unwrap(), 0);
+                assert!(plan.accounted <= max_batch_bytes);
+            }
+            Err(error) => {
+                assert!(
+                    !admitted,
+                    "admission regressed at {max_batch_bytes} bytes: {error}"
+                );
+                assert_eq!(error.kind(), GpuErrorKind::Capacity);
+            }
+        }
+    }
+    assert!(admitted, "the complete preparation envelope was exercised");
+}

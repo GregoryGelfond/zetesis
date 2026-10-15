@@ -283,6 +283,7 @@ fn qualify_frozen_queries(backend: GpuApi, projection: GateProjection) {
     qualify_root_propagation(&mut oracle);
     qualify_subset_strides(&mut oracle);
     native::qualify(&mut oracle);
+    native::qualify_shared_ordinals(&mut oracle);
 }
 
 fn scheduled_theories() -> [Theory; 2] {

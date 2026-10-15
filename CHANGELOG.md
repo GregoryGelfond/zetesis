@@ -17,6 +17,8 @@ Notable changes by release. Versions follow Semantic Versioning.
 - GPU tight checking evaluates independent formulas in parallel. General reduct
   propagation uses the same dependency schedule to carry root constraints toward
   their operands; bounded checks retain exact CPU completion.
+- GPU checks compute each shared aggregate row once when testing the original
+  program, and skip backward scans when the inputs already determine the result.
 - Lazy constraint checks avoid revisiting the same binding through several newly
   held atoms or repeated body occurrences.
 - Eligible grounding joins use completed numeric-domain analysis to filter bindings

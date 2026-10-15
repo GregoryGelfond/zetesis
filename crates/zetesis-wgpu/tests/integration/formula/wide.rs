@@ -122,6 +122,7 @@ fn repeated_slots_preserve_every_racing_snapshot_completion() {
                     }
                     let mut narrowed = domains;
                     narrowed[2] &= allowed;
+                    let output_only = narrowed;
                     if let Some((slot, bit)) = forced {
                         if slot == usize::MAX {
                             for &slot in &ids {
@@ -130,6 +131,12 @@ fn repeated_slots_preserve_every_racing_snapshot_completion() {
                         } else {
                             narrowed[slot] &= bit;
                         }
+                    }
+                    if allowed != 3 {
+                        // The full reference transfer is independent of the
+                        // shader shortcut. Even stale aliased observations
+                        // cannot make its skipped child intersections useful.
+                        assert_eq!(narrowed, output_only);
                     }
                     for bits in 0..8 {
                         let assignment = [bits & 1 != 0, bits & 2 != 0, bits & 4 != 0];

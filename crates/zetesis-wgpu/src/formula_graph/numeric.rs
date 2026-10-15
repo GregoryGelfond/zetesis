@@ -5,120 +5,239 @@ use crate::{GpuError, GpuErrorKind};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{ExtremumCutRule, NodeView, Theory};
 
-/// Sorted source row IDs and their column offsets. This host-only directory is
-/// prepared once, charged as cold staging, and released after packing.
+mod summary;
+use summary::{Summary, constant, endpoint};
+
+struct Row {
+    source: usize,
+    offset: u32,
+    summary: Summary,
+    guards: std::ops::Range<usize>,
+}
+
+/// A cold, bounded directory of source rows and their live guard IDs. Summaries
+/// are computed once per source row, then released with the packing directory.
+/// No candidate truth or second numeric semantic owner is retained here.
 pub(crate) struct Rows {
-    offsets: Vec<(usize, u32)>,
+    entries: Vec<Row>,
+    guards: Vec<(usize, u32)>,
+    constant_only: bool,
     pub(crate) tail_words: u32,
 }
 impl Rows {
     pub(super) fn new(
         theory: &Theory,
-        start: u32,
-        count: usize,
         max_staging_bytes: u64,
         cancellation: &Cancellation,
     ) -> Result<Self, GpuError> {
-        let mut offsets = Vec::new();
-        directory_budget(count, max_staging_bytes)?;
-        cancellation.poll().map_err(GpuError::interrupted)?;
-        offsets
+        let mut count = 0;
+        for index in 0..theory.view().len() {
+            poll(cancellation)?;
+            if row(theory, index).is_some()
+                && endpoint(theory.view().node(index).expect("admitted node")).is_none()
+            {
+                count += 1;
+            }
+        }
+        if count == 0 {
+            poll(cancellation)?;
+            return Ok(Self {
+                entries: Vec::new(),
+                guards: Vec::new(),
+                constant_only: true,
+                tail_words: 0,
+            });
+        }
+        if directory_bytes(0, count)? > max_staging_bytes {
+            return Self::constant_only(theory, cancellation);
+        }
+        let mut guards = Vec::new();
+        guards
             .try_reserve_exact(count)
-            .map_err(|error| GpuError::new(GpuErrorKind::Allocation, error.to_string()))?;
-        directory_budget(offsets.capacity(), max_staging_bytes)?;
-        for index in 0..theory.nodes().len() {
-            cancellation.poll().map_err(GpuError::interrupted)?;
+            .map_err(|error| allocation(&error))?;
+        if directory_bytes(0, guards.capacity())? > max_staging_bytes {
+            drop(guards);
+            return Self::constant_only(theory, cancellation);
+        }
+        for index in 0..theory.view().len() {
+            poll(cancellation)?;
             if let Some(row) = row(theory, index)
+                && endpoint(theory.view().node(index).expect("admitted node")).is_none()
+            {
+                guards.push((row, address(index)?));
+            }
+        }
+        // Bounded in-place sorting allocates no auxiliary storage. As with a
+        // host allocation, cancellation is polled on either side of the call.
+        poll(cancellation)?;
+        guards.sort_unstable();
+        poll(cancellation)?;
+        let mut unique = 0;
+        let mut previous = None;
+        for &(source, _) in &guards {
+            poll(cancellation)?;
+            if previous != Some(source) {
+                unique += 1;
+                previous = Some(source);
+            }
+        }
+        if directory_bytes(unique, guards.capacity())? > max_staging_bytes {
+            drop(guards);
+            return Self::constant_only(theory, cancellation);
+        }
+        let mut entries = Vec::new();
+        entries
+            .try_reserve_exact(unique)
+            .map_err(|error| allocation(&error))?;
+        if directory_bytes(entries.capacity(), guards.capacity())? > max_staging_bytes {
+            drop(entries);
+            drop(guards);
+            return Self::constant_only(theory, cancellation);
+        }
+        let mut result = Self {
+            entries,
+            guards,
+            constant_only: false,
+            tail_words: 0,
+        };
+        result.summarize(theory, cancellation)?;
+        Ok(result)
+    }
+
+    fn summarize(&mut self, theory: &Theory, cancellation: &Cancellation) -> Result<(), GpuError> {
+        let mut read = 0;
+        let mut write = 0;
+        while read < self.guards.len() {
+            poll(cancellation)?;
+            let (source, first) = self.guards[read];
+            let summary = Summary::new(
+                theory.view().node(first as usize).expect("numeric node"),
+                cancellation,
+            )?;
+            let start = write;
+            while read < self.guards.len() && self.guards[read].0 == source {
+                poll(cancellation)?;
+                let guard = self.guards[read];
+                let node = theory.view().node(guard.1 as usize).expect("numeric node");
+                if constant(node, Some(&summary), cancellation)?.is_none() {
+                    self.guards[write] = guard;
+                    write += 1;
+                }
+                read += 1;
+            }
+            self.entries.push(Row {
+                source,
+                offset: 0,
+                summary,
+                guards: start..write,
+            });
+        }
+        self.guards.truncate(write);
+        if self.guards.is_empty() {
+            // A larger staging allowance must not make an all-constant graph
+            // retain a directory that its allocation-free path does not need.
+            self.release();
+            self.constant_only = true;
+        }
+        Ok(())
+    }
+
+    /// Preserve the allocation-free constant-only boundary under a tight staging
+    /// allowance. This bounded compatibility scan never admits a live numeric row.
+    fn constant_only(theory: &Theory, cancellation: &Cancellation) -> Result<Self, GpuError> {
+        for index in 0..theory.view().len() {
+            poll(cancellation)?;
+            if row(theory, index).is_some()
                 && constant(
                     theory.view().node(index).expect("admitted node"),
+                    None,
                     cancellation,
                 )?
                 .is_none()
             {
-                offsets.push((row, 0));
+                return Err(capacity("numeric directory exceeds batch byte allowance"));
             }
-        }
-        // In-place sorting allocates no auxiliary storage. Like a single host
-        // allocation, this bounded library call is polled on either side.
-        cancellation.poll().map_err(GpuError::interrupted)?;
-        offsets.sort_unstable_by_key(|&(row, _)| row);
-        cancellation.poll().map_err(GpuError::interrupted)?;
-        offsets.dedup_by_key(|entry| entry.0);
-        let mut tail_words = start;
-        for (row, offset) in &mut offsets {
-            cancellation.poll().map_err(GpuError::interrupted)?;
-            *offset = tail_words;
-            let length = address(theory.parts().rows()[*row].length)?;
-            tail_words = length
-                .checked_mul(3)
-                .and_then(|n| tail_words.checked_add(n))
-                .ok_or_else(|| capacity("numeric column offsets exceed u32"))?;
         }
         Ok(Self {
-            offsets,
-            tail_words,
+            entries: Vec::new(),
+            guards: Vec::new(),
+            constant_only: true,
+            tail_words: 0,
         })
     }
+
+    pub(super) fn constant(
+        &self,
+        theory: &Theory,
+        index: usize,
+        cancellation: &Cancellation,
+    ) -> Result<Option<bool>, GpuError> {
+        let node = theory.view().node(index).expect("admitted node");
+        if row(theory, index).is_none() || endpoint(node).is_some() {
+            return Ok(endpoint(node));
+        }
+        let summary = if self.constant_only {
+            None
+        } else {
+            let index = self.entry(row(theory, index).expect("numeric node"))?;
+            Some(&self.entries[index].summary)
+        };
+        constant(node, summary, cancellation)
+    }
+
+    pub(super) fn locate(
+        &mut self,
+        theory: &Theory,
+        start: u32,
+        cancellation: &Cancellation,
+    ) -> Result<(), GpuError> {
+        self.tail_words = start;
+        for entry in &mut self.entries {
+            poll(cancellation)?;
+            if entry.guards.is_empty() {
+                continue;
+            }
+            entry.offset = self.tail_words;
+            let length = address(theory.parts().rows()[entry.source].length)?;
+            self.tail_words = length
+                .checked_mul(3)
+                .and_then(|n| n.checked_add(2))
+                .and_then(|n| n.checked_add(u32::try_from(entry.guards.len()).ok()?))
+                .and_then(|n| self.tail_words.checked_add(n))
+                .ok_or_else(|| capacity("numeric column offsets exceed u32"))?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn release(&mut self) {
-        self.offsets = Vec::new();
+        self.entries = Vec::new();
+        self.guards = Vec::new();
     }
     pub(crate) fn bytes(&self) -> Result<u64, GpuError> {
-        u64::try_from(self.offsets.capacity())
-            .ok()
-            .and_then(|n| n.checked_mul(size_of::<(usize, u32)>() as u64))
-            .ok_or_else(|| capacity("numeric directory size overflows"))
+        directory_bytes(self.entries.capacity(), self.guards.capacity())
     }
-    fn offset(&self, row: usize) -> Result<u32, GpuError> {
-        self.offsets
-            .binary_search_by_key(&row, |&(row, _)| row)
-            .map(|index| self.offsets[index].1)
+    fn entry(&self, source: usize) -> Result<usize, GpuError> {
+        self.entries
+            .binary_search_by_key(&source, |entry| entry.source)
             .map_err(|_| capacity("numeric row is absent from the transport directory"))
     }
-}
-fn directory_budget(entries: usize, maximum: u64) -> Result<(), GpuError> {
-    let bytes = u64::try_from(entries)
-        .ok()
-        .and_then(|n| n.checked_mul(size_of::<(usize, u32)>() as u64))
-        .ok_or_else(|| capacity("numeric directory size overflows"))?;
-    if bytes > maximum {
-        return Err(capacity("numeric directory exceeds batch byte allowance"));
+    fn offset(&self, row: usize) -> Result<u32, GpuError> {
+        Ok(self.entries[self.entry(row)?].offset)
     }
-    Ok(())
+}
+fn directory_bytes(rows: usize, guards: usize) -> Result<u64, GpuError> {
+    rows.checked_mul(size_of::<Row>())
+        .and_then(|n| n.checked_add(guards.checked_mul(size_of::<(usize, u32)>())?))
+        .and_then(|n| u64::try_from(n).ok())
+        .ok_or_else(|| capacity("numeric directory size overflows"))
+}
+fn poll(cancellation: &Cancellation) -> Result<(), GpuError> {
+    cancellation.poll().map_err(GpuError::interrupted)
+}
+fn allocation(error: &std::collections::TryReserveError) -> GpuError {
+    GpuError::new(GpuErrorKind::Allocation, error.to_string())
 }
 
-/// Physical constants preserve semantic node IDs without copying unused rows.
-/// Admitted nonnegative sums fit i128; extrema use their carrier's endpoints.
-pub(super) fn constant(
-    node: NodeView<'_>,
-    cancellation: &Cancellation,
-) -> Result<Option<bool>, GpuError> {
-    match node {
-        NodeView::Threshold(threshold) => {
-            if threshold.bound <= 0 {
-                return Ok(Some(true));
-            }
-            let mut total = 0i128;
-            for &weight in threshold.weights {
-                cancellation.poll().map_err(GpuError::interrupted)?;
-                total += i128::from(weight);
-            }
-            Ok((threshold.bound > total).then_some(false))
-        }
-        NodeView::ExtremumCut(cut) => {
-            if let Some(value) = cut.endpoint_truth() {
-                return Ok(Some(value));
-            }
-            for &rank in cut.row.ranks {
-                cancellation.poll().map_err(GpuError::interrupted)?;
-                if cut.qualifies(rank) {
-                    return Ok(None);
-                }
-            }
-            Ok(Some(false))
-        }
-        _ => Ok(None),
-    }
-}
 fn row(theory: &Theory, index: usize) -> Option<usize> {
     let node = theory.nodes()[index];
     node.threshold_descriptor()
@@ -170,8 +289,14 @@ pub(super) fn append(
             _ => {}
         }
     }
-    for &(row, _) in &rows.offsets {
-        let row = theory.parts().rows()[row];
+    for entry in &rows.entries {
+        poll(cancellation)?;
+        if entry.guards.is_empty() {
+            continue;
+        }
+        let guards = &rows.guards[entry.guards.clone()];
+        super::append(words, &[guards[0].1, address(guards.len())?])?;
+        let row = theory.parts().rows()[entry.source];
         let span = row.start..row.start + row.length;
         for &condition in &theory.parts().conditions()[span.clone()] {
             cancellation.poll().map_err(GpuError::interrupted)?;
@@ -182,6 +307,10 @@ pub(super) fn append(
                 cancellation.poll().map_err(GpuError::interrupted)?;
                 super::append(words, &[limbs(u128::from(value))[limb]])?;
             }
+        }
+        for &(_, guard) in guards {
+            poll(cancellation)?;
+            super::append(words, &[guard])?;
         }
     }
     Ok(())

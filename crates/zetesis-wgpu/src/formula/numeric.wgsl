@@ -19,6 +19,9 @@ fn threshold_gate(base: u32, node: Node) {
     if (empty) { allowed = 0u; }
     let output = atomicLoad(&domains[base + node.output]) & allowed;
     narrow(base + node.output, allowed);
+    // Settled bounds entail the output. Output conflicts were recorded above;
+    // no undecided contribution can require forcing in this case.
+    if (allowed != 3u) { return; }
     if (output != 1u && output != 2u) { return; }
     for (var index = 0u; index < node.right; index++) {
         let slot = node_at(numeric_condition(node, index)).output;
@@ -60,6 +63,8 @@ fn extremum_gate(base: u32, node: Node) {
     if (empty) { allowed = 0u; }
     let output = atomicLoad(&domains[base + node.output]) & allowed;
     narrow(base + node.output, allowed);
+    // A settled witness result cannot force another child.
+    if (allowed != 3u) { return; }
     if (output == 1u) {
         for (var index = 0u; index < node.right; index++) {
             if (numeric_qualifies(node, index)) {
