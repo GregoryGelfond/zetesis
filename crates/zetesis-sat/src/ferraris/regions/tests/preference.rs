@@ -1,4 +1,4 @@
-//! Joint propagation keeps the established last-subject split preference.
+//! Original degree breaks ties after joint propagation of candidate restrictions.
 
 use super::super::{CandidateKnowledge, Conditions, Narrower, Region, RegionCounts, narrow};
 use super::{budget, theory};
@@ -23,16 +23,19 @@ fn original() -> Theory {
 }
 
 fn prefer_a() -> Theory {
-    // `(a → c) → b` leaves every atom open and ranks a first.
+    // Two unknown implications read a; b and c each occur in just one.
+    // This separates the primary degree from the original's secondary degree.
     theory(
         vec![
             Node::atom(0),
             Node::atom(1),
             Node::atom(2),
+            Node::implies(0, 1),
             Node::implies(0, 2),
-            Node::implies(3, 1),
+            Node::implies(3, 2),
+            Node::implies(4, 1),
         ],
-        vec![4],
+        vec![5, 6],
     )
 }
 
@@ -105,7 +108,7 @@ fn the_original_theory_supplies_an_unrestricted_preference() {
 }
 
 #[test]
-fn a_zero_score_bound_prefers_the_lowest_open_atom() {
+fn original_degree_breaks_a_zero_score_bound_tie() {
     let conditions = Conditions {
         permanent: vec![permanent(prefer_c())],
         bound: Some(
@@ -114,7 +117,7 @@ fn a_zero_score_bound_prefers_the_lowest_open_atom() {
     };
     let (result, region, _, _) = closed(&conditions, u64::MAX);
     assert_eq!(result.unwrap(), Narrowing::Fixed { changed: false });
-    assert_eq!(region.split_atom(), Some(0));
+    assert_eq!(region.split_atom(), Some(1));
 }
 
 #[test]
@@ -156,7 +159,7 @@ fn a_restriction_still_propagates_before_split_selection() {
 }
 
 #[test]
-fn joint_closure_charges_one_preference_scan() {
+fn joint_closure_charges_one_composed_preference_scan() {
     let original = original();
     let bound = tautology();
     let mut separate_work = 0;
@@ -182,9 +185,10 @@ fn joint_closure_charges_one_preference_scan() {
     let (result, _, counts, work) = closed(&conditions, u64::MAX);
     result.unwrap();
     assert_eq!(counts.work, work);
-    // Both independent narrowings scan three open atoms. Joint closure
-    // retains only the bound's scan, saving exactly the original's three reads.
-    assert_eq!(work + 3, separate_work);
+    // Separate narrowing reads three degrees per subject. The joint selector
+    // reads both degrees for each of the same three open atoms. Propagation
+    // itself spends the same prefix, so the complete receipts agree.
+    assert_eq!(work, separate_work);
 }
 
 #[test]
@@ -217,9 +221,10 @@ fn a_bound_selector_refusal_retains_the_shared_budget_prefix() {
     let (result, _, complete, work) = closed(&conditions, u64::MAX);
     result.unwrap();
     assert_eq!(complete.work, work);
-    // The selected bound scans three open atoms. Each cutoff is inside that
-    // final scan; the other subjects completed propagation without ranking.
-    for missing in 1..=3 {
+    // The selected bound and original each supply one count per open atom.
+    // Each cutoff is inside that final six-read scan; all subjects completed
+    // propagation without ranking.
+    for missing in 1..=6 {
         let (result, region, prefix, work) = closed(&conditions, complete.work - missing);
         assert_eq!(result, Err(Incomplete::WorkLimit));
         assert_eq!(prefix.work, complete.work - missing);

@@ -4,6 +4,7 @@ use zetesis_test_support::repository::examples as root;
 use zetesis_validation::{
     examples,
     performance::{
+        bundles,
         matrix::{Workload, WorkloadLimits},
         scalability,
     },
@@ -237,4 +238,90 @@ fn default_authored_families_satisfy_their_contracts() {
             answers.model_count()
         );
     }
+}
+
+fn poker() -> Workload {
+    let mut workloads = bundles::load(
+        &root().join("scalability/poker/manifest.json"),
+        WorkloadLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(workloads.len(), 1);
+    workloads.pop().unwrap()
+}
+
+#[test]
+fn poker_bundle_preserves_its_reviewed_include_graph() {
+    let workload = poker();
+    assert!(workload.is_bundle());
+    assert_eq!(workload.entry(), "draw_poker_tests.lp");
+    let record = serde_json::to_value(&workload).unwrap();
+    assert_eq!(
+        record["bundle"]["manifest"]["sha256"],
+        "0384bacc2a0cc947165f72b769fb72404612b577dd39f50266e439850373837c"
+    );
+    assert_eq!(record["bundle"]["files"].as_array().unwrap().len(), 2);
+    assert_eq!(
+        record["bundle"]["files"][0]["includes"],
+        serde_json::json!([{ "spelling": "draw_poker.lp", "target": "draw_poker.lp" }])
+    );
+}
+
+#[test]
+fn poker_contract_lists_every_nonroyal_straight_flush() {
+    let workload = poker();
+    let contract = workload.contract().unwrap();
+    let expected = ["clubs", "diamonds", "hearts", "spades"]
+        .into_iter()
+        .flat_map(|suit| {
+            (1_u8..=9).map(move |low| {
+                let mut display = (low..=low + 4)
+                    .map(|rank| {
+                        let value = if rank == 1 { 14 } else { rank };
+                        format!("hand(hero,{value},{suit})")
+                    })
+                    .collect::<BTreeSet<_>>();
+                display.insert(format!("top_hand(hero,9,{low},{},na)", low + 4));
+                display
+            })
+        })
+        .collect::<BTreeSet<_>>();
+    let recorded = contract
+        .witnesses()
+        .iter()
+        .map(|witness| witness.iter().cloned().collect::<BTreeSet<_>>())
+        .collect::<BTreeSet<_>>();
+    assert_eq!(expected.len(), 36);
+    assert_eq!(recorded, expected);
+    assert_eq!(contract.witnesses().len(), 36);
+    assert!(
+        contract
+            .witnesses()
+            .iter()
+            .all(|witness| witness.len() == 6)
+    );
+    assert_eq!(contract.model_count(), Some(36));
+    assert_eq!(contract.family(), examples::Family::All);
+    assert_eq!(contract.satisfiability(), examples::Satisfiability::Sat);
+    assert_eq!(contract.cost(), None);
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+#[ignore = "requires clingo: poker has exactly the recorded 36 displayed answers"]
+fn poker_complete_family_satisfies_its_contract() {
+    use std::time::Duration;
+    use zetesis_clingo_support as oracle;
+    let workload = poker();
+    let run = oracle::run_in(
+        &root().join("scalability/poker"),
+        ["--models=0", "--outf=2", workload.entry()],
+        &oracle::DECIDED,
+        oracle::Limits {
+            timeout: Duration::from_mins(1),
+            max_output_bytes: 8 * 1024 * 1024,
+        },
+    );
+    let answers = oracle::answers(&run);
+    workload.contract().unwrap().check(&answers).unwrap();
 }

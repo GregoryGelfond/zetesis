@@ -10,6 +10,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   timestamps, separately from host preparation and waiting.
 - The GPU library exposes checked workgroup choices and optional changed-dependency
   propagation for controlled comparisons. Dense propagation remains the default.
+- A maintained draw-poker workload checks complete enumeration against clingo,
+  with portable filenames and a recorded 36-answer contract.
 
 ### Changed
 
@@ -35,6 +37,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   earlier, while retaining checked arithmetic and complete source validation.
   Certificates also cover bounded multiplication, division, absolute values and
   fixed nonnegative powers when every intermediate operation is defined.
+- Candidate propagation reuses existing disjunctions to expose shared necessary
+  conditions within rule bodies. Under an active restriction, split-order ties
+  use the original program's dependencies. Answer-set semantics are unchanged.
 
 ## 0.6.0 — 2026-10-14
 

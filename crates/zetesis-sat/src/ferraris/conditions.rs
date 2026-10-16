@@ -184,6 +184,17 @@ impl CandidateKnowledge {
             .expect("bound generation has a knowledge slot"))
     }
 
+    /// Original and currently preferred knowledge after joint propagation has
+    /// closed every subject in `conditions`. Both references borrow the same
+    /// stored entries used by propagation; no index or counters are copied.
+    pub(super) fn preference_subjects<R>(
+        &self,
+        conditions: &Conditions<R>,
+    ) -> (&Knowledge, &Knowledge) {
+        let current = conditions.permanent.len() + usize::from(conditions.bound.is_some());
+        (&self.entries[0], &self.entries[current])
+    }
+
     /// Owned allocations only; the enclosing frontier counts this value's
     /// inline vector and generation headers.
     pub(super) fn allocated_bytes(&self) -> u128 {

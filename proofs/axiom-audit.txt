@@ -1673,6 +1673,11 @@
 'Zetesis.SupportTransposition.original_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.SupportTransposition.frozen_exact' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.SupportTransposition.answer_sets_in_context' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.SupportTransposition.nested_conjunct_required' does not depend on any axioms
+'Zetesis.SupportTransposition.necessary_conjunct' does not depend on any axioms
+'Zetesis.SupportTransposition.supplemental_original' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.SupportTransposition.supplemental_frozen' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.SupportTransposition.supplemental_answer_sets' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.TableBindings.flat_match_survives' depends on axioms: [propext, Quot.sound]
 'Zetesis.TableBindings.completed_selection_reused' depends on axioms: [propext]
 'Zetesis.TableBindings.selection_consumer_preserved' depends on axioms: [propext]

@@ -35,6 +35,43 @@ impl<S: Default> Default for Index<S> {
     }
 }
 
+/// Probe the authoritative index without allocating or publishing a node.
+/// Hashing and complete collision checks have the same charges as interning;
+/// an absent key or interrupted probe leaves both owners unchanged.
+pub(super) fn find<S: BuildHasher>(
+    index: &Index<S>,
+    nodes: &FormulaNodes,
+    node: NodeView<'_>,
+    location: ProgramSite,
+    mut work: impl FnMut() -> Result<(), FormulaFailure>,
+) -> Result<Option<usize>, FormulaFailure> {
+    let hash = hash(&index.hash, node, &mut work)?;
+    let first = index.buckets.get(&hash).copied().unwrap_or(END);
+    find_in_bucket(index, nodes, node, first, location, &mut work)
+}
+
+fn find_in_bucket<S>(
+    index: &Index<S>,
+    nodes: &FormulaNodes,
+    node: NodeView<'_>,
+    mut cursor: usize,
+    location: ProgramSite,
+    work: &mut impl FnMut() -> Result<(), FormulaFailure>,
+) -> Result<Option<usize>, FormulaFailure> {
+    while cursor != END {
+        work()?;
+        let old = nodes
+            .view()
+            .node(cursor)
+            .map_err(|error| FormulaFailure::Theory { error, location })?;
+        if equal(old, node, work)? {
+            return Ok(Some(cursor));
+        }
+        cursor = index.links[cursor];
+    }
+    Ok(None)
+}
+
 pub(super) fn intern<S: BuildHasher>(
     index: &mut Index<S>,
     nodes: &mut FormulaNodes,
@@ -45,17 +82,8 @@ pub(super) fn intern<S: BuildHasher>(
 ) -> Result<(usize, bool), FormulaFailure> {
     let hash = hash(&index.hash, node, &mut work)?;
     let previous = index.buckets.get(&hash).copied().unwrap_or(END);
-    let mut cursor = previous;
-    while cursor != END {
-        work()?;
-        let old = nodes
-            .view()
-            .node(cursor)
-            .map_err(|error| FormulaFailure::Theory { error, location })?;
-        if equal(old, node, &mut work)? {
-            return Ok((cursor, false));
-        }
-        cursor = index.links[cursor];
+    if let Some(found) = find_in_bucket(index, nodes, node, previous, location, &mut work)? {
+        return Ok((found, false));
     }
     let id = nodes.view().len();
     ceiling(bounds[0].0, id as u128 + 1, bounds[0].1 as u128, location)?;
@@ -254,6 +282,81 @@ mod tests {
         );
         assert_eq!(nodes.parts().operands().len(), 12);
     }
+
+    #[test]
+    fn lookup_collisions_preserve_ordered_identity() {
+        let mut index = Index::<BuildHasherDefault<Collision>>::default();
+        let mut nodes = FormulaNodes::default();
+        for atom in 0..3 {
+            insert(&mut index, &mut nodes, NodeView::Atom(atom), 5, 6).unwrap();
+        }
+        insert(&mut index, &mut nodes, NodeView::And(&[0, 1, 2]), 5, 6).unwrap();
+        insert(&mut index, &mut nodes, NodeView::Or(&[0, 1, 2]), 5, 6).unwrap();
+        let links = index.links.clone();
+        let buckets = index.buckets.clone();
+        for (node, expected) in [
+            (NodeView::And(&[0, 1, 2]), Some(3)),
+            (NodeView::Or(&[0, 1, 2]), Some(4)),
+            (NodeView::Or(&[0, 2, 1]), None),
+        ] {
+            assert_eq!(
+                find(&index, &nodes, node, location(), || Ok(())).unwrap(),
+                expected
+            );
+        }
+        assert_eq!(index.links, links);
+        assert_eq!(index.buckets, buckets);
+        assert_eq!(nodes.view().len(), 5);
+        assert_eq!(nodes.parts().operands(), [0, 1, 2, 0, 1, 2]);
+    }
+
+    #[test]
+    fn interrupted_probes_leave_graph_and_index_unchanged() {
+        let mut index = Index::<BuildHasherDefault<Collision>>::default();
+        let mut nodes = FormulaNodes::default();
+        for atom in 0..3 {
+            insert(&mut index, &mut nodes, NodeView::Atom(atom), 4, 3).unwrap();
+        }
+        insert(&mut index, &mut nodes, NodeView::Or(&[0, 1, 2]), 4, 3).unwrap();
+        let requested = NodeView::Or(&[0, 2, 1]);
+        let mut exact = 0;
+        assert!(
+            find(&index, &nodes, requested, location(), || {
+                exact += 1;
+                Ok(())
+            })
+            .unwrap()
+            .is_none()
+        );
+        let links = index.links.clone();
+        let buckets = index.buckets.clone();
+        for cutoff in 0..exact {
+            let mut charged = 0;
+            let result = find(&index, &nodes, requested, location(), || {
+                if charged == cutoff {
+                    return Err(FormulaFailure::Interrupted {
+                        reason: zetesis_cpu::Stop::Cancelled,
+                        location: location(),
+                    });
+                }
+                charged += 1;
+                Ok(())
+            });
+            assert!(matches!(
+                result,
+                Err(FormulaFailure::Interrupted {
+                    reason: zetesis_cpu::Stop::Cancelled,
+                    ..
+                })
+            ));
+            assert_eq!(charged, cutoff);
+            assert_eq!(index.links, links);
+            assert_eq!(index.buckets, buckets);
+            assert_eq!(nodes.view().len(), 4);
+            assert_eq!(nodes.parts().operands(), [0, 1, 2]);
+        }
+    }
+
     #[test]
     fn threshold_identity_includes_numeric_columns_and_bound() {
         use zetesis_ferraris::Threshold;

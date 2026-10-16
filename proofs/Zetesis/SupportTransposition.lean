@@ -13,8 +13,11 @@ depends on the outer interpretation alone.
 The formulas may be arbitrary, including recursive or default-negated bodies.
 Empty rows and repeated incidences are allowed. The coverage premise is exact;
 no subset relation between the outer and tested interpretations is required.
-This is a semantic law, not a proof that a compiler builds complete incidence
-rows, preserves source evidence, or respects its storage and work bounds.
+Nested conjunction laws also justify appending entailed requirements while
+retaining the original guards. That extension needs entailment, rather than a
+second complete incidence table. These semantic laws do not prove that a
+compiler builds complete incidence rows, preserves source evidence, or respects
+its storage and work bounds.
 -/
 
 namespace Zetesis.SupportTransposition
@@ -133,5 +136,78 @@ theorem answer_sets_in_context (M : Atoms α) (context : Theory α)
       Stable M (GuardTheory (conditionGuards columns) ++ context) := by
   rw [stable_guard_theory_iff, stable_guard_theory_iff]
   exact and_congr Iff.rfl (requirements_equivalent M rows columns complete)
+
+/-- A condition occurs beneath conjunctions only. Other connectives are opaque:
+necessity must not be inferred by descending through a disjunction or implication. -/
+inductive ConjunctOf (condition : Formula α) : Formula α → Prop where
+  | here : ConjunctOf condition condition
+  | left {first second : Formula α} :
+      ConjunctOf condition first → ConjunctOf condition (.conj first second)
+  | right {first second : Formula α} :
+      ConjunctOf condition second → ConjunctOf condition (.conj first second)
+
+/-- A true conjunction makes every nested conjunct true. Shared implementation
+nodes and repeated paths do not change this formula-level implication. -/
+theorem nested_conjunct_required (M : Atoms α) (condition body : Formula α)
+    (occurs : ConjunctOf condition body) (bodyTrue : Satisfies M body) :
+    Satisfies M condition := by
+  induction occurs with
+  | here => exact bodyTrue
+  | left _ required => exact required bodyTrue.1
+  | right _ required => exact required bodyTrue.2
+
+/-- A necessary-support implication also requires any nested conjunct of its
+body. Complete producer recognition is a premise of supplying that implication;
+this law does not obtain support from an unfinished producer family. -/
+theorem necessary_conjunct (M : Atoms α) (head condition body : Formula α)
+    (occurs : ConjunctOf condition body)
+    (necessary : Satisfies M (.imp head body)) :
+    Satisfies M (.imp head condition) := by
+  intro headTrue
+  have bodyTrue : Satisfies M body := necessary headTrue
+  exact nested_conjunct_required M condition body occurs bodyTrue
+
+/-- Appending consequences of an existing guard family changes no original
+truth. The original guards remain, so only the forward entailment is required. -/
+theorem supplemental_original (M : Atoms α) (guards extra : Theory α)
+    (entailed : Models M guards → Models M extra) :
+    Models M (GuardTheory extra ++ GuardTheory guards) ↔
+      Models M (GuardTheory guards) := by
+  simp only [RuleFactorization.models_append, guarded_original]
+  constructor
+  · exact And.right
+  · intro original
+    exact ⟨entailed original, original⟩
+
+/-- Double-negated consequences preserve frozen truth for arbitrary M and J.
+No subset relation between the two interpretations is needed. -/
+theorem supplemental_frozen (M J : Atoms α) (guards extra : Theory α)
+    (entailed : Models M guards → Models M extra) :
+    Models J (ReductTheory M (GuardTheory extra ++ GuardTheory guards)) ↔
+      Models J (ReductTheory M (GuardTheory guards)) := by
+  simp only [ReductTheory, List.map_append, RuleFactorization.models_append]
+  change (Models J (ReductTheory M (GuardTheory extra)) ∧
+    Models J (ReductTheory M (GuardTheory guards))) ↔
+      Models J (ReductTheory M (GuardTheory guards))
+  simp only [guarded_frozen]
+  constructor
+  · exact And.right
+  · intro original
+    exact ⟨entailed original, original⟩
+
+/-- Supplementary necessary conditions preserve answer sets in an unchanged
+context. This semantic law leaves concrete producer completeness, DAG traversal,
+source evidence and resource accounting as separate implementation obligations. -/
+theorem supplemental_answer_sets (M : Atoms α) (context guards extra : Theory α)
+    (entailed : Models M guards → Models M extra) :
+    Stable M (GuardTheory extra ++ (GuardTheory guards ++ context)) ↔
+      Stable M (GuardTheory guards ++ context) := by
+  rw [stable_guard_theory_iff]
+  constructor
+  · exact And.left
+  · intro accepted
+    have original : Models M guards :=
+      ((stable_guard_theory_iff M context guards).mp accepted).2
+    exact ⟨accepted, entailed original⟩
 
 end Zetesis.SupportTransposition

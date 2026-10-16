@@ -1595,6 +1595,11 @@ import Zetesis
 #print axioms Zetesis.SupportTransposition.original_exact
 #print axioms Zetesis.SupportTransposition.frozen_exact
 #print axioms Zetesis.SupportTransposition.answer_sets_in_context
+#print axioms Zetesis.SupportTransposition.nested_conjunct_required
+#print axioms Zetesis.SupportTransposition.necessary_conjunct
+#print axioms Zetesis.SupportTransposition.supplemental_original
+#print axioms Zetesis.SupportTransposition.supplemental_frozen
+#print axioms Zetesis.SupportTransposition.supplemental_answer_sets
 #print axioms Zetesis.TableBindings.flat_match_survives
 #print axioms Zetesis.TableBindings.completed_selection_reused
 #print axioms Zetesis.TableBindings.selection_consumer_preserved

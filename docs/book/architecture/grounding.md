@@ -1479,7 +1479,35 @@ Ordinary roots and shared body prefixes are unchanged. No positive support is
 created by the guard disjunction. Multiple recorded producers, even duplicates,
 and constant or missing producers retain their per-atom guard construction.
 
-A deterministic shape check precedes incidence-row and formula publication. It
+Complete singleton producers can also share a condition beneath several nested
+conjunctions. A second pass follows only conjunction edges and can append a
+double-negated requirement for a nested condition shared by at least two
+heads, using an existing premise as described below. It retains the original
+guards: each additional requirement is a
+consequence of them. Disjunctions, implications and aggregate nodes remain
+opaque conditions, and an unfinished or multiple-producer family supplies no
+such inference. Repeated paths count each head once; direct conditions already
+handled above are excluded.
+
+The added requirement reuses an already represented disjunction of requiring
+heads. Read-only canonical lookup finds an existing binary fold or its longest
+prefix covering at least two heads, and an existing flat disjunction of the
+whole group. Distinct represented premises retain their separate propagation
+routes. A prefix uses only its covered heads' source evidence; the original
+guards still cover the remaining heads. If neither premise exists, no extra
+requirement is added. This exposes a condition when a represented disjunction
+is required even though its individual heads remain undecided, without adding
+new disjunction operands.
+
+Two marked walks visit each eligible producer's conjunction DAG rather than
+its unfolded tree. They use the same counted directory and incidence arena as
+the direct pass, plus reusable visit marks and a queue. At most two supplemental
+guards are added per shared condition. Traversal, canonical lookup, guard
+publication and temporary storage retain ordinary accounting. Existing premise
+reuse bounds additional graph structure; it does not eliminate preparation cost.
+
+For direct transposition, a deterministic shape check precedes incidence-row and
+formula publication. It
 requires fewer estimated guard nodes, no more logical child occurrences and no
 more roots; these estimates precede canonical interning and do not promise less
 work for every input. Before allocating the directory, a charged catalog scan

@@ -52,6 +52,7 @@ mod adjacency;
 mod counters;
 mod extrema;
 mod masks;
+mod preference;
 mod thresholds;
 mod witnesses;
 use adjacency::Adjacency;
@@ -401,11 +402,13 @@ pub struct NarrowingAttempt<E = Stop> {
 /// prefix. A selection changes neither the region nor its closed knowledge.
 #[derive(Debug)]
 pub struct PreferenceAttempt {
-    /// The open atom to split on, ranked as
-    /// [`Knowledge::preferred_atom_reserved`] describes, or no atom when the
-    /// region is decided.
+    /// The open atom to split on, ranked by the producing selector:
+    /// [`Knowledge::preferred_atom_reserved`] or
+    /// [`Knowledge::preferred_atom_with_secondary_reserved`]. No atom is
+    /// selected when the region is decided.
     pub result: Result<Option<usize>, Stop>,
-    /// One charged unknown-parent-count read per open atom inspected.
+    /// Charged unknown-parent-count reads, including a refused prefix: one per
+    /// open atom for the primary selector, two when a secondary count is used.
     pub work: u64,
 }
 

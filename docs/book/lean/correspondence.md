@@ -1773,12 +1773,16 @@ flags and independent knowledge; those remain Rust correspondence obligations.
 The semantic preservation laws do not establish this concrete loop's fixed point
 or its work and interruption prefixes.
 
-At that joint fixed point, `Knowledge::preferred_atom_reserved` selects once,
+At that joint fixed point, the `Knowledge` preference operations select once,
 ranking the original theory's atomic choice heads first and then the unknown-parent
 counts of the last subject: the active bound, latest permanent restriction, or
-original theory, in that precedence. The ranking charges each open atom's
-unknown-parent count, reads its choice mark in the same charge, retains its
-charged prefix on refusal and installs no partial preference.
+original theory, in that precedence. With a restriction, the original theory's
+unknown-parent count breaks ties through `preferred_atom_with_secondary_reserved`;
+otherwise `preferred_atom_reserved` retains the original-only ranking. The two
+knowledge values must share atom identities and be closed for the same region.
+The ranking charges each inspected count, one per open atom without a
+restriction and two with one. It reads the choice mark in the primary charge,
+retains its charged prefix on refusal and installs no partial preference.
 Packed enumeration must exclude padding and preserve ascending ties. Selecting
 an open atom retains the split-partition obligation of `Search.CoverageTree`;
 the existing laws do not verify these Rust ordering and accounting operations.
@@ -2285,6 +2289,19 @@ original truth, not identical syntax: double negation transports that truth to
 the arbitrary frozen interpretation. Completed producer metadata, stable operand
 storage, full source evidence and actual work, operand and storage admission
 remain executable obligations; the semantic theorem does not verify them.
+
+The same module's `ConjunctOf` relation follows conjunctions only.
+`nested_conjunct_required` and `necessary_conjunct` justify requiring a nested
+condition whenever a complete singleton producer's head is true. The
+`supplemental_original`, `supplemental_frozen` and `supplemental_answer_sets`
+laws allow double-negated consequences to be appended while retaining the
+original guards. They require entailment of the added requirements; unlike
+direct transposition, they do not require two equivalent incidence tables.
+The Rust nested pass must establish complete producer eligibility, exact shared
+condition identity and duplicate-path handling. A reused disjunction must
+denote a covered subset of the requiring heads; the original guards still
+establish the requirements of every omitted head. The laws
+do not verify that traversal, canonical lookup or its resource behavior.
 
 [`DomainProducers`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainProducers.lean)
 models possible argument values before binding enumeration. One producer

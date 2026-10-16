@@ -556,14 +556,13 @@ impl Drop for RegionSearch {
 /// share one allowance. Every source decision decreases the number of open atoms;
 /// no source clause is added to the theory or its frozen reduct.
 ///
-/// Select the split once after the joint fixed point, using the current
-/// candidate bound, else the latest permanent restriction, else the original
-/// theory. This preserves the traversal policy of narrowing those subjects in
-/// sequence while charging only the final subject's scan, one count read per
-/// open atom. Open atoms heading the original subject's atomic choice roots
-/// ([`OriginalSubject::choices`]) rank first, so choices are decided before
-/// the atoms they derive, whether or not the theory lies in the producer
-/// fragment. Ties prefer the lower atom.
+/// Select the split once after the joint fixed point. Original atomic choice
+/// heads rank first. The active bound, latest permanent restriction, or original
+/// theory supplies the primary unknown-parent count, in that precedence. The
+/// original count breaks restriction-count ties, followed by the lower atom.
+/// Selection borrows existing knowledge, charging two count reads per open atom
+/// when a restriction is active and one otherwise. A failed attempt installs no
+/// partial preference.
 pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
     (original, narrower): (OriginalSubject<'_>, &Narrower),
     restrictions: &Conditions<R>,
@@ -641,34 +640,47 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
                     }
                 }
             }
-            // Preserve the last subject's preference from the established
-            // narrowing order. Every subject is closed for the final region,
-            // so earlier rounds and subjects need no ranking scan.
-            let known = if let Some(bound) = &restrictions.bound {
-                knowledge.bound(bound)?
-            } else if let Some(restriction) = restrictions.permanent.last() {
-                let (_, restriction_narrower) = restriction.borrow();
-                knowledge.permanent(restrictions.permanent.len(), restriction_narrower)?
-            } else {
-                knowledge.permanent(0, narrower)?
-            };
-            let cancellation = budget.cancellation;
-            let mut quota = BudgetQuota {
-                budget,
-                failure: None,
-            };
-            let preference =
-                known.preferred_atom_reserved(region, original.choices(), cancellation, &mut quota);
-            counts.work += preference.work;
-            let preferred = preference
-                .result
-                .map_err(|stop| quota.failure.take().unwrap_or_else(|| stopped(stop)))?;
-            if let Some(atom) = preferred {
-                region.prefer(atom);
-            }
+            prefer_split(original, restrictions, region, knowledge, budget, counts)?;
             return Ok(Narrowing::Fixed { changed });
         }
     }
+}
+
+/// Rank open atoms only after all subjects agree on the current region. An
+/// active restriction keeps the primary degree; the original breaks its ties.
+fn prefer_split<Q: Quota, R>(
+    original: OriginalSubject<'_>,
+    conditions: &Conditions<R>,
+    region: &mut Region,
+    knowledge: &CandidateKnowledge,
+    budget: &mut Budget<'_, Q>,
+    counts: &mut RegionCounts,
+) -> Result<(), Incomplete> {
+    let (original_known, primary) = knowledge.preference_subjects(conditions);
+    let cancellation = budget.cancellation;
+    let mut quota = BudgetQuota {
+        budget,
+        failure: None,
+    };
+    let attempt = if conditions.permanent.is_empty() && conditions.bound.is_none() {
+        primary.preferred_atom_reserved(region, original.choices(), cancellation, &mut quota)
+    } else {
+        primary.preferred_atom_with_secondary_reserved(
+            region,
+            original.choices(),
+            original_known,
+            cancellation,
+            &mut quota,
+        )
+    };
+    counts.work += attempt.work;
+    let preferred = attempt
+        .result
+        .map_err(|stop| quota.failure.take().unwrap_or_else(|| stopped(stop)))?;
+    if let Some(atom) = preferred {
+        region.prefer(atom);
+    }
+    Ok(())
 }
 
 /// Charge one fresh mask update before publishing it. Its validity was checked

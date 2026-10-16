@@ -53,6 +53,12 @@ motivated adding these two classical problems. The programs and comments here
 were independently authored from their mathematical specifications; no upstream
 source was copied.
 
+The contributed [draw-poker workload](poker/README.md) complements these
+parametric cases. Its included-source bundle records all 36 nonroyal straight
+flushes and runs through the existing explicit workload matrix, with fresh clingo
+qualification. It is selected separately and does not change either default
+suite population.
+
 ## Run an example
 
 From the repository root, using the installed solver:

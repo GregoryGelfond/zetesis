@@ -12,6 +12,8 @@ use super::{Builder, FALSUM, Node, VERUM, metadata::Metadata};
 use crate::formula_support::Buffer;
 use crate::{FormulaFailure, FormulaResource, ProgramSite};
 
+mod nested;
+
 #[cfg(test)]
 mod tests;
 
@@ -40,22 +42,25 @@ impl Builder<'_, '_, '_> {
         if !tests::enabled() {
             return self.unshared_guards(&metadata);
         }
-        let Some(plan) = Plan::prepare(self, &metadata)? else {
-            return self.unshared_guards(&metadata);
-        };
-        // Unselected guards keep their atom order. Transposed groups follow in
-        // first-incidence order; ordinary roots and their evidence are unchanged.
-        for atom in 0..self.catalog.len() {
-            self.work(metadata.location(atom))?;
-            if producer(&metadata, atom).is_none() {
-                self.support_guard(&metadata, atom)?;
+        if let Some(plan) = Plan::prepare(self, &metadata)? {
+            // Unselected guards keep their atom order. Transposed groups follow
+            // in first-incidence order; original roots and evidence stay intact.
+            for atom in 0..self.catalog.len() {
+                self.work(metadata.location(atom))?;
+                if producer(&metadata, atom).is_none() {
+                    self.support_guard(&metadata, atom)?;
+                }
             }
+            for group in plan.groups.iter() {
+                let heads = &plan.heads.slice()[group.start..group.start + group.length];
+                self.transposed_guard(&metadata, *group, heads)?;
+            }
+        } else {
+            self.unshared_guards(&metadata)?;
         }
-        for group in plan.groups.iter() {
-            let heads = &plan.heads.slice()[group.start..group.start + group.length];
-            self.transposed_guard(&metadata, *group, heads)?;
-        }
-        Ok(())
+        // This separate consequence pass preserves every guard above. It can
+        // expose shared nested conditions even when full transposition is dearer.
+        nested::publish(self, &metadata)
     }
 
     fn unshared_guards(&mut self, metadata: &Metadata) -> Result<(), FormulaFailure> {
@@ -97,6 +102,17 @@ impl Builder<'_, '_, '_> {
             [only] => *only,
             row => self.node(Node::Or(row), location)?,
         };
+        self.condition_guard(metadata, group, heads, premise)
+    }
+
+    fn condition_guard(
+        &mut self,
+        metadata: &Metadata,
+        group: Group,
+        heads: &[usize],
+        premise: usize,
+    ) -> Result<(), FormulaFailure> {
+        let location = metadata.location(group.first_atom);
         let necessary = self.node(Node::Implies(premise, group.condition), location)?;
         let negative = self.neg(necessary, location)?;
         let guard = self.neg(negative, location)?;
@@ -194,6 +210,88 @@ fn child(builder: &Builder<'_, '_, '_>, body: usize, index: usize) -> usize {
 }
 
 impl Plan {
+    fn new(
+        builder: &mut Builder<'_, '_, '_>,
+        prefix: usize,
+        location: ProgramSite,
+    ) -> Result<Self, FormulaFailure> {
+        let mut directory = Buffer::new(
+            builder.computation,
+            builder.limits,
+            builder.counters,
+            location,
+        )?;
+        directory.resize(
+            prefix,
+            None,
+            builder.computation,
+            builder.limits,
+            builder.counters,
+            location,
+        )?;
+        Ok(Self {
+            directory,
+            groups: Buffer::new(
+                builder.computation,
+                builder.limits,
+                builder.counters,
+                location,
+            )?,
+            heads: Buffer::new(
+                builder.computation,
+                builder.limits,
+                builder.counters,
+                location,
+            )?,
+        })
+    }
+
+    /// Count one admitted incidence. The caller owns occurrence policy: direct
+    /// transposition preserves repetitions; the nested walker coalesces paths.
+    fn record(
+        &mut self,
+        builder: &mut Builder<'_, '_, '_>,
+        atom: usize,
+        condition: usize,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let group = if let Some(group) = self.directory.slice()[condition] {
+            group.get() - 1
+        } else {
+            let group = self.groups.len();
+            // A new group belongs to a distinct node of the owned prefix,
+            // so group < prefix length <= usize::MAX before this increment.
+            let stored = group
+                .checked_add(1)
+                .and_then(NonZeroUsize::new)
+                .expect("each group names a distinct owned prefix node");
+            self.groups.push(
+                Group {
+                    condition,
+                    first_atom: atom,
+                    start: 0,
+                    length: 0,
+                    filled: 0,
+                },
+                builder.computation,
+                builder.limits,
+                builder.counters,
+                location,
+            )?;
+            self.directory.slice_mut()[condition] = Some(stored);
+            group
+        };
+        let length = self.groups.slice()[group].length as u128 + 1;
+        super::ceiling(
+            FormulaResource::Operands,
+            length,
+            usize::MAX as u128,
+            location,
+        )?;
+        self.groups.slice_mut()[group].length = usize::try_from(length).expect("checked length");
+        Ok(())
+    }
+
     fn prepare(
         builder: &mut Builder<'_, '_, '_>,
         metadata: &Metadata,
@@ -227,35 +325,7 @@ impl Plan {
             return Ok(None);
         }
         let location = metadata.location(0);
-        let mut directory = Buffer::new(
-            builder.computation,
-            builder.limits,
-            builder.counters,
-            location,
-        )?;
-        directory.resize(
-            builder.nodes.view().len(),
-            None,
-            builder.computation,
-            builder.limits,
-            builder.counters,
-            location,
-        )?;
-        let mut plan = Self {
-            directory,
-            groups: Buffer::new(
-                builder.computation,
-                builder.limits,
-                builder.counters,
-                location,
-            )?,
-            heads: Buffer::new(
-                builder.computation,
-                builder.limits,
-                builder.counters,
-                location,
-            )?,
-        };
+        let mut plan = Self::new(builder, builder.nodes.view().len(), location)?;
         plan.count(builder, metadata)?;
         if !plan.improves(builder, metadata, selected)? {
             return Ok(None);
@@ -282,41 +352,7 @@ impl Plan {
                 tests::point(tests::Point::Count);
                 builder.work(location)?;
                 let condition = child(builder, body, index);
-                let group = if let Some(group) = self.directory.slice()[condition] {
-                    group.get() - 1
-                } else {
-                    let group = self.groups.len();
-                    // A new group belongs to a distinct node of the owned prefix,
-                    // so group < prefix length <= usize::MAX before this increment.
-                    let stored = group
-                        .checked_add(1)
-                        .and_then(NonZeroUsize::new)
-                        .expect("each group names a distinct owned prefix node");
-                    self.groups.push(
-                        Group {
-                            condition,
-                            first_atom: atom,
-                            start: 0,
-                            length: 0,
-                            filled: 0,
-                        },
-                        builder.computation,
-                        builder.limits,
-                        builder.counters,
-                        location,
-                    )?;
-                    self.directory.slice_mut()[condition] = Some(stored);
-                    group
-                };
-                let length = self.groups.slice()[group].length as u128 + 1;
-                super::ceiling(
-                    FormulaResource::Operands,
-                    length,
-                    usize::MAX as u128,
-                    location,
-                )?;
-                self.groups.slice_mut()[group].length =
-                    usize::try_from(length).expect("checked length");
+                self.record(builder, atom, condition, location)?;
             }
         }
         Ok(())
@@ -346,15 +382,21 @@ impl Plan {
             && 6 * groups + operands <= 6 * selected)
     }
 
-    fn fill(
+    /// Reserve the same counted row arena; supplemental guards keep only rows
+    /// required by at least two distinct heads.
+    fn allocate_heads(
         &mut self,
         builder: &mut Builder<'_, '_, '_>,
         metadata: &Metadata,
-    ) -> Result<(), FormulaFailure> {
+        shared_only: bool,
+    ) -> Result<bool, FormulaFailure> {
         let mut total = 0usize;
         for group in self.groups.slice_mut() {
             let location = metadata.location(group.first_atom);
             builder.work(location)?;
+            if shared_only && group.length < 2 {
+                continue;
+            }
             group.start = total;
             let next = total as u128 + group.length as u128;
             super::ceiling(
@@ -374,6 +416,15 @@ impl Plan {
             builder.counters,
             location,
         )?;
+        Ok(total != 0)
+    }
+
+    fn fill(
+        &mut self,
+        builder: &mut Builder<'_, '_, '_>,
+        metadata: &Metadata,
+    ) -> Result<(), FormulaFailure> {
+        self.allocate_heads(builder, metadata, false)?;
         for atom in 0..builder.catalog.len() {
             let location = metadata.location(atom);
             builder.work(location)?;

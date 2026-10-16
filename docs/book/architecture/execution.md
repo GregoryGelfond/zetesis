@@ -171,12 +171,15 @@ otherwise the original theory. Open atoms that head an atomic choice root of the
 original theory rank first, whether or not the theory lies in the producer
 fragment: deciding the choices leaves the atoms they derive to propagation and,
 where it applies, the support cut. Among atoms of the same kind, the one with the
-most unknown parents in the ranking subject is preferred, with ties going to the
-lowest atom. Any open
+most unknown parents in the ranking subject is preferred. When that subject is
+a restriction, the original theory's unknown-parent count breaks ties; the
+lowest atom breaks any remaining tie. Both counts come from the knowledge
+already closed for the region, without preparing another index. Any open
 atom is a sound split (the `CoverageTree.split` node of `Search.lean`), so this
 order changes the regions visited, never the answers. The packed region masks enumerate
 open atoms in ascending order, excluding decided atoms and unused final bits;
-each inspected parent count spends one work permit.
+each inspected parent count spends one work permit: one per open atom for the
+original-only ranking, two when a restriction supplies the primary count.
 The traversal itself is one operation in `zetesis-cpu`, shared by both
 routes when one worker walks; with several workers the formula route walks
 the same tree in `zetesis-sat`'s parallel regions: the walk begins on the

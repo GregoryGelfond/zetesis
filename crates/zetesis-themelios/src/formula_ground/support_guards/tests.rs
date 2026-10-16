@@ -87,7 +87,7 @@ fn reference_control_stays_on_its_thread() {
     assert!(enabled());
 }
 
-fn same_truth(left: &Theory, right: &Theory) {
+pub(super) fn same_truth(left: &Theory, right: &Theory) {
     assert_eq!(left.atom_count(), right.atom_count());
     assert!(left.atom_count() <= 7);
     let cancellation = Cancellation::default();
@@ -138,34 +138,36 @@ fn same_truth(left: &Theory, right: &Theory) {
 fn transposed_sources_preserve_formula_semantics() {
     // This comparison changes only the guard representation. Producer grouping
     // can change the immediate incidences and legitimately decline the price.
-    producer::scoped(false, || {
-        for source in [
-            "{a;b}. x :- a,b. y :- a,b. z :- a,b.",
-            "{a}. b :- a. x :- b. y :- b. z :- b.",
-            "{a}. x :- not a. y :- not a. z :- not a.",
-            "{a;b}. x | not y :- a,b. z :- a,b. w :- a,b.",
-            "{a;b}. x :- a,b. x :- a,b. y :- a,b. z :- a,b. w :- a,b.",
-            "{a}. x :- not not a. y :- not not a. z :- not not a.",
-            "{a}. x :- a,not not x. y :- a,not not x. z :- a,not not x.",
-            "{a;b}. {x;y;z} :- a,b.",
-            "{a;b}. x:a | y:a | z:a :- b.",
-            "{a;b;c}. x :- a,b,c. y :- a,b,c. z :- a,b,c.",
-        ] {
-            let (shared, used) = scoped(true, None, || {
-                ground(testing::prepare(source), None, None).unwrap()
-            });
-            let (prior, skipped) = scoped(false, None, || {
-                ground(testing::prepare(source), None, None).unwrap()
-            });
-            assert_eq!(used, 1, "{source}");
-            assert_eq!(skipped, 0);
-            assert_eq!(shared.atoms.atoms(), prior.atoms.atoms());
-            same_truth(&shared.theory, &prior.theory);
-            assert!(
-                shared.theory.nodes().len() < prior.theory.nodes().len(),
-                "{source}"
-            );
-        }
+    super::nested::without(|| {
+        producer::scoped(false, || {
+            for source in [
+                "{a;b}. x :- a,b. y :- a,b. z :- a,b.",
+                "{a}. b :- a. x :- b. y :- b. z :- b.",
+                "{a}. x :- not a. y :- not a. z :- not a.",
+                "{a;b}. x | not y :- a,b. z :- a,b. w :- a,b.",
+                "{a;b}. x :- a,b. x :- a,b. y :- a,b. z :- a,b. w :- a,b.",
+                "{a}. x :- not not a. y :- not not a. z :- not not a.",
+                "{a}. x :- a,not not x. y :- a,not not x. z :- a,not not x.",
+                "{a;b}. {x;y;z} :- a,b.",
+                "{a;b}. x:a | y:a | z:a :- b.",
+                "{a;b;c}. x :- a,b,c. y :- a,b,c. z :- a,b,c.",
+            ] {
+                let (shared, used) = scoped(true, None, || {
+                    ground(testing::prepare(source), None, None).unwrap()
+                });
+                let (prior, skipped) = scoped(false, None, || {
+                    ground(testing::prepare(source), None, None).unwrap()
+                });
+                assert_eq!(used, 1, "{source}");
+                assert_eq!(skipped, 0);
+                assert_eq!(shared.atoms.atoms(), prior.atoms.atoms());
+                same_truth(&shared.theory, &prior.theory);
+                assert!(
+                    shared.theory.nodes().len() < prior.theory.nodes().len(),
+                    "{source}"
+                );
+            }
+        })
     });
 }
 

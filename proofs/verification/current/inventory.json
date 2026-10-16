@@ -7937,43 +7937,68 @@
     },
     {
       "file": "Zetesis/SupportTransposition.lean",
-      "line": 42,
+      "line": 45,
       "name": "Zetesis.SupportTransposition.head_guards_exact"
     },
     {
       "file": "Zetesis/SupportTransposition.lean",
-      "line": 60,
+      "line": 63,
       "name": "Zetesis.SupportTransposition.condition_guards_exact"
     },
     {
       "file": "Zetesis/SupportTransposition.lean",
-      "line": 80,
+      "line": 83,
       "name": "Zetesis.SupportTransposition.requirements_equivalent"
     },
     {
       "file": "Zetesis/SupportTransposition.lean",
-      "line": 96,
+      "line": 99,
       "name": "Zetesis.SupportTransposition.guarded_original"
     },
     {
       "file": "Zetesis/SupportTransposition.lean",
-      "line": 102,
+      "line": 105,
       "name": "Zetesis.SupportTransposition.guarded_frozen"
     },
     {
       "file": "Zetesis/SupportTransposition.lean",
-      "line": 108,
+      "line": 111,
       "name": "Zetesis.SupportTransposition.original_exact"
     },
     {
       "file": "Zetesis/SupportTransposition.lean",
-      "line": 118,
+      "line": 121,
       "name": "Zetesis.SupportTransposition.frozen_exact"
     },
     {
       "file": "Zetesis/SupportTransposition.lean",
-      "line": 129,
+      "line": 132,
       "name": "Zetesis.SupportTransposition.answer_sets_in_context"
+    },
+    {
+      "file": "Zetesis/SupportTransposition.lean",
+      "line": 151,
+      "name": "Zetesis.SupportTransposition.nested_conjunct_required"
+    },
+    {
+      "file": "Zetesis/SupportTransposition.lean",
+      "line": 162,
+      "name": "Zetesis.SupportTransposition.necessary_conjunct"
+    },
+    {
+      "file": "Zetesis/SupportTransposition.lean",
+      "line": 172,
+      "name": "Zetesis.SupportTransposition.supplemental_original"
+    },
+    {
+      "file": "Zetesis/SupportTransposition.lean",
+      "line": 184,
+      "name": "Zetesis.SupportTransposition.supplemental_frozen"
+    },
+    {
+      "file": "Zetesis/SupportTransposition.lean",
+      "line": 201,
+      "name": "Zetesis.SupportTransposition.supplemental_answer_sets"
     },
     {
       "file": "Zetesis/TableBindings.lean",
@@ -9245,7 +9270,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "34f52807ea4a3239d36303324ee4e63228085103aaa724b4d3ada43cb51a7b03",
+    "Audit.lean": "f39182e3f5244d0f37146b5c80e23962ff1bd964531d46060d0f8b41cc3371b5",
     "Zetesis.lean": "a3679a3d04a4ad4935393b5be639079f54fbc18b6d3d6162afa6b709540fe0bd",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
@@ -9409,7 +9434,7 @@
     "Zetesis/StructuralBindings.lean": "8606044bbfeab1c9238e9c2311206d0dd894bb6482463c02613e759a44f06894",
     "Zetesis/StructuredWitnesses.lean": "035fda4f2857801d516f26c1dca179233a561581beffbfbc69c1897e8926be8c",
     "Zetesis/SubsetCounter.lean": "83fa58ee8faa1cded7aaacffd132ae59293860e4250d43162e58bcd83ce62f32",
-    "Zetesis/SupportTransposition.lean": "4d861b84240d1c4369e09dc087293db844e2cd1c5bc19dda75c542c078b75fa3",
+    "Zetesis/SupportTransposition.lean": "20874e6c860817855d81938b5cf12cc6c842db001a69343dcb8a09a9ade4ece5",
     "Zetesis/TableBindings.lean": "2d8ae5bca7ad881a2dd267f2375511d6c059c9a3b4b6ed3b42fd327f0d51b05b",
     "Zetesis/TerminalDefinitions.lean": "5d58652ba9c73381248f195e2d416dad03953a059854b87a82d78fa964da0513",
     "Zetesis/TernaryWatch.lean": "ff2f1d1a4a02522b2646b0a54fff3e7c08e64bbd5661cf4c3631518aa41ba57e",

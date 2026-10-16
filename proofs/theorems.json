@@ -7937,42 +7937,67 @@
   {
     "name": "Zetesis.SupportTransposition.head_guards_exact",
     "file": "Zetesis/SupportTransposition.lean",
-    "line": 42
+    "line": 45
   },
   {
     "name": "Zetesis.SupportTransposition.condition_guards_exact",
     "file": "Zetesis/SupportTransposition.lean",
-    "line": 60
+    "line": 63
   },
   {
     "name": "Zetesis.SupportTransposition.requirements_equivalent",
     "file": "Zetesis/SupportTransposition.lean",
-    "line": 80
+    "line": 83
   },
   {
     "name": "Zetesis.SupportTransposition.guarded_original",
     "file": "Zetesis/SupportTransposition.lean",
-    "line": 96
+    "line": 99
   },
   {
     "name": "Zetesis.SupportTransposition.guarded_frozen",
     "file": "Zetesis/SupportTransposition.lean",
-    "line": 102
+    "line": 105
   },
   {
     "name": "Zetesis.SupportTransposition.original_exact",
     "file": "Zetesis/SupportTransposition.lean",
-    "line": 108
+    "line": 111
   },
   {
     "name": "Zetesis.SupportTransposition.frozen_exact",
     "file": "Zetesis/SupportTransposition.lean",
-    "line": 118
+    "line": 121
   },
   {
     "name": "Zetesis.SupportTransposition.answer_sets_in_context",
     "file": "Zetesis/SupportTransposition.lean",
-    "line": 129
+    "line": 132
+  },
+  {
+    "name": "Zetesis.SupportTransposition.nested_conjunct_required",
+    "file": "Zetesis/SupportTransposition.lean",
+    "line": 151
+  },
+  {
+    "name": "Zetesis.SupportTransposition.necessary_conjunct",
+    "file": "Zetesis/SupportTransposition.lean",
+    "line": 162
+  },
+  {
+    "name": "Zetesis.SupportTransposition.supplemental_original",
+    "file": "Zetesis/SupportTransposition.lean",
+    "line": 172
+  },
+  {
+    "name": "Zetesis.SupportTransposition.supplemental_frozen",
+    "file": "Zetesis/SupportTransposition.lean",
+    "line": 184
+  },
+  {
+    "name": "Zetesis.SupportTransposition.supplemental_answer_sets",
+    "file": "Zetesis/SupportTransposition.lean",
+    "line": 201
   },
   {
     "name": "Zetesis.TableBindings.flat_match_survives",
