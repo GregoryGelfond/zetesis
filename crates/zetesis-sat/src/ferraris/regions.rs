@@ -87,6 +87,11 @@ pub struct RegionCounts {
     /// construction in its reduct counts. Each fresh source-consequence mask
     /// update costs one unit; source join work is accounted separately.
     pub work: u64,
+    /// Charged producer rechecks, included in `work` on every outcome.
+    pub support_work: u64,
+    /// Charged possible-foundedness preparation, closure and publication,
+    /// included in `work` on every outcome. This is not a propagation-event count.
+    pub founded_work: u64,
 }
 
 impl RegionCounts {
@@ -124,6 +129,14 @@ impl RegionCounts {
             work: self
                 .work
                 .checked_add(other.work)
+                .ok_or(Incomplete::CounterOverflow)?,
+            support_work: self
+                .support_work
+                .checked_add(other.support_work)
+                .ok_or(Incomplete::CounterOverflow)?,
+            founded_work: self
+                .founded_work
+                .checked_add(other.founded_work)
                 .ok_or(Incomplete::CounterOverflow)?,
         };
         *self = sum;
@@ -936,6 +949,8 @@ fn account(
     counts.held += charges.held;
     counts.cut += charges.cut;
     counts.work += charges.work;
+    counts.support_work += charges.support_work;
+    counts.founded_work += charges.founded_work;
     attempt.result
 }
 

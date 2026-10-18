@@ -4,7 +4,7 @@
 use crate::test_support::theory;
 use zetesis_cpu::{Cancellation, Stop};
 
-use super::super::{Closure, Step, Work};
+use super::super::{Closure, Step, Work, support::Progress};
 
 use crate::{
     AdmissionLimits, Narrower, Narrowing, NarrowingQuota, NarrowingScratch, NarrowingStatistics,
@@ -150,6 +150,11 @@ fn support_attempt(
         known: super::compact_mut(&mut knowledge),
         lists: &mut lists,
     };
+    // These tests measure only producer reads. Prepare empty positions outside
+    // that receipt; support::tests separately checks charged initialization and
+    // refusal before publication. Every fixture's complete population fits u16.
+    let positions = vec![[0; 2]; theory.atom_count()];
+    *closure.known.support_progress = Progress::Small(positions);
     for &atom in held {
         assert!(matches!(
             closure.atom(&index, None, None, atom, true),
@@ -502,4 +507,134 @@ fn support_saturation_refunds_unvisited_permits() {
         assert_eq!(quota.refunded, 64 - spent);
         assert_eq!(quota.remaining, 0);
     }
+}
+
+#[test]
+fn sibling_support_prefixes_never_cross_branches() {
+    let theory = shared_head(4);
+    let producers = producers(&theory);
+    let narrower = Narrower::new(&theory);
+    let mut region = Region::all_open(theory.atom_count());
+    let mut parent = narrower.knowledge();
+    let mut scratch = NarrowingScratch::default();
+    region.hold(0);
+    region.cut(1);
+    narrow(
+        &theory,
+        &producers,
+        &narrower,
+        &mut region,
+        &mut parent,
+        &mut scratch,
+    );
+    let original_progress = super::compact(&parent).support_progress.clone();
+    assert!(matches!(original_progress, Progress::Small(_)));
+    let mut child = parent.clone();
+    let mut left = region.clone();
+    left.cut(2);
+    left.cut(3);
+    narrow(
+        &theory,
+        &producers,
+        &narrower,
+        &mut left,
+        &mut child,
+        &mut scratch,
+    );
+    assert_eq!(left.decision(4), Some(true));
+    assert_eq!(super::compact(&parent).support_progress, original_progress);
+    assert_ne!(super::compact(&child).support_progress, original_progress);
+
+    // Restore the parent's truth and support authority before visiting the
+    // sibling. Carrying the left child's skipped positions would cut held a.
+    child.clone_from(&parent);
+    assert_eq!(super::compact(&child).support_progress, original_progress);
+    let mut right = region.clone();
+    right.cut(3);
+    right.cut(4);
+    narrow(
+        &theory,
+        &producers,
+        &narrower,
+        &mut right,
+        &mut child,
+        &mut scratch,
+    );
+    assert_eq!(right.decision(2), Some(true));
+    let mut fresh = region;
+    fresh.cut(3);
+    fresh.cut(4);
+    narrow(
+        &theory,
+        &producers,
+        &narrower,
+        &mut fresh,
+        &mut parent.clone(),
+        &mut scratch,
+    );
+    for atom in 0..theory.atom_count() {
+        assert_eq!(right.decision(atom), fresh.decision(atom));
+    }
+}
+
+#[test]
+fn retained_witnesses_recheck_competing_heads_and_choices() {
+    // (a or b); c -> a; {a}. The first two witnesses are ordinary.
+    // Holding b and cutting c withdraws both, leaving the choice of a.
+    let theory = theory(
+        3,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::falsum(),
+            Node::or_pair([0, 1]),
+            Node::implies(2, 0),
+            Node::implies(0, 3),
+            Node::or_pair([0, 6]),
+            Node::implies(1, 3),
+            Node::or_pair([1, 8]),
+            Node::implies(2, 3),
+            Node::or_pair([2, 10]),
+        ],
+        vec![4, 5, 7, 9, 11],
+    );
+    let producers = producers(&theory);
+    let narrower = Narrower::new(&theory);
+    let mut region = Region::all_open(theory.atom_count());
+    let mut knowledge = narrower.knowledge();
+    let mut scratch = NarrowingScratch::default();
+    region.hold(0);
+    narrow(
+        &theory,
+        &producers,
+        &narrower,
+        &mut region,
+        &mut knowledge,
+        &mut scratch,
+    );
+    assert!(matches!(
+        super::compact(&knowledge).support_progress,
+        Progress::Small(_)
+    ));
+    assert_eq!(region.decision(1), None);
+    assert_eq!(region.decision(2), None);
+    region.hold(1);
+    region.cut(2);
+    let (outcome, _) = narrow(
+        &theory,
+        &producers,
+        &narrower,
+        &mut region,
+        &mut knowledge,
+        &mut scratch,
+    );
+    assert!(matches!(outcome, Narrowing::Fixed { .. }));
+    assert_eq!(region.decision(0), Some(true));
+    assert_eq!(region.decision(1), Some(true));
+    assert_eq!(region.decision(2), Some(false));
+    let Progress::Small(rows) = &super::compact(&knowledge).support_progress else {
+        unreachable!();
+    };
+    assert_eq!(rows[0], [2, 3], "only the choice remains possible");
 }

@@ -1858,6 +1858,21 @@ regressions are executable evidence for those boundaries, not formal refinement.
 Retained-byte accounting includes the owned masks; the full seen-mask scan and
 snapshot writes are outside the existing charged-read work counters.
 
+The producer support continuation retains two positions in each long head row.
+Every producer before the first and strictly between the two positions has been
+proved blocked by a false body or a competing held ordinary head. Those facts
+are monotone within descendants under the same original subject. Both remaining
+endpoints are rechecked; only complete coverage can establish no support or sole
+support. An open head's first witness cannot substitute for the second witness
+required after that head becomes held. Choices keep their existing support rule.
+`known_mono`, `known_blocked_no_support`, `known_choice_blocked_no_support`,
+`unsupported_cut_with_choices` and the sole-support laws supply these semantic
+premises. They do not verify the Rust cursor. Exact row identities and bounds,
+complete prefix coverage, independent cloning and parent restoration, metered
+initialization, typed interruption and actual-capacity receipts remain executable
+representation obligations. No continuation state is used for frozen-reduct or
+candidate-only restriction narrowing.
+
 The chain accumulator retains exactly the information its consumers read.
 For disjunction, false operands are neutral and a true operand is absorbing;
 for conjunction these roles are reversed.
@@ -2488,13 +2503,35 @@ body whose frozen reduct can hold below a possible set `P`. If `P` is closed
 under every permitted head of every possible producer, complete producer and
 choice coverage implies that each compatible answer set is contained in `P`.
 The proof intersects an answer set with `P`, establishes a model of the whole
-reduct, and applies minimality. It neither chooses one disjunctive head nor uses
-held atoms as seeds. `body_upper_sound` justifies the positive Boolean relaxation
+reduct, and applies minimality. It requires a closed upper set, not necessarily
+the least one; it does not choose one disjunctive head. `body_upper_sound` justifies the positive Boolean relaxation
 with candidate-valid false masks. Rust must additionally establish complete
 extraction, native aggregate relaxation, flattened-incidence correspondence,
 completed closure, valid cached acyclicity and exact interruption/accounting.
 Those obligations are not discharged by the semantic theorem or the small
 exhaustive tests.
+
+Rust restricts repeated closure to heads in exact positive cyclic components.
+Every uncut noncyclic atom is a conceptual seed; held cyclic atoms are not seeds.
+Complete cyclic-head bodies retain all Boolean and opaque boundary inputs, so
+the resulting set is closed under every producer. Only missing cyclic heads
+are published as cuts. One pass can be weaker than whole-program closure;
+ordinary Boolean/support propagation and cyclic closure alternate to saturation.
+Equality at saturation additionally requires induction over the complete positive
+component order: an acyclic input to a cyclic component must precede it, and
+ordinary propagation must expose every false relaxed Boolean body. Exact component
+recognition, boundary invalidation, saturated equality and the packed publication
+remain Rust refinement obligations. Exhaustive partial-region and complete-family
+comparisons supply executable evidence, not a formal proof of this implementation.
+
+Inherited completion also requires a reuse argument: the prepared positive body
+projection belongs to the exact original theory, and no relevant input has become
+false. An atom with no occurrence in that projection can only remove itself from
+the previous upper closure; remaining uncut atoms stay covered. Ordinary propagation
+must still invalidate completion when an opaque body becomes false. Unknown,
+foreign or interrupted preparation supplies no exclusion evidence. The Rust
+membership states, event invalidation and sibling isolation remain refinement
+obligations; the semantic closure theorem alone does not verify this reuse.
 
 The CPU positive candidate cursor uses `positive_stable_iff` as a coverage law:
 only the completed least interpretation can belong to the answer-set family.

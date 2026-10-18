@@ -10,6 +10,26 @@ use zetesis_cpu::Cancellation;
 
 mod reuse;
 
+impl Scratch {
+    /// Test-only reference: use the existing engine over every head and body,
+    /// with no conceptual noncyclic seeds and no production algorithm switch.
+    fn prepare_global_reference(
+        &mut self,
+        owner: &Theory,
+        index: &Narrower,
+        producers: &Producers,
+    ) {
+        self.owner = None;
+        self.cyclic_atoms = vec![0; flag_words(owner.atom_count())];
+        for atom in 0..owner.atom_count() {
+            self.cyclic_atoms[atom / 64] |= 1 << (atom % 64);
+        }
+        self.prepare_cone(owner, index, producers, false, &mut Work::new(u64::MAX))
+            .unwrap();
+        self.owner = Some(owner.clone());
+    }
+}
+
 fn producers(owner: &Theory) -> Producers {
     crate::producers(owner, RegionLimits::default(), &Cancellation::default())
         .unwrap()
@@ -384,6 +404,30 @@ fn interrupted_foundation_passes_leave_no_stale_support() {
     }
 }
 
+#[test]
+fn support_work_attribution_retains_each_refused_prefix() {
+    let owner = cycle();
+    let complete = limited(&owner, &mut NarrowingScratch::default(), u64::MAX);
+    assert!(complete.statistics.support_work > 0);
+    assert!(complete.statistics.founded_work > 0);
+    let mut previous = crate::NarrowingStatistics::default();
+    for ceiling in 0..=complete.statistics.work {
+        let attempt = limited(&owner, &mut NarrowingScratch::default(), ceiling);
+        let counts = attempt.statistics;
+        assert_eq!(counts.work, ceiling);
+        assert!(counts.support_work + counts.founded_work <= counts.work);
+        assert!(counts.support_work >= previous.support_work);
+        assert!(counts.founded_work >= previous.founded_work);
+        if ceiling < complete.statistics.work {
+            assert_eq!(attempt.result, Err(Stop::WorkLimit));
+        } else {
+            assert_eq!(attempt.result, complete.result);
+            assert_eq!(counts, complete.statistics);
+        }
+        previous = counts;
+    }
+}
+
 fn acyclic_disjunction() -> Theory {
     theory(
         3,
@@ -510,8 +554,7 @@ fn projected_bodies_match_full_node_relaxation() {
     let producers = producers(&owner);
     let mut projected = Scratch::default();
     let mut full = Scratch::default();
-    full.prepare_bodies(&owner, &index, &producers, &mut Work::new(u64::MAX))
-        .unwrap();
+    full.prepare_global_reference(&owner, &index, &producers);
     // Reference the former algorithm: initialize every original node, including
     // irrelevant opaque roots and head-only subformulas. The event engine stays
     // identical, isolating the cone restriction rather than mirroring it.
@@ -544,10 +587,15 @@ fn projected_bodies_match_full_node_relaxation() {
                 &mut Work::new(u64::MAX),
             )
             .unwrap();
-            assert_eq!(
-                projected.atoms, full.atoms,
-                "body mask {false_bodies}, atom mask {cut_atoms}"
-            );
+            for atom in 0..owner.atom_count() {
+                let present = !bit(&atom_never, atom)
+                    && (!bit(&projected.cyclic_atoms, atom) || projected.contains(atom));
+                assert_eq!(
+                    present,
+                    full.contains(atom),
+                    "atom {atom}, body mask {false_bodies}, atom mask {cut_atoms}"
+                );
+            }
         }
     }
     assert!(projected.body_nodes.len() < owner.nodes().len());

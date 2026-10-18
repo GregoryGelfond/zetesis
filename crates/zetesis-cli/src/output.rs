@@ -1005,6 +1005,8 @@ fn region_statistics(
         "not_applicable"
     })?;
     out.number_field("reading_work", counts.work)?;
+    out.number_field("support_work", counts.support_work)?;
+    out.number_field("founded_work", counts.founded_work)?;
     let generator = stats.generator_order;
     out.text(",\"generator_order\":{\"status\":")?;
     out.string(generator.status.label())?;

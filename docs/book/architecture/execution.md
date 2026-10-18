@@ -93,29 +93,72 @@ a region with every atom decided is a leaf, and a leaf is a classical model, sin
 root is sure or never (`FormulaBounds.decided_leaf_models`). The leaf
 is the candidate the reduct decides.
 
+Support rechecks carry two producer-row positions with the region's inherited
+knowledge. A failed body or competing held head stays unavailable in every
+descendant, so a later recheck skips that proved prefix and rechecks its remaining
+witnesses. An open atom needs one witness; a held atom needs two before the scan
+can stop without forcing a body. Zero or sole support requires complete coverage,
+including the inherited failures. Atomic choices keep their existing exception
+to competing-head failure. Interrupted scans publish no support conclusion.
+
+Rows with at most two producers keep an allocation-free scan. Reaching a longer
+row prepares one owned vector of two compact positions per atom, normally four
+bytes per atom. Initialization is charged and fallible; the vector becomes
+inherited state only after initialization completes. Repeated scans of one row
+use work linear in its producer count plus its number of rechecks. Child clones
+copy the owned positions, and restoring a parent replaces a previous child's
+progress. Retained-byte receipts include actual vector capacity; cloning retains
+the existing infallible allocation contract. This trades bounded per-child
+storage for fewer repeated producer reads, without changing the original theory
+or the reduct check.
+
 When the complete producer inventory has positive cycles, narrowing also
-computes which atoms can have founded support. Starting empty, it propagates
-possible bodies through positive conjunctions and disjunctions and adds every
-permitted head of each enabled producer. Other body formulas remain possible
-unless already known false. Held atoms do not seed their own cycles. Atoms
-outside the completed closure can be cut; a held atom outside it refutes the
-region. This is a necessary restriction on candidates, not a replacement for
-reduct membership. Disjunctive heads are retained together, without shifting.
+restricts candidates by possible founded support. The defining whole relaxation
+starts empty, propagates possible bodies through positive conjunctions and
+disjunctions, and adds every permitted head of each enabled producer. Other body
+formulas remain possible unless already known false. Held atoms do not seed
+their own cycles. Atoms outside a completed upper closure can be cut; a held
+atom outside it refutes the region. This is a necessary restriction on
+candidates, not a replacement for reduct membership. Disjunctive heads are
+retained together, without shifting.
 
 The pass reuses the original incidence tables and worker scratch. Each worker
 prepares the positive Boolean dependencies of producer bodies once for the exact
-original theory. Later passes reset only those formula positions; formulas that
-cannot contribute to a producer body remain inactive. A completed
+original theory. Exact SCCs use the immutable relaxed incidences, independently
+of region false masks. Only heads in cyclic components need explicit derivation;
+other uncut atoms are conceptual seeds. Their occurrences in the selected complete
+producer bodies seed directly, avoiding unrelated atom postings. Later passes reset
+only bodies feeding cyclic heads, and publication inspects only missing uncut cyclic
+heads. Ordinary support and foundedness still alternate to saturation: acyclic paths
+can carry a cut to a downstream cycle, so one restricted pass may be weaker than a
+full pass even though the fixed point is unchanged. SCC condensation order supplies
+the preservation argument; the indexed executable refinement remains separate.
+Preparation reuses the existing state cells, atom cursors and queue, retaining one
+packed cyclic-atom mask. The body-ID vector temporarily holds up to A+B finishing
+entries (atoms plus the full body cone), and its actual retained capacity is charged.
+No second incidence graph or component map is retained. Formulas that cannot
+contribute to a cyclic-head body remain outside the selected projection. A completed
 acyclicity check skips it where ordinary support propagation suffices; interrupted
 checks publish no classification. A successfully closed region carries its
-completion to its children: if no atom or formula node becomes false, the same
-relaxation needs no repeat pass. Newly false evidence invalidates that completion,
-including a held decision that indirectly falsifies a body. This authority
-belongs to inherited knowledge for the same original subject, never reusable
-worker scratch. Candidate-only restrictions and frozen-reduct
+completion to its children: if no projected body input becomes false, the upper
+closure still covers every uncut atom and needs no repeat pass. The completed
+projection for the exact original distinguishes outside nodes from included but blocked nodes;
+without that projection every false node conservatively invalidates completion.
+A false atom with no positive occurrence in the projection can only remove itself
+from that upper closure; every included occurrence still invalidates, even when
+already blocked. A held or cut decision that indirectly falsifies an opaque body
+also invalidates. Without authenticated projection every false atom invalidates.
+This authority belongs to inherited knowledge for the same original subject.
+Worker scratch can identify an irrelevant node but cannot
+establish completion. Candidate-only restrictions and frozen-reduct
 queries do not use this producer closure. The semantic law
 `PossibleFoundedness.stable_sub_possible` explains why the restriction preserves
 answer sets; correspondence to the indexed Rust implementation remains separate.
+
+Candidate-region statistics distinguish producer rechecks (`support_work`) from
+possible-foundedness preparation, closure and publication (`founded_work`). Both
+are included in `reading_work`, and both retain work spent before interruption.
+An omitted closure pass contributes no foundedness work.
 
 Native nonnegative threshold rows also share consequences during
 original-candidate narrowing. Preparation links exact prefixes of grouped

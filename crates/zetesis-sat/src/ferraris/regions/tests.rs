@@ -73,6 +73,27 @@ fn budget(cancellation: &Cancellation, work: u64) -> Budget<'_> {
     }
 }
 
+#[test]
+fn support_attribution_overflow_leaves_counts_unchanged() {
+    for (support_work, founded_work) in [(u64::MAX, 0), (0, u64::MAX)] {
+        let mut counts = RegionCounts {
+            support_work,
+            founded_work,
+            ..RegionCounts::default()
+        };
+        let before = counts;
+        assert_eq!(
+            counts.add(RegionCounts {
+                support_work: 1,
+                founded_work: 1,
+                ..RegionCounts::default()
+            }),
+            Err(Incomplete::CounterOverflow)
+        );
+        assert_eq!(counts, before);
+    }
+}
+
 fn indexing_work(theory: &Theory) -> u64 {
     u64::try_from(theory.nodes().len() + theory.parts().occurrences()).unwrap()
 }

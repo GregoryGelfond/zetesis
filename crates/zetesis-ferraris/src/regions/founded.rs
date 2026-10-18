@@ -2,9 +2,12 @@
 //!
 //! Complete `Producers` coverage is mandatory. Relax a body by keeping its
 //! positive atoms and Boolean chains, replacing nodes already known false by
-//! falsum, and replacing other implications and aggregates by truth. Starting
-//! empty, derive every uncut head of each enabled producer. Held atoms are not
-//! seeds; disjunctive producers do not exclude competing held heads.
+//! falsum, and replacing other implications and aggregates by truth. Exact
+//! positive dependency components identify cyclic heads. Conceptually seed every
+//! other uncut atom, then derive cyclic heads to closure. A boundary Atom node
+//! reads that seed directly; no outside atom or its unrelated postings is queued.
+//! Held cyclic atoms are not seeds. Disjunctive producers never exclude a head
+//! because another head is held.
 //!
 //! Let P be the completed closure and M a stable interpretation compatible with
 //! the original knowledge. For J = M intersect P, body reduct truth in J implies
@@ -17,29 +20,52 @@
 //! complete roots and an upper relaxation, not head-cycle freedom or shifting.
 //! The representation and executable refinement remain proof obligations.
 //!
-//! Each worker caches the positive Boolean cone of complete producer bodies,
-//! bound to the exact original theory. Omitted formula positions stay inactive:
-//! they have no relaxation path to any producer body and cannot affect P. Opaque
-//! bodies remain leaves, and every region's known-false mask remains authoritative.
-//! Preparation initializes node cells once; later passes reset only this cone.
-//! The cache adds body-node/fact-row IDs, not a second incidence graph. Headers
-//! are part of the owning scratch and capacities are included in retained bytes.
+//! Each worker prepares the immutable full positive incidence graph through the
+//! existing postings, ignoring region false masks. Iterative reverse/forward DFS
+//! retains only a cyclic-atom mask, then selects complete bodies of every producer
+//! with a cyclic head. Omitted nodes cannot affect a cyclic-head body; ordinary
+//! support still propagates along acyclic paths. Opaque bodies remain leaves.
+//! Node states, atom cursors, queue and body-node IDs supply the temporary DFS
+//! storage; no second graph or component map is retained. Body-node IDs temporarily
+//! hold at most A+B finishing entries, where B is the full body cone. Their actual
+//! capacity remains charged after selecting the smaller cone. Owner publication
+//! authenticates both the cyclic mask and selected cone only after all phases.
 //!
 //! One pass reuses the original atom/node and flattened-chain incidences and
 //! producer body/head rows. Each atom/node activates at most once. For A atoms,
 //! N nodes, E indexed Boolean incidences, R producers and H head occurrences,
 //! preparation takes O(A + N + E + R + H) work and O(A + N) exclusive scratch.
-//! A later pass initializes only cached body nodes/fact rows; existing atom-node
-//! and parent postings are still visited and charged. All new cuts are
+//! A later pass resets only selected body nodes/fact rows and atom-mask words;
+//! only cyclic atom postings and selected-node parent/producer postings are read,
+//! including irrelevant entries filtered by Outside. Publication reads cyclic
+//! mask words and missing uncut cyclic heads. All actual reads are charged; cuts are
 //! published together before ordinary propagation resumes. A later pass can
 //! exploit newly false bodies; no pass installs a rule or changes the reduct.
-//! Successfully closed region knowledge can omit a later pass while no atom
-//! or node has become false. This conservative invalidation includes held
-//! decisions that indirectly falsify bodies. The authority belongs to inherited
-//! knowledge under its same-original subject contract, never worker scratch.
-//! Unchanged false masks define the same upper-closure operator, and a pass
-//! publishing no cuts has already included every uncut atom. True knowledge
-//! alone changes neither premise; a later false bit requires recomputation.
+//! Successfully closed region knowledge can omit a later pass while no projected
+//! body input has become false. A completed exact-owner projection
+//! distinguishes an outside node from an included but blocked node. Its outside
+//! cells never change during closure; unknown or foreign preparation invalidates
+//! conservatively. This includes held decisions that indirectly falsify bodies.
+//! The completion authority belongs to inherited knowledge under its same-original
+//! subject contract, never worker scratch. An atom with no positive occurrence
+//! in the projection can only remove itself from the completed upper closure:
+//! no projected body reads it, so all remaining uncut atoms stay included. Every
+//! included occurrence still invalidates, even when already blocked. Newly false
+//! opaque bodies invalidate separately after ordinary propagation. With unknown
+//! preparation every false atom invalidates. These rules preserve closedness and
+//! coverage of all uncut atoms, even when the operator loses an output-only head.
+//!
+//! A restricted pass may be weaker than the global least closure: a conceptual
+//! acyclic seed can temporarily support a downstream cycle. Ordinary propagation
+//! and foundedness therefore still alternate to saturation. At that fixed point,
+//! every uncut acyclic head has a nonfalse producer. Boolean saturation makes a
+//! relaxed-false body known false; opaque nonfalse leaves read true. Induction on
+//! the actual SCC condensation order then puts each acyclic head and each cyclic
+//! component into the global least closure. A boundary dependency must come from
+//! an earlier component, or a return path would put it in that cyclic component.
+//! Thus the saturated restriction matches global closure, even when passes differ.
+//! This executable correspondence remains a proof obligation, tested against the
+//! same event engine with every atom forced to be a closure head.
 //!
 //! A cached Kahn pass over the relaxed positive dependencies skips all later
 //! foundedness work when they are acyclic. Local support already suffices there:
@@ -53,11 +79,17 @@ use super::{Narrower, NodeView, Producers, Theory, Work, bit, chain_position, fl
 use std::mem::size_of;
 use zetesis_cpu::Stop;
 
+mod components;
+
 #[cfg(test)]
 mod tests;
 
 #[derive(Clone, Copy, Debug)]
 enum State {
+    /// Not read by any prepared producer body; immutable during closure.
+    Outside,
+    /// Preparation-only reverse DFS cursor; never owner-authorized.
+    Visiting(usize),
     Inactive,
     Awaiting(usize),
     True,
@@ -69,10 +101,12 @@ enum State {
 pub(super) struct Scratch {
     states: Vec<State>,
     atoms: Vec<u64>,
+    /// Exact positive cyclic heads; immutable under the prepared owner.
+    cyclic_atoms: Vec<u64>,
     queue: Vec<usize>,
-    /// Atom indegrees for the once-per-original positive dependency test.
+    /// Kahn indegrees, then atom cursors during exact component preparation.
     dependencies: Vec<usize>,
-    /// Only completed preparation authenticates these body-node/fact rows.
+    /// Authenticates the completed cyclic mask and selected body/fact rows.
     owner: Option<Theory>,
     body_nodes: Vec<usize>,
     fact_rows: Vec<usize>,
@@ -84,7 +118,8 @@ pub(super) struct Scratch {
 impl Scratch {
     pub(super) fn retained_bytes(&self) -> u128 {
         self.states.capacity() as u128 * size_of::<State>() as u128
-            + self.atoms.capacity() as u128 * size_of::<u64>() as u128
+            + (self.atoms.capacity() + self.cyclic_atoms.capacity()) as u128
+                * size_of::<u64>() as u128
             + (self.queue.capacity() as u128
                 + self.dependencies.capacity() as u128
                 + self.body_nodes.capacity() as u128
@@ -92,8 +127,46 @@ impl Scratch {
                 * size_of::<usize>() as u128
     }
 
-    pub(super) fn contains(&self, atom: usize) -> bool {
+    /// Number of packed original-atom words inspected during publication.
+    pub(super) fn publication_words(&self) -> usize {
+        self.cyclic_atoms.len()
+    }
+
+    /// Completed closure omits only these permitted cyclic heads. Noncyclic
+    /// heads are conceptual seeds and are never candidates for publication.
+    pub(super) fn missing_in_word(&self, word: usize, never: u64) -> u64 {
+        self.cyclic_atoms[word] & !self.atoms[word] & !never
+    }
+
+    fn contains(&self, atom: usize) -> bool {
         bit(&self.atoms, atom)
+    }
+
+    /// Every narrowing authenticates cached projection membership before any
+    /// false event runs. Clearing a foreign owner keeps later queries
+    /// conservative until preparation for this subject completes.
+    pub(super) fn forget_foreign(&mut self, theory: &Theory) {
+        if self
+            .owner
+            .as_ref()
+            .is_some_and(|owner| !owner.same_instance(theory))
+        {
+            self.owner = None;
+        }
+    }
+
+    /// Narrowing authenticated this completed projection before processing
+    /// any event. Without it even an atom with no occurrences must invalidate.
+    pub(super) const fn has_projection(&self) -> bool {
+        self.owner.is_some()
+    }
+
+    /// Only completed, authenticated preparation can exclude a node from the
+    /// relaxation's inputs. Included false nodes stay Inactive, not Outside.
+    /// Failed preparation clears owner before changing any state. The caller
+    /// must authenticate the narrowing's theory with `forget_foreign` first.
+    pub(super) fn may_affect_body(&self, node: usize) -> bool {
+        self.owner.is_none() || !matches!(self.states.get(node), Some(State::Outside))
     }
 
     /// An acyclic positive projection cannot strengthen ordinary support. The
@@ -245,7 +318,7 @@ impl Scratch {
             self.passes += 1;
         }
         self.prepare_bodies(theory, index, producers, work)?;
-        self.initialize(theory, index, never, work)?;
+        self.initialize(theory, index, never, atom_never, work)?;
         for position in 0..self.fact_rows.len() {
             work.tick()?;
             let producer = &producers.rules[self.fact_rows[position]];
@@ -276,7 +349,8 @@ impl Scratch {
                     State::Awaiting(remaining) => {
                         self.states[parent] = State::Awaiting(remaining - 1);
                     }
-                    State::Inactive | State::True => {}
+                    State::Outside | State::Inactive | State::True => {}
+                    State::Visiting(_) => return Err(Stop::InvalidProgram),
                 }
             }
             for &producer in &producers.by_body[node] {
@@ -290,11 +364,11 @@ impl Scratch {
         Ok(())
     }
 
-    /// Restrict the relaxation to nodes that can affect a producer body.
+    /// Prepare exact cyclic heads, then complete bodies feeding those heads.
     /// Boolean paths use the same flattened chain leaves as runtime propagation;
     /// opaque implications/aggregates are leaves, just as in the relaxation.
     /// Roots without heads and head-only subformulas cannot contribute to P.
-    /// Existing state cells mark discovery, so no second graph or bitset is held.
+    /// Existing state cells mark discovery; only cyclic head membership adds a mask.
     fn prepare_bodies(
         &mut self,
         theory: &Theory,
@@ -310,19 +384,41 @@ impl Scratch {
             return Ok(());
         }
         self.owner = None;
+        self.prepare_cone(theory, index, producers, false, work)?;
+        self.prepare_components(theory, index, producers, work)?;
+        self.prepare_cone(theory, index, producers, true, work)?;
+        // Components and selected body membership publish together. A failed
+        // phase cannot authorize either classification or inherited reuse.
+        self.owner = Some(theory.clone());
+        Ok(())
+    }
+
+    fn prepare_cone(
+        &mut self,
+        theory: &Theory,
+        index: &Narrower,
+        producers: &Producers,
+        cyclic_only: bool,
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
         self.body_nodes.clear();
         self.fact_rows.clear();
         self.states.clear();
         reserve(&mut self.states, theory.nodes().len())?;
         // This complete initialization occurs once per worker/owner. Subsequent
-        // regions reset only body_nodes; omitted cells remain inactive forever.
+        // regions reset only body_nodes; omitted cells remain Outside forever.
         for _ in 0..theory.nodes().len() {
             work.tick()?;
-            self.states.push(State::Inactive);
+            self.states.push(State::Outside);
         }
         for (row, producer) in producers.rules.iter().enumerate() {
             work.tick()?;
-            if producer.heads.is_empty() {
+            let mut selected = false;
+            for &head in &producer.heads {
+                work.tick()?;
+                selected |= !cyclic_only || bit(&self.cyclic_atoms, head);
+            }
+            if !selected {
                 continue;
             }
             if let Some(body) = producer.body {
@@ -354,14 +450,12 @@ impl Scratch {
                 }
             }
         }
-        // No interrupted prefix can be reused as a complete projection.
-        self.owner = Some(theory.clone());
         Ok(())
     }
 
     fn include_body(&mut self, node: usize, work: &mut Work<'_>) -> Result<(), Stop> {
         work.tick()?;
-        if matches!(self.states[node], State::Inactive) {
+        if matches!(self.states[node], State::Outside) {
             self.body_nodes
                 .try_reserve(1)
                 .map_err(|_| Stop::Allocation)?;
@@ -376,6 +470,7 @@ impl Scratch {
         theory: &Theory,
         index: &Narrower,
         never: &[u64],
+        atom_never: &[u64],
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
         self.atoms.clear();
@@ -398,7 +493,17 @@ impl Scratch {
             } else {
                 match nodes.node(node).map_err(|_| Stop::InvalidProgram)? {
                     NodeView::False => State::Inactive,
-                    NodeView::Atom(_) => State::Awaiting(1),
+                    NodeView::Atom(atom) => {
+                        if bit(&self.cyclic_atoms, atom) {
+                            State::Awaiting(1)
+                        } else if bit(atom_never, atom) {
+                            State::Inactive
+                        } else {
+                            // Preseed only this boundary occurrence. The atom's
+                            // unrelated postings are never queued or scanned.
+                            State::True
+                        }
+                    }
                     NodeView::And(_) | NodeView::Or(_) => {
                         let chain = index.chain_of[node].ok_or(Stop::InvalidProgram)?;
                         let chain = &index.chains[chain_position(chain)];
@@ -433,6 +538,9 @@ impl Scratch {
         atoms: usize,
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
+        if matches!(self.states[node], State::Outside) {
+            return Err(Stop::InvalidProgram);
+        }
         if !matches!(self.states[node], State::True) {
             work.tick()?;
             self.states[node] = State::True;
@@ -447,7 +555,7 @@ impl Scratch {
         atom_never: &[u64],
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
-        if !bit(atom_never, atom) && !self.contains(atom) {
+        if bit(&self.cyclic_atoms, atom) && !bit(atom_never, atom) && !self.contains(atom) {
             work.tick()?;
             self.atoms[atom / 64] |= 1u64 << (atom % 64);
             self.queue.push(atom);

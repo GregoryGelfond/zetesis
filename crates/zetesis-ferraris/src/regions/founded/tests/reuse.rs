@@ -5,6 +5,10 @@ use crate::regions::Width;
 use crate::{Knowledge, NarrowingStatistics};
 use std::collections::BTreeSet;
 
+mod cyclic;
+mod output;
+mod projection;
+
 struct Program {
     owner: Theory,
     index: Narrower,
@@ -193,7 +197,11 @@ fn recycled_siblings_receive_only_parent_authority() {
         recycled.clone_from(&knowledge);
         let before = scratch.founded.passes;
         program.close(&mut child, &mut recycled, &mut scratch);
-        assert!(scratch.founded.passes > before);
+        if held {
+            assert!(scratch.founded.passes > before);
+        } else {
+            assert_eq!(scratch.founded.passes, before);
+        }
         assert_eq!(child.decision(0), Some(!held));
         assert_eq!(child.decision(1), Some(!held));
         assert_eq!(child.decision(2), Some(held));
@@ -230,14 +238,9 @@ fn foreign_worker_scratch_supplies_no_completion() {
     first.close(&mut first_region, &mut recycled, &mut scratch);
     assert!(first_region.is_held(0) && first_region.is_held(1));
     assert_eq!(scratch.founded.passes, before);
-    assert!(
-        scratch
-            .founded
-            .owner
-            .as_ref()
-            .unwrap()
-            .same_instance(&second.owner)
-    );
+    // The new narrowing discards foreign projection authority even though
+    // inherited completion itself survives and needs no foundation pass.
+    assert!(scratch.founded.owner.is_none());
 }
 
 #[test]

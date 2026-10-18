@@ -9,6 +9,20 @@ mod objective_work_tests;
 mod model_policy_tests;
 
 #[test]
+fn region_json_preserves_support_work_components() {
+    let mut statistics = zetesis_sat::RegionSearchStatistics::default();
+    statistics.counts.work = 23;
+    statistics.counts.support_work = 5;
+    statistics.counts.founded_work = 11;
+    let mut output = Buffer::new(4096);
+    region_statistics(&mut output, Some(statistics)).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&output.bytes).unwrap();
+    assert_eq!(value["reading_work"], 23);
+    assert_eq!(value["support_work"], 5);
+    assert_eq!(value["founded_work"], 11);
+}
+
+#[test]
 fn frozen_positive_json_preserves_failed_attempt_work() {
     let statistics = zetesis_sat::Statistics {
         reduct: zetesis_sat::ReductStatistics {

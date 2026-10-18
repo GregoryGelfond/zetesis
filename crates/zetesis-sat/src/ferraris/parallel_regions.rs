@@ -295,6 +295,8 @@ struct Live {
     held: AtomicU64,
     cut: AtomicU64,
     work: AtomicU64,
+    support_work: AtomicU64,
+    founded_work: AtomicU64,
     countermodel_queries: AtomicU64,
     countermodels: AtomicU64,
     /// The workers' phase timings, one pair of counters per phase.
@@ -818,6 +820,16 @@ impl ParallelRegions {
                     .counts
                     .work
                     .saturating_add(Live::read(&live.work)),
+                support_work: self
+                    .statistics
+                    .counts
+                    .support_work
+                    .saturating_add(Live::read(&live.support_work)),
+                founded_work: self
+                    .statistics
+                    .counts
+                    .founded_work
+                    .saturating_add(Live::read(&live.founded_work)),
             },
             producers: self.statistics.producers,
             generator_order: self.statistics.generator_order,
@@ -1726,6 +1738,14 @@ fn step<'a>(
     );
     Live::add(&shared.live.held, after.held - before.held);
     Live::add(&shared.live.cut, after.cut - before.cut);
+    Live::add(
+        &shared.live.support_work,
+        after.support_work - before.support_work,
+    );
+    Live::add(
+        &shared.live.founded_work,
+        after.founded_work - before.founded_work,
+    );
     Live::add(&shared.live.work, after.work - before.work);
     let narrowing = narrowing?;
     if narrowing == Narrowing::Refuted {

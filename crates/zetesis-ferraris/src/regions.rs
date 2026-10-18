@@ -62,6 +62,7 @@ pub use generators::{
 };
 mod masks;
 mod preference;
+mod support;
 mod thresholds;
 mod witnesses;
 use adjacency::Adjacency;
@@ -427,6 +428,11 @@ fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, St
 pub struct NarrowingStatistics {
     /// Charged node reads, root tests, producer checks and threshold operations.
     pub work: u64,
+    /// Producer rechecks, included in `work`, including a refused prefix.
+    pub support_work: u64,
+    /// Possible-foundedness preparation, closure and publication, included in
+    /// `work`. Reusing a completed closure charges no work here.
+    pub founded_work: u64,
     /// Propagation events: nodes and atoms learned and their neighbours
     /// revisited, atoms whose support was rechecked, and threshold rows whose
     /// residual divisibility or changed requirements were checked.
@@ -774,8 +780,19 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>)
 /// The proposers keep the invariant by carrying each region's knowledge
 /// from its parent and by narrowing with the narrower that made it.
 /// A completed possible-foundedness pass is inherited with the knowledge;
-/// any newly false atom or node invalidates it. Thus an unchanged original
-/// relaxation needs no repeat pass, independently of the worker's scratch.
+/// any newly false projected producer-body node invalidates it. An atom with
+/// no positive occurrence in that projection can only remove itself from the
+/// upper closure. An absent or foreign projection invalidates on every false
+/// atom or node. Unchanged relaxation inputs need no repeat pass; worker scratch can
+/// identify an irrelevant node but never establish completion itself.
+///
+/// Support rechecks inherit two monotone producer-row positions per atom,
+/// allocated only after a head with more than two producers is reached. Their
+/// compact width is bounded by the complete producer count. Failed prefixes
+/// stay unavailable in descendants, while surviving endpoints are revalidated;
+/// this never replaces complete coverage for zero or sole support. Initial
+/// allocation is fallible and charged by the narrowing; cloning includes its
+/// owned capacity under the existing infallible clone boundary.
 ///
 /// Cloning owns an independent copy. [`Clone::clone_from`] overwrites every
 /// field, reusing equal-length storage at the same counter width. The six
@@ -900,6 +917,7 @@ impl<C: Count> Known<C> {
     fn retained_bytes(&self) -> u128 {
         self.masks.words.len() as u128 * size_of::<u64>() as u128
             + self.thresholds.len() as u128 * size_of::<thresholds::State>() as u128
+            + self.support_progress.allocated_bytes()
             + [&self.neutral_operands, &self.unknown]
                 .into_iter()
                 .map(Counters::allocated_bytes)
@@ -1369,6 +1387,7 @@ impl Narrower {
         // Whatever an earlier narrowing that refuted or stopped left here
         // belongs to another region; it is discarded before this one reads.
         scratch.prepare(subject.theory.atom_count());
+        scratch.founded.forget_foreign(subject.theory);
         let mut closure = Closure {
             known: known.borrow(),
             lists: scratch,
@@ -1450,10 +1469,12 @@ struct Known<C> {
     /// The roots, falsum and every atom's support have been seeded once;
     /// later closures learn only decisions not yet known.
     seeded: bool,
-    /// A successful possible-foundedness pass published no cuts, and no atom
-    /// or node has become false since. This authority has the same original
+    /// A successful possible-foundedness pass covered every uncut atom, and
+    /// no projected body input has become false since. This has the same original
     /// subject and enclosing-region preconditions as every inherited mask.
     founded_closed: bool,
+    /// Completed unavailable producer prefixes, inherited only by descendants.
+    support_progress: support::Progress,
 }
 
 impl<C: Clone> Clone for Known<C> {
@@ -1465,6 +1486,7 @@ impl<C: Clone> Clone for Known<C> {
             thresholds: self.thresholds.clone(),
             seeded: self.seeded,
             founded_closed: self.founded_closed,
+            support_progress: self.support_progress.clone(),
         }
     }
 
@@ -1475,6 +1497,7 @@ impl<C: Clone> Clone for Known<C> {
         self.thresholds.clone_from(&source.thresholds);
         self.seeded = source.seeded;
         self.founded_closed = source.founded_closed;
+        self.support_progress.clone_from(&source.support_progress);
     }
 }
 
@@ -1658,6 +1681,7 @@ struct KnownMut<'a, C> {
     thresholds: &'a mut [thresholds::State],
     seeded: &'a mut bool,
     founded_closed: &'a mut bool,
+    support_progress: &'a mut support::Progress,
 }
 
 impl<C> Known<C> {
@@ -1675,6 +1699,7 @@ impl<C> Known<C> {
             thresholds: &mut self.thresholds,
             seeded: &mut self.seeded,
             founded_closed: &mut self.founded_closed,
+            support_progress: &mut self.support_progress,
         }
     }
 }
@@ -1734,6 +1759,7 @@ impl<C: Count> Known<C> {
             thresholds: Box::default(),
             seeded: false,
             founded_closed: false,
+            support_progress: support::Progress::default(),
         }
     }
 }
@@ -1752,9 +1778,9 @@ impl<C: Count> Closure<'_, C> {
     fn never(&mut self, index: usize) -> Step {
         let step = learn(self.known.never, self.known.sure, index);
         if step == Step::Changed {
-            // Invalidating every false node conservatively covers the whole
-            // producer-body cone without another membership representation.
-            *self.known.founded_closed = false;
+            if *self.known.founded_closed && self.lists.founded.may_affect_body(index) {
+                *self.known.founded_closed = false;
+            }
             self.lists.nodes.push((index, false));
         }
         step
@@ -1780,12 +1806,18 @@ impl<C: Count> Closure<'_, C> {
         if step != Step::Changed {
             return step;
         }
-        if !value {
+        if !value && !self.lists.founded.has_projection() {
             *self.known.founded_closed = false;
         }
         self.lists.learned.push(atom);
         let mut step = step;
         for &node in &index.atom_nodes[atom] {
+            // A false output-only atom removes only itself from the old upper
+            // closure. Every included occurrence conservatively invalidates,
+            // including an occurrence already blocked before this atom event.
+            if !value && *self.known.founded_closed && self.lists.founded.may_affect_body(node) {
+                *self.known.founded_closed = false;
+            }
             if frozen.is_some_and(|truth| !truth[node]) {
                 continue;
             }
@@ -1931,14 +1963,20 @@ impl<C: Count> Closure<'_, C> {
                 statistics.propagations += 1;
                 let producers =
                     producers.expect("a support recheck is queued only when producers are known");
-                self.recheck(index, producers, atom, work)?
+                let before = work.spent;
+                let result = self.recheck(index, producers, atom, work);
+                statistics.support_work += work.spent - before;
+                result?
             } else if let Some(row) = self.lists.next_residual() {
                 debug_assert!(frozen.is_none(), "only original rows check residual sums");
                 statistics.propagations += 1;
                 self.threshold_residual(index, row, work)?
             } else if let Some(producers) = producers {
                 debug_assert!(frozen.is_none(), "only original subjects have producers");
-                let founded = self.founded(theory, index, producers, work)?;
+                let before = work.spent;
+                let result = self.founded(theory, index, producers, work);
+                statistics.founded_work += work.spent - before;
+                let founded = result?;
                 if founded == Step::Unchanged {
                     return Ok(Step::Changed);
                 }
@@ -1977,9 +2015,16 @@ impl<C: Count> Closure<'_, C> {
             work,
         )?;
         let mut step = Step::Unchanged;
-        for atom in 0..theory.atom_count() {
+        for word in 0..self.lists.founded.publication_words() {
             work.tick()?;
-            if !bit(self.known.atom_never, atom) && !self.lists.founded.contains(atom) {
+            let mut missing = self
+                .lists
+                .founded
+                .missing_in_word(word, self.known.atom_never[word]);
+            while missing != 0 {
+                work.tick()?;
+                let atom = word * 64 + missing.trailing_zeros() as usize;
+                missing &= missing - 1;
                 step = step.join(self.atom(index, Some(producers), None, atom, false));
                 if step == Step::Contradiction {
                     return Ok(step);
@@ -2380,9 +2425,10 @@ impl<C: Count> Closure<'_, C> {
     /// its heads is known to hold. An open atom needs only one possible
     /// supporter to remain open; a held atom with two cannot force a sole
     /// body. Stop at those witnesses and charge only visited producers.
-    /// Conclusions of no or sole support still require the complete scan.
-    /// Later body failure, a competing held head or this atom becoming held
-    /// queues a fresh recheck; no witness is retained between closures.
+    /// Inherited positions skip only prefixes already proved unavailable in
+    /// this region or an ancestor; zero or sole support still requires complete
+    /// coverage. Later body failure, a competing held head or this atom becoming
+    /// held queues a recheck, which revalidates its remaining endpoints.
     fn recheck(
         &mut self,
         index: &Narrower,
@@ -2394,31 +2440,18 @@ impl<C: Count> Closure<'_, C> {
             return Ok(Step::Unchanged);
         }
         let held = bit(self.known.atom_sure, atom);
-        let mut supporters = 0;
-        let mut sole = None;
-        for &producer in &producers.by_head[atom] {
-            work.tick()?;
-            let producer = &producers.rules[producer];
-            let body_impossible = producer
-                .body
-                .is_some_and(|body| bit(self.known.never, body));
-            let other_held = !producer.choice
-                && producer
-                    .heads
-                    .iter()
-                    .any(|&head| head != atom && bit(self.known.atom_sure, head));
-            if !body_impossible && !other_held {
-                supporters += 1;
-                if !held || supporters == 2 {
-                    return Ok(Step::Unchanged);
-                }
-                sole = producer.body;
-            }
-        }
-        Ok(match (supporters, sole) {
-            (0, _) => self.atom(index, Some(producers), None, atom, false),
-            (1, Some(body)) if held => self.sure(body),
-            _ => Step::Unchanged,
+        let support = self.known.support_progress.check(
+            producers,
+            atom,
+            held,
+            self.known.never,
+            self.known.atom_sure,
+            work,
+        )?;
+        Ok(match support {
+            support::Support::Unavailable => self.atom(index, Some(producers), None, atom, false),
+            support::Support::Sole(Some(body)) if held => self.sure(body),
+            support::Support::Sole(_) | support::Support::Sufficient => Step::Unchanged,
         })
     }
 }

@@ -806,6 +806,11 @@ fn candidate_regions(
     if let Some(workers) = regions.workers {
         region_workers(sink, workers)?;
     }
+    writeln!(
+        sink,
+        "  candidate support: producer work={}; possible-foundedness work={} (included in reading work)",
+        counts.support_work, counts.founded_work,
+    )?;
     Ok(())
 }
 
