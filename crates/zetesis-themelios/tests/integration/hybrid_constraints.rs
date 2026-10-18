@@ -889,3 +889,88 @@ fn refused_checks_publish_before_returning() {
 }
 
 mod numeric_totality;
+
+#[test]
+fn late_fact_substitution_preserves_eager_and_streamed_families() {
+    use std::collections::BTreeSet;
+    use zetesis_ferraris::{NodeView, Theory};
+    use zetesis_reference_support::{canonical, exhaustive};
+    use zetesis_sat::{Limits, StableModels};
+
+    let source = include_str!("../fixtures/hybrid-constraints/late-facts.lp");
+    let eager = prepared(source).ground().unwrap();
+    let hybrid = hybrid(source);
+    assert_eq!(hybrid.streamed_templates(), 1);
+    let reduced_body = |theory: &Theory, catalog: &zetesis_core::AtomCatalog| {
+        let names: Vec<_> = catalog.atoms().iter().map(canonical).collect();
+        let atom = |name: &str| names.iter().position(|found| found == name).unwrap();
+        assert!(
+            theory.roots().iter().any(|&root| {
+                let NodeView::Implies(body, head) = theory.view().node(root).unwrap() else {
+                    return false;
+                };
+                theory.view().node(head).unwrap() == NodeView::Atom(atom("q"))
+                    && theory.view().node(body).unwrap() == NodeView::Atom(atom("p"))
+            }),
+            "both late facts must be removed from q's emitted positive body"
+        );
+    };
+    reduced_body(eager.theory(), eager.atom_catalog());
+    reduced_body(hybrid.core_theory(), hybrid.atom_catalog());
+    let expected: BTreeSet<BTreeSet<String>> = [
+        &["d", "e", "r"][..],
+        &["block", "d", "e", "r"][..],
+        &["block", "d", "e", "p", "q"][..],
+    ]
+    .into_iter()
+    .map(|atoms| atoms.iter().map(|atom| (*atom).to_owned()).collect())
+    .collect();
+    let eager_answers = exhaustive(&eager)
+        .into_iter()
+        .map(|(atoms, cost)| {
+            assert!(cost.is_none());
+            atoms
+        })
+        .collect::<BTreeSet<_>>();
+    assert_eq!(eager_answers, expected);
+
+    let cancellation = Cancellation::default();
+    let mut checker = hybrid.checker(ConstraintCheckLimits::default()).unwrap();
+    let mut search = StableModels::new(
+        hybrid.core_theory(),
+        Limits::default(),
+        cancellation.clone(),
+    )
+    .unwrap();
+    let mut answers = BTreeSet::new();
+    let mut candidate_count = 0;
+    for answer in search.by_ref() {
+        let answer = answer.unwrap();
+        let candidate = Model::from_positions(hybrid.atom_catalog(), answer.atoms()).unwrap();
+        candidate_count += 1;
+        if checker.check(&candidate, &cancellation).unwrap() == ConstraintVerdict::Satisfied {
+            answers.insert(
+                answer
+                    .atoms()
+                    .map(|atom| canonical(hybrid.atom_catalog().atoms().at(atom).unwrap()))
+                    .collect::<BTreeSet<_>>(),
+            );
+        }
+    }
+    assert!(search.exhausted());
+    assert_eq!(
+        candidate_count, 4,
+        "every core choice reaches the separate checker"
+    );
+    assert!(checker.statistics().substitutions > 0);
+    assert_eq!(answers, expected);
+
+    // The checker establishes constraint satisfaction, not core membership.
+    // It must still read d from this deliberately fact-omitting interpretation.
+    assert_eq!(
+        checker
+            .check(&model(&hybrid, &["q"]), &cancellation)
+            .unwrap(),
+        ConstraintVerdict::Satisfied,
+    );
+}

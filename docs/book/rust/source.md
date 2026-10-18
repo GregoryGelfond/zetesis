@@ -459,9 +459,11 @@ catalog and, when any constraint is streamed, the closed canonical base with the
 possible-support relations those constraints read; discovery and order indexes
 and every other relation are released at admission. Closing is charged as
 formula work, and its transient peak is admitted against `max_support_bytes`. Producers and constraints with aggregates,
-projected atoms or conditional scopes remain in `core_theory()`. Ordinary
-atom/scalar integrity constraints retain their prepared templates instead of
-complete formula DAGs. This schedule requires indexed joins. Objective programs
+projected atoms or conditional scopes remain in `core_theory()`. A certified
+complete family of pairwise exclusions also becomes a compact native constraint
+in that core. Other ordinary atom/scalar integrity constraints retain their
+prepared templates instead of complete formula DAGs. This schedule requires
+indexed joins. Objective programs
 are prepared by the same operation as eager grounding; solving checks the
 original constraints before scoring an answer. The existing `ground()` methods
 remain eager.
@@ -587,9 +589,10 @@ mapping once consequence checking needs it. The existing source, scalar and
 support ceilings still apply;
 they are not a single aggregate live-memory or RSS bound. Core atoms, nodes and
 roots retain the formula-theory ceilings, including coherence and unsupported
-atom guards. `streamed_templates()` counts lowered templates, including pool
-alternatives, and `streamed_instances()` counts scalar-selected instances visited
-during admission; neither is a retained instance store.
+atom guards. `streamed_templates()` counts the surviving streamed templates,
+including pool alternatives, and `streamed_instances()` counts their
+scalar-selected instances visited during admission. Fully replaced native
+constraints contribute to neither count; neither is a retained instance store.
 
 `checker(limits)` gives each check its own work and substitution limits, plus a
 byte allowance for structural capture-delta capacity growth within each join:

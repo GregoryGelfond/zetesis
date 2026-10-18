@@ -455,8 +455,8 @@ impl Shared {
     fn publish_split(
         &self,
         index: usize,
-        held: Entry,
-        cut: Entry,
+        older: Entry,
+        next: Entry,
         reserve: impl FnOnce(&mut VecDeque<Entry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
         let mut queue = self.queue(index);
@@ -464,8 +464,8 @@ impl Shared {
         // The parent is still outstanding. Count its net gain before making
         // either child visible; the reserved pushes cannot allocate.
         self.termination.grow();
-        queue.push_back(held);
-        queue.push_back(cut);
+        queue.push_back(older);
+        queue.push_back(next);
         // Release the deque before taking the gate: a waiter holds the gate
         // while it tries the deques, and never waits for a queue lock.
         drop(queue);
@@ -680,7 +680,8 @@ impl ParallelRegions {
         budget: &mut Budget<'_>,
     ) -> Result<Self, Incomplete> {
         let delay = engagement.delay(workers.get());
-        let super::regions::Opened { parts, statistics } = super::regions::open(theory, budget)?;
+        let super::regions::Opened { parts, statistics } =
+            super::regions::open(theory, limits.max_reduct_bytes, budget)?;
         let (sender, receiver) = sync_channel(workers.get() * CHANNEL_SLACK);
         let root = (
             Region::all_open(theory.atom_count()),
@@ -819,6 +820,7 @@ impl ParallelRegions {
                     .saturating_add(Live::read(&live.work)),
             },
             producers: self.statistics.producers,
+            generator_order: self.statistics.generator_order,
             frontier: None,
             workers: Some(RegionWorkerStatistics {
                 configured: self.shared.workers,
@@ -1343,6 +1345,22 @@ fn merge_membership(into: &mut Statistics, from: &Statistics) -> Result<(), Inco
         Ok(())
     }
     add(&mut into.reduct.original_work, from.reduct.original_work)?;
+    add(
+        &mut into.reduct.frozen_positive_attempts,
+        from.reduct.frozen_positive_attempts,
+    )?;
+    add(
+        &mut into.reduct.frozen_positive_completed,
+        from.reduct.frozen_positive_completed,
+    )?;
+    add(
+        &mut into.reduct.frozen_positive_preparation_work,
+        from.reduct.frozen_positive_preparation_work,
+    )?;
+    add(
+        &mut into.reduct.frozen_positive_work,
+        from.reduct.frozen_positive_work,
+    )?;
     into.reduct.peak_workspace_bytes = into
         .reduct
         .peak_workspace_bytes
@@ -1734,8 +1752,8 @@ fn step<'a>(
     // Each child carries its own copy of the knowledge, linear in the theory:
     // what the parent learned holds in both.
     let (cut, held) = region.split(atom);
-    let held = (held, workspaces.copy_knowledge(&knowledge));
-    shared.publish_split(index, held, (cut, knowledge), reserve_regions)?;
+    let cut = (cut, workspaces.copy_knowledge(&knowledge));
+    shared.publish_split(index, cut, (held, knowledge), reserve_regions)?;
     Ok(Stepped::Split)
 }
 

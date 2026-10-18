@@ -55,8 +55,11 @@ fn a_bound_does_not_support_original_atoms() {
             Node::atom(1),
             Node::implies(0, 1),
             Node::implies(1, 0),
+            // The asserted conjunction preserves both roots while selecting
+            // general membership, beyond optional positive certificates.
+            Node::and_pair([2, 3]),
         ],
-        vec![2, 3],
+        vec![4],
     );
     for route in ROUTES {
         let mut search = route.search(&original, Cancellation::default());

@@ -207,7 +207,7 @@ fn source_failure_survives_checker_drop_panic() {
 
 #[test]
 fn proposals_split_on_the_original_choice_head_first() {
-    // The frontier is LIFO and holds each split's held sibling. Splitting the
+    // The frontier is LIFO and holds each split's cut sibling. Splitting the
     // root on the choice head decides it in every pending region; splitting on
     // a loop atom first would leave the root's sibling with the choice open.
     let theory = crate::ferraris::fixtures::choice_beside_a_loop();
@@ -221,6 +221,7 @@ fn proposals_split_on_the_original_choice_head_first() {
     let mut proposals = super::RegionProposals::new(
         &theory,
         NonZeroUsize::new(1).unwrap(),
+        u64::MAX,
         u64::MAX,
         &mut budget,
     )

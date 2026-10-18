@@ -127,12 +127,12 @@ fn relational_ordering_supplies_no_integer_certificate() {
 }
 
 #[test]
-fn generated_equalities_keep_their_original_route() {
+fn certified_generated_equalities_use_expression_postings() {
     let reference = controlled(true, || ground(testing::prepare(GENERATED), None, None)).unwrap();
     let receipts = Receipts::default();
     let selected = ground(testing::prepare(GENERATED), Some(&receipts), None).unwrap();
     assert_same_program(&reference, &selected);
-    assert_eq!(receipts.emission.get().expression_key_probes, Some(0));
+    assert_eq!(receipts.emission.get().expression_key_probes, Some(1));
 }
 
 #[test]

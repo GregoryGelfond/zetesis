@@ -8,20 +8,21 @@ pub(crate) mod testing;
 pub(crate) use context::{Context, GroundingWork};
 pub(crate) mod components;
 mod publication;
+mod scalar_selection;
 mod selection;
 pub(crate) mod sort;
 mod storage;
 pub(crate) use computation::Computation;
 pub(crate) use publication::Publication;
-pub(crate) use selection::SourceSelection;
+pub(crate) use selection::{SourceBatch, SourceSelection};
 pub(crate) use storage::{
     StorageLease, growth_capacity, growth_target, reserve, reserve_exact, reserve_exact_scoped,
 };
 mod accounting;
+mod expression_keys;
 mod generated;
 mod heads;
 mod integer_comparisons;
-mod expression_keys;
 pub(crate) use heads::RowHead;
 mod observation;
 mod term_selection;
@@ -854,6 +855,7 @@ fn derive_rule<'source>(
 ) -> Result<(), FormulaFailure> {
     // Every cursor belongs to this immutable round, including each first-new
     // variant. Family-evidence and external-check cursors never enter here.
+    outer.select_scalar_body(rule, computation, limits, counters)?;
     outer.select_numeric_probes(rule, limits, counters)?;
     if witnesses::derive(rule, outer, computation, limits, budget, counters)? {
         return Ok(());
@@ -1103,6 +1105,7 @@ enum Traversal {
 /// borrow a necessary positive-row filter; it never supplies family evidence.
 pub(crate) struct Join<'a, 'source> {
     bindings: Option<&'a crate::formula_assignment_plan::Plan>,
+    scalar_selection: scalar_selection::Preparation,
     literals: Ir<'a, 'source, [LiteralIr]>,
     generated: bool,
     /// The certificate of the last completed row, taken by its consumer.
@@ -1483,6 +1486,104 @@ impl<'a, 'source> Join<'a, 'source> {
         Ok(())
     }
 
+    /// A full-column proof is local to this immutable support snapshot. It
+    /// permits selected support production but never exports family evidence.
+    fn select_scalar_body(
+        &mut self,
+        rule: &'a crate::formula_ir::RuleIr,
+        computation: &mut Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+    ) -> Result<(), FormulaFailure> {
+        if !self.generated || self.certified_total || self.source_evidence {
+            return Ok(());
+        }
+        counters.charge_work(rule.body.len() as u128, limits, rule.location)?;
+        if !rule.body.iter().any(|literal| {
+            matches!(literal, LiteralIr::Bind { target, .. } if *target < rule.body_variables)
+        }) {
+            return Ok(());
+        }
+        if self.projections.total_body(
+            rule,
+            self.support,
+            &mut self.evaluation,
+            Context::new(computation, limits, counters, rule.location),
+        )? {
+            self.certified_total = true;
+            self.coverage = Coverage::Selected;
+        }
+        self.evaluation.clear_zero_divisor();
+        Ok(())
+    }
+
+    /// Install the selected view once, before any row or probe exists. Reorder
+    /// the same source occurrences; delta ownership remains by original index.
+    fn prepare_scalar_comparisons(
+        &mut self,
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
+        budget: &mut Budget,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        if !self.scalar_selection.is_pending()
+            || !self.certified_total
+            || !self.generated
+            || self.source_evidence
+        {
+            return Ok(());
+        }
+        self.scalar_selection = scalar_selection::Preparation::Unavailable;
+        let Some(view) = crate::formula_binding_plan::expanded::View::prepare(
+            self.literals.get(),
+            self.head_slots.start,
+            Context::new(computation, limits, counters, location),
+        )?
+        else {
+            return Ok(());
+        };
+        let domains = scalar_selection::Domains::prepare(
+            &self.plan.patterns,
+            self.head_slots.start,
+            self.support,
+            Context::new(computation, limits, counters, location),
+        )?;
+        let prefix = Binding::new(computation, limits, counters, location)?;
+        let mut admit =
+            |capacity| computation.preparation_capacity(capacity, limits, counters, location);
+        let plan = order::Plan::with_comparisons(
+            self.literals.get(),
+            &prefix,
+            self.values.len(),
+            (
+                order::SourceRows {
+                    relations: self.support,
+                    pivot: self.delta,
+                },
+                Some(&view),
+            ),
+            budget,
+            location,
+            Some(&mut admit),
+        )?;
+        let previous = self.lease.bytes();
+        self.plan = JoinPlan::Owned(plan);
+        self.scalar_selection = scalar_selection::Preparation::Ready {
+            comparisons: view,
+            domains,
+        };
+        self.lease.observe(self.storage_bytes(), location)?;
+        computation.storage_observed(
+            &self.lease,
+            previous,
+            self.storage_header(),
+            limits,
+            counters,
+            location,
+        )
+    }
+
     /// After support completion and source-family validation, cover the full
     /// positive column domains before ordinary comparisons may select rows.
     /// Hybrid capture performs this same attempt with append-capable terms
@@ -1496,7 +1597,9 @@ impl<'a, 'source> Join<'a, 'source> {
         limits: &FormulaLimits,
         counters: &mut Counters,
     ) -> Result<bool, FormulaFailure> {
-        if (self.coverage != Coverage::Complete && !projections::needs_totality(&rule.body))
+        if (self.coverage != Coverage::Complete
+            && !projections::needs_totality(&rule.body)
+            && !self.generated)
             || self.source_evidence
             || self.delta.is_some()
         {
@@ -1542,11 +1645,7 @@ impl<'a, 'source> Join<'a, 'source> {
         counters: &mut Counters,
     ) -> Result<bool, FormulaFailure> {
         counters.work(limits, rule.location)?;
-        if self.source_evidence
-            || self.delta.is_some()
-            || !matches!(rule.head, HeadIr::Normal(_))
-            || rule.variables != rule.body_variables
-        {
+        if self.source_evidence || self.delta.is_some() || !matches!(rule.head, HeadIr::Normal(_)) {
             return Ok(false);
         }
         if !std::ptr::eq(self.literals.get(), rule.body.as_slice()) {
@@ -1556,7 +1655,7 @@ impl<'a, 'source> Join<'a, 'source> {
             });
         }
         if !projections::supports_column_totality(rule, limits, counters)?
-            || !keys::covered(
+            || !keys::covered_family(
                 rule,
                 &self.plan,
                 &mut Context::new(&*computation, limits, counters, rule.location),
@@ -1564,7 +1663,7 @@ impl<'a, 'source> Join<'a, 'source> {
         {
             return Ok(false);
         }
-        let total = self.projections.total_body(
+        let total = self.projections.total_family(
             rule,
             self.support,
             &mut self.evaluation,
@@ -1902,6 +2001,7 @@ impl<'a, 'source> Join<'a, 'source> {
         values.extend_scope(variables, computation, limits, counters, location)?;
         let mut join = Self {
             bindings: None,
+            scalar_selection: scalar_selection::Preparation::Pending,
             literals: Ir::Temporary(literals),
             generated: literals
                 .iter()
@@ -1997,6 +2097,7 @@ impl<'a, 'source> Join<'a, 'source> {
             - size_of::<Binding>()
             - size_of::<Evaluation>()
             - self.projections.leased_header()
+            - self.scalar_selection.leased_header()
             - self
                 .structural_query
                 .as_ref()
@@ -2623,6 +2724,7 @@ impl<'a, 'source> Join<'a, 'source> {
                     location,
                 },
         } = context;
+        self.prepare_scalar_comparisons(computation, limits, budget, counters, location)?;
         self.resume(limits, counters, location)?;
         self.comparisons = Comparisons::Deferred;
         if self.traversal == Traversal::Finished {
@@ -3038,33 +3140,55 @@ impl<'a, 'source> Join<'a, 'source> {
         if self.coverage == Coverage::Complete {
             return Ok(true);
         }
+        if !self.scalar_selection.permits(
+            self.literals.get(),
+            &self.values,
+            Context::new(&*computation, limits, counters, location),
+        )? {
+            self.verdicts[self.depth] = false;
+            return Ok(false);
+        }
         let depth = self.depth;
         let mut passes = depth == 0 || self.verdicts[depth - 1];
         for index in self.plan.decisions.decided_at(depth) {
-            let comparison =
-                comparison(&self.literals[index]).expect("a decided literal is a comparison");
-            let decided = integer_comparisons::decide(
-                comparison,
-                &self.values,
-                Context::new(&*computation, limits, counters, location),
-            )?;
-            let ([left, right], relation) = comparison.operands();
-            let compared = if let Some(holds) = decided {
-                Ok(holds)
-            } else if self.certified_total {
-                self.projections.compare(
-                    index,
-                    ([left, right], relation),
+            let compared = if let Some(operands) = self
+                .scalar_selection
+                .comparisons()
+                .and_then(|view| view.operands(index))
+            {
+                // The selected operands have their own DAG. Original unary
+                // projection descriptors name generated slots and cannot serve it.
+                self.evaluation.source_comparison(
+                    operands,
                     &self.values,
-                    &mut self.evaluation,
                     Context::new(computation, limits, counters, location),
                 )
             } else {
-                self.evaluation.source_comparison(
-                    ([left, right], relation),
+                let comparison =
+                    comparison(&self.literals[index]).expect("a decided literal is a comparison");
+                let decided = integer_comparisons::decide(
+                    comparison,
                     &self.values,
-                    Context::new(computation, limits, counters, location),
-                )
+                    Context::new(&*computation, limits, counters, location),
+                )?;
+                let ([left, right], relation) = comparison.operands();
+                if let Some(holds) = decided {
+                    Ok(holds)
+                } else if self.certified_total {
+                    self.projections.compare(
+                        index,
+                        ([left, right], relation),
+                        &self.values,
+                        &mut self.evaluation,
+                        Context::new(computation, limits, counters, location),
+                    )
+                } else {
+                    self.evaluation.source_comparison(
+                        ([left, right], relation),
+                        &self.values,
+                        Context::new(computation, limits, counters, location),
+                    )
+                }
             };
             match compared {
                 Ok(false) if self.certified_total => {

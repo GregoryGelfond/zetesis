@@ -1,5 +1,6 @@
 //! Real region traversals must borrow the streamed core's prepared rows.
 
+use std::collections::BTreeSet;
 use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -94,10 +95,18 @@ impl RegionFilterWorker for Worker<'_> {
     }
 }
 
+// The repeated condition adds no restriction: p(X) already entails not not
+// p(X). Its signed source occurrence keeps the complete six-row constraint
+// streamed, so these tests exercise checker selection loans rather than native
+// pair-exclusion materialization.
+const STREAMED_AT_MOST_ONE: &str = "{p(1..4)}. :-p(X),p(Y),X<Y,not not p(X).";
+
 #[test]
 fn producer_rounds_borrow_the_core_selection() {
     for count in [2, 4] {
-        let filter = Arc::new(Filter::new("{p(1..4)}. :-p(X),p(Y),X<Y."));
+        let filter = Arc::new(Filter::new(STREAMED_AT_MOST_ONE));
+        assert_eq!(filter.owner.streamed_templates(), 1);
+        assert_eq!(filter.owner.streamed_instances(), 6);
         let mut search = StableModels::with_region_producers(
             filter.owner.core_theory(),
             NonZeroUsize::new(count).unwrap(),
@@ -130,6 +139,13 @@ fn producer_rounds_borrow_the_core_selection() {
         }
         assert!(search.exhausted());
         assert_eq!(models.len(), 5);
+        assert_eq!(
+            models
+                .iter()
+                .map(|model| model.atoms().collect::<Vec<_>>())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([vec![], vec![0], vec![1], vec![2], vec![3]])
+        );
         assert!(search.batch_statistics().checker_calls >= 3);
         assert!(
             (1..=count).contains(&filter.workers.load(Ordering::Relaxed)),
@@ -177,7 +193,9 @@ fn positive_checks_borrow_the_core_selection() {
 
 #[test]
 fn persistent_workers_borrow_the_core_selection() {
-    let filter = Arc::new(Filter::new("{p(1..4)}. :-p(X),p(Y),X<Y."));
+    let filter = Arc::new(Filter::new(STREAMED_AT_MOST_ONE));
+    assert_eq!(filter.owner.streamed_templates(), 1);
+    assert_eq!(filter.owner.streamed_instances(), 6);
     // A short search need not distribute work to every thread. Two traversals
     // guarantee distinct checkers without assuming a particular schedule. The
     // workers start at the first pull: under the default engagement a walk
@@ -194,6 +212,13 @@ fn persistent_workers_borrow_the_core_selection() {
         search.set_region_filter(filter.clone()).unwrap();
         let models: Vec<_> = search.by_ref().map(Result::unwrap).collect();
         assert_eq!(models.len(), 5);
+        assert_eq!(
+            models
+                .iter()
+                .map(|model| model.atoms().collect::<Vec<_>>())
+                .collect::<BTreeSet<_>>(),
+            BTreeSet::from([vec![], vec![0], vec![1], vec![2], vec![3]])
+        );
         assert!(search.exhausted());
         assert!(matches!(
             search

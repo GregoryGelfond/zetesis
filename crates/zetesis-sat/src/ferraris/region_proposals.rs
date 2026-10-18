@@ -177,9 +177,11 @@ impl RegionProposals {
         theory: &Theory,
         workers: NonZeroUsize,
         native_byte_limit: u64,
+        order_byte_limit: u64,
         budget: &mut Budget<'_>,
     ) -> Result<Self, Incomplete> {
-        let regions::Opened { parts, statistics } = regions::open(theory, budget)?;
+        let regions::Opened { parts, statistics } =
+            regions::open(theory, order_byte_limit, budget)?;
         let pool = rayon::ThreadPoolBuilder::new()
             .num_threads(workers.get())
             .thread_name(|index| format!("zetesis-proposal-{index}"))
@@ -513,8 +515,8 @@ impl<'filter> Round<'_, 'filter> {
                 Ok(Step::Candidate(candidate)) => state.output.push(candidate),
                 Ok(Step::Split(cut, held)) => {
                     if state.pending.try_reserve(2).is_ok() {
-                        state.pending.push(held);
                         state.pending.push(cut);
+                        state.pending.push(held);
                     } else {
                         state.stopped.get_or_insert(Incomplete::Allocation);
                     }

@@ -17,6 +17,16 @@ pub(crate) trait Quota {
     /// a grant never passes the ceiling, so the operation is refused at the
     /// read [`Self::work`] would refuse.
     fn reserve_up_to(&self, spent: u64, ceiling: u64, wanted: u64) -> Result<u64, Incomplete>;
+    /// Run one bounded operation under a whole-operation reservation. The
+    /// operation returns its admitted work even on refusal. A shared quota
+    /// settles its current lease before waiting and refunds unused permits.
+    fn with_reservation<T>(
+        &mut self,
+        spent: u64,
+        ceiling: u64,
+        wanted: u64,
+        run: impl FnOnce(u64) -> (T, u64),
+    ) -> Result<(T, u64), Incomplete>;
     /// Take back permits granted by [`Self::reserve_up_to`] and not spent.
     fn refund(&self, unspent: u64);
 }
@@ -56,6 +66,21 @@ impl Quota for LocalQuota {
         }
     }
 
+    fn with_reservation<T>(
+        &mut self,
+        spent: u64,
+        ceiling: u64,
+        wanted: u64,
+        run: impl FnOnce(u64) -> (T, u64),
+    ) -> Result<(T, u64), Incomplete> {
+        let granted = self.reserve_up_to(spent, ceiling, wanted)?;
+        let (result, used) = run(granted);
+        if used > granted {
+            return Err(Incomplete::InvalidWitness);
+        }
+        Ok((result, used))
+    }
+
     // The ledger is the budget's own count, which the caller lowers.
     fn refund(&self, _unspent: u64) {}
 }
@@ -82,6 +107,16 @@ impl<Q: Quota> Quota for BoundedQuota<Q> {
         self.0.reserve_up_to(spent, ceiling, wanted)
     }
 
+    fn with_reservation<T>(
+        &mut self,
+        spent: u64,
+        ceiling: u64,
+        wanted: u64,
+        run: impl FnOnce(u64) -> (T, u64),
+    ) -> Result<(T, u64), Incomplete> {
+        self.0.with_reservation(spent, ceiling, wanted, run)
+    }
+
     fn refund(&self, unspent: u64) {
         self.0.refund(unspent);
     }
@@ -104,6 +139,23 @@ impl Quota for WorkLease<'_> {
 
     fn reserve_up_to(&self, _spent: u64, _ceiling: u64, wanted: u64) -> Result<u64, Incomplete> {
         self.take_up_to(wanted)
+    }
+
+    fn with_reservation<T>(
+        &mut self,
+        _spent: u64,
+        _ceiling: u64,
+        wanted: u64,
+        run: impl FnOnce(u64) -> (T, u64),
+    ) -> Result<(T, u64), Incomplete> {
+        let reservation = self.reserve(wanted)?;
+        let granted = reservation.allowance();
+        if granted == 0 {
+            return Err(Incomplete::WorkLimit);
+        }
+        let (result, used) = run(granted);
+        reservation.finish(used)?;
+        Ok((result, used))
     }
 
     fn refund(&self, unspent: u64) {

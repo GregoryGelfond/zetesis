@@ -892,6 +892,15 @@ fn search_statistics(
     region_statistics(out, stats.regions)?;
     out.text(",\"region_filter\":")?;
     region_filter_statistics(out, stats.region_filter)?;
+    out.text(",\"frozen_positive\":{\"attempts\":")?;
+    out.text(&stats.reduct.frozen_positive_attempts.to_string())?;
+    out.number_field("completed", stats.reduct.frozen_positive_completed)?;
+    out.number_field(
+        "preparation_work",
+        stats.reduct.frozen_positive_preparation_work,
+    )?;
+    out.number_field("work", stats.reduct.frozen_positive_work)?;
+    out.text("}")?;
     out.text(",\"reduct_query_regions\":{\"visited\":")?;
     out.text(&stats.reduct.regions.regions.to_string())?;
     out.number_field("refuted", stats.reduct.regions.refuted)?;
@@ -996,6 +1005,13 @@ fn region_statistics(
         "not_applicable"
     })?;
     out.number_field("reading_work", counts.work)?;
+    let generator = stats.generator_order;
+    out.text(",\"generator_order\":{\"status\":")?;
+    out.string(generator.status.label())?;
+    out.number_field("work", generator.work)?;
+    out.number_field("peak_bytes", generator.peak_bytes)?;
+    out.number_field("retained_bytes", generator.retained_bytes)?;
+    out.text("}")?;
     out.text(",\"frontier\":")?;
     frontier_statistics(out, stats.frontier)?;
     out.text(",\"workers\":")?;

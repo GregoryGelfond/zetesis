@@ -315,6 +315,9 @@ impl NarrowingQuota for Quota {
 fn refused_body_propagation_keeps_exact_work_receipts() {
     let theory = aliased_bodies();
     let (index, producers) = prepare(&theory);
+    // Compare every refusal against the same cold classification premise as
+    // the complete baseline, even after a retry populates its own cache.
+    let cold_producers = producers.clone();
     let mut input = Region::all_open(4);
     input.hold(0);
     let mut expected = input.clone();
@@ -333,6 +336,7 @@ fn refused_body_propagation_keeps_exact_work_receipts() {
     assert_eq!(expected.decision(1), Some(false));
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for limit in 0..statistics.work {
+            let producers = cold_producers.clone();
             let mut region = input.clone();
             let mut known = index.knowledge();
             let mut quota = Quota {

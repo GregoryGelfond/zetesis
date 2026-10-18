@@ -26,6 +26,14 @@ pub struct ReductStatistics {
     /// Actual original-node/root evaluation work of entered prepared queries.
     /// Proposal and independent returned-witness evaluations are separate calls.
     pub original_work: u64,
+    /// Entered attempts to classify and close a candidate's positive reduct.
+    pub frozen_positive_attempts: u64,
+    /// Attempts completed by positive closure, without a subset-region query.
+    pub frozen_positive_completed: u64,
+    /// Frozen-positive incidence construction, included in frozen-positive work.
+    pub frozen_positive_preparation_work: u64,
+    /// Charged frozen-positive preparation and checking; included in search work.
+    pub frozen_positive_work: u64,
     /// Parameter-copy work, included in cumulative SAT work.
     pub parameter_work: u64,
     /// Largest actual single-worker retained capacity observed on query return,
@@ -63,9 +71,19 @@ pub struct ReductWorkspace {
     evaluation: EvaluationWorkspace,
     /// The worklists every region query of this workspace reuses.
     narrowing: zetesis_ferraris::NarrowingScratch,
+    positive: zetesis_ferraris::FrozenPositiveWorkspace,
     parameters: Vec<Literal>,
     search: search::PreparedWorkspace,
     owner: Weak<super::Data>,
+}
+
+/// Disjoint original truth and query scratch, with the other retained bytes
+/// charged before an optional frozen-positive workspace is allowed to grow.
+pub(crate) struct RegionEvaluation<'a> {
+    pub(crate) truth: FormulaEvaluation<'a>,
+    pub(crate) narrowing: &'a mut zetesis_ferraris::NarrowingScratch,
+    pub(crate) positive: &'a mut zetesis_ferraris::FrozenPositiveWorkspace,
+    pub(crate) positive_other_bytes: u128,
 }
 
 impl ReductWorkspace {
@@ -79,17 +97,11 @@ impl ReductWorkspace {
         limits: Limits,
         cancellation: &Cancellation,
         statistics: &mut Statistics,
-    ) -> Result<
-        (
-            FormulaEvaluation<'a>,
-            &'a mut zetesis_ferraris::NarrowingScratch,
-        ),
-        Incomplete,
-    > {
+    ) -> Result<RegionEvaluation<'a>, Incomplete> {
         let max_bytes = limits.max_reduct_bytes;
         bound(self.retained_bytes(), max_bytes)?;
         let other_bytes = self.retained_bytes() - self.evaluation.retained_bytes();
-        let (truth, _) = evaluate_truth(
+        let (truth, evaluation_bytes) = evaluate_truth(
             &mut self.evaluation,
             other_bytes,
             max_bytes,
@@ -98,7 +110,13 @@ impl ReductWorkspace {
             cancellation,
             statistics,
         )?;
-        Ok((truth, &mut self.narrowing))
+        let positive_other_bytes = other_bytes - self.positive.retained_bytes() + evaluation_bytes;
+        Ok(RegionEvaluation {
+            truth,
+            narrowing: &mut self.narrowing,
+            positive: &mut self.positive,
+            positive_other_bytes,
+        })
     }
 
     /// Record the capacity retained by a region query, including a failed
@@ -132,7 +150,9 @@ impl ReductWorkspace {
             size_of::<EvaluationWorkspace>() as u128
                 + prepared.theory().nodes().len() as u128 * size_of::<bool>() as u128,
         );
+        let query_scratch = self.narrowing.retained_bytes() + self.positive.retained_bytes();
         let other = header_bytes()
+            + query_scratch
             + self.parameters.capacity().max(count) as u128 * size_of::<Literal>() as u128
             + self.search.required_bytes(variables, clauses);
         bound(other + evaluation, max_bytes)?;
@@ -150,7 +170,7 @@ impl ReductWorkspace {
             &mut self.search,
             &mut self.parameters,
             &prepared.0,
-            header_bytes() + self.evaluation.retained_bytes(),
+            header_bytes() + self.evaluation.retained_bytes() + query_scratch,
             max_bytes,
         )
     }
@@ -163,6 +183,7 @@ impl ReductWorkspace {
             + self.parameters.capacity() as u128 * size_of::<Literal>() as u128
             + self.search.retained_bytes()
             + self.narrowing.retained_bytes()
+            + self.positive.retained_bytes()
     }
 }
 
@@ -256,7 +277,10 @@ impl PreparedReduct {
         }
         let started = timing::start(statistics.phase_timings.as_ref());
         let result = (|| {
-            let base = header_bytes() + evaluated_bytes;
+            let base = header_bytes()
+                + evaluated_bytes
+                + workspace.narrowing.retained_bytes()
+                + workspace.positive.retained_bytes();
             let prepared = &self.0;
             reserve_query(
                 &mut workspace.search,
@@ -376,6 +400,7 @@ fn header_bytes() -> u128 {
     // Nested workspace methods already include their headers.
     (size_of::<ReductWorkspace>()
         - size_of::<EvaluationWorkspace>()
+        - size_of::<zetesis_ferraris::FrozenPositiveWorkspace>()
         - size_of::<search::PreparedWorkspace>()) as u128
 }
 

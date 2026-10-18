@@ -109,11 +109,11 @@ fn monotone_family() -> Family {
 #[test]
 fn hybrid_admits_the_retained_root_ceiling() {
     let core = eager(CORE, &limits()).unwrap();
-    // Six facts and six disjunctions contribute twelve ordinary roots. The
-    // facts retain six guards; each p(X)/q(X) pair shares one necessary d(X)
-    // condition, contributing six more guards. Eager constraints still add
-    // fifteen roots, exceeding 32; the hybrid retains only this complete core.
-    assert_eq!(core.theory().roots().len(), 12 + 6 + 6);
+    // Six facts and six disjunctions contribute twelve ordinary roots. After
+    // fact substitution each atom retains its own support guard: six facts
+    // and twelve alternatives. Eager constraints still add fifteen roots,
+    // exceeding 32; the hybrid retains only this complete core.
+    assert_eq!(core.theory().roots().len(), 12 + 6 + 12);
     let failure = eager(MONOTONE, &limits()).unwrap_err();
     assert!(matches!(
         failure,

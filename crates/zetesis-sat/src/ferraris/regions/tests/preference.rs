@@ -291,13 +291,14 @@ fn original_choice_heads_outrank_a_bounds_busier_atom() {
 
 #[test]
 fn the_region_search_settles_the_choice_before_the_loop() {
-    // Cut branches come first. Splitting on the choice head finishes both loop
-    // answers without a0 before either with it; splitting on a loop atom first
-    // would propose {a0, a2} second.
+    // Held branches come first. Splitting on the choice head finishes both
+    // loop answers with a0 before either without it. The order of the two
+    // loop alternatives is independent of this choice-priority proposition.
     let theory = crate::ferraris::fixtures::choice_beside_a_loop();
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, u64::MAX);
-    let mut search = super::super::RegionSearch::new(&theory, u64::MAX, &mut budget).unwrap();
+    let mut search =
+        super::super::RegionSearch::new(&theory, u64::MAX, u64::MAX, &mut budget).unwrap();
     let mut owner = crate::ferraris::original_index::OriginalIndex::new(&theory, u64::MAX);
     let index = owner.ensure(&cancellation, |_| Ok(())).unwrap();
     let mut proposed = Vec::new();
@@ -308,5 +309,56 @@ fn the_region_search_settles_the_choice_before_the_loop() {
             .unwrap();
         proposed.push(leaf.atoms().collect::<Vec<_>>());
     }
-    assert_eq!(proposed, [vec![2], vec![1]]);
+    proposed.sort();
+    assert_eq!(proposed, [vec![0, 1], vec![0, 2]]);
+}
+
+#[test]
+fn active_restrictions_keep_primary_preference() {
+    // Choices form b -> a -> c, opposing each restriction's preferred atom.
+    let original = theory(
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::falsum(),
+            Node::implies(0, 3),
+            Node::or_pair([0, 4]),
+            Node::implies(1, 3),
+            Node::or_pair([1, 6]),
+            Node::implies(2, 3),
+            Node::or_pair([2, 8]),
+            Node::implies(1, 5),
+            Node::implies(0, 9),
+        ],
+        vec![7, 10, 11],
+    );
+    let cancellation = Cancellation::default();
+    let mut opening = budget(&cancellation, u64::MAX);
+    let opened = super::super::open(&original, u64::MAX, &mut opening).unwrap();
+    assert!(opened.parts.subject(&original).generator_order().is_some());
+    let restriction = Conditions {
+        permanent: vec![permanent(prefer_a())],
+        bound: None,
+    };
+    let bound = Conditions {
+        permanent: vec![permanent(prefer_a())],
+        bound: Some(Bound::prepare(&prefer_c(), 1, u64::MAX, &cancellation).unwrap()),
+    };
+    let narrower = Narrower::new(&original);
+    for (conditions, expected) in [(Conditions::default(), 1), (restriction, 0), (bound, 2)] {
+        let mut region = Region::all_open(3);
+        let mut allowance = budget(&cancellation, u64::MAX);
+        let result = narrow(
+            (opened.parts.subject(&original), &narrower),
+            &conditions,
+            (&mut region, &mut CandidateKnowledge::default()),
+            &mut NarrowingScratch::default(),
+            &mut allowance,
+            &mut RegionCounts::default(),
+            None,
+        );
+        assert_eq!(result.unwrap(), Narrowing::Fixed { changed: false });
+        assert_eq!(region.split_atom(), Some(expected));
+    }
 }

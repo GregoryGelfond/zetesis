@@ -115,11 +115,14 @@ fn a_candidate_bound_does_not_supply_reduct_support() {
                 Node::atom(1),
                 Node::implies(0, 1),
                 Node::implies(1, 0),
+                // The asserted conjunction preserves both roots while selecting
+                // general membership, beyond optional positive certificates.
+                Node::and_pair([2, 3]),
             ],
             vec![],
         )
         .unwrap(),
-        vec![2, 3],
+        vec![4],
         AdmissionLimits::default(),
     )
     .unwrap();

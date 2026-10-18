@@ -76,7 +76,13 @@ pub(super) fn publish(
         for premise in premises(builder, heads, location)?.into_iter().flatten() {
             #[cfg(test)]
             tests::point(tests::Point::Publish);
-            builder.condition_guard(metadata, *group, &heads[..premise.heads], premise.node)?;
+            builder.condition_guard(
+                metadata,
+                group.condition,
+                &heads[..premise.heads],
+                premise.node,
+                location,
+            )?;
             #[cfg(test)]
             tests::published();
         }

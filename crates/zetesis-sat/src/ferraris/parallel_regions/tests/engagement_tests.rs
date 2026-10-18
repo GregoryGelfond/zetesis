@@ -150,6 +150,17 @@ fn walk(theory: &Theory, engagement: Engagement) -> (ParallelRegions, Arc<Indexe
     walk_with(theory, 2, engagement, Limits::default())
 }
 
+/// Keep leaves for tests of membership receipts and handoff failures. Removing
+/// this optional inventory is safe only before any candidate knowledge exists.
+fn omit_producers_for_membership_test(search: &mut ParallelRegions) {
+    assert!(matches!(search.record, WalkRecord::NotBegun));
+    Arc::get_mut(&mut search.shared)
+        .expect("the unbegun walk exclusively owns its shared state")
+        .parts
+        .omit_producers_for_membership_test();
+    search.statistics.producers = false;
+}
+
 /// The caller's budget, as the enumeration holds it.
 fn caller<'c>(search: &ParallelRegions, cancellation: &'c Cancellation) -> Budget<'c> {
     Budget {
@@ -238,8 +249,11 @@ fn outcome(search: &ParallelRegions, models: &[Vec<usize>]) -> Outcome {
 
 /// The reference: the walk that never engages, which steps the scalar walk's
 /// order on the calling thread.
-fn unengaged(theory: &Theory, certificate: Option<&Arc<Certification>>) -> Outcome {
+fn unengaged(theory: &Theory, certificate: Option<&Arc<Certification>>, refuted: bool) -> Outcome {
     let (mut search, index) = walk(theory, NEVER);
+    if refuted {
+        omit_producers_for_membership_test(&mut search);
+    }
     let cancellation = search.shared.cancellation.clone();
     let mut budget = caller(&search, &cancellation);
     let models = drain(&mut search, &index, certificate, &mut budget);
@@ -366,6 +380,11 @@ fn handoff(
     skip: usize,
 ) -> (ParallelRegions, Vec<Vec<usize>>) {
     let (mut search, index) = walk(theory, LATE);
+    if refuted {
+        // These handoffs require a rejected membership leaf in the engaging
+        // pull, so optional original-producer pruning must not remove it.
+        omit_producers_for_membership_test(&mut search);
+    }
     if let Some(filter) = filter {
         search
             .set_filter(crate::region_filter::Filter::new(Arc::clone(filter)))
@@ -442,11 +461,31 @@ fn the_deadline_can_pass_between_two_steps_of_a_pull() {
     // deadline passes, so it holds unmerged membership receipts and a live
     // lease when it engages.
     let theory = loop_beside_choices(3);
-    let expected = unengaged(&theory, None);
+    let expected = unengaged(&theory, None, true);
     assert!(expected.countermodels > 0, "the reduct refutes leaves");
+    let cold = expected.reduct.frozen_positive_preparation_work;
+    assert!(
+        cold > 0,
+        "the scalar workspace prepares its incidence graph"
+    );
     for skip in 0..4 {
         let (search, models) = handoff(&theory, None, None, true, skip);
-        assert_eq!(outcome(&search, &models), expected, "after {skip} models");
+        let mut actual = outcome(&search, &models);
+        let preparation = actual.reduct.frozen_positive_preparation_work;
+        // The coordinator checked a leaf before handoff. One or both launched
+        // workers then check leaves, each preparing the same graph once.
+        assert!(
+            [2 * cold, 3 * cold].contains(&preparation),
+            "coordinator plus one or two worker preparations: {preparation}"
+        );
+        let extra = preparation - cold;
+        actual.reduct.frozen_positive_work = actual
+            .reduct
+            .frozen_positive_work
+            .checked_sub(extra)
+            .expect("cold preparation is included in frozen-positive work");
+        actual.reduct.frozen_positive_preparation_work = cold;
+        assert_eq!(actual, expected, "after {skip} models");
     }
 }
 
@@ -456,7 +495,7 @@ fn a_handoff_keeps_the_certificate_checks_of_the_engaging_pull() {
     // holds the unmerged checks of leaves the certificate refuted.
     let theory = positive_loops(3);
     let certificate = positive(&theory);
-    let expected = unengaged(&theory, Some(&certificate));
+    let expected = unengaged(&theory, Some(&certificate), true);
     assert_eq!(expected.certificate_checks, Some((8, 1, 7)));
     assert_eq!(expected.countermodel_queries, 0, "the certificate decides");
     let (search, models) = handoff(&theory, Some(&certificate), None, true, 0);
@@ -471,7 +510,7 @@ fn a_handoff_counts_the_coordinators_tight_checks_once() {
     // workers theirs after it.
     let theory = tautologies(4);
     let certificate = tight(&theory);
-    let expected = unengaged(&theory, Some(&certificate));
+    let expected = unengaged(&theory, Some(&certificate), false);
     assert_eq!(expected.certificate_checks, Some((16, 16, 0)));
     for skip in 0..4 {
         let (search, models) = handoff(&theory, Some(&certificate), None, false, skip);
@@ -487,7 +526,7 @@ fn a_filtered_handoff_prepares_at_most_one_checker_more_than_its_workers() {
         theory: theory.clone(),
         live: Arc::clone(&live),
     });
-    let expected = unengaged(&theory, None);
+    let expected = unengaged(&theory, None, true);
     let (search, models) = handoff(&theory, None, Some(&filter), true, 1);
     let preparations = search.filter().unwrap().statistics().preparations;
     assert!((1..=3).contains(&preparations), "{preparations}");
@@ -796,6 +835,7 @@ fn a_failed_release_at_engagement_starts_no_thread() {
 fn a_panic_in_a_coordinator_step_merges_nothing_of_its_pull() {
     let theory = loop_beside_choices(3);
     let (mut search, index) = walk(&theory, LATE);
+    omit_producers_for_membership_test(&mut search);
     let panic_at = Arc::new(AtomicUsize::new(0));
     search
         .set_filter(crate::region_filter::Filter::new(Arc::new(Faulty {
@@ -810,19 +850,27 @@ fn a_panic_in_a_coordinator_step_merges_nothing_of_its_pull() {
         .propose_with(&index, None, false, &mut budget, &mut |_| false)
         .unwrap()
         .unwrap();
-    // The second pull decides a leaf the reduct refutes, whose receipts it
-    // holds unmerged, and then panics in its next region check.
-    let checks = search.filter().unwrap().statistics().checks;
-    panic_at.store(usize::try_from(checks).unwrap() + 2, Ordering::SeqCst);
+    // Arm the panic after this pull actually reaches a nonminimal leaf.
+    // The number of earlier split checks depends on atom and branch ordering;
+    // the receipt boundary being tested is the same in either schedule.
     let merged = search.merged();
-    let leaves = Live::read(&search.shared.live.leaves);
+    let shared = Arc::clone(&search.shared);
+    let leaves = Live::read(&shared.live.leaves);
+    let countermodels = Live::read(&shared.live.countermodels);
     let walked = walking(&search);
     assert_eq!(
         search
-            .propose_with(&index, None, false, &mut budget, &mut |_| false)
+            .propose_with(&index, None, false, &mut budget, &mut |_| {
+                if Live::read(&shared.live.countermodels) > countermodels {
+                    let checks = shared.filter.as_ref().unwrap().statistics().checks;
+                    panic_at.store(usize::try_from(checks).unwrap() + 1, Ordering::SeqCst);
+                }
+                false
+            })
             .err(),
         Some(Incomplete::WorkerPanicked)
     );
+    assert!(Live::read(&shared.live.countermodels) > countermodels);
     // The leaf reached the live counters as it was decided; the pull's
     // report, which holds its reduct receipts, merged nothing.
     assert!(Live::read(&search.shared.live.leaves) > leaves);
@@ -1016,4 +1064,56 @@ fn stable_models_with_a_coordinator_state_stay_send() {
     fn send<T: Send>() {}
     send::<crate::StableModels>();
     send::<ParallelRegions>();
+}
+
+#[test]
+fn frozen_positive_receipts_survive_every_worker_route() {
+    let theory = positive_loops(2);
+    for (workers, engagement) in [
+        (1, Engagement::Immediate),
+        (2, Engagement::Immediate),
+        (2, NEVER),
+    ] {
+        let mut models = crate::StableModels::with_region_workers_engaging(
+            &theory,
+            NonZeroUsize::new(workers).unwrap(),
+            engagement,
+            Limits::default(),
+            Cancellation::default(),
+        )
+        .unwrap();
+        // Exercise both the scalar combined receipt and worker receipt merges
+        // with all four classical leaves reaching membership checking.
+        match &mut models.proposer {
+            crate::ferraris::Proposer::Regions(search) => {
+                search.omit_producers_for_membership_test();
+            }
+            crate::ferraris::Proposer::Parallel(search) => {
+                omit_producers_for_membership_test(search);
+            }
+            _ => panic!("expected a scalar or parallel region proposer"),
+        }
+        assert_eq!(models.next().unwrap().unwrap().atoms().count(), 0);
+        assert!(models.next().is_none());
+        assert!(models.exhausted());
+        let statistics = models.statistics();
+        assert_eq!(statistics.countermodels, 3);
+        assert_eq!(statistics.reduct.frozen_positive_attempts, 4);
+        assert_eq!(statistics.reduct.frozen_positive_completed, 4);
+        assert!(statistics.reduct.frozen_positive_preparation_work > 0);
+        assert!(
+            statistics.reduct.frozen_positive_work
+                > statistics.reduct.frozen_positive_preparation_work
+        );
+        assert_eq!(statistics.reduct.regions.regions, 0);
+        if workers > 1 {
+            let actual = statistics.regions.unwrap().workers.unwrap().engagement;
+            if engagement == Engagement::Immediate {
+                assert!(matches!(actual, RegionWalkEngagement::Engaged { .. }));
+            } else {
+                assert!(matches!(actual, RegionWalkEngagement::Unengaged { .. }));
+            }
+        }
+        assert_eq!(models.statistics().reduct, statistics.reduct);
+    }
 }

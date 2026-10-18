@@ -130,7 +130,7 @@ fn original_rule(program: &AdmittedFormula, head: &str) -> usize {
 }
 
 #[test]
-fn finite_conditional_rule_preserves_all_original_and_frozen_interpretation_pairs() {
+fn finite_conditional_with_facts_preserves_interpretation_pairs() {
     for (head_count, head_sign) in ["", "not ", "not not "].into_iter().enumerate() {
         for (condition_count, condition_sign) in ["", "not ", "not not "].into_iter().enumerate() {
             let source = format!(
@@ -147,19 +147,29 @@ fn finite_conditional_rule_preserves_all_original_and_frozen_interpretation_pair
                 let consequent = Formula::atom(format!("p({value})")).sign(head_count);
                 universal = Formula::and(universal, Formula::implies(condition, consequent));
             }
-            let specified = Formula::implies(universal, Formula::atom("q"));
+            // Positive fact occurrences may be substituted in the rule body.
+            // Compare it together with its retained fact roots, including
+            // outer/inner interpretations that omit those facts.
+            let facts = Formula::and(Formula::atom("d(1)"), Formula::atom("d(2)"));
+            let specified = Formula::and(facts, Formula::implies(universal, Formula::atom("q")));
+            let roots = [
+                root,
+                original_rule(&program, "d(1)"),
+                original_rule(&program, "d(2)"),
+            ];
             assert_eq!(program.atoms().len(), 7);
             for outer in 0..1 << program.atoms().len() {
                 let original = values(program.theory(), outer, None);
                 let outer_world = world(program.atoms(), outer);
                 assert_eq!(
-                    original[root],
+                    roots.iter().all(|&node| original[node]),
                     specified.original(&outer_world),
                     "{source}, M={outer}"
                 );
                 for inner in 0..1 << program.atoms().len() {
+                    let reduct = values(program.theory(), inner, Some(&original));
                     assert_eq!(
-                        values(program.theory(), inner, Some(&original))[root],
+                        roots.iter().all(|&node| reduct[node]),
                         specified.frozen(&outer_world, &world(program.atoms(), inner)),
                         "{source}, M={outer}, J={inner}"
                     );

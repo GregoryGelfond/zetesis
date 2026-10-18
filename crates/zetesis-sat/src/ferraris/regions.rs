@@ -7,7 +7,7 @@
 //! its producers for the support cut, and over every candidate-only
 //! restriction, without producers, since a restriction is not a rule of the
 //! program and supports nothing. A region no reading refutes is split on
-//! the atom its narrowing prefers, cut branch first; a region with every atom
+//! the atom its narrowing prefers, held branch first; a region with every atom
 //! decided is a leaf, and a leaf is a classical model of the theory and the
 //! restrictions, because at a full decision every root is sure or
 //! never and a root never refutes. The leaf is the proposal; the
@@ -22,8 +22,9 @@
 use zetesis_cpu::Stop;
 use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use zetesis_ferraris::{
-    ChoiceHeads, FrozenSubject, Interpretation, Knowledge, Narrower, NarrowingAttempt,
-    NarrowingQuota, NarrowingScratch, OriginalSubject, Producers, RegionLimits, Theory,
+    ChoiceHeads, FrozenSubject, GeneratorOrder, GeneratorOrderError, Interpretation, Knowledge,
+    Narrower, NarrowingAttempt, NarrowingQuota, NarrowingScratch, OriginalSubject, Producers,
+    RegionLimits, Theory,
 };
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
@@ -75,7 +76,8 @@ pub struct RegionCounts {
     /// Atoms the readings or original source consequences cut.
     pub cut: u64,
     /// Node reads, root tests and producer checks, and for the candidate
-    /// tree the producer extraction, the indexing of each restriction and,
+    /// tree the producer extraction, optional generator-order preparation,
+    /// the indexing of each restriction and,
     /// once a region walk first needs it, the indexing of the theory, one
     /// unit per node and operand occurrence (kept even if building the index
     /// then fails); included in search work. A run decided by a positive
@@ -164,6 +166,8 @@ pub struct RegionSearchStatistics {
     /// Whether the theory lies in the producer fragment, so the support
     /// cut applies.
     pub producers: bool,
+    /// Shared original generator-order preparation; included in `counts.work`.
+    pub generator_order: GeneratorOrderStatistics,
     /// Frontier ownership measured by parallel candidate production. Other
     /// schedules do not currently measure it; absence does not mean zero bytes.
     pub frontier: Option<RegionFrontierStatistics>,
@@ -171,6 +175,45 @@ pub struct RegionSearchStatistics {
     /// and the device route's pool starts at construction, so both report
     /// `None`.
     pub workers: Option<RegionWorkerStatistics>,
+}
+
+/// Applicability of the optional original generator preference.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum GeneratorOrderStatus {
+    /// The complete producer fragment or a generating head is absent.
+    #[default]
+    NotApplicable,
+    /// An immutable dependency order was prepared for original candidates.
+    Prepared,
+    /// Its named simultaneous storage exceeded the inherited allowance.
+    StorageDeclined,
+}
+
+impl GeneratorOrderStatus {
+    /// Stable spelling in execution receipts.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::NotApplicable => "not_applicable",
+            Self::Prepared => "prepared",
+            Self::StorageDeclined => "storage_declined",
+        }
+    }
+}
+
+/// One original candidate owner's generator-order preparation, never summed
+/// across its workers. Active restrictions still use their existing primary
+/// preference. Prepared does not assert a split occurred or a class certificate.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GeneratorOrderStatistics {
+    /// Whether a reusable order was published or why it declined.
+    pub status: GeneratorOrderStatus,
+    /// Preparation work, including a declined prefix; already in reading work.
+    pub work: u64,
+    /// Maximum named simultaneous preparation request or capacity observed.
+    pub peak_bytes: u128,
+    /// Published order header and vector capacities; shared theory excluded.
+    pub retained_bytes: u128,
 }
 
 /// The parallel region walk's workers: how many, when they were to start,
@@ -280,12 +323,15 @@ pub(crate) struct RegionSearch {
 pub(crate) struct OriginalParts {
     producers: Option<Producers>,
     choice_heads: ChoiceHeads,
+    generator_order: Option<GeneratorOrder>,
 }
 
 impl OriginalParts {
     /// The walk's subject over `theory`, the theory these parts came from.
     pub(crate) fn subject<'a>(&'a self, theory: &'a Theory) -> OriginalSubject<'a> {
-        OriginalSubject::new(theory, self.producers.as_ref()).with_choices(&self.choice_heads)
+        OriginalSubject::new(theory, self.producers.as_ref())
+            .with_choices(&self.choice_heads)
+            .with_generator_order(self.generator_order.as_ref())
     }
 }
 
@@ -299,25 +345,68 @@ pub(crate) struct Opened {
     pub(crate) statistics: RegionSearchStatistics,
 }
 
-/// Open a region search over the theory: extract its producers, charging
-/// the extraction.
-pub(crate) fn open(theory: &Theory, budget: &mut Budget<'_>) -> Result<Opened, Incomplete> {
+/// Extract original producers, then prepare the optional shared generator
+/// order under the caller's independent preparation-byte allowance. Work uses
+/// the same streaming quota as narrowing, including every refused prefix.
+pub(crate) fn open(
+    theory: &Theory,
+    order_byte_limit: u64,
+    budget: &mut Budget<'_>,
+) -> Result<Opened, Incomplete> {
     let extraction = zetesis_ferraris::producers(theory, limits(budget), budget.cancellation)
         .map_err(stopped)?;
     budget.charge(extraction.work)?;
+    let cancellation = budget.cancellation;
+    let mut quota = BudgetQuota {
+        budget,
+        failure: None,
+    };
+    let attempt = GeneratorOrder::prepare_reserved(
+        OriginalSubject::new(theory, extraction.producers.as_ref()),
+        usize::try_from(order_byte_limit).unwrap_or(usize::MAX),
+        cancellation,
+        &mut quota,
+    );
+    let (generator_order, status) = match attempt.result {
+        Ok(order) => {
+            let status = if order.is_some() {
+                GeneratorOrderStatus::Prepared
+            } else {
+                GeneratorOrderStatus::NotApplicable
+            };
+            (order, status)
+        }
+        Err(GeneratorOrderError::Storage { .. }) => (None, GeneratorOrderStatus::StorageDeclined),
+        Err(GeneratorOrderError::Stopped(stop)) => {
+            return Err(quota.failure.take().unwrap_or_else(|| stopped(stop)));
+        }
+    };
+    let generator_statistics = GeneratorOrderStatistics {
+        status,
+        work: attempt.work,
+        peak_bytes: attempt.peak_bytes,
+        retained_bytes: generator_order
+            .as_ref()
+            .map_or(0, GeneratorOrder::retained_bytes),
+    };
     Ok(Opened {
         statistics: RegionSearchStatistics {
             counts: RegionCounts {
-                work: extraction.work,
+                work: extraction
+                    .work
+                    .checked_add(attempt.work)
+                    .ok_or(Incomplete::CounterOverflow)?,
                 ..Default::default()
             },
             producers: extraction.producers.is_some(),
+            generator_order: generator_statistics,
             frontier: None,
             workers: None,
         },
         parts: OriginalParts {
             producers: extraction.producers,
             choice_heads: extraction.choice_heads,
+            generator_order,
         },
     })
 }
@@ -341,9 +430,10 @@ impl RegionSearch {
     pub(crate) fn new(
         theory: &Theory,
         native_byte_limit: u64,
+        order_byte_limit: u64,
         budget: &mut Budget<'_>,
     ) -> Result<Self, Incomplete> {
-        let Opened { parts, statistics } = open(theory, budget)?;
+        let Opened { parts, statistics } = open(theory, order_byte_limit, budget)?;
         Ok(Self {
             statistics,
             parts,
@@ -351,7 +441,8 @@ impl RegionSearch {
                 Region::all_open(theory.atom_count()),
                 Counting::Never,
                 CandidateKnowledge::default(),
-            ),
+            )
+            .with_held_first(),
             restrictions: Conditions::default(),
             scratch: NarrowingScratch::default(),
             filter: None,
@@ -395,6 +486,7 @@ impl RegionSearch {
                 ..self.statistics.counts
             },
             producers: self.statistics.producers,
+            generator_order: self.statistics.generator_order,
             frontier: None,
             workers: None,
         }
@@ -648,6 +740,7 @@ pub(super) fn narrow<Q: Quota, R: std::borrow::Borrow<(Theory, Narrower)>>(
 
 /// Rank open atoms only after all subjects agree on the current region. An
 /// active restriction keeps the primary degree; the original breaks its ties.
+/// Otherwise a prepared generator order takes precedence over the degree read.
 fn prefer_split<Q: Quota, R>(
     original: OriginalSubject<'_>,
     conditions: &Conditions<R>,
@@ -663,7 +756,17 @@ fn prefer_split<Q: Quota, R>(
         failure: None,
     };
     let attempt = if conditions.permanent.is_empty() && conditions.bound.is_none() {
-        primary.preferred_atom_reserved(region, original.choices(), cancellation, &mut quota)
+        match original.generator_order() {
+            Some(order) => {
+                order.preferred_atom_reserved(original.theory(), region, cancellation, &mut quota)
+            }
+            None => primary.preferred_atom_reserved(
+                region,
+                original.choices(),
+                cancellation,
+                &mut quota,
+            ),
+        }
     } else {
         primary.preferred_atom_with_secondary_reserved(
             region,

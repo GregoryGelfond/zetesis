@@ -433,7 +433,7 @@ fn a_determined_candidate_run_never_begins_the_walk() {
 #[test]
 fn one_worker_returns_the_scalar_walks_sequence() {
     // The sequence, not only the family: the scalar walk returns the models
-    // in the tree's order, cut branch first. A multi-worker walk keeps that
+    // in the tree's order, held branch first. A multi-worker walk keeps that
     // order only until engagement.
     let theory = mixed();
     let mut one = StableModels::with_region_workers(

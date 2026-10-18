@@ -135,12 +135,28 @@ the fixed point of the theory's readings, with
 the theory's producers for the support cut, and by every candidate-only
 restriction without producers, since a restriction supports nothing. A region
 the readings refute is dropped with its whole subtree; a region with an open
-atom is split on the atom its narrowing prefers, the open atom with the most
-parents still unknown, as the clause search branches on the variable with
-the most unresolved occurrences, cut branch first; a region with every atom
+atom is split on the atom its narrowing prefers, held branch first; a region
+with every atom
 decided is a leaf, and a leaf is a
 classical model of the theory and the restrictions, because at a full
 decision every root is sure or impossible and an impossible root refutes.
+
+Without active candidate restrictions, complete original producer coverage can
+prepare one shared `GeneratorOrder`. It prioritizes atomic choice heads and
+ordinary disjunctive heads that have no ordinary singleton producer, then the
+earliest ground dependency component and lowest atom identity within that
+component. Both signs of body formula operands contribute to dependency order;
+this does not shift disjunctive rules or certify minimality. Once no open
+generator remains, the same component order selects among all open atoms.
+An active bound or latest permanent restriction instead ranks atomic choices
+first, then uses its unknown-parent count, with the original theory breaking
+ties. If generator
+preparation is inapplicable or exceeds its independently applied byte allowance,
+open atomic choices rank first and unknown-parent counts determine the remaining
+preference. Every route preserves both split children and the original reduct.
+The order is shared across scalar, parallel and joined device candidate workers;
+its preparation receipt is included in candidate reading work.
+
 The leaf is the proposal, and the reduct decides it: by a complete class
 certificate when one applies, else by the proper-subset query, which under
 this method is a second region tree. Its root cuts every atom outside the

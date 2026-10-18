@@ -12,6 +12,7 @@ use super::{Builder, FALSUM, Node, VERUM, metadata::Metadata};
 use crate::formula_support::Buffer;
 use crate::{FormulaFailure, FormulaResource, ProgramSite};
 
+mod alternatives;
 mod nested;
 
 #[cfg(test)]
@@ -60,7 +61,8 @@ impl Builder<'_, '_, '_> {
         }
         // This separate consequence pass preserves every guard above. It can
         // expose shared nested conditions even when full transposition is dearer.
-        nested::publish(self, &metadata)
+        nested::publish(self, &metadata)?;
+        alternatives::publish(self, &metadata)
     }
 
     fn unshared_guards(&mut self, metadata: &Metadata) -> Result<(), FormulaFailure> {
@@ -102,18 +104,18 @@ impl Builder<'_, '_, '_> {
             [only] => *only,
             row => self.node(Node::Or(row), location)?,
         };
-        self.condition_guard(metadata, group, heads, premise)
+        self.condition_guard(metadata, group.condition, heads, premise, location)
     }
 
     fn condition_guard(
         &mut self,
         metadata: &Metadata,
-        group: Group,
+        condition: usize,
         heads: &[usize],
         premise: usize,
+        location: ProgramSite,
     ) -> Result<(), FormulaFailure> {
-        let location = metadata.location(group.first_atom);
-        let necessary = self.node(Node::Implies(premise, group.condition), location)?;
+        let necessary = self.node(Node::Implies(premise, condition), location)?;
         let negative = self.neg(necessary, location)?;
         let guard = self.neg(negative, location)?;
         self.admit_root(0, location)?;

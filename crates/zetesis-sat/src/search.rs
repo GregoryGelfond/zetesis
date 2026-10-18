@@ -1,6 +1,6 @@
 mod cursor;
-mod probe;
 mod prepared;
+mod probe;
 pub(crate) use prepared::PreparedWorkspace;
 mod quota;
 mod shared_budget;
@@ -100,6 +100,26 @@ impl<Q: Quota> Budget<'_, Q> {
         self.statistics.work += granted;
         Ok(granted)
     }
+    /// Run a finite accounted kernel once under its full reservation, rather
+    /// than treating one partial lease grant as the kernel's complete limit.
+    /// Actual returned work is committed on success and refusal alike.
+    pub(crate) fn with_reservation<T>(
+        &mut self,
+        wanted: u64,
+        run: impl FnOnce(u64) -> (T, u64),
+    ) -> Result<T, Incomplete> {
+        self.cancellation.poll()?;
+        let (result, used) =
+            self.quota
+                .with_reservation(self.statistics.work, self.limits.max_work, wanted, run)?;
+        self.statistics.work = self
+            .statistics
+            .work
+            .checked_add(used)
+            .ok_or(Incomplete::CounterOverflow)?;
+        Ok(result)
+    }
+
     /// Return permits granted by [`Self::reserve_up_to`] and not spent.
     pub(crate) fn refund(&mut self, unspent: u64) {
         self.quota.refund(unspent);

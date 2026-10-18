@@ -3,6 +3,7 @@
 mod constant_divisors;
 mod integer_comparisons;
 mod lending_rows;
+mod scalar_chains;
 mod support_demand;
 mod unchanged_visits;
 

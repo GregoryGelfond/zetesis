@@ -102,6 +102,27 @@ Rust formula construction and execution refinement open. These are obligations
 of zetesis's source bridge and solver; this architectural account is separate
 from teaching themelios's parsing and logical-program APIs.
 
+## Fixed facts and pairwise exclusions
+
+During formula emission, positive body occurrences of explicit facts become
+true. Their fact roots, atom identities and source origins remain in the theory.
+Those retained roots require the facts in every original and reduct model, so
+the substitution preserves answer sets in that context. Complete support and
+arithmetic validation still run; this does not prune possible support or rewrite
+negative literals and objectives.
+
+A complete family of pairwise exclusions over distinct atoms can be represented
+by one native at-most-one constraint. The compiler certifies every unordered
+pair within each connected component of one authored constraint; duplicates or
+reversed pairs cannot fill a missing pair. Eager emission retains ordinary
+constraints for uncertified components. Hybrid emission retires a streamed
+template only when its entire validated family is replaced. Both paths use the
+same collector and existing native threshold operations. The
+[compiler contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/docs/pairwise-exclusions.md)
+states the eligibility and costs; the
+[pairwise-exclusion laws](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PairwiseExclusions.lean)
+prove original and frozen-reduct equivalence for a complete pair family.
+
 ## Shared aggregate guards
 
 Multiple written bounds on one completed nonnegative tuple contribution set use
@@ -320,11 +341,14 @@ executor for core membership. Objectives
 are scored only after the original constraint check completes. Constraints
 containing aggregates, projected atoms or conditional
 scopes remain eager; ordinary atom/scalar constraints use the shared binding
-and evaluation operations. Existing eager entry points remain unchanged.
+and evaluation operations. Certified complete pairwise exclusions become native
+constraints in the core; remaining templates stay streamed. Existing eager entry
+points remain unchanged.
 
 Hybrid admission still completes possible support and original source-family
 arithmetic validation. It visits the eligible constraint instances to retain
-their atom identities, without retaining their complete formula DAGs. Coherence
+their atom identities, without retaining their complete formula DAGs. A complete
+native replacement retains the same atom identities and source evidence. Coherence
 and support guards remain in the core, including guards that force unsupported
 atoms false. Candidate truth cannot suppress a required admission error.
 
@@ -332,7 +356,7 @@ The execution composition is:
 
 ```text
 admit complete support, arithmetic and atom identities
-materialize all producers and ineligible constraints as the core
+materialize producers, ineligible constraints and certified replacements as the core
 walk the core's candidate regions:
     narrow the region under the core and existing candidate restrictions
     exclude templates whose signed predicates cannot supply a sure body
@@ -813,11 +837,13 @@ source can decrease without changing the completed arithmetic verdict.
 A separate [whole-family certificate](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/arithmetic/certified.rs)
 can omit the evidence scan for flat normal rules and constraints. Every
 normalized sibling of the original source occurrence must pass: completed
-positive columns prove all scalar expressions total, and positive flat atoms
-supply every variable used by body and plain-head keys, including negative
-atoms. The classifier covers flat atoms and scalar or tuple comparisons;
-generated bindings, local scopes and other heads keep the ordinary scan. The
-column proof uses no comparison truth or candidate membership as a premise.
+positive columns prove all scalar expressions total, with checked body
+assignments extending their variable coverage in dependency order. This covers
+every body and head key, including negative atoms. Head suffixes may copy values
+or construct terms from covered inputs; arithmetic head expressions, local
+scopes and other heads keep the ordinary scan. Ordinary head construction and
+its resource limits still apply. The proof uses no comparison truth or candidate
+membership as a premise.
 
 This certificate supplies no defined substitution. Empty required columns
 decline to the existing traversal, and an empty join remains silent. One
@@ -850,9 +876,10 @@ cumulative grounding work, while retained metadata uses `SupportBytes`. The
 check value reuse, owner boundaries, arithmetic failures and inclusive limits.
 
 After source-family validation, a flat normal-rule body can establish finite
-totality from completed positive columns. Constraints qualify too; constructors,
-generators, structural captures, nested scopes and additional head variables do
-not. A smallest covering column supplies all possible values of each variable
+totality from completed positive columns. Constraints and deterministic scalar
+assignments qualify too; body constructors, range generators, structural captures
+and nested scopes do not. Head-only variables retain their later evaluation.
+A smallest covering column supplies all possible values of each variable
 in complete bindings. An expression reading one variable is checked on that
 whole domain. Sums, differences, negation, products and division or remainder
 with variable operands can instead use numeric column intervals when several
@@ -864,8 +891,9 @@ overflow decline the certificate, including `i32::MIN / -1` and its remainder
 counterpart. No Cartesian table of arithmetic results is retained. Within one
 body’s totality attempt, repeated variable occurrences share the completed
 numeric column’s bounds, and expressions reuse one temporary range buffer. This
-leased workspace is created only for multi-input arithmetic and is released at
-the end of the attempt; evidence never crosses rules or source snapshots. Every
+leased workspace is created when interval analysis is needed, including for
+scalar body assignments, and is released at the end of the attempt; evidence
+never crosses rules or source snapshots. Every
 intermediate remains checked independently. The checked interval transfers are
 shared with keyed-rewrite safety. Resource and owner failures
 remain located failures. Only success for every expression permits this
@@ -874,6 +902,23 @@ later covering column; its arithmetic failures retain the ordinary deferred hand
 Evidence cursors always traverse complete rows. The certificate concerns body
 expressions, not head evaluation or candidate truth; mixed-type ASP comparisons
 retain their ordinary ordering.
+
+Scalar assignment chains propagate checked intervals in dependency order,
+including assignments whose results are unused. A certified body may expose
+those dependencies to join planning without changing its original instructions.
+The selected comparison view shares repeated expression nodes; interval masks
+reject a partial binding only when no extension in the full column bounds can
+satisfy a comparison. Support production uses this evidence only within its
+current immutable snapshot. Eager emission and hybrid checks use the same
+selection mechanism after source admission. Each cursor currently prepares its
+own derived comparisons and interval scratch.
+
+A separate full-family check can omit a duplicate arithmetic evidence scan when
+all body expressions are total and every generated key is covered. Pure
+constructor heads qualify; head arithmetic conservatively retains the scan.
+Actual head construction still checks allocation, size and depth for each
+reached instance. These certificates change neither arithmetic errors nor the
+distinction between body and head evaluation.
 
 After complete join and source-family checks, a rejected flat body validates
 atom keys without interning atoms or constructing a discarded
@@ -1379,6 +1424,27 @@ out atoms outside that carrier. [SourceSupport](../lean/theorems.md) and the
 [proof guide](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/guide/source-support.md)
 state this premise explicitly; successful Rust completion is not a proof of the
 source-to-reduct correspondence.
+
+Before formula emission, the builder records explicit ground facts in an
+owner-checked source selection. Every fact retains its original root, atom and
+provenance. Positive body occurrences are still named and validated, then those
+of recorded facts become true; merely possible support rows do not. The same
+replacement applies inside shared positive producer groups. Negative occurrences,
+heads and objective queries keep their existing representation. Retained facts
+force their atoms into every original model and every tested reduct model, which
+justifies the replacement in the enclosing formula; a candidate omitting a fact
+fails its unchanged root.
+
+This preparation repeats fact identity reads without copying canonical atom
+payload or assigning formula IDs. It collects R fact occurrences, sorts their
+source IDs with O(R log R) metered work and deduplicates before publishing F
+distinct identities. Temporary and retained capacity is O(R). Each emitted atom
+needs at most one O(log(F + 1)) membership lookup, cached in its existing
+construction metadata; shared group nodes never repeat those lookups. Work and
+retained selection storage are charged to the existing grounding limits. Collection happens during formula initialization,
+so its located resource or allocation refusal can precede a later ordinary
+formula-emission refusal. Semantic fact admission already completed in support.
+The original source-order emission still validates all body occurrences.
 
 Ordinary rule emission and streamed constraint capture name planned positive
 body atoms from the join's held [matched rows](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/witnesses.rs).

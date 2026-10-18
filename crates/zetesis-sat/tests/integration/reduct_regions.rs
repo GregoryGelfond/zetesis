@@ -189,9 +189,11 @@ fn a_work_limit_stops_the_region_query_without_a_verdict() {
     ));
 }
 
-/// The same original theory and traversal, with only its retained query ceiling changed.
+/// Fix the measured candidate to the empty answer of the choice fixtures.
+/// This candidate-only restriction leaves the original reduct unchanged and
+/// makes the capacity boundary independent of candidate split ordering.
 fn regions(theory: &Theory, max_reduct_bytes: u64) -> StableModels {
-    StableModels::with_method(
+    let mut search = StableModels::with_method(
         theory,
         SearchMethod::Regions,
         Limits {
@@ -200,7 +202,33 @@ fn regions(theory: &Theory, max_reduct_bytes: u64) -> StableModels {
         },
         Cancellation::default(),
     )
-    .unwrap()
+    .unwrap();
+    let mut nodes = vec![Node::falsum()];
+    let mut roots = Vec::new();
+    for atom in 0..theory.atom_count() {
+        let condition = nodes.len();
+        nodes.push(Node::atom(atom));
+        roots.push(nodes.len());
+        nodes.push(Node::implies(condition, 0));
+    }
+    let empty = zetesis_theory_support::theories::theory(theory.atom_count(), nodes, roots);
+    search.restrict_candidates(&empty).unwrap();
+    search
+}
+
+/// Conjoin the choice roots without changing their original or reduct truth.
+/// The general conjunction head makes frozen-positive checking decline, keeping
+/// these storage tests on the proper-subset region query they name.
+fn general_choices(atoms: usize) -> Theory {
+    let choices = choices(atoms);
+    let mut nodes = choices.nodes().to_vec();
+    let mut roots = choices.roots().iter().copied();
+    let mut root = roots.next().expect("the storage fixture has choices");
+    for next in roots {
+        nodes.push(Node::and_pair([root, next]));
+        root = nodes.len() - 1;
+    }
+    theory(atoms, nodes, vec![root])
 }
 
 /// Measure actual capacity so the boundary includes the host's headers and
@@ -211,6 +239,9 @@ fn first_query_workspace_bytes(theory: &Theory) -> u64 {
     assert!(search.next().unwrap().unwrap().atoms().next().is_none());
     let statistics = search.statistics();
     assert_eq!(statistics.countermodel_queries, 1);
+    assert_eq!(statistics.reduct.frozen_positive_attempts, 1);
+    assert_eq!(statistics.reduct.frozen_positive_completed, 0);
+    assert!(statistics.reduct.regions.work > 0);
     let retained = statistics.reduct.peak_workspace_bytes;
     assert!(
         retained > ReductWorkspace::default().retained_bytes() + theory.nodes().len() as u128,
@@ -221,7 +252,7 @@ fn first_query_workspace_bytes(theory: &Theory) -> u64 {
 
 #[test]
 fn the_first_region_query_refuses_retained_scratch_over_its_limit() {
-    let theory = choices(16);
+    let theory = general_choices(16);
     let required = first_query_workspace_bytes(&theory);
     let limit = required - 1;
     let mut search = regions(&theory, limit);
@@ -240,7 +271,7 @@ fn the_first_region_query_refuses_retained_scratch_over_its_limit() {
 
 #[test]
 fn the_first_region_query_accepts_its_exact_retained_limit() {
-    let theory = choices(16);
+    let theory = general_choices(16);
     let required = first_query_workspace_bytes(&theory);
     let mut search = regions(&theory, required);
     assert!(search.next().unwrap().unwrap().atoms().next().is_none());
@@ -250,13 +281,34 @@ fn the_first_region_query_accepts_its_exact_retained_limit() {
     );
 }
 
+/// Completion residuals enter the subset query directly. Measure their own
+/// retained workspace; scalar membership also retains the preceding optional
+/// frozen-positive attempt, so its capacity is a different operation's receipt.
+fn first_residual_workspace_bytes(theory: &Theory, workers: usize) -> u64 {
+    let mut search = regions(theory, u64::MAX);
+    let mut executor = CompletionExecutor::new(NonZeroUsize::new(workers).unwrap()).unwrap();
+    let models = search
+        .next_batch_with_completion(batch(1), &mut executor, residual)
+        .unwrap();
+    assert_eq!(models.len(), 1);
+    assert!(models[0].atoms().next().is_none());
+    let statistics = search.statistics();
+    assert_eq!(statistics.countermodel_queries, 1);
+    assert_eq!(statistics.reduct.frozen_positive_attempts, 0);
+    assert!(statistics.reduct.regions.work > 0);
+    assert_eq!(executor.last_statistics().unwrap().residual_completed, 1);
+    assert_eq!(search.batch_statistics().pending, 0);
+    assert_eq!(search.batch_statistics().committed, 1);
+    u64::try_from(statistics.reduct.peak_workspace_bytes).unwrap()
+}
+
 #[test]
 fn residual_batch_workspace_limits_match_retained_capacity() {
     let theory = choices(16);
-    let required = first_query_workspace_bytes(&theory);
     // One residual takes both execution paths: scalar without a pool, and
     // joined completion with a pool, even though only one workspace is needed.
     for workers in [1, 2] {
+        let required = first_residual_workspace_bytes(&theory, workers);
         for limit in [required - 1, required] {
             let mut search = regions(&theory, limit);
             let mut executor =

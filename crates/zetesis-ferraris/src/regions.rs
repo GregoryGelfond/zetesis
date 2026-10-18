@@ -29,7 +29,10 @@
 //! can support it, each having a body known to fail or another head known
 //! to hold, is known to fail (`unsupported_cut`), and an atom known to
 //! hold with exactly one producer able to support it forces that
-//! producer's body (`sole_support_forces`). A node or atom known both to
+//! producer's body (`sole_support_forces`). Once ordinary propagation drains,
+//! a possible-foundedness closure can cut positive cycles without an external
+//! seed. It relaxes nonpositive bodies, retains every uncut disjunctive head,
+//! and never treats held atoms as seeds (`founded`). A node or atom known both to
 //! hold and to fail refutes the region. The open atoms known are then
 //! held or cut.
 //!
@@ -42,6 +45,7 @@
 use std::collections::BTreeSet;
 use std::mem::size_of;
 use std::num::NonZeroUsize;
+use std::sync::OnceLock;
 
 use zetesis_cpu::regions::{Narrowing, Region};
 use zetesis_cpu::{Cancellation, Stop};
@@ -51,6 +55,11 @@ use crate::{FormulaView, NodeView, Theory};
 mod adjacency;
 mod counters;
 mod extrema;
+mod founded;
+mod generators;
+pub use generators::{
+    GeneratorOrder, GeneratorOrderAttempt, GeneratorOrderError, GeneratorOrderLimits,
+};
 mod masks;
 mod preference;
 mod thresholds;
@@ -95,6 +104,7 @@ struct Subject<'a> {
     producers: Option<&'a Producers>,
     frozen: Option<&'a [bool]>,
     choices: &'a ChoiceHeads,
+    generator_order: Option<&'a GeneratorOrder>,
 }
 
 /// The marks of a subject that ranks no atom as a choice.
@@ -107,6 +117,7 @@ pub struct OriginalSubject<'a> {
     theory: &'a Theory,
     producers: Option<&'a Producers>,
     choices: &'a ChoiceHeads,
+    generator_order: Option<&'a GeneratorOrder>,
 }
 
 impl<'a> OriginalSubject<'a> {
@@ -118,6 +129,7 @@ impl<'a> OriginalSubject<'a> {
             theory,
             producers,
             choices: &NO_CHOICES,
+            generator_order: None,
         }
     }
 
@@ -126,6 +138,24 @@ impl<'a> OriginalSubject<'a> {
     #[must_use]
     pub const fn with_choices(self, choices: &'a ChoiceHeads) -> Self {
         Self { choices, ..self }
+    }
+
+    /// The same original subject with a prepared generator preference. The
+    /// order must belong to this exact theory; selection refuses an unrelated
+    /// owner before reading its ranks. Propagation and reduct membership are
+    /// unchanged. Frozen subjects never carry this candidate preference.
+    #[must_use]
+    pub const fn with_generator_order(self, order: Option<&'a GeneratorOrder>) -> Self {
+        Self {
+            generator_order: order,
+            ..self
+        }
+    }
+
+    /// Optional immutable generator precedence for this original theory.
+    #[must_use]
+    pub const fn generator_order(&self) -> Option<&'a GeneratorOrder> {
+        self.generator_order
     }
 
     /// The theory read.
@@ -148,6 +178,7 @@ impl<'a> From<OriginalSubject<'a>> for Subject<'a> {
             producers: subject.producers,
             frozen: None,
             choices: subject.choices,
+            generator_order: subject.generator_order,
         }
     }
 }
@@ -188,6 +219,7 @@ impl<'a> From<FrozenSubject<'a>> for Subject<'a> {
             producers: None,
             frozen: Some(subject.truth),
             choices: &NO_CHOICES,
+            generator_order: None,
         }
     }
 }
@@ -202,6 +234,11 @@ pub struct Producers {
     /// Some extracted producer has at least two distinct heads. When false, holding a
     /// head cannot invalidate any other head's support.
     has_competing_heads: bool,
+    /// Some extracted producer is an atomic choice.
+    has_choice_heads: bool,
+    /// A once-completed cycle test over the same original positive incidences.
+    /// Failed preparation leaves this unset; concurrent successful tests agree.
+    founded_cycles: OnceLock<bool>,
 }
 
 /// The atoms that head an atomic choice root of a theory, `a ∨ ¬a` standing
@@ -222,6 +259,15 @@ impl ChoiceHeads {
         self.words
             .get(atom / 64)
             .is_some_and(|word| word & (1u64 << (atom % 64)) != 0)
+    }
+
+    /// Choices dominate every degree score. Rank only open choices when any
+    /// remain; otherwise rank every open atom. Both streams are ascending and
+    /// borrow the existing packed masks, with no per-region selection storage.
+    fn eligible<'a>(&'a self, region: &'a Region) -> impl Iterator<Item = usize> + 'a {
+        let mut choices = region.open_in(&self.words).peekable();
+        let any = choices.peek().is_some();
+        choices.chain((!any).then(|| region.open()).into_iter().flatten())
     }
 }
 
@@ -307,6 +353,7 @@ fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, St
     }
     let mut rules = Vec::new();
     let mut has_competing_heads = false;
+    let mut has_choice_heads = false;
     for &root in theory.roots() {
         work.tick()?;
         let (body, head) = match nodes.node(root).map_err(|_| Stop::InvalidProgram)? {
@@ -344,6 +391,7 @@ fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, St
             return Ok(None);
         };
         has_competing_heads |= heads.len() > 1;
+        has_choice_heads |= choice;
         rules.push(Producer {
             body,
             heads,
@@ -369,6 +417,8 @@ fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, St
         by_head,
         by_body,
         has_competing_heads,
+        has_choice_heads,
+        founded_cycles: OnceLock::new(),
     }))
 }
 
@@ -404,11 +454,14 @@ pub struct NarrowingAttempt<E = Stop> {
 pub struct PreferenceAttempt {
     /// The open atom to split on, ranked by the producing selector:
     /// [`Knowledge::preferred_atom_reserved`] or
-    /// [`Knowledge::preferred_atom_with_secondary_reserved`]. No atom is
-    /// selected when the region is decided.
+    /// [`Knowledge::preferred_atom_with_secondary_reserved`], or
+    /// [`GeneratorOrder::preferred_atom_reserved`]. No atom is selected when
+    /// the region is decided.
     pub result: Result<Option<usize>, Stop>,
-    /// Charged unknown-parent-count reads, including a refused prefix: one per
-    /// open atom for the primary selector, two when a secondary count is used.
+    /// Charged ranking reads, including a refused prefix. The producing selector
+    /// reads component ranks or unknown-parent counts once per eligible atom;
+    /// secondary counts are read only to distinguish primary ties, at most once
+    /// per eligible atom.
     pub work: u64,
 }
 
@@ -720,6 +773,9 @@ fn chains(theory: &Theory) -> (Vec<Chain>, Vec<Option<NonZeroUsize>>, Vec<bool>)
 /// or from a region not enclosing it, is unsound, and nothing checks it.
 /// The proposers keep the invariant by carrying each region's knowledge
 /// from its parent and by narrowing with the narrower that made it.
+/// A completed possible-foundedness pass is inherited with the knowledge;
+/// any newly false atom or node invalidates it. Thus an unchanged original
+/// relaxation needs no repeat pass, independently of the worker's scratch.
 ///
 /// Cloning owns an independent copy. [`Clone::clone_from`] overwrites every
 /// field, reusing equal-length storage at the same counter width. The six
@@ -776,10 +832,11 @@ impl Knowledge {
     /// exhaustive split; it establishes no truth and does not complete
     /// propagation.
     ///
-    /// For `A` atoms and `U` open atoms the scan takes `O(A / 64 + U)` time
-    /// and constant additional space. It charges one count read per open
-    /// atom; packed mask traversal is not separately charged. It polls
-    /// cancellation before reading and reserves/refunds the same batched
+    /// For `A` atoms and `E` eligible open atoms the scan takes `O(A / 64 + E)`
+    /// time and constant additional space. Eligible atoms are the open choice
+    /// heads when any remain, otherwise all open atoms. It charges one count
+    /// read per eligible atom; packed mask traversal is not separately charged.
+    /// It polls cancellation before reading and reserves/refunds the same batched
     /// permits as [`Narrower::narrow_known_reserved`]. Call after composed
     /// propagation has reached its joint fixed point, so the selected
     /// subject ranks the final region once.
@@ -1282,9 +1339,14 @@ impl Narrower {
             }?;
             if matches!(narrowing, Narrowing::Fixed { .. })
                 && matches!(selection, SplitSelection::Choose)
-                && let Some(atom) = knowledge.preferred_atom(region, subject.choices, &mut work)?
             {
-                region.prefer(atom);
+                let preferred = match subject.generator_order {
+                    Some(order) => order.preferred(subject.theory, region, &mut work)?,
+                    None => knowledge.preferred_atom(region, subject.choices, &mut work)?,
+                };
+                if let Some(atom) = preferred {
+                    region.prefer(atom);
+                }
             }
             Ok(narrowing)
         });
@@ -1339,17 +1401,18 @@ impl Narrower {
 /// still unknown, whose decision the theory is most sensitive to, as the
 /// clause search branches on the variable with the most unresolved
 /// occurrences; ties go to the lower atom. The counts are kept as parents
-/// become known, so the ranking is one read per open atom.
+/// become known, so ranking reads each eligible atom once. Packed choice
+/// filtering omits atoms that cannot win without changing the ordering.
 fn preferred_split<C: Count>(
     region: &Region,
     known: &Known<C>,
     choices: &ChoiceHeads,
     work: &mut Work<'_>,
 ) -> Result<Option<usize>, Stop> {
-    let mut best: Option<(usize, (bool, usize))> = None;
-    for atom in region.open() {
+    let mut best: Option<(usize, usize)> = None;
+    for atom in choices.eligible(region) {
         work.tick()?;
-        let rank = (choices.contains(atom), known.unknown.get(atom));
+        let rank = known.unknown.get(atom);
         if best.is_none_or(|(_, best)| rank > best) {
             best = Some((atom, rank));
         }
@@ -1387,6 +1450,10 @@ struct Known<C> {
     /// The roots, falsum and every atom's support have been seeded once;
     /// later closures learn only decisions not yet known.
     seeded: bool,
+    /// A successful possible-foundedness pass published no cuts, and no atom
+    /// or node has become false since. This authority has the same original
+    /// subject and enclosing-region preconditions as every inherited mask.
+    founded_closed: bool,
 }
 
 impl<C: Clone> Clone for Known<C> {
@@ -1397,6 +1464,7 @@ impl<C: Clone> Clone for Known<C> {
             unknown: self.unknown.clone(),
             thresholds: self.thresholds.clone(),
             seeded: self.seeded,
+            founded_closed: self.founded_closed,
         }
     }
 
@@ -1406,6 +1474,7 @@ impl<C: Clone> Clone for Known<C> {
         self.unknown.clone_from(&source.unknown);
         self.thresholds.clone_from(&source.thresholds);
         self.seeded = source.seeded;
+        self.founded_closed = source.founded_closed;
     }
 }
 
@@ -1440,6 +1509,8 @@ pub struct NarrowingScratch {
     pending_residuals: Vec<u64>,
     /// Shared connective views and dirty worklists belong to the walker.
     witnesses: witnesses::Scratch,
+    /// Possible founded atoms, computed only with complete original producers.
+    founded: founded::Scratch,
 }
 
 impl NarrowingScratch {
@@ -1455,6 +1526,7 @@ impl NarrowingScratch {
             + (self.pending_thresholds.capacity() + self.pending_residuals.capacity()) as u128
                 * size_of::<u64>() as u128
             + self.witnesses.retained_bytes()
+            + self.founded.retained_bytes()
     }
 
     /// Discard every entry, keeping the capacity, for a narrowing over
@@ -1585,6 +1657,7 @@ struct KnownMut<'a, C> {
     unknown: &'a mut Counters<C>,
     thresholds: &'a mut [thresholds::State],
     seeded: &'a mut bool,
+    founded_closed: &'a mut bool,
 }
 
 impl<C> Known<C> {
@@ -1601,6 +1674,7 @@ impl<C> Known<C> {
             unknown: &mut self.unknown,
             thresholds: &mut self.thresholds,
             seeded: &mut self.seeded,
+            founded_closed: &mut self.founded_closed,
         }
     }
 }
@@ -1659,6 +1733,7 @@ impl<C: Count> Known<C> {
             unknown,
             thresholds: Box::default(),
             seeded: false,
+            founded_closed: false,
         }
     }
 }
@@ -1677,6 +1752,9 @@ impl<C: Count> Closure<'_, C> {
     fn never(&mut self, index: usize) -> Step {
         let step = learn(self.known.never, self.known.sure, index);
         if step == Step::Changed {
+            // Invalidating every false node conservatively covers the whole
+            // producer-body cone without another membership representation.
+            *self.known.founded_closed = false;
             self.lists.nodes.push((index, false));
         }
         step
@@ -1701,6 +1779,9 @@ impl<C: Count> Closure<'_, C> {
         };
         if step != Step::Changed {
             return step;
+        }
+        if !value {
+            *self.known.founded_closed = false;
         }
         self.lists.learned.push(atom);
         let mut step = step;
@@ -1743,6 +1824,7 @@ impl<C: Count> Closure<'_, C> {
             producers,
             frozen,
             choices: _,
+            generator_order: _,
         } = subject;
         if frozen.is_none() {
             if index.thresholds.has_relations() {
@@ -1812,6 +1894,25 @@ impl<C: Count> Closure<'_, C> {
         if step == Step::Contradiction {
             return Ok(step);
         }
+        self.close_events(subject, index, work, statistics)
+    }
+
+    /// Drain ordinary events before testing possible foundedness. New cuts
+    /// reenter those same queues; contradiction stops either phase immediately.
+    fn close_events(
+        &mut self,
+        subject: Subject<'_>,
+        index: &Narrower,
+        work: &mut Work<'_>,
+        statistics: &mut NarrowingStatistics,
+    ) -> Result<Step, Stop> {
+        let Subject {
+            theory,
+            producers,
+            frozen,
+            choices: _,
+            generator_order: _,
+        } = subject;
         loop {
             let step = if let Some((node, value)) = self.lists.nodes.pop() {
                 statistics.propagations += 1;
@@ -1835,6 +1936,13 @@ impl<C: Count> Closure<'_, C> {
                 debug_assert!(frozen.is_none(), "only original rows check residual sums");
                 statistics.propagations += 1;
                 self.threshold_residual(index, row, work)?
+            } else if let Some(producers) = producers {
+                debug_assert!(frozen.is_none(), "only original subjects have producers");
+                let founded = self.founded(theory, index, producers, work)?;
+                if founded == Step::Unchanged {
+                    return Ok(Step::Changed);
+                }
+                founded
             } else {
                 return Ok(Step::Changed);
             };
@@ -1842,6 +1950,47 @@ impl<C: Count> Closure<'_, C> {
                 return Ok(step);
             }
         }
+    }
+
+    /// Every stable completion lies inside the possible founded closure. Cuts
+    /// are published only after that closure completes, then ordinary events
+    /// propagate them. Held atoms outside it refute the region. Candidate-only
+    /// restrictions and frozen-reduct subjects supply no producer inventory.
+    fn founded(
+        &mut self,
+        theory: &Theory,
+        index: &Narrower,
+        producers: &Producers,
+        work: &mut Work<'_>,
+    ) -> Result<Step, Stop> {
+        if *self.known.founded_closed
+            || !self.lists.founded.needed(theory, index, producers, work)?
+        {
+            return Ok(Step::Unchanged);
+        }
+        self.lists.founded.complete(
+            theory,
+            index,
+            producers,
+            self.known.never,
+            self.known.atom_never,
+            work,
+        )?;
+        let mut step = Step::Unchanged;
+        for atom in 0..theory.atom_count() {
+            work.tick()?;
+            if !bit(self.known.atom_never, atom) && !self.lists.founded.contains(atom) {
+                step = step.join(self.atom(index, Some(producers), None, atom, false));
+                if step == Step::Contradiction {
+                    return Ok(step);
+                }
+            }
+        }
+        // A changed pass queued new false evidence; ordinary propagation must
+        // finish and a new pass must account for it before closure is inherited.
+        // Interrupted or contradictory prefixes never publish this authority.
+        *self.known.founded_closed = step == Step::Unchanged;
+        Ok(step)
     }
 
     /// A node that learned something teaches its operands, and lets each
@@ -2024,6 +2173,7 @@ impl<C: Count> Closure<'_, C> {
             producers,
             frozen,
             choices: _,
+            generator_order: _,
         } = subject;
         let nodes = theory.view();
         if let Some(chain) = index.chain_of[node] {

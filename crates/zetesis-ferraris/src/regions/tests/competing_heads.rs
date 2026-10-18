@@ -165,8 +165,6 @@ fn single_head_guard_preserves_inherited_children() {
     let theory = singleton_heads();
     let index = Narrower::new(&theory);
     let producers = extract(&theory);
-    let mut scanning = producers.clone();
-    scanning.has_competing_heads = true;
     let parent = narrow(
         &theory,
         &index,
@@ -175,6 +173,9 @@ fn single_head_guard_preserves_inherited_children() {
         Work::new(u64::MAX),
     );
     assert!(matches!(parent.attempt.result, Ok(Narrowing::Fixed { .. })));
+    // Both child routes inherit the parent's completed classification cache.
+    let mut scanning = producers.clone();
+    scanning.has_competing_heads = true;
     for held in [false, true] {
         let mut child = parent.region.clone();
         assert!(child.is_open(1));
@@ -224,9 +225,8 @@ impl NarrowingQuota for Quota {
 fn single_head_guard_preserves_refused_prefixes() {
     let theory = singleton_heads();
     let index = Narrower::new(&theory);
-    let producers = extract(&theory);
-    let mut scanning = producers.clone();
-    scanning.has_competing_heads = true;
+    let cold_producers = extract(&theory);
+    let producers = cold_producers.clone();
     let mut region = Region::all_open(3);
     assert!(region.hold(1));
     let knowledge = index.knowledge();
@@ -240,6 +240,11 @@ fn single_head_guard_preserves_refused_prefixes() {
     assert!(required > 0);
     for stop in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for limit in 0..=required {
+            // Both routes and the complete baseline start with an empty
+            // classification cache, so every exact refusal prefix agrees.
+            let producers = cold_producers.clone();
+            let mut scanning = cold_producers.clone();
+            scanning.has_competing_heads = true;
             let mut guarded = Quota {
                 remaining: limit,
                 stop,

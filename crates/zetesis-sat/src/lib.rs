@@ -9,16 +9,16 @@
 //! external solver, or claim a refinement proof for its Rust implementation.
 #![forbid(unsafe_code)]
 
-mod cnf;
 mod clauses;
-mod error;
-mod projection;
-mod search;
-mod ordering;
+mod cnf;
 mod encoding;
+mod error;
 mod ferraris;
-mod timing;
+mod ordering;
+mod projection;
 mod region_filter;
+mod search;
+mod timing;
 pub use region_filter::{
     RegionConsequence, RegionFeasibility, RegionFilter, RegionFilterStatistics, RegionFilterWorker,
     RegionPass,
@@ -41,9 +41,10 @@ pub use error::Incomplete;
 pub use ferraris::{
     BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertificateError, CertificateLimits,
     CertificateOrder, CertificatePlanStatistics, CertifiedStatistics, Check, CompletionExecutor,
-    CompletionScratch, CompletionStatistics, Engagement, Limits, RegionCounts,
-    RegionFrontierStatistics, RegionSearchStatistics, RegionWalkEngagement, RegionWorkerStatistics,
-    SearchMethod, StableModels, Statistics, SupportStatistics, SupportStatus, check, check_with,
+    CompletionScratch, CompletionStatistics, Engagement, GeneratorOrderStatistics,
+    GeneratorOrderStatus, Limits, RegionCounts, RegionFrontierStatistics, RegionSearchStatistics,
+    RegionWalkEngagement, RegionWorkerStatistics, SearchMethod, StableModels, Statistics,
+    SupportStatistics, SupportStatus, check, check_with,
 };
 pub use projection::{ProjectionLimits, ProjectionResource, ProjectionStatistics};
 pub use search::{SearchLimits, SearchStatistics, Solve, solve, solve_with_statistics};

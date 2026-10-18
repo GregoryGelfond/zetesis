@@ -13,7 +13,7 @@
 mod domains;
 mod totality;
 pub(crate) use totality::supports_column_totality;
-pub(super) use totality::{needed as needs_totality, positive_bounds, range_body};
+pub(super) use totality::{column_bounds, needed as needs_totality, positive_bounds, range_body};
 
 use std::{cmp::Ordering, ops::Deref};
 

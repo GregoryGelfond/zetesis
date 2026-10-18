@@ -890,8 +890,10 @@ arithmetic. An arithmetic fault and a missing positive fact are different object
 
 The Rust [whole-family omission](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/arithmetic/certified.rs)
 uses a stronger implementation premise: every normalized sibling is flat, its
-scalar expressions are total on completed positive columns, and its body and
-plain-head key variables are covered by positive atoms. It can then omit a scan
+scalar expressions are total on completed positive columns extended by checked
+body assignments, and every body and head key is covered by those inputs.
+Head suffixes may copy values or construct terms from covered inputs, retaining
+ordinary construction limits; arithmetic head expressions decline. It can then omit a scan
 that would discover neither an undefined instance nor a fatal diagnostic. The
 proof attempt does not construct a definedness witness or claim that a join is
 nonempty; empty required columns and any unproved sibling retain the ordinary
@@ -2303,6 +2305,30 @@ denote a covered subset of the requiring heads; the original guards still
 establish the requirements of every omitted head. The laws
 do not verify that traversal, canonical lookup or its resource behavior.
 
+[`PairwiseExclusions`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PairwiseExclusions.lean)
+replaces a complete family of pairwise negative conjunctions with one negated
+unit threshold at two. Its carrier has distinct indices; every edge has two
+distinct carrier endpoints, and every unordered carrier pair occurs. Edges may
+repeat or reverse. Conditions may be arbitrary formulas. `original` proves equal
+original truth, `frozen` equal truth at every frozen candidate and tested
+interpretation without a subset premise, and `stable_in_context` equal answer-set
+membership in any unchanged surrounding theory. The frozen step uses the general
+fact that a negative constraint freezes entirely according to its original truth.
+
+The Rust [pair collector](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_ground/pairwise_exclusions.rs)
+uses exact interned atom-node identities after separately certified explicit
+facts are removed. A completed original constraint join delimits the population;
+source provenance alone cannot establish coverage. Sorting, duplicate-edge
+removal, component membership and the distinct-edge count must establish the
+Lean coverage premises. Eager compilation may replace separate complete
+components; hybrid capture retires a whole streamed template only when every
+passing row is a pair and every component is certified. Full source validation,
+original atom and producer ownership, root provenance, typed failures, charged
+storage/work and the retirement of exact original rule positions remain
+executable obligations. The Lean law does not verify these Rust operations or
+native threshold storage and propagation. The [compiler contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/docs/pairwise-exclusions.md)
+states their scope and resource boundary.
+
 [`DomainProducers`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/DomainProducers.lean)
 models possible argument values before binding enumeration. One producer
 intersects its mandatory inputs and local bound; alternative producers contribute
@@ -2446,6 +2472,29 @@ producer is an invariant refusal, not a constraint verdict. Exact evaluation
 consumes remaining work and counts its actual capacity beside the retained least
 interpretation after CSR release. The append/partition law does not prove those
 Rust ownership, work, first-error or source-completeness obligations.
+
+`ConstrainedPositive.stable_iff_frozen_least` also permits a positive presentation
+of one candidate's reduct. The original candidate must first satisfy the theory.
+For every subset of that candidate, satisfaction of the presentation must agree
+with satisfaction of the entire frozen reduct. Under those premises, the
+candidate is stable exactly when it equals the presentation's least consequences.
+The original program need not be positive or acyclic. Recognizing all original
+roots, freezing negation, preserving atom identity and computing the least set
+from the empty interpretation remain executable correspondence obligations.
+
+[`PossibleFoundedness`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/PossibleFoundedness.lean)
+gives a separate candidate restriction. An upper relaxation must retain every
+body whose frozen reduct can hold below a possible set `P`. If `P` is closed
+under every permitted head of every possible producer, complete producer and
+choice coverage implies that each compatible answer set is contained in `P`.
+The proof intersects an answer set with `P`, establishes a model of the whole
+reduct, and applies minimality. It neither chooses one disjunctive head nor uses
+held atoms as seeds. `body_upper_sound` justifies the positive Boolean relaxation
+with candidate-valid false masks. Rust must additionally establish complete
+extraction, native aggregate relaxation, flattened-incidence correspondence,
+completed closure, valid cached acyclicity and exact interruption/accounting.
+Those obligations are not discharged by the semantic theorem or the small
+exhaustive tests.
 
 The CPU positive candidate cursor uses `positive_stable_iff` as a coverage law:
 only the completed least interpretation can belong to the answer-set family.
@@ -3151,7 +3200,8 @@ adds a separate justification for ordinary row selection. A full positive
 column of the immutable snapshot covers every full binding's value at that
 variable, even when it contains extra values excluded by another argument or
 relation. Completed support is required for post-admission selection; an
-unfinished support round permits only its snapshot-local multiples selector. An
+unfinished support round permits only selection justified for its own immutable
+snapshot. An
 expression reading one variable is evaluated on that whole domain. For sums,
 differences, negations, products and division or remainder with variable operands,
 Rust checks the numeric hull of every intermediate. This applies to eligible flat normal-rule
@@ -3176,6 +3226,16 @@ pivot; each variant separately authenticates its selected multiples against its
 own join order. This grants neither completed-support authority nor generic
 table selection. Evidence lifetime, storage accounting and error-preserving
 reuse remain implementation obligations.
+
+Deterministic scalar assignments now carry checked hulls through their original
+dependency order, including unused assignments. A separate comparison DAG
+exposes those dependencies to join planning; interval masks reject only prefixes
+whose enclosing bounds cannot satisfy a comparison. The original assignments,
+head phase and diagnostics remain. Shared expression nodes, full-column
+coverage, preservation of signed arithmetic and snapshot ownership are Rust
+correspondence obligations. The interval laws above do not establish the new
+planner or cursor implementation. Full-family scan omission additionally checks
+every generated key and admits only leaves or constructors in the head suffix.
 
 For an eligible body with one closed positive integer range, Rust can supply
 the full original interval to the same numeric-hull check. After original-family
@@ -3429,3 +3489,18 @@ library-model assumptions; it does not close the whole evaluation layer above.
 The [neuromorphic appendix](../appendices/neuromorphic.md) applies the same
 discipline to proposed event backends: it separates existing mask and inference
 laws from the unproved transport, epoch and completion correspondences.
+
+
+### Original generator dependency preference
+
+`zetesis_ferraris::GeneratorOrder` orders open candidate atoms; it changes no
+formula, held/cut consequence, root-satisfaction test or frozen-reduct query.
+Complete `Producers` supply generator marks and body-to-head dependencies. Both
+signs of every formula operand participate in the temporary graph; its component
+order is a preference, not a foundedness or normal-program certificate. Every
+selected atom is checked against the region's open mask. The existing
+`Search.CoverageTree.split` and `Cube.split_partition`/`Cube.split_disjoint` laws
+therefore supply the semantic coverage obligation. Rust refinement separately
+owes exact theory ownership, valid graph incidences, correct component ordering,
+open-only selection and preservation of both children on every execution route.
+No Lean claim here certifies the component implementation or measured behavior.

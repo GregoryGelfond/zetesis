@@ -16,6 +16,7 @@ import Zetesis.Ferraris
 import Zetesis.ParametricReduct
 import Zetesis.PositiveTheory
 import Zetesis.ConstrainedPositive
+import Zetesis.PairwiseExclusions
 import Zetesis.StreamedConstraints
 import Zetesis.StreamedRegions
 import Zetesis.StreamedConsequences
@@ -131,6 +132,7 @@ import Zetesis.Observations
 import Zetesis.SourceSupport
 import Zetesis.BindingScopes
 import Zetesis.DisjunctiveSupport
+import Zetesis.PossibleFoundedness
 import Zetesis.GateRestrictions
 import Zetesis.PackedQueryLiterals
 import Zetesis.RelationExtension

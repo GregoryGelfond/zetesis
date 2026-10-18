@@ -110,9 +110,9 @@ fn a_split_preserves_both_children_and_counts_the_net_gain() {
     // Two children replace the one parent: outstanding 1 -> 2, counted before
     // the pushes so no peer can observe a transient zero.
     assert_eq!(outstanding(&search.shared), 2);
-    // Cut is pushed last (on top of the LIFO deque), held beneath it.
-    let (mut cut, mut cut_knowledge) = search.shared.take_local(0).unwrap();
+    // Held is pushed last (on top of the LIFO deque), cut beneath it.
     let (mut held, mut held_knowledge) = search.shared.take_local(0).unwrap();
+    let (mut cut, mut cut_knowledge) = search.shared.take_local(0).unwrap();
     assert!(cut.is_cut(0) && held.is_held(0));
     let conditions = search.shared.restrictions.read().unwrap();
     // Narrowing the cut child learns that atom 0 is false. Its sibling must
@@ -181,8 +181,27 @@ fn a_split_overwrites_retired_knowledge() {
         .unwrap(),
         Stepped::Split
     ));
+    // Discover the actual split and its two children independently of either
+    // atom preference or LIFO branch direction. Their inherited knowledge is
+    // what this test exercises, not which policy selected the split.
+    let first = search.shared.take_local(0).unwrap();
+    let second = search.shared.take_local(0).unwrap();
+    let split_atoms: Vec<_> = (0..2)
+        .filter(|&atom| {
+            first.0.is_cut(atom) && second.0.is_held(atom)
+                || first.0.is_held(atom) && second.0.is_cut(atom)
+        })
+        .collect();
+    assert_eq!(split_atoms.len(), 1);
+    let atom = split_atoms[0];
+    let (cut, held) = if first.0.is_cut(atom) {
+        (first, second)
+    } else {
+        (second, first)
+    };
+    assert!(cut.0.is_cut(atom) && held.0.is_held(atom));
     // The cut child becomes contradictory after a new permanent restriction.
-    let restriction = theory(2, vec![Node::atom(0)], vec![0]);
+    let restriction = theory(2, vec![Node::atom(atom)], vec![0]);
     let narrower = Narrower::new(&restriction);
     search
         .shared
@@ -191,8 +210,6 @@ fn a_split_overwrites_retired_knowledge() {
         .unwrap()
         .permanent
         .push(Arc::new((restriction, narrower)));
-    let cut = search.shared.take_local(0).unwrap();
-    assert!(cut.0.is_cut(0));
     assert!(matches!(
         step(
             &search.shared,
@@ -209,8 +226,6 @@ fn a_split_overwrites_retired_knowledge() {
     search.shared.termination.resolve();
     assert!(workspaces.retired_knowledge.is_some());
 
-    let held = search.shared.take_local(0).unwrap();
-    assert!(held.0.is_held(0));
     assert!(matches!(
         step(
             &search.shared,
@@ -396,8 +411,8 @@ fn an_owner_and_thief_acquire_distinct_split_children() {
         let stolen = find_work(&search.shared, 1, IDLE_WAIT).unwrap();
         (local.join().unwrap(), stolen)
     });
-    assert!(local.0.is_cut(0));
-    assert!(stolen.0.is_held(0));
+    assert!(local.0.is_held(0));
+    assert!(stolen.0.is_cut(0));
     assert!(search.shared.take_local(0).is_none());
     assert_eq!(outstanding(&search.shared), 2);
 }
@@ -856,9 +871,9 @@ fn a_worker_splits_the_root_on_the_original_choice_head() {
     )
     .unwrap();
     assert!(matches!(stepped, Stepped::Split));
-    // The children differ only in the split atom: cut on top, held beneath.
-    let (cut, _) = search.shared.take_local(0).unwrap();
+    // The children differ only in the split atom: held on top, cut beneath.
     let (held, _) = search.shared.take_local(0).unwrap();
+    let (cut, _) = search.shared.take_local(0).unwrap();
     let split: Vec<_> = (0..theory.atom_count())
         .filter(|&atom| cut.is_cut(atom) && held.is_held(atom))
         .collect();

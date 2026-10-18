@@ -140,8 +140,9 @@ impl HybridFormula {
         Arc::ptr_eq(&self.0, &other.0)
     }
 
-    /// Retained producers, ineligible constraints, coherence and support guards.
-    /// This is the core theory, not the complete original program.
+    /// Retained producers, materialized constraints, coherence and support guards.
+    /// Materialization includes whole certified pair-exclusion templates; other
+    /// eligible constraints remain streamed. This is the original program's core.
     #[must_use]
     pub fn core_theory(&self) -> &Theory {
         &self.0.core.0.compiled.theory

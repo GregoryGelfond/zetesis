@@ -38,8 +38,9 @@ pub(super) fn arithmetic(operation: &Operation) -> bool {
 ///
 /// A successful hull covers the same complete column throughout this attempt.
 /// Only those hulls are retained; unknown domains still decline the certificate.
-/// The buffers are created only for multi-input arithmetic, share the ordinary
-/// support-storage leases, and are released with the attempt. No evidence crosses
+/// The buffers are created when interval analysis is needed, including scalar
+/// body assignments. They share the ordinary support-storage leases and are
+/// released with the attempt. No evidence crosses
 /// a rule, support snapshot, candidate, or later totality attempt.
 ///
 /// Each used variable's distinct numeric values are scanned at most once. Space
@@ -118,6 +119,40 @@ impl<'input, 'source> Preparation<'input, 'source> {
         context: &mut Context<'_, &mut Computation<'_, '_>>,
     ) -> Result<Option<Domain<'source>>, FormulaFailure> {
         domain(slot, &self.rule.body, self.support, context)
+    }
+
+    /// Certify every deterministic body assignment before publishing its hull.
+    /// The compiler orders these instructions by their scalar dependencies.
+    /// An unused target still owns an arithmetic obligation and is checked.
+    pub(super) fn bindings(
+        &mut self,
+        context: &mut Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<bool, FormulaFailure> {
+        let rule = self.rule;
+        for literal in &rule.body {
+            tick(context)?;
+            let LiteralIr::Bind { target, value } = literal else {
+                continue;
+            };
+            if *target >= rule.body_variables {
+                continue;
+            }
+            if !self.total(value, context)? {
+                return Ok(false);
+            }
+            let workspace = self
+                .workspace
+                .as_mut()
+                .expect("total expression has scratch");
+            let bound = *workspace
+                .values
+                .slice()
+                .last()
+                .expect("total expression has a root");
+            tick(context)?;
+            workspace.hulls.slice_mut()[*target] = Some(bound);
+        }
+        Ok(true)
     }
 
     pub(super) fn total(
@@ -237,7 +272,7 @@ fn numeric_domain(
     let Some(domain) = domain(slot, literals, support, context)? else {
         return Ok(None);
     };
-    column_range(domain.rows, domain.column, context)
+    column_bounds(domain.rows, domain.column, context)
 }
 
 /// A target-column hull, distinct from the smallest covering variable domain.
@@ -247,10 +282,12 @@ pub(in crate::formula_support) fn positive_bounds<C>(
     column: usize,
     context: &mut Context<'_, C>,
 ) -> Result<Option<(i32, i32)>, FormulaFailure> {
-    Ok(column_range(rows, column, context)?.and_then(Range::positive_bounds))
+    Ok(column_bounds(rows, column, context)?.and_then(Range::positive_bounds))
 }
 
-fn column_range<C>(
+/// Every numeric value in one complete immutable column, or a conservative
+/// decline for empty, mixed or unindexed columns. No binding existence follows.
+pub(in crate::formula_support) fn column_bounds<C>(
     rows: &crate::formula_support::relations::RelationRows<'_>,
     column: usize,
     context: &mut Context<'_, C>,

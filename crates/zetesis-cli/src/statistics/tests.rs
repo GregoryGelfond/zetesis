@@ -478,3 +478,28 @@ fn incomplete_and_requested_model_statistics_do_not_claim_exhaustion_or_optimali
     assert!(!text.contains("objective: optimal"));
     assert!(!String::from_utf8(output).unwrap().contains("OPTIMUM FOUND"));
 }
+
+#[test]
+fn frozen_positive_statistics_report_incomplete_attempts() {
+    let statistics = zetesis_sat::Statistics {
+        reduct: zetesis_sat::ReductStatistics {
+            frozen_positive_attempts: 3,
+            frozen_positive_completed: 2,
+            frozen_positive_preparation_work: 5,
+            frozen_positive_work: 17,
+            ..zetesis_sat::ReductStatistics::default()
+        },
+        ..zetesis_sat::Statistics::default()
+    };
+    let mut output = Vec::new();
+    super::countermodel(
+        &mut output,
+        &crate::SolveConfig::from(&options(&[])),
+        &statistics,
+        "stable models",
+    )
+    .unwrap();
+    assert!(String::from_utf8(output).unwrap().contains(
+        "  frozen positive reduct: attempts=3; completed=2; preparation work=5; work=17 (included in search work)\n"
+    ));
+}

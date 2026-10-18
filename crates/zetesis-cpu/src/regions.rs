@@ -8,8 +8,9 @@
 //! is then refuted, a leaf when every atom is decided, split on the open
 //! atom its narrowing preferred or else its highest open atom, or counted
 //! when its narrowing decided nothing beyond the split and the caller
-//! counts such regions. The cut branch is visited before the held one, so
-//! with no preference the leaves come in the order of a binary counter over
+//! counts such regions. By default the cut branch is visited before the held
+//! one; [`Traversal::with_held_first`] reverses that preference. With the default
+//! branch order and no atom preference, leaves follow a binary counter over
 //! the atoms with atom zero as its low bit (`Cube.split_partition` and
 //! `Cube.split_disjoint` of `Search.lean`). The root is always split.
 //!
@@ -220,13 +221,29 @@ impl Region {
     }
     /// The open atoms, ascending.
     pub fn open(&self) -> impl Iterator<Item = usize> + '_ {
+        self.open_words(std::iter::repeat(u64::MAX))
+    }
+    /// Open atoms selected by a borrowed bitmask, ascending. Missing words
+    /// select nothing; excess words and unused tail bits are ignored. Bit
+    /// `atom % 64` in word `atom / 64` selects that atom.
+    ///
+    /// Visits at most `min(selected.len(), self.len().div_ceil(64))` words
+    /// plus the returned atoms, with constant space and no allocation.
+    pub fn open_in<'a>(&'a self, selected: &'a [u64]) -> impl Iterator<Item = usize> + 'a {
+        self.open_words(selected.iter().copied())
+    }
+    fn open_words<'a>(
+        &'a self,
+        selected: impl Iterator<Item = u64> + 'a,
+    ) -> impl Iterator<Item = usize> + 'a {
         self.held
             .iter()
             .zip(self.cut.iter())
+            .zip(selected)
             .enumerate()
-            .flat_map(move |(word, (&held, &cut))| {
+            .flat_map(move |(word, ((&held, &cut), selected))| {
                 let base = word * 64;
-                let mut bits = !(held | cut);
+                let mut bits = !(held | cut) & selected;
                 let valid = self.atoms - base;
                 if valid < 64 {
                     bits &= (1u64 << valid) - 1;
@@ -372,6 +389,8 @@ pub struct Traversal<S = ()> {
     /// The regions still to visit with their state, the next on top.
     regions: Vec<(Region, S)>,
     counting: Counting,
+    /// Visit the held child first at future splits; queued entries keep their order.
+    held_first: bool,
     /// The root has not been visited yet; it is split whatever its narrowing.
     root: bool,
     /// The caller narrowed the root before the traversal began, so it is
@@ -396,6 +415,7 @@ impl<S: Clone> Traversal<S> {
         Self {
             regions: vec![(root, state)],
             counting,
+            held_first: false,
             root: true,
             narrowed_root: false,
             statistics: self::RegionStatistics::default(),
@@ -412,6 +432,19 @@ impl<S: Clone> Traversal<S> {
             narrowed_root: true,
             ..Self::with_state(root, counting, state)
         }
+    }
+
+    /// Visit the held child before the cut child at subsequent splits.
+    ///
+    /// The default visits cut first. Both children retain the same independent
+    /// copies of their parent's state and cover the same disjoint partition.
+    /// This changes no narrowing, counting, work limit or failure behavior.
+    /// Already queued regions keep their order; choose this before the first
+    /// pull for a consistent held-first traversal. The extra state is one flag.
+    #[must_use]
+    pub const fn with_held_first(mut self) -> Self {
+        self.held_first = true;
+        self
     }
 
     /// The regions visited so far, by outcome.
@@ -466,8 +499,13 @@ impl<S: Clone> Traversal<S> {
             self.regions
                 .try_reserve(2)
                 .map_err(|_| E::from(Stop::Allocation))?;
-            self.regions.push((held, state.clone()));
-            self.regions.push((cut, state));
+            let (first, second) = if self.held_first {
+                (held, cut)
+            } else {
+                (cut, held)
+            };
+            self.regions.push((second, state.clone()));
+            self.regions.push((first, state));
         }
     }
 }

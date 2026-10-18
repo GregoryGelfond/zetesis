@@ -295,8 +295,8 @@ fn choice_heads_rank_before_more_constrained_atoms() {
         &mut Allowance::new(1000),
     );
     assert_eq!(choice.result, Ok(Some(0)));
-    // The choice bit is read with each open atom's count: no extra charge.
-    assert_eq!(choice.work, 5);
+    // Only the open choice can win; the four unmarked degrees are unread.
+    assert_eq!(choice.work, 1);
     assert_eq!(ordinary.work, 5);
 }
 
@@ -340,4 +340,41 @@ fn a_subject_with_choices_splits_on_a_choice_head() {
         split(OriginalSubject::new(&theory, producers).with_choices(&extraction.choice_heads)),
         Some(0)
     );
+}
+
+#[test]
+fn closed_and_outside_choice_bits_do_not_hide_open_atoms() {
+    let theory = Theory::new(
+        130,
+        FormulaParts::new(vec![], vec![]).unwrap(),
+        vec![],
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    let (mut region, known) = closed(&theory);
+    assert!(region.hold(0));
+    assert!(region.cut(64));
+    assert!(region.cut(129));
+    let choices = ChoiceHeads {
+        words: vec![1, 1, !3, u64::MAX],
+    };
+    let attempt = known.preferred_atom_reserved(
+        &region,
+        &choices,
+        &Cancellation::default(),
+        &mut Allowance::new(1000),
+    );
+    assert_eq!(attempt.result, Ok(Some(1)));
+    assert_eq!(attempt.work, 127);
+    let choices = ChoiceHeads {
+        words: vec![1, 1 | (1 << 63), !1, u64::MAX],
+    };
+    let attempt = known.preferred_atom_reserved(
+        &region,
+        &choices,
+        &Cancellation::default(),
+        &mut Allowance::new(1000),
+    );
+    assert_eq!(attempt.result, Ok(Some(127)));
+    assert_eq!(attempt.work, 1);
 }

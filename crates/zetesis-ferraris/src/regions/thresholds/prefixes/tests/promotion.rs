@@ -148,6 +148,7 @@ fn finish_pending(
                 producers: None,
                 frozen: None,
                 choices: &crate::regions::NO_CHOICES,
+                generator_order: None,
             },
             index,
             region,

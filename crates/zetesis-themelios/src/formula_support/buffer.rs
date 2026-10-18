@@ -63,6 +63,9 @@ impl<T> Buffer<T> {
         Ok(self)
     }
 
+    pub(crate) fn pop(&mut self) -> Option<T> {
+        self.values.pop()
+    }
     pub(crate) fn clear(&mut self) {
         self.values.clear();
     }

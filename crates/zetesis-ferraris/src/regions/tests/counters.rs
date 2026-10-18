@@ -32,6 +32,7 @@ fn copied_known<A: Count, B: Count>(known: &Known<A>) -> Known<B> {
         unknown: copied_counts(&known.unknown),
         thresholds: known.thresholds.clone(),
         seeded: known.seeded,
+        founded_closed: known.founded_closed,
     }
 }
 
@@ -77,6 +78,7 @@ fn same_known<A: Count, B: Count>(left: &Known<A>, right: &Known<B>) {
     );
     assert_eq!(values(&left.unknown), values(&right.unknown));
     assert_eq!(left.seeded, right.seeded);
+    assert_eq!(left.founded_closed, right.founded_closed);
     assert_eq!(left.thresholds, right.thresholds);
 }
 
@@ -123,8 +125,11 @@ fn compare_closures(theory: &Theory, frozen: Option<&[bool]>, max_work: u64) {
                     &cancellation,
                 )
             } else {
+                // Counter widths must pay the same cold classification work;
+                // one width must not populate another width's cache.
+                let producers = extracted.producers.clone();
                 narrower.narrow_known(
-                    crate::OriginalSubject::new(theory, extracted.producers.as_ref()),
+                    crate::OriginalSubject::new(theory, producers.as_ref()),
                     region,
                     knowledge,
                     &mut crate::NarrowingScratch::default(),

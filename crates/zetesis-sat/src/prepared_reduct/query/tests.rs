@@ -102,3 +102,29 @@ fn lowered_capacity_refusal_preserves_owner_for_retry() {
     let (retried, _) = check(&owner, &mut workspace);
     assert!(matches!(retried, Check::NonMinimal(_)));
 }
+
+#[test]
+fn prepared_reservation_includes_retained_positive_closure_scratch() {
+    let owner = prepare(&theory(0));
+    let candidate = Interpretation::new(owner.theory(), [0, 1]).unwrap();
+    let control = Cancellation::default();
+    let mut workspace = ReductWorkspace::default();
+    check(&owner, &mut workspace);
+    let mut evaluation = EvaluationWorkspace::default();
+    let truth = evaluation
+        .evaluate(&candidate, EvaluationLimits::default(), &control)
+        .result
+        .unwrap();
+    let closure = workspace
+        .positive
+        .check(&truth, EvaluationLimits::default(), &control);
+    assert!(matches!(
+        closure.result,
+        Ok(zetesis_ferraris::FrozenPositiveOutcome::NonMinimal(_))
+    ));
+    let retained = workspace.retained_bytes();
+    let limit = u64::try_from(retained).unwrap() - 1;
+    assert!(
+        matches!(workspace.reserve(&owner, limit, &control), Err(Incomplete::ReductStorage { required, .. }) if required >= retained)
+    );
+}

@@ -44,17 +44,44 @@ fn cyclic_choices() -> Theory {
     theory(5, nodes, roots)
 }
 
-#[test]
-fn shared_indexes_preserve_non_tight_answer_families() {
-    let theory = cyclic_choices();
+fn general_cyclic_choices() -> Theory {
+    let cycle = cyclic_choices();
+    assert!(matches!(
+        zetesis_ferraris::TightPlan::compile(
+            &cycle,
+            zetesis_ferraris::TightPlanLimits::default(),
+            &Cancellation::default()
+        ),
+        Err(zetesis_ferraris::TightError::PositiveCycle { .. })
+    ));
+    // Combine exactly the two cycle roots. This equivalent general formula
+    // preserves nonminimal proposals for the membership/index-sharing test.
+    let mut nodes = cycle.nodes().to_vec();
+    let mut roots = cycle.roots().to_vec();
+    let cycle_roots = roots.split_off(roots.len() - 2);
+    let combined = nodes.len();
+    nodes.push(Node::and_pair([cycle_roots[0], cycle_roots[1]]));
+    roots.push(combined);
+    let theory = theory(cycle.atom_count(), nodes, roots);
     assert!(matches!(
         zetesis_ferraris::TightPlan::compile(
             &theory,
             zetesis_ferraris::TightPlanLimits::default(),
             &Cancellation::default()
         ),
-        Err(zetesis_ferraris::TightError::PositiveCycle { .. })
+        Err(zetesis_ferraris::TightError::UnsupportedRoot { root }) if root == combined
     ));
+    let expected = expected(&theory);
+    assert_eq!(
+        expected,
+        crate::support::interpretations::stable_models(&cycle)
+    );
+    theory
+}
+
+#[test]
+fn shared_indexes_preserve_non_tight_answer_families() {
+    let theory = general_cyclic_choices();
     let expected = expected(&theory);
     assert_eq!(expected.len(), 8);
     let mut scalar =
@@ -339,8 +366,11 @@ fn producers_leave_nonminimal_models_to_the_checker() {
             Node::atom(1),
             Node::implies(0, 1),
             Node::implies(1, 0),
+            // The asserted conjunction preserves both roots while selecting
+            // general membership, beyond optional positive certificates.
+            Node::and_pair([2, 3]),
         ],
-        vec![2, 3],
+        vec![4],
     );
     let mut search = proposed(&theory, Limits::default());
     let mut received = BTreeSet::new();

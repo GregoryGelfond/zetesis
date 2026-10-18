@@ -25,7 +25,7 @@ pub(super) fn record_narrowing() {
 }
 
 /// `a <- b`, `b <- a`: the classical models are `{}` and `{a, b}`, and only
-/// `{}` is stable, so enumeration runs a proper-subset query on `{a, b}`.
+/// `{}` is stable; frozen-positive closure rejects the self-supported `{a, b}`.
 fn cycle() -> Theory {
     Theory::new(
         2,
@@ -81,6 +81,32 @@ fn extraction(theory: &Theory) -> u64 {
     zetesis_ferraris::producers(theory, RegionLimits::default(), &Cancellation::default())
         .unwrap()
         .work
+}
+
+// These test-only methods keep membership and handoff regressions on the
+// classical-candidate route even when optional producer pruning can decide the
+// fixture earlier. The original theory, index identity and choice marks remain.
+impl OriginalParts {
+    pub(in crate::ferraris) fn omit_producers_for_membership_test(&mut self) {
+        self.producers = None;
+    }
+}
+
+impl RegionSearch {
+    pub(in crate::ferraris) fn omit_producers_for_membership_test(&mut self) {
+        assert_eq!(
+            self.statistics.counts.regions, 0,
+            "before the first narrowing"
+        );
+        self.parts.omit_producers_for_membership_test();
+        self.statistics.producers = false;
+    }
+}
+
+impl IndexedTheory {
+    pub(crate) fn for_membership_test(theory: &Theory) -> Arc<Self> {
+        built(theory)
+    }
 }
 
 fn built(theory: &Theory) -> Arc<IndexedTheory> {
@@ -147,11 +173,33 @@ fn theory(nodes: Vec<Node>, roots: Vec<usize>) -> Theory {
 
 #[test]
 fn an_enumeration_builds_one_original_index() {
-    // The successor of the index-sharing test: the candidate walk and every
-    // proper-subset query read one index, built once per enumeration. Each
-    // run admits its own theory, so the per-instance count is this run's.
+    // The candidate walk builds one original index. Possible-founded closure
+    // cuts the positive cycle before membership, leaving the empty candidate.
+    // Its frozen-positive check shares that index and builds no subset regions.
     for (route, workers, producers) in ROUTES {
         let theory = cycle();
+        let cancellation = Cancellation::default();
+        let extraction =
+            zetesis_ferraris::producers(&theory, RegionLimits::default(), &cancellation).unwrap();
+        let narrower = Narrower::new(&theory);
+        let mut region = Region::all_open(theory.atom_count());
+        let (closed, direct) = narrower
+            .narrow_known(
+                OriginalSubject::new(&theory, extraction.producers.as_ref())
+                    .with_choices(&extraction.choice_heads),
+                &mut region,
+                &mut narrower.knowledge(),
+                &mut NarrowingScratch::default(),
+                RegionLimits::default(),
+                &cancellation,
+            )
+            .unwrap();
+        assert!(matches!(closed, Narrowing::Fixed { .. }));
+        assert_eq!(region.open().count(), 0);
+        assert_eq!(region.held().count(), 0);
+        // The independent core narrowing receipt plus extraction and one N+E
+        // index charge is the exact integration receipt on every route.
+        let region_work = extraction.work + indexing_work(&theory) + direct.work;
         let mut search = enumeration(&theory, route, workers, producers, Limits::default());
         assert_eq!(
             hooks::builds(&theory),
@@ -160,31 +208,32 @@ fn an_enumeration_builds_one_original_index() {
         );
         let models: Vec<_> = search.by_ref().map(Result::unwrap).collect();
         assert_eq!(models.len(), 1);
+        assert_eq!(models[0].atoms().count(), 0);
         assert!(search.exhausted());
         let statistics = search.statistics();
-        assert!(statistics.countermodel_queries > 0, "{route}");
+        assert_eq!(statistics.countermodel_queries, 1, "{route}");
         assert_eq!(hooks::builds(&theory), 1, "{route} with {workers} workers");
-        // The walk's receipts carry the index once; the queries share it.
-        assert_eq!(
-            statistics.regions.unwrap().counts.work,
-            CYCLE_REGIONS_WORK,
+        let counts = statistics.regions.unwrap().counts;
+        assert_eq!(counts.regions, 1, "{route}");
+        assert_eq!(counts.leaves, 1, "{route}");
+        assert_eq!(counts.work, region_work, "{route}");
+        assert_eq!(statistics.reduct.regions.work, 0, "{route}");
+        assert_eq!(statistics.reduct.frozen_positive_attempts, 1, "{route}");
+        assert_eq!(statistics.reduct.frozen_positive_completed, 1, "{route}");
+        assert_eq!(statistics.countermodels, 0, "{route}");
+        assert!(
+            statistics.reduct.frozen_positive_preparation_work > 0,
             "{route}"
         );
-        assert_eq!(statistics.reduct.regions.work, CYCLE_REDUCT_WORK, "{route}");
+        // No split or proper-subset witness adds work outside these receipts.
+        assert_eq!(statistics.search.decisions, 0, "{route}");
         assert_eq!(
-            statistics.search.work, CYCLE_SEARCH_WORK,
+            statistics.search.work,
+            region_work + statistics.reduct.frozen_positive_work,
             "{route} with {workers} workers"
         );
     }
 }
-
-/// Complete receipts on every region route. The original index costs N + E
-/// = 4 + 4, counted once beside 28 producer/walk operations and the choice-head
-/// scan's visit to each of the 2 roots. The reduct walks reuse that index.
-/// Search also charges two splits and two subset-atom reads.
-const CYCLE_REGIONS_WORK: u64 = 28 + 2 + 8;
-const CYCLE_REDUCT_WORK: u64 = 18;
-const CYCLE_SEARCH_WORK: u64 = CYCLE_REGIONS_WORK + CYCLE_REDUCT_WORK + 4;
 
 #[test]
 fn a_positive_certificate_route_builds_no_index() {
@@ -448,32 +497,40 @@ fn a_failed_region_query_records_growth_without_replacing_its_error() {
     let theory = cycle();
     let candidate = Interpretation::new(&theory, []).unwrap();
     let index = built(&theory);
-    let mut state = State::new(SearchMethod::Regions);
+    let mut workspace = crate::ReductWorkspace::default();
     let cancellation = Cancellation::default();
     let mut budget = budget(&cancellation, 0);
     let mut statistics = Statistics::default();
-    // Truth fits exactly. Scratch preparation grows the pending mask before
-    // the query's first charged read is refused by the work ceiling.
-    let limit = u64::try_from(state.workspace.retained_bytes()).unwrap() + indexing_work(&theory);
-    assert!(matches!(
-        state.check(
-            &theory,
-            Some(&index),
+    // Exercise the general query directly: an optional closure certificate can
+    // now refuse before any narrowing scratch grows. Truth fits exactly; this
+    // query grows its pending mask before its first charged read is refused.
+    let limit = u64::try_from(workspace.retained_bytes()).unwrap() + indexing_work(&theory);
+    let limits = Limits {
+        max_reduct_bytes: limit,
+        ..Limits::default()
+    };
+    let result = (|| {
+        let evaluated = workspace.evaluate(&candidate, limits, &cancellation, &mut statistics)?;
+        ReductQuery::new(&index).check(
+            zetesis_ferraris::FrozenSubject::new(&theory, evaluated.truth.truth()),
             &candidate,
-            Limits {
-                max_reduct_bytes: limit,
-                ..Limits::default()
-            },
+            limits,
             &mut budget,
             &mut statistics,
-        ),
+            evaluated.narrowing,
+        )
+    })();
+    assert!(matches!(
+        workspace.finish_check(result, limit, &mut statistics),
         Err(Incomplete::WorkLimit)
     ));
-    let retained = state.workspace.retained_bytes();
+    let retained = workspace.retained_bytes();
     assert!(retained > u128::from(limit));
     assert_eq!(statistics.reduct.peak_workspace_bytes, retained);
 }
 
 mod batch_control;
 mod composition;
+mod generator_order;
+mod ordering;
 mod preference;

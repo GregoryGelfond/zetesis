@@ -322,8 +322,9 @@ fn exact_scalar_work_boundary_includes_certification_and_residual_completion() {
 #[test]
 fn certificate_failure_retains_pending_candidates_without_reentering_completion() {
     let original = three_choices();
-    // Construction fits, but the per-candidate plan plus scratch does not.
-    let probe = zetesis_ferraris::TightPlan::compile(
+    // Keep construction fixed; the per-candidate work allowance admits original
+    // validation but refuses ranked support for the actual first proposal.
+    let mut probe = zetesis_ferraris::TightPlan::compile(
         &original,
         TightPlanLimits::default(),
         &Cancellation::default(),
@@ -348,7 +349,9 @@ fn certificate_failure_retains_pending_candidates_without_reentering_completion(
             .unwrap()
     );
     let mut pool = CompletionExecutor::default();
-    let result = stream.next_batch_with_completion(batch_limits(2), &mut pool, |_, rows| {
+    let mut first = None;
+    let result = stream.next_batch_with_completion(batch_limits(2), &mut pool, |owner, rows| {
+        first = Some(Interpretation::new(owner, rows[0].atoms()).unwrap());
         Ok::<_, Infallible>(vec![BatchVerdict::Residual; rows.len()])
     });
     assert!(matches!(
@@ -362,25 +365,56 @@ fn certificate_failure_retains_pending_candidates_without_reentering_completion(
     assert_eq!(stream.statistics().stable_models, 0);
     assert_eq!(stream.statistics().certified.unwrap().failed, 1);
     let certified = stream.statistics().certified.unwrap();
-    // The refused check is the worker's first, a complete one: the plan with its
-    // readers index, one truth byte per node, and the kept candidate words and
-    // queued marks; its work ran out testing roots, before support was reserved.
+    assert_first_tight_receipt(
+        &mut probe,
+        &first.expect("checker receives the pending candidates"),
+        zetesis_ferraris::TightCheckLimits {
+            max_bytes: plan_bytes,
+            max_work: limits.max_verification_work,
+        },
+        &certified,
+    );
+    assert_eq!(pool.last_statistics(), None);
+    assert!(!stream.exhausted());
+}
+
+/// Compare a refused first check's receipt with the public retained workspace.
+/// Boolean short-circuiting determines whether the work prefix reaches support
+/// allocation, so both work and bytes are measured for this exact proposal.
+fn assert_first_tight_receipt(
+    probe: &mut zetesis_ferraris::TightPlan,
+    candidate: &Interpretation,
+    limits: zetesis_ferraris::TightCheckLimits,
+    certified: &zetesis_sat::CertifiedStatistics,
+) {
     let Some(zetesis_sat::CertificatePlanStatistics::Tight(plan)) = certified.plan else {
         panic!("tight certificate required");
     };
     assert!(plan.resident_bytes > probe.statistics().resident_bytes);
+    assert!(
+        probe
+            .prepare_updates(
+                TightPlanLimits {
+                    max_bytes: limits.max_bytes,
+                    ..Default::default()
+                },
+                &Cancellation::default(),
+            )
+            .result
+            .unwrap()
+    );
+    assert_eq!(probe.statistics().resident_bytes, plan.resident_bytes);
+    let mut workspace = zetesis_ferraris::TightWorkspace::default();
+    let checked = workspace.check(probe, candidate, limits, &Cancellation::default());
+    assert!(matches!(
+        checked.result,
+        Err(TightError::Limit(TightResource::Work))
+    ));
+    assert_eq!(certified.checking_work, checked.work);
     assert_eq!(
         certified.tight_check_peak_bytes,
-        Some(
-            u128::from(plan.resident_bytes)
-                + original.nodes().len() as u128
-                + (original.atom_count().div_ceil(64) + original.nodes().len().div_ceil(64))
-                    as u128
-                    * size_of::<u64>() as u128
-        ),
+        Some(u128::from(plan.resident_bytes) + workspace.retained_bytes())
     );
-    assert_eq!(pool.last_statistics(), None);
-    assert!(!stream.exhausted());
 }
 
 #[test]

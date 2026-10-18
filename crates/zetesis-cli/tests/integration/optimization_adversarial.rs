@@ -33,9 +33,11 @@ fn assert_incomplete(report: &Report, output: &str) {
 
 #[test]
 fn failed_improving_replacement_preserves_a_valid_incumbent_and_full_score_count() {
-    let source = "{a}. #minimize {-1@0,k:a}.";
+    // The sole choice is visited held-first: {a} costs 1 and fits the cap.
+    // Its cut branch derives {b,c}, whose better cost cannot be retained.
+    let source = "{a}. b :- not a. c :- not a. #minimize {1@0,k:a}.";
     let mut limited = options();
-    limited.solve.max_optimal_atoms = 0;
+    limited.solve.max_optimal_atoms = 1;
     let (report, output) = solve(source, &limited);
     assert_incomplete(&report, &output);
     assert!(matches!(
@@ -43,17 +45,23 @@ fn failed_improving_replacement_preserves_a_valid_incumbent_and_full_score_count
         Some(Interruption::Incumbent(OptimizationStop::Atoms))
     ));
     assert_eq!(report.models, 1);
-    assert!(output.contains("\nAnswer: 1\n\nOptimization: 0\n"));
-    let retained = report.optimization.expect("previous valid empty incumbent");
-    assert_eq!(retained.score.costs(), &[(0, 0)]);
+    assert!(output.contains("\nAnswer: 1\na\nOptimization: 1\n"));
+    let retained = report
+        .optimization
+        .expect("previous valid one-atom incumbent");
+    assert_eq!(retained.score.costs(), &[(0, 1)]);
     assert_eq!(
         retained.scored_models, 2,
         "failed retention follows scoring"
     );
     assert_eq!(retained.tied_models, 1);
-    let (complete, _) = solve(source, &options());
+    let (complete, complete_output) = solve(source, &options());
+    assert_eq!(complete.completion, Completion::Exhausted);
+    assert_eq!(complete.models, 1);
+    assert!(complete_output.contains("\nAnswer: 1\nb c\nOptimization: 0\n"));
     let optimum = complete.optimization.expect("complete optimum");
-    assert_eq!(optimum.score.costs(), &[(0, -1)]);
+    assert_eq!(optimum.score.costs(), &[(0, 0)]);
+    assert_eq!(optimum.scored_models, 2);
     assert_eq!(
         retained.work, optimum.work,
         "both verified models were scored"

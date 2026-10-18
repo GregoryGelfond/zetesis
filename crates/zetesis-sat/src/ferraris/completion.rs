@@ -354,23 +354,26 @@ fn classify(
                 }
                 (None, Some(query)) => {
                     let result = (|| {
-                        let (truth, scratch) = workspace.evaluate(
+                        let evaluated = workspace.evaluate(
                             candidate,
                             input.limits,
                             budget.cancellation,
                             statistics,
                         )?;
-                        if !truth.is_model() {
+                        if !evaluated.truth.is_model() {
                             return Err(Incomplete::InvalidWitness);
                         }
                         increment(&mut statistics.countermodel_queries)?;
                         query.check(
-                            zetesis_ferraris::FrozenSubject::new(input.theory, truth.truth()),
+                            zetesis_ferraris::FrozenSubject::new(
+                                input.theory,
+                                evaluated.truth.truth(),
+                            ),
                             candidate,
                             input.limits,
                             budget,
                             statistics,
-                            scratch,
+                            evaluated.narrowing,
                         )
                     })();
                     workspace.finish_check(result, input.limits.max_reduct_bytes, statistics)?
@@ -539,6 +542,22 @@ fn merge(
     add(
         &mut statistics.reduct.original_work,
         worker.reduct.original_work,
+    )?;
+    add(
+        &mut statistics.reduct.frozen_positive_attempts,
+        worker.reduct.frozen_positive_attempts,
+    )?;
+    add(
+        &mut statistics.reduct.frozen_positive_completed,
+        worker.reduct.frozen_positive_completed,
+    )?;
+    add(
+        &mut statistics.reduct.frozen_positive_preparation_work,
+        worker.reduct.frozen_positive_preparation_work,
+    )?;
+    add(
+        &mut statistics.reduct.frozen_positive_work,
+        worker.reduct.frozen_positive_work,
     )?;
     add(
         &mut statistics.reduct.parameter_work,

@@ -293,11 +293,13 @@ fn source_consequences_never_enter_frozen_queries() {
         Node::atom(1),
         Node::implies(0, 1),
         Node::implies(1, 0),
+        // One general formula keeps the same cycle and its empty witness.
+        Node::and_pair([2, 3]),
     ];
-    let subject = theory(2, nodes.clone(), vec![2, 3]);
+    let subject = theory(2, nodes.clone(), vec![4]);
     let mut original_nodes = nodes;
-    original_nodes.extend([Node::falsum(), Node::implies(0, 4), Node::implies(5, 4)]);
-    let original = theory(2, original_nodes, vec![2, 3, 6]);
+    original_nodes.extend([Node::falsum(), Node::implies(0, 5), Node::implies(6, 5)]);
+    let original = theory(2, original_nodes, vec![4, 7]);
     assert!(stable_models(&original).is_empty());
     for route in ROUTES {
         let filter = Filter::new(&subject, require_first);

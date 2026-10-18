@@ -40,8 +40,8 @@ use region_proposals::RegionProposals;
 pub(crate) use regions::ReductQuery;
 use regions::RegionSearch;
 pub use regions::{
-    RegionCounts, RegionFrontierStatistics, RegionSearchStatistics, RegionWalkEngagement,
-    RegionWorkerStatistics, SearchMethod,
+    GeneratorOrderStatistics, GeneratorOrderStatus, RegionCounts, RegionFrontierStatistics,
+    RegionSearchStatistics, RegionWalkEngagement, RegionWorkerStatistics, SearchMethod,
 };
 
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
@@ -64,6 +64,9 @@ pub struct Limits {
     /// Named immutable reduct preparation and retained per-query capacity,
     /// each bounded independently. Aggregate completion also admits the shared
     /// prepared owner once alongside all worker/transient/result storage.
+    /// Original candidate generator ordering uses the same ceiling independently
+    /// for its transient graph and retained ranks; a named byte refusal declines
+    /// that optional preference, with its work prefix retained in search work.
     pub max_reduct_bytes: u64,
     /// Additional retained native-extrema narrowing index bytes per owner.
     /// This excludes legacy Boolean indexes and transient construction peak.
@@ -539,6 +542,7 @@ impl StableModels {
             theory,
             workers,
             limits.max_native_narrowing_bytes,
+            limits.max_reduct_bytes,
             &mut budget,
         )?;
         let statistics = Statistics {
@@ -601,6 +605,7 @@ impl StableModels {
                 Proposer::Regions(Box::new(RegionSearch::new(
                     theory,
                     limits.max_native_narrowing_bytes,
+                    limits.max_reduct_bytes,
                     &mut budget,
                 )?)),
                 None,
@@ -876,6 +881,12 @@ impl StableModels {
                     ),
                     reduct: crate::ReductStatistics {
                         original_work: merged.reduct.original_work,
+                        frozen_positive_attempts: merged.reduct.frozen_positive_attempts,
+                        frozen_positive_completed: merged.reduct.frozen_positive_completed,
+                        frozen_positive_preparation_work: merged
+                            .reduct
+                            .frozen_positive_preparation_work,
+                        frozen_positive_work: merged.reduct.frozen_positive_work,
                         peak_workspace_bytes: merged.reduct.peak_workspace_bytes,
                         regions: merged.reduct.regions,
                         ..self.statistics.reduct

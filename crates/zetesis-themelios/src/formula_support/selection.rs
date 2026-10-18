@@ -1,5 +1,8 @@
 //! Local atom coordinates select one source authority without copying payload.
 
+mod batch;
+pub(crate) use batch::SourceBatch;
+
 use crate::ProgramSite;
 use crate::formula_support::Context;
 use zetesis_core::catalog::AtomRef;
@@ -19,6 +22,17 @@ pub(crate) struct SourceSelection {
 }
 
 impl SourceSelection {
+    /// Collect source identities without assigning local coordinates. Finishing
+    /// sorts and deduplicates the private batch before publishing a selection.
+    pub(crate) fn batch(
+        computation: &Computation<'_, '_>,
+        limits: &FormulaLimits,
+        counters: &Counters,
+        location: ProgramSite,
+    ) -> Result<SourceBatch, FormulaFailure> {
+        Self::new(computation, limits, counters, location).map(SourceBatch::new)
+    }
+
     pub(crate) fn new(
         computation: &Computation<'_, '_>,
         limits: &FormulaLimits,

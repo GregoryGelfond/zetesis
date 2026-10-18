@@ -109,13 +109,12 @@ fn statistics_report_the_parallel_walks_workers_under_its_regions() {
     let mut configured = options(&["--stats", "--oracle", "countermodel", "--search", "regions"]);
     configured.workers = std::num::NonZeroUsize::new(2).unwrap();
     let (report, _, text) = solve("a | b.", &configured);
-    let workers = report
-        .countermodel_statistics
-        .unwrap()
-        .regions
-        .unwrap()
-        .workers
-        .unwrap();
+    let regions = report.countermodel_statistics.unwrap().regions.unwrap();
+    assert_eq!(
+        regions.counts.leaves, 2,
+        "both candidate leaves were visited"
+    );
+    let workers = regions.workers.unwrap();
     let delay = workers.engagement_delay.unwrap().as_nanos();
     // Under the default delay the host's clock decides whether so small a
     // walk engages; the line follows the state it took.
@@ -138,8 +137,18 @@ fn statistics_report_the_parallel_walks_workers_under_its_regions() {
         ),
         other => panic!("a walk that returned models has begun: {other:?}"),
     };
+    let generator = regions.generator_order;
+    let generator_line = format!(
+        "  candidate generator order: status={}; preparation work={}; peak bytes={}; retained bytes={} (work included in reading work)\n",
+        generator.status.label(),
+        generator.work,
+        generator.peak_bytes,
+        generator.retained_bytes,
+    );
     assert!(
-        text.contains(&format!("(included in search work)\n{line}")),
+        text.contains(&format!(
+            "(included in search work)\n{generator_line}{line}"
+        )),
         "{text}"
     );
 }

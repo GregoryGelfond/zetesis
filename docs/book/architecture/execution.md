@@ -88,10 +88,34 @@ one producer left demands that producer's body. The `zetesis-ferraris` crate nar
 these rules to a fixed point over the theory's own DAG, without a clause
 form (`FormulaBounds.read_sound`, `never_root_refutes`, `known_sound`,
 `unsupported_cut`). A region no reading refutes is split
-on the open atom the split ranking below prefers, cut branch first;
+on the open atom the split ranking below prefers, held branch first;
 a region with every atom decided is a leaf, and a leaf is a classical model, since at a full decision every
 root is sure or never (`FormulaBounds.decided_leaf_models`). The leaf
 is the candidate the reduct decides.
+
+When the complete producer inventory has positive cycles, narrowing also
+computes which atoms can have founded support. Starting empty, it propagates
+possible bodies through positive conjunctions and disjunctions and adds every
+permitted head of each enabled producer. Other body formulas remain possible
+unless already known false. Held atoms do not seed their own cycles. Atoms
+outside the completed closure can be cut; a held atom outside it refutes the
+region. This is a necessary restriction on candidates, not a replacement for
+reduct membership. Disjunctive heads are retained together, without shifting.
+
+The pass reuses the original incidence tables and worker scratch. Each worker
+prepares the positive Boolean dependencies of producer bodies once for the exact
+original theory. Later passes reset only those formula positions; formulas that
+cannot contribute to a producer body remain inactive. A completed
+acyclicity check skips it where ordinary support propagation suffices; interrupted
+checks publish no classification. A successfully closed region carries its
+completion to its children: if no atom or formula node becomes false, the same
+relaxation needs no repeat pass. Newly false evidence invalidates that completion,
+including a held decision that indirectly falsifies a body. This authority
+belongs to inherited knowledge for the same original subject, never reusable
+worker scratch. Candidate-only restrictions and frozen-reduct
+queries do not use this producer closure. The semantic law
+`PossibleFoundedness.stable_sub_possible` explains why the restriction preserves
+answer sets; correspondence to the indexed Rust implementation remains separate.
 
 Native nonnegative threshold rows also share consequences during
 original-candidate narrowing. Preparation links exact prefixes of grouped
@@ -167,7 +191,36 @@ without a restart, and no exclusion index is kept, because a leaf is visited
 once. Propagation under the original theory, permanent restrictions and current
 bound repeats to a shared fixed point before one split ranking. That ranking
 uses the active bound when present, otherwise the latest permanent restriction,
-otherwise the original theory. Open atoms that head an atomic choice root of the
+otherwise the original theory. With no active restriction, complete original
+producer coverage can prepare a generator preference once. It prefers atomic
+choice heads and ordinary disjunctive heads having no ordinary singleton
+producer, then chooses the earliest ground dependency component and lowest atom
+identity within that component. Once no open generator remains, it uses the same
+component order over all open atoms. Both signs of formula operands contribute:
+atom-to-occurrence, operand-to-parent and producer-body-to-every-head edges.
+Headless constraints add no producer edge. This is a scheduling dependency graph,
+not positive-program certification or disjunctive shifting. Unused original
+formulas can change ties between incomparable components, but cannot reverse a
+required dependency precedence.
+
+The reusable `GeneratorOrder` keeps the exact original theory identity, packed
+head marks and one rank per atom. Its two temporary compact incidence tables and
+iterative component walks take O(A + N + E + H) work and temporary space; retained
+space is O(A), and a split reads each eligible open atom once. The work quota is
+streamed and refunded like narrowing, preserving every refused prefix. The
+existing reduct-preparation byte allowance separately bounds named simultaneous
+generator preparation storage. A byte refusal retains the existing preference;
+work exhaustion, cancellation, deadlines and allocation failure remain explicit
+incompletion. `generator_order` receipts report applicability, preparation work,
+peak named bytes and retained bytes. Preparation work is already included in
+reading work. One owner is shared by scalar, parallel and joined device candidate
+producers; frozen proper-subset searches never use it. Source preparation and
+grounding may give eager and hybrid executions different dependency graphs, so
+coverage and complete answer families, rather than identical traversal order,
+are the preserved contract.
+
+With an active restriction or without a prepared generator order, the existing
+preference applies. Open atoms that head an atomic choice root of the
 original theory rank first, whether or not the theory lies in the producer
 fragment: deciding the choices leaves the atoms they derive to propagation and,
 where it applies, the support cut. Among atoms of the same kind, the one with the
@@ -178,8 +231,8 @@ already closed for the region, without preparing another index. Any open
 atom is a sound split (the `CoverageTree.split` node of `Search.lean`), so this
 order changes the regions visited, never the answers. The packed region masks enumerate
 open atoms in ascending order, excluding decided atoms and unused final bits;
-each inspected parent count spends one work permit: one per open atom for the
-original-only ranking, two when a restriction supplies the primary count.
+each inspected parent count spends one work permit. The primary count is read
+once per eligible atom; secondary counts are read only to resolve primary ties.
 The traversal itself is one operation in `zetesis-cpu`, shared by both
 routes when one worker walks; with several workers the formula route walks
 the same tree in `zetesis-sat`'s parallel regions: the walk begins on the
@@ -188,7 +241,21 @@ from which idle workers steal. The closure
 route narrows by its two closures, the formula route by
 the readings.
 
-Under the same method the reduct's proper-subset query is a second region
+Before a CPU region query searches subsets, an optional checked fragment can
+decide membership by least consequences of the frozen reduct. Candidate-false
+subformulas become false; true default negations become true. Every active root
+must then have a positive conjunction/disjunction body and one distinct live
+atomic head. This can cover a candidate of a disjunctive original program without
+classifying that whole program as normal. Closure starts empty. Equality with
+the candidate proves stability; a smaller closure supplies an independently
+checked countermodel. Unsupported active roots retain the general subset query.
+Cancellation or exhausted work or storage returns an incomplete result with its
+charged work preserved; it does not trigger fallback or establish nonmembership.
+Original satisfaction remains mandatory. The CPU workspace reuses source
+incidences, never another candidate's consequences; GPU residual completion
+currently retains its general subset query.
+
+For the general case, the reduct's proper-subset query is a second region
 tree: its root cuts every atom outside the candidate and leaves the
 candidate's atoms open, its regions are narrowed by the knowledge of the
 frozen reduct, read as the original DAG under the candidate's truth mask,

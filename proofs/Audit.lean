@@ -340,6 +340,7 @@ import Zetesis
 #print axioms Zetesis.ConstrainedPositive.stable_append_constraints
 #print axioms Zetesis.ConstrainedPositive.positive_stable_iff
 #print axioms Zetesis.ConstrainedPositive.failed_constraints_no_stable
+#print axioms Zetesis.ConstrainedPositive.stable_iff_frozen_least
 #print axioms Zetesis.ConstructorPatterns.function_shape_exact
 #print axioms Zetesis.ConstructorPatterns.tuple_refuses_function
 #print axioms Zetesis.ConstructorPatterns.root_capture
@@ -1119,6 +1120,12 @@ import Zetesis
 #print axioms Zetesis.Refinement.PackedWordIterator.run_exhausted
 #print axioms Zetesis.Refinement.PackedWordIterator.initialized_exact
 #print axioms Zetesis.Refinement.PackedWordIterator.packed_exact
+#print axioms Zetesis.PairwiseExclusions.masked_unit_sum_two
+#print axioms Zetesis.PairwiseExclusions.original
+#print axioms Zetesis.PairwiseExclusions.constraint_frozen_iff
+#print axioms Zetesis.PairwiseExclusions.constraints_frozen_iff
+#print axioms Zetesis.PairwiseExclusions.frozen
+#print axioms Zetesis.PairwiseExclusions.stable_in_context
 #print axioms Zetesis.ParametricReduct.satisfies_original
 #print axioms Zetesis.ParametricReduct.satisfies_reduct
 #print axioms Zetesis.ParametricReduct.countermodel_iff
@@ -1157,6 +1164,11 @@ import Zetesis
 #print axioms Zetesis.PositiveTheory.models_reduct_exact
 #print axioms Zetesis.PositiveTheory.stable_iff_least_constraints
 #print axioms Zetesis.PositiveTheory.failed_constraint_no_model
+#print axioms Zetesis.PossibleFoundedness.producer_intersection
+#print axioms Zetesis.PossibleFoundedness.choice_intersection
+#print axioms Zetesis.PossibleFoundedness.intersection_models_reduct
+#print axioms Zetesis.PossibleFoundedness.stable_sub_possible
+#print axioms Zetesis.PossibleFoundedness.body_upper_sound
 #print axioms Zetesis.ProducerScheduling.stable_of_reads_only
 #print axioms Zetesis.ProducerScheduling.selective_step_exact_of_stable
 #print axioms Zetesis.ProducerScheduling.empty_selection_closed_of_stable

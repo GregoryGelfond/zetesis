@@ -2,7 +2,8 @@
 //!
 //! Only a selected complete descendant may publish an atom or group. Later
 //! siblings reuse exactly the prefix left intact by join undo. Matched rows
-//! supply identities; support membership supplies no truth premise.
+//! supply identities; support membership supplies no truth premise. A separately
+//! collected explicit fact permits its positive body occurrence to become true.
 //!
 //! Balanced groups have at most three children. Consecutive traversal columns
 //! split into two or three nearly equal ranges recursively, so native rows keep
@@ -187,24 +188,20 @@ impl Body {
                     if compiled || at >= row.unchanged {
                         testing::record(testing::Point::Atom);
                     }
-                    if compiled {
+                    let node = if compiled {
                         // A compiled group never seeds per-atom prefix state.
                         builder.matched_atom(row.rows[at], rule.location)?
                     } else {
                         self.atoms.dispatched(at, row, builder, rule.location)?
-                    }
+                    };
+                    builder.fixed_body_atom(node, rule.location)?
                 }
                 Input::Group(child) => self.group(child, row, builder, rule)?,
             };
         }
         #[cfg(test)]
         testing::record(testing::Point::Group);
-        // The original ordered positive operands, including duplicates, enter
-        // the same sole canonical node index. Support is never assumed true.
-        let node = builder.node(
-            NodeView::And(&values[..children.slice().len()]),
-            rule.location,
-        )?;
+        let node = builder.fixed_body_group(&values[..children.slice().len()], rule.location)?;
         if let Some(map) = &mut self.groups.slice_mut()[index].compiled {
             map.insert(
                 key,
@@ -260,16 +257,16 @@ impl Body {
             let children = self.groups.slice()[index].children;
             for (slot, &input) in children.slice().iter().enumerate() {
                 builder.work(rule.location)?;
-                values[slot] = self.prefix_node(input);
+                let node = self.prefix_node(input);
+                values[slot] = match input {
+                    Input::Atom(_) => builder.fixed_body_atom(node, rule.location)?,
+                    Input::Group(_) => node,
+                };
             }
             #[cfg(test)]
             testing::record(testing::Point::Group);
-            // Children are atomic formulas or nonempty positive groups, never
-            // Boolean constants. Complete ordered duplicates remain operands.
-            let node = builder.node(
-                NodeView::And(&values[..children.slice().len()]),
-                rule.location,
-            )?;
+            let node =
+                builder.fixed_body_group(&values[..children.slice().len()], rule.location)?;
             self.groups.slice_mut()[index].node = Some(node);
         }
         Ok(self

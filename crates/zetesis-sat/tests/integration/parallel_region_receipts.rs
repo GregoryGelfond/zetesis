@@ -120,12 +120,18 @@ fn failed_reduct_narrowing_keeps_its_query_count() {
 }
 
 fn failed_reduct_narrowing_keeps_its_query_count_on(engagement: Engagement) {
-    // Two facts force one candidate and at least two frozen reads. There is
-    // no concurrent candidate whose completed query can mask a missing count.
+    // One conjunctive fact root forces both atoms, exactly as two separate
+    // facts do. The active general head makes frozen-positive checking decline,
+    // so one candidate reaches the general query and at least two frozen reads.
+    // No concurrent candidate can mask a missing failed-query count.
     let theory = Theory::new(
         2,
-        zetesis_ferraris::FormulaParts::new(vec![Node::atom(0), Node::atom(1)], vec![]).unwrap(),
-        vec![0, 1],
+        zetesis_ferraris::FormulaParts::new(
+            vec![Node::atom(0), Node::atom(1), Node::and_pair([0, 1])],
+            vec![],
+        )
+        .unwrap(),
+        vec![2],
         AdmissionLimits::default(),
     )
     .unwrap();
@@ -142,8 +148,12 @@ fn failed_reduct_narrowing_keeps_its_query_count_on(engagement: Engagement) {
     assert!(complete.next().is_none());
     assert!(complete.exhausted());
     assert_route(&complete, engagement);
-    assert_eq!(complete.statistics().countermodel_queries, 1);
-    let limit = complete.statistics().search.work - 1;
+    let completed = complete.statistics();
+    assert_eq!(completed.countermodel_queries, 1);
+    assert_eq!(completed.reduct.frozen_positive_attempts, 1);
+    assert_eq!(completed.reduct.frozen_positive_completed, 0);
+    assert!(completed.reduct.regions.work > 0);
+    let limit = completed.search.work - 1;
     let mut search = region_workers(
         &theory,
         engagement,
@@ -160,6 +170,9 @@ fn failed_reduct_narrowing_keeps_its_query_count_on(engagement: Engagement) {
     let statistics = search.statistics();
     assert!(!search.exhausted());
     assert_eq!(statistics.candidates, 1, "limit={limit}: {statistics:?}");
+    assert_eq!(statistics.reduct.frozen_positive_attempts, 1);
+    assert_eq!(statistics.reduct.frozen_positive_completed, 0);
+    assert_eq!(statistics.search.work, limit);
     // The original index was charged when the candidate walk started and is
     // shared.
     // Every unit of reduct-region work therefore comes from frozen narrowing.

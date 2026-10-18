@@ -28,8 +28,11 @@ fn restrictions_keep_the_original_reduct_and_semantic_instance() {
             Node::atom(1),
             Node::implies(0, 1),
             Node::implies(1, 0),
+            // The asserted conjunction preserves both roots while selecting
+            // general membership, beyond optional positive certificates.
+            Node::and_pair([2, 3]),
         ],
-        vec![2, 3],
+        vec![4],
     );
     let guard = theory(2, vec![Node::atom(0)], vec![0]);
     let mut search =
@@ -47,16 +50,16 @@ fn refinements_accumulate_and_restarts_preserve_exact_previous_blocks() {
     let original = choices(2);
     let mut search =
         StableModels::new(&original, Limits::default(), Cancellation::default()).unwrap();
-    let first = search.next().unwrap().unwrap();
-    assert!(key(&first).is_empty());
+    let first = key(&search.next().unwrap().unwrap());
+    let mut expected = BTreeSet::from([vec![0], vec![0, 1]]);
+    // A previously published answer never returns, whether or not this
+    // ordering's first answer satisfies the later positive restriction.
+    expected.remove(&first);
     let tautology = theory(2, vec![Node::falsum(), Node::implies(0, 0)], vec![1]);
     search.restrict_candidates(&tautology).unwrap();
     let positive = theory(2, vec![Node::atom(0)], vec![0]);
     search.restrict_candidates(&positive).unwrap();
-    assert_eq!(
-        remaining(&mut search),
-        BTreeSet::from([vec![0], vec![0, 1]])
-    );
+    assert_eq!(remaining(&mut search), expected);
     assert_eq!(search.statistics().candidate_restrictions, 2);
     assert_eq!(
         search.restrict_candidates(&positive),

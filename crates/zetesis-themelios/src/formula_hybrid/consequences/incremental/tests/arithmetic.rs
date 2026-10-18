@@ -169,7 +169,7 @@ fn queens_arithmetic_uses_incremental_scanning() {
 }
 
 #[test]
-fn keyed_send_keeps_generated_binding_scans() {
+fn keyed_send_certifies_generated_binding_scans() {
     let path =
         zetesis_test_support::repository::correctness().join("standalone/send-money/send-money.lp");
     let source = std::fs::read_to_string(path).unwrap();
@@ -180,8 +180,8 @@ fn keyed_send_keeps_generated_binding_scans() {
     let _ = pass(&mut checker, &region, ConstraintRegionPass::First);
     let prepared = checker.prepared.as_ref().unwrap();
     // The exact-one key rewrite replaces each written carry equation by
-    // demanded atoms. Their computed arguments are generated bindings, which
-    // the complete-column arithmetic certificate deliberately does not cover.
+    // demanded atoms. Their generated arguments now receive the same
+    // complete-column arithmetic certificate as direct carry expressions.
     assert!(
         prepared
             .source
@@ -200,8 +200,15 @@ fn keyed_send_keeps_generated_binding_scans() {
                 })
             })
     );
-    assert_eq!(prepared.incremental_eligible, Some(false));
-    assert!(prepared.incremental.is_none());
+    assert_eq!(prepared.incremental_eligible, Some(true));
+    assert!(prepared.incremental.is_some());
+    assert!(
+        prepared
+            .plans
+            .iter()
+            .flatten()
+            .any(crate::formula_hybrid::PreparedRule::has_totality_certificate)
+    );
 }
 
 #[test]

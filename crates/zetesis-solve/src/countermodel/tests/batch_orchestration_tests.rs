@@ -284,10 +284,19 @@ fn cancellation_preserves_unconsumed_verified_answers() {
         Some(Interruption::Countermodel(Incomplete::Cancelled))
     );
     assert_eq!(capture.answers.len(), 1);
-    assert!(capture.answers[0].0.atoms().is_empty());
+    assert_eq!(execution.proposed.len(), 1);
+    let proposed = &execution.proposed[0];
+    assert_eq!(proposed.len(), 3);
+    // Publication consumes the first verified proposal's full interpretation;
+    // the source's empty display projection cannot replace that identity.
+    let first = Model::from_positions(owner.atom_catalog(), proposed[0].iter().copied()).unwrap();
+    assert_eq!(capture.answers[0].0, first);
     assert_eq!(capture.outcome.verified_models(), 3);
+    assert_eq!(capture.outcome.candidate_progress(), 3);
     assert_eq!(execution.queue.len(), 2);
-    assert_eq!(execution.snapshots.last().unwrap().0.pending, 0);
+    let batch = execution.snapshots.last().unwrap().0;
+    assert_eq!(batch.committed, 3);
+    assert_eq!(batch.pending, 0);
 }
 
 #[test]

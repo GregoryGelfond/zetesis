@@ -73,6 +73,36 @@ fn open_atoms_preserve_sparse_positions() {
 }
 
 #[test]
+fn masked_open_atoms_match_scalar_intersection() {
+    for atoms in [0_usize, 1, 63, 64, 65, 127, 128, 129] {
+        let mut region = Region::all_open(atoms);
+        for atom in 0..atoms {
+            match atom % 3 {
+                0 => assert!(region.hold(atom)),
+                1 => assert!(region.cut(atom)),
+                _ => {}
+            }
+        }
+        let before = region.clone();
+        for words in 0..=atoms.div_ceil(64) + 1 {
+            for pattern in [0, 1, u64::MAX, 0xAAAA_AAAA_AAAA_AAAA] {
+                let selected = vec![pattern; words];
+                let expected = (0..atoms)
+                    .filter(|&atom| {
+                        region.is_open(atom)
+                            && selected
+                                .get(atom / 64)
+                                .is_some_and(|word| word & (1 << (atom % 64)) != 0)
+                    })
+                    .collect::<Vec<_>>();
+                assert_eq!(region.open_in(&selected).collect::<Vec<_>>(), expected);
+            }
+        }
+        assert_eq!(region, before);
+    }
+}
+
+#[test]
 fn a_region_holds_cuts_or_leaves_each_atom_open() {
     let mut region = Region::all_open(3);
     assert!(region.is_open(0) && region.is_open(1) && region.is_open(2));
@@ -469,4 +499,59 @@ fn a_traversal_from_a_narrowed_root_does_not_narrow_it_again() {
     assert_eq!(narrowed, vec![vec![(1, false)], vec![(1, true)]]);
     assert_eq!(traversal.statistics().regions, 3);
     assert_eq!(traversal.statistics().counted, 2);
+}
+
+#[test]
+fn held_first_reverses_an_unrestricted_traversal() {
+    let cut = visits(Traversal::new(Region::all_open(4), Counting::Never));
+    let held = visits(Traversal::new(Region::all_open(4), Counting::Never).with_held_first());
+    assert_eq!(held, cut.into_iter().rev().collect::<Vec<_>>());
+}
+
+#[test]
+fn held_first_preserves_refuted_coverage_and_lineage() {
+    fn family(held_first: bool) -> (Vec<Vec<usize>>, zetesis_cpu::regions::RegionStatistics) {
+        let mut walk = Traversal::with_state(Region::all_open(4), Counting::Never, 0_usize);
+        if held_first {
+            walk = walk.with_held_first();
+        }
+        let mut family = Vec::new();
+        while let Some(visit) = walk
+            .next(|region, depth| {
+                *depth += 1;
+                if region.is_held(3) && region.is_held(2) {
+                    Ok::<_, Stop>(Narrowing::Refuted)
+                } else {
+                    Ok(Narrowing::Fixed { changed: false })
+                }
+            })
+            .unwrap()
+        {
+            let Visit::Leaf(region, depth) = visit else {
+                panic!("never counted")
+            };
+            assert_eq!(depth, 5, "only this leaf's lineage updates its state");
+            family.push(region.held().collect());
+        }
+        family.sort();
+        (family, walk.statistics())
+    }
+    let cut = family(false);
+    let held = family(true);
+    assert_eq!(held, cut);
+    assert_eq!(held.0.len(), 12);
+    assert_eq!(held.1.refuted, 1);
+}
+
+#[test]
+fn held_first_keeps_a_refused_region_pending() {
+    let mut walk = Traversal::new(Region::all_open(3), Counting::Never).with_held_first();
+    assert_eq!(
+        walk.next(|_, ()| Err(Stop::WorkLimit)),
+        Err(Stop::WorkLimit)
+    );
+    let after_refusal = visits(walk);
+    let complete = visits(Traversal::new(Region::all_open(3), Counting::Never).with_held_first());
+    assert_eq!(after_refusal, complete);
+    assert_eq!(after_refusal.len(), 8);
 }

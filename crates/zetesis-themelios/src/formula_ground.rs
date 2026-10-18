@@ -11,10 +11,12 @@ pub(crate) mod atoms;
 mod cache;
 mod canonical_suffix;
 mod extremum_guards;
-mod metadata;
+mod fixed_facts;
 mod matched_nodes;
+mod metadata;
 use matched_nodes::MatchedNodes;
 mod nodes;
+mod pairwise_exclusions;
 mod producer;
 mod projection;
 mod rejected;
@@ -26,9 +28,9 @@ pub(crate) use retained::{RetainedGrounding, ground_retained};
 #[cfg(test)]
 mod assignment_families;
 #[cfg(test)]
-mod fact_declines;
-#[cfg(test)]
 mod constants;
+#[cfg(test)]
+mod fact_declines;
 
 use crate::formula_support::Ir;
 use crate::formula_support::family::Warnings;
@@ -312,9 +314,8 @@ fn instantiate(
                 )?
             };
             drop(domains);
-            // Streaming keeps constraints alone, and a fact is never one.
-            let keep = schedule.keep(prepared.rules_without_facts());
-            pending.publish(catalog, limits, location, keep, counters)
+            let publication_work = GroundingWork::new(limits, counters, location);
+            pending.publish(catalog, &mut prepared, schedule, publication_work)
         },
     )?;
     let PublishedEmission {
@@ -429,6 +430,20 @@ struct PendingEmission {
     emission: Emission<formula_support::SourceSelection>,
     warnings: Warnings,
     streamed_instances: u64,
+    materialized_constraints: Option<Buffer<usize>>,
+}
+
+/// Only exact original rule positions cross from capture into source retention.
+/// This private disposition is consumed before publication/accounting handoff.
+#[derive(Default)]
+struct Streaming {
+    instances: u64,
+    materialized: Option<Buffer<usize>>,
+}
+
+enum Captured {
+    Streamed(u64),
+    Materialized,
 }
 
 fn emit<'source>(
@@ -499,9 +514,10 @@ fn emit<'source>(
             location,
         )?;
         builder.initialize(location)?;
+        builder.collect_fixed_facts(prepared.items())?;
         Ok::<_, FormulaFailure>(builder)
     })?;
-    let streamed_instances =
+    let streaming =
         builder.instantiate_items(prepared.items(), domains, support, profile, schedule)?;
     let emission = builder.finish(profile, location)?;
     Ok(PendingEmission {
@@ -509,7 +525,8 @@ fn emit<'source>(
         objectives,
         emission,
         warnings,
-        streamed_instances,
+        streamed_instances: streaming.instances,
+        materialized_constraints: streaming.materialized,
     })
 }
 
@@ -527,24 +544,75 @@ struct PublishedEmission {
 }
 
 impl PendingEmission {
+    /// Compact the original rule vector only after every complete source
+    /// traversal and source borrow has ended. Fact blocks and retained rules
+    /// keep their original payloads, sites and relative order; no IR is copied.
+    fn retire_materialized(
+        &mut self,
+        prepared: &mut crate::formula_ir::Prepared,
+        limits: &FormulaLimits,
+        counters: &mut Counters,
+        location: ProgramSite,
+    ) -> Result<(), FormulaFailure> {
+        let Some(materialized) = self.materialized_constraints.take() else {
+            return Ok(());
+        };
+        // The existing in-place item/rule compaction performs one item visit,
+        // at most one two-cell rule swap and one slot write per retained rule.
+        counters.charge_work(
+            prepared.items().len() as u128 + 3 * prepared.rules_without_facts().len() as u128 + 1,
+            limits,
+            location,
+        )?;
+        let mut index = 0;
+        let mut removed = 0;
+        prepared.retain_rules_without_facts(|_| {
+            let keep = materialized.slice().get(removed) != Some(&index);
+            index += 1;
+            if !keep {
+                removed += 1;
+            }
+            keep
+        });
+        debug_assert_eq!(
+            removed,
+            materialized.len(),
+            "original ordered rule positions"
+        );
+        Ok(())
+    }
+
     /// Publish the emission. A retained schedule keeps the catalog open for
     /// reconstruction; a stream of constraints closes it, keeping the relations
     /// they read, before this account ends; otherwise it is released.
     fn publish(
-        self,
+        mut self,
         mut catalog: formula_support::CompletedCatalog,
-        limits: &FormulaLimits,
-        location: ProgramSite,
-        keep: Keep<'_>,
-        counters: &mut Counters,
+        prepared: &mut crate::formula_ir::Prepared,
+        schedule: Schedule<'_>,
+        work: GroundingWork<'_>,
     ) -> Result<PublishedEmission, FormulaFailure> {
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        // All source/domain borrows have ended. Retire complete replacements
+        // before deciding which original constraints the schedule must retain.
+        self.retire_materialized(prepared, limits, counters, location)?;
+        let keep = schedule.keep(prepared.rules_without_facts());
         let Self {
             projection,
             objectives,
             emission,
             warnings,
             streamed_instances,
+            materialized_constraints,
         } = self;
+        debug_assert!(
+            materialized_constraints.is_none(),
+            "dispositions retired before publication"
+        );
         let mut publication = formula_support::Publication::new(&mut catalog, counters, location)?;
         let projection = projection.publish(&mut publication, limits, counters, location)?;
         let Emission {
@@ -619,6 +687,7 @@ pub(super) struct Builder<'a, 'terms, 'source> {
     catalog: atoms::Catalog,
     terms: TermTable,
     aggregate_atoms: formula_support::SourceSelection,
+    fixed_facts: Option<formula_support::SourceSelection>,
     metadata: metadata::Metadata,
     nodes: FormulaNodes,
     node_indices: nodes::Index,
@@ -682,8 +751,8 @@ impl<'source> Builder<'_, '_, 'source> {
         support: &Support<'source>,
         profile: &Profile<'_>,
         schedule: Schedule<'_>,
-    ) -> Result<u64, FormulaFailure> {
-        let mut streamed_instances = 0;
+    ) -> Result<Streaming, FormulaFailure> {
+        let mut streaming = Streaming::default();
         for item in items.iter() {
             match item {
                 crate::formula_facts::Item::Rule(index, rule) => profile.phase(
@@ -693,7 +762,31 @@ impl<'source> Builder<'_, '_, 'source> {
                         if matches!(schedule, Schedule::Hybrid | Schedule::HybridRetained)
                             && crate::formula_hybrid::eligible(rule)
                         {
-                            self.capture_constraint(rule, support, &mut streamed_instances)
+                            match self.capture_constraint(rule, support)? {
+                                Captured::Streamed(instances) => streaming.instances += instances,
+                                Captured::Materialized => {
+                                    if streaming.materialized.is_none() {
+                                        streaming.materialized = Some(Buffer::new(
+                                            self.computation,
+                                            self.limits,
+                                            self.counters,
+                                            rule.location,
+                                        )?);
+                                    }
+                                    streaming
+                                        .materialized
+                                        .as_mut()
+                                        .expect("created above")
+                                        .push(
+                                            index,
+                                            self.computation,
+                                            self.limits,
+                                            self.counters,
+                                            rule.location,
+                                        )?;
+                                }
+                            }
+                            Ok(())
                         } else {
                             self.instantiate_rule(rule, index, domains, support, schedule)
                         }
@@ -707,7 +800,7 @@ impl<'source> Builder<'_, '_, 'source> {
                 )?,
             }
         }
-        Ok(streamed_instances)
+        Ok(streaming)
     }
 
     /// Emit each fact row as `Builder::normal` emits a fact rule's one passing
@@ -737,15 +830,16 @@ impl<'source> Builder<'_, '_, 'source> {
         Ok(())
     }
 
-    /// Retain every atom identity a streamed instance can read, without its
-    /// conjunction/implication DAG. Existing completion then emits coherence
+    /// Retain every atom identity a streamed instance can read. A complete
+    /// certified pair template emits native constraints; other templates retain
+    /// no conjunction/implication DAG. Existing completion then emits coherence
     /// and support guards, including falsity for atoms with no producer.
     fn capture_constraint(
         &mut self,
         rule: &'source RuleIr,
         support: &Support<'source>,
-        instances: &mut u64,
-    ) -> Result<(), FormulaFailure> {
+    ) -> Result<Captured, FormulaFailure> {
+        let mut instances = 0;
         let mut join = Join::rule(
             Ir::Source(rule),
             support,
@@ -759,6 +853,7 @@ impl<'source> Builder<'_, '_, 'source> {
         // include rows excluded by another argument of this source pattern.
         join.select_total_body(rule, self.computation, self.limits, self.counters)?;
         self.retain_matched_rows(&mut join, rule.location)?;
+        let mut exclusions = pairwise_exclusions::Pending::for_capture(self, rule)?;
         let mut matched = None;
         while let Some(row) = join.next_matched_row(
             self.budget,
@@ -776,8 +871,12 @@ impl<'source> Builder<'_, '_, 'source> {
                 continue;
             }
             // Every retained count is bounded by the charged substitution cap.
-            *instances += 1;
+            instances += 1;
             let view = self.matched_view(&mut matched, row.witnesses.as_ref(), rule)?;
+            if let Some(exclusions) = &mut exclusions {
+                exclusions.row(self, rule, &row.values, matched.as_mut().zip(view))?;
+                continue;
+            }
             for (index, literal) in rule.body.iter().enumerate() {
                 let pattern = match literal {
                     LiteralIr::Atom(_, pattern) => pattern,
@@ -793,7 +892,12 @@ impl<'source> Builder<'_, '_, 'source> {
                 }
             }
         }
-        Ok(())
+        if let Some(exclusions) = exclusions
+            && exclusions.finish_capture(self, rule)?
+        {
+            return Ok(Captured::Materialized);
+        }
+        Ok(Captured::Streamed(instances))
     }
 
     fn instantiate_rule(
@@ -843,6 +947,7 @@ impl<'source> Builder<'_, '_, 'source> {
         }
         outer.select_range_multiples(rule, self.computation, self.limits, self.counters)?;
         self.retain_matched_rows(&mut outer, rule.location)?;
+        let mut exclusions = pairwise_exclusions::Pending::for_rule(self, rule)?;
         let mut matched = None;
         while let Some(row) = outer.next_matched_row(
             self.budget,
@@ -850,10 +955,17 @@ impl<'source> Builder<'_, '_, 'source> {
         )? {
             if row.passes {
                 let view = self.matched_view(&mut matched, row.witnesses.as_ref(), rule)?;
-                self.rule(rule, &row.values, support, matched.as_mut().zip(view))?;
+                if let Some(exclusions) = &mut exclusions {
+                    exclusions.row(self, rule, &row.values, matched.as_mut().zip(view))?;
+                } else {
+                    self.rule(rule, &row.values, support, matched.as_mut().zip(view))?;
+                }
             } else {
                 self.validate_body(&rule.body, &row.values, support, rule.location)?;
             }
+        }
+        if let Some(exclusions) = exclusions {
+            exclusions.finish(self, rule)?;
         }
         Ok(())
     }
@@ -919,6 +1031,7 @@ impl<'source> Builder<'_, '_, 'source> {
             catalog,
             terms,
             aggregate_atoms,
+            fixed_facts: None,
             metadata: metadata::Metadata::default(),
             nodes: FormulaNodes::default(),
             node_indices: nodes::Index::default(),
@@ -1364,7 +1477,9 @@ impl<'source> Builder<'_, '_, 'source> {
                     Some(node) => node,
                     None => self.atom(*pattern, assignment, location)?,
                 };
-                if *negation != DefaultNegation::None {
+                if *negation == DefaultNegation::None {
+                    atom = self.fixed_body_atom(atom, location)?;
+                } else {
                     atom = self.neg(atom, location)?;
                 }
                 if *negation == DefaultNegation::NotNot {
@@ -1376,6 +1491,7 @@ impl<'source> Builder<'_, '_, 'source> {
                     Some(node) => node,
                     None => self.atom(pattern.atom, assignment, location)?,
                 };
+                let atom = self.fixed_body_atom(atom, location)?;
                 result = self.and(result, atom, location)?;
             } else if let LiteralIr::Aggregate(_) = literal {
                 let aggregate = self.aggregate(

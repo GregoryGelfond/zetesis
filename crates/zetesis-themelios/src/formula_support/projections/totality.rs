@@ -1,16 +1,20 @@
 //! Optional totality over complete positive source-column domains.
 //!
 //! Original-family admission, final emission, hybrid capture and admitted hybrid
-//! checks use this gate over completed support. Possible-head production uses it
-//! only for snapshot-local multiples selection; the proof then covers the full
-//! current columns, not later rounds or completed-family evidence. A rule
+//! checks use this gate over completed support. Possible-head production may
+//! use the same body proof within its exact immutable support snapshot; the
+//! proof covers complete current columns, not later rounds or family evidence. A rule
 //! can alternatively receive static totality from the completed all-producer
 //! analysis, which permits support-round prefix selection without a projection
 //! map. That separate certificate never broadens this snapshot's authority.
 //! Each expression
 //! in an eligible flat normal body is either a leaf, reads one source variable
 //! covered by an ordinary positive atom column, or has checked arithmetic over
-//! several numeric column bounds.
+//! several numeric column bounds. Deterministic body assignments propagate
+//! checked hulls in dependency order before comparisons are inspected. Every
+//! assignment is checked, including unused targets; no expression is expanded.
+//! Head-only generation remains a later phase. A body certificate does not
+//! establish totality of those head expressions or their operational limits.
 //! Products, quotients and remainders extend sums and differences;
 //! the bounds establish every intermediate and exclude zero divisors.
 //! Successful evaluation on that entire
@@ -33,7 +37,7 @@ use crate::formula_support::{Computation, Context, Counters, Evaluation, Support
 use crate::{ExpansionFailure, FormulaFailure, FormulaLimits};
 
 mod numeric;
-pub(in crate::formula_support) use numeric::positive_bounds;
+pub(in crate::formula_support) use numeric::{column_bounds, positive_bounds};
 
 /// Preparation serves either partial scalar families or total arithmetic whose
 /// certificate admits incremental source checking. This does not redefine which
@@ -46,6 +50,7 @@ pub(in crate::formula_support) fn needed(literals: &[LiteralIr]) -> bool {
                 arithmetic(comparison.left()) || arithmetic(comparison.right())
             }
             LiteralIr::TupleCompare(left, _, right) => left.iter().chain(right).any(arithmetic),
+            LiteralIr::Bind { .. } => true,
             _ => false,
         })
 }
@@ -61,11 +66,14 @@ pub(crate) fn supports_column_totality(
     for literal in &rule.body {
         counters.work(limits, rule.location)?;
         let expressions = match literal {
-            LiteralIr::Atom(..) => continue,
             LiteralIr::Compare(comparison) => std::slice::from_ref(comparison.left())
                 .iter()
                 .chain(std::slice::from_ref(comparison.right())),
             LiteralIr::TupleCompare(left, _, right) => left.iter().chain(right),
+            LiteralIr::Bind { target, value } if *target < rule.body_variables => {
+                std::slice::from_ref(value).iter().chain([].iter())
+            }
+            LiteralIr::Atom(..) | LiteralIr::Bind { .. } => continue,
             _ => return Ok(false),
         };
         for expression in expressions {
@@ -88,10 +96,11 @@ struct Domain<'source> {
 impl<'a> Projections<'a> {
     /// Use full, candidate-independent columns of one immutable source snapshot.
     /// Success establishes scalar totality for complete positive bindings within
-    /// that snapshot. Completed support permits post-admission selection; a
-    /// growing round permits only its separately bounded multiples selector.
-    /// A flat original family may omit its scan only when all normalized siblings
-    /// succeed on completed support. This proof supplies no defined witness.
+    /// that snapshot. This includes every scalar body assignment but excludes
+    /// the generated head suffix. A growing round may select only its current
+    /// snapshot. Completed-family admission additionally needs the full key and
+    /// head obligations in `total_family`, for every normalized sibling. This
+    /// proof supplies no defined witness and no guarantee about partial prefixes.
     pub(in crate::formula_support) fn total_body(
         &mut self,
         rule: &'a RuleIr,
@@ -129,6 +138,9 @@ impl<'a> Projections<'a> {
             context.work.location,
         )?;
         let mut numeric = numeric::Preparation::new(rule, support);
+        if !numeric.bindings(&mut context)? {
+            return Ok(false);
+        }
         for (index, literal) in rule.body.iter().enumerate() {
             tick(&mut context)?;
             match literal {
@@ -172,7 +184,9 @@ impl<'a> Projections<'a> {
                         }
                     }
                 }
-                LiteralIr::Atom(..) => {}
+                // Body bindings were certified in dependency order above.
+                // Head-only bindings retain their original later evaluation.
+                LiteralIr::Atom(..) | LiteralIr::Bind { .. } => {}
                 _ => unreachable!("eligible flat normal body checked above"),
             }
         }
@@ -181,7 +195,59 @@ impl<'a> Projections<'a> {
         };
         for projection in &mut values.values {
             tick(&mut context)?;
-            projection.covered = Some(projection.results.len());
+            // A generated slot has a checked hull, not an enumerated source
+            // column. Its empty memo must never become an empty-domain proof.
+            if numeric.domain(projection.slot, &mut context)?.is_some() {
+                projection.covered = Some(projection.results.len());
+            }
+        }
+        Ok(true)
+    }
+
+    /// Prove that a flat family's arithmetic evidence scan has nothing to
+    /// discover. The caller separately establishes key coverage, including
+    /// each generated input. Only constructors and leaves are admitted in the
+    /// head suffix; head arithmetic conservatively retains the original scan.
+    /// Constructor allocation, expanded size and depth are still checked by
+    /// the original head operation for each reached instance. Omitting this
+    /// duplicate scan changes work, never those construction limits.
+    pub(in crate::formula_support) fn total_family(
+        &mut self,
+        rule: &'a RuleIr,
+        support: &Support<'_>,
+        evaluation: &mut Evaluation,
+        mut context: Context<'_, &mut Computation<'_, '_>>,
+    ) -> Result<bool, FormulaFailure> {
+        if !self.total_body(
+            rule,
+            support,
+            evaluation,
+            Context::new(
+                &mut *context.computation,
+                context.work.limits,
+                context.work.counters,
+                context.work.location,
+            ),
+        )? {
+            return Ok(false);
+        }
+        for literal in &rule.body {
+            tick(&mut context)?;
+            let LiteralIr::Bind { target, value } = literal else {
+                continue;
+            };
+            if *target < rule.body_variables {
+                continue;
+            }
+            for operation in &value.nodes {
+                tick(&mut context)?;
+                if !matches!(
+                    operation,
+                    Operation::Constant(_) | Operation::Variable(_) | Operation::Constructor(_)
+                ) {
+                    return Ok(false);
+                }
+            }
         }
         Ok(true)
     }
@@ -226,7 +292,9 @@ impl<'a> Projections<'a> {
             return numeric.total(expression, context);
         }
         let Some(domain) = numeric.domain(slot, context)? else {
-            return Ok(false);
+            // A prior scalar assignment supplies a checked hull without a
+            // physical source column or an enumerable projection map.
+            return numeric.total(expression, context);
         };
         if matches!(expression.nodes.as_slice(), [Operation::Variable(_)]) {
             // Complete source columns already contain admitted canonical terms.
@@ -285,7 +353,7 @@ fn eligible(
     support: &Support<'_>,
     context: &mut Context<'_, &mut Computation<'_, '_>>,
 ) -> Result<bool, FormulaFailure> {
-    if !matches!(rule.head, HeadIr::Normal(_)) || rule.variables != rule.body_variables {
+    if !matches!(rule.head, HeadIr::Normal(_)) {
         return Ok(false);
     }
     for literal in &rule.body {
@@ -312,9 +380,10 @@ fn eligible(
             | LiteralIr::Compare(..)
             | LiteralIr::TupleCompare(..)
             | LiteralIr::Guard(_)
-            | LiteralIr::HeadGuard(_) => {}
-            // No generated bindings, structural captures, projections or
-            // nested families are certified by a flat column domain.
+            | LiteralIr::HeadGuard(_)
+            | LiteralIr::Bind { .. } => {}
+            // Range/aggregate generators, structural captures, projections and
+            // nested families need their separate coverage arguments.
             _ => return Ok(false),
         }
     }

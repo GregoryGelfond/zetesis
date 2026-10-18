@@ -54,6 +54,23 @@ impl<Q: Quota> Quota for CancelAfterFirstGrant<'_, Q> {
         }
         Ok(granted)
     }
+    fn with_reservation<T>(
+        &mut self,
+        spent: u64,
+        ceiling: u64,
+        wanted: u64,
+        run: impl FnOnce(u64) -> (T, u64),
+    ) -> Result<(T, u64), Incomplete> {
+        let cancellation = self.cancellation;
+        let first = &self.granted;
+        self.inner
+            .with_reservation(spent, ceiling, wanted, |granted| {
+                if !first.replace(true) {
+                    cancellation.cancel();
+                }
+                run(granted)
+            })
+    }
     fn refund(&self, unspent: u64) {
         self.inner.refund(unspent);
     }

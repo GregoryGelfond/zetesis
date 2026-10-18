@@ -1700,6 +1700,11 @@
     "line": 114
   },
   {
+    "name": "Zetesis.ConstrainedPositive.stable_iff_frozen_least",
+    "file": "Zetesis/ConstrainedPositive.lean",
+    "line": 133
+  },
+  {
     "name": "Zetesis.ConstructorPatterns.function_shape_exact",
     "file": "Zetesis/ConstructorPatterns.lean",
     "line": 73
@@ -5595,6 +5600,36 @@
     "line": 242
   },
   {
+    "name": "Zetesis.PairwiseExclusions.masked_unit_sum_two",
+    "file": "Zetesis/PairwiseExclusions.lean",
+    "line": 30
+  },
+  {
+    "name": "Zetesis.PairwiseExclusions.original",
+    "file": "Zetesis/PairwiseExclusions.lean",
+    "line": 101
+  },
+  {
+    "name": "Zetesis.PairwiseExclusions.constraint_frozen_iff",
+    "file": "Zetesis/PairwiseExclusions.lean",
+    "line": 131
+  },
+  {
+    "name": "Zetesis.PairwiseExclusions.constraints_frozen_iff",
+    "file": "Zetesis/PairwiseExclusions.lean",
+    "line": 143
+  },
+  {
+    "name": "Zetesis.PairwiseExclusions.frozen",
+    "file": "Zetesis/PairwiseExclusions.lean",
+    "line": 156
+  },
+  {
+    "name": "Zetesis.PairwiseExclusions.stable_in_context",
+    "file": "Zetesis/PairwiseExclusions.lean",
+    "line": 167
+  },
+  {
     "name": "Zetesis.ParametricReduct.satisfies_original",
     "file": "Zetesis/ParametricReduct.lean",
     "line": 41
@@ -5783,6 +5818,31 @@
     "name": "Zetesis.PositiveTheory.failed_constraint_no_model",
     "file": "Zetesis/PositiveTheory.lean",
     "line": 240
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.producer_intersection",
+    "file": "Zetesis/PossibleFoundedness.lean",
+    "line": 64
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.choice_intersection",
+    "file": "Zetesis/PossibleFoundedness.lean",
+    "line": 92
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.intersection_models_reduct",
+    "file": "Zetesis/PossibleFoundedness.lean",
+    "line": 129
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.stable_sub_possible",
+    "file": "Zetesis/PossibleFoundedness.lean",
+    "line": 156
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.body_upper_sound",
+    "file": "Zetesis/PossibleFoundedness.lean",
+    "line": 185
   },
   {
     "name": "Zetesis.ProducerScheduling.stable_of_reads_only",

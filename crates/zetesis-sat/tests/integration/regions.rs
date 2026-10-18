@@ -97,15 +97,17 @@ fn regions_build_no_support_certificate() {
 }
 
 #[test]
-fn regions_visit_the_cut_branch_before_the_held_one() {
+fn regions_visit_the_held_branch_before_the_cut_one() {
     // The split atom is the narrowing's choice, so the order is not the
-    // counter's; the cut branch first means the empty model comes first
-    // and the full one last, on independent choices.
+    // counter's; the held branch first means the full model comes first
+    // and the empty one last, on independent choices.
     let mut search = regions(&choices(2), Limits::default());
-    let found = models(&mut search);
-    assert_eq!(found.len(), 4);
-    assert_eq!(found.first(), Some(&vec![]));
-    assert_eq!(found.last(), Some(&vec![0, 1]));
+    let mut found = models(&mut search);
+    assert_eq!(found.first(), Some(&vec![0, 1]));
+    assert_eq!(found.last(), Some(&vec![]));
+    found.sort();
+    assert_eq!(found, [vec![], vec![0], vec![0, 1], vec![1]]);
+    assert!(search.exhausted());
 }
 
 #[test]
@@ -311,7 +313,25 @@ fn under_regions_the_reduct_is_never_encoded() {
 
 #[test]
 fn under_regions_the_reduct_is_queried_by_regions() {
-    let (_, statistics) = mixed_by_regions();
+    let original = mixed();
+    let mut nodes = original.nodes().to_vec();
+    let mut root = original.roots()[0];
+    // The conjunction of all original roots is the same theory under every
+    // original/reduct reading, but requires the general membership route.
+    for &next in &original.roots()[1..] {
+        let combined = nodes.len();
+        nodes.push(Node::and_pair([root, next]));
+        root = combined;
+    }
+    let general = theory_over(&original, nodes, vec![root]);
+    let mut search = regions(&general, Limits::default());
+    let found: BTreeSet<_> = models(&mut search).into_iter().collect();
+    assert_eq!(
+        found,
+        crate::support::interpretations::stable_models(&original)
+    );
+    assert!(search.exhausted());
+    let statistics = search.statistics();
     assert!(statistics.countermodel_queries > 0);
     assert!(statistics.reduct.regions.regions > 0);
     assert_eq!(

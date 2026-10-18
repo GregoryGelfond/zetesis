@@ -9,9 +9,11 @@
 //!
 //! Flat normal source bodies opt in during eager emission or possible-head
 //! production. Family evidence, hybrid capture/checks and direct-source exact
-//! activity never opt in. Generated bindings/heads and structural or nested
-//! scopes retain their old traversal. Every round query uses the occurrence's
-//! first-new interval against the one immutable snapshot index.
+//! activity never opt in. Scalar assignments may opt in after a whole-body
+//! totality certificate over that same immutable snapshot; their selected DAG
+//! operands retain original literal identities. Structural and nested scopes
+//! retain their old traversal. Every round query uses the occurrence's first-new
+//! interval against the one immutable snapshot index.
 
 use themelios_program::program::Relation;
 
@@ -33,8 +35,9 @@ impl<'a, 'source> Join<'a, 'source> {
     /// No totality premise is borrowed from original-family admission: a
     /// defined false plan-decided comparison excludes that row under the
     /// ordinary filters contract, including independent deferred scalar faults.
-    /// A source with generated bindings or structural/nested scopes retains
-    /// its current traversal until that broader failure inventory is reviewed.
+    /// Generated scalar bindings require an independent whole-body totality
+    /// certificate before their comparison view can select any source row.
+    /// Structural and nested scopes retain their existing traversal.
     pub(crate) fn select_numeric_probes(
         &mut self,
         rule: &RuleIr,
@@ -44,7 +47,7 @@ impl<'a, 'source> Join<'a, 'source> {
         counters.work(limits, rule.location)?;
         if !std::ptr::eq(self.literals.get(), rule.body.as_slice())
             || !matches!(rule.head, HeadIr::Normal(_))
-            || rule.variables != rule.body_variables
+            || (rule.variables != rule.body_variables && !self.certified_total)
         {
             return Ok(());
         }
@@ -56,6 +59,7 @@ impl<'a, 'source> Join<'a, 'source> {
                     comparison_found |= selected_relation(comparison.relation());
                 }
                 LiteralIr::Atom(..) | LiteralIr::TupleCompare(..) => {}
+                LiteralIr::Bind { .. } if self.certified_total => {}
                 _ => return Ok(()),
             }
         }
@@ -87,10 +91,17 @@ impl<'a, 'source> Join<'a, 'source> {
         for equality in [true, false] {
             for index in self.plan.decisions.decided_at(self.depth) {
                 tick(&mut context)?;
-                let Some(comparison) = super::comparison(&self.literals[index]) else {
+                let Some(([left, right], relation)) = self
+                    .scalar_selection
+                    .comparisons()
+                    .and_then(|view| view.operands(index))
+                    .or_else(|| {
+                        super::comparison(&self.literals[index])
+                            .map(crate::formula_ir::Comparison::operands)
+                    })
+                else {
                     continue;
                 };
-                let ([left, right], relation) = comparison.operands();
                 if !selected_relation(relation) || (relation == Relation::Eq) != equality {
                     continue;
                 }

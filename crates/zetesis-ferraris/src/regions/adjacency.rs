@@ -35,27 +35,41 @@ impl Adjacency {
         rows: usize,
         edges: impl Iterator<Item = Result<(usize, usize), Stop>> + Clone,
     ) -> Result<Self, Stop> {
+        Self::try_build_in(rows, edges.map(|edge| edge.map(Some)), &mut Unmetered)
+    }
+
+    /// The same construction under a caller's storage and work authority.
+    /// Empty events charge inspection of an input with no incidence. Every
+    /// event, initialized cell and cursor inspection has a bounded charge.
+    pub(super) fn try_build_in(
+        rows: usize,
+        edges: impl Iterator<Item = Result<Option<(usize, usize)>, Stop>> + Clone,
+        construction: &mut impl Construction,
+    ) -> Result<Self, Stop> {
         let length = rows.checked_add(1).ok_or(Stop::Allocation)?;
-        let mut offsets = zeros(length)?;
+        let mut offsets = construction.zeros(length)?;
         for edge in edges.clone() {
-            let (row, _) = edge?;
+            construction.tick()?;
+            let Some((row, _)) = edge? else { continue };
             let after = row.checked_add(1).ok_or(Stop::Allocation)?;
             let count = offsets.get_mut(after).ok_or(Stop::Allocation)?;
             *count = count.checked_add(1).ok_or(Stop::Allocation)?;
         }
         for row in 0..rows {
+            construction.tick()?;
             offsets[row + 1] = offsets[row + 1]
                 .checked_add(offsets[row])
                 .ok_or(Stop::Allocation)?;
         }
-        let mut entries = zeros(offsets[rows])?;
-        let mut cursors = Vec::new();
-        cursors
-            .try_reserve_exact(rows)
-            .map_err(|_| Stop::Allocation)?;
-        cursors.extend_from_slice(&offsets[..rows]);
+        let mut entries = construction.zeros(offsets[rows])?;
+        let mut cursors = construction.reserve(rows)?;
+        for &offset in &offsets[..rows] {
+            construction.tick()?;
+            cursors.push(offset);
+        }
         for edge in edges {
-            let (row, entry) = edge?;
+            construction.tick()?;
+            let Some((row, entry)) = edge? else { continue };
             let cursor = cursors.get_mut(row).ok_or(Stop::Allocation)?;
             if *cursor >= offsets[row + 1] {
                 return Err(Stop::Allocation);
@@ -63,14 +77,19 @@ impl Adjacency {
             entries[*cursor] = entry;
             *cursor += 1;
         }
-        if cursors
-            .iter()
-            .zip(&offsets[1..])
-            .any(|(cursor, end)| cursor != end)
-        {
-            return Err(Stop::Allocation);
+        for (cursor, end) in cursors.iter().zip(&offsets[1..]) {
+            construction.tick()?;
+            if cursor != end {
+                return Err(Stop::Allocation);
+            }
         }
+        construction.release(cursors)?;
         Ok(Self { offsets, entries })
+    }
+
+    pub(super) fn release_in(self, construction: &mut impl Construction) -> Result<(), Stop> {
+        construction.release(self.offsets)?;
+        construction.release(self.entries)
     }
 
     pub(super) fn len(&self) -> usize {
@@ -110,3 +129,33 @@ fn zeros(length: usize) -> Result<Vec<usize>, Stop> {
 
 #[cfg(test)]
 mod tests;
+
+/// The caller owns construction admission and every retained allocation.
+pub(super) trait Construction {
+    fn tick(&mut self) -> Result<(), Stop>;
+    fn zeros(&mut self, count: usize) -> Result<Vec<usize>, Stop>;
+    fn reserve(&mut self, count: usize) -> Result<Vec<usize>, Stop>;
+    fn release(&mut self, values: Vec<usize>) -> Result<(), Stop>;
+}
+
+struct Unmetered;
+
+impl Construction for Unmetered {
+    fn tick(&mut self) -> Result<(), Stop> {
+        Ok(())
+    }
+    fn zeros(&mut self, count: usize) -> Result<Vec<usize>, Stop> {
+        zeros(count)
+    }
+    fn reserve(&mut self, count: usize) -> Result<Vec<usize>, Stop> {
+        let mut values = Vec::new();
+        values
+            .try_reserve_exact(count)
+            .map_err(|_| Stop::Allocation)?;
+        Ok(values)
+    }
+    fn release(&mut self, values: Vec<usize>) -> Result<(), Stop> {
+        drop(values);
+        Ok(())
+    }
+}

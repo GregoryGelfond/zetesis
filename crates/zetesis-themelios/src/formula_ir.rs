@@ -98,6 +98,13 @@ impl Prepared {
         self.items.take_rules()
     }
 
+    /// Retain exact prepared rules in their existing order after a consumer
+    /// has finished the item sequence. Fact blocks retain their original slots.
+    /// The caller admits the existing in-place compaction's work beforehand.
+    pub(crate) fn retain_rules_without_facts(&mut self, keep: impl FnMut(&RuleIr) -> bool) {
+        self.items.retain_rules(keep);
+    }
+
     /// Move the items `selected` marks into their own sequence, in the `room`
     /// reserved for them by [`crate::formula_facts::Items::reserve_split`].
     pub(crate) fn split_items(

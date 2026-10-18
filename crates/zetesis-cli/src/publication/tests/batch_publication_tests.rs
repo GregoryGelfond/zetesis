@@ -212,7 +212,8 @@ fn cancellation_prevents_queued_answer_publication() {
         cancellation: cancellation.clone(),
     };
     let captured = run(
-        "{a;b;c}. #show x.",
+        // Keep the displayed record independent of candidate visitation order.
+        "{a;b;c}. #show. #show x.",
         &options(),
         &cancellation,
         &mut output,

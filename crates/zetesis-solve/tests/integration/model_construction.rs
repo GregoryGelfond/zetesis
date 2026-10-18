@@ -215,119 +215,60 @@ fn preparation_work_allowance_is_inclusive() {
 }
 
 #[test]
-fn construction_refusal_preserves_the_checked_prefix() {
-    let owner = formula("{a}.");
-    let mut complete = Session::new(
-        PreparedInput::formula(&owner),
-        config(),
-        Cancellation::default(),
-    )
-    .unwrap();
-    let prepared = complete.progress().model_construction().unwrap().work;
-    let expected_first = complete.next().unwrap().unwrap();
-    let first_work = complete.progress().model_construction().unwrap().work - prepared;
-    let expected_second = complete.next().unwrap().unwrap();
-    assert!(complete.next().is_none());
-    assert_eq!(expected_first.interpretation(), &model(&[]));
-    assert_eq!(expected_second.interpretation(), &model(&["a"]));
-    let second_work = complete
-        .outcome()
-        .unwrap()
-        .model_construction()
-        .unwrap()
-        .work
-        - prepared
-        - first_work;
-    let work_limit = second_work - 1;
-    // Order preparation and the empty answer fit; selecting a has more work.
-    assert!(prepared <= work_limit && first_work <= work_limit);
-    let mut limited = Session::new(
-        PreparedInput::formula(&owner),
-        SolveConfig {
-            max_model_work: work_limit,
-            ..config()
-        },
-        Cancellation::default(),
-    )
-    .unwrap();
-    let first = limited.next().unwrap().unwrap();
-    assert_eq!(first.interpretation(), expected_first.interpretation());
-    assert!(limited.next().is_none());
-    let outcome = limited.outcome().unwrap();
-    assert_eq!(outcome.verified_models(), 2);
-    assert!(
-        matches!(outcome.interruption(), Some(Interruption::ModelConstruction(
-        ModelConstructionStop::Work { observed, limit }
-    )) if observed == u128::from(work_limit) + 1 && limit == work_limit)
-    );
-    let receipt = outcome.model_construction().unwrap();
-    assert_eq!(receipt.work, prepared + first_work + work_limit);
-    assert_eq!(receipt.constructed, 1);
-    assert_eq!(outcome.completion(), Some(Completion::Interrupted));
-    assert!(!outcome.unsatisfiable());
-    assert!(limited.next().is_none());
-    assert_eq!(first.interpretation(), expected_first.interpretation());
-}
-
-#[test]
-fn construction_refusal_drains_prior_incumbents() {
-    let owner = formula("{a}. #minimize{1,a:a}.");
-    let mut complete = Session::enumerate(
-        PreparedInput::formula(&owner),
-        config(),
-        Cancellation::default(),
-    )
-    .unwrap();
-    let prepared = complete.progress().model_construction().unwrap().work;
-    let expected = complete.next().unwrap().unwrap();
-    let first_work = complete.progress().model_construction().unwrap().work - prepared;
-    let second = complete.next().unwrap().unwrap();
-    assert!(complete.next().is_none());
-    assert_eq!(expected.interpretation(), &model(&[]));
-    assert_eq!(second.interpretation(), &model(&["a"]));
-    let second_work = complete
-        .outcome()
-        .unwrap()
-        .model_construction()
-        .unwrap()
-        .work
-        - prepared
-        - first_work;
-    let work_limit = second_work - 1;
-    assert!(prepared <= work_limit && first_work <= work_limit);
-    let mut limited = Session::new(
-        PreparedInput::formula(&owner),
-        SolveConfig {
-            max_model_work: work_limit,
-            ..config()
-        },
-        Cancellation::default(),
-    )
-    .unwrap();
-    let retained = limited.next().unwrap().unwrap();
-    assert_eq!(retained.interpretation(), expected.interpretation());
-    assert_eq!(retained.score(), expected.score());
-    assert!(limited.next().is_none());
-    let outcome = limited.outcome().unwrap();
-    assert_eq!(
-        (
-            outcome.verified_models(),
-            outcome.scored_models(),
-            outcome.retained_models()
-        ),
-        (2, 1, 1)
-    );
-    let receipt = outcome.model_construction().unwrap();
-    assert_eq!(receipt.work, prepared + first_work + work_limit);
-    assert_eq!(receipt.constructed, 1);
-    assert_eq!(outcome.completion(), Some(Completion::Interrupted));
-    assert!(matches!(
-        outcome.interruption(),
-        Some(Interruption::ModelConstruction(
-            ModelConstructionStop::Work { .. }
-        ))
-    ));
-    assert!(!outcome.optimum_proved());
+fn construction_refusal_before_first_publication_keeps_verified_membership() {
+    for source in ["{a}.", "{a}. #minimize{1,a:a}."] {
+        let owner = formula(source);
+        let mut complete = Session::enumerate(
+            PreparedInput::formula(&owner),
+            config(),
+            Cancellation::default(),
+        )
+        .unwrap();
+        let prepared = *complete.progress().model_construction().unwrap();
+        let first = complete.next().unwrap().unwrap();
+        let first_peak = complete.progress().model_construction().unwrap().peak_bytes;
+        let mut family = BTreeSet::from([first.interpretation().clone()]);
+        family.extend(
+            complete
+                .by_ref()
+                .map(|answer| answer.unwrap().into_interpretation()),
+        );
+        assert_eq!(family, BTreeSet::from([model(&[]), model(&["a"])]));
+        assert_eq!(
+            complete.outcome().unwrap().completion(),
+            Some(Completion::Exhausted)
+        );
+        // The actual first selection needs more storage than preparation in
+        // either traversal direction; no model identity is assumed here.
+        assert!(first_peak > prepared.peak_bytes);
+        let limit = usize::try_from(first_peak - 1).unwrap();
+        let mut limited = Session::new(
+            PreparedInput::formula(&owner),
+            SolveConfig {
+                max_model_bytes: limit,
+                ..config()
+            },
+            Cancellation::default(),
+        )
+        .unwrap();
+        assert_eq!(limited.progress().model_construction(), Some(&prepared));
+        assert!(limited.next().is_none());
+        let outcome = limited.outcome().unwrap();
+        assert_eq!(outcome.verified_models(), 1);
+        assert_eq!(outcome.scored_models(), 0);
+        assert_eq!(outcome.retained_models(), 0);
+        assert_eq!(outcome.model_construction().unwrap().constructed, 0);
+        assert_eq!(outcome.completion(), Some(Completion::Interrupted));
+        assert!(matches!(
+            outcome.interruption(),
+            Some(Interruption::ModelConstruction(ModelConstructionStop::Bytes {
+                required, limit: observed_limit,
+            })) if required > limit as u128 && observed_limit == limit
+        ));
+        assert!(!outcome.unsatisfiable());
+        assert!(!outcome.optimum_proved());
+        assert!(limited.next().is_none());
+    }
 }
 
 #[test]

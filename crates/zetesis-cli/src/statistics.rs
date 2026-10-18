@@ -707,26 +707,7 @@ fn countermodel(
         )?;
     }
     if let Some(regions) = stats.regions {
-        let counts = regions.counts;
-        writeln!(
-            sink,
-            "  candidate regions: visited={}; refuted={}; leaves={}; propagations={}; held={}; cut={}; support cut={}; reading work={} (included in search work)",
-            counts.regions,
-            counts.refuted,
-            counts.leaves,
-            counts.propagations,
-            counts.held,
-            counts.cut,
-            if regions.producers {
-                "applied"
-            } else {
-                "not applicable"
-            },
-            counts.work,
-        )?;
-        if let Some(workers) = regions.workers {
-            region_workers(sink, workers)?;
-        }
+        candidate_regions(sink, regions)?;
     }
     writeln!(
         sink,
@@ -768,6 +749,16 @@ fn countermodel(
             stats.reduct.peak_workspace_bytes,
         )?;
     }
+    if stats.reduct.frozen_positive_attempts > 0 {
+        writeln!(
+            sink,
+            "  frozen positive reduct: attempts={}; completed={}; preparation work={}; work={} (included in search work)",
+            stats.reduct.frozen_positive_attempts,
+            stats.reduct.frozen_positive_completed,
+            stats.reduct.frozen_positive_preparation_work,
+            stats.reduct.frozen_positive_work,
+        )?;
+    }
     if stats.reduct.regions.regions > 0 || stats.reduct.regions.work > 0 {
         let regions = stats.reduct.regions;
         writeln!(
@@ -778,6 +769,42 @@ fn countermodel(
     }
     if let Some(certified) = stats.certified {
         certificate(sink, &certified, config.max_completion_scratch_bytes)?;
+    }
+    Ok(())
+}
+
+fn candidate_regions(
+    sink: &mut impl Write,
+    regions: zetesis_sat::RegionSearchStatistics,
+) -> io::Result<()> {
+    let counts = regions.counts;
+    writeln!(
+        sink,
+        "  candidate regions: visited={}; refuted={}; leaves={}; propagations={}; held={}; cut={}; support cut={}; reading work={} (included in search work)",
+        counts.regions,
+        counts.refuted,
+        counts.leaves,
+        counts.propagations,
+        counts.held,
+        counts.cut,
+        if regions.producers {
+            "applied"
+        } else {
+            "not applicable"
+        },
+        counts.work,
+    )?;
+    let generator = regions.generator_order;
+    writeln!(
+        sink,
+        "  candidate generator order: status={}; preparation work={}; peak bytes={}; retained bytes={} (work included in reading work)",
+        generator.status.label(),
+        generator.work,
+        generator.peak_bytes,
+        generator.retained_bytes
+    )?;
+    if let Some(workers) = regions.workers {
+        region_workers(sink, workers)?;
     }
     Ok(())
 }

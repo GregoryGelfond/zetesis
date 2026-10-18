@@ -760,7 +760,9 @@ fn vulkan_formula_profiles_preserve_independent_sessions() {
 }
 
 const UNSEEDED_CYCLE: &str = "a :- b. b :- a.";
-const SEEDED_CYCLE: &str = "a. b :- a. a :- b.";
+// The seed reaches the cycle through a derived atom. Substituting explicit
+// facts therefore leaves the a/b dependency cycle intact for general checking.
+const SEEDED_CYCLE: &str = "seed. a :- seed. b :- a. a :- b.";
 
 const TIGHT_FAMILIES: [&str; 7] = [
     "",
@@ -815,7 +817,7 @@ fn unseeded_cycle_has_one_empty_answer_set() {
 #[test]
 fn seeded_cycle_preserves_positive_nontight_class() {
     let owner = formula(SEEDED_CYCLE);
-    assert_eq!(owner.theory().atom_count(), 2);
+    assert_eq!(owner.theory().atom_count(), 3);
     zetesis_ferraris::PositivePlan::compile(
         owner.theory(),
         zetesis_ferraris::PositivePlanLimits::default(),
