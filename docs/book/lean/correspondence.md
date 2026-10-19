@@ -2597,6 +2597,16 @@ atoms, 16 literals, 4,096 reads and 65,536 workspace bytes. Matching remains
 charged to ordinary narrowing work. Optional limits decline capture; global
 quota, cancellation and allocation failures preserve their typed outcomes.
 
+Retained rows use either the scalar witness lists or sparse word groups, chosen
+by actual buffer capacity including the common row header. A packed row keeps
+premise words and output words in separate ordered spans of one allocation.
+The scalar collector remains temporary; conversion peak accounting includes both
+buffers. Packed matching must preserve the same complete, partial and opposite
+condition classifications, and decoding must preserve canonical atom identity
+and ascending output events. These representation obligations are checked
+against exhaustive scalar readings and bounded interruption tests; the generic
+conditional-absence laws do not prove that Rust refinement.
+
 These theorems do not prove Rust extraction, signed atom identity, Boolean witness
 traversal, complete producer coverage, exact-owner matching or resource accounting.
 For the additional deduction, Rust must distinguish an unknown condition from

@@ -48,6 +48,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   node roles; single-use theories retain their original traversal. Successful
   support cuts can also supply explanations for later regions.
   Original satisfaction and reduct membership remain unchanged.
+- Stored support explanations use compact bit masks when they need less space,
+  with unchanged deductions.
 
 ## 0.6.0 — 2026-10-14
 

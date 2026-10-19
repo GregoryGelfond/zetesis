@@ -91,10 +91,12 @@ impl Program {
         assert!(scratch.founded.passes > 0);
         assert_eq!(scratch.explanations.len(), 1);
         assert_eq!(
-            scratch.explanations.rows[0].conditions,
+            scratch.explanations.rows[0]
+                .conditions()
+                .collect::<Vec<_>>(),
             [(2, false), (3, true)]
         );
-        assert_eq!(scratch.explanations.outputs(0), [0, 1]);
+        assert_eq!(scratch.explanations.outputs(0).collect::<Vec<_>>(), [0, 1]);
         (known, scratch)
     }
 }

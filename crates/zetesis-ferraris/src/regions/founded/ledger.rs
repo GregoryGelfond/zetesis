@@ -5,9 +5,14 @@
 //! supplied them. Deleting a row loses pruning only. No rejected candidate,
 //! partial closure, objective bound or frozen reduct supplies a certificate.
 
-use super::explanations::{self, Explanation, Input, Limits};
-use crate::regions::{SupportExplanationStatistics, Theory, Work, bit};
+use super::explanations::{self, Input, Limits};
+use crate::regions::{SupportExplanationStatistics, Theory, Work};
 use zetesis_cpu::Stop;
+
+mod row;
+
+pub(in crate::regions) use row::OutputCursor;
+use row::Row;
 
 #[cfg(test)]
 mod tests;
@@ -27,7 +32,7 @@ pub(in crate::regions) enum Deduction {
 #[derive(Debug)]
 pub(in crate::regions) struct Ledger {
     owner: Option<Theory>,
-    rows: Vec<Explanation>,
+    rows: Vec<Row>,
     attempts: usize,
     remaining: u64,
     peak_bytes: u128,
@@ -63,12 +68,8 @@ impl Ledger {
     }
 
     pub(in crate::regions) fn retained_bytes(&self) -> u128 {
-        self.rows.capacity() as u128 * size_of::<Explanation>() as u128
-            + self
-                .rows
-                .iter()
-                .map(Explanation::retained_bytes)
-                .sum::<u128>()
+        self.rows.capacity() as u128 * size_of::<Row>() as u128
+            + self.rows.iter().map(Row::retained_bytes).sum::<u128>()
     }
 
     pub(in crate::regions) fn peak_bytes(&self) -> u128 {
@@ -79,29 +80,37 @@ impl Ledger {
         self.rows.len()
     }
 
-    pub(in crate::regions) fn outputs(&self, row: usize) -> &[usize] {
-        &self.rows[row].unsupported
+    #[cfg(test)]
+    pub(in crate::regions) fn outputs(&self, row: usize) -> impl Iterator<Item = usize> + '_ {
+        self.rows[row].outputs()
+    }
+
+    pub(in crate::regions) fn output_count(&self, row: usize) -> usize {
+        self.rows[row].output_count()
+    }
+
+    pub(in crate::regions) fn next_output(
+        &self,
+        row: usize,
+        cursor: &mut OutputCursor,
+    ) -> Option<usize> {
+        self.rows[row].next_output(cursor)
     }
 
     pub(in crate::regions) fn can_capture(&self) -> bool {
         self.rows.len() < MAX_ROWS && self.attempts < MAX_ATTEMPTS && self.remaining != 0
     }
 
-    /// Discovery and deduplication share the optional body-capture allowance.
+    /// Discovery, deduplication and conversion share the optional capture allowance.
     /// Its exhaustion declines retention; a real quota stop still propagates.
     pub(in crate::regions) fn capture_read(&mut self, work: &mut Work<'_>) -> Result<bool, Stop> {
-        if self.remaining == 0 {
-            return Ok(false);
-        }
-        work.tick()?;
-        self.remaining -= 1;
-        Ok(true)
+        capture_read(&mut self.remaining, work)
     }
 
     /// A complete condition excludes every output. If an output is held and
     /// exactly one condition is open, that condition must instead be false.
     /// An opposite premise or two open premises supplies no deduction. This
-    /// scans the existing bounded row and allocates no matching state.
+    /// scans scalar entries or compact word groups and allocates no matching state.
     pub(in crate::regions) fn deduction(
         &self,
         row: usize,
@@ -109,28 +118,7 @@ impl Ledger {
         cut: &[u64],
         work: &mut Work<'_>,
     ) -> Result<Deduction, Stop> {
-        work.tick()?;
-        let mut open = None;
-        for &(atom, value) in &self.rows[row].conditions {
-            work.tick()?;
-            if bit(if value { held } else { cut }, atom) {
-                continue;
-            }
-            if bit(if value { cut } else { held }, atom) || open.is_some() {
-                return Ok(Deduction::None);
-            }
-            open = Some((atom, !value));
-        }
-        let Some((atom, value)) = open else {
-            return Ok(Deduction::ExcludeOutputs);
-        };
-        for &output in &self.rows[row].unsupported {
-            work.tick()?;
-            if bit(held, output) {
-                return Ok(Deduction::Require { atom, value });
-            }
-        }
-        Ok(Deduction::None)
+        self.rows[row].deduction(held, cut, work)
     }
 
     pub(in crate::regions) fn capture(
@@ -170,44 +158,42 @@ impl Ledger {
                 counts.declined += 1;
                 return Ok(());
             }
-            let row = &self.rows[position];
-            let mut equal = row.conditions.len() == explanation.conditions.len()
-                && row.unsupported.len() == explanation.unsupported.len();
-            if equal {
-                for (index, right) in explanation.conditions.iter().enumerate() {
-                    if !self.capture_read(work)? {
-                        counts.declined += 1;
-                        return Ok(());
-                    }
-                    if &self.rows[position].conditions[index] != right {
-                        equal = false;
-                        break;
-                    }
-                }
-            }
-            if equal {
-                for (index, right) in explanation.unsupported.iter().enumerate() {
-                    if !self.capture_read(work)? {
-                        counts.declined += 1;
-                        return Ok(());
-                    }
-                    if &self.rows[position].unsupported[index] != right {
-                        equal = false;
-                        break;
-                    }
-                }
-            }
+            let Some(equal) =
+                self.rows[position].equivalent(&explanation, &mut self.remaining, work)?
+            else {
+                counts.declined += 1;
+                return Ok(());
+            };
             if equal {
                 counts.declined += 1;
                 return Ok(());
             }
         }
+        let prepared = Row::prepare(explanation, &mut self.remaining, work, &mut temporary_peak);
+        self.peak_bytes = self.peak_bytes.max(self.retained_bytes() + temporary_peak);
+        let Some(row) = prepared? else {
+            counts.declined += 1;
+            return Ok(());
+        };
         self.rows
             .try_reserve_exact(1)
             .map_err(|_| Stop::Allocation)?;
-        self.rows.push(explanation);
+        self.peak_bytes = self
+            .peak_bytes
+            .max(self.retained_bytes() + size_of::<Row>() as u128 + row.retained_bytes());
+        self.rows.push(row);
         counts.certified += 1;
         self.peak_bytes = self.peak_bytes.max(self.retained_bytes());
         Ok(())
     }
+}
+
+/// One finite capture allowance covers discovery, comparison and conversion.
+fn capture_read(remaining: &mut u64, work: &mut Work<'_>) -> Result<bool, Stop> {
+    if *remaining == 0 {
+        return Ok(false);
+    }
+    work.tick()?;
+    *remaining -= 1;
+    Ok(true)
 }

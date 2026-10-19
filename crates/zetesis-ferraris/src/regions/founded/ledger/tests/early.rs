@@ -16,10 +16,12 @@ fn capture_from_pruning(program: &Program) -> NarrowingScratch {
     assert_eq!(counts.support_explanations.refuted, 0);
     assert_eq!(scratch.explanations.len(), 1);
     assert_eq!(
-        scratch.explanations.rows[0].conditions,
+        scratch.explanations.rows[0]
+            .conditions()
+            .collect::<Vec<_>>(),
         [(2, false), (3, true)]
     );
-    assert_eq!(scratch.explanations.outputs(0), [0, 1]);
+    assert_eq!(scratch.explanations.outputs(0).collect::<Vec<_>>(), [0, 1]);
     scratch
 }
 
@@ -216,7 +218,10 @@ fn a_later_held_head_has_capture_priority() {
     assert_eq!(counts.support_explanations.attempts, 1);
     assert_eq!(counts.support_explanations.certified, 1);
     assert_eq!(scratch.explanations.len(), 1);
-    assert_eq!(scratch.explanations.outputs(0), [64, 65]);
+    assert_eq!(
+        scratch.explanations.outputs(0).collect::<Vec<_>>(),
+        [64, 65]
+    );
 }
 
 #[test]
@@ -240,7 +245,7 @@ fn one_completed_pass_captures_at_most_one_open_component() {
     }
     assert_eq!(counts.support_explanations.attempts, 1);
     assert_eq!(scratch.explanations.len(), 1);
-    assert_eq!(scratch.explanations.outputs(0), [0, 1]);
+    assert_eq!(scratch.explanations.outputs(0).collect::<Vec<_>>(), [0, 1]);
 }
 
 #[test]

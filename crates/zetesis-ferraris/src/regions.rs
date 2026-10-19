@@ -2176,9 +2176,14 @@ impl<C: Count> Closure<'_, C> {
                 founded::ledger::Deduction::ExcludeOutputs => {}
             }
             let mut changed = false;
-            for position in 0..self.lists.explanations.outputs(row).len() {
+            let mut outputs = founded::ledger::OutputCursor::default();
+            for _ in 0..self.lists.explanations.output_count(row) {
                 work.tick()?;
-                let atom = self.lists.explanations.outputs(row)[position];
+                let atom = self
+                    .lists
+                    .explanations
+                    .next_output(row, &mut outputs)
+                    .expect("the row's logical output count matches its cursor");
                 if bit(self.known.atom_sure, atom) {
                     counts.matched += 1;
                     counts.refuted += 1;

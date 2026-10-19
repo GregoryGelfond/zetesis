@@ -455,7 +455,7 @@ fn interrupted_foundation_passes_leave_no_stale_support() {
         );
         assert!(retained <= 1);
         if retained == 1 {
-            assert_eq!(scratch.explanations.outputs(0), [0, 1]);
+            assert_eq!(scratch.explanations.outputs(0).collect::<Vec<_>>(), [0, 1]);
             retained_prefixes += 1;
         }
         let mut retry_region = Region::all_open(owner.atom_count());

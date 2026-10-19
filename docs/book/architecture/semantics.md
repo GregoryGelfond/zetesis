@@ -121,7 +121,12 @@ to have the opposite value disables the row. Two or more unknown conditions, or
 one unknown condition without a held output, make no deduction.
 
 Fresh sibling knowledge may reuse a row. Both deductions enter the existing
-propagation queues and use the same bounded explanations.
+propagation queues and use the same bounded explanations. A row retains scalar
+atom lists for dispersed identities, or compact word groups when those occupy
+less space. It has one authoritative representation. Word intersections implement
+the same signed-condition checks, and output atoms retain their ascending order.
+Conversion shares the existing optional capture allowance; matching remains
+charged to ordinary narrowing work.
 Frozen-reduct and restriction-only queries do not use the ledger. The original
 theory and membership check stay unchanged. Optional capture limits lose only
 reuse; a global resource or cancellation failure still stops the operation.
