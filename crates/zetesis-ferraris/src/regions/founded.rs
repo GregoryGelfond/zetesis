@@ -171,9 +171,10 @@ impl Scratch {
         bit(&self.atoms, atom)
     }
 
-    /// Every narrowing authenticates cached projection membership before any
-    /// false event runs. Clearing a foreign owner keeps later queries
-    /// conservative until preparation for this subject completes.
+    /// Every producer-backed original narrowing authenticates cached projection
+    /// membership before any false event runs. Clearing a foreign owner keeps
+    /// later queries conservative until preparation for this subject completes.
+    /// Producer-free and frozen passes do not consume or replace this owner.
     pub(super) fn forget_foreign(&mut self, theory: &Theory) {
         if self
             .owner
@@ -184,7 +185,7 @@ impl Scratch {
         }
     }
 
-    /// Narrowing authenticated this completed projection before processing
+    /// Original support narrowing authenticated this projection before processing
     /// any event. Without it even an atom with no occurrences must invalidate.
     pub(super) const fn has_projection(&self) -> bool {
         self.owner.is_some()
@@ -193,7 +194,7 @@ impl Scratch {
     /// Only completed, authenticated preparation can exclude a node from the
     /// relaxation's inputs. Included false nodes stay Inactive, not Outside.
     /// Failed preparation clears owner before changing any state. The caller
-    /// must authenticate the narrowing's theory with `forget_foreign` first.
+    /// must authenticate the original support subject with `forget_foreign` first.
     pub(super) fn may_affect_body(&self, node: usize) -> bool {
         self.owner.is_none() || !matches!(self.states.get(node), Some(State::Outside))
     }

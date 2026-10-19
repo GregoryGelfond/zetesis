@@ -96,8 +96,11 @@ and cyclic heads that can affect this closure, preserving their order and
 multiplicity. It also records each selected node's fixed initial role; current
 false masks still apply on every pass. Links to unrelated constraints and opaque
 inputs cannot change this closure. These prepared columns belong to the exact
-original theory and become available together. Preparation work and retained
-storage remain accounted for, and a theory used once pays no such preparation cost.
+original theory and become available together. Candidate restrictions and objective
+bounds use separate knowledge; sharing worker scratch with them preserves the
+original support preparation. Returning to original support authenticates its
+owner before processing new evidence. Preparation work and retained storage
+remain accounted for, and a theory used once pays no such preparation cost.
 
 A completed pass can also supply a conditional deduction: whenever a signed
 atom condition `B` holds, no atom in an unsupported set `U` belongs to an answer

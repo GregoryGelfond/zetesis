@@ -1416,8 +1416,10 @@ impl Narrower {
         // Whatever an earlier narrowing that refuted or stopped left here
         // belongs to another region; it is discarded before this one reads.
         scratch.prepare(subject.theory.atom_count());
-        scratch.founded.forget_foreign(subject.theory);
         if subject.producers.is_some() && subject.frozen.is_none() {
+            // Only original support consumes this preparation. Candidate bounds
+            // and frozen queries may share scratch without replacing its owner.
+            scratch.founded.forget_foreign(subject.theory);
             scratch.explanations.prepare(subject.theory);
         }
         let mut closure = Closure {

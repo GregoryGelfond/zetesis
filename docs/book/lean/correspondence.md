@@ -2539,7 +2539,11 @@ closure truth is reused. The first pass uses original rows and node kinds;
 included cells remain included even after their runtime state changes.
 The parent rows, head rows and roles publish together under the exact owner.
 Construction and retained capacities are charged; a failed preparation clears
-that authority and a retry repeats body preparation.
+that authority and a retry repeats body preparation. Producer-free restrictions
+and frozen-reduct passes do not consume or invalidate this preparation. Their
+separate knowledge never establishes founded completion; returning to a
+producer-backed original subject authenticates the retained owner before false
+events. A genuinely different original still discards foreign authority.
 Preservation of the event sequence and completed closure remains a Rust
 correspondence obligation; exhaustive mask and interruption tests supply evidence.
 

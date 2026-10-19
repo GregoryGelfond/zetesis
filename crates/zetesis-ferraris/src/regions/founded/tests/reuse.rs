@@ -8,6 +8,7 @@ use std::collections::BTreeSet;
 mod cyclic;
 mod output;
 mod projection;
+mod subjects;
 
 struct Program {
     owner: Theory,
