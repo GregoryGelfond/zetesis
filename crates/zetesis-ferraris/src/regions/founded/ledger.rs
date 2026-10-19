@@ -16,6 +16,14 @@ const MAX_ROWS: usize = 64;
 const MAX_ATTEMPTS: usize = 256;
 const CAPTURE_WORK: u64 = 131_072;
 
+/// A consequence of one certified row under the current signed atom masks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(in crate::regions) enum Deduction {
+    None,
+    ExcludeOutputs,
+    Require { atom: usize, value: bool },
+}
+
 #[derive(Debug)]
 pub(in crate::regions) struct Ledger {
     owner: Option<Theory>,
@@ -90,23 +98,39 @@ impl Ledger {
         Ok(true)
     }
 
-    /// Conditions are a subset query against current knowledge, not an exact
-    /// region key. All conditions must hold, including explicitly absent atoms.
-    pub(in crate::regions) fn matches(
+    /// A complete condition excludes every output. If an output is held and
+    /// exactly one condition is open, that condition must instead be false.
+    /// An opposite premise or two open premises supplies no deduction. This
+    /// scans the existing bounded row and allocates no matching state.
+    pub(in crate::regions) fn deduction(
         &self,
         row: usize,
         held: &[u64],
         cut: &[u64],
         work: &mut Work<'_>,
-    ) -> Result<bool, Stop> {
+    ) -> Result<Deduction, Stop> {
         work.tick()?;
+        let mut open = None;
         for &(atom, value) in &self.rows[row].conditions {
             work.tick()?;
-            if !bit(if value { held } else { cut }, atom) {
-                return Ok(false);
+            if bit(if value { held } else { cut }, atom) {
+                continue;
+            }
+            if bit(if value { cut } else { held }, atom) || open.is_some() {
+                return Ok(Deduction::None);
+            }
+            open = Some((atom, !value));
+        }
+        let Some((atom, value)) = open else {
+            return Ok(Deduction::ExcludeOutputs);
+        };
+        for &output in &self.rows[row].unsupported {
+            work.tick()?;
+            if bit(held, output) {
+                return Ok(Deduction::Require { atom, value });
             }
         }
-        Ok(true)
+        Ok(Deduction::None)
     }
 
     pub(in crate::regions) fn capture(

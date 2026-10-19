@@ -227,6 +227,7 @@ fn live_explanation_receipts_add_only_worker_deltas() {
         certified: 1,
         matched: 3,
         cut: 4,
+        forced: 2,
         refuted: 1,
         declined: 1,
         work: 19,
@@ -237,6 +238,7 @@ fn live_explanation_receipts_add_only_worker_deltas() {
         certified: 2,
         matched: 8,
         cut: 9,
+        forced: 7,
         refuted: 2,
         declined: 3,
         work: 47,
@@ -247,6 +249,7 @@ fn live_explanation_receipts_add_only_worker_deltas() {
         certified: 1,
         matched: 2,
         cut: 3,
+        forced: 5,
         refuted: 1,
         declined: 0,
         work: 13,
@@ -257,6 +260,7 @@ fn live_explanation_receipts_add_only_worker_deltas() {
         certified: 0,
         matched: 1,
         cut: 1,
+        forced: 3,
         refuted: 0,
         declined: 1,
         work: 7,
@@ -264,12 +268,14 @@ fn live_explanation_receipts_add_only_worker_deltas() {
     };
     live.add_support_explanations(&SupportExplanationStatistics::default(), &first);
     live.add_support_explanations(&first, &second);
+    live.add_support_explanations(&second, &second);
     live.add_support_explanations(&SupportExplanationStatistics::default(), &other_worker);
     let expected = SupportExplanationStatistics {
         attempts: 7,
         certified: 3,
         matched: 11,
         cut: 13,
+        forced: 15,
         refuted: 3,
         declined: 4,
         work: 67,
@@ -277,4 +283,26 @@ fn live_explanation_receipts_add_only_worker_deltas() {
     };
     assert_eq!(live.support_explanations(&coordinator), expected);
     assert_eq!(live.support_explanations(&coordinator), expected);
+}
+
+#[test]
+fn unchanged_explanation_counts_preserve_absolute_peaks() {
+    let live = Live::default();
+    let empty = SupportExplanationStatistics::default();
+    live.add_support_explanations(&empty, &empty);
+    assert_eq!(live.support_explanations(&empty), empty);
+
+    let retained = SupportExplanationStatistics {
+        peak_bytes: 37,
+        ..empty
+    };
+    live.add_support_explanations(&retained, &retained);
+    assert_eq!(live.support_explanations(&empty), retained);
+
+    let larger = SupportExplanationStatistics {
+        peak_bytes: 41,
+        ..retained
+    };
+    live.add_support_explanations(&retained, &larger);
+    assert_eq!(live.support_explanations(&empty), larger);
 }

@@ -101,7 +101,14 @@ both `a` and `b` absent.
 The region narrower retains a bounded ledger of these deductions in each
 worker's scratch, owned by the exact immutable original theory. When all signed
 conditions are known, it cuts open output atoms or refutes a held output atom.
-Fresh sibling knowledge may reuse a row; an incomplete match makes no deduction.
+It also uses a row with exactly one unknown condition when every other condition
+holds and an output atom is held: the unknown condition must fail. For the example
+above, holding `a` while `x` is open forces `x` to hold. A condition already known
+to have the opposite value disables the row. Two or more unknown conditions, or
+one unknown condition without a held output, make no deduction.
+
+Fresh sibling knowledge may reuse a row. Both deductions enter the existing
+propagation queues and use the same bounded explanations.
 Frozen-reduct and restriction-only queries do not use the ledger. The original
 theory and membership check stay unchanged. Optional capture limits lose only
 reuse; a global resource or cancellation failure still stops the operation.

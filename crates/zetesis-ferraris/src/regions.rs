@@ -436,6 +436,8 @@ pub struct SupportExplanationStatistics {
     pub matched: u64,
     /// Previously open atoms excluded by matching explanations.
     pub cut: u64,
+    /// Open conditions forced opposite when a certified output is held.
+    pub forced: u64,
     /// Regions refuted by a held atom in a matching unsupported set.
     pub refuted: u64,
     /// Capture attempts that supplied no new bounded explanation.
@@ -2146,13 +2148,24 @@ impl<C: Count> Closure<'_, C> {
     ) -> Result<Step, Stop> {
         let mut step = Step::Unchanged;
         for row in 0..self.lists.explanations.len() {
-            if !self.lists.explanations.matches(
+            match self.lists.explanations.deduction(
                 row,
                 self.known.atom_sure,
                 self.known.atom_never,
                 work,
             )? {
-                continue;
+                founded::ledger::Deduction::None => continue,
+                founded::ledger::Deduction::Require { atom, value } => {
+                    let forced = self.atom(index, Some(producers), None, atom, value);
+                    counts.forced += 1;
+                    counts.matched += 1;
+                    step = step.join(forced);
+                    if step == Step::Contradiction {
+                        return Ok(step);
+                    }
+                    continue;
+                }
+                founded::ledger::Deduction::ExcludeOutputs => {}
             }
             let mut changed = false;
             for position in 0..self.lists.explanations.outputs(row).len() {

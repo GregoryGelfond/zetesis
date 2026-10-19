@@ -1169,6 +1169,7 @@ import Zetesis
 #print axioms Zetesis.PossibleFoundedness.intersection_models_reduct
 #print axioms Zetesis.PossibleFoundedness.stable_sub_possible
 #print axioms Zetesis.PossibleFoundedness.conditional_unsupported_absent
+#print axioms Zetesis.PossibleFoundedness.conditional_unsupported_forces_complement
 #print axioms Zetesis.PossibleFoundedness.body_upper_sound
 #print axioms Zetesis.ProducerScheduling.stable_of_reads_only
 #print axioms Zetesis.ProducerScheduling.selective_step_exact_of_stable

@@ -2541,6 +2541,13 @@ whose head meets `U` and every atomic choice into `U` must be disabled. Applying
 This covers partial conditions independently of the ancestor region that exposed
 them; a classical model or a model of a frozen reduct need not satisfy the cut.
 
+`PossibleFoundedness.conditional_unsupported_forces_complement` gives the
+corresponding deduction from an incomplete match. If `C ∧ ell` excludes `U`, an
+answer set satisfying `C` and containing an atom of `U` cannot satisfy `ell`.
+The proof applies the conditional absence law and contradicts that present atom.
+The conditions are arbitrary interpretation predicates; the law does not model
+Rust's signed coordinates or its classification of partial knowledge.
+
 The Rust [collector](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/founded/explanations.rs)
 starts from a held atom missing after a completed original founded pass, before
 publishing that pass's cuts. It reconstructs every incoming producer's false-body
@@ -2553,17 +2560,25 @@ that coverage duty.
 
 The worker-local [ledger](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/founded/ledger.rs)
 authenticates the exact original theory and uses rows only with complete producer
-coverage. All signed conditions must match current knowledge before outputs are
-cut or a held output refutes the region. Frozen and restriction-only visits
-suspend reuse; a different eligible theory clears the rows. Each owner retains
+coverage. A complete match cuts open outputs or refutes a held output. With
+exactly one unknown signed condition, all others satisfied and an output held,
+Rust instead forces the unknown condition's opposite through the existing atom
+events. A condition known opposite disables the row; multiple unknowns or the
+absence of a held output do not authorize this additional deduction. The
+additional deduction uses existing rows and their output sets; capture retains
+the bounds below. Frozen and restriction-only visits suspend reuse; a different eligible theory
+clears the rows. Each owner retains
 at most 64 rows after at most 256 capture attempts, sharing 131,072 discovery,
 collection and deduplication reads. One collection permits at most 64 unsupported
 atoms, 16 literals, 4,096 reads and 65,536 workspace bytes. Matching remains
 charged to ordinary narrowing work. Optional limits decline capture; global
 quota, cancellation and allocation failures preserve their typed outcomes.
 
-The theorem does not prove Rust extraction, signed atom identity, Boolean witness
+These theorems do not prove Rust extraction, signed atom identity, Boolean witness
 traversal, complete producer coverage, exact-owner matching or resource accounting.
+For the additional deduction, Rust must distinguish an unknown condition from
+one already known opposite, establish every remaining premise and a held output,
+and propagate the opposite signed value without changing original-only scope.
 Those representation and runtime correspondences remain open. Exhaustive small
 original theories and partial-region tests check semantic preservation, and
 scope/interruption tests exercise the executable boundaries; they do not close

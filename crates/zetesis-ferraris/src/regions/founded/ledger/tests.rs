@@ -1,7 +1,7 @@
 //! Reusable explanations belong to the exact original theory, not the region,
 //! inherited knowledge, a restriction-only visit or a frozen reduct query.
 
-use super::Ledger;
+use super::{Deduction, Ledger};
 use crate::regions::founded::explanations::Input;
 use crate::regions::{SupportExplanationStatistics, Width, Work};
 use crate::test_support::{SinglePermits, theory, world};
@@ -11,6 +11,8 @@ use crate::{
     Theory,
 };
 use zetesis_cpu::{Cancellation, Stop};
+
+mod partial;
 
 struct Program {
     owner: Theory,
@@ -185,6 +187,7 @@ fn all_partial_regions_preserve_every_original_answer() {
         })
         .collect();
     let mut matched = 0;
+    let mut forced = 0;
     for mut code in 0..243 {
         let mut initial = Region::all_open(5);
         for atom in 0..5 {
@@ -203,6 +206,7 @@ fn all_partial_regions_preserve_every_original_answer() {
         let (result, counts) =
             program.close(&mut narrowed, &mut program.index.knowledge(), &mut scratch);
         matched += counts.support_explanations.matched;
+        forced += counts.support_explanations.forced;
         for &answer in &answers {
             if compatible(&initial, answer) {
                 assert_ne!(result, Narrowing::Refuted);
@@ -214,6 +218,7 @@ fn all_partial_regions_preserve_every_original_answer() {
         matched > 0,
         "the comparison must exercise retained explanations"
     );
+    assert!(forced > 0, "the comparison must exercise partial matching");
 }
 
 #[test]
@@ -227,9 +232,13 @@ fn matching_requires_every_signed_condition() {
             assert_eq!(
                 scratch
                     .explanations
-                    .matches(0, &held, &cut, &mut Work::new(u64::MAX))
+                    .deduction(0, &held, &cut, &mut Work::new(u64::MAX))
                     .unwrap(),
-                x == 1 && y == 2
+                if x == 1 && y == 2 {
+                    Deduction::ExcludeOutputs
+                } else {
+                    Deduction::None
+                }
             );
         }
     }
@@ -365,18 +374,19 @@ fn interrupted_matching_preserves_the_typed_failure() {
     let held = [1 << 3];
     let cut = [1 << 2];
     let mut measured = Work::new(u64::MAX);
-    assert!(
+    assert_eq!(
         scratch
             .explanations
-            .matches(0, &held, &cut, &mut measured)
-            .unwrap()
+            .deduction(0, &held, &cut, &mut measured)
+            .unwrap(),
+        Deduction::ExcludeOutputs
     );
     for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
         for prefix in 0..measured.spent {
             let mut permits = SinglePermits::new(prefix, failure);
             let mut work = Work::reserved(&mut permits);
             assert_eq!(
-                scratch.explanations.matches(0, &held, &cut, &mut work),
+                scratch.explanations.deduction(0, &held, &cut, &mut work),
                 Err(failure)
             );
             assert_eq!(work.spent, prefix);

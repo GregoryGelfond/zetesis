@@ -163,6 +163,11 @@ impl RegionCounts {
                     .cut
                     .checked_add(other.support_explanations.cut)
                     .ok_or(Incomplete::CounterOverflow)?,
+                forced: self
+                    .support_explanations
+                    .forced
+                    .checked_add(other.support_explanations.forced)
+                    .ok_or(Incomplete::CounterOverflow)?,
                 refuted: self
                     .support_explanations
                     .refuted

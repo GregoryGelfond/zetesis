@@ -814,11 +814,12 @@ fn candidate_regions(
     let explanations = &counts.support_explanations;
     writeln!(
         sink,
-        "  support explanations: attempts={}; certified={}; matched={}; cut={}; refuted={}; declined={}; work={} (included in reading work); peak worker bytes={}",
+        "  support explanations: attempts={}; certified={}; matched={}; cut={}; forced={}; refuted={}; declined={}; work={} (included in reading work); peak worker bytes={}",
         explanations.attempts,
         explanations.certified,
         explanations.matched,
         explanations.cut,
+        explanations.forced,
         explanations.refuted,
         explanations.declined,
         explanations.work,

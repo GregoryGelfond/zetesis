@@ -208,6 +208,40 @@ theorem conditional_unsupported_absent
   intro a inside present
   exact possible a present inside
 
+/-- A present unsupported atom forces the remaining certificate condition to fail.
+
+Suppose the condition C together with a remaining condition excludes every atom
+of U by `conditional_unsupported_absent`. An answer set satisfying C and containing
+an atom of U cannot satisfy the remaining condition: otherwise the same answer
+set would both contain and omit that atom.
+
+Both conditions are predicates on interpretations; no signed-literal encoding or
+partial-region state is assumed. The Rust rule for exactly one unknown condition
+must separately establish that all other conditions hold in every compatible
+answer set and that an output atom is held. This law does not verify that
+classification, event propagation, ownership or resource handling.
+-/
+theorem conditional_unsupported_forces_complement
+    (T : Theory α) (rules : List (Producer α)) (choices : List (ChoiceProducer α))
+    (covered : CoveredWithChoices T rules choices)
+    (condition remaining : Atoms α → Prop) (unsupported : Atoms α)
+    (upper : Formula α → Prop)
+    (sound : ∀ M, condition M ∧ remaining M →
+      UpperSound M (fun a => ¬ unsupported a) upper)
+    (ordinaryBlocked : ∀ r ∈ rules,
+      (∃ a, r.head.Contains a ∧ unsupported a) → ¬ producerEnabled upper r)
+    (choicesBlocked : ∀ c ∈ choices, unsupported c.head → ¬ choiceEnabled upper c)
+    (M : Atoms α) (matching : condition M)
+    (present : ∃ a, unsupported a ∧ M a) (answer : Stable M T) :
+    ¬ remaining M := by
+  intro holds
+  have absent : ∀ a, unsupported a → ¬ M a :=
+    conditional_unsupported_absent T rules choices covered
+      (fun N => condition N ∧ remaining N) unsupported upper sound
+      ordinaryBlocked choicesBlocked M ⟨matching, holds⟩ answer
+  obtain ⟨a, inside, held⟩ := present
+  exact absent a inside held
+
 /-- Keep positive Boolean structure; an implication is possible unless known
 false. The known-false predicate is tested at each retained syntax node.
 Aggregates are outside Formula and require their own upper-soundness proof. -/

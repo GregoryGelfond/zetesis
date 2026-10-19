@@ -303,6 +303,7 @@ struct Live {
     support_explanation_certified: AtomicU64,
     support_explanation_matched: AtomicU64,
     support_explanation_cut: AtomicU64,
+    support_explanation_forced: AtomicU64,
     support_explanation_refuted: AtomicU64,
     support_explanation_declined: AtomicU64,
     support_explanation_work: AtomicU64,
@@ -359,6 +360,12 @@ impl Live {
         before: &SupportExplanationStatistics,
         after: &SupportExplanationStatistics,
     ) {
+        // An inactive ledger has neither a new count nor retained storage to
+        // publish. Nonzero peaks remain absolute observations, even without
+        // a count change.
+        if before == after && after.peak_bytes == 0 {
+            return;
+        }
         Self::add(
             &self.support_explanation_attempts,
             after.attempts - before.attempts,
@@ -372,6 +379,12 @@ impl Live {
             after.matched - before.matched,
         );
         Self::add(&self.support_explanation_cut, after.cut - before.cut);
+        if after.forced != before.forced {
+            Self::add(
+                &self.support_explanation_forced,
+                after.forced - before.forced,
+            );
+        }
         Self::add(
             &self.support_explanation_refuted,
             after.refuted - before.refuted,
@@ -406,6 +419,9 @@ impl Live {
             cut: coordinator
                 .cut
                 .saturating_add(Self::read(&self.support_explanation_cut)),
+            forced: coordinator
+                .forced
+                .saturating_add(Self::read(&self.support_explanation_forced)),
             refuted: coordinator
                 .refuted
                 .saturating_add(Self::read(&self.support_explanation_refuted)),

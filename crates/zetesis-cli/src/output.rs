@@ -1013,6 +1013,7 @@ fn region_statistics(
     out.number_field("certified", explanations.certified)?;
     out.number_field("matched", explanations.matched)?;
     out.number_field("cut", explanations.cut)?;
+    out.number_field("forced", explanations.forced)?;
     out.number_field("refuted", explanations.refuted)?;
     out.number_field("declined", explanations.declined)?;
     out.number_field("work", explanations.work)?;

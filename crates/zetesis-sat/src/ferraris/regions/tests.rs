@@ -563,6 +563,7 @@ fn failed_narrowing_keeps_support_explanation_receipts() {
         certified: 1,
         matched: 3,
         cut: 4,
+        forced: 6,
         refuted: 1,
         declined: 1,
         work: 19,
@@ -584,7 +585,7 @@ fn failed_narrowing_keeps_support_explanation_receipts() {
 
 #[test]
 fn explanation_overflow_leaves_all_counts_unchanged() {
-    for field in 0..7 {
+    for field in 0..8 {
         let mut counts = RegionCounts::default();
         let counter = match field {
             0 => &mut counts.support_explanations.attempts,
@@ -593,6 +594,7 @@ fn explanation_overflow_leaves_all_counts_unchanged() {
             3 => &mut counts.support_explanations.cut,
             4 => &mut counts.support_explanations.refuted,
             5 => &mut counts.support_explanations.declined,
+            6 => &mut counts.support_explanations.forced,
             _ => &mut counts.support_explanations.work,
         };
         *counter = u64::MAX;
@@ -605,6 +607,7 @@ fn explanation_overflow_leaves_all_counts_unchanged() {
                     certified: 1,
                     matched: 1,
                     cut: 1,
+                    forced: 1,
                     refuted: 1,
                     declined: 1,
                     work: 1,

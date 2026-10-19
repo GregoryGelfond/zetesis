@@ -5845,9 +5845,14 @@
     "line": 185
   },
   {
+    "name": "Zetesis.PossibleFoundedness.conditional_unsupported_forces_complement",
+    "file": "Zetesis/PossibleFoundedness.lean",
+    "line": 224
+  },
+  {
     "name": "Zetesis.PossibleFoundedness.body_upper_sound",
     "file": "Zetesis/PossibleFoundedness.lean",
-    "line": 225
+    "line": 259
   },
   {
     "name": "Zetesis.ProducerScheduling.stable_of_reads_only",

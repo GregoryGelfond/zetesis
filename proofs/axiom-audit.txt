@@ -1217,6 +1217,9 @@
 'Zetesis.PossibleFoundedness.intersection_models_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PossibleFoundedness.stable_sub_possible' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PossibleFoundedness.conditional_unsupported_absent' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.PossibleFoundedness.conditional_unsupported_forces_complement' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
 'Zetesis.PossibleFoundedness.body_upper_sound' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ProducerScheduling.stable_of_reads_only' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ProducerScheduling.selective_step_exact_of_stable' depends on axioms: [propext, Classical.choice, Quot.sound]
