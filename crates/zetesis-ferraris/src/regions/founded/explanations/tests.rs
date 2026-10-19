@@ -8,6 +8,8 @@ use crate::test_support::{SinglePermits, theory, world};
 use crate::{Narrower, Node, NodeView, Producers, RegionLimits, Theory};
 use zetesis_cpu::{Cancellation, Stop};
 
+mod aggregates;
+
 struct Program {
     owner: Theory,
     index: Narrower,

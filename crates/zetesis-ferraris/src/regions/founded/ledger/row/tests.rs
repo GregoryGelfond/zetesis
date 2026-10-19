@@ -159,12 +159,12 @@ fn peak_storage_includes_both_conversion_buffers() {
 }
 
 #[test]
-fn logical_deduplication_ignores_the_physical_form() {
+fn equal_rows_and_distinct_signs_ignore_physical_form() {
     let original = dense();
     for row in [Row::Scalar(dense()), packed(&original)] {
         let mut allowance = u64::MAX;
         assert_eq!(
-            row.equivalent(&original, &mut allowance, &mut Work::new(u64::MAX))
+            row.subsumes(&original, &mut allowance, &mut Work::new(u64::MAX))
                 .unwrap(),
             Some(true)
         );
@@ -172,7 +172,7 @@ fn logical_deduplication_ignores_the_physical_form() {
         opposite.conditions[7].1 = !opposite.conditions[7].1;
         let mut allowance = u64::MAX;
         assert_eq!(
-            row.equivalent(&opposite, &mut allowance, &mut Work::new(u64::MAX))
+            row.subsumes(&opposite, &mut allowance, &mut Work::new(u64::MAX))
                 .unwrap(),
             Some(false)
         );
@@ -180,7 +180,7 @@ fn logical_deduplication_ignores_the_physical_form() {
         *different.unsupported.last_mut().unwrap() = 80;
         let mut allowance = u64::MAX;
         assert_eq!(
-            row.equivalent(&different, &mut allowance, &mut Work::new(u64::MAX))
+            row.subsumes(&different, &mut allowance, &mut Work::new(u64::MAX))
                 .unwrap(),
             Some(false)
         );
@@ -308,13 +308,13 @@ fn every_interrupted_word_match_preserves_its_stop() {
 }
 
 #[test]
-fn a_duplicate_comparison_cannot_hide_a_stop() {
+fn a_subsumption_comparison_cannot_hide_a_stop() {
     let original = dense();
     let row = packed(&original);
     let mut measured = Work::new(u64::MAX);
     let mut allowance = u64::MAX;
     assert_eq!(
-        row.equivalent(&original, &mut allowance, &mut measured)
+        row.subsumes(&original, &mut allowance, &mut measured)
             .unwrap(),
         Some(true)
     );
@@ -324,7 +324,7 @@ fn a_duplicate_comparison_cannot_hide_a_stop() {
             let mut work = Work::reserved(&mut permits);
             let mut allowance = u64::MAX;
             assert_eq!(
-                row.equivalent(&original, &mut allowance, &mut work),
+                row.subsumes(&original, &mut allowance, &mut work),
                 Err(failure)
             );
             assert_eq!(work.spent, prefix);
@@ -333,9 +333,11 @@ fn a_duplicate_comparison_cannot_hide_a_stop() {
     for prefix in 0..measured.spent {
         let mut allowance = prefix;
         assert_eq!(
-            row.equivalent(&original, &mut allowance, &mut Work::new(u64::MAX))
+            row.subsumes(&original, &mut allowance, &mut Work::new(u64::MAX))
                 .unwrap(),
             None
         );
     }
 }
+
+mod subsumption;

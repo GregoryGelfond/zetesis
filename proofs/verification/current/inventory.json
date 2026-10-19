@@ -136,6 +136,46 @@
       "name": "Zetesis.AggregateAssignment.subset_candidates_need_not_be_realizable"
     },
     {
+      "file": "Zetesis/AggregateBodyWitnesses.lean",
+      "line": 45,
+      "name": "Zetesis.AggregateBodyWitnesses.refutes_outside_mono"
+    },
+    {
+      "file": "Zetesis/AggregateBodyWitnesses.lean",
+      "line": 59,
+      "name": "Zetesis.AggregateBodyWitnesses.refutation_upper_sound"
+    },
+    {
+      "file": "Zetesis/AggregateBodyWitnesses.lean",
+      "line": 74,
+      "name": "Zetesis.AggregateBodyWitnesses.threshold_reduct_absent"
+    },
+    {
+      "file": "Zetesis/AggregateBodyWitnesses.lean",
+      "line": 106,
+      "name": "Zetesis.AggregateBodyWitnesses.threshold_refutes_outside"
+    },
+    {
+      "file": "Zetesis/AggregateBodyWitnesses.lean",
+      "line": 124,
+      "name": "Zetesis.AggregateBodyWitnesses.aggregate_reduct_absent"
+    },
+    {
+      "file": "Zetesis/AggregateBodyWitnesses.lean",
+      "line": 145,
+      "name": "Zetesis.AggregateBodyWitnesses.aggregate_refutes_outside"
+    },
+    {
+      "file": "Zetesis/AggregateBodyWitnesses.lean",
+      "line": 164,
+      "name": "Zetesis.AggregateBodyWitnesses.prefix_requires_witness"
+    },
+    {
+      "file": "Zetesis/AggregateBodyWitnesses.lean",
+      "line": 183,
+      "name": "Zetesis.AggregateBodyWitnesses.suffix_requires_witness"
+    },
+    {
       "file": "Zetesis/AggregateBounds.lean",
       "line": 31,
       "name": "Zetesis.AggregateBounds.active_bounds"
@@ -9155,6 +9195,7 @@
     "Zetesis/AcyclicEvaluation.lean",
     "Zetesis/AdjacencyRows.lean",
     "Zetesis/AggregateAssignment.lean",
+    "Zetesis/AggregateBodyWitnesses.lean",
     "Zetesis/AggregateBounds.lean",
     "Zetesis/AggregateConsumers.lean",
     "Zetesis/AggregateDependencies.lean",
@@ -9342,11 +9383,12 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "2a071eff79610a5eac6e50834308b448ac7ca5f1ead59d91d764b5af40694c44",
-    "Zetesis.lean": "e873671491bac7f532419b9875842d43b31f9acb6b070bd4bff32f5dad34dfae",
+    "Audit.lean": "b18ccddb3126858ee5049faec1764c8b55ec29592bd8f6c5c8d2c5f16ab40916",
+    "Zetesis.lean": "ab627adbbcd72189d13c25548f8a7f4f23008d1e80f0cb5caee8197f5e4e15c1",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
     "Zetesis/AggregateAssignment.lean": "2ed2a2bced03e6c0bb8c88afea9a3b0b9f8276c1633ba7695be9a952610d1b35",
+    "Zetesis/AggregateBodyWitnesses.lean": "4e2c21f000af15cb40fa29ce85431ae4bc8841264e6521ed96e438acb7035513",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
     "Zetesis/AggregateDependencies.lean": "b21d2b1d84b19dcb43a1fe0276b0cc9dc72b4bf930c3928ffcfae14f96ca9b2f",

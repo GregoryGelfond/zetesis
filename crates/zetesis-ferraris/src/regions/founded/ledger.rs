@@ -101,7 +101,7 @@ impl Ledger {
         self.rows.len() < MAX_ROWS && self.attempts < MAX_ATTEMPTS && self.remaining != 0
     }
 
-    /// Discovery, deduplication and conversion share the optional capture allowance.
+    /// Discovery, subsumption and conversion share the optional capture allowance.
     /// Its exhaustion declines retention; a real quota stop still propagates.
     pub(in crate::regions) fn capture_read(&mut self, work: &mut Work<'_>) -> Result<bool, Stop> {
         capture_read(&mut self.remaining, work)
@@ -158,13 +158,13 @@ impl Ledger {
                 counts.declined += 1;
                 return Ok(());
             }
-            let Some(equal) =
-                self.rows[position].equivalent(&explanation, &mut self.remaining, work)?
+            let Some(subsumed) =
+                self.rows[position].subsumes(&explanation, &mut self.remaining, work)?
             else {
                 counts.declined += 1;
                 return Ok(());
             };
-            if equal {
+            if subsumed {
                 counts.declined += 1;
                 return Ok(());
             }

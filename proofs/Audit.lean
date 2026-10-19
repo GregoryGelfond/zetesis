@@ -27,6 +27,14 @@ import Zetesis
 #print axioms Zetesis.AggregateAssignment.actual_tuple_sum_is_candidate
 #print axioms Zetesis.AggregateAssignment.initial_zero_may_miss_actual_sum
 #print axioms Zetesis.AggregateAssignment.subset_candidates_need_not_be_realizable
+#print axioms Zetesis.AggregateBodyWitnesses.refutes_outside_mono
+#print axioms Zetesis.AggregateBodyWitnesses.refutation_upper_sound
+#print axioms Zetesis.AggregateBodyWitnesses.threshold_reduct_absent
+#print axioms Zetesis.AggregateBodyWitnesses.threshold_refutes_outside
+#print axioms Zetesis.AggregateBodyWitnesses.aggregate_reduct_absent
+#print axioms Zetesis.AggregateBodyWitnesses.aggregate_refutes_outside
+#print axioms Zetesis.AggregateBodyWitnesses.prefix_requires_witness
+#print axioms Zetesis.AggregateBodyWitnesses.suffix_requires_witness
 #print axioms Zetesis.AggregateBounds.active_bounds
 #print axioms Zetesis.AggregateBounds.violated_bound_refutes
 #print axioms Zetesis.AggregateBounds.inactive_frozen

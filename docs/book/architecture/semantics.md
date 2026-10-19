@@ -107,6 +107,14 @@ leave a model of its reduct, so minimality makes `U` absent. For example,
 `a :- b. b :- a. a :- x. {x}.` permits the deduction that `x` absent implies
 both `a` and `b` absent.
 
+Native aggregate bodies can also supply these explanations. A count or
+nonnegative sum is false when the contributions still possible cannot reach its
+bound. Every excluded contribution needs a false-reduct witness; an unexplained
+one keeps its full weight. An interior min/max cut needs all qualifying
+contributions false. Empty selections and endpoint bounds retain their ordinary
+meaning. These deductions use the existing numeric rows and signed atom premises;
+a cached aggregate value alone is not an explanation.
+
 The region narrower retains a bounded ledger of these deductions in each
 worker's scratch, owned by the exact immutable original theory. Each completed
 pass attempts at most one capture before publishing its cuts, preferring a held
@@ -126,7 +134,9 @@ atom lists for dispersed identities, or compact word groups when those occupy
 less space. It has one authoritative representation. Word intersections implement
 the same signed-condition checks, and output atoms retain their ascending order.
 Conversion shares the existing optional capture allowance; matching remains
-charged to ordinary narrowing work.
+charged to ordinary narrowing work. A new explanation is redundant when an
+existing row requires no additional conditions and excludes every proposed output.
+The comparison uses the same optional capture allowance and keeps the existing row.
 Frozen-reduct and restriction-only queries do not use the ledger. The original
 theory and membership check stay unchanged. Optional capture limits lose only
 reuse; a global resource or cancellation failure still stops the operation.

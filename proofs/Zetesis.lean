@@ -133,6 +133,7 @@ import Zetesis.SourceSupport
 import Zetesis.BindingScopes
 import Zetesis.DisjunctiveSupport
 import Zetesis.PossibleFoundedness
+import Zetesis.AggregateBodyWitnesses
 import Zetesis.GateRestrictions
 import Zetesis.PackedQueryLiterals
 import Zetesis.RelationExtension

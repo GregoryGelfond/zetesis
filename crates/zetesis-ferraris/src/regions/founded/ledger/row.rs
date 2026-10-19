@@ -8,7 +8,7 @@
 //! `held`. Logical iterators decode canonical atom IDs in increasing order.
 //!
 //! Preparation compares actual retained capacities, including the common enum
-//! header, and publishes only a complete row. Conversion and deduplication
+//! header, and publishes only a complete row. Conversion and subsumption
 //! share the ledger's optional capture allowance. Refusal loses retention only;
 //! allocation and global work failures preserve their typed stop. Peak storage
 //! includes the simultaneous scalar witness and packed allocation. Matching
@@ -131,33 +131,34 @@ impl Row {
         }
     }
 
-    /// None means optional comparison allowance was exhausted, not inequality.
-    pub(super) fn equivalent(
+    /// This row requires a subset of the proposed signed conditions and excludes
+    /// every proposed output. It therefore makes the proposed row redundant.
+    /// Both logical streams are canonical; physical packing is immaterial.
+    /// None means optional comparison allowance was exhausted, not a verdict.
+    pub(super) fn subsumes(
         &self,
         other: &Explanation,
         remaining: &mut u64,
         work: &mut Work<'_>,
     ) -> Result<Option<bool>, Stop> {
-        if self.lengths() != (other.conditions.len(), other.unsupported.len()) {
+        let (conditions, outputs) = self.lengths();
+        if conditions > other.conditions.len() || outputs < other.unsupported.len() {
             return Ok(Some(false));
         }
-        for (left, &right) in self.conditions().zip(&other.conditions) {
-            if !capture_read(remaining, work)? {
-                return Ok(None);
-            }
-            if left != right {
-                return Ok(Some(false));
-            }
+        match includes(
+            other.conditions.iter().copied(),
+            self.conditions(),
+            remaining,
+            work,
+        )? {
+            Some(true) => includes(
+                self.outputs(),
+                other.unsupported.iter().copied(),
+                remaining,
+                work,
+            ),
+            declined_or_false => Ok(declined_or_false),
         }
-        for (left, &right) in self.outputs().zip(&other.unsupported) {
-            if !capture_read(remaining, work)? {
-                return Ok(None);
-            }
-            if left != right {
-                return Ok(Some(false));
-            }
-        }
-        Ok(Some(true))
     }
 
     pub(super) fn conditions(&self) -> impl Iterator<Item = (usize, bool)> + '_ {
@@ -251,6 +252,32 @@ impl Row {
             ),
         }
     }
+}
+
+/// Ordered inclusion uses constant scratch and linear comparisons. Each visited
+/// candidate consumes the existing capture allowance; exhaustion is undecided.
+fn includes<T: Ord>(
+    mut candidates: impl Iterator<Item = T>,
+    required: impl Iterator<Item = T>,
+    remaining: &mut u64,
+    work: &mut Work<'_>,
+) -> Result<Option<bool>, Stop> {
+    for wanted in required {
+        loop {
+            if !capture_read(remaining, work)? {
+                return Ok(None);
+            }
+            let Some(candidate) = candidates.next() else {
+                return Ok(Some(false));
+            };
+            match candidate.cmp(&wanted) {
+                std::cmp::Ordering::Less => {}
+                std::cmp::Ordering::Equal => break,
+                std::cmp::Ordering::Greater => return Ok(Some(false)),
+            }
+        }
+    }
+    Ok(Some(true))
 }
 
 fn count_words(

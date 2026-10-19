@@ -135,6 +135,46 @@
     "line": 290
   },
   {
+    "name": "Zetesis.AggregateBodyWitnesses.refutes_outside_mono",
+    "file": "Zetesis/AggregateBodyWitnesses.lean",
+    "line": 45
+  },
+  {
+    "name": "Zetesis.AggregateBodyWitnesses.refutation_upper_sound",
+    "file": "Zetesis/AggregateBodyWitnesses.lean",
+    "line": 59
+  },
+  {
+    "name": "Zetesis.AggregateBodyWitnesses.threshold_reduct_absent",
+    "file": "Zetesis/AggregateBodyWitnesses.lean",
+    "line": 74
+  },
+  {
+    "name": "Zetesis.AggregateBodyWitnesses.threshold_refutes_outside",
+    "file": "Zetesis/AggregateBodyWitnesses.lean",
+    "line": 106
+  },
+  {
+    "name": "Zetesis.AggregateBodyWitnesses.aggregate_reduct_absent",
+    "file": "Zetesis/AggregateBodyWitnesses.lean",
+    "line": 124
+  },
+  {
+    "name": "Zetesis.AggregateBodyWitnesses.aggregate_refutes_outside",
+    "file": "Zetesis/AggregateBodyWitnesses.lean",
+    "line": 145
+  },
+  {
+    "name": "Zetesis.AggregateBodyWitnesses.prefix_requires_witness",
+    "file": "Zetesis/AggregateBodyWitnesses.lean",
+    "line": 164
+  },
+  {
+    "name": "Zetesis.AggregateBodyWitnesses.suffix_requires_witness",
+    "file": "Zetesis/AggregateBodyWitnesses.lean",
+    "line": 183
+  },
+  {
     "name": "Zetesis.AggregateBounds.active_bounds",
     "file": "Zetesis/AggregateBounds.lean",
     "line": 31

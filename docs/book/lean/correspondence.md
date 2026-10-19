@@ -2573,13 +2573,31 @@ before publishing that pass's cuts. It prefers a held atom; if no missing atom
 is held, it may capture an open one. The conditional absence law does not
 require the starting atom to be held: complete producer coverage with sound
 false-body witnesses establishes that conclusion. Discovery, collection and
-deduplication keep the same optional allowance. The collector reconstructs every incoming producer's false-body
-witness using positive Boolean structure, absent external atoms and exact negated
-atoms whose atom is held. A conjunction needs one false operand; a disjunction
-needs them all. Other implications and aggregates supply no witness. Adding an
-unsupported atom requires checking all its producers, and a failed conjunction
-alternative rolls back its speculative additions. A held cohead cannot discharge
-that coverage duty.
+redundancy checks keep the same optional allowance. The collector reconstructs
+every incoming producer's false-body witness using positive Boolean structure,
+absent external atoms and exact negated atoms whose atom is held. A conjunction
+needs one false operand; a disjunction needs them all. Other implications supply
+no witness. Adding an unsupported atom requires checking all its producers, and
+a failed alternative rolls back its speculative additions. A held cohead cannot
+discharge that coverage duty.
+
+[AggregateBodyWitnesses](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AggregateBodyWitnesses.lean)
+states the corresponding aggregate-body laws. Every omitted contribution has a
+false reduct outside the removed set under the recorded condition. A nonnegative
+threshold fails when the total of all remaining possible contributions is below
+its bound. Interior ordinal cuts fail when every qualifying contribution is false;
+endpoint cuts require their separate constant laws. The false-body property is
+preserved when the removed set grows, but every added atom still needs complete
+producer coverage.
+
+Rust implements threshold collection with a bounded frame cursor over the
+original weighted row. Successfully explained occurrences reduce the remaining
+possible weight; failed contributions roll back only their speculative additions.
+Unexplained occurrences keep their full weight. Zero weights need no condition
+witness. Native min/max cuts reuse their prepared qualifying disjunctions;
+endpoint constants are handled first, and an interior cut with no chain is
+verified by a charged scan. The laws do not prove the cursor, finite-width sums,
+rollback, rank classification or original-row identity.
 
 The worker-local [ledger](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/founded/ledger.rs)
 authenticates the exact original theory and uses rows only with complete producer
@@ -2592,10 +2610,17 @@ additional deduction uses existing rows and their output sets; capture retains
 the bounds below. Frozen and restriction-only visits suspend reuse; a different eligible theory
 clears the rows. Each owner retains
 at most 64 rows after at most 256 capture attempts, sharing 131,072 discovery,
-collection and deduplication reads. One collection permits at most 64 unsupported
+collection and redundancy-comparison reads. One collection permits at most 64 unsupported
 atoms, 16 literals, 4,096 reads and 65,536 workspace bytes. Matching remains
 charged to ordinary narrowing work. Optional limits decline capture; global
 quota, cancellation and allocation failures preserve their typed outcomes.
+
+A new row is omitted when a retained row requires a subset of its signed
+conditions and excludes a superset of its outputs. This preserves its complete
+conditional-absence consequence and its partial-match deductions. The ordered
+comparison allocates no scratch, consumes the existing capture allowance, and
+never replaces a retained row. Concrete canonical ordering and signed inclusion
+remain implementation obligations checked against independent set readings.
 
 Retained rows use either the scalar witness lists or sparse word groups, chosen
 by actual buffer capacity including the common row header. A packed row keeps

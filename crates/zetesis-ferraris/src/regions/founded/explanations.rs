@@ -6,7 +6,10 @@
 //! false after removing U. Other positive atoms require an explicit original
 //! cut literal; an exact negated atom requires an explicit held literal.
 //! Conjunction needs one false operand and disjunction needs every operand.
-//! Other implications and aggregates cannot provide a witness. In particular,
+//! A nonnegative threshold needs enough false contribution witnesses that even
+//! all remaining weights cannot reach its bound. An interior extremum cut needs
+//! every qualifying witness false, reusing its borrowed disjunction operands.
+//! Other implications cannot provide a witness. In particular,
 //! a cached false-node bit, a held cohead, or a candidate-only restriction is
 //! never a premise. Ordinary and choice producers have the same coverage duty.
 //!
@@ -19,7 +22,8 @@
 //!
 //! Growing U preserves every earlier body witness. Every newly added atom's
 //! complete incoming row must nevertheless be checked before publication. An
-//! AND alternative rolls back both pending atoms and literals when it fails;
+//! AND alternative or threshold contribution rolls back both pending atoms and
+//! literals when it fails;
 //! producer rows are processed only outside that Boolean traversal. The first
 //! locally successful alternative is retained. If its later producer coverage
 //! fails, capture declines instead of exploring combinations of alternatives.
@@ -144,10 +148,23 @@ struct Mark {
 
 #[derive(Clone, Copy)]
 struct Frame {
-    chain: usize,
+    kind: FrameKind,
     next: usize,
     mark: Mark,
-    disjunction: bool,
+}
+
+#[derive(Clone, Copy)]
+enum FrameKind {
+    Chain {
+        chain: usize,
+        disjunction: bool,
+    },
+    /// Total weight minus bound, less contributions already proved false.
+    /// The current occurrence is next - 1; its weight is read from the owner.
+    Threshold {
+        node: usize,
+        surplus: i128,
+    },
 }
 
 enum BodyStep {
@@ -299,7 +316,8 @@ impl Collector<'_, '_, '_> {
             NodeView::Atom(atom) => self.positive(atom)?,
             NodeView::Implies(left, right) => self.negative(left, right)?,
             NodeView::And(_) | NodeView::Or(_) => return self.chain(node),
-            NodeView::Threshold(_) | NodeView::ExtremumCut(_) => false,
+            NodeView::Threshold(threshold) => return self.threshold(node, threshold),
+            NodeView::ExtremumCut(cut) => return self.extremum(node, cut),
         };
         Ok(BodyStep::Done(found))
     }
@@ -353,18 +371,98 @@ impl Collector<'_, '_, '_> {
             return Ok(BodyStep::Done(row.disjunction));
         };
         let frame = Frame {
-            chain,
-            next: 1,
-            mark: Mark {
-                atoms: self.result.unsupported.len(),
-                literals: self.result.conditions.len(),
+            kind: FrameKind::Chain {
+                chain,
+                disjunction: row.disjunction,
             },
-            disjunction: row.disjunction,
+            next: 1,
+            mark: self.mark(),
         };
+        self.push_frame(frame)?;
+        Ok(BodyStep::Descend(first))
+    }
+
+    fn mark(&self) -> Mark {
+        Mark {
+            atoms: self.result.unsupported.len(),
+            literals: self.result.conditions.len(),
+        }
+    }
+
+    fn push_frame(&mut self, frame: Frame) -> Result<(), Failure> {
         let other = self.bytes() - capacity_bytes(&self.frames);
         reserve_one(&mut self.frames, other, self.limits.bytes, self.peak_bytes)?;
         self.frames.push(frame);
-        Ok(BodyStep::Descend(first))
+        Ok(())
+    }
+
+    /// Nonnegative weights make unexplained contributions a conservative upper
+    /// bound. Each successful child certifies false reduct truth, including when
+    /// it adds atoms to U. Complete producer coverage is still checked by run.
+    /// The stack, not Rust recursion, owns nested contribution traversals.
+    fn threshold(
+        &mut self,
+        node: usize,
+        threshold: crate::Threshold<'_>,
+    ) -> Result<BodyStep, Failure> {
+        if threshold.bound <= 0 {
+            return Ok(BodyStep::Done(false));
+        }
+        let total = threshold.selected_sum::<Failure>(|_| {
+            self.meter.tick()?;
+            Ok(true)
+        })?;
+        if total < threshold.bound {
+            return Ok(BodyStep::Done(true));
+        }
+        self.next_threshold(
+            Frame {
+                kind: FrameKind::Threshold {
+                    node,
+                    surplus: total - threshold.bound,
+                },
+                next: 0,
+                mark: self.mark(),
+            },
+            threshold,
+        )
+    }
+
+    fn next_threshold(
+        &mut self,
+        mut frame: Frame,
+        threshold: crate::Threshold<'_>,
+    ) -> Result<BodyStep, Failure> {
+        while let Some(&weight) = threshold.weights.get(frame.next) {
+            self.meter.tick()?;
+            let child = threshold.conditions[frame.next];
+            frame.next += 1;
+            if weight != 0 {
+                frame.mark = self.mark();
+                self.push_frame(frame)?;
+                return Ok(BodyStep::Descend(child));
+            }
+        }
+        Ok(BodyStep::Done(false))
+    }
+
+    fn extremum(&mut self, node: usize, cut: crate::ExtremumCut<'_>) -> Result<BodyStep, Failure> {
+        if let Some(truth) = cut.endpoint_truth() {
+            return Ok(BodyStep::Done(!truth));
+        }
+        if self.input.index.chain_of[node].is_some() {
+            return self.chain(node);
+        }
+        // An interior cut without a chain has no qualifying occurrence. Verify
+        // that constant case from the authoritative row, charging every read.
+        let possible = cut.row.reduce::<Failure>(|_| {
+            self.meter.tick()?;
+            Ok(true)
+        })?;
+        if cut.rule.holds(possible) {
+            return Err(Stop::InvalidProgram.into());
+        }
+        Ok(BodyStep::Done(true))
     }
 
     fn resume(&mut self, mut found: bool) -> Result<BodyStep, Failure> {
@@ -374,20 +472,48 @@ impl Collector<'_, '_, '_> {
                 self.result.unsupported.truncate(frame.mark.atoms);
                 self.result.conditions.truncate(frame.mark.literals);
             }
-            // One false conjunct or one unexplainable disjunct decides this
-            // frame. Otherwise advance in the existing flattened operand row.
-            if found != frame.disjunction {
-                continue;
+            match frame.kind {
+                FrameKind::Chain { chain, disjunction } => {
+                    // One false conjunct or one unexplainable disjunct decides
+                    // this frame. Otherwise advance in the borrowed operand row.
+                    if found != disjunction {
+                        continue;
+                    }
+                    self.meter.tick()?;
+                    let index = self.input.index;
+                    let children = index.chains[chain].leaves(&index.extrema);
+                    if let Some(&child) = children.get(frame.next) {
+                        frame.next += 1;
+                        self.frames.push(frame);
+                        return Ok(BodyStep::Descend(child));
+                    }
+                    found = disjunction;
+                }
+                FrameKind::Threshold { node, mut surplus } => {
+                    self.meter.tick()?;
+                    let NodeView::Threshold(threshold) = self
+                        .input
+                        .theory
+                        .view()
+                        .node(node)
+                        .map_err(|_| Stop::InvalidProgram)?
+                    else {
+                        return Err(Stop::InvalidProgram.into());
+                    };
+                    if found {
+                        let weight = i128::from(threshold.weights[frame.next - 1]);
+                        if weight > surplus {
+                            continue;
+                        }
+                        surplus -= weight;
+                        frame.kind = FrameKind::Threshold { node, surplus };
+                    }
+                    match self.next_threshold(frame, threshold)? {
+                        BodyStep::Descend(child) => return Ok(BodyStep::Descend(child)),
+                        BodyStep::Done(done) => found = done,
+                    }
+                }
             }
-            self.meter.tick()?;
-            let index = self.input.index;
-            let children = index.chains[frame.chain].leaves(&index.extrema);
-            if let Some(&child) = children.get(frame.next) {
-                frame.next += 1;
-                self.frames.push(frame);
-                return Ok(BodyStep::Descend(child));
-            }
-            found = frame.disjunction;
         }
         Ok(BodyStep::Done(found))
     }
