@@ -58,7 +58,7 @@ pub use regions::{
     ChoiceHeads, Extraction, FrozenSubject, GeneratorOrder, GeneratorOrderAttempt,
     GeneratorOrderError, GeneratorOrderLimits, Knowledge, NARROWING_BATCH, Narrower,
     NarrowingAttempt, NarrowingQuota, NarrowingScratch, NarrowingStatistics, OriginalSubject,
-    PreferenceAttempt, Producers, RegionLimits, producers,
+    PreferenceAttempt, Producers, RegionLimits, SupportExplanationStatistics, producers,
 };
 pub use theory::{
     AdmissionError, AdmissionLimits, ContributionRow, ExtremumCutDescriptor, FormulaParts,

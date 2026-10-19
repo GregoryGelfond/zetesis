@@ -40,6 +40,9 @@ Notable changes by release. Versions follow Semantic Versioning.
 - Candidate propagation reuses existing disjunctions to expose shared necessary
   conditions within rule bodies. Under an active restriction, split-order ties
   use the original program's dependencies. Answer-set semantics are unchanged.
+- Candidate checks retain bounded explanations of missing support, allowing later
+  regions to reuse deductions without repeating the support computation.
+  Original satisfaction and reduct membership remain unchanged.
 
 ## 0.6.0 — 2026-10-14
 

@@ -80,6 +80,8 @@ use std::mem::size_of;
 use zetesis_cpu::Stop;
 
 mod components;
+pub(super) mod explanations;
+pub(super) mod ledger;
 
 #[cfg(test)]
 mod tests;

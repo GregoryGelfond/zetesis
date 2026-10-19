@@ -24,7 +24,7 @@ use zetesis_cpu::regions::{Counting, Narrowing, Region, Traversal, Visit};
 use zetesis_ferraris::{
     ChoiceHeads, FrozenSubject, GeneratorOrder, GeneratorOrderError, Interpretation, Knowledge,
     Narrower, NarrowingAttempt, NarrowingQuota, NarrowingScratch, OriginalSubject, Producers,
-    RegionLimits, Theory,
+    RegionLimits, SupportExplanationStatistics, Theory,
 };
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
@@ -92,6 +92,10 @@ pub struct RegionCounts {
     /// Charged possible-foundedness preparation, closure and publication,
     /// included in `work` on every outcome. This is not a propagation-event count.
     pub founded_work: u64,
+    /// Bounded support-explanation capture and reuse; its work is included in `work`.
+    /// The byte peak is the largest single worker ledger/capture footprint, not
+    /// the sum across workers or total process memory.
+    pub support_explanations: SupportExplanationStatistics,
 }
 
 impl RegionCounts {
@@ -138,6 +142,47 @@ impl RegionCounts {
                 .founded_work
                 .checked_add(other.founded_work)
                 .ok_or(Incomplete::CounterOverflow)?,
+            support_explanations: SupportExplanationStatistics {
+                attempts: self
+                    .support_explanations
+                    .attempts
+                    .checked_add(other.support_explanations.attempts)
+                    .ok_or(Incomplete::CounterOverflow)?,
+                certified: self
+                    .support_explanations
+                    .certified
+                    .checked_add(other.support_explanations.certified)
+                    .ok_or(Incomplete::CounterOverflow)?,
+                matched: self
+                    .support_explanations
+                    .matched
+                    .checked_add(other.support_explanations.matched)
+                    .ok_or(Incomplete::CounterOverflow)?,
+                cut: self
+                    .support_explanations
+                    .cut
+                    .checked_add(other.support_explanations.cut)
+                    .ok_or(Incomplete::CounterOverflow)?,
+                refuted: self
+                    .support_explanations
+                    .refuted
+                    .checked_add(other.support_explanations.refuted)
+                    .ok_or(Incomplete::CounterOverflow)?,
+                declined: self
+                    .support_explanations
+                    .declined
+                    .checked_add(other.support_explanations.declined)
+                    .ok_or(Incomplete::CounterOverflow)?,
+                work: self
+                    .support_explanations
+                    .work
+                    .checked_add(other.support_explanations.work)
+                    .ok_or(Incomplete::CounterOverflow)?,
+                peak_bytes: self
+                    .support_explanations
+                    .peak_bytes
+                    .max(other.support_explanations.peak_bytes),
+            },
         };
         *self = sum;
         Ok(())
@@ -944,13 +989,17 @@ fn account(
     attempt: &NarrowingAttempt<Incomplete>,
     counts: &mut RegionCounts,
 ) -> Result<Narrowing, Incomplete> {
-    let charges = attempt.statistics;
-    counts.propagations += charges.propagations;
-    counts.held += charges.held;
-    counts.cut += charges.cut;
-    counts.work += charges.work;
-    counts.support_work += charges.support_work;
-    counts.founded_work += charges.founded_work;
+    let charges = &attempt.statistics;
+    counts.add(RegionCounts {
+        propagations: charges.propagations,
+        held: charges.held,
+        cut: charges.cut,
+        work: charges.work,
+        support_work: charges.support_work,
+        founded_work: charges.founded_work,
+        support_explanations: charges.support_explanations,
+        ..RegionCounts::default()
+    })?;
     attempt.result
 }
 

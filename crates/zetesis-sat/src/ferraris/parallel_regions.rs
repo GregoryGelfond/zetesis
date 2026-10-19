@@ -81,7 +81,9 @@ use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
 use zetesis_cpu::regions::{Narrowing, Region};
-use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Theory};
+use zetesis_ferraris::{
+    Interpretation, Narrower, NarrowingScratch, SupportExplanationStatistics, Theory,
+};
 
 use super::certified::{self, Certification};
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
@@ -297,6 +299,15 @@ struct Live {
     work: AtomicU64,
     support_work: AtomicU64,
     founded_work: AtomicU64,
+    support_explanation_attempts: AtomicU64,
+    support_explanation_certified: AtomicU64,
+    support_explanation_matched: AtomicU64,
+    support_explanation_cut: AtomicU64,
+    support_explanation_refuted: AtomicU64,
+    support_explanation_declined: AtomicU64,
+    support_explanation_work: AtomicU64,
+    /// Maximum single worker ledger/capture capacity, saturated at `u64::MAX`.
+    support_explanation_peak_bytes: AtomicU64,
     countermodel_queries: AtomicU64,
     countermodels: AtomicU64,
     /// The workers' phase timings, one pair of counters per phase.
@@ -340,6 +351,74 @@ impl Live {
     }
     fn read(counter: &AtomicU64) -> u64 {
         counter.load(Ordering::Relaxed)
+    }
+
+    /// Publish each admitted explanation prefix before a worker returns its result.
+    fn add_support_explanations(
+        &self,
+        before: &SupportExplanationStatistics,
+        after: &SupportExplanationStatistics,
+    ) {
+        Self::add(
+            &self.support_explanation_attempts,
+            after.attempts - before.attempts,
+        );
+        Self::add(
+            &self.support_explanation_certified,
+            after.certified - before.certified,
+        );
+        Self::add(
+            &self.support_explanation_matched,
+            after.matched - before.matched,
+        );
+        Self::add(&self.support_explanation_cut, after.cut - before.cut);
+        Self::add(
+            &self.support_explanation_refuted,
+            after.refuted - before.refuted,
+        );
+        Self::add(
+            &self.support_explanation_declined,
+            after.declined - before.declined,
+        );
+        Self::add(&self.support_explanation_work, after.work - before.work);
+        self.support_explanation_peak_bytes.fetch_max(
+            u64::try_from(after.peak_bytes).unwrap_or(u64::MAX),
+            Ordering::Relaxed,
+        );
+    }
+
+    /// Coordinator counts and independently readable worker totals. Reading does
+    /// not consume a delta, so repeated progress snapshots never double-count.
+    fn support_explanations(
+        &self,
+        coordinator: &SupportExplanationStatistics,
+    ) -> SupportExplanationStatistics {
+        SupportExplanationStatistics {
+            attempts: coordinator
+                .attempts
+                .saturating_add(Self::read(&self.support_explanation_attempts)),
+            certified: coordinator
+                .certified
+                .saturating_add(Self::read(&self.support_explanation_certified)),
+            matched: coordinator
+                .matched
+                .saturating_add(Self::read(&self.support_explanation_matched)),
+            cut: coordinator
+                .cut
+                .saturating_add(Self::read(&self.support_explanation_cut)),
+            refuted: coordinator
+                .refuted
+                .saturating_add(Self::read(&self.support_explanation_refuted)),
+            declined: coordinator
+                .declined
+                .saturating_add(Self::read(&self.support_explanation_declined)),
+            work: coordinator
+                .work
+                .saturating_add(Self::read(&self.support_explanation_work)),
+            peak_bytes: coordinator
+                .peak_bytes
+                .max(u128::from(Self::read(&self.support_explanation_peak_bytes))),
+        }
     }
 
     /// Add what a worker measured since its last report.
@@ -830,6 +909,8 @@ impl ParallelRegions {
                     .counts
                     .founded_work
                     .saturating_add(Live::read(&live.founded_work)),
+                support_explanations: live
+                    .support_explanations(&self.statistics.counts.support_explanations),
             },
             producers: self.statistics.producers,
             generator_order: self.statistics.generator_order,
@@ -1747,6 +1828,9 @@ fn step<'a>(
         after.founded_work - before.founded_work,
     );
     Live::add(&shared.live.work, after.work - before.work);
+    shared
+        .live
+        .add_support_explanations(&before.support_explanations, &after.support_explanations);
     let narrowing = narrowing?;
     if narrowing == Narrowing::Refuted {
         report.regions.refuted += 1;

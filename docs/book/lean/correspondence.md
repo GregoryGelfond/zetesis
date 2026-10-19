@@ -2533,6 +2533,42 @@ foreign or interrupted preparation supplies no exclusion evidence. The Rust
 membership states, event invalidation and sibling isolation remain refinement
 obligations; the semantic closure theorem alone does not verify this reuse.
 
+`PossibleFoundedness.conditional_unsupported_absent` states the reusable
+conditional law. For every answer set satisfying condition `B`, the same upper
+relaxation must be sound below the complement of `U`. Every ordinary producer
+whose head meets `U` and every atomic choice into `U` must be disabled. Applying
+`stable_sub_possible` to that complement then excludes every atom of `U`.
+This covers partial conditions independently of the ancestor region that exposed
+them; a classical model or a model of a frozen reduct need not satisfy the cut.
+
+The Rust [collector](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/founded/explanations.rs)
+starts from a held atom missing after a completed original founded pass, before
+publishing that pass's cuts. It reconstructs every incoming producer's false-body
+witness using positive Boolean structure, absent external atoms and exact negated
+atoms whose atom is held. A conjunction needs one false operand; a disjunction
+needs them all. Other implications and aggregates supply no witness. Adding an
+unsupported atom requires checking all its producers, and a failed conjunction
+alternative rolls back its speculative additions. A held cohead cannot discharge
+that coverage duty.
+
+The worker-local [ledger](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/founded/ledger.rs)
+authenticates the exact original theory and uses rows only with complete producer
+coverage. All signed conditions must match current knowledge before outputs are
+cut or a held output refutes the region. Frozen and restriction-only visits
+suspend reuse; a different eligible theory clears the rows. Each owner retains
+at most 64 rows after at most 256 capture attempts, sharing 131,072 discovery,
+collection and deduplication reads. One collection permits at most 64 unsupported
+atoms, 16 literals, 4,096 reads and 65,536 workspace bytes. Matching remains
+charged to ordinary narrowing work. Optional limits decline capture; global
+quota, cancellation and allocation failures preserve their typed outcomes.
+
+The theorem does not prove Rust extraction, signed atom identity, Boolean witness
+traversal, complete producer coverage, exact-owner matching or resource accounting.
+Those representation and runtime correspondences remain open. Exhaustive small
+original theories and partial-region tests check semantic preservation, and
+scope/interruption tests exercise the executable boundaries; they do not close
+that formal gap or replace the reduct membership check.
+
 The CPU positive candidate cursor uses `positive_stable_iff` as a coverage law:
 only the completed least interpretation can belong to the answer-set family.
 It proposes that interpretation once if the original constraints and candidate

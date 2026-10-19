@@ -423,6 +423,30 @@ fn extract(theory: &Theory, work: &mut Work<'_>) -> Result<Option<Producers>, St
     }))
 }
 
+/// Bounded reuse of conditional deductions from completed possible support.
+/// All reads are also included in [`NarrowingStatistics::work`]. Counts describe
+/// this narrowing, including an interrupted prefix, rather than retained state.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct SupportExplanationStatistics {
+    /// Completed support passes for which an explanation was requested.
+    pub attempts: u64,
+    /// Distinct complete explanations retained by the worker.
+    pub certified: u64,
+    /// Matching explanations that changed or refuted a region.
+    pub matched: u64,
+    /// Previously open atoms excluded by matching explanations.
+    pub cut: u64,
+    /// Regions refuted by a held atom in a matching unsupported set.
+    pub refuted: u64,
+    /// Capture attempts that supplied no new bounded explanation.
+    pub declined: u64,
+    /// Capture, deduplication and matching reads, including refused prefixes.
+    pub work: u64,
+    /// Maximum single-worker ledger and capture workspace bytes observed.
+    /// This is not total solver memory or a sum across workers.
+    pub peak_bytes: u128,
+}
+
 /// The work one narrowing charged.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct NarrowingStatistics {
@@ -433,6 +457,8 @@ pub struct NarrowingStatistics {
     /// Possible-foundedness preparation, closure and publication, included in
     /// `work`. Reusing a completed closure charges no work here.
     pub founded_work: u64,
+    /// Conditional support deductions, included in the total reading work.
+    pub support_explanations: SupportExplanationStatistics,
     /// Propagation events: nodes and atoms learned and their neighbours
     /// revisited, atoms whose support was rechecked, and threshold rows whose
     /// residual divisibility or changed requirements were checked.
@@ -1370,6 +1396,7 @@ impl Narrower {
         });
         work.refund();
         statistics.work = work.spent;
+        statistics.support_explanations.peak_bytes = scratch.explanations.peak_bytes();
         NarrowingAttempt { result, statistics }
     }
 
@@ -1388,6 +1415,9 @@ impl Narrower {
         // belongs to another region; it is discarded before this one reads.
         scratch.prepare(subject.theory.atom_count());
         scratch.founded.forget_foreign(subject.theory);
+        if subject.producers.is_some() && subject.frozen.is_none() {
+            scratch.explanations.prepare(subject.theory);
+        }
         let mut closure = Closure {
             known: known.borrow(),
             lists: scratch,
@@ -1534,6 +1564,8 @@ pub struct NarrowingScratch {
     witnesses: witnesses::Scratch,
     /// Possible founded atoms, computed only with complete original producers.
     founded: founded::Scratch,
+    /// Exact-original conditional deductions; not cloned with region knowledge.
+    explanations: founded::ledger::Ledger,
 }
 
 impl NarrowingScratch {
@@ -1550,6 +1582,7 @@ impl NarrowingScratch {
                 * size_of::<u64>() as u128
             + self.witnesses.retained_bytes()
             + self.founded.retained_bytes()
+            + self.explanations.retained_bytes()
     }
 
     /// Discard every entry, keeping the capacity, for a narrowing over
@@ -1974,8 +2007,16 @@ impl<C: Count> Closure<'_, C> {
             } else if let Some(producers) = producers {
                 debug_assert!(frozen.is_none(), "only original subjects have producers");
                 let before = work.spent;
-                let result = self.founded(theory, index, producers, work);
-                statistics.founded_work += work.spent - before;
+                let explanation_work = statistics.support_explanations.work;
+                let result = self.founded(
+                    theory,
+                    index,
+                    producers,
+                    work,
+                    &mut statistics.support_explanations,
+                );
+                statistics.founded_work +=
+                    work.spent - before - (statistics.support_explanations.work - explanation_work);
                 let founded = result?;
                 if founded == Step::Unchanged {
                     return Ok(Step::Changed);
@@ -2000,7 +2041,15 @@ impl<C: Count> Closure<'_, C> {
         index: &Narrower,
         producers: &Producers,
         work: &mut Work<'_>,
+        explanations: &mut SupportExplanationStatistics,
     ) -> Result<Step, Stop> {
+        let before = work.spent;
+        let matched = self.match_explanations(index, producers, work, explanations);
+        explanations.work += work.spent - before;
+        let matched = matched?;
+        if matched != Step::Unchanged {
+            return Ok(matched);
+        }
         if *self.known.founded_closed
             || !self.lists.founded.needed(theory, index, producers, work)?
         {
@@ -2014,6 +2063,10 @@ impl<C: Count> Closure<'_, C> {
             self.known.atom_never,
             work,
         )?;
+        let before = work.spent;
+        let captured = self.remember_unsupported(theory, index, producers, work, explanations);
+        explanations.work += work.spent - before;
+        captured?;
         let mut step = Step::Unchanged;
         for word in 0..self.lists.founded.publication_words() {
             work.tick()?;
@@ -2035,6 +2088,89 @@ impl<C: Count> Closure<'_, C> {
         // finish and a new pass must account for it before closure is inherited.
         // Interrupted or contradictory prefixes never publish this authority.
         *self.known.founded_closed = step == Step::Unchanged;
+        Ok(step)
+    }
+
+    fn remember_unsupported(
+        &mut self,
+        theory: &Theory,
+        index: &Narrower,
+        producers: &Producers,
+        work: &mut Work<'_>,
+        explanations: &mut SupportExplanationStatistics,
+    ) -> Result<(), Stop> {
+        if !self.lists.explanations.can_capture() {
+            return Ok(());
+        }
+        // Capture at most one direct contradiction before publishing any new
+        // cuts: this pass's outputs cannot become their own boundary premises.
+        for word in 0..self.lists.founded.publication_words() {
+            if !self.lists.explanations.capture_read(work)? {
+                break;
+            }
+            let held_missing = self
+                .lists
+                .founded
+                .missing_in_word(word, self.known.atom_never[word])
+                & self.known.atom_sure[word];
+            if held_missing != 0 {
+                let atom = word * 64 + held_missing.trailing_zeros() as usize;
+                let captured = self.lists.explanations.capture(
+                    founded::explanations::Input {
+                        theory,
+                        index,
+                        producers,
+                        completed: &self.lists.founded,
+                        atom_sure: self.known.atom_sure,
+                        atom_never: self.known.atom_never,
+                    },
+                    atom,
+                    work,
+                    explanations,
+                );
+                captured?;
+                break;
+            }
+        }
+        Ok(())
+    }
+
+    /// Read conditional support as a filter over current signed atom masks.
+    /// Consequences enter the existing event queues and preserve their order.
+    fn match_explanations(
+        &mut self,
+        index: &Narrower,
+        producers: &Producers,
+        work: &mut Work<'_>,
+        counts: &mut SupportExplanationStatistics,
+    ) -> Result<Step, Stop> {
+        let mut step = Step::Unchanged;
+        for row in 0..self.lists.explanations.len() {
+            if !self.lists.explanations.matches(
+                row,
+                self.known.atom_sure,
+                self.known.atom_never,
+                work,
+            )? {
+                continue;
+            }
+            let mut changed = false;
+            for position in 0..self.lists.explanations.outputs(row).len() {
+                work.tick()?;
+                let atom = self.lists.explanations.outputs(row)[position];
+                if bit(self.known.atom_sure, atom) {
+                    counts.matched += 1;
+                    counts.refuted += 1;
+                    return Ok(Step::Contradiction);
+                }
+                if !bit(self.known.atom_never, atom) {
+                    step = step.join(self.atom(index, Some(producers), None, atom, false));
+                    counts.cut += 1;
+                    changed = true;
+                }
+            }
+            counts.matched += u64::from(changed);
+        }
         Ok(step)
     }
 

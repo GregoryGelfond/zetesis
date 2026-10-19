@@ -15,7 +15,7 @@ fn region_json_preserves_support_work_components() {
     statistics.counts.support_work = 5;
     statistics.counts.founded_work = 11;
     let mut output = Buffer::new(4096);
-    region_statistics(&mut output, Some(statistics)).unwrap();
+    region_statistics(&mut output, Some(&statistics)).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&output.bytes).unwrap();
     assert_eq!(value["reading_work"], 23);
     assert_eq!(value["support_work"], 5);
@@ -44,6 +44,39 @@ fn frozen_positive_json_preserves_failed_attempt_work() {
             "completed": 2,
             "preparation_work": 5,
             "work": 17,
+        })
+    );
+}
+
+#[test]
+fn region_json_preserves_support_explanation_receipts() {
+    let mut statistics = zetesis_sat::RegionSearchStatistics::default();
+    statistics.counts.work = 31;
+    statistics.counts.support_explanations = zetesis_ferraris::SupportExplanationStatistics {
+        attempts: 2,
+        certified: 1,
+        matched: 3,
+        cut: 4,
+        refuted: 1,
+        declined: 1,
+        work: 19,
+        peak_bytes: 43,
+    };
+    let mut output = Buffer::new(4096);
+    region_statistics(&mut output, Some(&statistics)).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&output.bytes).unwrap();
+    assert_eq!(value["reading_work"], 31);
+    assert_eq!(
+        value["support_explanations"],
+        serde_json::json!({
+            "attempts": 2,
+            "certified": 1,
+            "matched": 3,
+            "cut": 4,
+            "refuted": 1,
+            "declined": 1,
+            "work": 19,
+            "peak_bytes": 43,
         })
     );
 }

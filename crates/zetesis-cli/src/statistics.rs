@@ -706,7 +706,7 @@ fn countermodel(
             support.status, support.construction_work, support.encoding_work
         )?;
     }
-    if let Some(regions) = stats.regions {
+    if let Some(regions) = stats.regions.as_ref() {
         candidate_regions(sink, regions)?;
     }
     writeln!(
@@ -775,7 +775,7 @@ fn countermodel(
 
 fn candidate_regions(
     sink: &mut impl Write,
-    regions: zetesis_sat::RegionSearchStatistics,
+    regions: &zetesis_sat::RegionSearchStatistics,
 ) -> io::Result<()> {
     let counts = regions.counts;
     writeln!(
@@ -810,6 +810,19 @@ fn candidate_regions(
         sink,
         "  candidate support: producer work={}; possible-foundedness work={} (included in reading work)",
         counts.support_work, counts.founded_work,
+    )?;
+    let explanations = &counts.support_explanations;
+    writeln!(
+        sink,
+        "  support explanations: attempts={}; certified={}; matched={}; cut={}; refuted={}; declined={}; work={} (included in reading work); peak worker bytes={}",
+        explanations.attempts,
+        explanations.certified,
+        explanations.matched,
+        explanations.cut,
+        explanations.refuted,
+        explanations.declined,
+        explanations.work,
+        explanations.peak_bytes,
     )?;
     Ok(())
 }

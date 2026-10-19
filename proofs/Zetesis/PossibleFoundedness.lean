@@ -168,6 +168,46 @@ theorem stable_sub_possible (M P allowed : Atoms α) (upper : Formula α → Pro
     ((stable_iff_minimal_reduct M T).mp answer).2 (intersection M P) below reduced
   exact fun a present => (reverse a present).2
 
+/-- A condition that blocks every producer entering U excludes every atom of U
+from each matching answer set.
+
+The condition describes interpretations, not an ancestor region or a frozen
+query. Its upper-soundness premise must hold separately for every matching
+interpretation. Every ordinary producer with any head in U is blocked, even
+when another head lies outside U, and every atomic choice into U is blocked.
+
+Take P to be the complement of U and permit all atoms. Producers whose heads
+lie outside U are already closed in P; the premises disable every other
+producer. `stable_sub_possible` then places each matching answer set inside P.
+This semantic law does not certify an executable explanation collector, signed
+atom coordinates, matching, ownership, resource bounds or interruption handling.
+-/
+theorem conditional_unsupported_absent
+    (T : Theory α) (rules : List (Producer α)) (choices : List (ChoiceProducer α))
+    (covered : CoveredWithChoices T rules choices)
+    (condition : Atoms α → Prop) (unsupported : Atoms α)
+    (upper : Formula α → Prop)
+    (sound : ∀ M, condition M → UpperSound M (fun a => ¬ unsupported a) upper)
+    (ordinaryBlocked : ∀ r ∈ rules,
+      (∃ a, r.head.Contains a ∧ unsupported a) → ¬ producerEnabled upper r)
+    (choicesBlocked : ∀ c ∈ choices, unsupported c.head → ¬ choiceEnabled upper c)
+    (M : Atoms α) (matching : condition M) (answer : Stable M T) :
+    ∀ a, unsupported a → ¬ M a := by
+  have ordinaryClosed :
+      ProducersClosed (fun a => ¬ unsupported a) (fun _ => True) upper rules := by
+    intro r member enabled a head _ inside
+    exact ordinaryBlocked r member ⟨a, head, inside⟩ enabled
+  have choiceClosed :
+      ChoicesClosed (fun a => ¬ unsupported a) (fun _ => True) upper choices := by
+    intro c member enabled _ inside
+    exact choicesBlocked c member inside enabled
+  have possible : Sub M (fun a => ¬ unsupported a) :=
+    stable_sub_possible M (fun a => ¬ unsupported a) (fun _ => True) upper
+      T rules choices covered (sound M matching) (fun _ _ => trivial)
+      ordinaryClosed choiceClosed answer
+  intro a inside present
+  exact possible a present inside
+
 /-- Keep positive Boolean structure; an implication is possible unless known
 false. The known-false predicate is tested at each retained syntax node.
 Aggregates are outside Formula and require their own upper-soundness proof. -/

@@ -81,6 +81,33 @@ aggregates. These constructs require their own source-to-formula preservation
 arguments. Classical equivalence of two aggregate expressions is insufficient:
 the replacement must preserve the required frozen-reduct behavior as well.
 
+## Restrict candidates by possible support
+
+Possible-foundedness narrows candidate regions using complete original producer
+coverage. A body relaxation overestimates which producers can fire and retains
+every permitted head of each possible producer, including every disjunctive
+head. Every compatible answer set lies inside any set closed under that
+relaxation. Atoms outside a completed possible set can therefore be excluded;
+this does not establish answer-set membership for the remaining candidates.
+
+A completed pass can also supply a conditional deduction: whenever a signed
+atom condition `B` holds, no atom in an unsupported set `U` belongs to an answer
+set. The explanation must block every original producer whose head meets `U`,
+including atomic choices. Removing `U` from any matching answer set would then
+leave a model of its reduct, so minimality makes `U` absent. For example,
+`a :- b. b :- a. a :- x. {x}.` permits the deduction that `x` absent implies
+both `a` and `b` absent.
+
+The region narrower retains a bounded ledger of these deductions in each
+worker's scratch, owned by the exact immutable original theory. When all signed
+conditions are known, it cuts open output atoms or refutes a held output atom.
+Fresh sibling knowledge may reuse a row; an incomplete match makes no deduction.
+Frozen-reduct and restriction-only queries do not use the ledger. The original
+theory and membership check stay unchanged. Optional capture limits lose only
+reuse; a global resource or cancellation failure still stops the operation.
+The [correspondence discussion](../lean/correspondence.md) separates the semantic
+law from the collector and runtime obligations.
+
 ## Evaluate stratified normal programs directly
 
 When positive dependencies stay within or below a component and every negative

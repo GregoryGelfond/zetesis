@@ -555,3 +555,65 @@ mod composition;
 mod generator_order;
 mod ordering;
 mod preference;
+
+#[test]
+fn failed_narrowing_keeps_support_explanation_receipts() {
+    let explanations = SupportExplanationStatistics {
+        attempts: 2,
+        certified: 1,
+        matched: 3,
+        cut: 4,
+        refuted: 1,
+        declined: 1,
+        work: 19,
+        peak_bytes: 43,
+    };
+    let attempt = NarrowingAttempt {
+        result: Err(Incomplete::WorkLimit),
+        statistics: zetesis_ferraris::NarrowingStatistics {
+            work: 31,
+            support_explanations: explanations,
+            ..zetesis_ferraris::NarrowingStatistics::default()
+        },
+    };
+    let mut counts = RegionCounts::default();
+    assert_eq!(account(&attempt, &mut counts), Err(Incomplete::WorkLimit));
+    assert_eq!(counts.support_explanations, explanations);
+    assert_eq!(counts.work, 31, "explanation work is already included");
+}
+
+#[test]
+fn explanation_overflow_leaves_all_counts_unchanged() {
+    for field in 0..7 {
+        let mut counts = RegionCounts::default();
+        let counter = match field {
+            0 => &mut counts.support_explanations.attempts,
+            1 => &mut counts.support_explanations.certified,
+            2 => &mut counts.support_explanations.matched,
+            3 => &mut counts.support_explanations.cut,
+            4 => &mut counts.support_explanations.refuted,
+            5 => &mut counts.support_explanations.declined,
+            _ => &mut counts.support_explanations.work,
+        };
+        *counter = u64::MAX;
+        let before = counts;
+        assert_eq!(
+            counts.add(RegionCounts {
+                work: 17,
+                support_explanations: SupportExplanationStatistics {
+                    attempts: 1,
+                    certified: 1,
+                    matched: 1,
+                    cut: 1,
+                    refuted: 1,
+                    declined: 1,
+                    work: 1,
+                    peak_bytes: 43,
+                },
+                ..RegionCounts::default()
+            }),
+            Err(Incomplete::CounterOverflow)
+        );
+        assert_eq!(counts, before);
+    }
+}

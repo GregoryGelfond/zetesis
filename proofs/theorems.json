@@ -5840,9 +5840,14 @@
     "line": 156
   },
   {
-    "name": "Zetesis.PossibleFoundedness.body_upper_sound",
+    "name": "Zetesis.PossibleFoundedness.conditional_unsupported_absent",
     "file": "Zetesis/PossibleFoundedness.lean",
     "line": 185
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.body_upper_sound",
+    "file": "Zetesis/PossibleFoundedness.lean",
+    "line": 225
   },
   {
     "name": "Zetesis.ProducerScheduling.stable_of_reads_only",

@@ -218,3 +218,63 @@ mod cancellation_tests;
 mod engagement_tests;
 mod coordination_tests;
 mod timing_tests;
+
+#[test]
+fn live_explanation_receipts_add_only_worker_deltas() {
+    let live = Live::default();
+    let first = SupportExplanationStatistics {
+        attempts: 2,
+        certified: 1,
+        matched: 3,
+        cut: 4,
+        refuted: 1,
+        declined: 1,
+        work: 19,
+        peak_bytes: 17,
+    };
+    let second = SupportExplanationStatistics {
+        attempts: 5,
+        certified: 2,
+        matched: 8,
+        cut: 9,
+        refuted: 2,
+        declined: 3,
+        work: 47,
+        peak_bytes: 23,
+    };
+    let other_worker = SupportExplanationStatistics {
+        attempts: 1,
+        certified: 1,
+        matched: 2,
+        cut: 3,
+        refuted: 1,
+        declined: 0,
+        work: 13,
+        peak_bytes: 37,
+    };
+    let coordinator = SupportExplanationStatistics {
+        attempts: 1,
+        certified: 0,
+        matched: 1,
+        cut: 1,
+        refuted: 0,
+        declined: 1,
+        work: 7,
+        peak_bytes: 29,
+    };
+    live.add_support_explanations(&SupportExplanationStatistics::default(), &first);
+    live.add_support_explanations(&first, &second);
+    live.add_support_explanations(&SupportExplanationStatistics::default(), &other_worker);
+    let expected = SupportExplanationStatistics {
+        attempts: 7,
+        certified: 3,
+        matched: 11,
+        cut: 13,
+        refuted: 3,
+        declined: 4,
+        work: 67,
+        peak_bytes: 37,
+    };
+    assert_eq!(live.support_explanations(&coordinator), expected);
+    assert_eq!(live.support_explanations(&coordinator), expected);
+}

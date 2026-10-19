@@ -889,7 +889,7 @@ fn search_statistics(
     out.text(",\"necessary_support\":")?;
     support_statistics(out, stats.support)?;
     out.text(",\"candidate_regions\":")?;
-    region_statistics(out, stats.regions)?;
+    region_statistics(out, stats.regions.as_ref())?;
     out.text(",\"region_filter\":")?;
     region_filter_statistics(out, stats.region_filter)?;
     out.text(",\"frozen_positive\":{\"attempts\":")?;
@@ -985,7 +985,7 @@ fn hybrid_statistics(
 
 fn region_statistics(
     out: &mut Buffer,
-    statistics: Option<zetesis_sat::RegionSearchStatistics>,
+    statistics: Option<&zetesis_sat::RegionSearchStatistics>,
 ) -> Result<(), RunError> {
     let Some(stats) = statistics else {
         return out.text("null");
@@ -1007,6 +1007,17 @@ fn region_statistics(
     out.number_field("reading_work", counts.work)?;
     out.number_field("support_work", counts.support_work)?;
     out.number_field("founded_work", counts.founded_work)?;
+    let explanations = &counts.support_explanations;
+    out.text(",\"support_explanations\":{\"attempts\":")?;
+    out.text(&explanations.attempts.to_string())?;
+    out.number_field("certified", explanations.certified)?;
+    out.number_field("matched", explanations.matched)?;
+    out.number_field("cut", explanations.cut)?;
+    out.number_field("refuted", explanations.refuted)?;
+    out.number_field("declined", explanations.declined)?;
+    out.number_field("work", explanations.work)?;
+    out.number_field("peak_bytes", explanations.peak_bytes)?;
+    out.text("}")?;
     let generator = stats.generator_order;
     out.text(",\"generator_order\":{\"status\":")?;
     out.string(generator.status.label())?;

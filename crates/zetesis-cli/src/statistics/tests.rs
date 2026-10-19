@@ -503,3 +503,23 @@ fn frozen_positive_statistics_report_incomplete_attempts() {
         "  frozen positive reduct: attempts=3; completed=2; preparation work=5; work=17 (included in search work)\n"
     ));
 }
+
+#[test]
+fn support_explanation_statistics_include_declined_work() {
+    let mut statistics = zetesis_sat::RegionSearchStatistics::default();
+    statistics.counts.support_explanations = zetesis_ferraris::SupportExplanationStatistics {
+        attempts: 2,
+        certified: 1,
+        matched: 3,
+        cut: 4,
+        refuted: 1,
+        declined: 1,
+        work: 19,
+        peak_bytes: 43,
+    };
+    let mut output = Vec::new();
+    super::candidate_regions(&mut output, &statistics).unwrap();
+    assert!(String::from_utf8(output).unwrap().contains(
+        "  support explanations: attempts=2; certified=1; matched=3; cut=4; refuted=1; declined=1; work=19 (included in reading work); peak worker bytes=43\n"
+    ));
+}
