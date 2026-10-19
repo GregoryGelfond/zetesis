@@ -76,7 +76,9 @@ impl Explanation {
     }
 }
 
-/// Capture one directly missing held head before any founded cuts are published.
+/// Capture one missing uncut head before any founded cuts are published.
+/// The head may be held or open; complete producer coverage justifies absence
+/// independently of the region decision that made the deduction useful.
 /// A local refusal returns None and has no semantic effect. The peak includes
 /// the local collector header and simultaneous buffers even on failed capture.
 pub(in crate::regions) fn collect(
@@ -218,7 +220,7 @@ impl Collector<'_, '_, '_> {
             return Err(Stop::InvalidProgram.into());
         }
         self.meter.tick()?;
-        if !bit(input.atom_sure, start) || bit(input.atom_never, start) || !self.missing(start) {
+        if bit(input.atom_never, start) || !self.missing(start) {
             return Err(Failure::Declined);
         }
         Ok(())

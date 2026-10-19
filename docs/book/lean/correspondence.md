@@ -2529,11 +2529,17 @@ destinations are included, nonabsorbed Boolean nodes. Omitted destinations are
 either outside the projection or opaque inputs initialized true or inactive;
 their parent events cannot change the closure. Every remaining occurrence keeps
 its original order and multiplicity. This filtering depends only on the immutable
-theory, never on a region's false mask. The first pass uses original rows;
+theory, never on a region's false mask. The same preparation flattens producer
+heads into ordered cyclic-head rows, including a separate row for selected
+facts. It retains every relevant occurrence, while keeping original producers
+available for explanation coverage. Parallel to the selected body nodes, an
+immutable role records each node's initial state or noncyclic boundary atom.
+Current node and atom falsity still determine its state on every pass; no prior
+closure truth is reused. The first pass uses original rows and node kinds;
 included cells remain included even after their runtime state changes.
-Construction and retained capacities are charged. The exact owner authenticates
-each completed phase; a failed index build clears that authority and a retry
-repeats body preparation.
+The parent rows, head rows and roles publish together under the exact owner.
+Construction and retained capacities are charged; a failed preparation clears
+that authority and a retry repeats body preparation.
 Preservation of the event sequence and completed closure remains a Rust
 correspondence obligation; exhaustive mask and interruption tests supply evidence.
 
@@ -2562,8 +2568,12 @@ The conditions are arbitrary interpretation predicates; the law does not model
 Rust's signed coordinates or its classification of partial knowledge.
 
 The Rust [collector](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/founded/explanations.rs)
-starts from a held atom missing after a completed original founded pass, before
-publishing that pass's cuts. It reconstructs every incoming producer's false-body
+starts from one uncut atom missing after a completed original founded pass,
+before publishing that pass's cuts. It prefers a held atom; if no missing atom
+is held, it may capture an open one. The conditional absence law does not
+require the starting atom to be held: complete producer coverage with sound
+false-body witnesses establishes that conclusion. Discovery, collection and
+deduplication keep the same optional allowance. The collector reconstructs every incoming producer's false-body
 witness using positive Boolean structure, absent external atoms and exact negated
 atoms whose atom is held. A conjunction needs one false operand; a disjunction
 needs them all. Other implications and aggregates supply no witness. Adding an

@@ -43,7 +43,7 @@ fn shared_bodies(extra: usize) -> Theory {
 /// or removed repeated identical leaves before this projection is prepared.
 pub(super) fn assert_rows(scratch: &Scratch, owner: &Theory, index: &Narrower) {
     assert!(scratch.owner.as_ref().unwrap().same_instance(owner));
-    let projected = scratch.projected_parents.as_ref().unwrap();
+    let projected = &scratch.projected.as_ref().unwrap().parents;
     assert_eq!(projected.len(), owner.nodes().len());
     for node in 0..owner.nodes().len() {
         let expected: Vec<_> = index.parents[node]
@@ -73,7 +73,7 @@ fn parent_projection_retains_ordered_alias_occurrences() {
     assert_eq!(scratch.cyclic_atoms, [0b011]);
     assert!(index.absorbed[6]);
     assert!(!scratch.body_nodes.contains(&6));
-    let projected = scratch.projected_parents.as_ref().unwrap();
+    let projected = &scratch.projected.as_ref().unwrap().parents;
     assert_eq!(&projected[0], &[7, 8]);
     assert_eq!(&projected[3], &[7, 9]);
     assert_eq!(&projected[5], &[8], "opaque seed still feeds its OR");
@@ -104,10 +104,7 @@ fn every_small_mask_matches_original_parent_postings() {
                 &mut Work::new(u64::MAX),
             )
             .unwrap();
-        assert!(
-            scratch.projected_parents.is_none(),
-            "first pass uses original rows"
-        );
+        assert!(scratch.projected.is_none(), "first pass uses original rows");
         scratch
             .prepare_bodies(&owner, &index, &producers, &mut Work::new(u64::MAX))
             .unwrap();
@@ -123,7 +120,7 @@ fn every_small_mask_matches_original_parent_postings() {
     // Keep the same exact owner, cyclic heads and body cone. Only the parent
     // source differs. An explicit original-row clone also prevents later
     // preparation from materializing filtered rows in the reference.
-    original.projected_parents = Some(index.parents.clone());
+    original.projected.as_mut().unwrap().parents = index.parents.clone();
     let body_nodes = projected.body_nodes.clone();
     assert_eq!(body_nodes.len(), 7);
     let mut supports_cycle = false;
@@ -148,8 +145,8 @@ fn every_small_mask_matches_original_parent_postings() {
                     )
                     .unwrap();
             }
-            assert!(projected.projected_parents.is_some());
-            assert!(original.projected_parents.is_some());
+            assert!(projected.projected.is_some());
+            assert!(original.projected.is_some());
             assert_eq!(
                 projected.atoms, original.atoms,
                 "body mask {false_bodies}, atom mask {cut_atoms}"
@@ -165,9 +162,9 @@ fn every_small_mask_matches_original_parent_postings() {
         }
     }
     assert!(supports_cycle && excludes_cycle);
-    let reference = original.projected_parents.as_ref().unwrap();
+    let reference = &original.projected.as_ref().unwrap().parents;
     assert_eq!(&reference[0], &index.parents[0]);
-    assert!(reference[0].len() > projected.projected_parents.as_ref().unwrap()[0].len());
+    assert!(reference[0].len() > projected.projected.as_ref().unwrap().parents[0].len());
 }
 
 fn warm(extra: usize, projected: bool) -> u64 {
@@ -177,7 +174,7 @@ fn warm(extra: usize, projected: bool) -> u64 {
     let mut scratch = Scratch::default();
     scratch.prepare_projected(&owner, &index, &producers);
     if !projected {
-        scratch.projected_parents = Some(index.parents.clone());
+        scratch.projected.as_mut().unwrap().parents = index.parents.clone();
     }
     let mut work = Work::new(u64::MAX);
     scratch
@@ -211,9 +208,10 @@ fn public_scratch_bytes_include_projected_payload() {
     scratch
         .founded
         .prepare_projected(&owner, &Narrower::new(&owner), &producers(&owner));
-    let projected = scratch.founded.projected_parents.as_ref().unwrap();
-    assert!(projected.iter().any(|row| !row.is_empty()));
-    let payload = projected.retained_bytes() - std::mem::size_of_val(projected) as u128;
+    let projected = scratch.founded.projected.as_ref().unwrap();
+    assert!(projected.parents.iter().any(|row| !row.is_empty()));
+    assert!(projected.heads.iter().any(|row| !row.is_empty()));
+    let payload = projected.payload_bytes();
     assert!(payload > 0);
     let before = scratch.retained_bytes();
     let capacities = |founded: &Scratch| {
@@ -244,7 +242,118 @@ fn public_scratch_bytes_include_projected_payload() {
     );
     assert_eq!(none.spent, 0);
     assert!(scratch.founded.owner.is_none());
-    assert!(scratch.founded.projected_parents.is_none());
+    assert!(scratch.founded.projected.is_none());
     assert_eq!(capacities(&scratch.founded), retained);
     assert_eq!(before, scratch.retained_bytes() + payload);
+}
+
+#[test]
+fn prepared_initialization_matches_fresh_region_masks() {
+    let owner = shared_bodies(2);
+    let index = Narrower::new(&owner);
+    let producers = producers(&owner);
+    let mut prepared = Scratch::default();
+    prepared.prepare_projected(&owner, &index, &producers);
+    let selected = prepared.body_nodes.clone();
+    for false_bodies in 0..1_usize << selected.len() {
+        let mut never = vec![0; flag_words(owner.nodes().len())];
+        for (position, &node) in selected.iter().enumerate() {
+            if false_bodies & (1 << position) != 0 {
+                never[node / 64] |= 1 << (node % 64);
+            }
+        }
+        for cut_atoms in 0..1_u64 << owner.atom_count() {
+            let mut fresh = Scratch::default();
+            for scratch in [&mut prepared, &mut fresh] {
+                scratch
+                    .complete(
+                        &owner,
+                        &index,
+                        &producers,
+                        &never,
+                        &[cut_atoms],
+                        &mut Work::new(u64::MAX),
+                    )
+                    .unwrap();
+            }
+            assert!(
+                fresh.projected.is_none(),
+                "reference decodes current formula roles directly"
+            );
+            assert!(
+                prepared.projected.is_some(),
+                "warm route reads retained initialization"
+            );
+            assert_eq!(
+                prepared.atoms, fresh.atoms,
+                "body mask {false_bodies}, atoms {cut_atoms}"
+            );
+            assert_eq!(
+                prepared.queue, fresh.queue,
+                "ordered activated nodes and atoms"
+            );
+            for &node in &selected {
+                assert_eq!(
+                    format!("{:?}", prepared.states[node]),
+                    format!("{:?}", fresh.states[node]),
+                    "node {node}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn boundary_roles_reapply_both_false_masks() {
+    let owner = theory(
+        3,
+        vec![
+            Node::atom(0),
+            Node::atom(1),
+            Node::atom(2),
+            Node::implies(1, 0),
+            Node::implies(0, 1),
+            Node::implies(2, 0),
+        ],
+        vec![3, 4, 5],
+    );
+    let index = Narrower::new(&owner);
+    let producers = producers(&owner);
+    let mut scratch = Scratch::default();
+    scratch.prepare_projected(&owner, &index, &producers);
+    assert_eq!(scratch.cyclic_atoms, [0b011]);
+    let position = scratch
+        .body_nodes
+        .iter()
+        .position(|&node| node == 2)
+        .unwrap();
+    assert!(matches!(
+        scratch.projected.as_ref().unwrap().initial[position],
+        Initial::Boundary(2)
+    ));
+    // The same retained role alternates between seeded and inactive. Either
+    // current mask suppresses it; a previous pass's false state cannot persist.
+    for (node_never, atom_never, seeded) in [
+        (0, 0, true),
+        (0, 0b100, false),
+        (0b100, 0, false),
+        (0, 0, true),
+    ] {
+        scratch
+            .initialize(
+                &owner,
+                &index,
+                &[node_never],
+                &[atom_never],
+                &mut Work::new(u64::MAX),
+            )
+            .unwrap();
+        if seeded {
+            assert!(matches!(scratch.states[2], State::True));
+            assert_eq!(scratch.queue, [owner.atom_count() + 2]);
+        } else {
+            assert!(matches!(scratch.states[2], State::Inactive));
+            assert!(scratch.queue.is_empty());
+        }
+    }
 }

@@ -214,6 +214,7 @@ fn tiny_program(selected: usize) -> Program {
 fn every_tiny_explanation_excludes_all_matching_original_answers() {
     let mut unconditional = 0;
     let mut conditional = 0;
+    let mut open_starts = 0;
     for selected in 0..256 {
         let program = tiny_program(selected);
         let answers = program.answers();
@@ -230,7 +231,8 @@ fn every_tiny_explanation_excludes_all_matching_original_answers() {
                 .unwrap() else {
                     continue;
                 };
-                assert!(bit(&completed.sure, start));
+                assert!(!bit(&completed.never, start));
+                open_starts += usize::from(!bit(&completed.sure, start));
                 assert!(record.unsupported.contains(&start));
                 assert_sound(&program, &completed, &record, &answers);
                 if record.conditions.is_empty() {
@@ -241,6 +243,10 @@ fn every_tiny_explanation_excludes_all_matching_original_answers() {
             }
         }
     }
+    assert!(
+        open_starts > 0,
+        "the test must capture without a held output"
+    );
     assert!(unconditional > 0, "the test must exercise unseeded cycles");
     assert!(
         conditional > 0,
@@ -362,7 +368,7 @@ fn opaque_false_nodes_do_not_become_unconditional_explanations() {
 fn foreign_completed_geometry_supplies_no_explanation() {
     let original = boundary_program();
     let foreign = boundary_program();
-    let completed = original.complete(&[(0, true), (2, false), (3, true)], &[]);
+    let completed = original.complete(&[(2, false), (3, true)], &[]);
     assert!(!original.owner.same_instance(&foreign.owner));
     assert!(
         explain(&foreign, &completed, 0, limits(), &mut Work::new(u64::MAX))
@@ -379,7 +385,7 @@ fn foreign_completed_geometry_supplies_no_explanation() {
 #[test]
 fn every_local_explanation_cap_declines_without_partial_evidence() {
     let program = boundary_program();
-    let completed = program.complete(&[(0, true), (2, false), (3, true)], &[]);
+    let completed = program.complete(&[(2, false), (3, true)], &[]);
     for limited in [
         Limits {
             atoms: 1,
@@ -414,7 +420,7 @@ fn every_local_explanation_cap_declines_without_partial_evidence() {
 #[test]
 fn every_interrupted_explanation_prefix_returns_no_certificate() {
     let program = boundary_program();
-    let completed = program.complete(&[(0, true), (2, false), (3, true)], &[]);
+    let completed = program.complete(&[(2, false), (3, true)], &[]);
     let mut measured = Work::new(u64::MAX);
     let expected = explain(&program, &completed, 0, limits(), &mut measured)
         .unwrap()

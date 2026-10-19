@@ -8,17 +8,34 @@ use crate::{
 };
 use zetesis_cpu::Cancellation;
 
+mod projected_heads;
 mod projected_parents;
 mod reuse;
 
 impl Scratch {
-    /// Complete both cone preparation and the deferred parent projection.
+    fn use_original_projection(&mut self, owner: &Theory, index: &Narrower, producers: &Producers) {
+        let initial = initialization::prepare(
+            owner,
+            index,
+            &self.body_nodes,
+            &self.cyclic_atoms,
+            &mut Work::new(u64::MAX),
+        )
+        .unwrap();
+        self.projected = Some(Projection {
+            parents: index.parents.clone(),
+            heads: projected_heads::original_rows(owner, producers),
+            initial,
+        });
+    }
+
+    /// Complete both cone preparation and the deferred incidence projection.
     fn prepare_projected(&mut self, owner: &Theory, index: &Narrower, producers: &Producers) {
         for _ in 0..2 {
             self.prepare_bodies(owner, index, producers, &mut Work::new(u64::MAX))
                 .unwrap();
         }
-        assert!(self.projected_parents.is_some());
+        assert!(self.projected.is_some());
     }
 
     /// Test-only reference: use the existing engine over every head and body,
@@ -36,7 +53,7 @@ impl Scratch {
         }
         self.prepare_cone(owner, index, producers, false, &mut Work::new(u64::MAX))
             .unwrap();
-        self.projected_parents = Some(index.parents.clone());
+        self.use_original_projection(owner, index, producers);
         self.owner = Some(owner.clone());
     }
 }
@@ -388,10 +405,24 @@ impl NarrowingQuota for Allowance {
 }
 
 fn limited(owner: &Theory, scratch: &mut NarrowingScratch, work: u64) -> NarrowingAttempt {
+    limited_region(
+        owner,
+        scratch,
+        &mut Region::all_open(owner.atom_count()),
+        work,
+    )
+}
+
+fn limited_region(
+    owner: &Theory,
+    scratch: &mut NarrowingScratch,
+    region: &mut Region,
+    work: u64,
+) -> NarrowingAttempt {
     let index = Narrower::new(owner);
     index.narrow_known_reserved(
         OriginalSubject::new(owner, Some(&producers(owner))),
-        &mut Region::all_open(owner.atom_count()),
+        region,
         &mut index.knowledge(),
         scratch,
         &Cancellation::default(),
@@ -402,17 +433,60 @@ fn limited(owner: &Theory, scratch: &mut NarrowingScratch, work: u64) -> Narrowi
 #[test]
 fn interrupted_foundation_passes_leave_no_stale_support() {
     let owner = cycle();
-    let complete = limited(&owner, &mut NarrowingScratch::default(), u64::MAX);
+    let mut complete_region = Region::all_open(owner.atom_count());
+    let complete = limited_region(
+        &owner,
+        &mut NarrowingScratch::default(),
+        &mut complete_region,
+        u64::MAX,
+    );
     assert_eq!(complete.result.unwrap(), Narrowing::Fixed { changed: true });
+    assert!(complete_region.is_cut(0) && complete_region.is_cut(1));
+    let mut retained_prefixes = 0;
     for ceiling in 0..complete.statistics.work {
         let mut scratch = NarrowingScratch::default();
         let stopped = limited(&owner, &mut scratch, ceiling);
         assert_eq!(stopped.result.unwrap_err(), Stop::WorkLimit);
         assert_eq!(stopped.statistics.work, ceiling);
-        let reused = limited(&owner, &mut scratch, u64::MAX);
-        assert_eq!(reused.result.unwrap(), Narrowing::Fixed { changed: true });
-        assert_eq!(reused.statistics, complete.statistics);
+        let retained = scratch.explanations.len();
+        assert_eq!(
+            u64::try_from(retained).unwrap(),
+            stopped.statistics.support_explanations.certified
+        );
+        assert!(retained <= 1);
+        if retained == 1 {
+            assert_eq!(scratch.explanations.outputs(0), [0, 1]);
+            retained_prefixes += 1;
+        }
+        let mut retry_region = Region::all_open(owner.atom_count());
+        let reused = limited_region(&owner, &mut scratch, &mut retry_region, u64::MAX);
+        assert_eq!(reused.result, complete.result);
+        assert_eq!(retry_region, complete_region);
+        if retained == 0 {
+            assert_eq!(reused.statistics, complete.statistics);
+        } else {
+            // The failed prefix may have finished a complete explanation
+            // before stopping in later cut publication or propagation. That
+            // row is valid for fresh knowledge; a partial closure is not.
+            let counts = reused.statistics.support_explanations;
+            assert_eq!(counts.attempts, 0);
+            assert_eq!(counts.certified, 0);
+            assert_eq!(counts.matched, 1);
+            assert_eq!(counts.cut, 2);
+            assert_eq!(counts.forced, 0);
+            assert_eq!(counts.refuted, 0);
+            assert_eq!(reused.statistics.held, complete.statistics.held);
+            assert_eq!(reused.statistics.cut, complete.statistics.cut);
+            assert_eq!(
+                reused.statistics.propagations,
+                complete.statistics.propagations
+            );
+        }
     }
+    assert!(
+        retained_prefixes > 0,
+        "late stops must exercise complete-row reuse"
+    );
 }
 
 #[test]
@@ -570,6 +644,7 @@ fn projected_bodies_match_full_node_relaxation() {
     // irrelevant opaque roots and head-only subformulas. The event engine stays
     // identical, isolating the cone restriction rather than mirroring it.
     full.body_nodes = (0..owner.nodes().len()).collect();
+    full.use_original_projection(&owner, &index, &producers);
     for false_bodies in 0..16 {
         let mut never = vec![0; flag_words(owner.nodes().len())];
         for (bit_index, node) in [0, 1, 4, 7].into_iter().enumerate() {
@@ -671,13 +746,14 @@ fn interrupted_body_preparation_publishes_no_owner() {
         .prepare_bodies(&owner, &index, &producers, &mut cone)
         .unwrap();
     assert!(expected.owner.as_ref().unwrap().same_instance(&owner));
-    assert!(expected.projected_parents.is_none());
+    assert!(expected.projected.is_none());
     let mut parents = Work::new(u64::MAX);
     expected
         .prepare_bodies(&owner, &index, &producers, &mut parents)
         .unwrap();
     assert!(cone.spent > 0 && parents.spent > 0);
     projected_parents::assert_rows(&expected, &owner, &index);
+    projected_heads::assert_rows(&expected, &owner, &producers);
     for (phase, spent) in [cone.spent, parents.spent].into_iter().enumerate() {
         for ceiling in 0..spent {
             let mut scratch = Scratch::default();
@@ -685,7 +761,7 @@ fn interrupted_body_preparation_publishes_no_owner() {
                 scratch
                     .prepare_bodies(&owner, &index, &producers, &mut Work::new(u64::MAX))
                     .unwrap();
-                assert!(scratch.projected_parents.is_none());
+                assert!(scratch.projected.is_none());
             }
             let mut limited = Work::new(ceiling);
             assert_eq!(
@@ -695,11 +771,12 @@ fn interrupted_body_preparation_publishes_no_owner() {
             );
             assert_eq!(limited.spent, ceiling);
             assert!(scratch.owner.is_none());
-            assert!(scratch.projected_parents.is_none());
+            assert!(scratch.projected.is_none());
             scratch.prepare_projected(&owner, &index, &producers);
             assert_eq!(scratch.body_nodes, expected.body_nodes);
             assert_eq!(scratch.fact_rows, expected.fact_rows);
             projected_parents::assert_rows(&scratch, &owner, &index);
+            projected_heads::assert_rows(&scratch, &owner, &producers);
             assert!(scratch.owner.as_ref().unwrap().same_instance(&owner));
         }
     }
@@ -723,6 +800,7 @@ fn body_preparation_requires_exact_original_identity() {
         .unwrap();
     assert_eq!(none.spent, 0);
     projected_parents::assert_rows(&scratch, &first, &Narrower::new(&first));
+    projected_heads::assert_rows(&scratch, &first, &producers(&first));
     assert_eq!(
         scratch.prepare_bodies(
             &second,
@@ -736,11 +814,12 @@ fn body_preparation_requires_exact_original_identity() {
         scratch.owner.is_none(),
         "failed owner change cannot retain old authority"
     );
-    assert!(scratch.projected_parents.is_none());
+    assert!(scratch.projected.is_none());
     scratch.prepare_projected(&second, &Narrower::new(&second), &producers(&second));
     assert!(scratch.owner.as_ref().unwrap().same_instance(&second));
     assert!(!scratch.owner.as_ref().unwrap().same_instance(&first));
     projected_parents::assert_rows(&scratch, &second, &Narrower::new(&second));
+    projected_heads::assert_rows(&scratch, &second, &producers(&second));
 }
 
 #[test]

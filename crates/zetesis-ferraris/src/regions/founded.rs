@@ -30,24 +30,30 @@
 //! temporarily hold at most A+B finishing entries, where B is the full body cone.
 //! Their actual capacity remains charged after selecting the smaller cone. Owner
 //! publication authenticates the cyclic mask, selected cone and any completed
-//! parent index. The first pass keeps original parent rows. A later preparation
+//! incidence indexes. The first pass keeps original parent and producer rows. A later preparation
 //! for the same exact owner builds the filtered rows, so one-use scratch pays no
-//! parent-index construction. A refused build clears owner authority; retry
-//! conservatively repeats body preparation before another attempt.
+//! incidence-index construction. A refused build clears owner authority; retry
+//! conservatively repeats body preparation before another attempt. Reused preparation
+//! also records each selected node's immutable initial role. Every pass applies
+//! current node/atom masks to those roles; no prior closure truth is reused.
 //!
 //! One pass reuses the original atom/node and producer body/head rows. Once
 //! prepared, its parent rows retain only included, nonabsorbed Boolean destinations,
 //! in original occurrence order and multiplicity. Outside destinations never change;
 //! included opaque destinations are initialized True or Inactive and cannot
 //! consume a parent event. No region-dependent state filters this index.
+//! Body-to-head rows flatten the original producer rows and retain exactly their
+//! cyclic head occurrences; noncyclic heads were already ignored by activation.
+//! One additional row holds the selected facts' heads in the same occurrence order.
+//! Neither projection consults region knowledge or changes producer information.
 //! Each atom/node activates at most once. For A atoms, N nodes, E indexed Boolean
 //! incidences, R producers, H head occurrences and P retained parent occurrences,
-//! preparation takes O(A + N + E + R + H) work and O(A + N + P) exclusive storage.
-//! Parent construction also temporarily holds N row cursors. It scans original
-//! parent postings only for selected body nodes; empty offset rows are still
-//! initialized and charged. A later pass resets only selected body nodes/fact
+//! preparation takes O(A + N + E + R + H) work and O(A + N + P + H) exclusive storage.
+//! Each incidence construction also temporarily holds at most N+1 row cursors.
+//! Original parent and producer postings are scanned only for selected body nodes;
+//! empty offset rows and fact-row inspections remain initialized and charged. A later pass resets only selected body nodes/fact
 //! rows and atom-mask words; only cyclic atom postings, the chosen parent rows
-//! and selected-node producer postings are read. Publication reads cyclic
+//! and projected cyclic-head incidences are read after preparation. Publication reads cyclic
 //! mask words and missing uncut cyclic heads. All actual reads are charged; cuts are
 //! published together before ordinary propagation resumes. A later pass can
 //! exploit newly false bodies; no pass installs a rule or changes the reduct.
@@ -93,8 +99,12 @@ use zetesis_cpu::Stop;
 
 mod components;
 pub(super) mod explanations;
+mod initialization;
 pub(super) mod ledger;
-mod parents;
+mod projection;
+
+use initialization::Initial;
+use projection::Projection;
 
 #[cfg(test)]
 mod tests;
@@ -110,7 +120,7 @@ enum State {
     True,
 }
 
-/// Exclusive worklists and owner-bound body/parent preparation. These retain
+/// Exclusive worklists and owner-bound body/incidence preparation. These retain
 /// original node IDs and carry no inherited region knowledge or second theory.
 #[derive(Debug, Default)]
 pub(super) struct Scratch {
@@ -121,13 +131,13 @@ pub(super) struct Scratch {
     queue: Vec<usize>,
     /// Kahn indegrees, then atom cursors during exact component preparation.
     dependencies: Vec<usize>,
-    /// Authenticates the cyclic mask, body/fact rows and any completed parent index.
+    /// Authenticates the cyclic mask, body/fact rows and completed incidence indexes.
     owner: Option<Theory>,
     body_nodes: Vec<usize>,
     fact_rows: Vec<usize>,
-    /// Original ordered parent occurrences with included Boolean destinations.
+    /// Original ordered parent and cyclic-head occurrences in the body projection.
     /// Absence keeps original rows for the first pass; exact-owner reuse builds it.
-    projected_parents: Option<Adjacency>,
+    projected: Option<Projection>,
     /// Test-only operation count; no closure authority is stored here.
     #[cfg(test)]
     passes: usize,
@@ -143,10 +153,7 @@ impl Scratch {
                 + self.body_nodes.capacity() as u128
                 + self.fact_rows.capacity() as u128)
                 * size_of::<usize>() as u128
-            + self.projected_parents.as_ref().map_or(0, |parents| {
-                // The optional header is already inside this scratch value.
-                parents.retained_bytes() - size_of::<Adjacency>() as u128
-            })
+            + self.projected.as_ref().map_or(0, Projection::payload_bytes)
     }
 
     /// Number of packed original-atom words inspected during publication.
@@ -341,12 +348,26 @@ impl Scratch {
         }
         self.prepare_bodies(theory, index, producers, work)?;
         self.initialize(theory, index, never, atom_never, work)?;
-        for position in 0..self.fact_rows.len() {
-            work.tick()?;
-            let producer = &producers.rules[self.fact_rows[position]];
-            for &head in &producer.heads {
+        if let Some(projected) = &self.projected {
+            for &head in projected.fact_heads() {
                 work.tick()?;
-                self.activate_atom(head, atom_never, work)?;
+                activate_atom(
+                    &mut self.atoms,
+                    &self.cyclic_atoms,
+                    &mut self.queue,
+                    head,
+                    atom_never,
+                    work,
+                )?;
+            }
+        } else {
+            for position in 0..self.fact_rows.len() {
+                work.tick()?;
+                let producer = &producers.rules[self.fact_rows[position]];
+                for &head in &producer.heads {
+                    work.tick()?;
+                    self.activate_atom(head, atom_never, work)?;
+                }
             }
         }
         let atoms = theory.atom_count();
@@ -364,7 +385,10 @@ impl Scratch {
                 continue;
             }
             let node = vertex - atoms;
-            let parents = self.projected_parents.as_ref().unwrap_or(&index.parents);
+            let parents = self
+                .projected
+                .as_ref()
+                .map_or(&index.parents, |projected| &projected.parents);
             for &parent in &parents[node] {
                 work.tick()?;
                 match self.states[parent] {
@@ -378,11 +402,25 @@ impl Scratch {
                     State::Visiting(_) => return Err(Stop::InvalidProgram),
                 }
             }
-            for &producer in &producers.by_body[node] {
-                work.tick()?;
-                for &head in &producers.rules[producer].heads {
+            if let Some(projected) = &self.projected {
+                for &head in &projected.heads[node] {
                     work.tick()?;
-                    self.activate_atom(head, atom_never, work)?;
+                    activate_atom(
+                        &mut self.atoms,
+                        &self.cyclic_atoms,
+                        &mut self.queue,
+                        head,
+                        atom_never,
+                        work,
+                    )?;
+                }
+            } else {
+                for &producer in &producers.by_body[node] {
+                    work.tick()?;
+                    for &head in &producers.rules[producer].heads {
+                        work.tick()?;
+                        self.activate_atom(head, atom_never, work)?;
+                    }
                 }
             }
         }
@@ -394,7 +432,7 @@ impl Scratch {
     /// opaque implications/aggregates are leaves, just as in the relaxation.
     /// Roots without heads and head-only subformulas cannot contribute to P.
     /// Existing state cells mark discovery; only cyclic head membership adds a mask.
-    /// Prepare parent rows only when the same exact body projection is reused.
+    /// Prepare incidence rows only when the same exact body projection is reused.
     fn prepare_bodies(
         &mut self,
         theory: &Theory,
@@ -407,16 +445,10 @@ impl Scratch {
             .as_ref()
             .is_some_and(|owner| owner.same_instance(theory))
         {
-            if self.projected_parents.is_none() {
+            if self.projected.is_none() {
                 // No partial construction may retain body-projection authority.
                 self.owner = None;
-                self.projected_parents = Some(parents::prepare(
-                    theory,
-                    index,
-                    &self.body_nodes,
-                    &self.states,
-                    work,
-                )?);
+                self.projected = Some(Projection::prepare(theory, index, producers, self, work)?);
                 self.owner = Some(theory.clone());
             }
             return Ok(());
@@ -439,8 +471,8 @@ impl Scratch {
         cyclic_only: bool,
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
-        // No parent row may survive replacement of its included body set.
-        self.projected_parents = None;
+        // No incidence row may survive replacement of its included body set.
+        self.projected = None;
         self.body_nodes.clear();
         self.fact_rows.clear();
         self.states.clear();
@@ -525,40 +557,17 @@ impl Scratch {
             work.tick()?;
             self.atoms.push(0);
         }
-        let nodes = theory.view();
-        for &node in &self.body_nodes {
+        for (position, &node) in self.body_nodes.iter().enumerate() {
             work.tick()?;
-            let state = if index.absorbed[node] || bit(never, node) {
+            let state = if bit(never, node) {
                 State::Inactive
             } else {
-                match nodes.node(node).map_err(|_| Stop::InvalidProgram)? {
-                    NodeView::False => State::Inactive,
-                    NodeView::Atom(atom) => {
-                        if bit(&self.cyclic_atoms, atom) {
-                            State::Awaiting(1)
-                        } else if bit(atom_never, atom) {
-                            State::Inactive
-                        } else {
-                            // Preseed only this boundary occurrence. The atom's
-                            // unrelated postings are never queued or scanned.
-                            State::True
-                        }
-                    }
-                    NodeView::And(_) | NodeView::Or(_) => {
-                        let chain = index.chain_of[node].ok_or(Stop::InvalidProgram)?;
-                        let chain = &index.chains[chain_position(chain)];
-                        if chain.disjunction {
-                            State::Awaiting(1)
-                        } else {
-                            State::Awaiting(chain.leaves(&index.extrema).len())
-                        }
-                    }
-                    // Unknown nonpositive bodies can only add possible support.
-                    // Original known-false masks above still suppress them.
-                    NodeView::Implies(_, _) | NodeView::Threshold(_) | NodeView::ExtremumCut(_) => {
-                        State::True
-                    }
-                }
+                let initial = if let Some(plan) = &self.projected {
+                    plan.initial[position]
+                } else {
+                    Initial::read(theory, index, &self.cyclic_atoms, node)?
+                };
+                initial.state(atom_never)
             };
             self.states[node] = state;
             if matches!(state, State::True | State::Awaiting(0)) {
@@ -587,13 +596,33 @@ impl Scratch {
         atom_never: &[u64],
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
-        if bit(&self.cyclic_atoms, atom) && !bit(atom_never, atom) && !self.contains(atom) {
-            work.tick()?;
-            self.atoms[atom / 64] |= 1u64 << (atom % 64);
-            self.queue.push(atom);
-        }
-        Ok(())
+        activate_atom(
+            &mut self.atoms,
+            &self.cyclic_atoms,
+            &mut self.queue,
+            atom,
+            atom_never,
+            work,
+        )
     }
+}
+
+/// Split atom/worklist borrows retain one immutable projected-head row while
+/// applying the same activation as the original producer traversal.
+fn activate_atom(
+    atoms: &mut [u64],
+    cyclic_atoms: &[u64],
+    queue: &mut Vec<usize>,
+    atom: usize,
+    atom_never: &[u64],
+    work: &mut Work<'_>,
+) -> Result<(), Stop> {
+    if bit(cyclic_atoms, atom) && !bit(atom_never, atom) && !bit(atoms, atom) {
+        work.tick()?;
+        atoms[atom / 64] |= 1u64 << (atom % 64);
+        queue.push(atom);
+    }
+    Ok(())
 }
 
 /// Split state/worklist borrows let a closure keep one immutable parent-row

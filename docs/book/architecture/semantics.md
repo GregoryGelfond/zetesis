@@ -91,11 +91,13 @@ relaxation. Atoms outside a completed possible set can therefore be excluded;
 this does not establish answer-set membership for the remaining candidates.
 
 Repeated passes reuse the same prepared body projection. The first pass reads
-original parent links. On reuse, a prepared index keeps only links that can
-propagate through that projection, preserving their order and multiplicity.
-Links to unrelated constraints and opaque inputs cannot change this closure.
-The index belongs to the exact original theory; preparation work and retained
-storage remain accounted for, and a theory used once pays no index-building cost.
+original links and node kinds. On reuse, preparation retains the parent links
+and cyclic heads that can affect this closure, preserving their order and
+multiplicity. It also records each selected node's fixed initial role; current
+false masks still apply on every pass. Links to unrelated constraints and opaque
+inputs cannot change this closure. These prepared columns belong to the exact
+original theory and become available together. Preparation work and retained
+storage remain accounted for, and a theory used once pays no such preparation cost.
 
 A completed pass can also supply a conditional deduction: whenever a signed
 atom condition `B` holds, no atom in an unsupported set `U` belongs to an answer
@@ -106,8 +108,12 @@ leave a model of its reduct, so minimality makes `U` absent. For example,
 both `a` and `b` absent.
 
 The region narrower retains a bounded ledger of these deductions in each
-worker's scratch, owned by the exact immutable original theory. When all signed
-conditions are known, it cuts open output atoms or refutes a held output atom.
+worker's scratch, owned by the exact immutable original theory. Each completed
+pass attempts at most one capture before publishing its cuts, preferring a held
+unsupported atom. Otherwise it may explain an open atom that the pass is about
+to exclude. Neither case permits omitting any producer from the explanation.
+When all signed conditions are known, it cuts open output atoms or refutes a
+held output atom.
 It also uses a row with exactly one unknown condition when every other condition
 holds and an output atom is held: the unknown condition must fail. For the example
 above, holding `a` while `x` is open forces `x` to hold. A condition already known

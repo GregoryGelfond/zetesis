@@ -2104,35 +2104,43 @@ impl<C: Count> Closure<'_, C> {
         if !self.lists.explanations.can_capture() {
             return Ok(());
         }
-        // Capture at most one direct contradiction before publishing any new
-        // cuts: this pass's outputs cannot become their own boundary premises.
+        // Prefer a direct contradiction. If none is present, capture one new
+        // cut from the completed pass. Nothing is published during discovery:
+        // this pass's outputs cannot become their own boundary premises.
+        let mut start = None;
         for word in 0..self.lists.founded.publication_words() {
             if !self.lists.explanations.capture_read(work)? {
-                break;
+                // Discovery did not finish, so even the first open head must
+                // wait: a later held head would have priority.
+                return Ok(());
             }
-            let held_missing = self
+            let missing = self
                 .lists
                 .founded
-                .missing_in_word(word, self.known.atom_never[word])
-                & self.known.atom_sure[word];
+                .missing_in_word(word, self.known.atom_never[word]);
+            let held_missing = missing & self.known.atom_sure[word];
             if held_missing != 0 {
-                let atom = word * 64 + held_missing.trailing_zeros() as usize;
-                let captured = self.lists.explanations.capture(
-                    founded::explanations::Input {
-                        theory,
-                        index,
-                        producers,
-                        completed: &self.lists.founded,
-                        atom_sure: self.known.atom_sure,
-                        atom_never: self.known.atom_never,
-                    },
-                    atom,
-                    work,
-                    explanations,
-                );
-                captured?;
+                start = Some(word * 64 + held_missing.trailing_zeros() as usize);
                 break;
             }
+            if start.is_none() && missing != 0 {
+                start = Some(word * 64 + missing.trailing_zeros() as usize);
+            }
+        }
+        if let Some(atom) = start {
+            self.lists.explanations.capture(
+                founded::explanations::Input {
+                    theory,
+                    index,
+                    producers,
+                    completed: &self.lists.founded,
+                    atom_sure: self.known.atom_sure,
+                    atom_never: self.known.atom_never,
+                },
+                atom,
+                work,
+                explanations,
+            )?;
         }
         Ok(())
     }

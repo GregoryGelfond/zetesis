@@ -348,3 +348,62 @@ fn inherited_completion_still_polls_cancellation() {
     assert_eq!(attempt.statistics.work, 0);
     assert_eq!(scratch.founded.passes, 1);
 }
+
+#[test]
+fn interrupted_projection_publishes_neither_index() {
+    let program = Program::new(negative_seed());
+    let mut prepared = Scratch::default();
+    prepared
+        .prepare_bodies(
+            &program.owner,
+            &program.index,
+            &program.producers,
+            &mut Work::new(u64::MAX),
+        )
+        .unwrap();
+    let mut complete = Work::new(u64::MAX);
+    prepared
+        .prepare_bodies(
+            &program.owner,
+            &program.index,
+            &program.producers,
+            &mut complete,
+        )
+        .unwrap();
+    assert!(prepared.projected.is_some());
+    for failure in [Stop::Cancelled, Stop::Deadline] {
+        for ceiling in 0..complete.spent {
+            let mut scratch = Scratch::default();
+            scratch
+                .prepare_bodies(
+                    &program.owner,
+                    &program.index,
+                    &program.producers,
+                    &mut Work::new(u64::MAX),
+                )
+                .unwrap();
+            let retained = scratch.retained_bytes();
+            let mut quota = RefuseAfter {
+                remaining: ceiling,
+                failure,
+            };
+            let mut work = Work::reserved(&mut quota);
+            assert_eq!(
+                scratch.prepare_bodies(
+                    &program.owner,
+                    &program.index,
+                    &program.producers,
+                    &mut work
+                ),
+                Err(failure)
+            );
+            assert_eq!(work.spent, ceiling);
+            assert!(scratch.owner.is_none());
+            assert!(scratch.projected.is_none());
+            assert_eq!(scratch.retained_bytes(), retained);
+            scratch.prepare_projected(&program.owner, &program.index, &program.producers);
+            projected_parents::assert_rows(&scratch, &program.owner, &program.index);
+            projected_heads::assert_rows(&scratch, &program.owner, &program.producers);
+        }
+    }
+}

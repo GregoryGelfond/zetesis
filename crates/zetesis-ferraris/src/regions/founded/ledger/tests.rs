@@ -12,6 +12,7 @@ use crate::{
 };
 use zetesis_cpu::{Cancellation, Stop};
 
+mod early;
 mod partial;
 
 struct Program {

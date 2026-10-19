@@ -79,12 +79,18 @@ fn blocked_body_nodes_remain_inputs_across_siblings() {
     let program = Program::new(negative_seed());
     let (parent, inherited, mut scratch) = program.closed();
     for _ in 0..2 {
+        // Keep the completed projection, including its blocked cells, but
+        // remove optional explanations so this test requires actual closure
+        // invalidation rather than a retained row cutting the cycle first.
+        scratch.explanations = crate::regions::founded::ledger::Ledger::default();
         let mut child = parent.clone();
         child.hold(2);
         let mut knowledge = inherited.clone();
         let before = scratch.founded.passes;
-        program.close(&mut child, &mut knowledge, &mut scratch);
+        let (_, counts) = program.close(&mut child, &mut knowledge, &mut scratch);
         assert!(child.is_cut(0) && child.is_cut(1));
+        assert_eq!(counts.support_explanations.matched, 0);
+        assert_eq!(counts.support_explanations.cut, 0);
         assert_eq!(scratch.founded.passes, before + 2);
         assert!(matches!(scratch.founded.states[4], State::Inactive));
         assert!(scratch.founded.may_affect_body(4));
