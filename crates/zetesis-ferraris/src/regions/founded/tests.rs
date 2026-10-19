@@ -8,9 +8,19 @@ use crate::{
 };
 use zetesis_cpu::Cancellation;
 
+mod projected_parents;
 mod reuse;
 
 impl Scratch {
+    /// Complete both cone preparation and the deferred parent projection.
+    fn prepare_projected(&mut self, owner: &Theory, index: &Narrower, producers: &Producers) {
+        for _ in 0..2 {
+            self.prepare_bodies(owner, index, producers, &mut Work::new(u64::MAX))
+                .unwrap();
+        }
+        assert!(self.projected_parents.is_some());
+    }
+
     /// Test-only reference: use the existing engine over every head and body,
     /// with no conceptual noncyclic seeds and no production algorithm switch.
     fn prepare_global_reference(
@@ -26,6 +36,7 @@ impl Scratch {
         }
         self.prepare_cone(owner, index, producers, false, &mut Work::new(u64::MAX))
             .unwrap();
+        self.projected_parents = Some(index.parents.clone());
         self.owner = Some(owner.clone());
     }
 }
@@ -619,9 +630,7 @@ fn unrelated_constraints_add_no_warm_initialization_work() {
         let index = Narrower::new(owner);
         let producers = producers(owner);
         let mut scratch = Scratch::default();
-        scratch
-            .prepare_bodies(owner, &index, &producers, &mut Work::new(u64::MAX))
-            .unwrap();
+        scratch.prepare_projected(owner, &index, &producers);
         let mut work = Work::new(u64::MAX);
         scratch
             .complete(
@@ -657,25 +666,42 @@ fn interrupted_body_preparation_publishes_no_owner() {
     let index = Narrower::new(&owner);
     let producers = producers(&owner);
     let mut expected = Scratch::default();
-    let mut complete = Work::new(u64::MAX);
+    let mut cone = Work::new(u64::MAX);
     expected
-        .prepare_bodies(&owner, &index, &producers, &mut complete)
+        .prepare_bodies(&owner, &index, &producers, &mut cone)
         .unwrap();
-    for ceiling in 0..complete.spent {
-        let mut scratch = Scratch::default();
-        let mut limited = Work::new(ceiling);
-        assert_eq!(
-            scratch.prepare_bodies(&owner, &index, &producers, &mut limited),
-            Err(Stop::WorkLimit)
-        );
-        assert_eq!(limited.spent, ceiling);
-        assert!(scratch.owner.is_none());
-        scratch
-            .prepare_bodies(&owner, &index, &producers, &mut Work::new(u64::MAX))
-            .unwrap();
-        assert_eq!(scratch.body_nodes, expected.body_nodes);
-        assert_eq!(scratch.fact_rows, expected.fact_rows);
-        assert!(scratch.owner.as_ref().unwrap().same_instance(&owner));
+    assert!(expected.owner.as_ref().unwrap().same_instance(&owner));
+    assert!(expected.projected_parents.is_none());
+    let mut parents = Work::new(u64::MAX);
+    expected
+        .prepare_bodies(&owner, &index, &producers, &mut parents)
+        .unwrap();
+    assert!(cone.spent > 0 && parents.spent > 0);
+    projected_parents::assert_rows(&expected, &owner, &index);
+    for (phase, spent) in [cone.spent, parents.spent].into_iter().enumerate() {
+        for ceiling in 0..spent {
+            let mut scratch = Scratch::default();
+            if phase == 1 {
+                scratch
+                    .prepare_bodies(&owner, &index, &producers, &mut Work::new(u64::MAX))
+                    .unwrap();
+                assert!(scratch.projected_parents.is_none());
+            }
+            let mut limited = Work::new(ceiling);
+            assert_eq!(
+                scratch.prepare_bodies(&owner, &index, &producers, &mut limited),
+                Err(Stop::WorkLimit),
+                "phase {phase}, work prefix {ceiling}"
+            );
+            assert_eq!(limited.spent, ceiling);
+            assert!(scratch.owner.is_none());
+            assert!(scratch.projected_parents.is_none());
+            scratch.prepare_projected(&owner, &index, &producers);
+            assert_eq!(scratch.body_nodes, expected.body_nodes);
+            assert_eq!(scratch.fact_rows, expected.fact_rows);
+            projected_parents::assert_rows(&scratch, &owner, &index);
+            assert!(scratch.owner.as_ref().unwrap().same_instance(&owner));
+        }
     }
 }
 
@@ -685,14 +711,7 @@ fn body_preparation_requires_exact_original_identity() {
     let second = projected_bodies();
     assert!(!first.same_instance(&second));
     let mut scratch = Scratch::default();
-    scratch
-        .prepare_bodies(
-            &first,
-            &Narrower::new(&first),
-            &producers(&first),
-            &mut Work::new(u64::MAX),
-        )
-        .unwrap();
+    scratch.prepare_projected(&first, &Narrower::new(&first), &producers(&first));
     let mut none = Work::new(0);
     scratch
         .prepare_bodies(
@@ -703,6 +722,7 @@ fn body_preparation_requires_exact_original_identity() {
         )
         .unwrap();
     assert_eq!(none.spent, 0);
+    projected_parents::assert_rows(&scratch, &first, &Narrower::new(&first));
     assert_eq!(
         scratch.prepare_bodies(
             &second,
@@ -716,16 +736,11 @@ fn body_preparation_requires_exact_original_identity() {
         scratch.owner.is_none(),
         "failed owner change cannot retain old authority"
     );
-    scratch
-        .prepare_bodies(
-            &second,
-            &Narrower::new(&second),
-            &producers(&second),
-            &mut Work::new(u64::MAX),
-        )
-        .unwrap();
+    assert!(scratch.projected_parents.is_none());
+    scratch.prepare_projected(&second, &Narrower::new(&second), &producers(&second));
     assert!(scratch.owner.as_ref().unwrap().same_instance(&second));
     assert!(!scratch.owner.as_ref().unwrap().same_instance(&first));
+    projected_parents::assert_rows(&scratch, &second, &Narrower::new(&second));
 }
 
 #[test]
@@ -735,9 +750,7 @@ fn interrupted_projected_rounds_reinitialize_every_active_cell() {
     let producers = producers(&owner);
     let never = vec![0; flag_words(owner.nodes().len())];
     let mut prepared = Scratch::default();
-    prepared
-        .prepare_bodies(&owner, &index, &producers, &mut Work::new(u64::MAX))
-        .unwrap();
+    prepared.prepare_projected(&owner, &index, &producers);
     let mut complete = Work::new(u64::MAX);
     prepared
         .complete(&owner, &index, &producers, &never, &[0], &mut complete)
@@ -745,9 +758,7 @@ fn interrupted_projected_rounds_reinitialize_every_active_cell() {
     let expected = prepared.atoms.clone();
     for ceiling in 0..complete.spent {
         let mut scratch = Scratch::default();
-        scratch
-            .prepare_bodies(&owner, &index, &producers, &mut Work::new(u64::MAX))
-            .unwrap();
+        scratch.prepare_projected(&owner, &index, &producers);
         let mut limited = Work::new(ceiling);
         assert_eq!(
             scratch.complete(&owner, &index, &producers, &never, &[0], &mut limited),

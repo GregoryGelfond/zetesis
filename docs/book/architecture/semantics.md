@@ -90,6 +90,13 @@ head. Every compatible answer set lies inside any set closed under that
 relaxation. Atoms outside a completed possible set can therefore be excluded;
 this does not establish answer-set membership for the remaining candidates.
 
+Repeated passes reuse the same prepared body projection. The first pass reads
+original parent links. On reuse, a prepared index keeps only links that can
+propagate through that projection, preserving their order and multiplicity.
+Links to unrelated constraints and opaque inputs cannot change this closure.
+The index belongs to the exact original theory; preparation work and retained
+storage remain accounted for, and a theory used once pays no index-building cost.
+
 A completed pass can also supply a conditional deduction: whenever a signed
 atom condition `B` holds, no atom in an unsupported set `U` belongs to an answer
 set. The explanation must block every original producer whose head meets `U`,

@@ -2524,6 +2524,19 @@ recognition, boundary invalidation, saturated equality and the packed publicatio
 remain Rust refinement obligations. Exhaustive partial-region and complete-family
 comparisons supply executable evidence, not a formal proof of this implementation.
 
+On exact-owner reuse, the body projection also prepares ordered parent incidences whose
+destinations are included, nonabsorbed Boolean nodes. Omitted destinations are
+either outside the projection or opaque inputs initialized true or inactive;
+their parent events cannot change the closure. Every remaining occurrence keeps
+its original order and multiplicity. This filtering depends only on the immutable
+theory, never on a region's false mask. The first pass uses original rows;
+included cells remain included even after their runtime state changes.
+Construction and retained capacities are charged. The exact owner authenticates
+each completed phase; a failed index build clears that authority and a retry
+repeats body preparation.
+Preservation of the event sequence and completed closure remains a Rust
+correspondence obligation; exhaustive mask and interruption tests supply evidence.
+
 Inherited completion also requires a reuse argument: the prepared positive body
 projection belongs to the exact original theory, and no relevant input has become
 false. An atom with no occurrence in that projection can only remove itself from

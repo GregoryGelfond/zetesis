@@ -44,6 +44,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   regions to reuse deductions without repeating the support computation.
   Partially matched explanations can also determine a remaining atom before
   branching. Inactive ledgers avoid repeated statistics updates.
+  Repeated support checks reuse relevant formula links, avoiding traversal of
+  unrelated parents; single-use theories retain their original traversal.
   Original satisfaction and reduct membership remain unchanged.
 
 ## 0.6.0 — 2026-10-14

@@ -334,14 +334,7 @@ fn boundary_seeds_skip_unrelated_atom_occurrences() {
         nodes.extend((0..extra).map(|_| Node::atom(2)));
         let program = Program::new(theory(3, nodes, vec![2, 3, 4, 5]));
         let mut scratch = Scratch::default();
-        scratch
-            .prepare_bodies(
-                &program.owner,
-                &program.index,
-                &program.producers,
-                &mut Work::new(u64::MAX),
-            )
-            .unwrap();
+        scratch.prepare_projected(&program.owner, &program.index, &program.producers);
         let mut work = Work::new(u64::MAX);
         scratch
             .complete(
