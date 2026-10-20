@@ -180,8 +180,11 @@ check uses this relaxation only after original-subject mandatory and lattice
 propagation leave the row unchanged. Its packed shifts are shared with source
 assignment-sum computation. Complete open-condition coverage, grouping, processed
 sum correspondence, machine-word shifts, optional-work admission, storage and
-interruption remain executable obligations; these laws do not verify the Rust
-implementation or change frozen-reduct semantics.
+interruption remain executable obligations. The fused Rust shift checks only
+translated bits for the first interval witness; its early exit discards a
+possibly incomplete union and makes no exclusion claim. Proving the witness
+probe, carry handling and disposal is separate from complete-union correspondence.
+These laws do not verify the Rust implementation or change frozen-reduct semantics.
 
 [`ThresholdDivision.equivalent`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ThresholdDivision.lean)
 proves that dividing every nonnegative weight by a positive common divisor and
@@ -2616,18 +2619,22 @@ closure, and does not assume or prove inherited completion.
 Rust's [selective replay](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/founded/local.rs)
 uses inherited completed knowledge only on the first invalidated original pass,
 with exact owner and projection authentication repeated immediately before use.
-Its forward cone must include every affected cyclic head `H`, from all false
+Its forward cone must include every affected live cyclic head `H`, from all false
 inputs since entry, including opaque bodies and already-false occurrences of newly
-cut atoms. Reverse selection must cover every producer entering an uncut head in
+cut atoms. Forward traversal may stop at a currently false destination only
+because a newly false input retains its own notification and an older false
+input was inactive in the inherited completed closure. The head-prefix partition
+must preserve every discovered vertex, head order and membership marks; it does
+not supply new closure authority. Reverse selection must cover every producer entering an uncut head in
 `H` and every relevant relaxed Boolean operand in `B(H)`. A current false body
 may stop reverse traversal only because initialization keeps it inactive; any
 operand needed through another live path remains selected. A cut head cannot
 activate and needs no incoming producer evaluation. Fresh initialization and filtered shared events
 must saturate that complete body selection while seeding unaffected uncut atoms.
 The result must include the boundary seeds as well as the local closure before
-publication or explanation capture. Proving that no changed dependency reaches
-the complement, and that inherited completion justifies those seeds in the current
-least closure of the full cyclic-head relaxation, remains an executable
+publication or explanation capture. Proving that no newly invalidated unblocked
+dependency can change a boundary seed, and that inherited completion justifies
+those seeds in the current least closure of the full cyclic-head relaxation, remains an executable
 correspondence obligation. So do occurrence
 multiplicity, sibling isolation, full fallback, typed interruption and actual
 storage accounting. Exhaustive cut comparisons and interrupted-prefix tests supply
@@ -2722,7 +2729,12 @@ premise words and output words in separate ordered spans of one allocation.
 The scalar collector remains temporary; conversion peak accounting includes both
 buffers. Packed matching must preserve the same complete, partial and opposite
 condition classifications, and decoding must preserve canonical atom identity
-and ascending output events. These representation obligations are checked
+and ascending output events. Publication filters each packed output word by
+`outputs & (held | !cut)` before decoding: cut-only outputs are settled, while
+held outputs retain contradiction precedence. The cursor is local to one
+traversal, and publication may cut its returned atom but cannot drain other
+propagation between visits. Word reads and emitted outputs remain charged;
+interruption supplies no completed traversal. These representation obligations are checked
 against exhaustive scalar readings and bounded interruption tests; the generic
 conditional-absence laws do not prove that Rust refinement.
 

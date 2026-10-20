@@ -169,8 +169,14 @@ additional region truth and retains the existing allocation and failure rules.
 The first invalidated pass below inherited completed knowledge can instead use
 [selective replay](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/founded/local.rs).
 The exact original owner and completed projection are checked at entry and again
-before replay. Newly false selected inputs identify all downstream affected cyclic
-heads `H`. The pass selects every producer body entering an uncut head in `H`,
+before replay. Newly false selected inputs identify the affected live cyclic
+heads `H`. Forward discovery stops at currently false destinations. Newly false
+inputs retain their independently queued notifications; an older false barrier
+was already inactive in the inherited completed closure. A cut head cannot
+activate, but every affected occurrence of its atom still supplies its own input.
+The discovered heads are grouped at the front of the existing queue, preserving
+their order, so head-only consumers need not scan formula nodes again.
+The pass selects every producer body entering an uncut head in `H`,
 including unchanged producers, and their Boolean operands, `B(H)`. A body already
 known false remains selected but needs no operand traversal; a shared operand is
 still selected through any other live path. Cut heads need no producer evaluation.
@@ -183,7 +189,7 @@ capture therefore still receive a complete result.
 Worker scratch retains one disposable membership byte per original atom/node,
 touched IDs and the reused queue; it carries no ancestor body truth or additional
 per-region knowledge.
-Missing authority, unfinished history or all cyclic heads being affected requires
+Missing authority, unfinished history or all live cyclic heads being affected requires
 full replay, as do later passes in the same narrowing. Allocation, work exhaustion,
 cancellation and deadlines remain typed failures; a partial local attempt supplies
 no completion and retry uses full replay. Membership and incidence preparation
@@ -209,6 +215,11 @@ Unrelated rows retain their order. Capture still stops when the ledger is full.
 Matching and capture are counted in `support_explanations.work`, separately from
 `founded_work`, and both contribute to total reads. Consolidation changes the
 physical representation of established consequences, not their reduct meaning.
+After a complete premise match, packed output words are filtered against current
+held and cut masks before decoding atom IDs. Already-cut outputs need no event;
+a held output must still refute the region, even if also cut. Ascending event
+order is preserved. The cursor lasts only for that traversal and stores no
+knowledge for another region. Work includes loaded words and emitted outputs.
 
 Native nonnegative threshold rows also share consequences during
 original-candidate narrowing. Preparation links exact prefixes of grouped
@@ -273,9 +284,13 @@ The requested mask and optional visit allowance are bounded by the existing
 row's payload. An unsuitable span or exhausted local allowance retains ordinary
 propagation; allocation failure and global work, cancellation or deadline stops
 remain errors. Used words are reinitialized for every attempt, and retained
-capacity is accounted as worker scratch. Grounding's packed assignment sums and
-this CPU propagation check share `zetesis_core::packed::union_shifted`.
-Frozen-reduct narrowing is unchanged.
+capacity is accounted as worker scratch. Grounding's complete assignment sums
+and this CPU check share one packed shift-and-union kernel. The propagation
+operation `zetesis_core::packed::union_shifted_until_hit` checks translated bits
+while inserting them, avoiding a separate interval scan. Earlier iterations
+found no witness, so only the new translated bits can supply one. A hit may
+leave a partial union, which the caller discards; absence requires completing
+all admitted reductions. Frozen-reduct narrowing is unchanged.
 
 Once a step proves a region contradictory, narrowing discards it without
 visiting the remaining operands, parents or support wakeups. Work accounting

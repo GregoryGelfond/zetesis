@@ -2,9 +2,12 @@
 //!
 //! Every old uncut cyclic atom belongs to the old least upper closure. Collect
 //! all newly false selected inputs, then close their forward dependency cone.
-//! No changed dependency enters its complement, so unaffected uncut cyclic atoms
-//! remain valid seeds. Recompute every producer body for affected heads, including
-//! unchanged support, and saturate those heads under current masks. The final
+//! Discovery stops at currently false destinations: newly false inputs already
+//! have their own queued events, and older false inputs were already inactive.
+//! No newly invalidated unblocked dependency can change a boundary seed, so
+//! unaffected uncut cyclic atoms remain valid seeds. Recompute every producer
+//! body for affected live heads, including unchanged support, and saturate those
+//! heads under current masks. The final
 //! atom mask contains the unaffected seeds and the complete local result.
 //!
 //! Only the inherited knowledge supplies this premise. Owner-bound scratch stores
@@ -180,18 +183,24 @@ impl Scratch {
         {
             return Ok(false);
         }
-        let heads = self.local_forward(index, work)?;
-        // Every head affected gives the original body population; avoid another
-        // reverse selection when no boundary seed can reduce the full pass.
-        if heads == self.local.cyclic {
+        let heads = self.local_forward(index, (never, atom_never), work)?;
+        // Cut heads cannot activate and are omitted from forward discovery.
+        // Keep the full-pass fallback when no live cyclic boundary remains.
+        let mut live = self.local.cyclic;
+        for (&cyclic, &cut) in self.cyclic_atoms.iter().zip(atom_never) {
+            work.tick()?;
+            live -= (cyclic & cut).count_ones() as usize;
+        }
+        if heads == live {
             return Ok(false);
         }
         let forward_end = self.queue.len();
+        self.partition_heads(heads, work)?;
         self.local_bodies(
             theory,
             index,
             producers,
-            forward_end,
+            (heads, forward_end),
             (never, atom_never),
             work,
         )?;
@@ -213,7 +222,17 @@ impl Scratch {
         Ok(true)
     }
 
-    fn local_forward(&mut self, index: &Narrower, work: &mut Work<'_>) -> Result<usize, Stop> {
+    /// Do not filter queued inputs. Every newly false included node, including
+    /// each occurrence of a newly cut atom, was recorded before discovery.
+    /// A false destination therefore either has its own input event or was
+    /// already inactive in the inherited closure. Neither case needs another
+    /// incoming traversal. Current masks, not sibling scratch truth, decide this.
+    fn local_forward(
+        &mut self,
+        index: &Narrower,
+        (never, atom_never): (&[u64], &[u64]),
+        work: &mut Work<'_>,
+    ) -> Result<usize, Stop> {
         let projected = self.projected.as_ref().ok_or(Stop::InvalidProgram)?;
         let mut heads = 0;
         let mut next = 0;
@@ -224,7 +243,7 @@ impl Scratch {
                 heads += 1;
                 for &node in &index.atom_nodes[vertex] {
                     work.tick()?;
-                    if !matches!(self.states[node], State::Outside) {
+                    if !matches!(self.states[node], State::Outside) && !bit(never, node) {
                         self.local.enqueue(
                             &mut self.queue,
                             self.local.atoms + node,
@@ -237,6 +256,9 @@ impl Scratch {
                 let node = vertex - self.local.atoms;
                 for &parent in &projected.parents[node] {
                     work.tick()?;
+                    if bit(never, parent) {
+                        continue;
+                    }
                     self.local.enqueue(
                         &mut self.queue,
                         self.local.atoms + parent,
@@ -246,11 +268,38 @@ impl Scratch {
                 }
                 for &head in &projected.heads[node] {
                     work.tick()?;
-                    self.local.enqueue(&mut self.queue, head, FORWARD, work)?;
+                    if !bit(atom_never, head) {
+                        self.local.enqueue(&mut self.queue, head, FORWARD, work)?;
+                    }
                 }
             }
         }
         Ok(heads)
+    }
+
+    /// Group discovered heads before producer selection. Discovery has finished,
+    /// so its vertex order is no longer needed; marks and the forward boundary
+    /// remain unchanged. A stopped partition is disposable on the full retry.
+    fn partition_heads(&mut self, heads: usize, work: &mut Work<'_>) -> Result<(), Stop> {
+        let mut placed = 0;
+        for position in 0..self.queue.len() {
+            if placed == heads {
+                return Ok(());
+            }
+            work.tick()?;
+            if self.queue[position] < self.local.atoms {
+                if position != placed {
+                    work.tick()?;
+                    self.queue.swap(position, placed);
+                }
+                placed += 1;
+            }
+        }
+        if placed == heads {
+            Ok(())
+        } else {
+            Err(Stop::InvalidProgram)
+        }
     }
 
     fn local_bodies(
@@ -258,16 +307,16 @@ impl Scratch {
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
-        forward_end: usize,
+        (heads, forward_end): (usize, usize),
         (never, atom_never): (&[u64], &[u64]),
         work: &mut Work<'_>,
     ) -> Result<(), Stop> {
-        for position in 0..forward_end {
+        for position in 0..heads {
             work.tick()?;
             let head = self.queue[position];
             // A cut head cannot activate. Other uncut affected heads select
             // their complete rows independently, including shared producers.
-            if head >= self.local.atoms || bit(atom_never, head) {
+            if bit(atom_never, head) {
                 continue;
             }
             for &row in &producers.by_head[head] {
@@ -332,12 +381,10 @@ impl Scratch {
             work.tick()?;
             self.atoms.push(cyclic & !never);
         }
-        for position in 0..forward_end {
+        for position in 0..heads {
             work.tick()?;
             let head = self.queue[position];
-            if head < self.local.atoms {
-                self.atoms[head / 64] &= !(1_u64 << (head % 64));
-            }
+            self.atoms[head / 64] &= !(1_u64 << (head % 64));
         }
         for position in forward_end..body_end {
             work.tick()?;
@@ -349,10 +396,10 @@ impl Scratch {
                 self.queue.push(self.local.atoms + node);
             }
         }
-        for position in 0..forward_end {
+        for position in 0..heads {
             work.tick()?;
             let head = self.queue[position];
-            if head < self.local.atoms && self.local.marks[head] & FACT != 0 {
+            if self.local.marks[head] & FACT != 0 {
                 self.activate_atom(head, atom_never, work)?;
             }
         }

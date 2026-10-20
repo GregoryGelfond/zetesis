@@ -245,8 +245,11 @@ contributions. Correlated conditions only reduce the possible selections, so an
 intersection does not establish a model. The mask and optional work are bounded
 by the grouped row's payload; declining loses only this pruning. Allocation and
 global interruption remain typed failures. The reduction reuses the same
-`zetesis_core::packed::union_shifted` primitive as source assignment sums, and
-worker scratch retains capacity without carrying truth into another region.
+packed shift-and-union kernel as source assignment sums. Its
+`union_shifted_until_hit` operation checks translated bits during insertion and
+can stop at the first interval witness; that partial mask is discarded. Absence
+requires complete processing. Worker scratch retains capacity without carrying
+truth into another region.
 A `Narrower` indexes the theory once
 and narrows any region of it, the root from knowledge of nothing and a child
 from its parent's knowledge. The index

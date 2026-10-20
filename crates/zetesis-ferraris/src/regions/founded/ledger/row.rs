@@ -241,6 +241,7 @@ impl Row {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn output_count(&self) -> usize {
         self.lengths().1
     }
@@ -271,6 +272,52 @@ impl Row {
                 let bit = cursor.pending.trailing_zeros() as usize;
                 cursor.pending &= cursor.pending - 1;
                 Some(cursor.word * 64 + bit)
+            }
+        }
+    }
+
+    /// Visit outputs after a complete premise match. Scalar rows retain their
+    /// one-read-per-output traversal. Packed words omit cut-only outputs before
+    /// decoding atom IDs; held outputs remain visits even if also cut.
+    ///
+    /// Each source word and each returned packed output is charged before its
+    /// read. The cursor owns only this traversal's remaining bits, not knowledge
+    /// reusable by another row or region. Between visits the caller may cut the
+    /// returned atom; other mask changes require starting a fresh cursor.
+    pub(super) fn next_publication_output(
+        &self,
+        cursor: &mut OutputCursor,
+        held: &[u64],
+        cut: &[u64],
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, Stop> {
+        match self {
+            Self::Scalar(row) => {
+                let Some(atom) = row.unsupported.get(cursor.next) else {
+                    return Ok(None);
+                };
+                work.tick()?;
+                cursor.next += 1;
+                Ok(Some(*atom))
+            }
+            Self::Packed {
+                words,
+                premise_words,
+                ..
+            } => {
+                while cursor.pending == 0 {
+                    let Some(group) = words.get(*premise_words + cursor.next) else {
+                        return Ok(None);
+                    };
+                    work.tick()?;
+                    cursor.word = group.index;
+                    cursor.pending = group.held & (held[group.index] | !cut[group.index]);
+                    cursor.next += 1;
+                }
+                work.tick()?;
+                let bit = cursor.pending.trailing_zeros() as usize;
+                cursor.pending &= cursor.pending - 1;
+                Ok(Some(cursor.word * 64 + bit))
             }
         }
     }

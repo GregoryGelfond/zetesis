@@ -2204,13 +2204,13 @@ impl<C: Count> Closure<'_, C> {
             }
             let mut changed = false;
             let mut outputs = founded::ledger::OutputCursor::default();
-            for _ in 0..self.lists.explanations.output_count(row) {
-                work.tick()?;
-                let atom = self
-                    .lists
-                    .explanations
-                    .next_output(row, &mut outputs)
-                    .expect("the row's logical output count matches its cursor");
+            while let Some(atom) = self.lists.explanations.next_publication_output(
+                row,
+                &mut outputs,
+                self.known.atom_sure,
+                self.known.atom_never,
+                work,
+            )? {
                 if bit(self.known.atom_sure, atom) {
                     counts.matched += 1;
                     counts.refuted += 1;

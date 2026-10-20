@@ -340,4 +340,5 @@ fn a_subsumption_comparison_cannot_hide_a_stop() {
     }
 }
 
+mod publication;
 mod subsumption;

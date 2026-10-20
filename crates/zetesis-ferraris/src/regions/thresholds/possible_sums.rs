@@ -10,6 +10,8 @@
 //! into that interval.
 //! Ascending contributions stop as soon as one retained sum meets the interval:
 //! the remaining optional contributions cannot remove that witness.
+//! The shifted bits supply that witness directly, without rereading the mask.
+//! A witness may leave a partial shift; the whole scratch is then discarded.
 //!
 //! This is optional pruning, bounded by the existing grouped row's payload.
 //! Its requested mask uses no more bytes than that payload, and the attempt gets
@@ -48,9 +50,9 @@ impl Plan {
         let words = (maximum / WORD_BITS).checked_add(1)?;
         let bytes = row.terms.len().checked_mul(size_of::<(usize, i128)>())?;
         let visits = bytes / size_of::<u64>();
-        // Leave room beyond zeroing for allocation admission, the seed, one
-        // coefficient, one shifted source word and one interval-word query.
-        // Otherwise even the first useful update cannot fit the local budget.
+        // Keep the conservative admission margin beyond zeroing: allocation,
+        // the seed, one coefficient, one shifted source word and a spare visit.
+        // This is not an advance charge; only actual visits consume the budget.
         (words.checked_add(5)? <= visits).then_some(Self {
             lower,
             maximum,
@@ -150,11 +152,20 @@ fn attempt(
         }
         let weight = usize::try_from(weight).map_err(|_| Stop::InvalidProgram)?;
         let source_words = maximum / WORD_BITS + 1;
-        zetesis_core::packed::union_shifted(words, source_words, weight, &mut || allowance.tick())?;
-        maximum = maximum.saturating_add(weight).min(plan.maximum);
-        if intersects(words, plan.lower, maximum, allowance)? {
+        // Zero is below lower, and each earlier shift found no interval bit.
+        // Only this translated copy can supply the first witness. It merely
+        // declines optional pruning, never proves a compatible model. A hit
+        // may leave the shift incomplete; no later code consumes that scratch.
+        if zetesis_core::packed::union_shifted_until_hit(
+            words,
+            source_words,
+            weight,
+            plan.lower..=plan.maximum,
+            &mut || allowance.tick(),
+        )? {
             return Ok(Step::Unchanged);
         }
+        maximum = maximum.saturating_add(weight).min(plan.maximum);
     }
     // Every open contribution fitting the interval was considered. No allowed
     // bit appeared, so even the independent-condition relaxation has no model.
@@ -188,34 +199,4 @@ fn prepare(
     allowance.tick()?;
     words[0] = 1;
     Ok(())
-}
-
-/// Read only initialized words intersecting the required inclusive interval.
-fn intersects(
-    words: &[u64],
-    lower: usize,
-    maximum: usize,
-    allowance: &mut Allowance<'_, '_>,
-) -> Result<bool, Failure> {
-    if maximum < lower {
-        return Ok(false);
-    }
-    let first = lower / WORD_BITS;
-    let last = maximum / WORD_BITS;
-    for (offset, word) in words[first..=last].iter().enumerate() {
-        allowance.tick()?;
-        let word = *word;
-        let position = first + offset;
-        let mut mask = u64::MAX;
-        if position == first {
-            mask &= u64::MAX << (lower % WORD_BITS);
-        }
-        if position == last {
-            mask &= u64::MAX >> (WORD_BITS - 1 - maximum % WORD_BITS);
-        }
-        if word & mask != 0 {
-            return Ok(true);
-        }
-    }
-    Ok(false)
 }

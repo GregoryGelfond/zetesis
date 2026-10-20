@@ -86,16 +86,20 @@ impl Ledger {
         self.rows[row].outputs()
     }
 
+    #[cfg(test)]
     pub(in crate::regions) fn output_count(&self, row: usize) -> usize {
         self.rows[row].output_count()
     }
 
-    pub(in crate::regions) fn next_output(
+    pub(in crate::regions) fn next_publication_output(
         &self,
         row: usize,
         cursor: &mut OutputCursor,
-    ) -> Option<usize> {
-        self.rows[row].next_output(cursor)
+        held: &[u64],
+        cut: &[u64],
+        work: &mut Work<'_>,
+    ) -> Result<Option<usize>, Stop> {
+        self.rows[row].next_publication_output(cursor, held, cut, work)
     }
 
     pub(in crate::regions) fn can_capture(&self) -> bool {

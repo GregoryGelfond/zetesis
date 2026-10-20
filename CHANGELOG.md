@@ -21,6 +21,11 @@ Notable changes by release. Versions follow Semantic Versioning.
   producing tuples; equal-size sources prefer the bindings needed by those filters.
 - Repeated support checks consume initial support seeds directly after resetting
   their counters, avoiding a redundant queue round trip.
+- Repeated support checks skip dependency paths already known false and reuse a
+  compact list of affected heads. Packed explanations omit outputs already
+  excluded from the candidate region.
+- Possible-sum checks detect an allowed value while updating the packed sum set,
+  avoiding a separate scan.
 - Weighted aggregate comparisons can determine a condition when its opposite
   value leaves no possible remainder in the required interval. These deductions
   use the existing propagation queues and preserve answer-set semantics.

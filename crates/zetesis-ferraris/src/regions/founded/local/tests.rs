@@ -2,8 +2,10 @@
 
 use super::*;
 
+mod barriers;
 mod coverage;
 mod false_bodies;
+mod heads;
 use crate::test_support::{Allowance, theory};
 use crate::{Node, RegionLimits};
 use zetesis_cpu::Cancellation;

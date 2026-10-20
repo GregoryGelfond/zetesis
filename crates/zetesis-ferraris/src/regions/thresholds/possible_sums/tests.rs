@@ -189,6 +189,150 @@ fn boundary_offsets_and_nonzero_bases_keep_exact_answers() {
 }
 
 #[test]
+fn a_witness_stops_inside_the_current_shift() {
+    let data = row(&[63, 64, 65, 66]);
+    let plan = Plan::for_row(&data, state(&data, 0, 0, [129, 130])).unwrap();
+    let mut words = Vec::new();
+    let mut work = Work::new(u64::MAX);
+    assert!(matches!(
+        attempt(
+            &data,
+            &[0],
+            &[0],
+            &mut words,
+            plan,
+            &mut Allowance {
+                remaining: plan.visits,
+                work: &mut work,
+            },
+        ),
+        Ok(Step::Unchanged)
+    ));
+    // Allocate, clear three words and seed; then three coefficients and three
+    // source words. The 64+65 witness precedes the lower source word for +65.
+    assert_eq!(work.spent, 11);
+    assert!(bit(&words, 129));
+    assert!(
+        !bit(&words, 128),
+        "the lower-source sum 63+65 is not formed"
+    );
+    assert!(!bit(&words, 65), "the lower source word was not shifted");
+}
+
+#[test]
+fn a_witness_publishes_no_knowledge() {
+    let theory = interval(4, &[(0, 63), (1, 64), (2, 65), (3, 66)], [129, 130]);
+    let index = Narrower::new(&theory);
+    let mut knowledge = index.knowledge();
+    let Width::Compact16(known) = &mut knowledge.width else {
+        unreachable!()
+    };
+    let before = state(&index.thresholds.rows[0], 0, 0, [129, 130]);
+    known.thresholds[0] = before;
+    let masks = known.masks.slices().map(<[u64]>::to_vec);
+    let mut scratch = NarrowingScratch::default();
+    assert!(matches!(
+        Closure {
+            known: known.borrow(),
+            lists: &mut scratch,
+        }
+        .threshold_possible_sums(&index, 0, &mut Work::new(u64::MAX)),
+        Ok(Step::Unchanged)
+    ));
+    assert_eq!(known.thresholds[0], before);
+    assert_eq!(known.masks.slices(), masks.each_ref().map(Vec::as_slice));
+    assert!(scratch.possible_sums.capacity() > 0, "the packed route ran");
+    assert!(
+        scratch.possible_sums.is_empty(),
+        "partial output is discarded"
+    );
+    assert!(scratch.nodes.is_empty());
+    assert!(scratch.threshold_rows.is_empty());
+    assert!(scratch.heads.is_empty());
+}
+
+#[test]
+fn optional_refusal_before_a_witness_remains_incomplete() {
+    let data = row(&[63, 64, 65, 66]);
+    let plan = Plan::for_row(&data, state(&data, 0, 0, [129, 130])).unwrap();
+    for limit in 0..11 {
+        let mut words = Vec::new();
+        let mut work = Work::new(u64::MAX);
+        assert!(matches!(
+            attempt(
+                &data,
+                &[0],
+                &[0],
+                &mut words,
+                plan,
+                &mut Allowance {
+                    remaining: limit,
+                    work: &mut work,
+                },
+            ),
+            Err(Failure::Declined)
+        ));
+        assert_eq!(work.spent, u64::try_from(limit).unwrap());
+        assert!(matches!(
+            attempt(
+                &data,
+                &[0],
+                &[0],
+                &mut words,
+                plan,
+                &mut Allowance {
+                    remaining: plan.visits,
+                    work: &mut Work::new(u64::MAX),
+                },
+            ),
+            Ok(Step::Unchanged)
+        ));
+    }
+}
+
+#[test]
+fn global_refusal_before_a_witness_keeps_its_kind() {
+    let data = row(&[63, 64, 65, 66]);
+    let plan = Plan::for_row(&data, state(&data, 0, 0, [129, 130])).unwrap();
+    for failure in [Stop::WorkLimit, Stop::Cancelled, Stop::Deadline] {
+        for limit in 0..11 {
+            let mut quota = SinglePermits::new(limit, failure);
+            let mut work = Work::reserved(&mut quota);
+            let mut words = Vec::new();
+            assert!(matches!(
+                attempt(
+                    &data,
+                    &[0],
+                    &[0],
+                    &mut words,
+                    plan,
+                    &mut Allowance {
+                        remaining: plan.visits,
+                        work: &mut work,
+                    },
+                ),
+                Err(Failure::Stopped(actual)) if actual == failure
+            ));
+            assert_eq!(work.spent, limit);
+            assert!(matches!(
+                attempt(
+                    &data,
+                    &[0],
+                    &[0],
+                    &mut words,
+                    plan,
+                    &mut Allowance {
+                        remaining: plan.visits,
+                        work: &mut Work::new(u64::MAX),
+                    },
+                ),
+                Ok(Step::Unchanged)
+            ));
+        }
+    }
+}
+
+#[test]
 fn optional_declines_do_not_become_refutations() {
     let data = row(&[4, 6, 7, 9]);
     let plan = Plan::for_row(&data, state(&data, 0, 0, [12, 13])).unwrap();

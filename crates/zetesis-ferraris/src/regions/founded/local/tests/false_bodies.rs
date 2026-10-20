@@ -66,19 +66,20 @@ fn prepared(example: &Example) -> Scratch {
 fn selection(example: &Example, never: &[u64], cuts: &[u64]) -> Scratch {
     let mut scratch = prepared(example);
     example.start(&mut scratch, never);
-    assert_eq!(
-        scratch
-            .local_forward(&example.index, &mut Work::new(u64::MAX))
-            .unwrap(),
-        2
-    );
+    let heads = scratch
+        .local_forward(&example.index, (never, cuts), &mut Work::new(u64::MAX))
+        .unwrap();
+    assert_eq!(heads, 2 - (cuts[0] & 3).count_ones() as usize);
     let end = scratch.queue.len();
+    scratch
+        .partition_heads(heads, &mut Work::new(u64::MAX))
+        .unwrap();
     scratch
         .local_bodies(
             &example.owner,
             &example.index,
             &example.producers,
-            end,
+            (heads, end),
             (never, cuts),
             &mut Work::new(u64::MAX),
         )
@@ -133,7 +134,7 @@ fn cut_heads_omit_only_their_exclusive_producer_bodies() {
         let never = [1];
         let cuts = [1];
         let scratch = selection(&example, &never, &cuts);
-        assert!(scratch.local.head(0) && scratch.local.head(1));
+        assert!(!scratch.local.head(0) && scratch.local.head(1));
         assert!(scratch.local.body(0));
         assert!(!scratch.local.body(1));
         // The disjunctive producer still enters the other, uncut head.
