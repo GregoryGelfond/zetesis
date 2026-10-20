@@ -1111,6 +1111,14 @@ a selected witness before any component publishes atoms or source provenance.
 Emission then retains every witness alternative. This preserves original and
 frozen truth; possible support alone does not make any body true.
 
+Each reached component prepares its join order and comparison schedule once
+over the completed support snapshot and fixed head-slot shape. Existence checks
+and subsequent emission borrow that metadata; each cursor owns its current
+bindings and selected rows. Plans retain neither witness results nor body truth.
+Preparation is lazy, so an empty earlier component does not prepare later ones.
+The original join order is preserved. Plan storage is leased until that rule's
+emission ends, while cursor storage is released after each traversal.
+
 The arithmetic check includes matching head rows introduced by other producers.
 Undefined arithmetic on such a row declines optional factoring and retains the
 complete join. Authoritative source-family diagnostics run before formula
@@ -1470,7 +1478,8 @@ so its located resource or allocation refusal can precede a later ordinary
 formula-emission refusal. Semantic fact admission already completed in support.
 The original source-order emission still validates all body occurrences.
 
-Ordinary rule emission and streamed constraint capture name planned positive
+Ordinary rule emission, independent component emission and streamed constraint
+capture name planned positive
 body atoms from the join's held [matched rows](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/witnesses.rs).
 The same `Witnesses` record serves support production and the producer route.
 Only a passing completion lends the record and resets its unchanged-prefix
@@ -1480,14 +1489,17 @@ naming path. Owned continuation adapters carry no view.
 
 `Builder::matched_atom` imports the row's canonical atom identity at the same
 literal position where general naming would project the tuple. One
-`MatchedNodes` owner per rule and consumer retains nodes by join depth and, when
+`MatchedNodes` owner per cursor and consumer retains nodes by join depth and, when
 needed, a literal-to-depth inverse. It reuses only populated depths inside the
 reported unchanged prefix. That cache stays current within the same traversal
 and Builder; aggregate transactions append and detach only their own suffix,
 leaving previously interned atomic nodes intact. Negative literals, unheld
-positive depths, factoring and nested element joins keep their existing path.
+positive depths and nested element joins keep their existing path. Factored
+components use their own copied literal positions and a separate owner for each
+fixed head binding. Scalar-rejected rows name no atoms; the existence preflight
+still precedes every component's publication.
 
-The public `row_atoms` count records successful ordinary-emission/capture
+The public `row_atoms` count records successful emission/capture
 naming through held rows; `row_atom_reuses` counts its unchanged-prefix subset.
 The earlier producer route is excluded from both. In successful complete
 comparisons with the same producer and factoring policies, each such reuse
@@ -1496,6 +1508,10 @@ cache and inverse storage is leased; pushes, undo, initialization, lookup and
 stores consume their actual work. An explicit work or support-byte bound can
 therefore stop at a different point. An identity memo remains staged after
 measurement; see [body-atom identity](../../design/body-atom-identity.md).
+
+These source operations run on the host for both CPU and GPU backends. Device
+membership checks consume their resulting formula graph and candidate stream;
+sharing this preparation does not mean that the GPU executes source joins.
 
 Ordinary normal rules with at least two flat positive body atoms additionally
 share head projection and balanced subformulas through their [matched rows](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/src/formula_support/witnesses.rs).

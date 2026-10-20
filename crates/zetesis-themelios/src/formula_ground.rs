@@ -872,7 +872,12 @@ impl<'source> Builder<'_, '_, 'source> {
             }
             // Every retained count is bounded by the charged substitution cap.
             instances += 1;
-            let view = self.matched_view(&mut matched, row.witnesses.as_ref(), rule)?;
+            let view = self.matched_view(
+                &mut matched,
+                row.witnesses.as_ref(),
+                rule.body.len(),
+                rule.location,
+            )?;
             if let Some(exclusions) = &mut exclusions {
                 exclusions.row(self, rule, &row.values, matched.as_mut().zip(view))?;
                 continue;
@@ -954,7 +959,12 @@ impl<'source> Builder<'_, '_, 'source> {
             Context::new(self.computation, self.limits, self.counters, rule.location),
         )? {
             if row.passes {
-                let view = self.matched_view(&mut matched, row.witnesses.as_ref(), rule)?;
+                let view = self.matched_view(
+                    &mut matched,
+                    row.witnesses.as_ref(),
+                    rule.body.len(),
+                    rule.location,
+                )?;
                 if let Some(exclusions) = &mut exclusions {
                     exclusions.row(self, rule, &row.values, matched.as_mut().zip(view))?;
                 } else {
@@ -970,7 +980,7 @@ impl<'source> Builder<'_, '_, 'source> {
         Ok(())
     }
 
-    fn retain_matched_rows(
+    pub(super) fn retain_matched_rows(
         &mut self,
         join: &mut Join<'_, '_>,
         location: ProgramSite,
@@ -993,19 +1003,15 @@ impl<'source> Builder<'_, '_, 'source> {
         &mut self,
         nodes: &mut Option<MatchedNodes>,
         view: Option<&'view formula_support::witnesses::WitnessRow<'row, 'source>>,
-        rule: &RuleIr,
+        literals: usize,
+        location: ProgramSite,
     ) -> Result<Option<&'view formula_support::witnesses::WitnessRow<'row, 'source>>, FormulaFailure>
     {
         let Some(view) = view.filter(|view| !view.rows.is_empty()) else {
             return Ok(None);
         };
         if nodes.is_none() {
-            *nodes = Some(MatchedNodes::for_body(
-                view,
-                rule.body.len(),
-                self,
-                rule.location,
-            )?);
+            *nodes = Some(MatchedNodes::for_body(view, literals, self, location)?);
         }
         Ok(Some(view))
     }
@@ -1441,6 +1447,29 @@ impl<'source> Builder<'_, '_, 'source> {
             assignment,
             location,
             support,
+        )
+    }
+
+    /// Name a selected component row through the ordinary body implementation.
+    /// The node owner belongs to this literal slice and this cursor alone;
+    /// rejected rows must be skipped before calling. Borrowed positive rows
+    /// establish atom identities, not the truth of their body literals.
+    pub(super) fn body_from_row(
+        &mut self,
+        literals: &[LiteralIr],
+        row: &formula_support::witnesses::MatchedBinding<'_, 'source>,
+        nodes: &mut Option<MatchedNodes>,
+        support: &Support<'source>,
+        location: ProgramSite,
+    ) -> Result<usize, FormulaFailure> {
+        debug_assert!(row.passes);
+        let view = self.matched_view(nodes, row.witnesses.as_ref(), literals.len(), location)?;
+        self.body_matched(
+            literals.iter().map(Ir::Temporary),
+            &row.values,
+            location,
+            support,
+            nodes.as_mut().zip(view),
         )
     }
 

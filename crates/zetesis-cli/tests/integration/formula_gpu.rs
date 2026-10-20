@@ -97,6 +97,13 @@ fn complete_records_preserve_objective_presence() {
 }
 
 #[test]
+fn capacity_fixture_uses_a_prepared_projection() {
+    let source = include_str!("../fixtures/shared-preparation/unit_capacity.lp");
+    let admitted = zetesis_reference_support::formula(source);
+    assert!(zetesis_ferraris::Narrower::new(admitted.theory()).capacity_index_bytes() > 0);
+}
+
+#[test]
 fn head_elements_preserve_complete_source_answers() {
     use zetesis_core::{Atom, Predicate, Value};
 
@@ -409,6 +416,7 @@ mod physical {
 
     fn qualify_formula_results(backend: GpuApi) {
         qualify_hybrid_output(backend);
+        qualify_shared_preparation(backend);
         for source in [
             "a | b.",
             "{a;b;c;d}. x:-x. :-a,b. #show.",
@@ -437,6 +445,74 @@ mod physical {
         {
             for json in [false, true] {
                 qualify_formula_output(source, backend, json);
+            }
+        }
+    }
+
+    fn qualify_shared_preparation(backend: GpuApi) {
+        let capacity = include_str!("../fixtures/shared-preparation/unit_capacity.lp");
+        let admitted = zetesis_reference_support::formula(capacity);
+        assert!(zetesis_ferraris::Narrower::new(admitted.theory()).capacity_index_bytes() > 0);
+        for (source, expected_models) in [
+            (
+                include_str!("../fixtures/shared-preparation/independent_arithmetic.lp"),
+                9,
+            ),
+            (capacity, 2),
+        ] {
+            let mut expected = Vec::new();
+            let cpu = run_with_diagnostics(
+                source.into(),
+                &options(&["--backend", "cpu", "--grounder", "eager", "--json"]),
+                &mut expected,
+                &mut Vec::new(),
+                &Cancellation::default(),
+            )
+            .unwrap();
+            assert_eq!(cpu.completion, Completion::Exhausted);
+            assert_eq!(cpu.models, expected_models);
+            for grounder in ["eager", "lazy"] {
+                let mut actual = Vec::new();
+                let report = run_with_diagnostics(
+                    source.into(),
+                    &options(&[
+                        "--backend",
+                        backend.argument(),
+                        "--oracle",
+                        "countermodel",
+                        "--grounder",
+                        grounder,
+                        "--workers",
+                        "2",
+                        "--json",
+                        "--stats",
+                    ]),
+                    &mut actual,
+                    &mut Vec::new(),
+                    &Cancellation::default(),
+                )
+                .unwrap();
+                assert_eq!(report.completion, Completion::Exhausted);
+                assert_eq!(report.models, expected_models);
+                assert_eq!(full_records(&actual), full_records(&expected));
+                let execution = report.formula_execution.unwrap();
+                assert!(execution.adapter.contains(backend.name()));
+                assert!(execution.gpu_candidates > 0);
+                assert!(execution.gpu_work > 0);
+                assert!(execution.gpu_rounds > 0);
+                assert_eq!(execution.gpu_candidates, report.checked);
+                assert_eq!(execution.gpu_decided, report.checked);
+                assert_eq!(execution.cpu_residuals, 0);
+                assert_eq!(
+                    (execution.pending_candidates, execution.queued_models),
+                    (0, 0)
+                );
+                if grounder == "lazy" {
+                    let core = report.hybrid_execution.unwrap();
+                    assert_eq!(core.pending, 0);
+                    assert_eq!(core.core_answers, core.accepted + core.rejected);
+                    assert_eq!(core.accepted, u64::try_from(report.models).unwrap());
+                }
             }
         }
     }

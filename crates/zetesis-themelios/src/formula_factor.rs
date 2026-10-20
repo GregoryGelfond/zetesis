@@ -22,7 +22,7 @@ use crate::FormulaFailure;
 use crate::formula_binding::Binding;
 use crate::formula_ground::{Builder, FALSUM, VERUM};
 use crate::formula_ir::{HeadIr, LiteralIr, RuleIr};
-use crate::formula_support::{Context, Join, Support};
+use crate::formula_support::{ComponentPlans, ComponentScope, Context, Join, Support};
 
 /// Return false only when the original complete-join path should be used.
 pub(super) fn rule<'source>(
@@ -55,6 +55,7 @@ pub(super) fn rule<'source>(
     if components.arithmetic {
         arithmetic::testing::record(arithmetic::testing::Point::Certified);
     }
+    let mut prepared = None;
     if let Some(head) = head {
         // Every possible firing's head occurs in completed U. Other producers
         // may add extra rows, which this rule's complete component joins filter.
@@ -64,13 +65,13 @@ pub(super) fn rule<'source>(
                 && (!components.arithmetic
                     || arithmetic::matches(builder, rule, &fixed, &mut evaluation)?)
             {
-                emit(builder, rule, support, &components, &fixed)?;
+                emit(builder, rule, support, &components, &mut prepared, &fixed)?;
             }
         }
     } else {
         let fixed = fixed_frame(builder, rule)?;
         if !components.arithmetic || arithmetic::matches(builder, rule, &fixed, &mut evaluation)? {
-            emit(builder, rule, support, &components, &fixed)?;
+            emit(builder, rule, support, &components, &mut prepared, &fixed)?;
         }
     }
     Ok(true)
@@ -83,13 +84,33 @@ struct Component {
 }
 
 impl Component {
-    fn join<'a, 'source>(
-        &'a self,
+    fn join<'plan: 'cursor, 'cursor, 'source>(
+        &'plan self,
         builder: &mut Builder<'_, '_, 'source>,
         rule: &RuleIr,
-        support: &'a Support<'source>,
+        support: &'plan Support<'source>,
         fixed: &Binding<'_>,
-    ) -> Result<Join<'a, 'source>, FormulaFailure> {
+        index: usize,
+        prepared: Option<&'cursor mut ComponentPlans<'plan, 'source>>,
+    ) -> Result<Join<'cursor, 'source>, FormulaFailure> {
+        if let Some(prepared) = prepared {
+            return prepared.join(
+                index,
+                ComponentScope {
+                    literals: &self.literals,
+                    used: &self.used,
+                },
+                fixed,
+                support,
+                builder.budget,
+                Context::new(
+                    &*builder.computation,
+                    builder.limits,
+                    builder.counters,
+                    rule.location,
+                ),
+            );
+        }
         Join::component(
             &self.literals,
             rule.variables,
@@ -181,33 +202,67 @@ fn fixed_frame(
     Ok(fixed)
 }
 
-fn emit<'source>(
+fn emit<'plan, 'source>(
     builder: &mut Builder<'_, '_, 'source>,
     rule: &RuleIr,
-    support: &Support<'source>,
-    components: &plan::Plan,
+    support: &'plan Support<'source>,
+    components: &'plan plan::Plan,
+    prepared: &mut Option<ComponentPlans<'plan, 'source>>,
     fixed: &Binding,
 ) -> Result<(), FormulaFailure> {
-    if !inhabited(builder, rule, support, components, fixed)? {
+    #[cfg(test)]
+    let enabled = crate::formula_support::component_plan::testing::enabled();
+    #[cfg(not(test))]
+    let enabled = true;
+    if enabled && prepared.is_none() {
+        *prepared = Some(ComponentPlans::new(
+            components.components.len(),
+            rule.variables,
+            fixed,
+            support,
+            Context::new(
+                &*builder.computation,
+                builder.limits,
+                builder.counters,
+                rule.location,
+            ),
+        )?);
+    }
+    if !inhabited(builder, rule, support, components, prepared.as_mut(), fixed)? {
         return Ok(());
     }
     let mut body = VERUM;
-    for component in &components.components {
+    for (index, component) in components.components.iter().enumerate() {
         let mut alternatives = FALSUM;
-        let mut bindings = component.join(builder, rule, support, fixed)?;
-        while let Some(binding) = bindings.next(
-            builder.computation,
-            builder.limits,
+        let mut bindings =
+            component.join(builder, rule, support, fixed, index, prepared.as_mut())?;
+        builder.retain_matched_rows(&mut bindings, rule.location)?;
+        let mut matched = None;
+        while let Some(row) = bindings.next_matched_row(
             builder.budget,
-            builder.counters,
-            rule.location,
+            Context::new(
+                builder.computation,
+                builder.limits,
+                builder.counters,
+                rule.location,
+            ),
         )? {
+            // The borrowed cursor exposes scalar-rejected completions. They
+            // name no atoms and must not advance the emitted-node prefix.
+            if !row.passes {
+                continue;
+            }
             #[cfg(test)]
             if components.arithmetic {
                 arithmetic::testing::record(arithmetic::testing::Point::Witness);
             }
-            let conjunction =
-                builder.body(&component.literals, &binding, rule.location, support)?;
+            let conjunction = builder.body_from_row(
+                &component.literals,
+                &row,
+                &mut matched,
+                support,
+                rule.location,
+            )?;
             alternatives = builder.or(alternatives, conjunction, rule.location)?;
         }
         if alternatives == FALSUM {
@@ -243,15 +298,23 @@ fn emit<'source>(
 /// proves existence, not body truth. Emission subsequently traverses every
 /// selected row without retaining a cache. Work and typed refusal belong to the
 /// same join as emission; only one cursor and its first frame coexist here.
-fn inhabited<'source>(
+fn inhabited<'plan, 'source>(
     builder: &mut Builder<'_, '_, 'source>,
     rule: &RuleIr,
-    support: &Support<'source>,
-    components: &plan::Plan,
+    support: &'plan Support<'source>,
+    components: &'plan plan::Plan,
+    mut prepared: Option<&mut ComponentPlans<'plan, 'source>>,
     fixed: &Binding<'_>,
 ) -> Result<bool, FormulaFailure> {
-    for component in &components.components {
-        let mut bindings = component.join(builder, rule, support, fixed)?;
+    for (index, component) in components.components.iter().enumerate() {
+        let mut bindings = component.join(
+            builder,
+            rule,
+            support,
+            fixed,
+            index,
+            prepared.as_deref_mut(),
+        )?;
         if bindings
             .next(
                 builder.computation,

@@ -61,6 +61,7 @@ pub(crate) use order::comparison_depth;
 #[cfg(test)]
 mod postings;
 mod prepared;
+pub(crate) mod component_plan;
 mod probe_selection;
 mod producers;
 mod projections;
@@ -91,6 +92,7 @@ use crate::{ExpansionFailure, FormulaFailure, FormulaLimits, FormulaResource};
 use rows::{Advance, Frame, Ownership, Staged};
 
 pub(crate) use accounting::{Accounting, AccountingBaseline};
+pub(crate) use component_plan::{ComponentPlans, ComponentScope};
 pub(crate) use evaluation::{Evaluation, Failures};
 pub(crate) use prepared::PreparedRule;
 pub(crate) use producers::AcyclicPlan;
@@ -1807,18 +1809,50 @@ impl<'a, 'source> Join<'a, 'source> {
             budget,
             Context::new(computation, limits, counters, location),
         )?;
-        for slot in 0..fixed.len().min(join.values.len()) {
+        join.fix_component(
+            fixed,
+            used,
+            None,
+            Context::new(computation, limits, counters, location),
+        )?;
+        join.decide(computation, limits, budget, counters, location)?;
+        Ok(join)
+    }
+
+    fn fix_component(
+        &mut self,
+        fixed: &Binding<'_>,
+        used: &[usize],
+        expected: Option<&[bool]>,
+        context: Context<'_, &Computation<'_, '_>>,
+    ) -> Result<(), FormulaFailure> {
+        let Context {
+            computation: _,
+            work,
+        } = context;
+        let GroundingWork {
+            limits,
+            counters,
+            location,
+        } = work;
+        for slot in 0..fixed.len().min(self.values.len()) {
             counters.work(limits, location)?;
-            if let Some(value) = fixed
+            let value = fixed
                 .slots()
                 .key(slot)
-                .map_err(|error| crate::formula_binding::assignment(error, location))?
-            {
-                join.values.set(slot, &value, limits, counters, location)?;
+                .map_err(|error| crate::formula_binding::assignment(error, location))?;
+            if expected.is_some_and(|expected| expected[slot] != value.is_some()) {
+                return Err(FormulaFailure::SupportRelation {
+                    error: zetesis_core::relation::Failure::Owner,
+                    location,
+                });
+            }
+            if let Some(value) = value {
+                self.values.set(slot, &value, limits, counters, location)?;
             }
         }
         let mut used_cursor = 0;
-        for (variable, slot) in join.slots.iter_mut().enumerate() {
+        for (variable, slot) in self.slots.iter_mut().enumerate() {
             counters.work(limits, location)?;
             while used.get(used_cursor).is_some_and(|&used| used < variable) {
                 counters.work(limits, location)?;
@@ -1828,8 +1862,7 @@ impl<'a, 'source> Join<'a, 'source> {
                 *slot = Slot::Excluded;
             }
         }
-        join.decide(computation, limits, budget, counters, location)?;
-        Ok(join)
+        Ok(())
     }
     #[cfg_attr(test, track_caller)]
     pub(crate) fn local(

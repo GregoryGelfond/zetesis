@@ -2337,6 +2337,15 @@ authoritative source-family diagnostics, provenance, rebuilt support guards and
 charged transient storage remain Rust correspondence obligations. Existing
 semantic laws do not establish an implementation refinement.
 
+Component cursors share immutable ordering and comparison metadata only under
+the same support owner, literal scope and fixed-slot shape. Their held positive
+rows supply canonical atom identities at component-local literal positions;
+unchanged-prefix node reuse stays within one cursor and fixed head. Neither
+metadata nor identity reuse establishes body truth. Exact traversal, owner
+checks, storage receipts and skipped scalar-rejected rows remain executable
+correspondence obligations, covered by differential tests rather than new Lean
+refinement claims. CPU and GPU-selected sessions share this host preparation.
+
 Formula witness sharing has its own observation boundary.
 [`RuleFactorization.original_factorization` and `frozen_factorization`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RuleFactorization.lean)
 replace a finite family `(W_i ∧ C) → H` by `((∨ W_i) ∧ C) → H`, specialized to
