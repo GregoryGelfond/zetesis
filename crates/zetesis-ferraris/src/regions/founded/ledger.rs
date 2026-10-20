@@ -5,7 +5,7 @@
 //! supplied them. Deleting a row loses pruning only. No rejected candidate,
 //! partial closure, objective bound or frozen reduct supplies a certificate.
 
-use super::explanations::{self, Input, Limits};
+use super::explanations::{self, Explanation, Input, Limits};
 use crate::regions::{SupportExplanationStatistics, Theory, Work};
 use zetesis_cpu::Stop;
 
@@ -17,7 +17,8 @@ use row::Row;
 #[cfg(test)]
 mod tests;
 
-const MAX_ROWS: usize = 64;
+const MAX_ROWS: usize = u64::BITS as usize;
+const MAX_OUTPUTS: usize = 64;
 const MAX_ATTEMPTS: usize = 256;
 const CAPTURE_WORK: u64 = 131_072;
 
@@ -139,7 +140,7 @@ impl Ledger {
             input,
             atom,
             Limits {
-                atoms: 64,
+                atoms: MAX_OUTPUTS,
                 literals: 16,
                 visits: self.remaining.min(4096),
                 bytes: 65_536,
@@ -153,38 +154,105 @@ impl Ledger {
             counts.declined += 1;
             return Ok(());
         };
+        let retained = self.retained_bytes();
+        let result = self.retain(explanation, work, &mut temporary_peak);
+        self.peak_bytes = self
+            .peak_bytes
+            .max(retained + temporary_peak)
+            .max(self.retained_bytes());
+        if result? {
+            counts.certified += 1;
+        } else {
+            counts.declined += 1;
+        }
+        Ok(())
+    }
+
+    /// Consolidate a completed certificate without changing any retained row
+    /// until every comparison, allocation and publication visit has succeeded.
+    /// Row positions are private to a matching pass; capture runs between passes.
+    fn retain(
+        &mut self,
+        mut explanation: Explanation,
+        work: &mut Work<'_>,
+        peak: &mut u128,
+    ) -> Result<bool, Stop> {
+        // Existing admission keeps the row count below this one-word mask.
+        debug_assert!(self.rows.len() < MAX_ROWS);
+        let mut replaced = 0_u64;
         for position in 0..self.rows.len() {
             if !self.capture_read(work)? {
-                counts.declined += 1;
-                return Ok(());
+                return Ok(false);
             }
             let Some(subsumed) =
                 self.rows[position].subsumes(&explanation, &mut self.remaining, work)?
             else {
-                counts.declined += 1;
-                return Ok(());
+                return Ok(false);
             };
             if subsumed {
-                counts.declined += 1;
-                return Ok(());
+                return Ok(false);
+            }
+            let Some(combined) = self.rows[position].union_outputs(
+                &mut explanation,
+                MAX_OUTPUTS,
+                &mut self.remaining,
+                work,
+                peak,
+            )?
+            else {
+                return Ok(false);
+            };
+            if combined {
+                replaced |= 1_u64 << position;
             }
         }
-        let prepared = Row::prepare(explanation, &mut self.remaining, work, &mut temporary_peak);
-        self.peak_bytes = self.peak_bytes.max(self.retained_bytes() + temporary_peak);
-        let Some(row) = prepared? else {
-            counts.declined += 1;
-            return Ok(());
+        // A union can dominate a row examined before its outputs were added.
+        // Compare the completed proposed certificate against every other row.
+        for position in 0..self.rows.len() {
+            if replaced & (1_u64 << position) != 0 {
+                continue;
+            }
+            if !self.capture_read(work)? {
+                return Ok(false);
+            }
+            let Some(dominated) =
+                self.rows[position].subsumed_by(&explanation, &mut self.remaining, work)?
+            else {
+                return Ok(false);
+            };
+            if dominated {
+                replaced |= 1_u64 << position;
+            }
+        }
+        let Some(row) = Row::prepare(explanation, &mut self.remaining, work, peak)? else {
+            return Ok(false);
         };
-        self.rows
-            .try_reserve_exact(1)
-            .map_err(|_| Stop::Allocation)?;
-        self.peak_bytes = self
-            .peak_bytes
-            .max(self.retained_bytes() + size_of::<Row>() as u128 + row.retained_bytes());
-        self.rows.push(row);
-        counts.certified += 1;
-        self.peak_bytes = self.peak_bytes.max(self.retained_bytes());
-        Ok(())
+        if replaced == 0 {
+            self.rows
+                .try_reserve_exact(1)
+                .map_err(|_| Stop::Allocation)?;
+            self.peak_bytes = self
+                .peak_bytes
+                .max(self.retained_bytes() + size_of::<Row>() as u128 + row.retained_bytes());
+            self.rows.push(row);
+        } else {
+            // Pay for the bounded compaction before its first mutation. A stop
+            // during this admission preserves all previous explanations.
+            for _ in 0..self.rows.len() {
+                if !self.capture_read(work)? {
+                    return Ok(false);
+                }
+            }
+            let first = replaced.trailing_zeros() as usize;
+            self.rows[first] = row;
+            let mut position = 0;
+            self.rows.retain(|_| {
+                let keep = position == first || replaced & (1_u64 << position) == 0;
+                position += 1;
+                keep
+            });
+        }
+        Ok(true)
     }
 }
 

@@ -5915,14 +5915,24 @@
     "line": 222
   },
   {
+    "name": "Zetesis.PossibleFoundedness.conditional_unsupported_union",
+    "file": "Zetesis/PossibleFoundedness.lean",
+    "line": 257
+  },
+  {
+    "name": "Zetesis.PossibleFoundedness.conditional_unsupported_dominance",
+    "file": "Zetesis/PossibleFoundedness.lean",
+    "line": 277
+  },
+  {
     "name": "Zetesis.PossibleFoundedness.conditional_unsupported_forces_complement",
     "file": "Zetesis/PossibleFoundedness.lean",
-    "line": 261
+    "line": 302
   },
   {
     "name": "Zetesis.PossibleFoundedness.body_upper_sound",
     "file": "Zetesis/PossibleFoundedness.lean",
-    "line": 296
+    "line": 337
   },
   {
     "name": "Zetesis.ProducerScheduling.stable_of_reads_only",

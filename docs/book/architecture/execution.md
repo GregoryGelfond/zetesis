@@ -198,6 +198,18 @@ possible-foundedness preparation, closure and publication (`founded_work`). Both
 are included in `reading_work`, and both retain work spent before interruption.
 An omitted closure pass contributes no foundedness work.
 
+A worker may retain a bounded ledger of conditional unsupported sets: if all
+signed atom conditions hold, every output atom must be absent. Identical
+conditions can share their output union, and a stronger newly certified row can
+replace older rows requiring more conditions and excluding fewer atoms. Unions
+retain the existing limit of 64 distinct outputs. Merely overlapping conditions
+are not combined. Comparisons, packing and bounded compaction are admitted before
+any old row is removed; an interrupted attempt preserves the old certificates.
+Unrelated rows retain their order. Capture still stops when the ledger is full.
+Matching and capture are counted in `support_explanations.work`, separately from
+`founded_work`, and both contribute to total reads. Consolidation changes the
+physical representation of established consequences, not their reduct meaning.
+
 Native nonnegative threshold rows also share consequences during
 original-candidate narrowing. Preparation links exact prefixes of grouped
 `(condition, weight)` terms. A required lower bound passes from a prefix to its

@@ -59,7 +59,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   Original satisfaction and reduct membership remain unchanged.
 - Stored support explanations use compact bit masks when they need less space,
   with unchanged deductions. Native count, sum and min/max conditions can supply
-  support explanations, and stronger retained explanations avoid redundant rows.
+  support explanations. Identical conditions can share their outputs, and stronger
+  explanations can replace weaker retained entries.
 
 ## 0.6.0 — 2026-10-14
 

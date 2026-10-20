@@ -1231,6 +1231,10 @@
 'Zetesis.PossibleFoundedness.stable_sub_possible' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PossibleFoundedness.stable_sub_locally_closed' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PossibleFoundedness.conditional_unsupported_absent' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.PossibleFoundedness.conditional_unsupported_union' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.PossibleFoundedness.conditional_unsupported_dominance' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
 'Zetesis.PossibleFoundedness.conditional_unsupported_forces_complement' depends on axioms: [propext,
  Classical.choice,
  Quot.sound]

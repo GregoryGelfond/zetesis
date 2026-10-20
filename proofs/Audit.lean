@@ -1183,6 +1183,8 @@ import Zetesis
 #print axioms Zetesis.PossibleFoundedness.stable_sub_possible
 #print axioms Zetesis.PossibleFoundedness.stable_sub_locally_closed
 #print axioms Zetesis.PossibleFoundedness.conditional_unsupported_absent
+#print axioms Zetesis.PossibleFoundedness.conditional_unsupported_union
+#print axioms Zetesis.PossibleFoundedness.conditional_unsupported_dominance
 #print axioms Zetesis.PossibleFoundedness.conditional_unsupported_forces_complement
 #print axioms Zetesis.PossibleFoundedness.body_upper_sound
 #print axioms Zetesis.ProducerScheduling.stable_of_reads_only

@@ -5917,12 +5917,22 @@
     },
     {
       "file": "Zetesis/PossibleFoundedness.lean",
-      "line": 261,
+      "line": 257,
+      "name": "Zetesis.PossibleFoundedness.conditional_unsupported_union"
+    },
+    {
+      "file": "Zetesis/PossibleFoundedness.lean",
+      "line": 277,
+      "name": "Zetesis.PossibleFoundedness.conditional_unsupported_dominance"
+    },
+    {
+      "file": "Zetesis/PossibleFoundedness.lean",
+      "line": 302,
       "name": "Zetesis.PossibleFoundedness.conditional_unsupported_forces_complement"
     },
     {
       "file": "Zetesis/PossibleFoundedness.lean",
-      "line": 296,
+      "line": 337,
       "name": "Zetesis.PossibleFoundedness.body_upper_sound"
     },
     {
@@ -9428,7 +9438,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "860b862b7f0a893dab5d1498d9985b5218034ee6c85ded0d100c1f1f091ec6fb",
+    "Audit.lean": "7e5072a45487a8e052e1946b014373cd76b38153bf33e07072381aefdd361898",
     "Zetesis.lean": "ab627adbbcd72189d13c25548f8a7f4f23008d1e80f0cb5caee8197f5e4e15c1",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
@@ -9560,7 +9570,7 @@
     "Zetesis/PartitionedScan.lean": "513fd9e0b5d9fad9eb89911aab621f11ba9a604ecc416c16d7f4c1e76ee3748e",
     "Zetesis/PositiveArguments.lean": "71e99535d01f24ecf2bc447153cbd48006231bab85babead9f982638e9735bd2",
     "Zetesis/PositiveTheory.lean": "f0168dab6f0bba3a7df30abe4130871d99fff83d1aa0b2c9879530422f0d8a7a",
-    "Zetesis/PossibleFoundedness.lean": "d188dca80687fb054cac94daf8f851188bd2b3235e57dabb84642cffb0880f6a",
+    "Zetesis/PossibleFoundedness.lean": "2a59fd5d7e73384ed44e84ad3c6365e7412943f624b2626cb1f6ca83101f28ae",
     "Zetesis/ProducerScheduling.lean": "85cf9876accf61f23878866cc21be6ac6f0991fdaff97a98722e693f6c5a650f",
     "Zetesis/ProjectedAnswers.lean": "9c9662842e9cf0108a14d4dadaa0777f1019440ea483916e097311e300229a14",
     "Zetesis/ProjectedConditionals.lean": "a420d26c76215b77f75cf33831dce80055a5d6cdb448db53f83c8951bf06dc4b",

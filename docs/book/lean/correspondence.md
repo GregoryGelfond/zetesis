@@ -2693,16 +2693,28 @@ the bounds below. Frozen and restriction-only visits suspend reuse; a different 
 clears the rows. Each owner retains
 at most 64 rows after at most 256 capture attempts, sharing 131,072 discovery,
 collection and redundancy-comparison reads. One collection permits at most 64 unsupported
-atoms, 16 literals, 4,096 reads and 65,536 workspace bytes. Matching remains
+atoms, 16 literals, 4,096 reads and 65,536 workspace bytes. A consolidated row
+keeps the same 64-distinct-output bound. Capture still stops at a full ledger;
+consolidation does not expand its discovery allowance. Matching remains
 charged to ordinary narrowing work. Optional limits decline capture; global
 quota, cancellation and allocation failures preserve their typed outcomes.
 
-A new row is omitted when a retained row requires a subset of its signed
-conditions and excludes a superset of its outputs. This preserves its complete
-conditional-absence consequence and its partial-match deductions. The ordered
-comparison allocates no scratch, consumes the existing capture allowance, and
-never replaces a retained row. Concrete canonical ordering and signed inclusion
-remain implementation obligations checked against independent set readings.
+`PossibleFoundedness.conditional_unsupported_union` combines already established
+absence consequences under the same interpretation condition by taking the union
+of their unsupported atoms. Their producer witnesses may differ. The ledger can
+therefore share outputs when its signed conditions are identical.
+`PossibleFoundedness.conditional_unsupported_dominance` transfers an absence
+consequence to a stronger condition and a smaller output set: a row requiring a
+subset of another row's signed conditions and excluding a superset of its outputs
+subsumes that row. This supports either omitting a new row or retiring an old one
+after a stronger replacement is retained. Both laws concern answer sets of the
+same original theory, not arbitrary classical models or frozen queries.
+
+Concrete condition identity, complete ordered union and inclusion, preservation
+of partial-match deductions, and publication of a completed replacement remain
+Rust obligations. Union and retirement must preserve the existing capture bounds,
+optional allowance, typed failure behavior and retained/transient storage
+accounting. These laws do not prove the ledger's representation or propagation.
 
 Retained rows use either the scalar witness lists or sparse word groups, chosen
 by actual buffer capacity including the common row header. A packed row keeps

@@ -245,6 +245,47 @@ theorem conditional_unsupported_absent
   intro a inside present
   exact possible a present inside
 
+/-- Two conditional absence consequences with the same condition may share the
+union of their unsupported atoms.
+
+Both premises concern answer sets of the same original theory. Their producer
+witnesses or upper relaxations may differ: the union combines the established
+consequences, rather than asserting a new combined producer certificate. An atom
+in the union is absent by the premise for the side containing it. This does not
+certify concrete signed-condition equality or an executable row merge.
+-/
+theorem conditional_unsupported_union
+    (T : Theory α) (condition : Atoms α → Prop) (left right : Atoms α)
+    (leftAbsent : ∀ M, condition M → Stable M T → ∀ a, left a → ¬ M a)
+    (rightAbsent : ∀ M, condition M → Stable M T → ∀ a, right a → ¬ M a) :
+    ∀ M, condition M → Stable M T → ∀ a, left a ∨ right a → ¬ M a := by
+  intro M matching answer a inside
+  rcases inside with inLeft | inRight
+  · exact leftAbsent M matching answer a inLeft
+  · exact rightAbsent M matching answer a inRight
+
+/-- A conditional absence consequence subsumes one with a stronger condition
+and a smaller unsupported set.
+
+Every interpretation satisfying the narrower condition satisfies the original
+condition, and every atom in the smaller set belongs to the original unsupported
+set. Thus the original stable consequence supplies every exclusion of the
+subsumed one. This justifies omission or retirement at the semantic level; it
+does not prove signed inclusion, partial-match classification, propagation,
+replacement publication or resource handling in a concrete ledger.
+-/
+theorem conditional_unsupported_dominance
+    (T : Theory α) (condition narrower : Atoms α → Prop)
+    (unsupported smaller : Atoms α)
+    (conditions : ∀ M, narrower M → condition M)
+    (outputs : Sub smaller unsupported)
+    (absent : ∀ M, condition M → Stable M T → ∀ a, unsupported a → ¬ M a) :
+    ∀ M, narrower M → Stable M T → ∀ a, smaller a → ¬ M a := by
+  intro M narrowed answer a member
+  have matching : condition M := conditions M narrowed
+  have inside : unsupported a := outputs a member
+  exact absent M matching answer a inside
+
 /-- A present unsupported atom forces the remaining certificate condition to fail.
 
 Suppose the condition C together with a remaining condition excludes every atom

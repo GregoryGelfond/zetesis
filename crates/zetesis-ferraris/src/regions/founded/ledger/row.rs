@@ -20,6 +20,8 @@ use crate::regions::founded::explanations::Explanation;
 use crate::regions::{Work, bit};
 use zetesis_cpu::Stop;
 
+mod merge;
+
 #[cfg(test)]
 mod tests;
 
@@ -159,6 +161,49 @@ impl Row {
             ),
             declined_or_false => Ok(declined_or_false),
         }
+    }
+
+    /// The proposed row requires no more premises and excludes all of this
+    /// row's outputs. Retiring this row then preserves its deductions, or lets
+    /// the stronger row refute the region before a formerly unit deduction.
+    pub(super) fn subsumed_by(
+        &self,
+        other: &Explanation,
+        remaining: &mut u64,
+        work: &mut Work<'_>,
+    ) -> Result<Option<bool>, Stop> {
+        let (conditions, outputs) = self.lengths();
+        if conditions < other.conditions.len() || outputs > other.unsupported.len() {
+            return Ok(Some(false));
+        }
+        match includes(
+            self.conditions(),
+            other.conditions.iter().copied(),
+            remaining,
+            work,
+        )? {
+            Some(true) => includes(
+                other.unsupported.iter().copied(),
+                self.outputs(),
+                remaining,
+                work,
+            ),
+            declined_or_false => Ok(declined_or_false),
+        }
+    }
+
+    /// Extend a temporary explanation with this row's outputs when their signed
+    /// conditions are identical and the distinct union stays within maximum.
+    /// Optional refusal or a typed stop leaves both inputs unchanged.
+    pub(super) fn union_outputs(
+        &self,
+        other: &mut Explanation,
+        maximum: usize,
+        remaining: &mut u64,
+        work: &mut Work<'_>,
+        peak: &mut u128,
+    ) -> Result<Option<bool>, Stop> {
+        merge::union_outputs(self, other, maximum, remaining, work, peak)
     }
 
     pub(super) fn conditions(&self) -> impl Iterator<Item = (usize, bool)> + '_ {
