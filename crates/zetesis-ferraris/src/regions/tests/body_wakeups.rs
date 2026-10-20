@@ -72,18 +72,30 @@ fn close(
     assert!(scratch.pending.iter().all(|word| *word == 0));
 }
 
-/// The complete state, including counters and seen decisions, agrees; no
-/// pending effect is hidden behind agreement of the published region alone.
-fn same_knowledge(left: &Knowledge, right: &Knowledge) {
+/// Live counters and all truth/ranking state agree. Retired neutral counters
+/// may differ because inherited and fresh closures encounter a witness at
+/// different positions. Both must retain the same absorbing root and witness;
+/// neither retired prefix may claim that every operand was neutral.
+fn same_knowledge(index: &Narrower, left: &Knowledge, right: &Knowledge) {
     let (left, right) = (super::compact(left), super::compact(right));
     assert_eq!(left.masks.slices(), right.masks.slices());
-    for (left, right) in [
-        (&left.neutral_operands, &right.neutral_operands),
-        (&left.unknown, &right.unknown),
-    ] {
-        assert_eq!(left.len(), right.len());
-        assert!((0..left.len()).all(|at| left.get(at) == right.get(at)));
+    assert_eq!(left.neutral_operands.len(), right.neutral_operands.len());
+    assert_eq!(left.neutral_operands.len(), index.chains.len());
+    for (position, chain) in index.chains.iter().enumerate() {
+        if super::super::bit(left.masks.slices()[5], position) {
+            let polarity = usize::from(!chain.disjunction);
+            assert!(super::super::bit(left.masks.slices()[polarity], chain.root));
+            assert!(left.neutral_operands.get(position) < chain.leaves(&index.extrema).len());
+            assert!(right.neutral_operands.get(position) < chain.leaves(&index.extrema).len());
+        } else {
+            assert_eq!(
+                left.neutral_operands.get(position),
+                right.neutral_operands.get(position)
+            );
+        }
     }
+    assert_eq!(left.unknown.len(), right.unknown.len());
+    assert!((0..left.unknown.len()).all(|at| left.unknown.get(at) == right.unknown.get(at)));
     assert_eq!(left.seeded, right.seeded);
 }
 
@@ -178,7 +190,7 @@ fn compare_children(
         finish(&mut fresh, &mut fresh_known);
         check(&child, held);
         assert_eq!(child, fresh);
-        same_knowledge(&known, &fresh_known);
+        same_knowledge(index, &known, &fresh_known);
     }
 }
 
@@ -368,7 +380,7 @@ fn refused_body_propagation_keeps_exact_work_receipts() {
                 &mut scratch,
             );
             assert_eq!(retry, expected);
-            same_knowledge(&retry_known, &expected_known);
+            same_knowledge(&index, &retry_known, &expected_known);
         }
     }
 }

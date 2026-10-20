@@ -225,16 +225,12 @@ impl Packed {
             )?;
         }
         let old_words = (self.maximum + 1).div_ceil(WORD_BITS);
-        let shift = weight % WORD_BITS;
-        for source in (0..old_words).rev() {
-            tick(context)?;
-            let bits = self.words.slice()[source];
-            let target = source + weight / WORD_BITS;
-            self.words.slice_mut()[target] |= bits << shift;
-            if shift != 0 && target + 1 < self.words.len() {
-                self.words.slice_mut()[target + 1] |= bits >> (WORD_BITS - shift);
-            }
-        }
+        zetesis_core::packed::union_shifted(
+            self.words.slice_mut(),
+            old_words,
+            weight,
+            &mut || tick(context),
+        )?;
         let mut count = 0;
         for &word in self.words.iter() {
             tick(context)?;

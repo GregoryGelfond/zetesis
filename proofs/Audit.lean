@@ -13,6 +13,9 @@ import Zetesis
 #print axioms Zetesis.AggregateAssignment.unique_length_le
 #print axioms Zetesis.AggregateAssignment.selected_sum_update
 #print axioms Zetesis.AggregateAssignment.selected_sum_is_candidate
+#print axioms Zetesis.AggregateAssignment.selected_sum_nonnegative
+#print axioms Zetesis.AggregateAssignment.bounded_selected_sum_is_candidate
+#print axioms Zetesis.AggregateAssignment.bounded_sum_interval_refuted
 #print axioms Zetesis.AggregateAssignment.subset_sums_nodup
 #print axioms Zetesis.AggregateAssignment.subset_sums_length_le_pow
 #print axioms Zetesis.AggregateAssignment.perm_weighted_sum
@@ -694,6 +697,8 @@ import Zetesis
 #print axioms Zetesis.FormulaBounds.ChainEvidence.record_counts
 #print axioms Zetesis.FormulaBounds.ChainEvidence.records_counts
 #print axioms Zetesis.FormulaBounds.ChainEvidence.propagation_observations
+#print axioms Zetesis.FormulaBounds.ChainEvidence.settled_record_observations
+#print axioms Zetesis.FormulaBounds.ChainEvidence.settled_records_observations
 #print axioms Zetesis.FormulaRegions.classical_consequence_forces
 #print axioms Zetesis.FormulaRegions.classical_consequence_cuts
 #print axioms Zetesis.FormulaRegions.no_model_refutes
@@ -1176,6 +1181,7 @@ import Zetesis
 #print axioms Zetesis.PossibleFoundedness.choice_intersection
 #print axioms Zetesis.PossibleFoundedness.intersection_models_reduct
 #print axioms Zetesis.PossibleFoundedness.stable_sub_possible
+#print axioms Zetesis.PossibleFoundedness.stable_sub_locally_closed
 #print axioms Zetesis.PossibleFoundedness.conditional_unsupported_absent
 #print axioms Zetesis.PossibleFoundedness.conditional_unsupported_forces_complement
 #print axioms Zetesis.PossibleFoundedness.body_upper_sound

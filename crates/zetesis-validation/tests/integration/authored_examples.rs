@@ -1,4 +1,5 @@
 //! Fixture integrity is portable; complete clingo contract checks are opt-in.
+mod shifted_sum;
 use std::collections::BTreeSet;
 use zetesis_test_support::repository::examples as root;
 use zetesis_validation::{

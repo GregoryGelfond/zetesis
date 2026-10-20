@@ -127,8 +127,8 @@ prepares the positive Boolean dependencies of producer bodies once for the exact
 original theory. Exact SCCs use the immutable relaxed incidences, independently
 of region false masks. Only heads in cyclic components need explicit derivation;
 other uncut atoms are conceptual seeds. Their occurrences in the selected complete
-producer bodies seed directly, avoiding unrelated atom postings. Later passes reset
-only bodies feeding cyclic heads, and publication inspects only missing uncut cyclic
+producer bodies seed directly, avoiding unrelated atom postings. Full replay resets
+those cyclic-head bodies, and publication inspects only missing uncut cyclic
 heads. Ordinary support and foundedness still alternate to saturation: acyclic paths
 can carry a cut to a downstream cycle, so one restricted pass may be weaker than a
 full pass even though the fixed point is unchanged. SCC condensation order supplies
@@ -155,8 +155,8 @@ queries do not use this producer closure. The semantic law
 `PossibleFoundedness.stable_sub_possible` explains why the restriction preserves
 answer sets; correspondence to the indexed Rust implementation remains separate.
 
-On reuse, the same body IDs and immutable roles are partitioned together so
-mutable counters precede seeds. Each pass resets those counters before reading
+Preparation on reuse partitions the same body IDs and immutable roles together so
+mutable counters precede seeds. Full replay resets those counters before reading
 current masks for boundary and opaque seeds. A true seed immediately visits its
 parent and head rows; it need not be queued and read again. Atom events and
 newly enabled Boolean nodes remain queued until every seed is initialized.
@@ -165,6 +165,33 @@ seed state. The first pass retains the ordinary queue schedule. This changes
 event order, not the completed closure, producer coverage or support explanations.
 Preparation adds a charged in-place partition and one split index; it stores no
 additional region truth and retains the existing allocation and failure rules.
+
+The first invalidated pass below inherited completed knowledge can instead use
+[selective replay](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/founded/local.rs).
+The exact original owner and completed projection are checked at entry and again
+before replay. Newly false selected inputs identify all downstream affected cyclic
+heads `H`. The pass selects every producer body entering an uncut head in `H`,
+including unchanged producers, and their Boolean operands, `B(H)`. A body already
+known false remains selected but needs no operand traversal; a shared operand is
+still selected through any other live path. Cut heads need no producer evaluation.
+The pass freshly initializes `B(H)` under
+current masks and saturates it through the shared event engine, filtering local
+destinations. Unaffected uncut cyclic atoms are seeds; the completed atom mask
+contains those seeds together with the derived heads. Publication and explanation
+capture therefore still receive a complete result.
+
+Worker scratch retains one disposable membership byte per original atom/node,
+touched IDs and the reused queue; it carries no ancestor body truth or additional
+per-region knowledge.
+Missing authority, unfinished history or all cyclic heads being affected requires
+full replay, as do later passes in the same narrowing. Allocation, work exhaustion,
+cancellation and deadlines remain typed failures; a partial local attempt supplies
+no completion and retry uses full replay. Membership and incidence preparation
+publish together only after success. Actual capacities count as retained storage;
+replacement construction temporarily overlaps old membership with its fresh
+replacement and incidence buffers. Retained-byte receipts do not measure that
+transient peak. Discovery, selection and cleanup add charged work alongside the
+reduced replay.
 
 Candidate-region statistics distinguish producer rechecks (`support_work`) from
 possible-foundedness preparation, closure and publication (`founded_work`). Both
@@ -222,6 +249,22 @@ Frozen-reduct narrowing is unchanged. The
 [residual-sum laws](../lean/correspondence.md#nonnegative-aggregate-thresholds)
 state the necessary condition and the remaining implementation obligations.
 
+If lattice reasoning leaves a nonunit row unchanged, a bounded possible-sum
+check can refute gaps that divisibility does not detect. It treats each open
+grouped condition as independently optional and reduces its nonnegative weights
+with packed shifts and unions. The queried offsets end below the required
+exclusive upper bound. Missing the required interval refutes the region; finding
+a sum merely ends this check, since correlated conditions may prevent that
+selection. No condition is forced and no model is certified by the reduction.
+
+The requested mask and optional visit allowance are bounded by the existing
+row's payload. An unsuitable span or exhausted local allowance retains ordinary
+propagation; allocation failure and global work, cancellation or deadline stops
+remain errors. Used words are reinitialized for every attempt, and retained
+capacity is accounted as worker scratch. Grounding's packed assignment sums and
+this CPU propagation check share `zetesis_core::packed::union_shifted`.
+Frozen-reduct narrowing is unchanged.
+
 Once a step proves a region contradictory, narrowing discards it without
 visiting the remaining operands, parents or support wakeups. Work accounting
 covers the visited prefix; cleanup still settles worker receipts. Partial
@@ -239,11 +282,13 @@ one another. The node-sure, node-never, atom-sure, atom-never, seen and chain-wi
 occupy disjoint spans of one owned word block. Narrowing splits that block once
 into borrowed slices; child copies remain independent and include every span,
 its boundaries, both counter arrays and the seeded state. A chain counts its
-processed neutral operands exactly: false for a disjunction, true for a
-conjunction. Its witness bit records a processed operand at the opposite,
-absorbing polarity. Propagation needs that witness's existence, not its count.
-Queued events contribute neither count nor witness; this distinction preserves
-the original ordered scans and work charges.
+processed neutral operands exactly until a witness settles it: false for a
+disjunction, true for a conjunction. Its witness bit records a processed operand
+at the opposite, absorbing polarity. Later operand events retain their parent
+visit but omit counter updates and witness notices that cannot teach anything.
+Other parents, node truth, support wakeups and split ranking remain active.
+Queued events contribute neither count nor witness; a pending truth bit alone
+does not justify retiring the counter.
 The counter arrays choose one width for the lifetime of a knowledge: `u16`,
 `u32` or native width, according to a bound on each cell. That bound includes
 all parent occurrences of all nodes carrying an atom, rather than the total

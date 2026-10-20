@@ -67,72 +67,87 @@
     },
     {
       "file": "Zetesis/AggregateAssignment.lean",
-      "line": 136,
+      "line": 137,
+      "name": "Zetesis.AggregateAssignment.selected_sum_nonnegative"
+    },
+    {
+      "file": "Zetesis/AggregateAssignment.lean",
+      "line": 165,
+      "name": "Zetesis.AggregateAssignment.bounded_selected_sum_is_candidate"
+    },
+    {
+      "file": "Zetesis/AggregateAssignment.lean",
+      "line": 204,
+      "name": "Zetesis.AggregateAssignment.bounded_sum_interval_refuted"
+    },
+    {
+      "file": "Zetesis/AggregateAssignment.lean",
+      "line": 220,
       "name": "Zetesis.AggregateAssignment.subset_sums_nodup"
     },
     {
       "file": "Zetesis/AggregateAssignment.lean",
-      "line": 143,
+      "line": 227,
       "name": "Zetesis.AggregateAssignment.subset_sums_length_le_pow"
     },
     {
       "file": "Zetesis/AggregateAssignment.lean",
-      "line": 158,
+      "line": 242,
       "name": "Zetesis.AggregateAssignment.perm_weighted_sum"
     },
     {
       "file": "Zetesis/AggregateAssignment.lean",
-      "line": 167,
+      "line": 251,
       "name": "Zetesis.AggregateAssignment.filtered_sum_is_candidate"
     },
     {
       "file": "Zetesis/AggregateAssignment.lean",
-      "line": 180,
+      "line": 264,
       "name": "Zetesis.AggregateAssignment.filter_nodup"
     },
     {
       "file": "Zetesis/AggregateAssignment.lean",
-      "line": 192,
+      "line": 276,
       "name": "Zetesis.AggregateAssignment.covered_actual_sum_is_candidate"
     },
     {
       "file": "Zetesis/AggregateAssignment.lean",
-      "line": 209,
+      "line": 293,
       "name": "Zetesis.AggregateAssignment.active_tuples_nodup"
     },
     {
       "file": "Zetesis/AggregateAssignment.lean",
-      "line": 212,
+      "line": 296,
       "name": "Zetesis.AggregateAssignment.mem_active_tuples"
     },
     {
       "file": "Zetesis/AggregateAssignment.lean",
-      "line": 226,
+      "line": 310,
       "name": "Zetesis.AggregateAssignment.eligible_for_iff_active"
     },
     {
       "file": "Zetesis/AggregateAssignment.lean",
-      "line": 240,
+      "line": 324,
       "name": "Zetesis.AggregateAssignment.coalesced_active_tuples"
     },
     {
       "file": "Zetesis/AggregateAssignment.lean",
-      "line": 263,
+      "line": 347,
       "name": "Zetesis.AggregateAssignment.coalescing_preserves_actual_sum"
     },
     {
       "file": "Zetesis/AggregateAssignment.lean",
-      "line": 273,
+      "line": 357,
       "name": "Zetesis.AggregateAssignment.actual_tuple_sum_is_candidate"
     },
     {
       "file": "Zetesis/AggregateAssignment.lean",
-      "line": 284,
+      "line": 368,
       "name": "Zetesis.AggregateAssignment.initial_zero_may_miss_actual_sum"
     },
     {
       "file": "Zetesis/AggregateAssignment.lean",
-      "line": 290,
+      "line": 374,
       "name": "Zetesis.AggregateAssignment.subset_candidates_need_not_be_realizable"
     },
     {
@@ -3422,53 +3437,63 @@
     },
     {
       "file": "Zetesis/FormulaChains.lean",
-      "line": 56,
+      "line": 59,
       "name": "Zetesis.FormulaBounds.position_in_append"
     },
     {
       "file": "Zetesis/FormulaChains.lean",
-      "line": 80,
+      "line": 83,
       "name": "Zetesis.FormulaBounds.disj_chain_sure"
     },
     {
       "file": "Zetesis/FormulaChains.lean",
-      "line": 93,
+      "line": 96,
       "name": "Zetesis.FormulaBounds.disj_chain_never"
     },
     {
       "file": "Zetesis/FormulaChains.lean",
-      "line": 105,
+      "line": 108,
       "name": "Zetesis.FormulaBounds.disj_chain_unit"
     },
     {
       "file": "Zetesis/FormulaChains.lean",
-      "line": 142,
+      "line": 145,
       "name": "Zetesis.FormulaBounds.conj_chain_sure"
     },
     {
       "file": "Zetesis/FormulaChains.lean",
-      "line": 152,
+      "line": 155,
       "name": "Zetesis.FormulaBounds.conj_chain_never"
     },
     {
       "file": "Zetesis/FormulaChains.lean",
-      "line": 166,
+      "line": 169,
       "name": "Zetesis.FormulaBounds.conj_chain_unit"
     },
     {
       "file": "Zetesis/FormulaChains.lean",
-      "line": 223,
+      "line": 226,
       "name": "Zetesis.FormulaBounds.ChainEvidence.record_counts"
     },
     {
       "file": "Zetesis/FormulaChains.lean",
-      "line": 233,
+      "line": 236,
       "name": "Zetesis.FormulaBounds.ChainEvidence.records_counts"
     },
     {
       "file": "Zetesis/FormulaChains.lean",
-      "line": 248,
+      "line": 251,
       "name": "Zetesis.FormulaBounds.ChainEvidence.propagation_observations"
+    },
+    {
+      "file": "Zetesis/FormulaChains.lean",
+      "line": 275,
+      "name": "Zetesis.FormulaBounds.ChainEvidence.settled_record_observations"
+    },
+    {
+      "file": "Zetesis/FormulaChains.lean",
+      "line": 288,
+      "name": "Zetesis.FormulaBounds.ChainEvidence.settled_records_observations"
     },
     {
       "file": "Zetesis/FormulaRegions.lean",
@@ -5882,17 +5907,22 @@
     },
     {
       "file": "Zetesis/PossibleFoundedness.lean",
-      "line": 185,
+      "line": 184,
+      "name": "Zetesis.PossibleFoundedness.stable_sub_locally_closed"
+    },
+    {
+      "file": "Zetesis/PossibleFoundedness.lean",
+      "line": 222,
       "name": "Zetesis.PossibleFoundedness.conditional_unsupported_absent"
     },
     {
       "file": "Zetesis/PossibleFoundedness.lean",
-      "line": 224,
+      "line": 261,
       "name": "Zetesis.PossibleFoundedness.conditional_unsupported_forces_complement"
     },
     {
       "file": "Zetesis/PossibleFoundedness.lean",
-      "line": 259,
+      "line": 296,
       "name": "Zetesis.PossibleFoundedness.body_upper_sound"
     },
     {
@@ -9398,11 +9428,11 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "12293b7e1520e1d9b90216b6245c604f73d2b2216cf8cb7ee113f6142553b8bd",
+    "Audit.lean": "860b862b7f0a893dab5d1498d9985b5218034ee6c85ded0d100c1f1f091ec6fb",
     "Zetesis.lean": "ab627adbbcd72189d13c25548f8a7f4f23008d1e80f0cb5caee8197f5e4e15c1",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
-    "Zetesis/AggregateAssignment.lean": "2ed2a2bced03e6c0bb8c88afea9a3b0b9f8276c1633ba7695be9a952610d1b35",
+    "Zetesis/AggregateAssignment.lean": "def2eac0ae638f3801d35c11a3162afaa3e0b9e393601cf899952e449e309639",
     "Zetesis/AggregateBodyWitnesses.lean": "4e2c21f000af15cb40fa29ce85431ae4bc8841264e6521ed96e438acb7035513",
     "Zetesis/AggregateBounds.lean": "c1a49f93ac5140bcd22876b42c52c23c4f447352c9cf61f2f01741fbbdc98452",
     "Zetesis/AggregateConsumers.lean": "41aded89dbfaa79833ed3b336030ef4b08afa5be8e7029060416c2f8de59ef97",
@@ -9473,7 +9503,7 @@
     "Zetesis/FiniteValues.lean": "14e3d4f778b607fabdaa2c9153c7341618ab895f73158095efb46ff1d12d5788",
     "Zetesis/FixedWitnessConstraints.lean": "cd04d3ee169908eccb49bc6aa8ee16556ca668d1ead3ccc18967b63af1644229",
     "Zetesis/FormulaBounds.lean": "9a258d50b67196acca383b5bab85ba96cdbac7838f8b921d5f8f710b88601b36",
-    "Zetesis/FormulaChains.lean": "de959fb2100faa3f4bc069a2dbf9aa8ff64946f66cc6817f532fc330433185f7",
+    "Zetesis/FormulaChains.lean": "c341a4d7e966ba1fd2eb00a14bd69b5c74feeabd599749da4640e4f7e8063794",
     "Zetesis/FormulaRegions.lean": "64a8e7764e6e5afa11355dc71601c3a19b8f77bbea71c2c497aa5b77cc62451a",
     "Zetesis/Frontier.lean": "ee779cc1950d8e095c8350a2422425ce53985e15c00f4bed4e138a44441fadb2",
     "Zetesis/GatePositions.lean": "765bdd0ede74577aba5c19b3439545d4f55bc96ed5b341c86fd9c6be65fb7243",
@@ -9530,7 +9560,7 @@
     "Zetesis/PartitionedScan.lean": "513fd9e0b5d9fad9eb89911aab621f11ba9a604ecc416c16d7f4c1e76ee3748e",
     "Zetesis/PositiveArguments.lean": "71e99535d01f24ecf2bc447153cbd48006231bab85babead9f982638e9735bd2",
     "Zetesis/PositiveTheory.lean": "f0168dab6f0bba3a7df30abe4130871d99fff83d1aa0b2c9879530422f0d8a7a",
-    "Zetesis/PossibleFoundedness.lean": "d3c9ee04548ea04e52052f7e09b6553073fae7d1e4054f446a27c6562fb04198",
+    "Zetesis/PossibleFoundedness.lean": "d188dca80687fb054cac94daf8f851188bd2b3235e57dabb84642cffb0880f6a",
     "Zetesis/ProducerScheduling.lean": "85cf9876accf61f23878866cc21be6ac6f0991fdaff97a98722e693f6c5a650f",
     "Zetesis/ProjectedAnswers.lean": "9c9662842e9cf0108a14d4dadaa0777f1019440ea483916e097311e300229a14",
     "Zetesis/ProjectedConditionals.lean": "a420d26c76215b77f75cf33831dce80055a5d6cdb448db53f83c8951bf06dc4b",

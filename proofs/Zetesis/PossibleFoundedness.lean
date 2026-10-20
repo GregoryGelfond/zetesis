@@ -168,6 +168,43 @@ theorem stable_sub_possible (M P allowed : Atoms α) (upper : Formula α → Pro
     ((stable_iff_minimal_reduct M T).mp answer).2 (intersection M P) below reduced
   exact fun a present => (reverse a present).2
 
+/-- Recomputing support for selected heads preserves every compatible answer set
+when all other permitted atoms remain in the possible set.
+
+Every producer entering the selected heads must be closed, including producers
+whose bodies did not change. A head outside that selection is already present
+by the boundary premise. These two cases establish whole-program closure, so
+`stable_sub_possible` applies.
+
+The selection may be conservative: this law proves safe exclusion, not equality
+with a full least-closure computation. Dependency selection, inherited completion,
+exact producer coverage, concrete body evaluation and interrupted execution
+remain separate implementation obligations.
+-/
+theorem stable_sub_locally_closed (M P allowed selected : Atoms α)
+    (upper : Formula α → Prop)
+    (T : Theory α) (rules : List (Producer α)) (choices : List (ChoiceProducer α))
+    (covered : CoveredWithChoices T rules choices)
+    (sound : UpperSound M P upper) (compatible : Sub M allowed)
+    (boundary : ∀ a, allowed a → ¬ selected a → P a)
+    (producers : ∀ r ∈ rules, producerEnabled upper r →
+      ∀ a, r.head.Contains a → allowed a → selected a → P a)
+    (choiceHeads : ∀ c ∈ choices, choiceEnabled upper c →
+      allowed c.head → selected c.head → P c.head)
+    (answer : Stable M T) : Sub M P := by
+  have ordinaryClosed : ProducersClosed P allowed upper rules := by
+    intro r member enabled a occurs permitted
+    by_cases affected : selected a
+    · exact producers r member enabled a occurs permitted affected
+    · exact boundary a permitted affected
+  have choicesClosed : ChoicesClosed P allowed upper choices := by
+    intro c member enabled permitted
+    by_cases affected : selected c.head
+    · exact choiceHeads c member enabled permitted affected
+    · exact boundary c.head permitted affected
+  exact stable_sub_possible M P allowed upper T rules choices covered sound
+    compatible ordinaryClosed choicesClosed answer
+
 /-- A condition that blocks every producer entering U excludes every atom of U
 from each matching answer set.
 

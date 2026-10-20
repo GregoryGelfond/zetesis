@@ -1416,10 +1416,14 @@ impl Narrower {
         // Whatever an earlier narrowing that refuted or stopped left here
         // belongs to another region; it is discarded before this one reads.
         scratch.prepare(subject.theory.atom_count());
+        scratch.founded.end_local();
         if subject.producers.is_some() && subject.frozen.is_none() {
             // Only original support consumes this preparation. Candidate bounds
             // and frozen queries may share scratch without replacing its owner.
             scratch.founded.forget_foreign(subject.theory);
+            scratch
+                .founded
+                .begin_local(subject.theory, known.founded_closed);
             scratch.explanations.prepare(subject.theory);
         }
         let mut closure = Closure {
@@ -1483,16 +1487,18 @@ fn preferred_split<C: Count>(
 /// `FormulaChains`). The closure is driven by a worklist: a node that
 /// learns something is revisited once, and only its parents, operands and
 /// dependent producers are read, a chain learning from an operand by one
-/// counter or witness step. A disjunction counts failing operands and records
-/// whether a holding operand was processed; a conjunction dually counts holding
-/// operands and records a failing witness. Pending events contribute neither.
+/// counter or witness step. Until a witness settles the chain, a disjunction
+/// counts failing operands and records whether a holding operand was processed;
+/// a conjunction dually counts holding operands and records a failing witness.
+/// Pending events contribute neither, and settled counters need no further update.
 #[derive(Debug)]
 struct Known<C> {
     masks: Masks,
     /// Per chain, processed neutral operands: false for OR, true for AND.
     /// The count preserves distinct operand-node occurrences, including nodes
     /// that denote the same atom. Repeated identical leaves are coalesced by
-    /// chain formation. Absorbing operands use the packed witness mask instead.
+    /// chain formation. It is exact until an absorbing witness is processed;
+    /// later operand events leave the now-irrelevant count unchanged.
     neutral_operands: Counters<C>,
     /// Per atom, the parents of its nodes not yet known: the split ranking.
     /// A parent is counted once here and taken off once when it is
@@ -1566,6 +1572,8 @@ pub struct NarrowingScratch {
     pending_residuals: Vec<u64>,
     /// Reversed suffix gcds for one drained residual row; never inherited.
     residual_suffix: Vec<i128>,
+    /// Optional reachable-sum scratch; rebuilt from each drained row snapshot.
+    possible_sums: Vec<u64>,
     /// Shared connective views and dirty worklists belong to the walker.
     witnesses: witnesses::Scratch,
     /// Possible founded atoms, computed only with complete original producers.
@@ -1587,6 +1595,7 @@ impl NarrowingScratch {
             + (self.pending_thresholds.capacity() + self.pending_residuals.capacity()) as u128
                 * size_of::<u64>() as u128
             + self.residual_suffix.capacity() as u128 * size_of::<i128>() as u128
+            + self.possible_sums.capacity() as u128 * size_of::<u64>() as u128
             + self.witnesses.retained_bytes()
             + self.founded.retained_bytes()
             + self.explanations.retained_bytes()
@@ -1611,6 +1620,7 @@ impl NarrowingScratch {
         self.threshold_rows.clear();
         self.residual_rows.clear();
         self.residual_suffix.clear();
+        self.possible_sums.clear();
         if self.pending.len() < flag_words(atoms) {
             self.pending.resize(flag_words(atoms), 0);
         }
@@ -1820,6 +1830,7 @@ impl<C: Count> Closure<'_, C> {
     fn never(&mut self, index: usize) -> Step {
         let step = learn(self.known.never, self.known.sure, index);
         if step == Step::Changed {
+            self.lists.founded.record_false(index);
             if *self.known.founded_closed && self.lists.founded.may_affect_body(index) {
                 *self.known.founded_closed = false;
             }
@@ -1854,6 +1865,9 @@ impl<C: Count> Closure<'_, C> {
         self.lists.learned.push(atom);
         let mut step = step;
         for &node in &index.atom_nodes[atom] {
+            if !value {
+                self.lists.founded.record_false(node);
+            }
             // A false output-only atom removes only itself from the old upper
             // closure. Every included occurrence conservatively invalidates,
             // including an occurrence already blocked before this atom event.
@@ -2013,7 +2027,12 @@ impl<C: Count> Closure<'_, C> {
             } else if let Some(row) = self.lists.next_residual() {
                 debug_assert!(frozen.is_none(), "only original rows check residual sums");
                 statistics.propagations += 1;
-                self.threshold_residual(index, row, work)?
+                let step = self.threshold_residual(index, row, work)?;
+                if step == Step::Unchanged {
+                    self.threshold_possible_sums(index, row, work)?
+                } else {
+                    step
+                }
             } else if let Some(producers) = producers {
                 debug_assert!(frozen.is_none(), "only original subjects have producers");
                 let before = work.spent;
@@ -2274,6 +2293,13 @@ impl<C: Count> Closure<'_, C> {
             }
             step = step.join(if let Some(chain) = index.chain_of[parent] {
                 let chain = chain_position(chain);
+                // A processed absorbing operand already settled this root.
+                // Its neutral count and witness notices cannot teach anything
+                // further. Keep this parent visit and every other event: node
+                // truth, support wakeups and split ranking remain independent.
+                if bit(self.known.witnessed, chain) {
+                    continue;
+                }
                 let step = self.operand_changed(index, chain, value, work)?;
                 // An absorbing operand supplies a witness and settles its root.
                 // Neither relay nor an expanded unit obligation remains.

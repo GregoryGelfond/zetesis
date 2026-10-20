@@ -35,11 +35,15 @@
 //! incidence-index construction. A refused build clears owner authority; retry
 //! conservatively repeats body preparation before another attempt. Reused preparation
 //! also records each selected node's immutable initial role. Counters precede
-//! relaxed seeds in that plan: reset all counters, then initialize each seed and
+//! relaxed seeds in the full-replay plan: reset all counters, then initialize each seed and
 //! immediately replay its outgoing rows without enqueueing the seed itself.
 //! This retains the same closure; seeds have no incoming relaxed dependency.
-//! Newly derived nodes and atoms still use the ordinary queue. Every pass applies
+//! Newly derived nodes and atoms still use the ordinary queue. Full replay applies
 //! current node/atom masks to those roles; no prior closure truth is reused.
+//! Below inherited completed knowledge, the first invalidated pass may instead
+//! recompute affected heads with every incoming producer body and unaffected
+//! boundary seeds. `local` states the selection, initialization and failure
+//! obligations; both routes use the same event engine and publish a complete mask.
 //!
 //! One pass reuses the original atom/node and producer body/head rows. Once
 //! prepared, its parent rows retain only included, nonabsorbed Boolean destinations,
@@ -104,6 +108,7 @@ use zetesis_cpu::Stop;
 mod components;
 pub(super) mod explanations;
 mod initialization;
+mod local;
 pub(super) mod ledger;
 mod projection;
 
@@ -128,6 +133,7 @@ enum State {
 /// original node IDs and carry no inherited region knowledge or second theory.
 #[derive(Debug, Default)]
 pub(super) struct Scratch {
+    local: local::Replay,
     states: Vec<State>,
     atoms: Vec<u64>,
     /// Exact positive cyclic heads; immutable under the prepared owner.
@@ -149,7 +155,8 @@ pub(super) struct Scratch {
 
 impl Scratch {
     pub(super) fn retained_bytes(&self) -> u128 {
-        self.states.capacity() as u128 * size_of::<State>() as u128
+        self.local.retained_bytes()
+            + self.states.capacity() as u128 * size_of::<State>() as u128
             + (self.atoms.capacity() + self.cyclic_atoms.capacity()) as u128
                 * size_of::<u64>() as u128
             + (self.queue.capacity() as u128
@@ -351,6 +358,10 @@ impl Scratch {
         {
             self.passes += 1;
         }
+        if self.complete_local(theory, index, producers, never, atom_never, work)? {
+            return Ok(());
+        }
+        self.local.clear(work)?;
         self.prepare_bodies(theory, index, producers, work)?;
         self.initialize(theory, index, never, atom_never, work)?;
         if let Some(projected) = &self.projected {
@@ -396,7 +407,7 @@ impl Scratch {
                 };
                 if matches!(state, State::True | State::Awaiting(0)) {
                     self.states[node] = State::True;
-                    self.propagate_node(index, producers, node, atoms, atom_never, work)?;
+                    self.propagate_node::<false>(index, producers, node, atoms, atom_never, work)?;
                 } else {
                     self.states[node] = state;
                 }
@@ -415,14 +426,21 @@ impl Scratch {
                 }
                 continue;
             }
-            self.propagate_node(index, producers, vertex - atoms, atoms, atom_never, work)?;
+            self.propagate_node::<false>(
+                index,
+                producers,
+                vertex - atoms,
+                atoms,
+                atom_never,
+                work,
+            )?;
         }
         Ok(())
     }
 
     /// Replay the same original or projected incidences for a newly true node,
     /// whether it came from a seed or from the ordinary closure queue.
-    fn propagate_node(
+    fn propagate_node<const LOCAL: bool>(
         &mut self,
         index: &Narrower,
         producers: &Producers,
@@ -437,6 +455,9 @@ impl Scratch {
             .map_or(&index.parents, |projected| &projected.parents);
         for &parent in &parents[node] {
             work.tick()?;
+            if LOCAL && !self.local.body(parent) {
+                continue;
+            }
             match self.states[parent] {
                 State::Awaiting(1) => {
                     activate_node(&mut self.states, &mut self.queue, parent, atoms, work)?;
@@ -451,6 +472,9 @@ impl Scratch {
         if let Some(projected) = &self.projected {
             for &head in &projected.heads[node] {
                 work.tick()?;
+                if LOCAL && !self.local.head(head) {
+                    continue;
+                }
                 activate_atom(
                     &mut self.atoms,
                     &self.cyclic_atoms,
@@ -461,6 +485,9 @@ impl Scratch {
                 )?;
             }
         } else {
+            if LOCAL {
+                return Err(Stop::InvalidProgram);
+            }
             for &producer in &producers.by_body[node] {
                 work.tick()?;
                 for &head in &producers.rules[producer].heads {
@@ -493,7 +520,22 @@ impl Scratch {
             if self.projected.is_none() {
                 // No partial construction may retain body-projection authority.
                 self.owner = None;
-                self.projected = Some(Projection::prepare(theory, index, producers, self, work)?);
+                let projected = Projection::prepare(theory, index, producers, self, work)?;
+                // Publish all owner-bound buffers together. A refused build
+                // leaves every previously retained capacity unchanged. During
+                // construction both old membership and this fresh membership
+                // coexist, just as local incidence buffers do before commit.
+                let mut local = local::Replay::default();
+                local.prepare(
+                    theory.atom_count(),
+                    theory.nodes().len(),
+                    self.body_nodes.len(),
+                    &self.cyclic_atoms,
+                    work,
+                )?;
+                reserve(&mut self.queue, self.body_nodes.len())?;
+                self.local = local;
+                self.projected = Some(projected);
                 self.owner = Some(theory.clone());
             }
             return Ok(());

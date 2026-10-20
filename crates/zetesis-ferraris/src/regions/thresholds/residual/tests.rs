@@ -163,19 +163,22 @@ fn gcd_one_does_not_claim_attainability() {
     let terms = [(0, 6), (1, 10), (2, 15), (3, 7)];
     let theory = interval(4, &terms, [18, 19]);
     let index = Narrower::new(&theory);
-    let mut region = Region::all_open(4);
-    assert_ne!(
-        close(
-            &theory,
-            &index,
-            &mut region,
-            &mut index.knowledge(),
-            &mut NarrowingScratch::default()
-        )
-        .0,
-        Narrowing::Refuted,
-    );
-    assert!((0..4).all(|atom| region.is_open(atom)));
+    let mut knowledge = index.knowledge();
+    let Width::Compact16(known) = &mut knowledge.width else {
+        unreachable!()
+    };
+    // Neither interval nor single-coefficient propagation decides a condition.
+    // Isolate the lattice check: a later possible-sum reduction may refute.
+    known.thresholds[0].lower = 18;
+    known.thresholds[0].upper = Some(19);
+    assert!(matches!(
+        Closure {
+            known: known.borrow(),
+            lists: &mut NarrowingScratch::default(),
+        }
+        .threshold_residual(&index, 0, &mut Work::new(u64::MAX)),
+        Ok(Step::Unchanged)
+    ));
     // No subset makes 18; every complement gcd is one, so this hole remains.
     assert!((0..16).all(|mask| {
         terms
@@ -476,6 +479,7 @@ fn unit_rows_do_not_allocate_residual_queue() {
     assert_eq!(scratch.pending_residuals.capacity(), 0);
     assert_eq!(scratch.residual_rows.capacity(), 0);
     assert_eq!(scratch.residual_suffix.capacity(), 0);
+    assert_eq!(scratch.possible_sums.capacity(), 0);
 }
 
 #[test]
@@ -632,6 +636,7 @@ fn frozen_subjects_do_not_run_residual_checks() {
             assert_eq!(scratch.pending_residuals.capacity(), 0);
             assert_eq!(scratch.residual_rows.capacity(), 0);
             assert_eq!(scratch.residual_suffix.capacity(), 0);
+            assert_eq!(scratch.possible_sums.capacity(), 0);
         }
     }
 }

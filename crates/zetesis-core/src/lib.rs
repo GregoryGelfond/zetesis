@@ -36,6 +36,7 @@ mod candidate;
 mod model;
 pub mod catalog;
 pub mod retention;
+pub mod packed;
 mod identity;
 mod ordered_index;
 mod atom_lookup;

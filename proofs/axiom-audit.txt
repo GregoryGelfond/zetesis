@@ -11,6 +11,9 @@
 'Zetesis.AggregateAssignment.unique_length_le' depends on axioms: [propext, Quot.sound]
 'Zetesis.AggregateAssignment.selected_sum_update' depends on axioms: [propext, Quot.sound]
 'Zetesis.AggregateAssignment.selected_sum_is_candidate' depends on axioms: [propext, Quot.sound]
+'Zetesis.AggregateAssignment.selected_sum_nonnegative' depends on axioms: [propext, Quot.sound]
+'Zetesis.AggregateAssignment.bounded_selected_sum_is_candidate' depends on axioms: [propext, Quot.sound]
+'Zetesis.AggregateAssignment.bounded_sum_interval_refuted' depends on axioms: [propext, Quot.sound]
 'Zetesis.AggregateAssignment.subset_sums_nodup' depends on axioms: [propext]
 'Zetesis.AggregateAssignment.subset_sums_length_le_pow' depends on axioms: [propext, Quot.sound]
 'Zetesis.AggregateAssignment.perm_weighted_sum' depends on axioms: [propext]
@@ -712,6 +715,8 @@
 'Zetesis.FormulaBounds.ChainEvidence.record_counts' depends on axioms: [propext, Quot.sound]
 'Zetesis.FormulaBounds.ChainEvidence.records_counts' depends on axioms: [propext, Quot.sound]
 'Zetesis.FormulaBounds.ChainEvidence.propagation_observations' depends on axioms: [propext, Quot.sound]
+'Zetesis.FormulaBounds.ChainEvidence.settled_record_observations' does not depend on any axioms
+'Zetesis.FormulaBounds.ChainEvidence.settled_records_observations' depends on axioms: [propext]
 'Zetesis.FormulaRegions.classical_consequence_forces' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FormulaRegions.classical_consequence_cuts' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.FormulaRegions.no_model_refutes' depends on axioms: [propext, Classical.choice, Quot.sound]
@@ -1224,6 +1229,7 @@
 'Zetesis.PossibleFoundedness.choice_intersection' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PossibleFoundedness.intersection_models_reduct' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PossibleFoundedness.stable_sub_possible' depends on axioms: [propext, Classical.choice, Quot.sound]
+'Zetesis.PossibleFoundedness.stable_sub_locally_closed' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PossibleFoundedness.conditional_unsupported_absent' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.PossibleFoundedness.conditional_unsupported_forces_complement' depends on axioms: [propext,
  Classical.choice,

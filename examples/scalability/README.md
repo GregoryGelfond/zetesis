@@ -59,6 +59,11 @@ flushes and runs through the existing explicit workload matrix, with fresh cling
 qualification. It is selected separately and does not change either default
 suite population.
 
+The [shifted-weight subset-sum workload](shifted-subset-sum/README.md) adds a
+complete unsatisfiable sum and nearby unique-answer controls. It uses the same
+explicit workload matrix and fresh clingo qualification without changing either
+default population.
+
 ## Run an example
 
 From the repository root, using the installed solver:

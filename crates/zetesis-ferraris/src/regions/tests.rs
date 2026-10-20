@@ -29,9 +29,10 @@ mod implications;
 mod masks;
 mod metering;
 mod preference;
-mod secondary_preference;
 mod rechecks;
 mod scratch;
+mod secondary_preference;
+mod settled;
 mod units;
 
 /// A held root forces a chain of implications `a0 → a1 → … → a{n-1}`, so the

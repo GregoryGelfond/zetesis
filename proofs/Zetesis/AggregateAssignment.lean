@@ -132,6 +132,90 @@ theorem selected_sum_is_candidate (weights : List Int) (selected : Nat → Bool)
       apply List.mem_map.mpr
       exact ⟨_, tail, by simp [selectedSum, truth]⟩
 
+/-- The sum of selected nonnegative contributions is nonnegative. Correlated
+    selections and repeated weights are permitted. -/
+theorem selected_sum_nonnegative (weights : List Int) (selected : Nat → Bool)
+    (nonnegative : ∀ weight ∈ weights, 0 ≤ weight) :
+    0 ≤ selectedSum weights selected := by
+  induction weights generalizing selected with
+  | nil => simp [selectedSum]
+  | cons weight rest induction =>
+    have head_nonnegative : 0 ≤ weight := nonnegative weight (by simp)
+    have tail_nonnegative : 0 ≤ selectedSum rest (fun index => selected (index + 1)) :=
+      induction (fun index => selected (index + 1))
+        (fun value member => nonnegative value (List.mem_cons_of_mem weight member))
+    cases truth : selected 0 <;> simp [selectedSum, truth] <;> omega
+
+/-- Include/exclude reduction retaining only sums at most the supplied ceiling.
+    This finite mathematical list may contain duplicates. A packed set is an
+    implementation of its membership, not of its order or multiplicity. -/
+def boundedSums (maximum : Int) : List Int → List Int
+  | [] => if 0 ≤ maximum then [0] else []
+  | weight :: rest =>
+      let previous := boundedSums maximum rest
+      previous ++ (previous.map (fun value => weight + value)).filter
+        (fun value => decide (value ≤ maximum))
+
+/-- Truncating each reduction preserves every selected sum below the ceiling
+    when all contributions are nonnegative. The tail cannot exceed the complete
+    selected sum, so induction may retain it before adding the head.
+
+    This is coverage, not a claim that every independent selection corresponds
+    to a possible interpretation of correlated condition formulas. -/
+theorem bounded_selected_sum_is_candidate (weights : List Int)
+    (selected : Nat → Bool) (maximum : Int)
+    (nonnegative : ∀ weight ∈ weights, 0 ≤ weight)
+    (fits : selectedSum weights selected ≤ maximum) :
+    selectedSum weights selected ∈ boundedSums maximum weights := by
+  induction weights generalizing selected with
+  | nil =>
+    have zero_fits : 0 ≤ maximum := by simpa [selectedSum] using fits
+    simp [boundedSums, selectedSum, zero_fits]
+  | cons weight rest induction =>
+    have head_nonnegative : 0 ≤ weight := nonnegative weight (by simp)
+    have tail_nonnegative : ∀ value ∈ rest, 0 ≤ value :=
+      fun value member => nonnegative value (List.mem_cons_of_mem weight member)
+    have tail_fits : selectedSum rest (fun index => selected (index + 1)) ≤ maximum := by
+      cases truth : selected 0 <;> simp [selectedSum, truth] at fits <;> omega
+    have tail_member :
+        selectedSum rest (fun index => selected (index + 1)) ∈ boundedSums maximum rest :=
+      induction (fun index => selected (index + 1)) tail_nonnegative tail_fits
+    rw [boundedSums, List.mem_append]
+    cases truth : selected 0 with
+    | false =>
+      exact Or.inl (by simpa [selectedSum, truth] using tail_member)
+    | true =>
+      apply Or.inr
+      apply List.mem_filter.mpr
+      constructor
+      · apply List.mem_map.mpr
+        exact ⟨_, tail_member, by simp [selectedSum, truth]⟩
+      · exact decide_eq_true fits
+
+/-- If the bounded possible-sum set misses the required interval after adding
+    the known contribution, no represented selection satisfies that interval.
+    Applying this to an ASP region requires a complete list of its undecided
+    contributions and the known-plus-undecided sum correspondence.
+
+    Proof: a satisfying selection fits below the exclusive upper endpoint.
+    Bounded coverage places its residual sum in the tested set, contradicting
+    the missing-interval hypothesis. Rust word operations, row grouping,
+    cancellation and optional-work admission remain separate obligations. -/
+theorem bounded_sum_interval_refuted (weights : List Int) (selected : Nat → Bool)
+    (known lower upper : Int)
+    (nonnegative : ∀ weight ∈ weights, 0 ≤ weight)
+    (misses : ∀ value ∈ boundedSums (upper - known - 1) weights,
+      ¬ (lower ≤ known + value ∧ known + value < upper)) :
+    ¬ (lower ≤ known + selectedSum weights selected ∧
+      known + selectedSum weights selected < upper) := by
+  intro inside
+  have fits : selectedSum weights selected ≤ upper - known - 1 := by omega
+  have represented :
+      selectedSum weights selected ∈ boundedSums (upper - known - 1) weights :=
+    bounded_selected_sum_is_candidate weights selected (upper - known - 1) nonnegative fits
+  exact misses (selectedSum weights selected) represented inside
+
+
 /-- Every candidate row is a set of numerical values, not a multiset of witnesses. -/
 theorem subset_sums_nodup (weights : List Int) : (subsetSums weights).Nodup := by
   cases weights with

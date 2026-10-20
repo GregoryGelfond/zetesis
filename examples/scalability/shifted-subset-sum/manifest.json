@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "root": ".",
+  "cases": [
+    {
+      "entry": "subset_sum.lp",
+      "contract": {
+        "satisfiability": "unsat",
+        "family": "all",
+        "model_count": 0,
+        "cost": null,
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "At n=8 the weights are 9..16. No singleton reaches 17 and the smallest pair weighs 19.",
+          "More generally target=2*n+1 is unattainable; target=2*n+3 selects exactly items 1 and 2 for n>=2."
+        ]
+      },
+      "files": [
+        {
+          "path": "subset_sum.lp",
+          "sha256": "366ed74d26e462b7f1fc02fc73bf4891daa1843b71a7351b01c8e5c137e627de",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}

@@ -23,6 +23,7 @@ mod incremental_tests;
 mod prefixes;
 mod propagate;
 mod residual;
+mod possible_sums;
 
 #[derive(Clone, Debug)]
 pub(super) struct Thresholds {

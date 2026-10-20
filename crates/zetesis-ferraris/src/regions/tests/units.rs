@@ -623,7 +623,9 @@ fn witnessed_units_keep_the_node_and_parent_permits() {
                     }
                 }
                 if limit == 2 {
-                    expected_known.neutral_operands.add(0, 1);
+                    // The parent read still occurs, but its processed witness
+                    // makes another neutral-count update irrelevant.
+                    assert_eq!(expected_known.neutral_operands.get(0), 2);
                     assert!(matches!(result, Ok(Step::Changed)));
                 } else {
                     assert!(result == Err(stop));

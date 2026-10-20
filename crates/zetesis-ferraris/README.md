@@ -239,15 +239,27 @@ lattice tests would yield no deduction, avoiding their preparation. This does
 not establish an attainable sum. New decisions return through ordinary
 propagation before the next arithmetic check; this does not replace answer-set
 membership.
+When lattice reasoning leaves the row unchanged, a bounded packed reduction can
+also exclude an interval containing no subset sum of its open nonnegative
+contributions. Correlated conditions only reduce the possible selections, so an
+intersection does not establish a model. The mask and optional work are bounded
+by the grouped row's payload; declining loses only this pruning. Allocation and
+global interruption remain typed failures. The reduction reuses the same
+`zetesis_core::packed::union_shifted` primitive as source assignment sums, and
+worker scratch retains capacity without carrying truth into another region.
 A `Narrower` indexes the theory once
 and narrows any region of it, the root from knowledge of nothing and a child
 from its parent's knowledge. The index
 reads each maximal tree of one connective, a clause or a body, as one node
 over its operands, a *chain*, when its inner nodes have that one parent and
-are not roots. Per chain, the closure keeps one exact neutral-operand count
+are not roots. Per chain, the closure keeps one neutral-operand count
 and one packed witness bit: failing operands and a holding witness for a
 disjunction, holding operands and a failing witness for a conjunction.
 These record processed events; a node's truth bit can precede its event.
+The neutral count is exact until a processed witness settles the chain. Later
+operand events still visit that parent but omit redundant counter updates and
+witness notices. The original node events, other parents, support wakeups and
+split ranking remain active.
 The closure applies the n-ary rules, a disjunction sure
 with one operand and impossible with all, forcing its one open operand when
 sure, and the duals for a conjunction (`FormulaChains`). Propagating a new
@@ -286,6 +298,16 @@ history with `decided()`'s ascending `(atom, value)` pairs, and `split` consumes
 its parent. `snapshot_decided` copies only the available destination prefix;
 the narrower supplies all `region.len().div_ceil(64)` words.
 
+With complete producers, possible-foundedness additionally excludes unseeded
+positive cycles. Below inherited completed knowledge, its first invalidated pass
+can recompute affected cyclic heads using every incoming producer body and safe
+unaffected seeds. The exact original owner authorizes only immutable preparation;
+worker membership and queues carry no ancestor body truth or extra per-region
+state. Full replay remains the fallback, and incomplete attempts return typed
+failures. See the [execution contract](../../docs/book/architecture/execution.md)
+and [proof boundary](../../docs/book/lean/correspondence.md) for the complete-result,
+resource and correspondence obligations.
+
 Every narrowing entry point takes what it reads, an `OriginalSubject` (the
 theory and, when the support cut applies, its producers) or a `FrozenSubject`
 (the theory and a candidate's node truth), then the region, its knowledge and
@@ -318,7 +340,7 @@ atom. The latter includes every parent occurrence of every node carrying that
 atom; distinct nodes contribute separately even when they share a parent.
 The smallest suitable width is selected once: `u16`, then `u32`, if narrower
 than `usize`, otherwise `usize`. Checked additions and decrements preserve the
-exact count; width never changes while propagating. Large theories can therefore
+live counter meanings; width never changes while propagating. Large theories can therefore
 use narrow cells when their individual counts fit. This adds no theory-size
 admission cap and does not narrow cumulative work statistics. Knowledge clones
 retain independent arrays, with unchanged original/frozen ownership requirements.
@@ -340,8 +362,9 @@ All count reads and updates retain the same charged propagation operations;
 storage initialization and copying remain outside that work receipt. Existing
 knowledge allocation behavior remains infallible.
 
-The processed-event representation preserves the two-count rules: the neutral
-count is exact and the witness is equivalent to a positive absorbing count.
+The processed-event representation preserves the two-count rules until an
+absorbing operand has been processed. Its witness then settles the chain, so
+later notifications leave the now-irrelevant neutral count unchanged.
 Chain formation coalesces repeated identical node leaves, while distinct nodes
 denoting the same atom remain separate operand events. Frozen-mask exclusion,
 contradiction stopping, ordered unit scans and split ranking are unchanged.

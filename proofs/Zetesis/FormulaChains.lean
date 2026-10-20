@@ -15,7 +15,10 @@ count of processed neutral operands and only the existence of a processed
 absorbing operand: false is neutral for disjunction, true for conjunction.
 `ChainEvidence.record_counts` and `records_counts` show that this smaller
 accumulator preserves the information read from two exact counts. Pending
-operand notifications are not processed evidence.
+operand notifications are not processed evidence. After an absorbing witness,
+`settled_record_observations` and `settled_records_observations` show that further
+notifications may leave the accumulator unchanged: its root has already been
+settled, and neither an all-neutral nor a unit obligation remains.
 
 A chain is any tree of one connective whose leaves are arbitrary formulas; the
 leaves are listed left to right, one per operand position, so a formula
@@ -252,6 +255,70 @@ theorem propagation_observations (neutral absorbing arity : Nat) :
       ((evidence.absorbing = false ∧ evidence.neutral + 1 = arity) ↔
         (absorbing = 0 ∧ neutral + 1 = arity)) := by
   simp [ofCounts]
+
+/-- The three observations still relevant to a consistent chain. A processed
+absorbing witness settles its root; only an unwitnessed chain needs its exact
+neutral count to detect an all-neutral result or a possible unit obligation.
+Root consistency and processed-event validity are caller premises. -/
+def observations (evidence : ChainEvidence) (arity : Nat) : Bool × Bool × Bool :=
+  if evidence.absorbing then (true, false, false)
+  else (false, evidence.neutral == arity, evidence.neutral + 1 == arity)
+
+/-- Process notifications only until the first absorbing witness. The retained
+neutral count is exact before that witness, and irrelevant afterwards. -/
+def recordSettled (evidence : ChainEvidence) (event : Bool) : ChainEvidence :=
+  if evidence.absorbing then evidence else evidence.record event
+
+/-- Ignoring a notification after an absorbing witness preserves every remaining
+chain observation. Before the witness both accumulators take the same step;
+afterwards both report a settled root, with no neutral or unit obligation. -/
+theorem settled_record_observations (evidence : ChainEvidence)
+    (event : Bool) (arity : Nat) :
+    (evidence.recordSettled event).observations arity =
+      (evidence.record event).observations arity := by
+  cases evidence with
+  | mk neutral absorbing =>
+    cases absorbing <;> cases event <;> rfl
+
+/-- Ignoring all notifications after the first absorbing witness preserves the
+remaining observations after any finite sequence. The proof separates a still
+unwitnessed prefix, whose next transition is identical, from a witnessed suffix,
+whose remaining counters cannot affect its already settled root. This is not a
+claim that their final neutral counts are equal. -/
+theorem settled_records_observations (events : List Bool)
+    (evidence : ChainEvidence) (arity : Nat) :
+    (events.foldl recordSettled evidence).observations arity =
+      (events.foldl record evidence).observations arity := by
+  have retained : ∀ (tail : List Bool) (state : ChainEvidence),
+      state.absorbing = true → tail.foldl recordSettled state = state := by
+    intro tail
+    induction tail with
+    | nil => intro state _; rfl
+    | cons event rest ih =>
+      intro state witnessed
+      simpa [List.foldl_cons, recordSettled, witnessed] using ih state witnessed
+  have witnessed : ∀ (tail : List Bool) (state : ChainEvidence),
+      state.absorbing = true → (tail.foldl record state).absorbing = true := by
+    intro tail
+    induction tail with
+    | nil => intro state held; exact held
+    | cons event rest ih =>
+      intro state held
+      apply ih (state.record event)
+      cases event <;> simp [record, held]
+  induction events generalizing evidence with
+  | nil => rfl
+  | cons event rest ih =>
+    cases held : evidence.absorbing with
+    | false =>
+      simpa [List.foldl_cons, recordSettled, held] using ih (evidence.record event)
+    | true =>
+      have unchanged := retained (event :: rest) evidence held
+      have stillWitnessed := witnessed (event :: rest) evidence held
+      rw [unchanged]
+      unfold observations
+      rw [held, stillWitnessed]
+      rfl
 
 end ChainEvidence
 
