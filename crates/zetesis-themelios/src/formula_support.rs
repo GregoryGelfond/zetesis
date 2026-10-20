@@ -1776,6 +1776,11 @@ impl<'a, 'source> Join<'a, 'source> {
         Ok(join)
     }
 
+    /// Build a component cursor with fixed head values and unrelated slots excluded.
+    /// `used` lists the component's variable slots in sorted, duplicate-free order.
+    /// Every bound fixed slot is copied, even if this component does not read it.
+    /// This execution state certifies neither body truth nor arithmetic totality
+    /// across the complete head carrier.
     pub(super) fn component(
         literals: &'a [LiteralIr],
         variables: usize,

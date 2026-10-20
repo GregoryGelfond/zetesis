@@ -237,7 +237,7 @@ fn short_rows_need_no_progress_allocation() {
             .unwrap();
         assert!(matches!(
             (length, result),
-            (0, Support::Unavailable) | (1, Support::Sole(Some(1))) | (2, Support::Sufficient)
+            (0, Support::Unavailable) | (1, Support::Sole(Some(1))) | (2, Support::Possible)
         ));
         assert_eq!(progress, Progress::Vacant);
         assert_eq!(progress.allocated_bytes(), 0);
@@ -256,7 +256,7 @@ fn compact_and_native_positions_preserve_the_same_scan() {
         let mut work = Work::new(5);
         assert!(matches!(
             progress.check(&producers, 0, true, &[0b01110], &[1], &mut work),
-            Ok(Support::Sufficient)
+            Ok(Support::Possible)
         ));
         assert_eq!(work.spent, 5);
         let mut work = Work::new(2);

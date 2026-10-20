@@ -49,7 +49,7 @@ use zetesis_cpu::Stop;
 
 use crate::regions::{Chain, Closure, Count, Narrower, Step, Work, bit, chain_position};
 
-use super::{Adjacency, Row, State, Thresholds, reserve};
+use super::{Adjacency, Row, State, reserve};
 
 #[cfg(test)]
 mod anchors_tests;
@@ -102,7 +102,7 @@ impl Connectives {
         let row_postings = Adjacency::build(
             anchors.len(),
             rows.iter().enumerate().filter_map(|(row, data)| {
-                unit_first(data).map(|first| {
+                data.unit_first().map(|first| {
                     let anchor = anchors.binary_search(&first).expect("prepared row anchor");
                     (anchor, row)
                 })
@@ -192,9 +192,9 @@ fn anchored_cones(
 /// Allocate only after finding a native unit row. Sorting and deduplication
 /// retain one key per distinct anchor; the allocation is bounded by unit rows.
 fn anchor_keys(rows: &[Row]) -> Result<Vec<usize>, Stop> {
-    let count = rows.iter().filter(|row| unit_first(row).is_some()).count();
+    let count = rows.iter().filter(|row| row.unit_first().is_some()).count();
     let mut anchors = reserve(count)?;
-    anchors.extend(rows.iter().filter_map(unit_first));
+    anchors.extend(rows.iter().filter_map(Row::unit_first));
     anchors.sort_unstable();
     anchors.dedup();
     Ok(anchors)
@@ -240,13 +240,6 @@ fn find<T>(
         }
     }
     Ok(None)
-}
-
-fn unit_first(row: &Row) -> Option<usize> {
-    let &(first, 1) = row.terms.first()? else {
-        return None;
-    };
-    Some(first)
 }
 
 /// Authenticate the shorter canonical row without reordering borrowed leaves.
@@ -328,16 +321,6 @@ fn useful_bound(state: &State, value: bool, bound: i128) -> bool {
         state.lower < bound
     } else {
         state.upper.is_none_or(|upper| bound < upper)
-    }
-}
-
-impl Thresholds {
-    pub(super) fn has_requirement_links(&self, row: usize) -> bool {
-        self.capacity
-            .as_ref()
-            .is_some_and(|capacity| capacity.has_row(row))
-            || !self.related(row).is_empty()
-            || (self.connectives.is_some() && unit_first(&self.rows[row]).is_some())
     }
 }
 
@@ -479,7 +462,7 @@ impl<C: Count> Closure<'_, C> {
             return Ok(step);
         };
         let data = &index.thresholds.rows[row];
-        let Some(first) = unit_first(data) else {
+        let Some(first) = data.unit_first() else {
             return Ok(step);
         };
         let source = self.known.thresholds[row];

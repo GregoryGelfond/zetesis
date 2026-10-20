@@ -240,10 +240,11 @@ fn factored_cartesian_bodies_visit_only_component_rows() {
     )
     .unwrap();
     // Canonical compilation and final publication also consume global work.
-    // Count the actual factorized route: two 40-row components, rather than
-    // the 40 + 40*40 row visits of a complete Cartesian join. The compact root
-    // ceiling independently prevents publishing that Cartesian formula family.
-    assert_eq!(visits.0.get(), 40 + 40);
+    // Each component supplies one witness before emission can name any atoms.
+    // Full emission then visits the two 40-row components, rather than the
+    // 40 + 40*40 rows of a Cartesian join. The compact root ceiling independently
+    // prevents publishing that Cartesian formula family.
+    assert_eq!(visits.0.get(), 2 + 40 + 40);
     assert_eq!(stable(&admitted), stable(&formula("a(1..40).b(1..40).h.")));
 }
 

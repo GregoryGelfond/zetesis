@@ -18,8 +18,8 @@
 //! is linear in row offsets, retained intersections and their distinct conditions.
 //! A dense incidence join can still produce a dense projection. Each
 //! dirty row scans its intersections, stopping a condition scan once the bound
-//! is exceeded. All runtime visits are charged and cancellable. Original-only
-//! row notifications are coalesced by the existing queue.
+//! is reached or exceeded. All runtime visits are charged and cancellable.
+//! Original-only row notifications are coalesced by the existing queue.
 
 use crate::regions::{Chain, Closure, Count, Narrower, Step, Work, bit};
 use crate::{NodeView, Theory};
@@ -127,7 +127,7 @@ impl Capacity {
 fn eligible(row: &Row) -> bool {
     // Terms are distinct and sorted by descending weight. A singleton cannot
     // supply the two necessary contributions retained by this projection.
-    row.terms.len() >= 2 && row.terms.first().is_some_and(|&(_, weight)| weight == 1)
+    row.terms.len() >= 2 && row.unit_first().is_some()
 }
 
 fn push<T>(values: &mut Vec<T>, value: T) -> Result<(), Stop> {

@@ -111,6 +111,15 @@ impl Row {
         self.terms.first().is_some_and(|&(_, weight)| weight > 1)
     }
 
+    /// Least condition of a nonempty unit row. Descending positive weights
+    /// make the first coefficient sufficient to recognize the whole row.
+    fn unit_first(&self) -> Option<usize> {
+        let &(first, 1) = self.terms.first()? else {
+            return None;
+        };
+        Some(first)
+    }
+
     fn state(&self) -> State {
         State {
             known: 0,
@@ -248,6 +257,14 @@ impl Thresholds {
 
     pub(super) fn has_relations(&self) -> bool {
         self.relations.is_some() || self.connectives.is_some() || self.capacity.is_some()
+    }
+
+    pub(super) fn has_requirement_links(&self, row: usize) -> bool {
+        self.capacity
+            .as_ref()
+            .is_some_and(|capacity| capacity.has_row(row))
+            || !self.related(row).is_empty()
+            || (self.connectives.is_some() && self.rows[row].unit_first().is_some())
     }
 
     pub(super) fn has_residuals(&self) -> bool {

@@ -105,8 +105,8 @@ fn a_long_source_operand_keeps_the_general_evaluator() {
 
 #[test]
 fn factored_components_decide_their_copied_comparisons() {
-    // Factoring admits comparisons of variables and constants; arithmetic
-    // expressions retain the complete join and would not test copied forms.
+    // Variable/constant comparisons exercise the copied component forms
+    // without needing the separate fixed-head arithmetic certificate.
     let source = "a(1..2). b(1..2). h :- a(X), X<3, b(Y), Y<3.";
     let observer = Observer::default();
     let admitted = compile(source, &FormulaLimits::default(), Some(&observer)).unwrap();
@@ -118,10 +118,11 @@ fn factored_components_decide_their_copied_comparisons() {
             .map(|record| field(record).unwrap())
             .sum()
     };
-    // Two two-row components, rather than the six visits of a Cartesian join.
-    // Only final instantiation can count the copies, not support production.
-    assert_eq!(total(|record| record.work.join_rows), 4);
-    assert_eq!(total(|record| record.work.integer_comparisons), 4);
+    // One witness per component establishes existence before either publishes
+    // atoms. Full emission then visits both two-row components. Every selected
+    // row uses its copied integer comparison, including the existence checks.
+    assert_eq!(total(|record| record.work.join_rows), 2 + 4);
+    assert_eq!(total(|record| record.work.integer_comparisons), 2 + 4);
     assert_eq!(total(|record| record.work.integer_comparison_declines), 0);
     assert_eq!(
         exhaustive(&admitted),

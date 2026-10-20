@@ -2673,7 +2673,7 @@ impl<C: Count> Closure<'_, C> {
         Ok(match support {
             support::Support::Unavailable => self.atom(index, Some(producers), None, atom, false),
             support::Support::Sole(Some(body)) if held => self.sure(body),
-            support::Support::Sole(_) | support::Support::Sufficient => Step::Unchanged,
+            support::Support::Sole(_) | support::Support::Possible => Step::Unchanged,
         })
     }
 }

@@ -4,9 +4,10 @@
 //! ordinary head is held. Neither condition can disappear in a descendant.
 //! Two positions retain exactly that eliminated coverage: everything before
 //! `first`, and strictly between `first` and `second`, is unavailable. Endpoints
-//! are rechecked against current knowledge; an open head needs one witness, a
-//! held head two. When `first` fails it can jump to `second`. Reaching the end
-//! proves zero or sole support only after every omitted position was checked.
+//! are rechecked against current knowledge. One possible producer ends the scan
+//! for an open head; two end it for a held head without forcing a sole body.
+//! When `first` fails it can jump to `second`. Reaching the end proves zero or
+//! sole support only after every omitted position was checked.
 //!
 //! The positions are part of Knowledge, never worker scratch. Independent
 //! clones preserve sibling isolation; `clone_from` restores the source's complete
@@ -38,7 +39,9 @@ mod tests;
 pub(super) enum Support {
     Unavailable,
     Sole(Option<usize>),
-    Sufficient,
+    /// Enough possible producers remain to end the scan without forcing truth:
+    /// one for an open head, or two for a held head.
+    Possible,
 }
 
 /// The complete row population bounds both positions, including its end.
@@ -135,7 +138,7 @@ impl Progress {
         Ok(match sole {
             Outcome::None => Support::Unavailable,
             Outcome::Sole(position) => Support::Sole(producers.rules[rows[position]].body),
-            Outcome::Enough => Support::Sufficient,
+            Outcome::Enough => Support::Possible,
         })
     }
 }

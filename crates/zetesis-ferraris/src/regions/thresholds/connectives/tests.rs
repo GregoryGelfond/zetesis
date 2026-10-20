@@ -345,7 +345,7 @@ fn discovery_authenticates_complete_unit_prefixes() {
     for &(conditions, weights, leaves, expected) in cases {
         let index = prepared(conditions, weights, leaves);
         let matches = index.thresholds.rows.iter().any(|row| {
-            super::unit_first(row).is_some()
+            row.unit_first().is_some()
                 && index.chains.iter().any(|chain| {
                     super::exact_prefix(
                         &row.terms,
@@ -360,7 +360,7 @@ fn discovery_authenticates_complete_unit_prefixes() {
             "conditions={conditions:?}, weights={weights:?}, leaves={leaves:?}"
         );
         for row in &index.thresholds.rows {
-            let Some(first) = super::unit_first(row) else {
+            let Some(first) = row.unit_first() else {
                 continue;
             };
             for chain in &index.chains {

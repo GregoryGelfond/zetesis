@@ -233,7 +233,7 @@ for frozen-reduct narrowing. Recognition is limited to exact prefixes in
 prepared order; other subset relations can remain undiscovered.
 
 A conjunction can also be excluded when its necessary contributions would
-exceed a unit row's exclusive upper bound. Preparation joins conjunction
+reach or exceed a unit row's exclusive upper bound. Preparation joins conjunction
 operands with counted conditions, including aliases established by original
 root implications. It counts distinct conditions once and adds only those not
 already held to the processed held count. Pending truth can weaken that bound;

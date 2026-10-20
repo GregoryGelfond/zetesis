@@ -1,6 +1,9 @@
-//! Existential body components over fixed head bindings in completed support.
-//! Arithmetic must be defined over that complete head carrier before emission;
-//! fixed head assignments remain equalities and local witnesses remain complete.
+//! Formula factoring over completed possible support.
+//!
+//! Independent body components share fixed head bindings; complete positive
+//! witness runs share their common continuations. Independent fixed-input
+//! arithmetic is certified over the complete head carrier before emission.
+//! Both routes retain all witness alternatives and source provenance.
 
 mod arithmetic;
 mod continuations;
@@ -75,7 +78,33 @@ pub(super) fn rule<'source>(
 
 struct Component {
     literals: Vec<LiteralIr>,
+    /// Sorted, distinct slots read by these literals, including fixed head slots.
     used: Vec<usize>,
+}
+
+impl Component {
+    fn join<'a, 'source>(
+        &'a self,
+        builder: &mut Builder<'_, '_, 'source>,
+        rule: &RuleIr,
+        support: &'a Support<'source>,
+        fixed: &Binding<'_>,
+    ) -> Result<Join<'a, 'source>, FormulaFailure> {
+        Join::component(
+            &self.literals,
+            rule.variables,
+            &self.used,
+            fixed,
+            support,
+            builder.budget,
+            Context::new(
+                &*builder.computation,
+                builder.limits,
+                builder.counters,
+                rule.location,
+            ),
+        )
+    }
 }
 
 fn head_binding(
@@ -165,20 +194,7 @@ fn emit<'source>(
     let mut body = VERUM;
     for component in &components.components {
         let mut alternatives = FALSUM;
-        let mut bindings = Join::component(
-            &component.literals,
-            rule.variables,
-            &component.used,
-            fixed,
-            support,
-            builder.budget,
-            Context::new(
-                &*builder.computation,
-                builder.limits,
-                builder.counters,
-                rule.location,
-            ),
-        )?;
+        let mut bindings = component.join(builder, rule, support, fixed)?;
         while let Some(binding) = bindings.next(
             builder.computation,
             builder.limits,
@@ -235,20 +251,7 @@ fn inhabited<'source>(
     fixed: &Binding<'_>,
 ) -> Result<bool, FormulaFailure> {
     for component in &components.components {
-        let mut bindings = Join::component(
-            &component.literals,
-            rule.variables,
-            &component.used,
-            fixed,
-            support,
-            builder.budget,
-            Context::new(
-                &*builder.computation,
-                builder.limits,
-                builder.counters,
-                rule.location,
-            ),
-        )?;
+        let mut bindings = component.join(builder, rule, support, fixed)?;
         if bindings
             .next(
                 builder.computation,
