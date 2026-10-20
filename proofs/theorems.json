@@ -8505,6 +8505,21 @@
     "line": 171
   },
   {
+    "name": "Zetesis.ThresholdResidues.bounded_interval_refuted",
+    "file": "Zetesis/ThresholdResidues.lean",
+    "line": 198
+  },
+  {
+    "name": "Zetesis.ThresholdResidues.condition_required_true_by_residue",
+    "file": "Zetesis/ThresholdResidues.lean",
+    "line": 233
+  },
+  {
+    "name": "Zetesis.ThresholdResidues.condition_required_false_by_residue",
+    "file": "Zetesis/ThresholdResidues.lean",
+    "line": 269
+  },
+  {
     "name": "Zetesis.Thresholds.threshold_query_exact",
     "file": "Zetesis/Thresholds.lean",
     "line": 37

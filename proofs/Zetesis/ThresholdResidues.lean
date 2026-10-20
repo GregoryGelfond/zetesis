@@ -12,7 +12,7 @@ misses the required interval, no compatible reading satisfies the interval.
 The condition formulas may be correlated. The progression contains all possible
 sums; its points need not be realizable. These laws concern original truth and
 do not replace the reduct. Grouping equal conditions, computing the divisor,
-finite-width arithmetic, processed-event snapshots and Rust queue execution
+complement prefix/suffix reduction, finite-width arithmetic, processed-event snapshots and Rust queue execution
 remain separate obligations.
 -/
 
@@ -187,5 +187,113 @@ theorem formula_interval_refuted (M : Atoms α) (conditions : β → Formula α)
     omega
   exact interval_refuted lower upper (active M conditions) inputs divisor low high
     compatible divides excluded ⟨below, above⟩
+
+/-- Intersect the necessary progression with both the required interval and the
+    upper reading. Every compatible sum obeys that finite upper bound, so a
+    progression point outside it cannot rescue a branch. This strengthens the
+    exclusion premise available to a consumer; it does not assert attainability.
+
+    First obtain the exact residue witness. Then enclose the actual sum by the
+    upper mask and contradict the excluded bounded progression point. -/
+theorem bounded_interval_refuted (lower upper actual : β → Bool)
+    (inputs : List (Nat × β)) (divisor low high : Nat)
+    (compatible : Compatible lower upper actual)
+    (divides : ∀ entry ∈ remaining lower upper inputs, divisor ∣ entry.1)
+    (excluded : ∀ remainder : Nat,
+      ¬ (low ≤ maskedSum lower inputs + divisor * remainder ∧
+        maskedSum lower inputs + divisor * remainder < high ∧
+        maskedSum lower inputs + divisor * remainder ≤ maskedSum upper inputs)) :
+    ¬ (low ≤ maskedSum actual inputs ∧ maskedSum actual inputs < high) := by
+  have residue : maskedSum actual inputs = maskedSum lower inputs + divisor *
+      maskedSum actual (ThresholdDivision.divide divisor (remaining lower upper inputs)) :=
+    sum_residue lower upper actual inputs divisor compatible divides
+  have bounded : maskedSum actual inputs ≤ maskedSum upper inputs :=
+    (sum_bounds lower upper actual inputs compatible).2
+  intro within
+  have excludedPoint : ¬ (low ≤ maskedSum lower inputs + divisor *
+      maskedSum actual (ThresholdDivision.divide divisor (remaining lower upper inputs)) ∧
+      maskedSum lower inputs + divisor *
+        maskedSum actual (ThresholdDivision.divide divisor (remaining lower upper inputs)) < high ∧
+      maskedSum lower inputs + divisor *
+        maskedSum actual (ThresholdDivision.divide divisor (remaining lower upper inputs)) ≤
+          maskedSum upper inputs) :=
+    excluded (maskedSum actual (ThresholdDivision.divide divisor (remaining lower upper inputs)))
+  have enclosedInterval : low ≤ maskedSum actual inputs ∧
+      maskedSum actual inputs < high ∧ maskedSum actual inputs ≤ maskedSum upper inputs :=
+    ⟨within.1, within.2, bounded⟩
+  exact excludedPoint (by simpa only [← residue] using enclosedInterval)
+
+/-- If switching one condition off leaves no bounded progression point in the
+    required interval, every satisfying compatible reading makes it true.
+    Assigning that condition affects all its occurrences; the complementary
+    coefficients may still describe correlated formulas.
+
+    Assume the condition false, strengthen the upper reading with that fact,
+    and apply the residual exclusion to the resulting compatible masks. -/
+theorem condition_required_true_by_residue [DecidableEq β]
+    (lower upper actual : β → Bool) (inputs : List (Nat × β))
+    (condition : β) (divisor low high : Nat)
+    (compatible : Compatible lower upper actual)
+    (within : low ≤ maskedSum actual inputs ∧ maskedSum actual inputs < high)
+    (divides : ∀ entry ∈ remaining lower (assign upper condition false) inputs,
+      divisor ∣ entry.1)
+    (excluded : ∀ remainder : Nat,
+      ¬ (low ≤ maskedSum lower inputs + divisor * remainder ∧
+        maskedSum lower inputs + divisor * remainder < high ∧
+        maskedSum lower inputs + divisor * remainder ≤
+          maskedSum (assign upper condition false) inputs)) :
+    actual condition = true := by
+  cases truth : actual condition with
+  | true => rfl
+  | false =>
+    have enclosed : ∀ index, actual index = true →
+        assign upper condition false index = true := by
+      intro index enabled
+      by_cases same : index = condition
+      · subst index
+        simp [truth] at enabled
+      · simpa [assign, same] using compatible.2 index enabled
+    have branchCompatible : Compatible lower (assign upper condition false) actual :=
+      ⟨compatible.1, enclosed⟩
+    have impossible : ¬ (low ≤ maskedSum actual inputs ∧ maskedSum actual inputs < high) :=
+      bounded_interval_refuted lower (assign upper condition false) actual inputs
+        divisor low high branchCompatible divides excluded
+    exact False.elim (impossible within)
+
+/-- If switching one condition on leaves no bounded progression point in the
+    required interval, every satisfying compatible reading makes it false.
+
+    Assuming the condition true strengthens the lower reading. Its complete
+    grouped contribution becomes part of the base; the remaining coefficients
+    supply the complementary progression. The same exclusion law then applies. -/
+theorem condition_required_false_by_residue [DecidableEq β]
+    (lower upper actual : β → Bool) (inputs : List (Nat × β))
+    (condition : β) (divisor low high : Nat)
+    (compatible : Compatible lower upper actual)
+    (within : low ≤ maskedSum actual inputs ∧ maskedSum actual inputs < high)
+    (divides : ∀ entry ∈ remaining (assign lower condition true) upper inputs,
+      divisor ∣ entry.1)
+    (excluded : ∀ remainder : Nat,
+      ¬ (low ≤ maskedSum (assign lower condition true) inputs + divisor * remainder ∧
+        maskedSum (assign lower condition true) inputs + divisor * remainder < high ∧
+        maskedSum (assign lower condition true) inputs + divisor * remainder ≤
+          maskedSum upper inputs)) :
+    actual condition = false := by
+  cases truth : actual condition with
+  | false => rfl
+  | true =>
+    have enclosed : ∀ index, assign lower condition true index = true →
+        actual index = true := by
+      intro index enabled
+      by_cases same : index = condition
+      · subst index
+        exact truth
+      · exact compatible.1 index (by simpa [assign, same] using enabled)
+    have branchCompatible : Compatible (assign lower condition true) upper actual :=
+      ⟨enclosed, compatible.2⟩
+    have impossible : ¬ (low ≤ maskedSum actual inputs ∧ maskedSum actual inputs < high) :=
+      bounded_interval_refuted (assign lower condition true) upper actual inputs
+        divisor low high branchCompatible divides excluded
+    exact False.elim (impossible within)
 
 end Zetesis.ThresholdResidues

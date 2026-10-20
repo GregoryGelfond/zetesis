@@ -177,6 +177,16 @@ impl<'a, 'source> Join<'a, 'source> {
         let Some(wanted) = wanted else {
             return Ok(None);
         };
+        if relation != Relation::Eq {
+            let [Operation::Variable(variable)] = key.nodes.as_slice() else {
+                unreachable!("range keys contain exactly one variable");
+            };
+            if let Some(probe) =
+                self.multiples_range_probe(source, *variable, (relation, wanted), context)?
+            {
+                return Ok(Some(probe));
+            }
+        }
         let range = delta::interval(
             self.delta,
             occurrence,

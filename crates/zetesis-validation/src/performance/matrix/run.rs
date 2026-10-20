@@ -283,10 +283,10 @@ fn prepare<'a>(
             .collect());
     };
     if workloads.is_empty()
-        || workloads.len() > request.limits.corpus.cases.min(super::config::MAX_CASES)
+        || workloads.len() > request.limits.corpus.cases.min(super::super::MAX_CASES)
     {
         return Err(Error::Configuration(
-            "explicit workload population must fit 1..=94",
+            "explicit workload population must fit 1..=95",
         ));
     }
     let mut metadata = 0usize;

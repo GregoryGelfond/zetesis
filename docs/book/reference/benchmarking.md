@@ -2,8 +2,9 @@
 
 `zetesis-bench` runs the zetesis benchmark suite and shows the results as
 tables or as JSON. It compares zetesis with the installed clingo when there is
-one, times zetesis alone when there is not, and compares saved runs. It runs
-the solvers as separate programs, as a user would, and counts a time only after
+one, supports zetesis-only runs for catalog workloads, and compares saved runs.
+The full corpus includes a source bundle that requires fresh clingo qualification.
+It runs the solvers as separate programs, as a user would, and counts a time only after
 zetesis's answers are qualified: against clingo's when clingo takes part, and
 against each workload's recorded answers when it does not.
 [INSTALL.md](https://github.com/GregoryGelfond/zetesis/blob/main/INSTALL.md)
@@ -56,14 +57,16 @@ inputs.
 
 | `--suite` | Workloads |
 | --- | --- |
-| `corpus` (the default) | All 94 verified corpus cases |
+| `corpus` (the default) | All 95 maintained cases: the 94-case correctness catalog and integrated Family Crossing |
 | `baseline` | SEND, queens variant 02 and task allocation |
 | `queens` | The six unchanged eight-queens encodings |
 | `series` | The maintained 22 generated, constant-amended and original workloads |
 | `scalability` | Twenty authored and corpus workloads, with indexed formula joins and region search |
 
 `--case PATH` measures one case of the suite, named relative to the corpus
-directory; repeat it to measure several, in the order given. For `series`, use
+directory; repeat it to measure several, in the order given. Family Crossing
+uses `--case family-crossing/integrated.lp`, relative to the enclosing
+`examples` directory. For `series`, use
 the workload entry path (including `generated/...`); a repeated amended entry
 such as `standalone/n-queens/variant-01.lp` selects both its ten- and eleven-queen
 cells in their series order. A case outside the suite is refused before anything
@@ -72,7 +75,7 @@ own workloads and accepts no `--case`; it alone accepts `--examples`, its
 authored root, which defaults to `examples`, and `--include-einstein`, which
 adds the unchanged Einstein riddle as a twenty-first workload. Prime sieve at
 n=30/100/300 and subset sum at n=12/20/30 follow the established fourteen
-workloads; the separate 94-case corpus is unchanged. The maintained
+workloads; the 94-case correctness catalog is unchanged. The maintained
 Sudoku case has eight givens per row: it tests grounding and language handling,
 not difficult Sudoku search. The series suite raises the per-invocation,
 capture, evidence and native-decoder ceilings to the sizes of its records.
@@ -86,6 +89,31 @@ The report records the resulting capacities in `limits` and
 resource limits or relax complete-family comparison. Library callers explicitly
 apply `scalability::limits` and `scalability::native_answers` before constructing
 their matrix request; execution itself never raises supplied limits.
+
+### The maintained corpus
+
+The ordinary `corpus` suite composes the pinned 94-case correctness catalog
+with `family-crossing/integrated.lp` from the enclosing examples directory.
+Family Crossing is one regular case in campaign totals and scorecards. Its
+three original source files and include spellings are preserved byte for byte;
+[its manifest](../../../examples/family-crossing/manifest.json) seals the graph
+and records complete optimal enumeration: all eight final ties at cost 29.
+Fresh clingo qualification must corroborate this expectation in each campaign,
+followed by the ordinary full native-model and selected-output comparisons.
+A best incumbent, cost alone or an interrupted enumeration cannot qualify it.
+
+The original catalog and its correctness-gate population remain 94 cases.
+Historical 94-case performance reports keep that population; do not combine
+them with a separately timed Family Crossing run to claim a new 95-case total.
+A current whole-corpus comparison runs all 95 cases under one recorded plan.
+Existing caller time, solver, capture and decoding limits still apply, so a
+refused Family Crossing slot remains a visible non-pass in that population.
+
+Library callers use `performance::command::run` for the composed suite, or
+`performance::corpus::workloads` to prepare it without launching processes.
+The low-level `matrix::run` still uses the historical catalog directly.
+`performance::Limits` defaults to 95 case slots; an explicit caller case
+ceiling remains binding. The source catalog's independent default stays 94.
 
 ### Declared external bundles
 
@@ -214,9 +242,11 @@ Without clingo, each native answer family is qualified against the workload's
 recorded answers, and every later native sample against the first qualified
 family. A workload with no recorded answers, such as an amended series cell,
 whose family only clingo establishes, is recorded as needing clingo: it is not
-launched, and it is a non-pass shown with that reason. Every corpus case has
-recorded answers, so a plain run without clingo measures the whole default
-suite. The evidence records the policy the run used: `all_phases`,
+launched, and it is a non-pass shown with that reason. The 94 catalog cases have recorded contracts. Family Crossing retains the
+external-bundle requirement for fresh clingo qualification, so the complete
+default corpus refuses a clingo-free request before launching any process.
+Choose a catalog-only suite or select catalog entries to measure without clingo;
+Family Crossing is never silently omitted from the regular corpus. The evidence records the policy the run used: `all_phases`,
 `qualification_only` or `clingo_free`. The table and the JSON summary say what
 qualified each cell: clingo, the recorded contract, or nothing, because the
 cell needs clingo.

@@ -231,6 +231,14 @@ Threshold-row events follow stricter bounds; coalesced witness notices track
 changes in unresolved possibilities. Original-only residual-sum checks use their
 own dirty queue after mandatory propagation settles, so arithmetic notifications
 neither reorder bound transport nor rescan a row during intermediate waves.
+Residual divisibility can refute a region or determine a condition by excluding
+one of its values. Complementary gcds share prefix/suffix reductions over the
+same grouped nonunit row, when requirements constrain both ends. A small open
+coefficient and a small positive gcd of its complement can establish that these
+lattice tests would yield no deduction, avoiding their preparation. This does
+not establish an attainable sum. New decisions return through ordinary
+propagation before the next arithmetic check; this does not replace answer-set
+membership.
 A `Narrower` indexes the theory once
 and narrows any region of it, the root from knowledge of nothing and a child
 from its parent's knowledge. The index

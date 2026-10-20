@@ -155,6 +155,17 @@ queries do not use this producer closure. The semantic law
 `PossibleFoundedness.stable_sub_possible` explains why the restriction preserves
 answer sets; correspondence to the indexed Rust implementation remains separate.
 
+On reuse, the same body IDs and immutable roles are partitioned together so
+mutable counters precede seeds. Each pass resets those counters before reading
+current masks for boundary and opaque seeds. A true seed immediately visits its
+parent and head rows; it need not be queued and read again. Atom events and
+newly enabled Boolean nodes remain queued until every seed is initialized.
+Projected parents cannot target these seed roles, so no replay observes stale
+seed state. The first pass retains the ordinary queue schedule. This changes
+event order, not the completed closure, producer coverage or support explanations.
+Preparation adds a charged in-place partition and one split index; it stores no
+additional region truth and retains the existing allocation and failure rules.
+
 Candidate-region statistics distinguish producer rechecks (`support_work`) from
 possible-foundedness preparation, closure and publication (`founded_work`). Both
 are included in `reading_work`, and both retain work spent before interruption.
@@ -183,12 +194,23 @@ coefficient has a progression point in the interval, and the check ends before
 computing a remainder. Deciding conditions or tightening the interval reconsiders
 the row; this witness is not retained as a permanent property.
 
-This check reads processed sums after node, bound-transfer, witness and support
-queues reach a fixed point. Arithmetic notifications use a separate coalesced
-queue, preserving bound-transfer order and checking each dirty row at most once
-per closure. They do not repeat Boolean or prefix transport. The check publishes
-no new bounds and adds no state to child copies. Both queues and their membership
-masks belong to worker scratch, with their actual capacities accounted.
+These original-only checks read processed sums after node, bound-transfer,
+witness and support queues reach a fixed point. A separate coalesced arithmetic
+queue preserves bound-transfer order. For a nonunit weighted row constrained at
+both ends, complementary gcds can also exclude one value of an open condition
+and force the other. A suffix reduction and forward prefix share one drained
+snapshot; new decisions enter ordinary propagation before arithmetic resumes.
+Each new wave fixes an open condition, so the process terminates. Scratch retains
+reduction capacity, not prior truth, and adds no state to child copies.
+
+Complement preparation is skipped when one open coefficient fits the interval's
+width and a positive partial gcd of the other open coefficients also fits.
+Every complementary lattice then intersects the interval; clipped branch
+endpoints are witnesses under the already-drained ordinary bounds. The test
+reads small coefficients first and may stop without reading the rest. It avoids
+fruitless complement tests but does not establish an attainable sum or model.
+Unit rows and one-sided intervals acquire no complement reduction. All visits,
+reductions and actual scratch capacities remain accounted.
 
 Work includes visited coefficients, Euclidean remainder steps and interval tests.
 The scan visits smaller coefficients first and stops if the current progression

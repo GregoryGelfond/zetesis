@@ -6,6 +6,8 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Added
 
+- The regular benchmark corpus includes integrated Family Crossing, checking all
+  eight optimal answers alongside the existing 94 cases.
 - Requested GPU statistics include compute-pass time when the device supports
   timestamps, separately from host preparation and waiting.
 - The GPU library exposes checked workgroup choices and optional changed-dependency
@@ -15,6 +17,13 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Changed
 
+- Numeric grounding joins combine certified divisibility and range filters before
+  producing tuples; equal-size sources prefer the bindings needed by those filters.
+- Repeated support checks consume initial support seeds directly after resetting
+  their counters, avoiding a redundant queue round trip.
+- Weighted aggregate comparisons can determine a condition when its opposite
+  value leaves no possible remainder in the required interval. These deductions
+  use the existing propagation queues and preserve answer-set semantics.
 - GPU formula checking retains shared numeric aggregate rows instead of expanding
   them into Boolean formulas. Original satisfaction and reduct membership keep
   their existing meaning; unresolved device checks still receive exact CPU checks.

@@ -110,27 +110,33 @@ fn completed_residue_reuses_its_last_interval_check() {
         |condition| !crate::regions::bit(closure.known.sure, condition)
             && !crate::regions::bit(closure.known.never, condition)
     ));
-    let outcome = closure.threshold_residual(&index, 0, &mut work);
+    let outcome = closure.threshold_residual_check(&index, 0, &mut work);
     assert!(matches!(outcome, Ok(Step::Contradiction)));
     assert_eq!(work.spent, 10);
 }
 
 #[test]
 fn condition_changes_recheck_inherited_residues() {
-    let theory = residual();
+    let terms: Vec<_> = [(0, 1), (1, 1)]
+        .into_iter()
+        .chain((2..=33).map(|atom| (atom, 6)))
+        .chain((34..=65).map(|atom| (atom, 10)))
+        .collect();
+    let theory = interval(66, &terms, [17, 18]);
     let index = Narrower::new(&theory);
     let mut scratch = NarrowingScratch::default();
     let mut parent = index.knowledge();
-    let mut root = Region::all_open(65);
+    let mut root = Region::all_open(66);
     assert_ne!(
         close(&theory, &index, &mut root, &mut parent, &mut scratch).0,
         Narrowing::Refuted
     );
-    assert!((0..65).all(|atom| root.is_open(atom)));
-    // Cutting the weight 1 changes no guard truth, but every remaining sum is
-    // even. A requirement-only notification policy misses this contradiction.
+    assert!((0..66).all(|atom| root.is_open(atom)));
+    // Two unit conditions admit either parity. Cutting one and deciding the
+    // other changes no guard truth, but cutting both leaves only even sums.
     for value in [false, true, false] {
         let mut child = root.clone();
+        assert!(child.cut(1));
         if value {
             assert!(child.hold(0));
         } else {
@@ -154,8 +160,8 @@ fn condition_changes_recheck_inherited_residues() {
 
 #[test]
 fn gcd_one_does_not_claim_attainability() {
-    let terms = [(0, 6), (1, 10), (2, 15), (3, 15)];
-    let theory = interval(4, &terms, [17, 18]);
+    let terms = [(0, 6), (1, 10), (2, 15), (3, 7)];
+    let theory = interval(4, &terms, [18, 19]);
     let index = Narrower::new(&theory);
     let mut region = Region::all_open(4);
     assert_ne!(
@@ -170,14 +176,14 @@ fn gcd_one_does_not_claim_attainability() {
         Narrowing::Refuted,
     );
     assert!((0..4).all(|atom| region.is_open(atom)));
-    // No subset makes 17, but gcd alone cannot establish this hole.
+    // No subset makes 18; every complement gcd is one, so this hole remains.
     assert!((0..16).all(|mask| {
         terms
             .iter()
             .filter(|&&(atom, _)| mask & (1 << atom) != 0)
             .map(|&(_, weight)| weight)
             .sum::<u64>()
-            != 17
+            != 18
     }));
 }
 
@@ -377,7 +383,7 @@ fn gcd_refinement_preserves_interval_intersections() {
     }
 }
 
-fn closed_residual_work(theory: &Theory, region: &mut Region) -> u64 {
+fn closed_refutation_work(theory: &Theory, region: &mut Region) -> u64 {
     let index = Narrower::new(theory);
     assert_eq!(index.thresholds.rows.len(), 1);
     let mut knowledge = index.knowledge();
@@ -400,7 +406,7 @@ fn closed_residual_work(theory: &Theory, region: &mut Region) -> u64 {
         known: known.borrow(),
         lists: &mut NarrowingScratch::default(),
     }
-    .threshold_residual(&index, 0, &mut work)
+    .threshold_residual_check(&index, 0, &mut work)
     .unwrap();
     assert!(result == Step::Unchanged);
     work.spent
@@ -408,12 +414,17 @@ fn closed_residual_work(theory: &Theory, region: &mut Region) -> u64 {
 
 #[test]
 fn unit_coefficient_ends_residual_scan() {
-    let theory = residual();
-    let mut region = Region::all_open(65);
-    // One row tick and one term read suffice. Reading from the large end
-    // instead visits every undecided coefficient before finding the unit.
-    assert_eq!(closed_residual_work(&theory, &mut region), 2);
-    assert!((0..65).all(|atom| region.is_open(atom)));
+    let terms: Vec<_> = [(0, 1), (1, 1)]
+        .into_iter()
+        .chain((2..10).map(|atom| (atom, 6)))
+        .chain((10..18).map(|atom| (atom, 10)))
+        .collect();
+    let theory = interval(18, &terms, [17, 18]);
+    let mut region = Region::all_open(18);
+    // Two unit coefficients leave no useful complement deduction. The retained
+    // whole-row refutation primitive still needs only its row and first term.
+    assert_eq!(closed_refutation_work(&theory, &mut region), 2);
+    assert!((0..18).all(|atom| region.is_open(atom)));
 }
 
 #[test]
@@ -425,7 +436,7 @@ fn intersecting_residue_ends_scan_before_remaining_terms() {
     // 10 after the 6s gives gcd 2 and admits 17 = 1 + 16; the remaining 10s
     // cannot invalidate that lattice point. Each term read costs a tick, so a
     // receipt smaller than the row proves that the whole row was not scanned.
-    assert!(closed_residual_work(&theory, &mut region) < 65);
+    assert!(closed_refutation_work(&theory, &mut region) < 65);
     assert!(region.is_held(0));
     assert!((1..65).all(|atom| region.is_open(atom)));
 }
@@ -464,6 +475,7 @@ fn unit_rows_do_not_allocate_residual_queue() {
     assert_eq!(scratch.pending_thresholds.capacity(), 0);
     assert_eq!(scratch.pending_residuals.capacity(), 0);
     assert_eq!(scratch.residual_rows.capacity(), 0);
+    assert_eq!(scratch.residual_suffix.capacity(), 0);
 }
 
 #[test]
@@ -619,9 +631,12 @@ fn frozen_subjects_do_not_run_residual_checks() {
             assert_eq!(scratch.pending_thresholds.capacity(), 0);
             assert_eq!(scratch.pending_residuals.capacity(), 0);
             assert_eq!(scratch.residual_rows.capacity(), 0);
+            assert_eq!(scratch.residual_suffix.capacity(), 0);
         }
     }
 }
 
 mod eligibility;
 mod phase;
+
+mod forcing;

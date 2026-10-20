@@ -11,6 +11,7 @@ use zetesis_cpu::Cancellation;
 mod projected_heads;
 mod projected_parents;
 mod reuse;
+mod seed_fusion;
 
 impl Scratch {
     fn use_original_projection(&mut self, owner: &Theory, index: &Narrower, producers: &Producers) {
@@ -25,6 +26,7 @@ impl Scratch {
         self.projected = Some(Projection {
             parents: index.parents.clone(),
             heads: projected_heads::original_rows(owner, producers),
+            seed_start: initial.len(),
             initial,
         });
     }

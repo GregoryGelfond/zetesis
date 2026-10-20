@@ -5,7 +5,7 @@ use super::*;
 /// Two nodes denote a. Both are required by the flattened conjunction. The
 /// cycle also has an OR body, an opaque negative seed, a disjunctive producer,
 /// and parent incidences outside the selected body cone.
-fn shared_bodies(extra: usize) -> Theory {
+pub(super) fn shared_bodies(extra: usize) -> Theory {
     let mut nodes = vec![
         Node::atom(0),
         Node::atom(1),
@@ -120,7 +120,9 @@ fn every_small_mask_matches_original_parent_postings() {
     // Keep the same exact owner, cyclic heads and body cone. Only the parent
     // source differs. An explicit original-row clone also prevents later
     // preparation from materializing filtered rows in the reference.
-    original.projected.as_mut().unwrap().parents = index.parents.clone();
+    let reference = original.projected.as_mut().unwrap();
+    reference.parents = index.parents.clone();
+    reference.seed_start = reference.initial.len();
     let body_nodes = projected.body_nodes.clone();
     assert_eq!(body_nodes.len(), 7);
     let mut supports_cycle = false;
@@ -174,7 +176,9 @@ fn warm(extra: usize, projected: bool) -> u64 {
     let mut scratch = Scratch::default();
     scratch.prepare_projected(&owner, &index, &producers);
     if !projected {
-        scratch.projected.as_mut().unwrap().parents = index.parents.clone();
+        let reference = scratch.projected.as_mut().unwrap();
+        reference.parents = index.parents.clone();
+        reference.seed_start = reference.initial.len();
     }
     let mut work = Work::new(u64::MAX);
     scratch
@@ -288,10 +292,8 @@ fn prepared_initialization_matches_fresh_region_masks() {
                 prepared.atoms, fresh.atoms,
                 "body mask {false_bodies}, atoms {cut_atoms}"
             );
-            assert_eq!(
-                prepared.queue, fresh.queue,
-                "ordered activated nodes and atoms"
-            );
+            // Prepared seeds replay directly. Its queue omits those seed
+            // vertices, but every completed node and atom state must agree.
             for &node in &selected {
                 assert_eq!(
                     format!("{:?}", prepared.states[node]),
@@ -340,9 +342,10 @@ fn boundary_roles_reapply_both_false_masks() {
         (0, 0, true),
     ] {
         scratch
-            .initialize(
+            .complete(
                 &owner,
                 &index,
+                &producers,
                 &[node_never],
                 &[atom_never],
                 &mut Work::new(u64::MAX),
@@ -350,10 +353,10 @@ fn boundary_roles_reapply_both_false_masks() {
             .unwrap();
         if seeded {
             assert!(matches!(scratch.states[2], State::True));
-            assert_eq!(scratch.queue, [owner.atom_count() + 2]);
+            assert_eq!(scratch.atoms, [0b011]);
         } else {
             assert!(matches!(scratch.states[2], State::Inactive));
-            assert!(scratch.queue.is_empty());
+            assert_eq!(scratch.atoms, [0]);
         }
     }
 }

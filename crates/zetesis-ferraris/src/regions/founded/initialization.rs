@@ -2,7 +2,8 @@
 //!
 //! A role depends only on the exact theory, flattened chains and cyclic-head
 //! mask. Region masks are applied on every pass; no previous closure truth is
-//! retained. Rows are parallel to the existing ordered body-node selection.
+//! retained. Roles remain parallel to the selected node IDs; preparation may
+//! partition both together so mutable counters precede relaxed seed roles.
 
 use super::{Narrower, NodeView, State, Theory, Work, bit, chain_position};
 use zetesis_cpu::Stop;
@@ -16,6 +17,12 @@ pub(super) enum Initial {
 }
 
 impl Initial {
+    /// These relaxed leaves have no incoming dependency to replay. An empty
+    /// conjunction also has no incoming event, although it is a Boolean node.
+    pub(super) const fn is_seed(self) -> bool {
+        matches!(self, Self::True | Self::Boundary(_) | Self::Awaiting(0))
+    }
+
     pub(super) fn read(
         theory: &Theory,
         index: &Narrower,
@@ -84,4 +91,31 @@ pub(super) fn prepare(
         initial.push(Initial::read(theory, index, cyclic_atoms, node)?);
     }
     Ok(initial)
+}
+
+/// Keep node IDs and their immutable roles aligned while moving relaxed seeds
+/// after mutable counters. This changes no incidence row or semantic identity.
+/// Owner authority is absent until this complete permutation is published.
+pub(super) fn partition(
+    body_nodes: &mut [usize],
+    initial: &mut [Initial],
+    work: &mut Work<'_>,
+) -> Result<usize, Stop> {
+    debug_assert_eq!(body_nodes.len(), initial.len());
+    let mut seeds = initial.len();
+    let mut position = 0;
+    while position < seeds {
+        work.tick()?;
+        if initial[position].is_seed() {
+            seeds -= 1;
+            if position != seeds {
+                work.tick()?;
+                body_nodes.swap(position, seeds);
+                initial.swap(position, seeds);
+            }
+        } else {
+            position += 1;
+        }
+    }
+    Ok(seeds)
 }

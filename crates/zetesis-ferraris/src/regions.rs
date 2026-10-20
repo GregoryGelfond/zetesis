@@ -1564,6 +1564,8 @@ pub struct NarrowingScratch {
     residual_rows: Vec<usize>,
     /// One bit per row, set exactly while it is in `residual_rows`.
     pending_residuals: Vec<u64>,
+    /// Reversed suffix gcds for one drained residual row; never inherited.
+    residual_suffix: Vec<i128>,
     /// Shared connective views and dirty worklists belong to the walker.
     witnesses: witnesses::Scratch,
     /// Possible founded atoms, computed only with complete original producers.
@@ -1584,6 +1586,7 @@ impl NarrowingScratch {
                 * size_of::<usize>() as u128
             + (self.pending_thresholds.capacity() + self.pending_residuals.capacity()) as u128
                 * size_of::<u64>() as u128
+            + self.residual_suffix.capacity() as u128 * size_of::<i128>() as u128
             + self.witnesses.retained_bytes()
             + self.founded.retained_bytes()
             + self.explanations.retained_bytes()
@@ -1607,6 +1610,7 @@ impl NarrowingScratch {
         self.heads.clear();
         self.threshold_rows.clear();
         self.residual_rows.clear();
+        self.residual_suffix.clear();
         if self.pending.len() < flag_words(atoms) {
             self.pending.resize(flag_words(atoms), 0);
         }
@@ -1648,7 +1652,8 @@ impl NarrowingScratch {
     }
 
     /// Condition changes request only arithmetic, not prefix or bridge walks.
-    /// All mandatory waves coalesce into one check of the final row state.
+    /// Mandatory waves coalesce into one check of their drained row state.
+    /// Residual decisions return through those waves before a row is rechecked.
     fn queue_residual(&mut self, row: usize) {
         Self::queue_row(&mut self.residual_rows, &mut self.pending_residuals, row);
     }
@@ -1877,9 +1882,10 @@ impl<C: Count> Closure<'_, C> {
     /// roots. Node events follow new bits or initial seeds. Original threshold
     /// row events follow strictly tighter requirements from the finite set of
     /// native and linked Boolean bounds, or processed condition events. A
-    /// residual divisibility check runs only after all mandatory queues drain:
-    /// it adds no bounds or events, so each dirty row is checked at most once.
-    /// Thus both row routes terminate; Boolean chains retain their counters.
+    /// residual divisibility check runs only after all mandatory queues drain.
+    /// Its forced conditions return through those same queues before another
+    /// arithmetic check. Every new wave fixes a previously open condition,
+    /// so residual forcing terminates; Boolean chains retain their counters.
     fn close(
         &mut self,
         subject: Subject<'_>,

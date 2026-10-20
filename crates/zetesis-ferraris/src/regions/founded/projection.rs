@@ -10,7 +10,10 @@
 //! Incidence indexes and immutable initialization roles publish together under
 //! Scratch's exact owner. Indexes use shared adjacency construction, charging
 //! original reads, offsets and temporary cursors. A later construction failure
-//! drops every completed local view. Current region masks are applied at runtime.
+//! drops every completed local view. After those rows are complete, the selected
+//! node IDs and parallel roles are partitioned together: counters precede seeds.
+//! The permutation has no owner authority until publication and adds no heap
+//! storage. Current region masks are applied to every role on every pass.
 
 use super::super::adjacency::Construction;
 use super::{
@@ -24,6 +27,8 @@ pub(super) struct Projection {
     pub(super) parents: Adjacency,
     pub(super) heads: Adjacency,
     pub(super) initial: Vec<Initial>,
+    /// Reset every non-seed before initializing and replaying this seed suffix.
+    pub(super) seed_start: usize,
 }
 
 impl Projection {
@@ -31,22 +36,24 @@ impl Projection {
         theory: &Theory,
         index: &Narrower,
         producers: &Producers,
-        scratch: &Scratch,
+        scratch: &mut Scratch,
         work: &mut Work<'_>,
     ) -> Result<Self, Stop> {
         let parents = prepare_parents(theory, index, scratch, work)?;
         let heads = prepare_heads(theory, producers, scratch, work)?;
-        let initial = initialization::prepare(
+        let mut initial = initialization::prepare(
             theory,
             index,
             &scratch.body_nodes,
             &scratch.cyclic_atoms,
             work,
         )?;
+        let seed_start = initialization::partition(&mut scratch.body_nodes, &mut initial, work)?;
         Ok(Self {
             parents,
             heads,
             initial,
+            seed_start,
         })
     }
 

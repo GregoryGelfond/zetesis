@@ -149,13 +149,25 @@ distinguishes this restriction from full attainable-sum computation.
 The original-only Rust check uses existing grouped rows after mandatory node,
 bound-transfer, witness and support propagation reaches a fixed point. Separate
 coalesced queues keep arithmetic notifications from changing bound-transfer order.
-The check refutes regions without publishing bounds or events, so each dirty row
-is checked at most once per closure. Notifications arise only from processed
-conditions or existing stricter requirements. Grouping, the gcd computation and
-remainder-based interval test, finite-width arithmetic, snapshot consistency,
-queue scheduling and termination, and resource accounting remain executable
-correspondence obligations. The laws do not verify this scheduling policy or
-qualify the retained native extraction or frozen-reduct propagation.
+The check may refute a region or force a condition by excluding its other value.
+`bounded_interval_refuted` includes the upper reading in the arithmetic exclusion;
+`condition_required_true_by_residue` and `condition_required_false_by_residue`
+justify the two deductions for every compatible satisfying reading.
+Complementary gcds share one suffix vector and forward reduction. Each batch reads
+one drained snapshot; unique grouped conditions and deferred event processing
+keep preceding publications from changing the remaining reads. Every new wave
+fixes an open condition and returns through the ordinary queues.
+Before preparing complements, Rust can find one open coefficient fitting the
+interval width and a positive partial gcd of the other open coefficients fitting
+that width. Every complement except that coefficient's retains it; its own final
+gcd divides the observed partial gcd. Together with the drained ordinary bounds,
+these witnesses make every branch's lattice test inconclusive. This is a reason
+to omit those tests, not evidence of an attainable sum. The arithmetic laws
+support this argument but do not formalize the Rust filter. Grouping, gcd
+computation, checked arithmetic, snapshot consistency, queue termination and
+storage accounting remain executable correspondence obligations. The laws do
+not verify this scheduling policy or qualify the retained native extraction or
+frozen-reduct propagation.
 
 [`ThresholdDivision.equivalent`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ThresholdDivision.lean)
 proves that dividing every nonnegative weight by a positive common divisor and
@@ -2538,14 +2550,28 @@ Current node and atom falsity still determine its state on every pass; no prior
 closure truth is reused. The first pass uses original rows and node kinds;
 included cells remain included even after their runtime state changes.
 The parent rows, head rows and roles publish together under the exact owner.
+Preparation also partitions selected IDs and roles together, placing mutable
+counters before seed roles. Every pass resets the counters first. It then reads
+the current masks for each seed and immediately replays a true seed's outgoing
+rows; ordinary atom and derived-node events drain only after all seeds have
+current states. Projected parents cannot target boundary or opaque seeds, and
+an empty conjunction has no incoming occurrence. These conditions justify
+removing initial seeds from the queue while retaining every activation once.
+No previous closure truth is reused, and cuts still require full completion.
+The first pass retains the queued schedule. Alignment of the partition, reset
+before replay, complete outgoing incidences and equality of the two completed
+closures are executable refinement obligations; the semantic upper-set law
+needs no change. Exhaustive mask comparisons against the queued schedule give
+regression evidence, not a Lean proof of these Rust operations.
 Construction and retained capacities are charged; a failed preparation clears
 that authority and a retry repeats body preparation. Producer-free restrictions
 and frozen-reduct passes do not consume or invalidate this preparation. Their
 separate knowledge never establishes founded completion; returning to a
 producer-backed original subject authenticates the retained owner before false
 events. A genuinely different original still discards foreign authority.
-Preservation of the event sequence and completed closure remains a Rust
-correspondence obligation; exhaustive mask and interruption tests supply evidence.
+Preservation of completed closure across the different event schedules remains
+a Rust correspondence obligation; interruption tests also exercise partial
+preparation and current-mask resets.
 
 Inherited completion also requires a reuse argument: the prepared positive body
 projection belongs to the exact original theory, and no relevant input has become

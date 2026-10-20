@@ -165,7 +165,7 @@ impl Default for Schedule {
 fn is_default<T: Default + PartialEq>(value: &T) -> bool {
     *value == T::default()
 }
-/// Check an explicit selection of manifest-relative cases: one through 94
+/// Check an explicit selection of manifest-relative cases: one through 95
 /// distinct normal relative paths of 1..=1024 bytes each. Whether each names a
 /// runnable case is decided later, against the admitted corpus.
 ///
@@ -174,8 +174,8 @@ fn is_default<T: Default + PartialEq>(value: &T) -> bool {
 pub(super) fn selection(paths: &[String]) -> Result<(), Error> {
     use std::collections::BTreeSet;
     use std::path::Component;
-    if paths.is_empty() || paths.len() > 94 {
-        return Err(Error::Configuration("selected cases must be 1..=94"));
+    if paths.is_empty() || paths.len() > super::MAX_CASES {
+        return Err(Error::Configuration("selected cases must be 1..=95"));
     }
     let mut seen = BTreeSet::new();
     for path in paths {
@@ -223,7 +223,7 @@ impl Schedule {
         })
     }
 
-    /// Select one through 94 distinct manifest-relative cases in caller order.
+    /// Select one through 95 distinct manifest-relative cases in caller order.
     /// Each path is bounded by 1024 bytes and must be a normal relative path.
     /// Corpus admission later requires every path to identify a runnable case.
     ///
@@ -357,7 +357,8 @@ impl Schedule {
 /// These are logical quantities; none denotes peak heap or process RSS.
 #[derive(Clone, Copy, Debug)]
 pub struct Limits {
-    /// Clean corpus admission bounds.
+    /// Catalog admission and combined workload bounds; `cases` also limits the
+    /// explicit campaign population independently of the pinned catalog size.
     pub corpus: examples::Limits,
     /// Per-invocation capture and cleanup bounds.
     pub process: process::Limits,
@@ -375,7 +376,10 @@ pub struct Limits {
 impl Default for Limits {
     fn default() -> Self {
         Self {
-            corpus: examples::Limits::default(),
+            corpus: examples::Limits {
+                cases: super::MAX_CASES,
+                ..examples::Limits::default()
+            },
             process: process::Limits {
                 timeout: Duration::from_secs(30),
                 max_output_bytes: 4_194_304,

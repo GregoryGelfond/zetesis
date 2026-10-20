@@ -17,7 +17,8 @@
 //!    size, or within a semi-naive round the rows its partition offers;
 //! 5. among relations of one size, the occurrence that binds the most variables
 //!    still needed by waiting comparisons;
-//! 6. otherwise the earlier occurrence of the canonical body.
+//! 6. a divisor needed by a flat remainder equality before its dividend;
+//! 7. otherwise the earlier occurrence of the canonical body.
 //!
 //! A known argument is a scheduling preference, not a fanout bound: a skewed
 //! posting may contain every source row. A ready comparison may also accept
@@ -41,9 +42,10 @@ use zetesis_core::TemplateTerm;
 use super::{PatternOccurrence, PositivePattern, Relations, comparison, delta};
 use crate::expansion::Budget;
 use crate::formula_binding::Binding;
-use crate::formula_ir::LiteralIr;
+use crate::formula_ir::{Expression, LiteralIr, Operation};
 use crate::{ExpansionResource, FormulaFailure};
-use themelios_program::program::DefaultNegation;
+use themelios_program::program::{DefaultNegation, Relation};
+use themelios_program::term::BinaryOp;
 
 /// The populations offered by one immutable support snapshot. A delta pivot
 /// names an original source occurrence, independently of the chosen join order.
@@ -250,6 +252,7 @@ impl Workspace<'_> {
 struct Waiting {
     variables: Vec<usize>,
     decided: bool,
+    remainder: Option<(usize, usize)>,
 }
 
 impl Waiting {
@@ -271,7 +274,7 @@ impl Waiting {
         let mut waiting = space.reserve(capacity)?;
         for (index, literal) in literals.iter().enumerate() {
             work(budget, 1, location)?;
-            let Some(([left, right], _)) = operands(comparisons, index, literal) else {
+            let Some(([left, right], relation)) = operands(comparisons, index, literal) else {
                 continue;
             };
             work(
@@ -285,9 +288,41 @@ impl Waiting {
             )?;
             work(budget, variables.len() as u128, location)?;
             let decided = variables.iter().all(|&variable| is_bound(bound, variable));
-            waiting.push(Self { variables, decided });
+            // This is only a structural scheduling hint. Constants are not
+            // evaluated, and only the separately certified multiples selector
+            // can skip rows. Nonzero remainders retain ordinary evaluation.
+            let remainder = if relation == Relation::Eq {
+                match remainder_inputs(left, right, budget, location)? {
+                    Some(inputs) => Some(inputs),
+                    None => remainder_inputs(right, left, budget, location)?,
+                }
+            } else {
+                None
+            };
+            waiting.push(Self {
+                variables,
+                decided,
+                remainder,
+            });
         }
         Ok(waiting)
+    }
+
+    fn prepares_divisor(
+        &self,
+        occurrence: &PatternOccurrence<'_>,
+        bound: &[bool],
+        budget: &mut Budget,
+        location: ProgramSite,
+    ) -> Result<bool, FormulaFailure> {
+        let Some((dividend, divisor)) = self.remainder else {
+            return Ok(false);
+        };
+        work(budget, 2, location)?;
+        Ok(!is_bound(bound, dividend)
+            && !is_bound(bound, divisor)
+            && binds(occurrence, divisor, budget, location)?
+            && !binds(occurrence, dividend, budget, location)?)
     }
 
     fn decided_by(
@@ -328,6 +363,34 @@ impl Waiting {
         }
         Ok(count)
     }
+}
+
+/// A bound divisor exposes a possible finite numeric probe. The scheduling
+/// preference changes no coverage or arithmetic-definedness certificate.
+fn remainder_inputs(
+    expression: &Expression,
+    constant: &Expression,
+    budget: &mut Budget,
+    location: ProgramSite,
+) -> Result<Option<(usize, usize)>, FormulaFailure> {
+    work(budget, 1, location)?;
+    if expression.nodes.len() != 3 || constant.nodes.len() != 1 {
+        return Ok(None);
+    }
+    work(budget, 4, location)?;
+    Ok(
+        match (expression.nodes.as_slice(), constant.nodes.as_slice()) {
+            (
+                [
+                    Operation::Variable(dividend),
+                    Operation::Variable(divisor),
+                    Operation::Binary(BinaryOp::Mod, 0, 1),
+                ],
+                [Operation::Constant(_)],
+            ) if dividend != divisor => Some((*dividend, *divisor)),
+            _ => None,
+        },
+    )
 }
 
 fn work(budget: &mut Budget, amount: u128, location: ProgramSite) -> Result<(), FormulaFailure> {
@@ -594,11 +657,13 @@ fn arrange_with(
         let mut best = None;
         for (candidate, occurrence) in occurrences.iter().enumerate().skip(position) {
             work(budget, 1, location)?;
-            let (mut decides, mut advances) = (0, 0);
+            let (mut decides, mut advances, mut divisors) = (0, 0, 0);
             for comparison in &waiting {
                 work(budget, 1, location)?;
                 decides += usize::from(comparison.decided_by(occurrence, bound, budget, location)?);
                 advances += comparison.advanced_by(occurrence, bound, budget, location)?;
+                divisors +=
+                    usize::from(comparison.prepares_divisor(occurrence, bound, budget, location)?);
             }
             let test = is_test(occurrence, bound, budget, location)?;
             // Tests keep their existing order. Only a nonempty generator needs
@@ -613,6 +678,7 @@ fn arrange_with(
                 independent,
                 offered[candidate],
                 Reverse(advances),
+                Reverse(divisors),
                 occurrence.source,
             );
             if best.as_ref().is_none_or(|(_, least)| rank < *least) {

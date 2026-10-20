@@ -34,7 +34,11 @@
 //! for the same exact owner builds the filtered rows, so one-use scratch pays no
 //! incidence-index construction. A refused build clears owner authority; retry
 //! conservatively repeats body preparation before another attempt. Reused preparation
-//! also records each selected node's immutable initial role. Every pass applies
+//! also records each selected node's immutable initial role. Counters precede
+//! relaxed seeds in that plan: reset all counters, then initialize each seed and
+//! immediately replay its outgoing rows without enqueueing the seed itself.
+//! This retains the same closure; seeds have no incoming relaxed dependency.
+//! Newly derived nodes and atoms still use the ordinary queue. Every pass applies
 //! current node/atom masks to those roles; no prior closure truth is reused.
 //!
 //! One pass reuses the original atom/node and producer body/head rows. Once
@@ -372,6 +376,32 @@ impl Scratch {
             }
         }
         let atoms = theory.atom_count();
+        if let Some(seed_start) = self.projected.as_ref().map(|plan| plan.seed_start) {
+            // All mutable counters were reset before any seed can reach them.
+            // No seed has an incoming relaxed edge; queued consequences are not
+            // processed until every seed has received its current mask state.
+            for position in seed_start..self.body_nodes.len() {
+                work.tick()?;
+                let node = self.body_nodes[position];
+                let initial = self
+                    .projected
+                    .as_ref()
+                    .expect("prepared seed suffix")
+                    .initial[position];
+                debug_assert!(initial.is_seed());
+                let state = if bit(never, node) {
+                    State::Inactive
+                } else {
+                    initial.state(atom_never)
+                };
+                if matches!(state, State::True | State::Awaiting(0)) {
+                    self.states[node] = State::True;
+                    self.propagate_node(index, producers, node, atoms, atom_never, work)?;
+                } else {
+                    self.states[node] = state;
+                }
+            }
+        }
         let mut next = 0;
         while let Some(&vertex) = self.queue.get(next) {
             work.tick()?;
@@ -385,43 +415,57 @@ impl Scratch {
                 }
                 continue;
             }
-            let node = vertex - atoms;
-            let parents = self
-                .projected
-                .as_ref()
-                .map_or(&index.parents, |projected| &projected.parents);
-            for &parent in &parents[node] {
-                work.tick()?;
-                match self.states[parent] {
-                    State::Awaiting(1) => {
-                        activate_node(&mut self.states, &mut self.queue, parent, atoms, work)?;
-                    }
-                    State::Awaiting(remaining) => {
-                        self.states[parent] = State::Awaiting(remaining - 1);
-                    }
-                    State::Outside | State::Inactive | State::True => {}
-                    State::Visiting(_) => return Err(Stop::InvalidProgram),
+            self.propagate_node(index, producers, vertex - atoms, atoms, atom_never, work)?;
+        }
+        Ok(())
+    }
+
+    /// Replay the same original or projected incidences for a newly true node,
+    /// whether it came from a seed or from the ordinary closure queue.
+    fn propagate_node(
+        &mut self,
+        index: &Narrower,
+        producers: &Producers,
+        node: usize,
+        atoms: usize,
+        atom_never: &[u64],
+        work: &mut Work<'_>,
+    ) -> Result<(), Stop> {
+        let parents = self
+            .projected
+            .as_ref()
+            .map_or(&index.parents, |projected| &projected.parents);
+        for &parent in &parents[node] {
+            work.tick()?;
+            match self.states[parent] {
+                State::Awaiting(1) => {
+                    activate_node(&mut self.states, &mut self.queue, parent, atoms, work)?;
                 }
+                State::Awaiting(remaining) => {
+                    self.states[parent] = State::Awaiting(remaining - 1);
+                }
+                State::Outside | State::Inactive | State::True => {}
+                State::Visiting(_) => return Err(Stop::InvalidProgram),
             }
-            if let Some(projected) = &self.projected {
-                for &head in &projected.heads[node] {
+        }
+        if let Some(projected) = &self.projected {
+            for &head in &projected.heads[node] {
+                work.tick()?;
+                activate_atom(
+                    &mut self.atoms,
+                    &self.cyclic_atoms,
+                    &mut self.queue,
+                    head,
+                    atom_never,
+                    work,
+                )?;
+            }
+        } else {
+            for &producer in &producers.by_body[node] {
+                work.tick()?;
+                for &head in &producers.rules[producer].heads {
                     work.tick()?;
-                    activate_atom(
-                        &mut self.atoms,
-                        &self.cyclic_atoms,
-                        &mut self.queue,
-                        head,
-                        atom_never,
-                        work,
-                    )?;
-                }
-            } else {
-                for &producer in &producers.by_body[node] {
-                    work.tick()?;
-                    for &head in &producers.rules[producer].heads {
-                        work.tick()?;
-                        self.activate_atom(head, atom_never, work)?;
-                    }
+                    self.activate_atom(head, atom_never, work)?;
                 }
             }
         }
@@ -558,7 +602,11 @@ impl Scratch {
             work.tick()?;
             self.atoms.push(0);
         }
-        for (position, &node) in self.body_nodes.iter().enumerate() {
+        let reset = self
+            .projected
+            .as_ref()
+            .map_or(self.body_nodes.len(), |plan| plan.seed_start);
+        for (position, &node) in self.body_nodes[..reset].iter().enumerate() {
             work.tick()?;
             let state = if bit(never, node) {
                 State::Inactive

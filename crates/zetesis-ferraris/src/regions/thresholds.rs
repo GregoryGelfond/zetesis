@@ -5,7 +5,8 @@
 //! multiplicity. Immutable term/guard orders let each propagation cursor advance
 //! only once along a region branch, independently of pending truth bits.
 //! Residual divisibility has a separate coalesced original-row event: each scan
-//! reads closed condition knowledge and may refute without adding any bound.
+//! reads closed condition knowledge and may refute or force conditions. New
+//! decisions return through ordinary events before another arithmetic scan.
 
 use std::collections::HashMap;
 

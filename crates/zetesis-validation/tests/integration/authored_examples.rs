@@ -325,3 +325,125 @@ fn poker_complete_family_satisfies_its_contract() {
     let answers = oracle::answers(&run);
     workload.contract().unwrap().check(&answers).unwrap();
 }
+
+fn family_crossing() -> Workload {
+    let mut workloads = bundles::load(
+        &root().join("family-crossing/manifest.json"),
+        WorkloadLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(workloads.len(), 1);
+    workloads.pop().unwrap()
+}
+
+#[test]
+fn maintained_corpus_appends_family_to_the_original_catalog() {
+    let catalog = examples::load(&root().join("correctness"), examples::Limits::default()).unwrap();
+    let workloads = zetesis_validation::performance::corpus::workloads(
+        &catalog,
+        &root(),
+        WorkloadLimits::default(),
+    )
+    .unwrap();
+    assert_eq!(catalog.cases().len(), 94);
+    assert_eq!(workloads.len(), 95);
+    for (workload, case) in workloads[..94].iter().zip(catalog.cases()) {
+        assert_eq!(workload.entry(), case.path());
+        assert_eq!(workload.contract(), Some(case.contract()));
+        assert_eq!(
+            serde_json::to_value(workload).unwrap()["manifest_sha256"],
+            examples::MANIFEST_SHA256
+        );
+    }
+    assert_eq!(workloads[94].entry(), "family-crossing/integrated.lp");
+    assert_eq!(workloads[94].identity(), family_crossing().identity());
+    assert_eq!(
+        workloads
+            .iter()
+            .map(Workload::identity)
+            .collect::<BTreeSet<_>>()
+            .len(),
+        95
+    );
+}
+
+#[test]
+fn family_bundle_preserves_every_original_source_and_include() {
+    let workload = family_crossing();
+    assert!(workload.is_bundle());
+    assert!(!workload.is_amended());
+    let record = serde_json::to_value(&workload).unwrap();
+    assert!(record.get("manifest_sha256").is_none());
+    assert_eq!(
+        record["bundle"]["manifest"]["sha256"],
+        "92a39c82c8bebb5f17323db9e61084f2b713628b574690bcc0312147395d3f26"
+    );
+    assert_eq!(
+        record["bundle"]["files"],
+        serde_json::json!([
+            {
+                "path": "family-crossing/integrated.lp",
+                "sha256": "ddd36744c2138067f5d37dd9679e2e02427eb4eb80af5c63549bac7660703b29",
+                "includes": [{
+                    "spelling": "family_crossing_complete_domain.lp",
+                    "target": "family-crossing/family_crossing_complete_domain.lp"
+                }]
+            },
+            {
+                "path": "family-crossing/family_crossing_complete_domain.lp",
+                "sha256": "2903ff0b8134ad5b99df68fe7cc0ac6ad387f44f160d16a199c037a5c59241da",
+                "includes": [{
+                    "spelling": "eec_htp_integration_v5.lp",
+                    "target": "family-crossing/eec_htp_integration_v5.lp"
+                }]
+            },
+            {
+                "path": "family-crossing/eec_htp_integration_v5.lp",
+                "sha256": "1d0f52af6de50c7d0bb64abb3b61203c351c582b29222fccacb71bac53c727ed",
+                "includes": []
+            }
+        ])
+    );
+    for source in record["sources"].as_array().unwrap() {
+        assert_eq!(source["base_sha256"], source["derived_sha256"]);
+        assert_eq!(source["edits"], serde_json::json!([]));
+    }
+}
+
+#[test]
+fn family_contract_requires_eight_optimal_ties_at_cost_29() {
+    let workload = family_crossing();
+    let contract = workload.contract().unwrap();
+    assert_eq!(contract.satisfiability(), examples::Satisfiability::Sat);
+    assert_eq!(contract.family(), examples::Family::Optimal);
+    assert_eq!(contract.model_count(), Some(8));
+    assert_eq!(contract.cost(), Some([29].as_slice()));
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+#[test]
+#[ignore = "requires clingo: Family Crossing has eight complete optimum ties at cost 29"]
+fn family_complete_optimal_family_satisfies_its_contract() {
+    use std::time::Duration;
+    use zetesis_clingo_support as oracle;
+    let workload = family_crossing();
+    let run = oracle::run_in(
+        &root(),
+        [
+            "--models=0",
+            "--opt-mode=optN",
+            "--outf=2",
+            workload.entry(),
+        ],
+        &oracle::DECIDED,
+        oracle::Limits {
+            timeout: Duration::from_mins(2),
+            max_output_bytes: 32 * 1024 * 1024,
+        },
+    );
+    workload
+        .contract()
+        .unwrap()
+        .check(&oracle::answers(&run))
+        .unwrap();
+}

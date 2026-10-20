@@ -736,8 +736,11 @@ decides the most waiting comparisons. A false comparison can then prune before
 deeper joins multiply the rows. Among equally decisive generators, a constant
 or already-bound whole argument takes precedence over an independent domain:
 that argument can use an equality posting. The remaining criteria prefer the
-smaller relation, then progress toward other waiting comparisons, and
-otherwise the earlier occurrence of the canonical body, which orders literals
+smaller relation, then progress toward other waiting comparisons, then binding
+an unbound divisor of a flat remainder equality before its dividend. This last
+preference only arranges the join: it evaluates no constant and supplies no
+permission to skip rows. The remaining tie goes to the earlier occurrence of
+the canonical body, which orders literals
 by predicate and then by variable name rather than by their position in the
 source text. A known argument is a preference, not a bound on the number of
 matching rows: a skewed posting may contain the whole relation, and a comparison
@@ -764,6 +767,11 @@ body expression must be proved defined, and all atom-key variables must be
 supplied by the positive join. Other comparisons remain residual filters. The
 operation looks up canonical values without inserting new terms, then sorts the
 matching row IDs to retain ordinary traversal order and complete tuple identity.
+When an existing numeric range probe selects that same dividend, the two
+necessary domains are intersected before any range union is allocated. This
+requires the same checked multiples descriptor; a scheduling preference alone
+supplies no numeric evidence. Existing equality postings keep precedence, and
+sparse or high-fanout selections still fall back to the ordinary range probe.
 
 The same selector serves post-admission formula emission and eligible support
 rounds.

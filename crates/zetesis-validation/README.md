@@ -180,7 +180,10 @@ invocations outside that timed population; it has no command, and its engine,
 are different protocols, not interchangeable timing populations.
 
 `--suite queens` selects the maintained queens encodings;
-`--suite corpus` selects the full clean collection. The profile axes
+`--suite corpus` selects the 94-case correctness catalog and the unchanged
+integrated Family Crossing bundle. Family Crossing is included in the same
+95-case totals and requires fresh clingo qualification. Library consumers use
+`performance::corpus::workloads` to prepare that selection. The profile axes
 (`--compare-backends`, `--compare-grounders`, `--compare-threads`) select
 execution cells. Requested eager/lazy and CPU/GPU policies are recorded
 alongside actual routes; unsupported combinations remain failures. Native and
@@ -314,7 +317,8 @@ Prime sieve at n=30/100/300 and subset sum at n=12/20/30 extend this unchanged
 fourteen-workload prefix to twenty workloads. They exercise positive divisibility
 joins and complete weighted-choice families (15/64/296 subsets), respectively.
 `--include-einstein` adds the unchanged riddle as a twenty-first workload. The
-separate 94-case corpus is unchanged. Sudoku's reviewed source digest and
+separate correctness catalog remains unchanged at 94 cases; the ordinary
+benchmark corpus adds Family Crossing as its 95th case. Sudoku's reviewed source digest and
 exact 81-digit display contract live in `scalability::sudoku`, also used by the
 ordinary CLI correctness test. Its eight givens per row make it a grounding and
 language workload, not a difficult search instance. The examples root is

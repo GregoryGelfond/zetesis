@@ -22,7 +22,7 @@ mod tests;
 /// Maintained source selections; every cell retains complete selected families.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, ValueEnum)]
 pub enum Suite {
-    /// All 94 verified corpus entries.
+    /// All 95 maintained corpus entries, including Family Crossing.
     #[default]
     Corpus,
     /// SEND, queens variant 02 and task allocation.
@@ -195,11 +195,11 @@ pub struct RunOptions {
     )]
     pub native_interface: Option<NativeInterface>,
     /// The clingo to compare with, which must run. Omitted, the first `clingo`
-    /// on PATH is used, and without one the run measures zetesis alone.
+    /// on PATH is used. Bundled workloads, including Family Crossing, require it.
     #[arg(long, conflicts_with = "without_clingo")]
     pub clingo: Option<PathBuf>,
-    /// Measure zetesis alone: qualify each workload against its recorded
-    /// contract and launch no clingo.
+    /// Measure catalog workloads against their recorded contracts without clingo.
+    /// Bundled workloads, including Family Crossing, require fresh clingo qualification.
     #[arg(long)]
     pub without_clingo: bool,
     /// New complete JSON evidence file, including failures and unlaunched

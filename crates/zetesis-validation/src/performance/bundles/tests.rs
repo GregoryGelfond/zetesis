@@ -103,3 +103,23 @@ fn manifest_read_ceiling_is_inclusive() {
     );
     assert!(matches!(result, Err(Error::Boundary(_))));
 }
+
+#[test]
+fn reviewed_loading_checks_the_manifest_bytes_it_admits() {
+    let (directory, manifest) = fixture();
+    let path = write(directory.path(), &manifest);
+    let mut bytes = std::fs::read(&path).unwrap();
+    let expected = crate::digest::sha256(&bytes);
+    assert_eq!(
+        load_reviewed(&path, matrix::WorkloadLimits::default(), &expected)
+            .unwrap()
+            .len(),
+        1
+    );
+    bytes.push(b' ');
+    std::fs::write(&path, bytes).unwrap();
+    assert!(matches!(
+        load_reviewed(&path, matrix::WorkloadLimits::default(), &expected),
+        Err(Error::Corpus(examples::Error::Digest { .. }))
+    ));
+}

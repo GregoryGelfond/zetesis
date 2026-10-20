@@ -1701,6 +1701,9 @@ import Zetesis
 #print axioms Zetesis.ThresholdResidues.open_coefficient_intersects
 #print axioms Zetesis.ThresholdResidues.interval_refuted
 #print axioms Zetesis.ThresholdResidues.formula_interval_refuted
+#print axioms Zetesis.ThresholdResidues.bounded_interval_refuted
+#print axioms Zetesis.ThresholdResidues.condition_required_true_by_residue
+#print axioms Zetesis.ThresholdResidues.condition_required_false_by_residue
 #print axioms Zetesis.Thresholds.threshold_query_exact
 #print axioms Zetesis.Thresholds.threshold_bound_antitone
 #print axioms Zetesis.Thresholds.threshold_sum_monotone

@@ -8506,6 +8506,21 @@
       "name": "Zetesis.ThresholdResidues.formula_interval_refuted"
     },
     {
+      "file": "Zetesis/ThresholdResidues.lean",
+      "line": 198,
+      "name": "Zetesis.ThresholdResidues.bounded_interval_refuted"
+    },
+    {
+      "file": "Zetesis/ThresholdResidues.lean",
+      "line": 233,
+      "name": "Zetesis.ThresholdResidues.condition_required_true_by_residue"
+    },
+    {
+      "file": "Zetesis/ThresholdResidues.lean",
+      "line": 269,
+      "name": "Zetesis.ThresholdResidues.condition_required_false_by_residue"
+    },
+    {
       "file": "Zetesis/Thresholds.lean",
       "line": 37,
       "name": "Zetesis.Thresholds.threshold_query_exact"
@@ -9383,7 +9398,7 @@
     "Zetesis/WorldViews.lean"
   ],
   "source_sha256": {
-    "Audit.lean": "b18ccddb3126858ee5049faec1764c8b55ec29592bd8f6c5c8d2c5f16ab40916",
+    "Audit.lean": "12293b7e1520e1d9b90216b6245c604f73d2b2216cf8cb7ee113f6142553b8bd",
     "Zetesis.lean": "ab627adbbcd72189d13c25548f8a7f4f23008d1e80f0cb5caee8197f5e4e15c1",
     "Zetesis/AcyclicEvaluation.lean": "1a9c77283876cf1f61cb92031da04780aada5d0b256f79db5b64bfb6b129d0dc",
     "Zetesis/AdjacencyRows.lean": "38a19b1c74483a157636321a56e95fea660a2192a04c77930d609e411c8d30d4",
@@ -9560,7 +9575,7 @@
     "Zetesis/ThresholdPrefixes.lean": "a7741e66b7dd983b727bee98e1d37a504b818aefd24a3851df45fcc2ababdf44",
     "Zetesis/ThresholdPropagation.lean": "c2d637283903b1f7f653390e1c939452168b86fb2ed7f582bfc5c502f89dca75",
     "Zetesis/ThresholdReduct.lean": "cd65ca3c8b5b66cea0058413b3290bae0da6ac51dbd553283a9647a2841f5840",
-    "Zetesis/ThresholdResidues.lean": "a0bd983d7b61a16118467bd7076b7315b45cc63a338f90520a4b8e2586c535d5",
+    "Zetesis/ThresholdResidues.lean": "21a7516c91aece3f81b162ef7a7885dac1b5d7fdeb31bd71fe5f912a6b5175c6",
     "Zetesis/Thresholds.lean": "271ba89d3885ecf242dca61cc0ce8998f7b0f36db6a4df907ed1d4f7bd075a85",
     "Zetesis/TightBodyRecognition.lean": "fc2f7e335c6fb1d96f807f073ba54afa1e3c6ea37da6003f89e8733599c1ccdb",
     "Zetesis/TightEvaluation.lean": "5102023a074986acc36c816d3f67dca68e7ff0654b448c017f05c17a63a0dd6a",

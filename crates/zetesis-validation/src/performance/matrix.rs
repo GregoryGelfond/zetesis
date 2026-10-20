@@ -330,13 +330,13 @@ pub fn run_workloads_with_cancellation(
     run::campaign(request, Some(workloads), invocation, cancelled)
 }
 
-/// Expand a selection over the maintained series' workload entries before
+/// Expand a selection over the maintained suite's workload entries before
 /// invoking the explicit-workload runner. One entry can name several amended
 /// cells; every match keeps its identity and its order within that entry.
 /// Only this command-owned expansion consumes a selection: the public
 /// explicit-workload operations still refuse one. The returned report records
 /// both the original request and the actual expanded population.
-pub(super) fn run_series_with_cancellation(
+pub(super) fn run_selected_workloads_with_cancellation(
     request: &Request<'_>,
     workloads: &[Workload],
     invocation: NativeInvocation,
@@ -356,7 +356,7 @@ pub(super) fn run_series_with_cancellation(
         );
         if selected.len() == previous {
             return Err(Error::Configuration(
-                "a selected case is not a workload of the series",
+                "a selected case is not a workload of the selected suite",
             ));
         }
     }

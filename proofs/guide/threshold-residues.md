@@ -9,8 +9,9 @@ in the required interval, the candidate region has no satisfying completion.
 For example, require a sum of 17 from one weight-1 condition and several weight-6
 and weight-10 conditions. If the weight-1 condition becomes false, every remaining
 sum is even. Ordinary lower and upper bounds may still enclose 17; divisibility
-rules it out. This does not resolve every unreachable sum: weights 6, 10, 15 and
-15 have common divisor 1, yet cannot sum to 17.
+rules it out. Testing that false branch before choosing the condition can therefore
+force it true. This does not resolve every unreachable sum: weights 6, 10, 15 and
+7 cannot sum to 18, but each complementary coefficient set has gcd 1.
 
 The proof has three steps:
 
@@ -60,10 +61,48 @@ to the supplied row; preservation under runtime grouping is a separate premise.
 
 The Rust implementation coalesces arithmetic notifications separately from bound
 transport and runs them after node, bound-transfer, witness and support propagation
-settles. Each dirty row is then checked once; the check creates no further events.
-An earlier arithmetic refutation remains valid after more decisions or tighter
-bounds, since these only restrict its possible completions. This scheduling
-argument is separate from the proved arithmetic statements above.
+settles. Complement checks may then force previously open conditions through
+those same queues. The next arithmetic check waits for their events to drain;
+no pending bit contributes to a processed sum. Every additional wave decides an
+open condition, so this extension terminates. An earlier arithmetic refutation
+remains valid after more decisions or tighter bounds, since these only restrict
+its possible completions. These scheduling obligations remain separate from the
+proved arithmetic statements above.
+
+
+## Forcing one condition by excluding its complement
+
+`bounded_interval_refuted` also intersects the progression with the upper reading.
+`condition_required_true_by_residue` and `condition_required_false_by_residue`
+then test a condition's two hypothetical values. When one branch has no progression
+point in the required interval, every compatible satisfying interpretation takes
+the other branch. A zero divisor denotes a singleton base. None of these results
+assumes independent conditions or replaces reduct membership.
+
+For a grouped coefficient `w`, the false branch has base `known` and maximum
+`possible-w`; the true branch has base `known+w` and maximum `possible`. Both use
+the gcd of the other undecided coefficients. Runtime grouping must preserve the
+whole coefficient of a condition, including repeated source occurrences.
+
+The consumer first retains its cheap whole-row refutation test. Complement
+checks can stop when one undecided coefficient fits the interval width and a
+positive partial gcd of the other undecided coefficients also fits. Removing
+any other coefficient leaves the fitting one; removing that one leaves a final
+gcd dividing the observed partial gcd. Each complementary lattice therefore
+has an interval witness. A branch clipped by its minimum or maximum has that
+attainable endpoint as a witness; ordinary bound propagation must already have
+ruled out empty branch ranges. This does not establish an attainable interior
+sum. The existing arithmetic laws support the argument, while this filter's
+executable correspondence remains an implementation obligation.
+
+Otherwise one reversed suffix-gcd vector and one forward prefix reduction obtain
+every complementary gcd with linear coefficient visits per batch. The suffix is
+rebuilt from drained masks. Grouped conditions are unique; publishing a deduction
+only queues that condition, so an unvisited condition still has its original
+snapshot truth. The prefix includes every originally open coefficient, even after
+its decision is queued. No event processing may be interleaved with that batch.
+The retained vector belongs to worker scratch and carries no inherited authority;
+its capacity is included in memory accounting and every reduction step is charged.
 
 The mathematical arithmetic is unbounded. The Rust implementation must establish
 grouped-row correspondence, its greatest-common-divisor computation, the interval

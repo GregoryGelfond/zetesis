@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "root": "..",
+  "cases": [
+    {
+      "entry": "family-crossing/integrated.lp",
+      "contract": {
+        "satisfiability": "sat",
+        "family": "optimal",
+        "model_count": 8,
+        "cost": [
+          29
+        ],
+        "witnesses": [],
+        "required_symbols": [],
+        "notes": [
+          "Complete optimal enumeration: all eight final ties at cost 29; each campaign requires fresh clingo qualification."
+        ]
+      },
+      "files": [
+        {
+          "path": "family-crossing/integrated.lp",
+          "sha256": "ddd36744c2138067f5d37dd9679e2e02427eb4eb80af5c63549bac7660703b29",
+          "includes": [
+            {
+              "spelling": "family_crossing_complete_domain.lp",
+              "target": "family-crossing/family_crossing_complete_domain.lp"
+            }
+          ]
+        },
+        {
+          "path": "family-crossing/family_crossing_complete_domain.lp",
+          "sha256": "2903ff0b8134ad5b99df68fe7cc0ac6ad387f44f160d16a199c037a5c59241da",
+          "includes": [
+            {
+              "spelling": "eec_htp_integration_v5.lp",
+              "target": "family-crossing/eec_htp_integration_v5.lp"
+            }
+          ]
+        },
+        {
+          "path": "family-crossing/eec_htp_integration_v5.lp",
+          "sha256": "1d0f52af6de50c7d0bb64abb3b61203c351c582b29222fccacb71bac53c727ed",
+          "includes": []
+        }
+      ]
+    }
+  ]
+}
