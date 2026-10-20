@@ -106,7 +106,7 @@ those instructions rather than interpreting the plan as new program semantics.
 | Complete joins and possible support | `formula_support`, `formula_pattern` | Transactional whole-tuple matching, snapshots, indexes and support completion |
 | Positive-row query strategy | `grounding_options`, `formula_support::queries`, CPU `table` | Explicit completed-support table indices and owned row masks; shared matcher and cumulative source budgets |
 | Formula emission | `formula_ground`, `formula_guard`, `formula_conditional` | Original implications, aggregate conditions and universal instances |
-| Optional formula factoring | `formula_factor` | Qualified existential components with the complete-join path as fallback |
+| Optional formula factoring | `formula_factor` | Independent existential components over fixed heads; certified fixed-input arithmetic, with the complete join as fallback |
 | Optional count certificates | `formula_count_plan` | Capture, derivation and emitted correspondence to the original theory |
 | Source activity | `formula_source_activity` | Bounded absent/optional/required producer refinement over completed support, shared by objectives and projection; each fact row is a required producer |
 | Original-model queries | `formula_source_activity::model_query` | Closed conditions over full original atom identities, separate from source activity and reduct formulas |

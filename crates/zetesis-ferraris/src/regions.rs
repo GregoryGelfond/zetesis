@@ -1051,10 +1051,28 @@ impl Narrower {
     /// For N nodes, U unit rows, C chains, L chain leaves and A anchors, this
     /// adds O(N + R + U log U + L + (R + C + L) log(A + 1)) preparation work,
     /// including the per-chain anchored-cone summary, and O(U + C) storage,
-    /// with fallible reservations. There are no row/chain pairs or
-    /// node-sized offsets. With no unit row there is no allocation or chain
-    /// scan. Runtime anchor lookups, posting visits and exact-prefix comparisons
-    /// consume propagation work; no per-Boolean mutable state is added.
+    /// with fallible reservations. This anchor projection has no row/chain
+    /// pairs or node-sized offsets. With no unit row it performs no allocation
+    /// or chain scan. Runtime anchor lookups, posting visits and exact-prefix
+    /// comparisons consume propagation work; no per-Boolean mutable state is added.
+    ///
+    /// A separate capacity projection retains conjunction/row intersections
+    /// containing at least two distinct necessary unit contributions. It joins
+    /// direct conjunction leaves and necessary aliases from original root
+    /// implications with the existing row incidences. Its preparation work is
+    /// O(R + C + D + B log(B + 1) + L log(B + 1) + J + sum(Pc log(Pc + 1))),
+    /// where D counts root discovery visits (including repeated double-negation
+    /// and target-incidence scans), B the collected aliases, J the projection's
+    /// incidence visits, and Pc its entries before deduplication for chain c.
+    /// Retained storage is O(R + I + T) for row offsets, I retained intersections
+    /// and T distinct required conditions; a dense incidence join can produce
+    /// a dense projection. Temporary alias and per-chain projection vectors can
+    /// exceed the deduplicated payload. Reservations are fallible. There is no
+    /// per-region capacity cache; its runtime visits consume propagation work.
+    /// Original-root aliases are never used in frozen-reduct propagation.
+    /// This constructor has no memory allowance. Callers can budget retained
+    /// capacity publication using [`Self::capacity_index_bytes`]; temporary
+    /// preparation peaks can precede that publication check.
     ///
     /// # Errors
     /// Returns [`Stop::Allocation`] for compact-adjacency offset overflow or
@@ -1140,6 +1158,14 @@ impl Narrower {
             + self.extrema.retained_bytes()
             + self.equal_extrema.retained_bytes()
             + shared
+    }
+
+    /// Additional retained cardinality-capacity projection storage. The shared
+    /// immutable projection owns its actual vector capacities; no capacity
+    /// state is cloned with regions. Temporary preparation storage is excluded.
+    #[must_use]
+    pub fn capacity_index_bytes(&self) -> u128 {
+        self.thresholds.capacity_storage_bytes()
     }
 
     /// Direct Boolean parents followed by ordinal-cut parents. The ordinal

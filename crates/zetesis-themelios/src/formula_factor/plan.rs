@@ -17,11 +17,13 @@ use crate::formula_support::{StorageLease, reserve};
 
 pub(super) struct Plan {
     pub(super) components: Vec<Component>,
+    pub(super) arithmetic: bool,
     lease: StorageLease,
 }
 
 struct Scratch {
     fixed: Vec<bool>,
+    arithmetic: bool,
     parents: Vec<usize>,
     scopes: Vec<Range<usize>>,
     variables: Vec<usize>,
@@ -88,8 +90,13 @@ pub(super) fn components(
     let Some(mut scratch) = partition(builder, rule, head)? else {
         return Ok(None);
     };
+    #[cfg(test)]
+    if scratch.arithmetic && !super::arithmetic::testing::enabled() {
+        return Ok(None);
+    }
     let mut plan = Plan {
         components: Vec::new(),
+        arithmetic: scratch.arithmetic,
         lease: lease(builder, size_of::<Plan>(), rule)?,
     };
     let mut start = 0;
@@ -109,6 +116,11 @@ pub(super) fn components(
             used: Vec::new(),
         };
         for &(_, index) in &scratch.groups[start..end] {
+            builder.work(rule.location)?;
+            if matches!(rule.body[index], LiteralIr::Bind { .. }) {
+                // Fixed assignments are checked once before component joins.
+                continue;
+            }
             for &variable in &scratch.variables[scratch.scopes[index].clone()] {
                 push(
                     &mut component.used,
@@ -126,6 +138,10 @@ pub(super) fn components(
                 builder,
                 rule,
             )?;
+        }
+        if component.literals.is_empty() {
+            start = end;
+            continue;
         }
         sort(&mut component.used, builder, rule)?;
         for _ in &component.used {
@@ -169,7 +185,7 @@ pub(super) fn components(
         )?;
         start = end;
     }
-    Ok(Some(plan))
+    Ok((plan.components.len() > 1).then_some(plan))
 }
 
 /// Connect non-head variables and group literals by their admitted component.
@@ -181,6 +197,7 @@ fn partition(
 ) -> Result<Option<Scratch>, FormulaFailure> {
     let mut scratch = Scratch {
         fixed: Vec::new(),
+        arithmetic: false,
         parents: Vec::new(),
         scopes: Vec::new(),
         variables: Vec::new(),
@@ -205,13 +222,7 @@ fn partition(
     }
     for literal in &rule.body {
         let start = scratch.variables.len();
-        if !scope(
-            builder,
-            rule,
-            literal,
-            &mut scratch.variables,
-            &mut scratch.lease,
-        )? {
+        if !scope(builder, rule, literal, &mut scratch)? {
             return Ok(None);
         }
         let range = start..scratch.variables.len();
@@ -288,20 +299,15 @@ fn scope(
     builder: &mut Builder<'_, '_, '_>,
     rule: &RuleIr,
     literal: &LiteralIr,
-    used: &mut Vec<usize>,
-    lease: &mut StorageLease,
+    scratch: &mut Scratch,
 ) -> Result<bool, FormulaFailure> {
     match literal {
-        LiteralIr::Atom(_, pattern) => {
-            let pattern = builder.computation.static_pattern(
-                *pattern,
-                builder.limits,
-                builder.counters,
-                rule.location,
-            )?;
-            for variable in pattern.terms().variables() {
-                push(used, variable, lease, builder, rule)?;
-            }
+        LiteralIr::Atom(_, pattern) => pattern_scope(builder, rule, *pattern, scratch)?,
+        LiteralIr::PatternAtom(pattern) if pattern.arguments.is_empty() => {
+            // With no structural argument traversal the whole captured row is
+            // exactly the ordinary positive atom. ArgumentCheck keeps its test.
+            scratch.arithmetic = true;
+            pattern_scope(builder, rule, pattern.atom, scratch)?;
         }
         LiteralIr::ProjectedAtom(_, projection) => {
             let Projection::Arguments { terms, .. } = projection else {
@@ -310,22 +316,47 @@ fn scope(
             for term in terms.iter().flatten() {
                 builder.work(rule.location)?;
                 if let Term::Variable(variable) = term {
-                    push(used, *variable, lease, builder, rule)?;
+                    push(
+                        &mut scratch.variables,
+                        *variable,
+                        &mut scratch.lease,
+                        builder,
+                        rule,
+                    )?;
                 }
             }
         }
-        LiteralIr::Compare(comparison) => {
-            if !expression_scope(builder, rule, comparison.left(), used, lease)?
-                || !expression_scope(builder, rule, comparison.right(), used, lease)?
+        LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => {
+            scratch.arithmetic |= matches!(literal, LiteralIr::ArgumentCheck(_));
+            if !expression_scope(builder, rule, comparison.left(), scratch)?
+                || !expression_scope(builder, rule, comparison.right(), scratch)?
             {
                 return Ok(false);
             }
         }
         LiteralIr::TupleCompare(left, _, right) => {
             for expression in left.iter().chain(right) {
-                if !expression_scope(builder, rule, expression, used, lease)? {
+                if !expression_scope(builder, rule, expression, scratch)? {
                     return Ok(false);
                 }
+            }
+        }
+        LiteralIr::Bind { target, value } => {
+            if !scratch.fixed[*target]
+                || !super::arithmetic::fixed_expression(builder, rule, value, &scratch.fixed)?
+            {
+                return Ok(false);
+            }
+            scratch.arithmetic = true;
+            push(
+                &mut scratch.variables,
+                *target,
+                &mut scratch.lease,
+                builder,
+                rule,
+            )?;
+            if !expression_scope(builder, rule, value, scratch)? {
+                return Ok(false);
             }
         }
         _ => return Ok(false),
@@ -333,19 +364,56 @@ fn scope(
     Ok(true)
 }
 
+fn pattern_scope(
+    builder: &mut Builder<'_, '_, '_>,
+    rule: &RuleIr,
+    pattern: crate::formula_support::components::Pattern,
+    scratch: &mut Scratch,
+) -> Result<(), FormulaFailure> {
+    let pattern = builder.computation.static_pattern(
+        pattern,
+        builder.limits,
+        builder.counters,
+        rule.location,
+    )?;
+    for variable in pattern.terms().variables() {
+        push(
+            &mut scratch.variables,
+            variable,
+            &mut scratch.lease,
+            builder,
+            rule,
+        )?;
+    }
+    Ok(())
+}
+
 fn expression_scope(
     builder: &mut Builder<'_, '_, '_>,
     rule: &RuleIr,
     expression: &Expression,
-    used: &mut Vec<usize>,
-    lease: &mut StorageLease,
+    scratch: &mut Scratch,
 ) -> Result<bool, FormulaFailure> {
+    if expression.nodes.len() > 1 {
+        if !super::arithmetic::fixed_expression(builder, rule, expression, &scratch.fixed)? {
+            return Ok(false);
+        }
+        scratch.arithmetic = true;
+    }
     for operation in &expression.nodes {
         builder.work(rule.location)?;
         match operation {
-            Operation::Variable(variable) => push(used, *variable, lease, builder, rule)?,
-            Operation::Constant(_) => {}
-            _ => return Ok(false),
+            Operation::Variable(variable) => {
+                push(
+                    &mut scratch.variables,
+                    *variable,
+                    &mut scratch.lease,
+                    builder,
+                    rule,
+                )?;
+            }
+            Operation::Constructor(_) => return Ok(false),
+            _ => {}
         }
     }
     Ok(true)
@@ -385,6 +453,13 @@ fn copy_literal(
 ) -> Result<LiteralIr, FormulaFailure> {
     Ok(match literal {
         LiteralIr::Atom(negation, pattern) => LiteralIr::Atom(*negation, *pattern),
+        LiteralIr::PatternAtom(pattern) => {
+            debug_assert!(pattern.arguments.is_empty());
+            LiteralIr::Atom(
+                themelios_program::program::DefaultNegation::None,
+                pattern.atom,
+            )
+        }
         LiteralIr::ProjectedAtom(negation, projection) => {
             let Projection::Arguments {
                 predicate,
@@ -412,13 +487,18 @@ fn copy_literal(
                 },
             )
         }
-        LiteralIr::Compare(comparison) => {
+        LiteralIr::Compare(comparison) | LiteralIr::ArgumentCheck(comparison) => {
             let (limits, counters) = (builder.limits, &mut builder.counters);
-            LiteralIr::Compare(comparison.copy(
+            let comparison = comparison.copy(
                 || counters.work(limits, rule.location),
                 builder.budget,
                 rule.location,
-            )?)
+            )?;
+            if matches!(literal, LiteralIr::ArgumentCheck(_)) {
+                LiteralIr::ArgumentCheck(comparison)
+            } else {
+                LiteralIr::Compare(comparison)
+            }
         }
         LiteralIr::TupleCompare(left, relation, right) => LiteralIr::TupleCompare(
             left.iter()

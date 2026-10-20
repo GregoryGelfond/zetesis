@@ -252,3 +252,36 @@ fn false_bodies_keep_selected_witness_vocabulary() {
         }
     );
 }
+
+#[test]
+fn an_empty_component_leaves_no_unused_source_origin() {
+    // No arithmetic is present: both independent anonymous variables belong
+    // to the original component profile. A different producer supplies h(1),
+    // so the first component has a witness while the second one is empty.
+    let source = "{p(1,a);q(2,a);a}. h(X) :- p(X,_),q(X,_). h(1) :- a.";
+    let preparation = testing::prepare(source);
+    let rule = preparation
+        .program
+        .rules_without_facts()
+        .iter()
+        .find(|rule| rule.body.len() == 2)
+        .expect("the unused rule has two ordinary body occurrences");
+    assert!(matches!(
+        rule.head,
+        crate::formula_ir::HeadIr::Normal(Some(_))
+    ));
+    assert!(rule.body.iter().all(|literal| matches!(
+        literal,
+        crate::formula_ir::LiteralIr::Atom(themelios_program::program::DefaultNegation::None, _)
+    )));
+    let unused = rule.location;
+    let compiled = ground(preparation, None, None).unwrap();
+    assert!(
+        !compiled
+            .origins
+            .iter()
+            .flatten()
+            .any(|site| *site == unused),
+        "an uninstantiated producer cannot become a body atom's first origin"
+    );
+}

@@ -31,6 +31,7 @@ import Zetesis.ThresholdReduct
 import Zetesis.ThresholdDivision
 import Zetesis.ThresholdPrefixes
 import Zetesis.ThresholdConnectives
+import Zetesis.ThresholdCapacity
 import Zetesis.AssociativeWitnesses
 import Zetesis.AggregateAssignment
 import Zetesis.DagSharing

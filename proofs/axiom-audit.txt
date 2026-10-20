@@ -1749,6 +1749,11 @@
 'Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes' does not depend on any axioms
 'Zetesis.Refinement.TheoryAdmission.self_reference_is_refused' does not depend on any axioms
 'Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked' does not depend on any axioms
+'Zetesis.ThresholdCapacity.masked_sum_union' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdCapacity.capacity_lower_bound' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdCapacity.unit_sum_filter_length' depends on axioms: [propext]
+'Zetesis.ThresholdCapacity.unit_capacity_lower_bound' depends on axioms: [propext, Quot.sound]
+'Zetesis.ThresholdCapacity.body_excluded_original' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ThresholdConnectives.masked_unit_sum_le_length' depends on axioms: [propext, Quot.sound]
 'Zetesis.ThresholdConnectives.masked_unit_sum_full' depends on axioms: [propext, Classical.choice, Quot.sound]
 'Zetesis.ThresholdConnectives.masked_unit_sum_positive' depends on axioms: [propext, Quot.sound]

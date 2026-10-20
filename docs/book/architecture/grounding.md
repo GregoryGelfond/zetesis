@@ -1102,6 +1102,22 @@ original activation and equality conditions. Structured positive witnesses can
 bind local variables before dependent arithmetic is checked. Positive-witness
 matching does not invert arithmetic or introduce a global guessed value universe.
 
+Independent existential body components can share a formula once head values
+are fixed, avoiding the product of their witness families. Fixed-input
+arithmetic is eligible only after it is checked over every matching completed
+head row. Fixed assignments remain equality tests; local arithmetic generators
+and connected components retain the complete join. Each component must supply
+a selected witness before any component publishes atoms or source provenance.
+Emission then retains every witness alternative. This preserves original and
+frozen truth; possible support alone does not make any body true.
+
+The arithmetic check includes matching head rows introduced by other producers.
+Undefined arithmetic on such a row declines optional factoring and retains the
+complete join. Authoritative source-family diagnostics run before formula
+emission, so this decline cannot suppress their warnings or errors. Storage,
+work and cancellation failures propagate as typed failures; they do not become
+an optimization decline or a successfully emitted partial formula.
+
 A checked `AtomKey` borrows a pattern and its current binding. Support and delta
 membership use that full typed identity without making a temporary atom. Formula
 head admission validates a borrowed projection of constants and assigned

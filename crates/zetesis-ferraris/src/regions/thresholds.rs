@@ -16,6 +16,7 @@ use zetesis_cpu::Stop;
 use super::adjacency::Adjacency;
 
 mod connectives;
+mod capacity;
 #[cfg(test)]
 mod frozen_tests;
 #[cfg(test)]
@@ -37,6 +38,7 @@ pub(super) struct Thresholds {
     connectives: Option<connectives::Connectives>,
     /// A non-unit grouped coefficient can expose residual divisibility.
     residuals: bool,
+    capacity: Option<capacity::Capacity>,
 }
 
 #[derive(Clone, Debug)]
@@ -205,6 +207,14 @@ impl Thresholds {
                     .map(|(index, edge)| (edge.condition, index)),
             )?)
         };
+        let capacity = capacity::Capacity::prepare(
+            theory,
+            &rows,
+            by_condition.as_ref(),
+            &incidences,
+            chains,
+            extrema,
+        )?;
         let relations = prefixes::prepare(&rows)?;
         let connectives = connectives::Connectives::prepare(
             &rows,
@@ -221,6 +231,7 @@ impl Thresholds {
             relations,
             connectives,
             residuals,
+            capacity,
         })
     }
 
@@ -236,11 +247,17 @@ impl Thresholds {
     }
 
     pub(super) fn has_relations(&self) -> bool {
-        self.relations.is_some() || self.connectives.is_some()
+        self.relations.is_some() || self.connectives.is_some() || self.capacity.is_some()
     }
 
     pub(super) fn has_residuals(&self) -> bool {
         self.residuals
+    }
+
+    pub(super) fn capacity_storage_bytes(&self) -> u128 {
+        self.capacity
+            .as_ref()
+            .map_or(0, capacity::Capacity::retained_bytes)
     }
 
     fn related(&self, row: usize) -> &[usize] {

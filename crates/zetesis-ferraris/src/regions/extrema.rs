@@ -10,6 +10,8 @@
 //! Runtime streams those guards into the ordinary connective event counters.
 //! Each condition event may therefore cost O(G), but no E-by-G transpose is
 //! retained, and the processed-event invariant of region knowledge is unchanged.
+//! A known cut locates its ordered consequences in O(log G) charged reads, then
+//! visits only that prefix or suffix, preserving the column's notification order.
 //! Preparation sorts occurrences and guards in O(E log E + G log G). It has no
 //! independent cancellation contract, like the enclosing narrower constructor.
 
@@ -33,6 +35,37 @@ struct Column {
     conditions: Vec<usize>,
     /// (qualifying prefix length, original formula node), sorted lexically.
     guards: Vec<(usize, usize)>,
+}
+
+impl Column {
+    /// Nested disjunctions preserve truth towards longer prefixes and falsity
+    /// towards shorter ones. Equal lengths belong to both implication ranges.
+    /// The sorted guard column admits a charged binary boundary search, followed
+    /// by the original target order. No target is taught during the search.
+    fn consequences(
+        &self,
+        length: usize,
+        value: bool,
+        work: &mut Work<'_>,
+    ) -> Result<&[(usize, usize)], Stop> {
+        let (mut start, mut end) = (0, self.guards.len());
+        while start < end {
+            work.tick()?;
+            let middle = start + (end - start) / 2;
+            let size = self.guards[middle].0;
+            let before = if value { size < length } else { size <= length };
+            if before {
+                start = middle + 1;
+            } else {
+                end = middle;
+            }
+        }
+        Ok(if value {
+            &self.guards[start..]
+        } else {
+            &self.guards[..start]
+        })
+    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -313,14 +346,11 @@ impl<C: Count> Closure<'_, C> {
             return Ok(Step::Unchanged);
         }
         let value = bit(self.known.sure, source.root);
-        let guards = &index.extrema.columns[column].guards;
+        let guards = index.extrema.columns[column].consequences(length, value, work)?;
         let mut step = Step::Unchanged;
-        for &(size, node) in guards {
+        for &(_, node) in guards {
             work.tick()?;
-            if (value && size < length)
-                || (!value && size > length)
-                || frozen.is_some_and(|truth| !truth[node])
-            {
+            if frozen.is_some_and(|truth| !truth[node]) {
                 continue;
             }
             step = step.join(if value {

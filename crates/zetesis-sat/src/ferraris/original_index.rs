@@ -145,7 +145,10 @@ pub(super) fn prepare(
 }
 
 pub(super) fn admit(narrower: &Narrower, native_byte_limit: u64) -> Result<(), Incomplete> {
-    check_bytes(narrower.extremum_index_bytes(), native_byte_limit)
+    check_bytes(
+        narrower.extremum_index_bytes() + narrower.capacity_index_bytes(),
+        native_byte_limit,
+    )
 }
 
 fn check_bytes(required: u128, limit: u64) -> Result<(), Incomplete> {

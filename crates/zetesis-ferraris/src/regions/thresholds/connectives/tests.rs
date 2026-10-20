@@ -87,6 +87,7 @@ fn original_bounds_cross_the_connective_boundary() {
             assert!(index.thresholds.connectives.is_some());
             let mut without = index.clone();
             without.thresholds.connectives = None;
+            without.thresholds.capacity = None;
             let mut baseline = Region::all_open(5);
             close(
                 &theory,
@@ -205,6 +206,7 @@ fn frozen_closure_ignores_connective_links() {
             let index = Narrower::new(&theory);
             let mut without = index.clone();
             without.thresholds.connectives = None;
+            without.thresholds.capacity = None;
             let mut evaluation = EvaluationWorkspace::default();
             for candidate in 0..32 {
                 let outer = interpretation(&theory, candidate);

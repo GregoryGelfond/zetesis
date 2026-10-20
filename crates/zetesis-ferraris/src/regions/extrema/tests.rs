@@ -9,6 +9,8 @@ use crate::{
 };
 use zetesis_cpu::{Cancellation, Stop};
 
+mod order;
+
 fn owner(atoms: usize) -> FormulaNodes {
     FormulaNodes::new(FormulaParts::new((0..atoms).map(Node::atom).collect(), vec![]).unwrap())
 }

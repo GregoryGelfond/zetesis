@@ -333,7 +333,10 @@ fn useful_bound(state: &State, value: bool, bound: i128) -> bool {
 
 impl Thresholds {
     pub(super) fn has_requirement_links(&self, row: usize) -> bool {
-        !self.related(row).is_empty()
+        self.capacity
+            .as_ref()
+            .is_some_and(|capacity| capacity.has_row(row))
+            || !self.related(row).is_empty()
             || (self.connectives.is_some() && unit_first(&self.rows[row]).is_some())
     }
 }
@@ -465,6 +468,10 @@ impl<C: Count> Closure<'_, C> {
         work: &mut Work<'_>,
     ) -> Result<Step, Stop> {
         let mut step = self.threshold_prefixes(index, row, work)?;
+        if step == Step::Contradiction {
+            return Ok(step);
+        }
+        step = step.join(self.threshold_capacity(index, row, work)?);
         if step == Step::Contradiction {
             return Ok(step);
         }

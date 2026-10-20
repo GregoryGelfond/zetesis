@@ -8335,6 +8335,31 @@
     "line": 368
   },
   {
+    "name": "Zetesis.ThresholdCapacity.masked_sum_union",
+    "file": "Zetesis/ThresholdCapacity.lean",
+    "line": 36
+  },
+  {
+    "name": "Zetesis.ThresholdCapacity.capacity_lower_bound",
+    "file": "Zetesis/ThresholdCapacity.lean",
+    "line": 56
+  },
+  {
+    "name": "Zetesis.ThresholdCapacity.unit_sum_filter_length",
+    "file": "Zetesis/ThresholdCapacity.lean",
+    "line": 86
+  },
+  {
+    "name": "Zetesis.ThresholdCapacity.unit_capacity_lower_bound",
+    "file": "Zetesis/ThresholdCapacity.lean",
+    "line": 99
+  },
+  {
+    "name": "Zetesis.ThresholdCapacity.body_excluded_original",
+    "file": "Zetesis/ThresholdCapacity.lean",
+    "line": 118
+  },
+  {
     "name": "Zetesis.ThresholdConnectives.masked_unit_sum_le_length",
     "file": "Zetesis/ThresholdConnectives.lean",
     "line": 34

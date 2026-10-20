@@ -71,6 +71,17 @@ impl<C: Count> Closure<'_, C> {
             } else {
                 state.possible -= edge.weight;
             }
+            if value
+                && frozen.is_none()
+                && index
+                    .thresholds
+                    .capacity
+                    .as_ref()
+                    .is_some_and(|capacity| capacity.has_row(edge.row))
+                && state.upper.is_some()
+            {
+                self.lists.queue_threshold(edge.row);
+            }
             step = step.join(self.threshold_row(index, edge.row, frozen, work)?);
             if step == Step::Contradiction {
                 return Ok(step);

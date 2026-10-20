@@ -232,6 +232,16 @@ the requirements, adding no state to child copies. This transfer is disabled
 for frozen-reduct narrowing. Recognition is limited to exact prefixes in
 prepared order; other subset relations can remain undiscovered.
 
+A conjunction can also be excluded when its necessary contributions would
+exceed a unit row's exclusive upper bound. Preparation joins conjunction
+operands with counted conditions, including aliases established by original
+root implications. It counts distinct conditions once and adds only those not
+already held to the processed held count. Pending truth can weaken that bound;
+its processed event schedules another check. The projection is immutable,
+stores only intersections with at least two conditions, and is unused during
+frozen-reduct narrowing. This excludes impossible alternatives without changing
+the membership check or retaining another per-region truth cache.
+
 For a required finite sum interval, original-candidate narrowing also checks
 divisibility of the remaining coefficients. If `B` is already known true and
 `d` divides every undecided coefficient, every completion has sum `B + d*k`.
@@ -298,6 +308,11 @@ covers the visited prefix; cleanup still settles worker receipts. Partial
 knowledge from a refuted or interrupted closure is not reused as a completed
 closure. This stopping rule applies to the region decision: operations returning
 a complete truth vector or least closure must still construct that result.
+
+Native extremum cuts use their shared ordered guard column to locate the
+affected prefix or suffix before sending consequences. Binary boundary lookup
+and visited targets are charged; unrelated guards are skipped. Equal cuts,
+frozen-truth checks and target order retain their existing behavior.
 
 The knowledge of a region holds in every region inside it
 (`FormulaBounds.known_mono`), so a split hands each child a copy of its

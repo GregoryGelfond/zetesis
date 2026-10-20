@@ -224,6 +224,21 @@ empty lists and repeated conditions need no extra premise. These laws justify
 Boolean sorting and deduplication, not removal of weighted aggregate occurrences.
 They are original-satisfaction laws, not a proof of a frozen rewrite.
 
+[`ThresholdCapacity`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/ThresholdCapacity.lean)
+counts the union of held and necessary conditions without counting overlap twice.
+Its lower-bound law permits the recorded held sum to underestimate current truth;
+the unit-count corollary requires a duplicate-free carrier. A body is excluded
+when its necessary conditions would reach a forbidden threshold. This is an
+original-candidate consequence: original producer implications do not supply the
+same premise in an arbitrary frozen reduct.
+
+The [Rust capacity projection](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-ferraris/src/regions/thresholds/capacity.rs)
+must establish that each projected condition belongs to the unit row and follows
+from the body, including the root authority of implication aliases. Grouped row
+identity, valid held sums, checked arithmetic, event scheduling and charged reads
+remain executable obligations. Pending true events may weaken the lower bound;
+the semantic law does not establish their eventual processing or Rust refinement.
+
 [`AssociativeWitnesses`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/AssociativeWitnesses.lean)
 proves the original truth of associative cuts, distinct-leaf unit consequences,
 and witness transfer under explicit coverage or containment premises. A cut may
@@ -2301,6 +2316,26 @@ quadratic total movement; the semantic laws supply neither resource bounds nor
 an admission guarantee. Differential tests compare original and arbitrary frozen
 truth, with exhaustive small cases and sampled larger cases. They do not prove
 the Rust map or producer traversal.
+
+For independent component factoring,
+[`RuleFactorization.original_factorization` and `frozen_factorization`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RuleFactorization.lean)
+prove the replacement of a complete Cartesian product of two finite body
+families by one implication whose antecedent conjoins their disjunctions. The
+conditions may be arbitrary formulas, and frozen equivalence holds for every M
+and J. The laws assume that product explicitly; they do not prove its extraction
+from source variables, arithmetic or completed support.
+
+The Rust component route must establish independence after fixing the head,
+check fixed assignments as equalities, and retain every producer alternative.
+Its arithmetic certificate checks every matching completed head row before
+emission; undefined arithmetic declines the route, while typed resource and
+interruption failures propagate. The shared inhabited-witness preflight covers
+both the ordinary and arithmetic profiles: every component supplies a selected
+row before any component names atoms or records source provenance. This proves
+a complete substitution exists, not that its body is true. These checks,
+authoritative source-family diagnostics, provenance, rebuilt support guards and
+charged transient storage remain Rust correspondence obligations. Existing
+semantic laws do not establish an implementation refinement.
 
 Formula witness sharing has its own observation boundary.
 [`RuleFactorization.original_factorization` and `frozen_factorization`](https://github.com/GregoryGelfond/zetesis/blob/main/proofs/Zetesis/RuleFactorization.lean)

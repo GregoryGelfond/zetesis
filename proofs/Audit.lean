@@ -1667,6 +1667,11 @@ import Zetesis
 #print axioms Zetesis.Refinement.TheoryAdmission.dimensions_precede_nodes
 #print axioms Zetesis.Refinement.TheoryAdmission.self_reference_is_refused
 #print axioms Zetesis.Refinement.TheoryAdmission.unasserted_atom_is_checked
+#print axioms Zetesis.ThresholdCapacity.masked_sum_union
+#print axioms Zetesis.ThresholdCapacity.capacity_lower_bound
+#print axioms Zetesis.ThresholdCapacity.unit_sum_filter_length
+#print axioms Zetesis.ThresholdCapacity.unit_capacity_lower_bound
+#print axioms Zetesis.ThresholdCapacity.body_excluded_original
 #print axioms Zetesis.ThresholdConnectives.masked_unit_sum_le_length
 #print axioms Zetesis.ThresholdConnectives.masked_unit_sum_full
 #print axioms Zetesis.ThresholdConnectives.masked_unit_sum_positive

@@ -1,5 +1,8 @@
 //! Existential body components over fixed head bindings in completed support.
+//! Arithmetic must be defined over that complete head carrier before emission;
+//! fixed head assignments remain equalities and local witnesses remain complete.
 
+mod arithmetic;
 mod continuations;
 mod plan;
 pub(super) use continuations::rule as continuations;
@@ -40,18 +43,32 @@ pub(super) fn rule<'source>(
     let Some(components) = plan::components(builder, rule, head)? else {
         return Ok(false);
     };
+    let mut evaluation = crate::formula_support::Evaluation::default();
+    if components.arithmetic && !arithmetic::certify(builder, rule, support, head, &mut evaluation)?
+    {
+        return Ok(false);
+    }
+    #[cfg(test)]
+    if components.arithmetic {
+        arithmetic::testing::record(arithmetic::testing::Point::Certified);
+    }
     if let Some(head) = head {
         // Every possible firing's head occurs in completed U. Other producers
         // may add extra rows, which this rule's complete component joins filter.
         for atom in support.rows(head.predicate()) {
             builder.work(rule.location)?;
-            if let Some(fixed) = head_binding(builder, rule, head, atom)? {
+            if let Some(fixed) = head_binding(builder, rule, head, atom)?
+                && (!components.arithmetic
+                    || arithmetic::matches(builder, rule, &fixed, &mut evaluation)?)
+            {
                 emit(builder, rule, support, &components, &fixed)?;
             }
         }
     } else {
         let fixed = fixed_frame(builder, rule)?;
-        emit(builder, rule, support, &components, &fixed)?;
+        if !components.arithmetic || arithmetic::matches(builder, rule, &fixed, &mut evaluation)? {
+            emit(builder, rule, support, &components, &fixed)?;
+        }
     }
     Ok(true)
 }
@@ -142,6 +159,9 @@ fn emit<'source>(
     components: &plan::Plan,
     fixed: &Binding,
 ) -> Result<(), FormulaFailure> {
+    if !inhabited(builder, rule, support, components, fixed)? {
+        return Ok(());
+    }
     let mut body = VERUM;
     for component in &components.components {
         let mut alternatives = FALSUM;
@@ -166,6 +186,10 @@ fn emit<'source>(
             builder.counters,
             rule.location,
         )? {
+            #[cfg(test)]
+            if components.arithmetic {
+                arithmetic::testing::record(arithmetic::testing::Point::Witness);
+            }
             let conjunction =
                 builder.body(&component.literals, &binding, rule.location, support)?;
             alternatives = builder.or(alternatives, conjunction, rule.location)?;
@@ -183,10 +207,60 @@ fn emit<'source>(
     } else {
         FALSUM
     };
+    #[cfg(test)]
+    if components.arithmetic {
+        arithmetic::testing::record(arithmetic::testing::Point::Emission);
+    }
     let formula = builder.node(Node::Implies(body, head), rule.location)?;
     builder.root(formula, rule)?;
     if head != FALSUM {
         builder.producer(head, body, rule)?;
     }
     Ok(())
+}
+
+/// Establish a complete Cartesian witness before naming any component atoms.
+/// Naming an early component records the rule as an atom's first origin; a
+/// later empty component must not leave that unused origin in completion roots.
+/// The ordinary profile has only scalar leaves; the extended profile has its
+/// fixed-input arithmetic certificate. One selected row per independent component
+/// proves existence, not body truth. Emission subsequently traverses every
+/// selected row without retaining a cache. Work and typed refusal belong to the
+/// same join as emission; only one cursor and its first frame coexist here.
+fn inhabited<'source>(
+    builder: &mut Builder<'_, '_, 'source>,
+    rule: &RuleIr,
+    support: &Support<'source>,
+    components: &plan::Plan,
+    fixed: &Binding<'_>,
+) -> Result<bool, FormulaFailure> {
+    for component in &components.components {
+        let mut bindings = Join::component(
+            &component.literals,
+            rule.variables,
+            &component.used,
+            fixed,
+            support,
+            builder.budget,
+            Context::new(
+                &*builder.computation,
+                builder.limits,
+                builder.counters,
+                rule.location,
+            ),
+        )?;
+        if bindings
+            .next(
+                builder.computation,
+                builder.limits,
+                builder.budget,
+                builder.counters,
+                rule.location,
+            )?
+            .is_none()
+        {
+            return Ok(false);
+        }
+    }
+    Ok(true)
 }
