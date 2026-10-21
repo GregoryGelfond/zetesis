@@ -1770,14 +1770,20 @@ either child under the same queue guard. A resolved region decrements the count
 once. Taking or stealing only transfers ownership. Thus pending and active
 regions remain one frontier until refuted, split or checked, and an idle worker
 can establish termination only when the count reaches zero. Idle workers wait at
-a gate that also counts them: the resolution that reaches zero, a stop and a close
-each wake them after changing the count or the closed flag, and a split, after
-publishing both children and releasing its queue, wakes one. An idle worker
-re-checks both conditions and the peers' queues under the gate before waiting, so
-none waits past the end of the walk or misses a region published after its
-re-check. The wait stays bounded, which is how an idle worker sees a cancellation,
-or a region left in a queue its re-check found busy; completeness never depends on
-a wake.
+a gate: the resolution that reaches zero, a stop and a close each wake them after
+changing the count or the closed flag. A waiter registers in an idle count under
+the gate, issues a sequentially consistent fence and then re-checks both conditions
+and the peers' queues before waiting, so none waits past the end of the walk. A
+split publishes its children, releases its queue, issues a sequentially consistent
+fence and then reads the idle count without the gate, taking the gate to wake one
+waiter only when one is counted. The two fences are totally ordered, so either the
+waiter's re-check finds the published child or the publication counts the waiter,
+whose gate it then waits for until the waiter is waiting. The wait stays bounded,
+which is how an idle worker sees a cancellation, or a region left in a queue its
+re-check found busy; completeness never depends on a wake. The memory-ordering
+argument is a Rust obligation, exercised by a lost-wakeup protocol harness. It
+rests on a premise about the platform's mutex: releasing it and `try_lock` are
+atomic operations on its lock word, which the fences order.
 
 Before its workers start, the walk runs on the calling thread: the coordinator
 takes the newest region of deque 0 as a worker takes its own, and decides it with

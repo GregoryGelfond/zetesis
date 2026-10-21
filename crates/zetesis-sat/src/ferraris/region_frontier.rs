@@ -8,24 +8,26 @@
 //! or the end of the walk.
 //!
 //! Each deque has its own mutex: local removal locks only that deque, a split
-//! publication locks that deque and then, after releasing it, the idle gate to
-//! wake one idle worker, and a thief skips a busy peer. Region preparation and
-//! evaluation hold no deque lock. Entry capacity grows fallibly and before any
-//! child is published. An atomic counter of unresolved regions carries
-//! termination: a split raises it before pushing its children, a resolved
-//! region lowers it once, and an unsuccessful thief stops only once that
-//! counter has reached zero. An atomic closed flag, set on the first stop or
-//! when the walk's consumer stops listening, halts the others at their next
+//! publication locks that deque and then, after releasing it and only while a
+//! worker is idle, the idle gate to wake one, and a thief skips a busy peer.
+//! Region preparation and evaluation hold no deque lock. Entry capacity grows
+//! fallibly and before any child is published. An atomic counter of unresolved
+//! regions carries termination: a split raises it before pushing its children,
+//! a resolved region lowers it once, and an unsuccessful thief stops only once
+//! that counter has reached zero. An atomic closed flag, set on the first stop
+//! or when the walk's consumer stops listening, halts the others at their next
 //! region. Idle workers wait at a gate that the last resolution and every
 //! close open, and that a publication opens for one waiter, so none sleeps
 //! out its timed wait after the walk has ended or while a region it could
-//! take is published. The timed wait bounds how late an idle worker sees a
+//! take is published. A publication reads the number of idle workers without
+//! the gate and takes the gate only when one is counted, so busy workers
+//! never contend for it. The timed wait bounds how late an idle worker sees a
 //! cancellation, and how late it finds a region left in a deque that was busy
 //! when it last looked.
 
 use std::collections::VecDeque;
 use std::mem::size_of;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering, fence};
 use std::sync::{Condvar, Mutex, MutexGuard, PoisonError, TryLockError};
 use std::time::Duration;
 
@@ -64,19 +66,37 @@ pub(super) fn reserve_regions(
 /// workers wait at for either.
 ///
 /// The count and the flag are atomics because the region loop reads them for
-/// every region; the gate guards the number of idle waiters. Every transition
-/// that ends the walk changes its atomic first and then takes the gate to wake
-/// the waiters, and an idle worker takes the gate and re-checks both conditions,
-/// and the peers' deques, before it waits. Whichever reaches the gate first, no
-/// idle worker waits past the end of the walk: a worker that takes the gate after
-/// the ending transition sees it, and one that took the gate before is already
-/// waiting when the wake comes. A publication pushes its children, releases its
-/// deque and then takes the gate to wake one waiter, so by the same argument no
-/// waiter misses a region published after its re-check. Zero is terminal, since
-/// a region in hand counts until it is resolved. Every wait stays bounded by its
+/// every region. Every transition that ends the walk changes its atomic first
+/// and then takes the gate to wake the waiters, and an idle worker takes the
+/// gate and re-checks both conditions, and the peers' deques, before it waits.
+/// Whichever reaches the gate first, no idle worker waits past the end of the
+/// walk: a worker that takes the gate after the ending transition sees it, and
+/// one that took the gate before is already waiting when the wake comes.
+///
+/// The number of idle waiters is an atomic changed only while the gate is
+/// held, and a publication reads it without the gate. A waiter registers
+/// itself, issues a sequentially consistent fence, and only then re-checks
+/// the deques; a publication pushes its children, releases its deque, issues
+/// a sequentially consistent fence, and only then reads the count, taking the
+/// gate to wake one waiter when it is not zero. The two fences are totally
+/// ordered. If the publication's comes first, the waiter's re-check observes
+/// the released deque and so the pushed child; if the waiter's comes first,
+/// the publication reads its registration and takes the gate, which the waiter
+/// holds until it is waiting, so the wake reaches it. Either the waiter sees
+/// the child or the publication sees the waiter. Zero is terminal, since a
+/// region in hand counts until it is resolved. Every wait stays bounded by its
 /// timeout, so correctness never rests on a wake: the timeout is how an idle
 /// worker sees a cancellation, or a region left in a deque its re-check found
 /// busy.
+///
+/// The first case rests on a premise about the platform's mutex: releasing it
+/// and `try_lock` are atomic operations on its lock word, as they are in std's
+/// own futex mutex (Linux, Windows) and in the pthread mutex std uses on
+/// macOS, so the fences order them as they order any atomic access. A re-check
+/// after the publication's fence therefore finds the deque released, or locked
+/// again by a later holder, which costs the waiter a bounded wait. Were the
+/// premise to fail, a waiter could also find the publication still holding the
+/// deque, and would find the child after its bounded wait.
 pub(super) struct Termination {
     /// Created-but-unresolved regions across every worker's deque and hand: a
     /// split adds one (before pushing its children), a refuted or decided
@@ -88,10 +108,13 @@ pub(super) struct Termination {
     /// stopped listening; workers check it before each region and while idle,
     /// and exit. Normal termination is `outstanding` reaching zero.
     closed: AtomicBool,
-    /// The number of idle workers waiting on `idle`. Held to re-check the
-    /// walk's end and the peers' deques before an idle wait, to wake one waiter
-    /// after a publication, and to wake every waiter after the walk ends.
-    pub(super) gate: Mutex<usize>,
+    /// Held to register and re-check before an idle wait, to wake one waiter
+    /// after a publication that counted one, and to wake every waiter after
+    /// the walk ends.
+    pub(super) gate: Mutex<()>,
+    /// The number of idle workers waiting on `idle`: changed only while
+    /// `gate` is held, read by a publication without it.
+    pub(super) idle_waiters: AtomicUsize,
     /// Idle workers wait here for a published region or the end of the walk.
     idle: Condvar,
 }
@@ -102,7 +125,8 @@ impl Termination {
         Self {
             outstanding: AtomicUsize::new(1),
             closed: AtomicBool::new(false),
-            gate: Mutex::new(0),
+            gate: Mutex::new(()),
+            idle_waiters: AtomicUsize::new(0),
             idle: Condvar::new(),
         }
     }
@@ -146,10 +170,13 @@ impl Termination {
         self.is_closed() || self.is_resolved()
     }
 
-    /// Wake one idle worker, if any waits, after a publication.
+    /// Wake one idle worker, if any is counted, after a publication released
+    /// its deque. The fence orders the publication before the count's read;
+    /// see the type's documentation for why no waiter is missed.
     pub(super) fn wake_one(&self) {
-        let waiting = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
-        if *waiting != 0 {
+        fence(Ordering::SeqCst);
+        if self.idle_waiters.load(Ordering::Relaxed) != 0 {
+            let _gate = self.gate.lock().unwrap_or_else(PoisonError::into_inner);
             self.idle.notify_one();
         }
     }
@@ -229,32 +256,37 @@ impl RegionFrontier {
     }
 
     /// Wait at the gate for a published region or the end of the walk, for at
-    /// most `timeout`. Under the gate, the walk's end and `try_take` are
-    /// re-checked first; a region found then is returned at once. `None` does
-    /// not mean the walk ended: the caller re-checks.
+    /// most `timeout`. Under the gate the waiter registers, fences, and then
+    /// re-checks the walk's end and `try_take`; a region found then is returned
+    /// at once. `None` does not mean the walk ended: the caller re-checks.
     pub(super) fn wait_for_work(
         &self,
         timeout: Duration,
         mut try_take: impl FnMut(Attempt) -> Option<Entry>,
     ) -> Option<Entry> {
-        let mut waiting = self
-            .termination
+        let termination = &self.termination;
+        let gate = termination
             .gate
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
-        if self.termination.has_ended() {
-            return None;
+        termination.idle_waiters.fetch_add(1, Ordering::Relaxed);
+        // Pairs with the publication's fence: see `Termination`.
+        fence(Ordering::SeqCst);
+        let ended = termination.has_ended();
+        let found = if ended {
+            None
+        } else {
+            try_take(Attempt::UnderGate)
+        };
+        if ended || found.is_some() {
+            termination.idle_waiters.fetch_sub(1, Ordering::Relaxed);
+            return found;
         }
-        if let Some(entry) = try_take(Attempt::UnderGate) {
-            return Some(entry);
-        }
-        *waiting += 1;
-        let (mut waiting, _) = self
-            .termination
+        let _gate = termination
             .idle
-            .wait_timeout(waiting, timeout)
+            .wait_timeout(gate, timeout)
             .unwrap_or_else(PoisonError::into_inner);
-        *waiting -= 1;
+        termination.idle_waiters.fetch_sub(1, Ordering::Relaxed);
         None
     }
 

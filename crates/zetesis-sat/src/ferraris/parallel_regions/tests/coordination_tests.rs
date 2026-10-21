@@ -781,15 +781,15 @@ fn a_waiting_worker_never_misses_a_publication() {
     }
 }
 
-/// The number of registered idle waiters, read under the gate that guards it.
+/// The number of registered idle waiters, read under the gate that guards
+/// its changes.
 fn waiting(search: &ParallelRegions) -> usize {
-    *search
-        .shared
-        .frontier
-        .termination
+    let termination = &search.shared.frontier.termination;
+    let _gate = termination
         .gate
         .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .unwrap_or_else(PoisonError::into_inner);
+    termination.idle_waiters.load(Ordering::Relaxed)
 }
 
 #[test]

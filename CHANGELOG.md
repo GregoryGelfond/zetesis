@@ -100,6 +100,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   with unchanged deductions. Native count, sum and min/max conditions can supply
   support explanations. Identical conditions can share their outputs, and stronger
   explanations can replace weaker retained entries.
+- Parallel region walks take their shared idle lock after publishing a region
+  only when a worker is waiting for one. Answer sets are unchanged.
 
 ### Fixed
 

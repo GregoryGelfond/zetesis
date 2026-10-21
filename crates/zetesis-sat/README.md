@@ -499,8 +499,10 @@ regions walk. This particular operation does not use the batched protocol,
 since its workers decide their leaves themselves.
 
 Each deque has its own mutex: taking a worker's own region locks only that
-deque, a split publication locks it and then, after releasing it, the idle gate
-to wake one waiter, and a thief skips a busy peer. An atomic count of
+deque, a split publication locks it and then, after releasing it and only while
+a worker is idle, the idle gate to wake one, and a thief skips a busy peer. A
+publication reads the number of idle workers after a sequentially consistent
+fence, without the gate, so busy workers never contend for it. An atomic count of
 unresolved regions carries termination: a split raises it before publishing
 the children, a resolved region lowers it once, and an idle worker stops only
 once it has reached zero. An atomic closed flag, set on the first stop or when
