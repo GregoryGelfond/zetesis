@@ -221,6 +221,161 @@ fn config() -> SolveConfig {
     }
 }
 
+/// `config` with a GPU backend value, region search and four workers, which
+/// selects the parallel region producers; the injected native execution
+/// answers membership, so no device is constructed.
+fn producing(config: SolveConfig) -> SolveConfig {
+    SolveConfig {
+        backend: Backend::Gpu(None),
+        search: crate::SearchMethod::Regions,
+        workers: NonZeroUsize::new(4).unwrap(),
+        ..config
+    }
+}
+
+/// The session ran the parallel region producers: only they keep frontier
+/// receipts, which the walker and the scalar walk leave absent.
+fn assert_produced(execution: &NativeBatch) {
+    let (_, search, _) = execution.snapshots.last().unwrap();
+    assert!(
+        search
+            .regions
+            .is_some_and(|regions| regions.frontier.is_some()),
+        "the parallel region producers did not run"
+    );
+}
+
+/// The scalar session's complete records for `owner`, sorted.
+fn scalar_records(owner: &zetesis_themelios::AdmittedFormula) -> Vec<Record> {
+    let mut scalar = Session::new(
+        PreparedInput::formula(owner),
+        config(),
+        Cancellation::default(),
+    )
+    .unwrap();
+    let mut expected: Vec<Record> = scalar
+        .by_ref()
+        .map(|answer| {
+            let answer = answer.unwrap();
+            (
+                answer.interpretation().clone(),
+                answer.score().map(|score| score.costs().to_vec()),
+            )
+        })
+        .collect();
+    expected.sort();
+    expected
+}
+
+#[test]
+fn producer_batches_preserve_complete_full_answers() {
+    for source in [
+        "",
+        ":-.",
+        "a | b.",
+        "{a;b;c}. p:-p.",
+        "1 {a;b;c} 1. #show.",
+        "{p;-p}. #show x.",
+        "{a;b}. #show a:a. #minimize{1,a:a;1,b:b}.",
+        "{a;b;c;d;e}.",
+    ] {
+        let owner = admitted(source);
+        let expected = scalar_records(&owner);
+        for (_, config, mut execution) in harnesses(producing(config())) {
+            let actual = run(&owner, &config, &Cancellation::default(), &mut execution);
+            assert!(actual.error.is_none(), "{source}: {:?}", actual.error);
+            assert_eq!(actual.outcome.completion(), Some(Completion::Exhausted));
+            assert_eq!(actual.records(), expected, "{source}");
+            let (batch, search, queued) = execution.snapshots.last().unwrap();
+            assert_eq!((batch.pending, *queued), (0, 0));
+            assert_eq!(batch.committed, search.candidates);
+            assert_produced(&execution);
+        }
+    }
+}
+
+#[test]
+fn producer_objective_bounds_preserve_optimal_ties() {
+    let owner = admitted("1 {a;b;c} 1. #minimize{1,a:a;1,b:b;2,c:c}. #show.");
+    let expected = scalar_records(&owner);
+    for (_, config, mut execution) in harnesses(producing(config())) {
+        let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
+        assert!(capture.error.is_none());
+        assert_eq!(capture.outcome.completion(), Some(Completion::Exhausted));
+        let optimum = capture.outcome.incumbent().unwrap();
+        assert_eq!(optimum.tied_models, 2);
+        assert_eq!(optimum.score.costs(), [(0, 1)]);
+        assert_eq!(capture.records(), expected);
+        assert!(capture.outcome.optimum_proved());
+        assert_produced(&execution);
+    }
+}
+
+#[test]
+fn producer_proposal_limit_delivers_the_committed_prefix() {
+    let owner = admitted("{a;b;c}.");
+    let mut execution = NativeBatch::default();
+    let capture = run(
+        &owner,
+        &SolveConfig {
+            max_candidates: 2,
+            ..producing(config())
+        },
+        &Cancellation::default(),
+        &mut execution,
+    );
+    assert!(capture.error.is_none());
+    assert_eq!(
+        capture.outcome.interruption(),
+        Some(Interruption::Countermodel(Incomplete::CandidateLimit))
+    );
+    assert_eq!(capture.answers.len(), 2);
+    let mut expected: Vec<Record> = execution
+        .proposed
+        .iter()
+        .flatten()
+        .map(|candidate| {
+            (
+                Model::from_positions(owner.atom_catalog(), candidate.iter().copied()).unwrap(),
+                None,
+            )
+        })
+        .collect();
+    expected.sort();
+    assert_eq!(capture.records(), expected);
+    assert_produced(&execution);
+}
+
+#[test]
+fn producer_cancellation_preserves_unconsumed_verified_answers() {
+    let owner = admitted("{a;b;c}. #show x.");
+    let cancellation = Cancellation::default();
+    let mut execution = NativeBatch::default();
+    let capture = run_consuming(
+        &owner,
+        &producing(config()),
+        &cancellation,
+        &mut execution,
+        |_| cancellation.cancel(),
+    );
+    assert!(capture.error.is_none());
+    assert_eq!(
+        capture.outcome.interruption(),
+        Some(Interruption::Countermodel(Incomplete::Cancelled))
+    );
+    assert_eq!(capture.answers.len(), 1);
+    // The published answer is one of the proposals the session committed.
+    let first = &capture.answers[0].0;
+    assert!(execution.proposed.iter().flatten().any(|candidate| {
+        Model::from_positions(owner.atom_catalog(), candidate.iter().copied()).unwrap() == *first
+    }));
+    assert_eq!(
+        capture.outcome.verified_models(),
+        capture.outcome.candidate_progress()
+    );
+    assert_produced(&execution);
+}
+
 #[test]
 fn native_batches_preserve_complete_full_answers() {
     for source in [

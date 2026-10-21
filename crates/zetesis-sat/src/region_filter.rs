@@ -55,9 +55,9 @@ pub enum RegionConsequence {
 ///
 /// A checker is prepared on the first region not refuted by original narrowing.
 /// Serial traversal, a parallel walk's coordinator until its workers start,
-/// each persistent native worker and each joined producer slot retain their
+/// each persistent native worker and each joined producer retain their
 /// checker, borrowing this factory across answer pulls.
-/// Joined slots can move between executor threads. Separate determined-candidate
+/// Joined producers' workspaces can move between executor threads. Separate determined-candidate
 /// checks prepare per operation. Preparation is not assumed free.
 /// The factory owns all external resource limits: shared allowances must be
 /// charged before work across every worker, including failed preparation and

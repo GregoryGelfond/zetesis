@@ -356,8 +356,8 @@ region scans and preparation can cost more than the avoided membership work,
 so the schedule still needs workload-specific measurement.
 
 Serial candidate traversal retains one source checker across answer pulls.
-Joined candidate production retains one per active producer slot across device
-batches, with at most the configured worker count of slots.
+Joined candidate production retains one per producer across slates, with at
+most the configured worker count of producers.
 The checker belongs to the exact source owner, has exclusive access to its
 scratch and can move between executor threads. `zetesis_sat::RegionFilterWorker`
 therefore requires `Send`; the callback is never invoked concurrently on one

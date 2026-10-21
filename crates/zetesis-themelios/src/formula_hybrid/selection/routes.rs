@@ -102,7 +102,7 @@ impl RegionFilterWorker for Worker<'_> {
 const STREAMED_AT_MOST_ONE: &str = "{p(1..4)}. :-p(X),p(Y),X<Y,not not p(X).";
 
 #[test]
-fn producer_rounds_borrow_the_core_selection() {
+fn producer_slates_borrow_the_core_selection() {
     for count in [2, 4] {
         let filter = Arc::new(Filter::new(STREAMED_AT_MOST_ONE));
         assert_eq!(filter.owner.streamed_templates(), 1);
@@ -149,7 +149,7 @@ fn producer_rounds_borrow_the_core_selection() {
         assert!(search.batch_statistics().checker_calls >= 3);
         assert!(
             (1..=count).contains(&filter.workers.load(Ordering::Relaxed)),
-            "joined rounds retain their source checkers in bounded producer slots"
+            "joined slates retain their source checkers, at most one per producer"
         );
         assert!(filter.checks.load(Ordering::Relaxed) > 0);
         assert!(filter.parallel_checks.load(Ordering::Relaxed) > 0);

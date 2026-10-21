@@ -195,19 +195,25 @@ impl RegionCounts {
     }
 }
 
-/// Owned storage of queued, inactive candidate regions at frontier mutations.
+/// Owned storage of queued, inactive candidate regions in the parallel
+/// producers' deques, at frontier mutations.
 ///
-/// Bytes include the frontier vector header, every allocated entry slot and
-/// each queued region's and knowledge's owned vector capacities. They exclude
-/// active regions, temporary split copies, shared theory and indexes, candidate
-/// batches, measurement bookkeeping, thread stacks and allocator/driver storage.
-/// This observation is neither total search memory nor a byte admission limit.
-/// Peaks need not occur at the same mutation; an empty frontier can retain slots.
+/// Bytes include the deque vector's and each deque's header, the deques'
+/// allocated entry capacity, used or not, and each queued region's and
+/// knowledge's owned vector capacities. They exclude the regions producers
+/// hold, temporary split copies, shared theory and indexes, candidate batches,
+/// measurement bookkeeping, thread stacks and allocator/driver storage. This
+/// observation is neither total search memory nor a byte admission limit. Each
+/// count changes under the lock of the deque whose change causes it, so its
+/// peak is the maximum of a linearization of the deques' changes; peaks need
+/// not occur at the same mutation, and an empty frontier can retain entry
+/// capacity.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct RegionFrontierStatistics {
     /// Currently queued inactive regions.
     pub regions: usize,
-    /// Currently allocated region entry slots, including unused slots.
+    /// Current entry capacity of the deques: the regions their storage can
+    /// queue without growing, used or not.
     pub capacity: usize,
     /// Current logical retained bytes in the stated ownership scope.
     pub retained_bytes: u128,

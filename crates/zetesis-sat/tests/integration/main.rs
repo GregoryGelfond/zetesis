@@ -15,6 +15,7 @@ mod parallel_regions;
 mod parallel_stress;
 mod partition;
 mod partition_search;
+mod producer_stress;
 mod phase_timing;
 mod positive_certified;
 mod positive_candidates;

@@ -1764,10 +1764,11 @@ worker unwind also checks that idle peers wake and coverage remains incomplete.
 The native parallel walk keeps one deque per worker. Its owner removes the
 newest region, and an idle worker tries to steal the oldest region from a peer.
 Each deque has its own mutex; a thief skips a busy deque. Payload preparation,
-narrowing and membership checks hold no queue lock. A split first reserves both
-slots fallibly, then raises the unresolved-region count by one before publishing
-either child under the same queue guard. A resolved region decrements the count
-once. Taking or stealing only transfers ownership. Thus pending and active
+narrowing and membership checks hold no queue lock. A split first reserves entry
+capacity for both children fallibly, then raises the unresolved-region count by
+one before publishing either child under the same queue guard. A resolved
+region decrements the count once. Taking or stealing only transfers ownership.
+Thus pending and active
 regions remain one frontier until refuted, split or checked, and an idle worker
 can establish termination only when the count reaches zero. Idle workers wait at
 a gate: the resolution that reaches zero, a stop and a close each wake them after
@@ -1797,9 +1798,9 @@ and exhaustion laws; the atomic count, the queue and gate protocols (including t
 of lost ownership remain Rust refinement obligations. Depth-first local order
 retains at most one older sibling per ancestor plus the newest children. Each
 split decides another atom, and stealing starts only with an empty local deque,
-giving at most `atom_count + 1` live entries per deque. Slot capacity grows
+giving at most `atom_count + 1` live entries per deque. Entry capacity grows
 fallibly as needed and is released after joining, including a partially launched
-worker set. This slot reservation does not make region/knowledge payload cloning
+worker set. This reservation does not make region/knowledge payload cloning
 fallible.
 A native worker may retain one refuted region's knowledge allocation for its
 next split. `Knowledge::clone_from` and `CandidateKnowledge::clone_from` must
@@ -2043,7 +2044,15 @@ contains every still-required stable interpretation. Necessary support cuts may
 exclude other classical models, so classical truth alone is not the proposal
 coverage predicate. `FormulaBounds` supplies the preservation premises for
 these cuts and decided classical leaves. `Pending.Walk.perm` accounts for leaves
-emitted so far together with those still held by the frontier.
+emitted so far together with those still held by the frontier. The producers'
+frontier is their deques together with the region each producer holds: a split
+publishes one child and keeps the other in hand, a steal or a return to a deque
+only transfers ownership, and the count of unresolved regions is raised before a
+published child becomes visible. So every stop-free step permutes that frontier
+and the emitted leaves, and a slate reports exhaustion only from a stop-free
+join at a count of zero. The count, the output-slot reservation that bounds the
+regions in hand plus the emitted candidates, and the hand-over are Rust
+obligations beside the walker's queue and gate protocols.
 
 After producers join, emitted candidates enter the pending membership ledger.
 `BatchAccounting.exact_commit_preserves_soundness` justifies committing a fully
@@ -2053,14 +2062,14 @@ is a scheduling boundary, not exhaustion. A producer stop retains completed
 candidates and reports the unresolved remainder as incomplete; it cannot turn
 an empty delivered batch into a complete negative result. The concrete queue
 ownership, reservation arithmetic, panic/cancellation paths, budget settlement
-before checking and transfer between rounds remain Rust obligations. The two
+before checking and transfer between slates remain Rust obligations. The two
 abstract laws do not themselves verify that concurrent implementation.
 
-Joined producer slots retain source checkers and narrowing scratch across
-batches. A stable owner outlives every borrowed checker; a slot is used by one
-task at a time and keeps no candidate knowledge. Candidate knowledge remains
-with the frontier entry. Terminal cleanup releases the slots without changing
-pending candidates or failure receipts. These ownership and reuse invariants,
+Joined producers retain source checkers and narrowing scratch across slates.
+A stable owner outlives every borrowed checker; a producer's workspace is used by
+one task at a time and keeps no candidate knowledge. Candidate knowledge remains
+with the frontier entry. Terminal cleanup releases the workspaces without
+changing pending candidates or failure receipts. These ownership and reuse invariants,
 including the owner/dependent container, remain Rust correspondence obligations;
 they introduce no new answer-set law and are not established by the existing
 batch theorems.

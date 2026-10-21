@@ -511,15 +511,16 @@ impl StableModels {
         })
     }
 
-    /// Produce classical candidates in bounded Rayon rounds, leaving membership
-    /// to this iterator or its injected batch checker. Unlike
+    /// Produce classical candidates in bounded Rayon runs, one for each slate
+    /// of candidates the stream checks and commits together, leaving
+    /// membership to this iterator or its injected batch checker. Unlike
     /// [`Self::with_region_workers`], producers never decide answer-set membership.
     /// This permits the same original region traversal to feed a device oracle.
     ///
-    /// Each batch joins its producers before checking begins. Native search
+    /// Each slate joins its producers before checking begins. Native search
     /// work and decision allowances are cumulative; an external checker's costs
     /// belong to its own contract. Candidate order is schedule-dependent, and a
-    /// failed round retains its completed proposals.
+    /// stopped slate retains its completed proposals.
     /// One worker uses the ordinary scalar region traversal.
     ///
     /// # Errors

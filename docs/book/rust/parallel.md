@@ -187,8 +187,8 @@ checked on each pull and between steps. A walk that ends before engagement
 starts no thread. Afterwards each worker removes the newest region from its own
 deque; an idle worker tries to steal the oldest region from a peer.
 Each deque has its own mutex. A thief skips a busy deque, and narrowing, payload
-cloning, reduct checks and model sends hold no deque lock. Slot growth uses
-fallible reservation before either split child is published; refusal leaves
+cloning, reduct checks and model sends hold no deque lock. Entry-capacity growth
+uses fallible reservation before either split child is published; refusal leaves
 enumeration incomplete. Region and knowledge payload cloning remains infallible,
 so this boundary is not an end-to-end guarantee against allocation failure.
 
@@ -208,8 +208,11 @@ abandoned entries and queue capacity, and joins every worker that started,
 including after a partially successful worker start.
 
 The device route uses a different execution boundary: an owned Rayon pool
-produces a bounded candidate batch, joins, and then submits that batch for device
-membership checking. CPU residual completion has its own worker setting.
+produces a bounded slate of candidates, joins, and then submits that slate for
+device membership checking. Its producers share the walker's deque, publication
+and idle protocols within each slate: one deque per producer, retained between
+slates, depth-first local work and stealing of a peer's oldest region only with
+an empty deque. CPU residual completion has its own worker setting.
 The routes share semantic region readings and split laws, but their scheduling
 costs differ. A scaling comparison must record the producer and completion worker
 counts, batch size and observed membership route separately; increasing host

@@ -507,7 +507,7 @@ impl StableModels {
         index
     }
 
-    /// Admit a joined production round's pending candidates. No producer
+    /// Admit a slate's pending candidates once its producers joined. No producer
     /// decides membership. Each owned leaf follows the selected original-check
     /// contract, just as a scalar proposal does. An independent validation
     /// failure retains only the already validated prefix.

@@ -1,23 +1,49 @@
 //! Parallel production of classical candidates, with membership left to the caller.
 //!
-//! The frontier contains disjoint regions of the original candidate space. A
-//! worker removes one region, applies the same readings as the scalar traversal,
-//! then refutes it, returns its two children, or emits its classical leaf. No
-//! worker checks answer-set membership. A bounded round reserves one output slot
-//! per active region, so completed candidates plus active regions never exceed
-//! the batch allowance. A split or refutation returns that reservation.
+//! The frontier contains disjoint regions of the original candidate space, in
+//! one deque per producer, retained between slates. A producer takes a region,
+//! applies the same readings as the scalar traversal, then refutes it, splits
+//! it, or emits its classical leaf. No producer checks answer-set membership.
 //!
-//! All workers join before the next stage runs. Their work leases then settle
-//! into the coordinator's cumulative budget, including failed attempts. Retained
-//! frontier regions supply the next round; a stop never establishes coverage.
-//! Each producer slot retains its checker and worklists between rounds. These
-//! are scratch for the same immutable source, not knowledge about a candidate:
-//! the latter travels with its frontier region.
-//! Candidate order depends on scheduling, while identity and coverage do not.
+//! A slate is the candidates the stream proposes together for one membership
+//! check and commit, filled by one bounded run of the producers. A producer
+//! holds a region only under a reserved output slot, so the regions in hand
+//! plus the emitted candidates never exceed the slate's allowance and the
+//! output never reallocates. A producer works depth first: a split publishes
+//! the older child on its own deque, where an idle peer can steal it, and keeps
+//! the newer child in hand under the same output slot. After a refutation it
+//! keeps the slot while it finds another region at once, its own newest or,
+//! with an empty deque, a peer's oldest; otherwise it releases the slot. A
+//! leaf's slot becomes its candidate's, and the emission that fills the slate
+//! closes it. A producer steals only with an empty deque: under the idle gate,
+//! where its own deque is only tried, a busy deque ends the attempt instead.
+//! The deques, the count of unresolved regions, the idle gate and the idle
+//! back-off are the frontier protocols the CPU walker shares
+//! (`region_frontier`).
+//!
+//! A slate ends full, stopped or with every region resolved, after finitely
+//! many steps. Each step consumes the one region it took: it refutes it, emits
+//! its leaf, or splits it on an atom the region leaves open, so no region is
+//! stepped twice, and the regions of `n` atoms form a tree of at most
+//! `2^(n+1) - 1` regions; a step that fails stops the slate. Idle producers
+//! then leave within one bounded wait.
+//!
+//! All producers join before the next stage runs. Each holds one work lease
+//! for the slate, settled before it steals, before it waits and at its exit,
+//! so the coordinator's cumulative budget receives every charge, including
+//! failed attempts. A stop requeues the regions in hand, and a stop never
+//! establishes coverage. A cancellation or deadline that a producer observes
+//! once the slate is full is left to the next slate's first poll, which
+//! observes it again, so no stop follows the emission that fills a slate.
+//! Each producer retains its checker and worklists between slates. These are
+//! scratch for the same immutable source, not knowledge about a candidate: the
+//! latter travels with its frontier region. Candidate order depends on
+//! scheduling, while identity and coverage do not.
 
-use std::mem::size_of;
+use std::collections::VecDeque;
 use std::num::NonZeroUsize;
-use std::sync::{Condvar, Mutex, MutexGuard, PoisonError};
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::Duration;
 
 use rayon::prelude::*;
@@ -25,18 +51,23 @@ use zetesis_cpu::regions::{Narrowing, Region};
 use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Theory};
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
-use super::region_frontier::{Entry, entry_payload};
-use super::regions::{self, RegionCounts, RegionFrontierStatistics, RegionSearchStatistics};
+use super::region_frontier::{Attempt, Busy, Entry, RegionFrontier, Termination, reserve_regions};
+use super::regions::{self, RegionCounts, RegionSearchStatistics};
 use crate::search::{Budget, SharedBudget, WorkLease};
-use crate::{Cancellation, Incomplete, SearchStatistics};
+use crate::{Cancellation, Incomplete, SearchLimits, SearchPhaseTimings, SearchStatistics};
 
 /// Idle producers poll control while another producer owns the last region.
 const CONTROL_WAIT: Duration = Duration::from_millis(1);
 
+/// One producer's retained scratch and its receipts for the current slate.
+/// The receipts live here, beside the scratch, so a panicking producer's
+/// counts and timings still reach the merge after the join.
 #[derive(Default)]
 struct Workspace<'a> {
     filter: Option<crate::region_filter::Worker<'a>>,
     scratch: NarrowingScratch,
+    counts: RegionCounts,
+    timings: Option<SearchPhaseTimings>,
 }
 
 type Workspaces<'a> = Vec<Workspace<'a>>;
@@ -44,10 +75,11 @@ type Workspaces<'a> = Vec<Workspace<'a>>;
 self_cell::self_cell! {
     /// The filter remains at a stable address until every borrowed checker has
     /// been dropped. Exclusive access to the dependent vector lends distinct
-    /// slots to the existing executor; no lock protects a checker's hot path.
-    /// There is at most one slot per configured producer. Slot storage is
-    /// reserved fallibly; the owner's small allocation follows the existing
-    /// infallible boxed-checker contract, not a universal OOM guarantee.
+    /// workspaces to the existing executor; no lock protects a checker's hot
+    /// path. There is at most one workspace per configured producer. Workspace
+    /// storage is reserved fallibly; the owner's small allocation follows the
+    /// existing infallible boxed-checker contract, not a universal OOM
+    /// guarantee.
     struct Workers {
         owner: Option<crate::region_filter::Filter>,
         #[not_covariant]
@@ -55,89 +87,15 @@ self_cell::self_cell! {
     }
 }
 
-/// The same LIFO frontier, with incremental ownership observations. A region's
-/// payload changes only while a worker owns it outside this frontier. Count it
-/// on insertion/removal, visiting its restriction knowledges but no other entry.
-/// Actual disjoint allocations and their headers fit comfortably in u128 on the
-/// supported 32/64-bit hosts; no search counter or resource limit is changed.
-struct Frontier {
-    entries: Vec<Entry>,
-    payload_bytes: u128,
-    statistics: RegionFrontierStatistics,
-}
-
-impl Default for Frontier {
-    fn default() -> Self {
-        let mut frontier = Self {
-            entries: Vec::new(),
-            payload_bytes: 0,
-            statistics: RegionFrontierStatistics::default(),
-        };
-        frontier.record();
-        frontier
-    }
-}
-
-impl Frontier {
-    fn new(entry: Entry) -> Result<Self, Incomplete> {
-        let mut frontier = Self {
-            entries: crate::search::storage(1)?,
-            ..Self::default()
-        };
-        frontier.push(entry);
-        Ok(frontier)
-    }
-
-    fn len(&self) -> usize {
-        self.entries.len()
-    }
-
-    fn is_empty(&self) -> bool {
-        self.entries.is_empty()
-    }
-
-    fn try_reserve(&mut self, additional: usize) -> Result<(), std::collections::TryReserveError> {
-        let result = self.entries.try_reserve(additional);
-        self.record();
-        result
-    }
-
-    fn push(&mut self, entry: Entry) {
-        self.payload_bytes += entry_payload(&entry);
-        self.entries.push(entry);
-        self.record();
-    }
-
-    fn pop(&mut self) -> Option<Entry> {
-        let entry = self.entries.pop()?;
-        self.payload_bytes -= entry_payload(&entry);
-        self.record();
-        Some(entry)
-    }
-
-    fn record(&mut self) {
-        let statistics = &mut self.statistics;
-        statistics.regions = self.entries.len();
-        statistics.capacity = self.entries.capacity();
-        statistics.retained_bytes = size_of::<Vec<Entry>>() as u128
-            + self.entries.capacity() as u128 * size_of::<Entry>() as u128
-            + self.payload_bytes;
-        statistics.peak_regions = statistics.peak_regions.max(statistics.regions);
-        statistics.peak_capacity = statistics.peak_capacity.max(statistics.capacity);
-        statistics.peak_retained_bytes = statistics
-            .peak_retained_bytes
-            .max(statistics.retained_bytes);
-    }
-}
-
 /// A reusable candidate frontier and an owned Rayon executor. Its immutable
-/// preparation, and the original index each round is lent, are shared across
-/// workers and every bounded production round.
+/// preparation, and the original index each slate is lent, are shared across
+/// producers and every bounded slate.
 pub(crate) struct RegionProposals {
     /// What the walk reads of the original theory beyond the theory itself.
     parts: regions::OriginalParts,
     restrictions: Conditions<(Theory, Narrower)>,
-    pending: Frontier,
+    /// One deque per producer, with exact receipts, retained between slates.
+    frontier: RegionFrontier,
     pool: rayon::ThreadPool,
     statistics: RegionSearchStatistics,
     workers: Workers,
@@ -149,14 +107,14 @@ pub(crate) struct RegionProposals {
 impl std::fmt::Debug for RegionProposals {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("RegionProposals")
-            .field("workers", &self.pool.current_num_threads())
-            .field("pending", &self.pending.len())
+            .field("producers", &self.pool.current_num_threads())
+            .field("unresolved", &self.frontier.termination.unresolved())
             .finish_non_exhaustive()
     }
 }
 
 /// Joined production retains its completed candidates even if another region
-/// stopped. Only an empty frontier with no stop establishes exhaustion.
+/// stopped. Only a fully resolved frontier with no stop establishes exhaustion.
 pub(crate) struct Produced {
     pub(crate) exhausted: bool,
     pub(crate) stopped: Option<Incomplete>,
@@ -180,14 +138,17 @@ impl RegionProposals {
             .thread_name(|index| format!("zetesis-proposal-{index}"))
             .build()
             .map_err(|_| Incomplete::Allocation)?;
-        let pending = Frontier::new((
-            Region::all_open(theory.atom_count()),
-            CandidateKnowledge::default(),
-        ))?;
+        let frontier = RegionFrontier::measured(
+            workers.get(),
+            (
+                Region::all_open(theory.atom_count()),
+                CandidateKnowledge::default(),
+            ),
+        )?;
         Ok(Self {
             parts,
             restrictions: Conditions::default(),
-            pending,
+            frontier,
             pool,
             statistics,
             workers: Workers::new(None, |_| Vec::new()),
@@ -204,20 +165,21 @@ impl RegionProposals {
         self.workers.borrow_owner().as_ref()
     }
 
-    /// The caller permits installation only before traversal, when no slot
-    /// has prepared a checker or retained a worklist.
+    /// The caller permits installation only before traversal, when no
+    /// producer has prepared a checker or retained a worklist.
     pub(super) fn set_filter(&mut self, filter: crate::region_filter::Filter) {
         self.workers = Workers::new(Some(filter), |_| Vec::new());
     }
 
-    /// No producer runs outside a joined round. Discard its retained scratch
+    /// No producer runs outside a joined slate. Discard its retained scratch
     /// on completion or stop, preserving factory receipts and pending regions.
     pub(super) fn finish(&mut self) -> Result<(), Incomplete> {
         self.workers.with_dependent_mut(|_, workspaces| {
             let mut stopped = None;
-            // Isolate each callback destructor, as the per-round worker catch
-            // did before retention. Clearing the whole vector inside one catch
-            // could abort if a second destructor panicked during unwinding.
+            // Isolate each callback destructor, as the per-slate producer
+            // catch did before retention. Clearing the whole vector inside one
+            // catch could abort if a second destructor panicked during
+            // unwinding.
             while let Some(workspace) = workspaces.pop() {
                 if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| drop(workspace)))
                     .is_err()
@@ -229,9 +191,9 @@ impl RegionProposals {
         })
     }
 
-    pub(crate) const fn statistics(&self) -> RegionSearchStatistics {
+    pub(crate) fn statistics(&self) -> RegionSearchStatistics {
         RegionSearchStatistics {
-            frontier: Some(self.pending.statistics),
+            frontier: self.frontier.statistics(),
             ..self.statistics
         }
     }
@@ -302,7 +264,7 @@ impl RegionProposals {
     /// is empty on entry; its allocation remains the caller's batch ownership.
     /// A zero remaining candidate allowance still permits coverage work until
     /// either the frontier is refuted or another classical leaf is encountered.
-    /// The round reads the original theory through `subject`, the
+    /// The slate reads the original theory through `subject`, the
     /// enumeration's one shared index, authenticated by the caller.
     pub(crate) fn fill(
         &mut self,
@@ -316,7 +278,9 @@ impl RegionProposals {
         debug_assert!(output.is_empty());
         debug_assert!(maximum > 0 && output.capacity() >= maximum);
         let allowance = SharedBudget::new(budget.limits, budget.statistics);
-        let state = self.workers.with_dependent_mut(|filter, workspaces| {
+        // No producer runs between slates, so the count is carried exactly.
+        self.frontier.termination = Termination::resuming(self.frontier.termination.unresolved());
+        let joined = self.workers.with_dependent_mut(|filter, workspaces| {
             if workspaces.is_empty() {
                 let count = self.pool.current_num_threads();
                 workspaces
@@ -324,47 +288,64 @@ impl RegionProposals {
                     .map_err(|_| Incomplete::Allocation)?;
                 workspaces.resize_with(count, Workspace::default);
             }
-            let round = Round {
+            for workspace in workspaces.iter_mut() {
+                workspace.counts = RegionCounts::default();
+                workspace.timings = timed.then(SearchPhaseTimings::default);
+            }
+            let slate = SlateFill {
                 theory,
                 filter: filter.as_ref(),
-                timed,
                 parts: &self.parts,
                 narrower,
                 restrictions: &self.restrictions,
                 allowance: &allowance,
                 limits: budget.limits,
                 cancellation: budget.cancellation,
+                frontier: &self.frontier,
                 maximum: maximum.min(usize::try_from(remaining).unwrap_or(usize::MAX).max(1)),
                 remaining,
-                changed: Condvar::new(),
-                state: Mutex::new(State {
-                    pending: std::mem::take(&mut self.pending),
-                    output: std::mem::take(output),
-                    active: 0,
-                    counts: RegionCounts::default(),
+                output_slots: AtomicUsize::new(0),
+                outcome: Mutex::new(Outcome {
+                    candidates: std::mem::take(output),
                     stopped: None,
-                    original_validation: crate::PhaseMeasurement::default(),
                 }),
             };
             self.pool.install(|| {
-                workspaces.par_iter_mut().for_each(|workspace| {
-                    if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-                        round.work(workspace);
-                    }))
-                    .is_err()
-                    {
-                        round.stop(Incomplete::WorkerPanicked);
-                    }
-                });
+                workspaces
+                    .par_iter_mut()
+                    .enumerate()
+                    .for_each(|(index, workspace)| {
+                        if std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                            slate.produce(index, workspace);
+                        }))
+                        .is_err()
+                        {
+                            slate.stop(Incomplete::WorkerPanicked);
+                        }
+                    });
             });
-            Ok(round
-                .state
+            let Outcome {
+                candidates,
+                mut stopped,
+            } = slate
+                .outcome
                 .into_inner()
-                .unwrap_or_else(PoisonError::into_inner))
+                .unwrap_or_else(PoisonError::into_inner);
+            let mut counts = RegionCounts::default();
+            let mut original_validation = crate::PhaseMeasurement::default();
+            for workspace in workspaces.iter() {
+                if let Err(error) = counts.add(workspace.counts) {
+                    stopped.get_or_insert(error);
+                }
+                if let Some(timings) = &workspace.timings {
+                    original_validation.merge(timings.original_validation);
+                }
+            }
+            Ok((candidates, stopped, counts, original_validation))
         });
         allowance.record(&mut budget.statistics);
-        let mut state = match state {
-            Ok(state) => state,
+        let (produced, mut stopped, counts, original_validation) = match joined {
+            Ok(joined) => joined,
             Err(error) => {
                 let _ = self.finish();
                 return Produced {
@@ -374,20 +355,20 @@ impl RegionProposals {
                 };
             }
         };
-        if let Err(error) = self.statistics.counts.add(state.counts) {
-            state.stopped.get_or_insert(error);
+        *output = produced;
+        if let Err(error) = self.statistics.counts.add(counts) {
+            stopped.get_or_insert(error);
         }
-        self.pending = state.pending;
-        *output = state.output;
-        if (state.stopped.is_some() || self.pending.is_empty())
+        let resolved = self.frontier.termination.is_resolved();
+        if (stopped.is_some() || resolved)
             && let Err(error) = self.finish()
         {
-            state.stopped.get_or_insert(error);
+            stopped.get_or_insert(error);
         }
         Produced {
-            exhausted: state.stopped.is_none() && self.pending.is_empty(),
-            stopped: state.stopped,
-            original_validation: state.original_validation,
+            exhausted: stopped.is_none() && resolved,
+            stopped,
+            original_validation,
         }
     }
 }
@@ -400,33 +381,36 @@ impl Drop for RegionProposals {
     }
 }
 
-struct State {
-    pending: Frontier,
-    output: Vec<Interpretation>,
-    /// Each active region reserves a possible output slot.
-    active: usize,
-    counts: RegionCounts,
-    stopped: Option<Incomplete>,
-    original_validation: crate::PhaseMeasurement,
-}
-
 #[cfg(test)]
 mod tests;
 
-struct Round<'a, 'filter> {
+/// What a slate has produced: its emitted candidates and its first stop. One
+/// lock guards both, so a stop that polling control observed is recorded only
+/// while the slate is not yet full.
+struct Outcome {
+    candidates: Vec<Interpretation>,
+    stopped: Option<Incomplete>,
+}
+
+/// One slate's shared state: the slate's allowance of output slots and its
+/// outcome.
+struct SlateFill<'a, 'filter> {
     theory: &'a Theory,
     filter: Option<&'filter crate::region_filter::Filter>,
-    timed: bool,
     parts: &'a regions::OriginalParts,
     narrower: &'a Narrower,
     restrictions: &'a Conditions<(Theory, Narrower)>,
     allowance: &'a SharedBudget,
-    limits: crate::SearchLimits,
+    limits: SearchLimits,
     cancellation: &'a Cancellation,
+    frontier: &'a RegionFrontier,
     maximum: usize,
     remaining: u64,
-    changed: Condvar,
-    state: Mutex<State>,
+    /// Output slots reserved: the regions producers hold plus the emitted
+    /// candidates, never more than `maximum`.
+    output_slots: AtomicUsize,
+    /// A leaf lock: the slate closes only after it is released.
+    outcome: Mutex<Outcome>,
 }
 
 enum Step {
@@ -435,122 +419,232 @@ enum Step {
     Candidate(Interpretation),
 }
 
-impl<'filter> Round<'_, 'filter> {
-    fn lock(&self) -> MutexGuard<'_, State> {
-        self.state.lock().unwrap_or_else(PoisonError::into_inner)
+impl<'filter> SlateFill<'_, 'filter> {
+    fn outcome(&self) -> MutexGuard<'_, Outcome> {
+        self.outcome.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// Record the first stop and close the slate: producers take no further
+    /// region, return the regions they hold and leave.
     fn stop(&self, error: Incomplete) {
-        self.lock().stopped.get_or_insert(error);
-        self.changed.notify_all();
+        self.outcome().stopped.get_or_insert(error);
+        self.frontier.termination.close();
     }
 
-    fn take(&self) -> Option<Entry> {
-        let mut state = self.lock();
-        loop {
-            if state.stopped.is_some() || state.output.len() == self.maximum {
-                return None;
+    /// Record a stop that polling control observed, unless the slate is
+    /// already full, and close the slate. The emission that fills the slate
+    /// ends it without a stop, and a requested stop stays requested, so the
+    /// next slate's first poll observes it. The check and the record share the
+    /// lock the emission takes, so no such stop follows the filling emission.
+    fn stop_unless_full(&self, error: Incomplete) {
+        let recorded = {
+            let mut outcome = self.outcome();
+            let open = outcome.candidates.len() < self.maximum;
+            if open {
+                outcome.stopped.get_or_insert(error);
             }
-            if let Err(error) = self.cancellation.poll() {
-                state.stopped.get_or_insert(error.into());
-                self.changed.notify_all();
-                return None;
-            }
-            if state.active + state.output.len() < self.maximum {
-                if let Some(entry) = state.pending.pop() {
-                    state.active += 1;
-                    return Some(entry);
-                }
-                if state.active == 0 {
-                    return None;
-                }
-            }
-            state = self
-                .changed
-                .wait_timeout(state, CONTROL_WAIT)
-                .unwrap_or_else(PoisonError::into_inner)
-                .0;
+            open
+        };
+        if recorded {
+            self.frontier.termination.close();
         }
     }
 
-    fn work(&self, workspace: &mut Workspace<'filter>) {
-        let mut timings = self.timed.then(crate::SearchPhaseTimings::default);
-        while let Some(mut entry) = self.take() {
+    /// Reserve one output slot, if the slate has one left.
+    fn reserve_slot(&self) -> bool {
+        self.output_slots
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |held| {
+                (held < self.maximum).then_some(held + 1)
+            })
+            .is_ok()
+    }
+
+    /// Return an output slot whose holder found no region. It wakes nobody: a
+    /// producer waiting for a slot sees it within its bounded wait.
+    fn release_slot(&self) {
+        self.output_slots.fetch_sub(1, Ordering::AcqRel);
+    }
+
+    /// One attempt to take a region under a newly reserved output slot: the
+    /// producer's own newest region, or, with an empty deque, a peer's oldest.
+    /// Under the gate only `try_lock` is used, and an own deque found busy ends
+    /// the attempt without a steal: a thief holds it, and it may still hold
+    /// this producer's regions, which its next attempt outside the gate waits
+    /// for. Every failed attempt settles the lease, so the back-off never waits
+    /// holding permits.
+    fn admit(&self, index: usize, attempt: Attempt, lease: &WorkLease<'_>) -> Option<Entry> {
+        if !self.reserve_slot() {
+            lease.settle();
+            return None;
+        }
+        let local = match attempt {
+            Attempt::Outside => Ok(self.frontier.take_local(index)),
+            Attempt::UnderGate => self.frontier.try_take_local(index),
+        };
+        let entry = match local {
+            Ok(Some(entry)) => Some(entry),
+            Ok(None) => {
+                lease.settle();
+                self.frontier.steal(index)
+            }
+            Err(Busy) => {
+                lease.settle();
+                None
+            }
+        };
+        if entry.is_none() {
+            self.release_slot();
+        }
+        entry
+    }
+
+    /// A region under a reserved output slot, waiting while any remains;
+    /// `None` when the slate ended.
+    fn acquire(&self, index: usize, lease: &WorkLease<'_>) -> Option<Entry> {
+        self.frontier.find_work(
+            CONTROL_WAIT,
+            self.cancellation,
+            |attempt| self.admit(index, attempt, lease),
+            |error| self.stop_unless_full(error),
+        )
+    }
+
+    /// Publish a split's older child and keep its newer one in hand under the
+    /// same output slot. A refused publication drops the older child
+    /// unpublished, leaving the count unchanged; the newer child goes back to
+    /// the deque when storage permits, and the recorded stop keeps the run
+    /// incomplete.
+    fn hand_over(
+        &self,
+        index: usize,
+        (cut, held): (Entry, Entry),
+        reserve: impl FnOnce(&mut VecDeque<Entry>, usize) -> Result<(), Incomplete>,
+    ) -> Option<Entry> {
+        match self.frontier.publish_split(index, [cut], reserve) {
+            Ok(()) => Some(held),
+            Err(error) => {
+                self.frontier.requeue(index, held);
+                self.stop(error);
+                None
+            }
+        }
+    }
+
+    /// After a refutation the producer keeps its output slot when it finds
+    /// another region at once: its own newest, or, with an empty deque, a
+    /// peer's oldest after settling its lease. Otherwise the slot is released.
+    fn after_refutation(&self, index: usize, lease: &WorkLease<'_>) -> Option<Entry> {
+        let next = self.frontier.take_local(index).or_else(|| {
+            lease.settle();
+            self.frontier.steal(index)
+        });
+        if next.is_none() {
+            self.release_slot();
+        }
+        next
+    }
+
+    /// The leaf's region is resolved and its output slot becomes its
+    /// candidate's. The emission that fills the slate closes it, a normal end
+    /// with no stop, after the outcome lock is released.
+    fn emit(&self, candidate: Interpretation) {
+        self.frontier.termination.resolve();
+        let full = {
+            let mut outcome = self.outcome();
+            outcome.candidates.push(candidate);
+            outcome.candidates.len() == self.maximum
+        };
+        if full {
+            self.frontier.termination.close();
+        }
+    }
+
+    /// Producer `index`'s part of the slate. It holds one lease throughout,
+    /// polls control before every step, keeps the newer child of each split in
+    /// hand, and returns a region it holds to its deque when the slate ends.
+    fn produce(&self, index: usize, workspace: &mut Workspace<'filter>) {
+        let mut lease = self.allowance.lease(self.cancellation);
+        let mut search = SearchStatistics::default();
+        let mut hand: Option<Entry> = None;
+        loop {
+            if self.frontier.termination.has_ended() {
+                break;
+            }
+            if let Err(error) = self.cancellation.poll() {
+                self.stop_unless_full(error.into());
+                break;
+            }
+            let mut entry = match hand.take() {
+                Some(entry) => entry,
+                None => match self.acquire(index, &lease) {
+                    Some(entry) => entry,
+                    None => break,
+                },
+            };
             let mut counts = RegionCounts {
                 regions: 1,
                 ..Default::default()
             };
-            // Settle permits before touching the frontier mutex or waiting;
-            // an idle producer must not strand another worker's allowance.
             let result = {
                 let mut budget = Budget {
-                    quota: self.allowance.lease(self.cancellation),
+                    quota: lease,
                     limits: self.limits,
                     cancellation: self.cancellation,
-                    statistics: SearchStatistics::default(),
+                    statistics: search,
                 };
-                self.step(
-                    &mut entry,
-                    &mut workspace.scratch,
-                    &mut budget,
-                    &mut counts,
-                    &mut workspace.filter,
-                    &mut timings,
-                )
+                let result = self.step(&mut entry, workspace, &mut budget, &mut counts);
+                search = budget.statistics;
+                lease = budget.quota;
+                result
             };
-            let mut state = self.lock();
-            state.active -= 1;
-            if let Err(error) = state.counts.add(counts) {
-                state.stopped.get_or_insert(error);
-            }
+            let overflow = workspace.counts.add(counts).err();
             match result {
-                Ok(Step::Refuted) => {}
-                Ok(Step::Candidate(candidate)) => state.output.push(candidate),
+                Ok(Step::Refuted) => {
+                    self.frontier.termination.resolve();
+                    hand = self.after_refutation(index, &lease);
+                }
                 Ok(Step::Split(cut, held)) => {
-                    if state.pending.try_reserve(2).is_ok() {
-                        state.pending.push(cut);
-                        state.pending.push(held);
-                    } else {
-                        state.stopped.get_or_insert(Incomplete::Allocation);
+                    match self.hand_over(index, (cut, held), reserve_regions) {
+                        Some(held) => hand = Some(held),
+                        None => break,
                     }
                 }
+                Ok(Step::Candidate(candidate)) => self.emit(candidate),
                 Err(error) => {
                     // This region remains unresolved. Retain it when storage
                     // permits; the explicit stop is authoritative either way.
-                    if state.pending.try_reserve(1).is_ok() {
-                        state.pending.push(entry);
-                    }
-                    state.stopped.get_or_insert(error);
+                    self.frontier.requeue(index, entry);
+                    self.stop(error);
+                    break;
                 }
             }
-            self.changed.notify_all();
+            if let Some(error) = overflow {
+                self.stop(error);
+                break;
+            }
         }
-        if let Some(timings) = timings {
-            self.lock()
-                .original_validation
-                .merge(timings.original_validation);
+        if let Some(entry) = hand {
+            self.frontier.requeue(index, entry);
         }
     }
 
     fn step<'a>(
         &'a self,
         (region, knowledge): &mut Entry,
-        scratch: &mut NarrowingScratch,
+        workspace: &mut Workspace<'filter>,
         budget: &mut Budget<'a, WorkLease<'a>>,
         counts: &mut RegionCounts,
-        filter: &mut Option<crate::region_filter::Worker<'filter>>,
-        timings: &mut Option<crate::SearchPhaseTimings>,
     ) -> Result<Step, Incomplete> {
         let mut check = self.filter.map(|factory| crate::region_filter::Check {
             filter: factory,
-            worker: filter,
-            timings,
+            worker: &mut workspace.filter,
+            timings: &mut workspace.timings,
         });
         if regions::narrow(
             (self.parts.subject(self.theory), self.narrower),
             self.restrictions,
             (region, knowledge),
-            scratch,
+            &mut workspace.scratch,
             budget,
             counts,
             check.as_mut(),
@@ -562,7 +656,7 @@ impl<'filter> Round<'_, 'filter> {
         if let Some(atom) = region.split_atom() {
             budget.decide()?;
             // Take the region out to split it by value; the emptied placeholder
-            // (no atoms, no allocation) is discarded with this pending entry.
+            // (no atoms, no allocation) is discarded with this entry.
             let (cut, held) = std::mem::replace(region, Region::all_open(0)).split(atom);
             let cut = (cut, knowledge.clone());
             let held = (held, std::mem::take(knowledge));

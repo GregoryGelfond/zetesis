@@ -273,7 +273,7 @@ result for these independently validated original-model proposals is an
 invalid-witness error.
 The callback must preserve ordering and semantic meaning; cardinality is checked.
 
-Scalar batch proposals and joined producer rounds share one original-validation
+Scalar batch proposals and joined producer slates share one original-validation
 `EvaluationWorkspace` per batch owner. Only capacity survives: every candidate's
 truth is recomputed against the exact original theory before the external checker
 runs. Numeric measures are shared within that evaluation, never across candidates.
@@ -517,24 +517,34 @@ holds at most `atom_count + 1` regions. Deque storage grows with the observed
 depth and is released after joining. This does not bound total process memory.
 
 `StableModels::with_region_producers` instead retains its region preparation
-and an owned Rayon pool across bounded production rounds, each reading the
-enumeration's one original index. It uses the same
-readings and disjoint splits, returning classical candidates for a separate
-membership executor. `next_batch_with_completion` joins each round, independently
+and an owned Rayon pool across slates, the candidates the stream checks and
+commits together, filling each in one bounded run that reads the enumeration's
+one original index. It uses the same readings and disjoint splits, returning
+classical candidates for a separate membership executor.
+`next_batch_with_completion` joins each slate's producers, independently
 validates original satisfaction, then invokes its checker and finishes residuals.
 Work allowances remain cumulative across those stages. No answer-set membership
 is performed in a producer, so a device checker receives new candidates rather
 than CPU-completed answers. Scalar iterator consumption is also supported.
 
-The shared frontier and each active region own disjoint unfinished portions of
-the candidate space. An active region reserves one output slot; refutation or
-splitting releases it, and a classical leaf consumes it. Every round ends before
-device execution begins. A checker failure keeps admitted candidates retryable;
-a producer or validation stop retains the completed admitted prefix and leaves
-enumeration incomplete. Output order is schedule-dependent. The batch payload
-limit excludes frontier knowledge and worker thread stacks; it is not an RSS
-bound. This does not introduce a new candidate search algorithm or alter the
-original frozen reduct.
+The producers' deques and the regions they hold own disjoint unfinished
+portions of the candidate space. Each producer keeps a deque, retained between
+slates, and shares the region walker's frontier protocols: it continues depth
+first on the newer child of each split, publishes the older child for idle peers
+to steal, and steals a peer's oldest region only with an empty deque. Its deque
+therefore holds at most one sibling per atom split along its current path, so at
+most `atom_count` regions, besides a region returned at a stop. A region a
+producer holds reserves one output slot; a split keeps the slot for the
+continued child, a refutation keeps it only while the producer finds another
+region at once, and a classical leaf consumes it. Each producer holds one work
+lease per slate. Every slate's producers join before device execution begins. A
+cancellation or deadline observed once the slate is full is left to the next
+slate, so no stop follows the emission that fills it. A checker failure keeps
+admitted candidates retryable; a producer or validation stop retains the
+completed admitted prefix and leaves enumeration incomplete. Output order is
+schedule-dependent. The batch payload limit excludes frontier knowledge and
+worker thread stacks; it is not an RSS bound. This does not introduce a new
+candidate search algorithm or alter the original frozen reduct.
 
 Each region's lease settles before its worker waits for work or sends a model,
 returning unused permits to the other workers. The shared allowance includes

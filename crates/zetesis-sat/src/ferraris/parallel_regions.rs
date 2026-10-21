@@ -55,8 +55,8 @@
 //! the two newest children. Each split decides another atom, and a worker steals
 //! only with an empty deque, so each deque holds at most `atom_count + 1` entries.
 //! Storage grows with the observed depth rather than reserving that bound for
-//! every worker. Capacity and payloads are released after joining. Fallible slot
-//! growth does not make region or knowledge cloning fallible.
+//! every worker. Capacity and payloads are released after joining. Fallible
+//! entry-capacity growth does not make region or knowledge cloning fallible.
 //! Each worker may retain one refuted region's knowledge allocation until its
 //! next split or exit. Copying the current parent's complete knowledge into it
 //! reuses storage without retaining any conclusions from the refuted region.
@@ -1204,7 +1204,7 @@ impl ParallelRegions {
             }
         }
         // No worker can still own or publish work. Release abandoned payloads
-        // and high-water slot capacity even if the caller keeps the enumerator.
+        // and high-water entry capacity even if the caller keeps the enumerator.
         self.release_frontier();
         failure.map_or(Ok(()), Err)
     }

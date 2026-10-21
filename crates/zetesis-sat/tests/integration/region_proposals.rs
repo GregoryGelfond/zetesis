@@ -12,8 +12,7 @@ use crate::support::interpretations::stable_models as expected;
 use zetesis_ferraris::{Node, Theory};
 use zetesis_sat::{
     BatchError, BatchLimits, BatchVerdict, Cancellation, CompletionExecutor, Engagement,
-    Incomplete, Limits, RegionFrontierStatistics, RegionWalkEngagement, SearchLimits, SearchMethod,
-    StableModels,
+    Incomplete, Limits, RegionWalkEngagement, SearchLimits, SearchMethod, StableModels,
 };
 use zetesis_test_support::counts::nonzero;
 
@@ -205,20 +204,12 @@ fn frontier_peaks_survive_complete_enumeration() {
 }
 
 #[test]
-fn frontier_receipts_include_exact_knowledge_storage() {
-    // One-candidate rounds keep one region active at a time, so the walk,
-    // and every frontier receipt, is deterministic. The root is queued with
-    // no knowledge; its first narrowing creates exactly one reserved slot for
-    // the original theory. Receipts include its consolidated mask header and
-    // complete owned payload; amortized reservation of the slot changes them.
-    // Three atom-ranking counters and three neutral chain counters occupy six
-    // u16 cells. Ten nodes, three atoms and three chain witnesses each fit one
-    // word per mask: six words in the knowledge, plus the region's held/cut
-    // pair. Keep this payload calculation independent of retained_bytes().
-    let empty_frontier = 408;
-    let queued_payload = size_of::<zetesis_ferraris::Knowledge>() as u128
-        + 8 * size_of::<u64>() as u128
-        + 6 * size_of::<u16>() as u128;
+fn single_candidate_slates_keep_frontier_receipt_identities() {
+    // With several producers a single-candidate slate's frontier is spread
+    // over their deques by the schedule, so its receipts are not fixed; the
+    // exact payload accounting is the frontier's own unit test. Every receipt
+    // still holds no more regions than entry capacity, its peaks never fall,
+    // and exhaustion leaves no queued region.
     let mut search = StableModels::with_region_producers(
         &choice_theories::three_choices_falsum_first(),
         nonzero(2),
@@ -226,24 +217,19 @@ fn frontier_receipts_include_exact_knowledge_storage() {
         Cancellation::default(),
     )
     .unwrap();
-    let mut receipts = Vec::new();
+    let mut prior = search.statistics().regions.unwrap().frontier.unwrap();
     while !search.exhausted() {
         search.next_batch(batch(1), residual).unwrap();
-        receipts.push(search.statistics().regions.unwrap().frontier.unwrap());
+        let observed = search.statistics().regions.unwrap().frontier.unwrap();
+        assert!(observed.regions <= observed.capacity);
+        assert!(observed.peak_regions >= prior.peak_regions.max(observed.regions));
+        assert!(observed.peak_capacity >= prior.peak_capacity.max(observed.capacity));
+        assert!(
+            observed.peak_retained_bytes >= prior.peak_retained_bytes.max(observed.retained_bytes)
+        );
+        prior = observed;
     }
-    let peak = |regions, capacity, retained_bytes| RegionFrontierStatistics {
-        regions,
-        capacity,
-        retained_bytes,
-        peak_regions: 4,
-        peak_capacity: 4,
-        peak_retained_bytes: empty_frontier + 4 * queued_payload,
-    };
-    assert_eq!(
-        receipts.first(),
-        Some(&peak(3, 4, empty_frontier + 3 * queued_payload))
-    );
-    assert_eq!(receipts.last(), Some(&peak(0, 4, empty_frontier)));
+    assert_eq!(prior.regions, 0);
 }
 
 #[test]

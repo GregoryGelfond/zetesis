@@ -102,6 +102,10 @@ Notable changes by release. Versions follow Semantic Versioning.
   explanations can replace weaker retained entries.
 - Parallel region walks take their shared idle lock after publishing a region
   only when a worker is waiting for one. Answer sets are unchanged.
+- GPU-route candidate producers keep a deque each, continue depth first on their
+  own regions and steal a peer's oldest region only with an empty deque,
+  holding one work lease per slate instead of one per region. Proposal order
+  remains schedule-dependent, and answer sets are unchanged.
 
 ### Fixed
 

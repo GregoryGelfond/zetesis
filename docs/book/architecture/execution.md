@@ -430,7 +430,8 @@ oracle comparison of answer sets as sets, not on order or determinism.
 
 Candidate production and membership need not run on the same executor.
 `StableModels::with_region_producers` uses the same original-theory readings
-and disjoint splits in bounded Rayon rounds. A worker returns a classical leaf;
+and disjoint splits, filling each slate (the candidates checked and committed
+together, below) in one bounded Rayon run. A worker returns a classical leaf;
 the coordinator retains it until original satisfaction and reduct membership
 have been established. Device execution checks both in one operation. Native
 completion finishes any general-reduct residuals. Producers never complete
@@ -445,15 +446,23 @@ while candidate_frontier is unfinished:
     yield answers
 ```
 
-One output slot is reserved for every active producer region. Refutation or
-splitting returns the reservation; an emitted leaf consumes it. The batch is
-bounded even when workers finish together. A stopped validation retains its
-admitted prefix and reports the unfinished suffix explicitly. Every producer
-joins and settles its work before membership begins. Original validation has
-its own per-candidate work allowance. This schedule does not overlap production
-with device execution. Pending-byte limits cover pending/result storage and
-original-validation scratch, not the entire region frontier, thread stacks or
-process memory.
+One output slot is reserved for every region a producer holds. A split keeps
+the reservation for the child the producer continues and publishes the other
+child, where an idle producer can steal it; a refutation keeps it only when the
+producer finds another region at once, and otherwise returns it; an emitted
+leaf consumes it. The slate is bounded even when producers finish together.
+The producers keep one deque each, retained between slates, and share the
+region walker's frontier protocols: the count of unresolved regions, split
+publication and the idle back-off. A producer steals only with an empty deque,
+so its deque holds at most one sibling per atom split along its current path.
+Each holds one work lease for the slate. A cancellation or deadline observed
+once the slate is full is left to the next slate's first poll. A stopped
+validation retains its admitted prefix and reports the unfinished suffix
+explicitly. Every producer joins and settles its work before membership begins.
+Original validation has its own per-candidate work allowance. This schedule
+does not overlap production with device execution. Pending-byte limits cover
+pending/result storage and original-validation scratch, not the entire region
+frontier, thread stacks or process memory.
 
 The generic batch-checker API independently validates original satisfaction
 using one `EvaluationWorkspace` per owner. Each candidate receives a full
@@ -473,10 +482,10 @@ retrying through the generic API first performs independent original validation.
 partially published batch. The trusted callback contract and actual device
 execution remain separate from mechanically proved correspondence.
 
-The executor and its producer slots persist between batches. Each slot keeps
-its narrowing worklists and, when needed, one checker for the immutable source.
-Slots are used exclusively, may move between executor threads and number at
-most the requested workers. The retained checker borrows one stable owner;
+The executor and its producers' workspaces persist between slates. Each
+workspace keeps its narrowing worklists and, when needed, one checker for the
+immutable source. Workspaces are used exclusively, may move between executor
+threads and number at most the requested workers. The retained checker borrows one stable owner;
 stopping or completing production drops the checkers before that owner.
 Candidate truth and support knowledge still travel with each region, so reuse
 does not transfer deductions between unrelated candidates. Source-filter

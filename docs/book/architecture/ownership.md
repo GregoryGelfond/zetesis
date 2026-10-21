@@ -172,7 +172,7 @@ cache or public interchange of raw index handles.
 Only immutable indexing is shared. Each candidate region owns its knowledge;
 each reduct traversal starts with private knowledge under its candidate's mask.
 A narrowing's worklists belong to whoever walks: the scalar walk, each parallel
-worker and each producer round keep one `NarrowingScratch` for their candidate
+worker and each producer keep one `NarrowingScratch` for their candidate
 regions; each reduct workspace keeps one for its proper-subset queries, counted
 in its retained bytes; each proposer keeps one for its positive checks. Each
 narrowing empties the scratch it borrows before reading it, and no scratch is
@@ -272,12 +272,14 @@ semantic preservation argument and its remaining implementation obligations.
 ## Candidate frontier observations
 
 `RegionSearchStatistics::frontier` records queued, inactive candidate regions in
-the parallel proposal executor. Its byte count includes allocated entry capacity
-and the owned decision and knowledge buffers of queued regions. An empty frontier
-can retain capacity. The count and byte peaks are maxima over frontier changes;
-they need not occur together.
+the parallel proposal executor's producer deques. Its byte count includes the
+deques' headers, allocated entry capacity and the owned decision and knowledge
+buffers of queued regions. An empty frontier can retain capacity. Each count is
+changed under the lock of the deque whose change causes it, so its history is a
+linearization of the deques' changes and its peak the maximum of that history;
+the count and byte peaks need not occur together.
 
-The observation excludes active regions, retired worker storage, temporary split copies, shared immutable
+The observation excludes the regions producers hold, retired worker storage, temporary split copies, shared immutable
 indexes, candidate batches, thread stacks, allocator overhead and device storage.
 It is neither peak process memory nor a memory limit. Uninstrumented traversal
 routes report absence, not zero. The statistics JSON preserves that distinction

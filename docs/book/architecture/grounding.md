@@ -529,8 +529,8 @@ publishes it; each checker admits its retained capacity against its own storage
 ceiling. Candidate masks, dirty flags, pending deductions and workspace remain
 local. Predicate references used while building the mapping are temporary.
 
-Serial traversal, native persistent workers and joined producer slots retain
-their checkers. Each traversal or slot prepares at most once, borrows the same
+Serial traversal, native persistent workers and joined producers retain
+their checkers. Each traversal or producer prepares at most once, borrows the same
 immutable core mappings and reuses its worklists across batches; source truth remains specific to each
 checked region. Separate singleton validation still prepares a checker per
 operation. The indexed query wrapper borrows existing indexes and allocates

@@ -34,7 +34,11 @@ use std::time::Duration;
 use zetesis_cpu::regions::Region;
 
 use super::conditions::CandidateKnowledge;
+use super::regions::RegionFrontierStatistics;
 use crate::{Cancellation, Incomplete};
+
+#[cfg(test)]
+mod tests;
 
 /// A region with its per-narrower knowledge: the unit a worker takes,
 /// publishes and steals.
@@ -122,8 +126,15 @@ pub(super) struct Termination {
 impl Termination {
     /// The root is the one outstanding region until it is split.
     pub(super) fn new() -> Self {
+        Self::resuming(1)
+    }
+
+    /// A walk that continues `unresolved` regions left by an earlier joined
+    /// one, which no worker holds: the count is carried, the walk is open and
+    /// nobody waits.
+    pub(super) fn resuming(unresolved: usize) -> Self {
         Self {
-            outstanding: AtomicUsize::new(1),
+            outstanding: AtomicUsize::new(unresolved),
             closed: AtomicBool::new(false),
             gate: Mutex::new(()),
             idle_waiters: AtomicUsize::new(0),
@@ -197,19 +208,94 @@ pub(super) enum Attempt {
     UnderGate,
 }
 
+/// A worker's own deque found locked by another worker: its contents are
+/// unknown, so it may still hold regions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) struct Busy;
+
+/// One counter of queued storage and the maximum it has held.
+struct Counter {
+    current: AtomicUsize,
+    peak: AtomicUsize,
+}
+
+impl Counter {
+    fn starting_at(value: usize) -> Self {
+        Self {
+            current: AtomicUsize::new(value),
+            peak: AtomicUsize::new(value),
+        }
+    }
+
+    /// Raise the counter and fold its new value into the peak.
+    fn add(&self, amount: usize) {
+        if amount != 0 {
+            let previous = self.current.fetch_add(amount, Ordering::Relaxed);
+            self.peak
+                .fetch_max(previous.saturating_add(amount), Ordering::Relaxed);
+        }
+    }
+
+    fn subtract(&self, amount: usize) {
+        self.current.fetch_sub(amount, Ordering::Relaxed);
+    }
+
+    fn set(&self, value: usize) {
+        self.current.store(value, Ordering::Relaxed);
+    }
+
+    fn current(&self) -> usize {
+        self.current.load(Ordering::Relaxed)
+    }
+
+    fn peak(&self) -> usize {
+        self.peak.load(Ordering::Relaxed)
+    }
+}
+
+/// Exact receipts of a frontier's queued regions and their storage.
+///
+/// Each counter changes by a relaxed read-modify-write under the deque lock of
+/// the change that causes it, and an increase folds its result into the
+/// counter's peak. Updates to one counter are totally ordered by its
+/// modification order, and each is applied while its deque's change is held,
+/// so the counter's history is a linearization of the deques' changes and its
+/// peak the exact maximum of that history. Counters of different kinds are
+/// separate histories, so their peaks need not occur together. They are read
+/// once no party can change the frontier.
+struct Accounting {
+    regions: Counter,
+    capacity: Counter,
+    /// The deque vector's header and its deques' headers, every deque's entry
+    /// capacity times the entry size, and every queued entry's owned payload.
+    retained_bytes: Counter,
+    /// The headers' share of `retained_bytes`, constant for a frontier.
+    headers: usize,
+}
+
+/// An entry's owned payload as a count of host bytes. The payload measures
+/// actual allocations, so it fits the host's address range.
+fn payload_bytes(entry: &Entry) -> usize {
+    usize::try_from(entry_payload(entry)).unwrap_or(usize::MAX)
+}
+
 /// One deque of regions per worker and the walk's termination record.
 ///
 /// An owner pops its newest region and thieves take the oldest. At most one
-/// deque lock is held at a time, and none while the gate is waited for.
+/// deque lock is held at a time, and none while the gate is waited for. A
+/// measured frontier keeps exact receipts of its queued regions; its deques
+/// are then changed only through these operations.
 pub(super) struct RegionFrontier {
     pub(super) queues: Vec<Mutex<VecDeque<Entry>>>,
     /// Whether the walk has ended, and where idle workers wait for its end.
     pub(super) termination: Termination,
+    accounting: Option<Accounting>,
 }
 
 impl RegionFrontier {
     /// Deque 0 holds `root`; the others start empty. Storage for the deques
-    /// and the root's entry is reserved fallibly.
+    /// and the root's entry is reserved fallibly. The frontier keeps no
+    /// receipts.
     pub(super) fn new(workers: usize, root: Entry) -> Result<Self, Incomplete> {
         let mut queues = crate::search::storage(workers)?;
         let mut first = VecDeque::new();
@@ -222,7 +308,65 @@ impl RegionFrontier {
         Ok(Self {
             queues,
             termination: Termination::new(),
+            accounting: None,
         })
+    }
+
+    /// [`Self::new`], keeping exact receipts of the queued regions and their
+    /// storage from the root onward.
+    pub(super) fn measured(workers: usize, root: Entry) -> Result<Self, Incomplete> {
+        let payload = payload_bytes(&root);
+        let mut frontier = Self::new(workers, root)?;
+        let headers = size_of::<Vec<Mutex<VecDeque<Entry>>>>()
+            + frontier.queues.capacity() * size_of::<Mutex<VecDeque<Entry>>>();
+        let capacity = frontier.queue(0).capacity();
+        frontier.accounting = Some(Accounting {
+            regions: Counter::starting_at(1),
+            capacity: Counter::starting_at(capacity),
+            retained_bytes: Counter::starting_at(headers + capacity * size_of::<Entry>() + payload),
+            headers,
+        });
+        Ok(frontier)
+    }
+
+    /// The frontier's receipts, when it keeps them.
+    pub(super) fn statistics(&self) -> Option<RegionFrontierStatistics> {
+        let accounting = self.accounting.as_ref()?;
+        Some(RegionFrontierStatistics {
+            regions: accounting.regions.current(),
+            capacity: accounting.capacity.current(),
+            retained_bytes: accounting.retained_bytes.current() as u128,
+            peak_regions: accounting.regions.peak(),
+            peak_capacity: accounting.capacity.peak(),
+            peak_retained_bytes: accounting.retained_bytes.peak() as u128,
+        })
+    }
+
+    /// Record a removal from a deque whose lock the caller holds.
+    fn removed(&self, entry: &Entry) {
+        if let Some(accounting) = &self.accounting {
+            accounting.regions.subtract(1);
+            accounting.retained_bytes.subtract(payload_bytes(entry));
+        }
+    }
+
+    /// Record an insertion into a deque whose lock the caller holds.
+    fn inserted(&self, entry: &Entry) {
+        if let Some(accounting) = &self.accounting {
+            accounting.regions.add(1);
+            accounting.retained_bytes.add(payload_bytes(entry));
+        }
+    }
+
+    /// Record a capacity change of a deque whose lock the caller holds.
+    fn resized(&self, before: usize, after: usize) {
+        if let Some(accounting) = &self.accounting
+            && after > before
+        {
+            let grown = after - before;
+            accounting.capacity.add(grown);
+            accounting.retained_bytes.add(grown * size_of::<Entry>());
+        }
     }
 
     pub(super) fn queue(&self, index: usize) -> MutexGuard<'_, VecDeque<Entry>> {
@@ -233,7 +377,41 @@ impl RegionFrontier {
 
     /// Worker `index`'s newest region.
     pub(super) fn take_local(&self, index: usize) -> Option<Entry> {
-        self.queue(index).pop_back()
+        let mut queue = self.queue(index);
+        let entry = queue.pop_back()?;
+        self.removed(&entry);
+        Some(entry)
+    }
+
+    /// Worker `index`'s newest region without waiting for its deque's lock:
+    /// the gate's form of [`Self::take_local`]. `Ok(None)` means the deque was
+    /// empty, and [`Busy`] that another worker held it, which says nothing of
+    /// its contents.
+    pub(super) fn try_take_local(&self, index: usize) -> Result<Option<Entry>, Busy> {
+        let mut queue = match self.queues[index].try_lock() {
+            Ok(queue) => queue,
+            Err(TryLockError::Poisoned(error)) => error.into_inner(),
+            Err(TryLockError::WouldBlock) => return Err(Busy),
+        };
+        let entry = queue.pop_back();
+        if let Some(entry) = &entry {
+            self.removed(entry);
+        }
+        Ok(entry)
+    }
+
+    /// Return a region to worker `index`'s deque without changing the count:
+    /// a region taken but neither resolved nor split goes back. Best effort:
+    /// when entry capacity is refused the region is dropped, which only a path
+    /// that records a stop does, so the run stays incomplete.
+    pub(super) fn requeue(&self, index: usize, entry: Entry) {
+        let mut queue = self.queue(index);
+        let before = queue.capacity();
+        if reserve_regions(&mut queue, 1).is_ok() {
+            self.resized(before, queue.capacity());
+            self.inserted(&entry);
+            queue.push_back(entry);
+        }
     }
 
     /// Take the oldest region of a peer's deque, trying peers in round-robin
@@ -249,6 +427,7 @@ impl RegionFrontier {
                 Err(TryLockError::WouldBlock) => continue,
             };
             if let Some(entry) = queue.pop_front() {
+                self.removed(&entry);
                 return Some(entry);
             }
         }
@@ -295,19 +474,25 @@ impl RegionFrontier {
     /// the deque, then wake one idle worker. The injected reservation is the
     /// sole fallible storage effect; success must reserve `N` entries, as
     /// [`reserve_regions`] does. A refused reservation publishes nothing and
-    /// leaves the count unchanged.
+    /// leaves the count unchanged. A publication of no child would count a
+    /// region that no deque or hand holds, so the count could never reach
+    /// zero; it is refused when the call is compiled.
     pub(super) fn publish_split<const N: usize>(
         &self,
         index: usize,
         children: [Entry; N],
         reserve: impl FnOnce(&mut VecDeque<Entry>, usize) -> Result<(), Incomplete>,
     ) -> Result<(), Incomplete> {
+        const { assert!(N > 0, "a split publishes at least one child") };
         let mut queue = self.queue(index);
+        let before = queue.capacity();
         reserve(&mut queue, N)?;
+        self.resized(before, queue.capacity());
         // The parent is still outstanding. Count its net gain before making
         // any child visible; the reserved pushes cannot allocate.
         self.termination.grow();
         for child in children {
+            self.inserted(&child);
             queue.push_back(child);
         }
         // Release the deque before taking the gate: a waiter holds the gate
@@ -366,10 +551,16 @@ impl RegionFrontier {
     }
 
     /// Release every deque's payloads and capacity, once no party can still
-    /// own or publish work.
+    /// own or publish work. A measured frontier's current receipts become its
+    /// headers alone; its peaks remain.
     pub(super) fn release(&self) {
         for index in 0..self.queues.len() {
             drop(std::mem::take(&mut *self.queue(index)));
+        }
+        if let Some(accounting) = &self.accounting {
+            accounting.regions.set(0);
+            accounting.capacity.set(0);
+            accounting.retained_bytes.set(accounting.headers);
         }
     }
 }
