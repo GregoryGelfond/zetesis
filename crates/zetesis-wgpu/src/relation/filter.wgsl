@@ -2,6 +2,10 @@
 // arithmetic, term-order or candidate-membership interpretation. The first
 // two words per column are its absolute payload word offset and cell width.
 // Host-checked widths are 8, 16 or 32; each column starts at a word boundary.
+// Every workgroup location an invocation reads was written earlier in its
+// workgroup, by the same invocation or by another ordered before the read by a
+// barrier or uniform load, and every workgroup array index is within its array,
+// so the zero-fill of workgroup memory is never observed.
 struct Dimensions {
     rows: u32, columns: u32, queries: u32, words: u32,
     epoch: u32, tiles: u32, reserved1: u32, reserved2: u32,

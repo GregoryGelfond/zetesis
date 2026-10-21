@@ -2,6 +2,10 @@
 // every index and buffer length before dispatch. Rules and frozen seeds never
 // change during an epoch. This is the static profile: no source grounding is
 // performed in this shader.
+// Every workgroup location an invocation reads was written earlier in its
+// workgroup, by the same invocation or by another ordered before the read by a
+// barrier or uniform load, and every workgroup array index is within its array,
+// so the zero-fill of workgroup memory is never observed.
 
 struct Params {
     atom_count: u32,

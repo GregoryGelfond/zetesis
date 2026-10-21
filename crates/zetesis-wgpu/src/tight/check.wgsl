@@ -8,6 +8,10 @@
 // because conditions precede their rows in either schedule. Every truth reader
 // masks bit 0. Support bit a denotes an enabled producer for a in this
 // candidate's row; only the complete and dense routes build it.
+// Every workgroup location an invocation reads was written earlier in its
+// workgroup, by the same invocation or by another ordered before the read by a
+// barrier or uniform load, and every workgroup array index is within its array,
+// so the zero-fill of workgroup memory is never observed.
 override WORKGROUP_SIZE: u32 = 64u;
 const NODE_FALSE: u32 = 0u;
 const NODE_ATOM: u32 = 1u;

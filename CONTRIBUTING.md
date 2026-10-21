@@ -145,6 +145,20 @@ physical scheduling: a checked class certificate has the same original-theory
 meaning on CPU and GPU. State the actual host/device work and completion
 requirements separately from the requested backend.
 
+GPU kernels read only workgroup memory they have written. Every workgroup
+location an invocation reads was written earlier in that workgroup, by the same
+invocation or by another invocation ordered before the read by a barrier or a
+uniform load. Every index into a workgroup array is within the array: the bounds
+policy wgpu compiles with replaces an out-of-range index with some in-range one,
+possibly a location nothing wrote. Pipelines keep WebGPU's zero-fill of
+workgroup memory (`ZERO_FILL_WORKGROUP_MEMORY` in the wgpu runtime), which this
+rule makes unobservable; the fill is removed only where a measured kernel-time
+gain repays it, and an unwritten location would then hold whatever the memory
+last held, which can be another program's data. Review every new kernel,
+workgroup variable and workgroup index against this rule, and restate it in the
+kernel's header; the physical tests' CPU comparisons are evidence for it, not
+proof.
+
 Separate three obligations: semantic laws, executable representation/refinement,
 and measured backend behavior. Existing Lean laws do not certify Rust, shaders,
 parsing or hardware. Do not use proof counts or passing regression tests as a

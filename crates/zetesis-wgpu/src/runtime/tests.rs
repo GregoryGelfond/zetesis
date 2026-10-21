@@ -1,6 +1,9 @@
 //! Exercise the actual wait loop with a deterministic clock and poll operation.
 
-use super::{Effects, GpuError, GpuErrorKind, SubmissionWait, finish_read, wait_for_submission};
+use super::{
+    Effects, GpuError, GpuErrorKind, SubmissionWait, compilation_options, finish_read,
+    wait_for_submission,
+};
 use std::{cell::Cell, time::Duration};
 use zetesis_cpu::{Cancellation, Stop};
 
@@ -299,4 +302,12 @@ fn map_and_decoder_failures_keep_their_original_causes() {
             }
         );
     }
+}
+
+#[test]
+fn pipelines_keep_the_workgroup_zero_fill() {
+    let constants = [("WORKGROUP_SIZE", 128.0)];
+    let options = compilation_options(&constants);
+    assert!(options.zero_initialize_workgroup_memory);
+    assert_eq!(options.constants, constants.as_slice());
 }

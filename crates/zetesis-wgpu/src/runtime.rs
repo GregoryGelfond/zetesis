@@ -418,12 +418,34 @@ fn create_pipeline(
         layout: None,
         module: shader,
         entry_point: Some(entry_point),
-        compilation_options: wgpu::PipelineCompilationOptions {
-            constants: constants.as_ref().map_or(&[], |values| values.as_slice()),
-            ..Default::default()
-        },
+        compilation_options: compilation_options(
+            constants.as_ref().map_or(&[], |values| values.as_slice()),
+        ),
         cache: None,
     })
+}
+
+/// Whether every pipeline keeps WebGPU's zero-fill of workgroup memory.
+///
+/// It stays `true`, wgpu's default, until a measured kernel-time gain repays
+/// removing it. Every kernel satisfies the rule that makes `false` sound: each
+/// workgroup location a kernel reads was written earlier in its workgroup, by
+/// the same invocation or by another ordered before the read by a barrier or
+/// uniform load, and every workgroup array index is within its array, since the
+/// bounds policy would otherwise substitute some element, possibly one nothing
+/// wrote (CONTRIBUTING, "Carry the semantic contract into Lean and Rust").
+const ZERO_FILL_WORKGROUP_MEMORY: bool = true;
+
+/// The compilation options of every pipeline in the crate: `constants` for the
+/// overridable constants, and the workgroup zero-fill that
+/// `ZERO_FILL_WORKGROUP_MEMORY` selects.
+fn compilation_options<'a>(
+    constants: &'a [(&'a str, f64)],
+) -> wgpu::PipelineCompilationOptions<'a> {
+    wgpu::PipelineCompilationOptions {
+        constants,
+        zero_initialize_workgroup_memory: ZERO_FILL_WORKGROUP_MEMORY,
+    }
 }
 
 pub(crate) fn submit(
