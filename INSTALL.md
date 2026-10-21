@@ -37,7 +37,11 @@ zetesis --help
 ```
 
 The script builds locked release binaries and installs both tools into
-`~/.local/bin`; pass a directory to install elsewhere. The first build needs
+`~/.local/bin` on every platform; pass a directory to install elsewhere. It
+reminds you when that directory is not on PATH, and names any other `zetesis`
+that comes first on PATH, such as one in a Cargo build output. Some Linux
+systems add `~/.local/bin` to PATH only at login and only if it already exists,
+so after a first install open a new login shell or run the `export` line above. The first build needs
 GitHub read access for the pinned themelios dependency.
 
 The default install includes GPU support: Metal on macOS, Vulkan elsewhere. It
@@ -48,10 +52,10 @@ before anything is replaced, each executable is replaced by a rename, and the
 the previous one working. The script then removes the older GPU-capable builds,
 every other directory in `zetesis-libexec` named in the `<version>-<hash>` form,
 and reports one it cannot remove; it leaves other names there alone. Run one
-install at a time for a given binary directory and Cargo target directory: both
-builds of zetesis write the same build output, which then holds the `zetesis`
-built without the GPU stack. Run the installed `zetesis`: the one in the build
-output has no `zetesis-libexec` beside it and refuses GPU requests.
+install at a time for a given binary directory and Cargo target directory. The
+`zetesis` built without the GPU stack is built in its own directory beneath the
+target directory, so Cargo's build output keeps the default, GPU-capable
+`zetesis`, which serves GPU requests itself.
 `./scripts/install.sh --cpu-only` builds zetesis without GPU support, for
 machines with no supported GPU or no graphics drivers; that build runs on the
 CPU only, refuses `--backend gpu`, and the script removes any

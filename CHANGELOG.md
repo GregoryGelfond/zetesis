@@ -88,9 +88,11 @@ Notable changes by release. Versions follow Semantic Versioning.
 
 ### Fixed
 
-- A GPU request to the `zetesis` that a default install leaves in Cargo's build
-  output now explains that it is not an installed copy and points to the
-  installed one, instead of advising a reinstall that cannot repair it.
+- A default install no longer replaces the GPU-capable `zetesis` in Cargo's
+  build output with the CPU front, so running that copy serves GPU requests. A
+  front copied away from its install now explains that it is not an installed
+  copy and points to the installed one, instead of advising a reinstall that
+  cannot repair it.
 
 ### Compatibility
 
