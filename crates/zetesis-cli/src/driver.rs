@@ -138,6 +138,11 @@ pub enum RunError {
         /// Where the front looked for the GPU executable; `None` when the
         /// front could not resolve its own path, so could not locate it.
         path: Option<std::path::PathBuf>,
+        /// Whether the front's directory holds the `zetesis-libexec`
+        /// directory a default install places beside it. A copy that is not
+        /// installed has none, such as the build output where an install
+        /// leaves its front.
+        installed: bool,
         /// Why locating or running it failed.
         error: io::Error,
     },
@@ -258,9 +263,11 @@ impl fmt::Display for RunError {
             Self::BackendUnavailable => f.write_str(
                 "this zetesis was built without GPU support; install the default build for GPU execution (see INSTALL.md)",
             ),
-            Self::GpuExecutableUnavailable { path, error } => {
-                gpu_executable_unavailable(f, path.as_deref(), error)
-            }
+            Self::GpuExecutableUnavailable {
+                path,
+                installed,
+                error,
+            } => gpu_executable_unavailable(f, path.as_deref(), *installed, error),
             Self::UnsupportedCombination { backend, grounder } => write!(
                 f,
                 "unsupported backend/grounding profile: {} with {}",
@@ -371,11 +378,15 @@ impl RunError {
 }
 /// Why this install's GPU executable did not serve a GPU request: it could not
 /// be located, because the front could not resolve its own path, or the one at
-/// `path` could not be run. The remedy is given only where reinstalling repairs
-/// the cause, a missing or unusable file, not an exhausted or failing system.
+/// `path` could not be run. A missing executable beside a front that is not
+/// `installed` sends the user to the installed copy, since reinstalling leaves
+/// this one as it is. Otherwise the remedy is given only where reinstalling
+/// repairs the cause, a missing or unusable file, not an exhausted or failing
+/// system.
 fn gpu_executable_unavailable(
     f: &mut fmt::Formatter<'_>,
     path: Option<&std::path::Path>,
+    installed: bool,
     error: &io::Error,
 ) -> fmt::Result {
     let Some(path) = path else {
@@ -389,13 +400,15 @@ fn gpu_executable_unavailable(
         "this install's GPU executable, {}, could not be run: {error}",
         path.display()
     )?;
-    if matches!(
-        error.kind(),
-        io::ErrorKind::NotFound | io::ErrorKind::PermissionDenied
-    ) {
-        f.write_str("; rerun scripts/install.sh to repair the install (see INSTALL.md)")?;
+    match error.kind() {
+        io::ErrorKind::NotFound if !installed => f.write_str(
+            "; no zetesis-libexec directory is beside this executable, so it is not an installed copy: run the zetesis that scripts/install.sh installed, or install into this directory (see INSTALL.md)",
+        ),
+        io::ErrorKind::NotFound | io::ErrorKind::PermissionDenied => {
+            f.write_str("; rerun scripts/install.sh to repair the install (see INSTALL.md)")
+        }
+        _ => Ok(()),
     }
-    Ok(())
 }
 
 impl std::error::Error for RunError {

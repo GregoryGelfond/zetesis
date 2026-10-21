@@ -49,7 +49,9 @@ the previous one working. The script then removes the older GPU-capable builds,
 every other directory in `zetesis-libexec` named in the `<version>-<hash>` form,
 and reports one it cannot remove; it leaves other names there alone. Run one
 install at a time for a given binary directory and Cargo target directory: both
-builds of zetesis write the same build output.
+builds of zetesis write the same build output, which then holds the `zetesis`
+built without the GPU stack. Run the installed `zetesis`: the one in the build
+output has no `zetesis-libexec` beside it and refuses GPU requests.
 `./scripts/install.sh --cpu-only` builds zetesis without GPU support, for
 machines with no supported GPU or no graphics drivers; that build runs on the
 CPU only, refuses `--backend gpu`, and the script removes any

@@ -225,6 +225,7 @@ mod human_summary;
 fn failed_hand_off() -> RunError {
     RunError::GpuExecutableUnavailable {
         path: Some("zetesis-libexec/0/zetesis".into()),
+        installed: true,
         error: io::ErrorKind::NotFound.into(),
     }
 }

@@ -73,6 +73,12 @@ Notable changes by release. Versions follow Semantic Versioning.
   support explanations. Identical conditions can share their outputs, and stronger
   explanations can replace weaker retained entries.
 
+### Fixed
+
+- A GPU request to the `zetesis` that a default install leaves in Cargo's build
+  output now explains that it is not an installed copy and points to the
+  installed one, instead of advising a reinstall that cannot repair it.
+
 ## 0.6.0 — 2026-10-14
 
 ### Added
