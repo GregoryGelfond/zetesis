@@ -176,6 +176,19 @@ impl GpuContext {
         timing: bool,
     ) -> Result<Self, GpuError> {
         let (adapter, info) = selection::select_adapter(options, selection, validate).await?;
+        Self::open(&adapter, info, label, validate, timing).await
+    }
+
+    /// Request `adapter`'s device with its full limits and the supported
+    /// optional features, check the granted limits with `validate`, and
+    /// register the fault callbacks: the device half of creation.
+    pub(crate) async fn open(
+        adapter: &wgpu::Adapter,
+        info: GpuInfo,
+        label: &'static str,
+        validate: fn(&wgpu::Limits) -> Result<(), GpuError>,
+        timing: bool,
+    ) -> Result<Self, GpuError> {
         let limits = adapter.limits();
         let compute_timing = timing_status(timing, adapter.features());
         let required_features = requested_features(adapter.features(), timing);

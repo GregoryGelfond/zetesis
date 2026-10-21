@@ -350,7 +350,9 @@ share an explicitly supplied context through `ExecutionResources` and
 `Session::builder`. `ExecutionResources::with_formula_profile` additionally
 shares the supplied profile's shader and pipelines across ordinary formula
 sessions and derives its context from that profile, preventing mismatched
-context/profile pairs.
+context/profile pairs. `ExecutionResources::discovering` instead retains an
+adapter enumeration begun before the session; the session's primitive selects
+over it exactly as ordinary selection does and requests its own device.
 Each session still owns its executor, subject residency, search, candidate queue,
 counters and incumbent. Context-only resources compile per session; neither
 form installs a global cache. Hard adapter policy is checked before profile

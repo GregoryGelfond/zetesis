@@ -427,20 +427,12 @@ impl Executor {
         observations: &mut impl ExecutionSink,
         phases: &Recorder,
     ) -> Result<Self, PreparationFailure> {
-        use zetesis_wgpu::{GpuOptions, GpuOracle};
+        use zetesis_wgpu::GpuOracle;
 
-        let context = resources
-            .gpu_for(options.backend)
-            .map_err(SolveError::Gpu)?;
+        let source = resources.device_source(options).map_err(SolveError::Gpu)?;
         if options.grounder != Grounder::Eager {
-            let oracle = match context {
-                Some(context) => zetesis_wgpu::GpuLazyOracle::from_context(context),
-                None => zetesis_wgpu::GpuLazyOracle::new_selected(
-                    GpuOptions::default(),
-                    selection(options.backend),
-                ),
-            }
-            .map_err(SolveError::Gpu)?;
+            let oracle =
+                zetesis_wgpu::GpuLazyOracle::from_source(source).map_err(SolveError::Gpu)?;
             let statistics =
                 crate::LazyExecutionStatistics::new(options.backend, oracle.info().metadata());
             phases.lazy_grounding();
@@ -456,11 +448,7 @@ impl Executor {
 
         // Validate or discover hardware before new static materialization.
         // Caller-supplied compiled graphs are reused without expansion.
-        let oracle = match context {
-            Some(context) => GpuOracle::from_context(context),
-            None => GpuOracle::new_selected(GpuOptions::default(), selection(options.backend)),
-        }
-        .map_err(SolveError::Gpu)?;
+        let oracle = GpuOracle::from_source(source).map_err(SolveError::Gpu)?;
         let atom_limit = options.max_atoms.min(zetesis_wgpu::MAX_ATOMS);
         let ground = match cached {
             Some(ground) => {

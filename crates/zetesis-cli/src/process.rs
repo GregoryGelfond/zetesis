@@ -205,24 +205,26 @@ fn run_input(
     output: &mut impl Write,
     diagnostics: &mut Diagnostics<impl Write>,
 ) -> Result<PublicationOutcome, RunFailure> {
-    let (input, cancellation) = match load_input(options).and_then(|input| {
-        process_cancellation(options.time_limit, Instant::now())
-            .map(|cancellation| (input, cancellation))
-    }) {
-        Ok(input) => input,
-        Err(error) => {
-            let failure = error.into();
-            return Err(if options.json {
-                crate::output::input_failure(output, failure, options)
-            } else {
-                failure
-            });
-        }
-    };
+    let (input, resources, cancellation) =
+        match load_input(options).and_then(|(input, resources)| {
+            process_cancellation(options.time_limit, Instant::now())
+                .map(|cancellation| (input, resources, cancellation))
+        }) {
+            Ok(input) => input,
+            Err(error) => {
+                let failure = error.into();
+                return Err(if options.json {
+                    crate::output::input_failure(output, failure, options)
+                } else {
+                    failure
+                });
+            }
+        };
     let result = match input {
         Input::Source(source) => crate::driver::run_source_with_writer(
             source,
             options,
+            &resources,
             output,
             diagnostics,
             &cancellation,
@@ -230,6 +232,7 @@ fn run_input(
         Input::Bundle(bundle) => crate::driver::run_bundle_with_writer(
             bundle,
             options,
+            &resources,
             output,
             diagnostics,
             &cancellation,
@@ -256,7 +259,11 @@ enum Input {
     Bundle(SourceBundle),
 }
 
-fn load_input(options: &Options) -> Result<Input, RunError> {
+/// Validate the invocation's configuration, then begin a GPU solve's adapter
+/// enumeration, so it runs while the sources are read, admitted and grounded,
+/// then read the sources. An invalid configuration starts nothing; a later
+/// failure waits, as the resources drop, for the adapter enumeration to finish.
+fn load_input(options: &Options) -> Result<(Input, crate::ExecutionResources), RunError> {
     if !options.additional_inputs.is_empty()
         && std::iter::once(&options.input)
             .chain(&options.additional_inputs)
@@ -264,18 +271,21 @@ fn load_input(options: &Options) -> Result<Input, RunError> {
     {
         return Err(RunError::MixedStandardInput);
     }
-    crate::SolveConfig::from(options).validate()?;
-    if options.input.as_os_str() == "-" {
-        let source = read_source(options).map_err(RunError::Input)?;
-        Ok(Input::Source(source))
+    let config = crate::SolveConfig::from(options);
+    config.validate()?;
+    let resources = crate::ExecutionResources::discovering(&config);
+    let input = if options.input.as_os_str() == "-" {
+        Input::Source(read_source(options).map_err(RunError::Input)?)
     } else {
-        let bundle = SourceBundle::load_many(
-            std::iter::once(&options.input).chain(&options.additional_inputs),
-            options.resources().bundle_limits(),
+        Input::Bundle(
+            SourceBundle::load_many(
+                std::iter::once(&options.input).chain(&options.additional_inputs),
+                options.resources().bundle_limits(),
+            )
+            .map_err(RunError::BundleLoad)?,
         )
-        .map_err(RunError::BundleLoad)?;
-        Ok(Input::Bundle(bundle))
-    }
+    };
+    Ok((input, resources))
 }
 
 fn read_source(options: &Options) -> io::Result<String> {

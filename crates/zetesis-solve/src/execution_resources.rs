@@ -2,18 +2,21 @@
 
 /// Caller-owned execution infrastructure, independent of any semantic subject.
 ///
-/// The default retains no device and preserves ordinary per-session discovery.
-/// With the `gpu` feature, `with_gpu` retains the supplied context and compiles
-/// primitive pipelines per session. `with_formula_profile` also retains one
-/// formula profile, whose shader and compiled pipelines repeated formula
-/// sessions share. Every session
-/// still owns fresh resident subjects, epochs, search state, budgets, pending
+/// The default retains no device and preserves ordinary per-session device
+/// selection. With the `gpu` feature, `with_gpu` retains the supplied context
+/// and creates each session's primitive on it. `with_formula_profile` also
+/// retains one formula profile, whose shader and compiled pipelines repeated
+/// formula sessions share. `discovering` retains an adapter enumeration begun
+/// before the session: the session's GPU primitive selects over it exactly as
+/// ordinary selection does, then requests its own device. Every session still
+/// owns fresh resident subjects, epochs, search state, budgets, pending
 /// answers, counters and incumbents. CPU worker pools remain session-owned.
 ///
 /// Resources do not select a solving policy: the CPU backend ignores the
-/// supplied device. A GPU backend uses this exact context or fails; it never
-/// discovers a replacement. Resource ownership does not override the session's
-/// selected backend.
+/// supplied device, and the session's configuration alone decides whether its
+/// primitive requests timestamps. A GPU backend uses this exact context or
+/// fails; it never discovers a replacement. Resource ownership does not
+/// override the session's selected backend.
 ///
 /// Context operations are serialized through nonblocking leases. Busy refuses
 /// an overlapping operation without poisoning the owner; device invalidation is
@@ -33,6 +36,7 @@ pub struct ExecutionResources {
 enum GpuResources {
     Context(zetesis_wgpu::GpuContext),
     Formula(zetesis_wgpu::GpuFormulaProfile),
+    Discovery(zetesis_wgpu::GpuDiscovery),
 }
 
 impl ExecutionResources {
@@ -57,8 +61,7 @@ impl ExecutionResources {
     /// submission. General formula sessions share the profile's shader and its
     /// pipelines, as [`zetesis_wgpu::GpuFormulaProfile`] documents; a
     /// tight-support session creates its own primitive on the profile's exact
-    /// context.
-    /// Each formula session validates policy, Busy, health and
+    /// context. Each formula session validates policy, Busy, health and
     /// granted capabilities before starting independent residency and search.
     /// CPU sessions ignore these resources.
     #[cfg(feature = "gpu")]
@@ -67,6 +70,33 @@ impl ExecutionResources {
         Self {
             gpu: Some(GpuResources::Formula(profile.clone())),
         }
+    }
+
+    /// Resources for an ordinary session of `config`: for a GPU backend, an
+    /// adapter enumeration of that backend's API begun now on a background
+    /// thread ([`zetesis_wgpu::GpuDiscovery`]); otherwise, and in a build
+    /// without GPU support, the default.
+    ///
+    /// The session's GPU primitive selects over the adapter enumeration exactly
+    /// as ordinary selection does, with its own capability check, then requests
+    /// its own device, so adapter choice, failures and timestamps are those of
+    /// a session without these resources. It serves one primitive; a later
+    /// session, or a session of another API, selects as it would without it.
+    /// Dropping the last clone before a primitive takes the adapter enumeration
+    /// waits for it to finish.
+    #[must_use]
+    pub fn discovering(config: &crate::SolveConfig) -> Self {
+        #[cfg(feature = "gpu")]
+        if config.backend.is_gpu() {
+            return Self {
+                gpu: Some(GpuResources::Discovery(zetesis_wgpu::GpuDiscovery::spawn(
+                    crate::engine::selection(config.backend),
+                ))),
+            };
+        }
+        #[cfg(not(feature = "gpu"))]
+        let _ = config;
+        Self::default()
     }
 
     /// The exact retained formula compilation, if explicitly supplied.
@@ -91,21 +121,52 @@ impl ExecutionResources {
         match self.gpu.as_ref() {
             Some(GpuResources::Context(context)) => Some(context),
             Some(GpuResources::Formula(profile)) => Some(profile.context()),
-            None => None,
+            Some(GpuResources::Discovery(_)) | None => None,
         }
     }
 
+    /// Where a GPU session of `config` obtains its primitive's device, decided
+    /// here once for every primitive the session may construct.
+    ///
+    /// A retained context, a formula profile's included, is used exactly once
+    /// it matches the session's API and the default adapter policy. Otherwise
+    /// the primitive selects its own adapter under that policy, over a retained
+    /// adapter enumeration of the session's API when there is one. Explicit resources
+    /// thus keep their exact identity and granted features, and every selection
+    /// keeps primitive-specific adapter eligibility. A selected primitive
+    /// requests timestamps exactly when the session requests statistics; only
+    /// the formula and tight primitives read them.
+    ///
+    /// # Errors
+    /// A retained context whose device does not match the session's policy.
     #[cfg(feature = "gpu")]
-    pub(crate) fn gpu_for(
+    pub(crate) fn device_source(
         &self,
-        backend: crate::Backend,
-    ) -> Result<Option<&zetesis_wgpu::GpuContext>, zetesis_wgpu::GpuError> {
+        config: &crate::SolveConfig,
+    ) -> Result<zetesis_wgpu::GpuDeviceSource<'_>, zetesis_wgpu::GpuError> {
+        let options = zetesis_wgpu::GpuOptions::default();
+        let selection = crate::engine::selection(config.backend);
+        let timing = config.stats;
         if let Some(context) = self.gpu_context() {
-            context.check_selection(
-                zetesis_wgpu::GpuOptions::default(),
-                crate::engine::selection(backend),
-            )?;
+            context.check_selection(options, selection)?;
+            return Ok(zetesis_wgpu::GpuDeviceSource::Context(context));
         }
-        Ok(self.gpu_context())
+        Ok(match self.gpu.as_ref() {
+            Some(GpuResources::Discovery(discovery)) if discovery.selection() == selection => {
+                zetesis_wgpu::GpuDeviceSource::Discovered {
+                    discovery,
+                    options,
+                    timing,
+                }
+            }
+            _ => zetesis_wgpu::GpuDeviceSource::Selected {
+                options,
+                selection,
+                timing,
+            },
+        })
     }
 }
+
+#[cfg(all(test, feature = "gpu"))]
+mod tests;

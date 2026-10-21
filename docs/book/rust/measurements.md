@@ -179,7 +179,11 @@ not proved for native groups and numeric rows
 so report the size beside a comparison of verdict classes too. Under fitted
 sizing the dispatched size's pipeline is compiled by the solve's first device
 check, so its compilation time falls in that check's `GpuHostOracle` phase
-rather than in `ExecutionSetup`; a fixed size is compiled during setup.
+rather than in `ExecutionSetup`; a fixed size is compiled during setup. When a
+command-line GPU solve began its adapter enumeration before reading its sources,
+`ExecutionSetup` holds what remains of that adapter enumeration, if anything, and
+the primitive's own device request, so the phase is shorter than one that
+enumerates adapters at setup.
 
 ## GPU candidate slates
 

@@ -8,9 +8,12 @@
 //!
 //! [`GpuContext`] allows distinct primitives to retain prepared subjects on one
 //! device. Existing constructors create independent contexts; `from_context`
-//! constructors share one context and its failure boundary. Calls are serialized
-//! without waiting for a competing call: overlap returns [`GpuErrorKind::Busy`].
-//! Each primitive's resource limit keeps its documented local scope.
+//! constructors share one context and its failure boundary. The solve-path
+//! primitives' `from_source` constructors take a [`GpuDeviceSource`]: their own
+//! selection, a selection over the adapter enumeration a [`GpuDiscovery`] began
+//! earlier, or an existing context. Calls are serialized without waiting for a
+//! competing call: overlap returns [`GpuErrorKind::Busy`]. Each primitive's
+//! resource limit keeps its documented local scope.
 //!
 //! The shader implements the monotone event/iteration schedules modeled in the
 //! Lean specification. The Rust-to-WGSL packing and device implementation are
@@ -22,6 +25,8 @@ mod aggregate;
 mod candidates;
 mod checked_batch;
 mod context;
+mod device_source;
+mod discovery;
 mod formula;
 mod formula_graph;
 mod kernel;
@@ -46,6 +51,8 @@ use runtime::{DeviceProfile, ErrorScopes, Runtime};
 
 pub use checked_batch::CheckedBatch;
 pub use context::GpuContext;
+pub use device_source::GpuDeviceSource;
+pub use discovery::GpuDiscovery;
 pub use kernel::{GpuKernelOptions, GpuPropagation, GpuWorkgroupSize, GpuWorkgroupSizing};
 
 pub use formula::{
@@ -285,7 +292,22 @@ impl GpuOracle {
     /// Returns typed adapter absence, policy refusal, capability, device,
     /// allocation, or validation errors. CPU reference fallback is a caller policy.
     pub fn new_selected(options: GpuOptions, selection: GpuSelection) -> Result<Self, GpuError> {
-        let runtime = pollster::block_on(Runtime::new(options, selection, Self::profile()))?;
+        Self::from_source(GpuDeviceSource::Selected {
+            options,
+            selection,
+            timing: false,
+        })
+    }
+
+    /// Construct on the device `source` provides: as [`Self::new_selected`]
+    /// does for a selected or discovered source, and as [`Self::from_context`]
+    /// does for a context. This primitive measures no compute time, so it
+    /// requests no timestamps.
+    ///
+    /// # Errors
+    /// The typed failures of the constructor matching `source`, at the same step.
+    pub fn from_source(source: GpuDeviceSource<'_>) -> Result<Self, GpuError> {
+        let runtime = pollster::block_on(Runtime::open(source, Self::profile()))?;
         Ok(Self::with_runtime(runtime))
     }
 
@@ -298,8 +320,7 @@ impl GpuOracle {
     /// Refuses an active or invalidated context, unsupported granted limits,
     /// allocation and shader validation failure. No adapter selection occurs.
     pub fn from_context(context: &crate::GpuContext) -> Result<Self, GpuError> {
-        let runtime = pollster::block_on(Runtime::from_context(context, Self::profile()))?;
-        Ok(Self::with_runtime(runtime))
+        Self::from_source(GpuDeviceSource::Context(context))
     }
 
     /// Exact device context retained by this primitive.

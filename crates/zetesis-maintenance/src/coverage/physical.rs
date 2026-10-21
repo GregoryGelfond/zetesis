@@ -45,7 +45,7 @@ const SELECTIONS: [(GpuApi, &str); 2] = [
 /// Refuses missing/extra groups, altered target/count identities or duplicate tests.
 pub fn selection(table: &str) -> Result<Selection, Error> {
     const EXPECTED: [(&str, &str, usize); 14] = [
-        ("wgpu-lib", "lib", 19),
+        ("wgpu-lib", "lib", 20),
         ("tight", "integration", 4),
         ("formula", "integration", 2),
         ("aggregate", "integration", 3),
@@ -66,13 +66,13 @@ pub fn selection(table: &str) -> Result<Selection, Error> {
         .map(|(api, _)| *api)
         .ok_or_else(|| {
             Error::Invalid(
-                "physical qualification requires one reviewed selection of 69 exact test identities".into(),
+                "physical qualification requires one reviewed selection of 70 exact test identities".into(),
             )
         })?;
     let rows: Vec<_> = table.lines().collect();
     require(
         rows.len() == EXPECTED.len(),
-        "physical qualification requires all fourteen groups and 69 named tests",
+        "physical qualification requires all fourteen groups and 70 named tests",
     )?;
     let mut groups = Vec::new();
     let mut all_names = BTreeSet::new();

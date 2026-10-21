@@ -589,18 +589,33 @@ pub fn run_finalized_with_diagnostics(
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut diagnostics =
         Diagnostics::for_solve(diagnostics, options.color.human(options.json), options);
-    run_source_with_writer(source, options, output, &mut diagnostics, cancellation)
+    run_source_with_writer(
+        source,
+        options,
+        &crate::ExecutionResources::default(),
+        output,
+        &mut diagnostics,
+        cancellation,
+    )
 }
 
 pub(crate) fn run_source_with_writer(
     source: String,
     options: &Options,
+    resources: &crate::ExecutionResources,
     output: &mut impl Write,
     diagnostics: &mut Diagnostics<impl Write>,
     cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut renderer = crate::view::builtin::Builtin::new(output, options);
-    run_source_with_renderer(source, options, &mut renderer, diagnostics, cancellation)
+    run_source_with_renderer(
+        source,
+        options,
+        resources,
+        &mut renderer,
+        diagnostics,
+        cancellation,
+    )
 }
 
 /// Admit an original include graph through the extended source profile, then
@@ -666,18 +681,33 @@ pub fn run_bundle_finalized_with_diagnostics(
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut diagnostics =
         Diagnostics::for_solve(diagnostics, options.color.human(options.json), options);
-    run_bundle_with_writer(bundle, options, output, &mut diagnostics, cancellation)
+    run_bundle_with_writer(
+        bundle,
+        options,
+        &crate::ExecutionResources::default(),
+        output,
+        &mut diagnostics,
+        cancellation,
+    )
 }
 
 pub(crate) fn run_bundle_with_writer(
     bundle: SourceBundle,
     options: &Options,
+    resources: &crate::ExecutionResources,
     output: &mut impl Write,
     diagnostics: &mut Diagnostics<impl Write>,
     cancellation: &Cancellation,
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut renderer = crate::view::builtin::Builtin::new(output, options);
-    run_bundle_renderer_inner(bundle, options, &mut renderer, diagnostics, cancellation)
+    run_bundle_renderer_inner(
+        bundle,
+        options,
+        resources,
+        &mut renderer,
+        diagnostics,
+        cancellation,
+    )
 }
 
 /// Admit source and stream typed views into a caller-supplied renderer.
@@ -708,12 +738,20 @@ pub fn run_with_renderer(
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut diagnostics =
         Diagnostics::for_solve(diagnostics, options.color.human(options.json), options);
-    run_source_with_renderer(source, options, renderer, &mut diagnostics, cancellation)
+    run_source_with_renderer(
+        source,
+        options,
+        &crate::ExecutionResources::default(),
+        renderer,
+        &mut diagnostics,
+        cancellation,
+    )
 }
 
 fn run_source_with_renderer(
     source: String,
     options: &Options,
+    resources: &crate::ExecutionResources,
     renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
     cancellation: &Cancellation,
@@ -724,6 +762,7 @@ fn run_source_with_renderer(
     let result = crate::admission::source(
         source,
         options,
+        resources,
         renderer,
         diagnostics,
         cancellation,
@@ -753,12 +792,20 @@ pub fn run_bundle_with_renderer(
 ) -> Result<crate::PublicationOutcome, crate::PublicationFailure> {
     let mut diagnostics =
         Diagnostics::for_solve(diagnostics, options.color.human(options.json), options);
-    run_bundle_renderer_inner(bundle, options, renderer, &mut diagnostics, cancellation)
+    run_bundle_renderer_inner(
+        bundle,
+        options,
+        &crate::ExecutionResources::default(),
+        renderer,
+        &mut diagnostics,
+        cancellation,
+    )
 }
 
 fn run_bundle_renderer_inner(
     bundle: SourceBundle,
     options: &Options,
+    resources: &crate::ExecutionResources,
     renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
     cancellation: &Cancellation,
@@ -769,6 +816,7 @@ fn run_bundle_renderer_inner(
     let result = crate::admission::bundle(
         bundle,
         options,
+        resources,
         renderer,
         diagnostics,
         cancellation,
@@ -807,9 +855,12 @@ pub fn publish_prepared(
     let renderer = &mut invocation;
     let phases = crate::phase_timing::recorder(config.solve.stats, renderer);
     let mut result = crate::publication::solve(
-        input,
-        None,
+        crate::publication::Admitted {
+            input,
+            expansion: None,
+        },
         config,
+        &crate::ExecutionResources::default(),
         renderer,
         &mut diagnostics,
         cancellation,

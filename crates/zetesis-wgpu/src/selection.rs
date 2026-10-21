@@ -277,9 +277,10 @@ pub fn discover_adapters() -> Result<Vec<GpuInfo>, GpuError> {
     })
 }
 
-struct Candidate {
-    adapter: wgpu::Adapter,
-    info: GpuInfo,
+/// An enumerated adapter with its reported identity.
+pub(crate) struct Candidate {
+    pub(crate) adapter: wgpu::Adapter,
+    pub(crate) info: GpuInfo,
 }
 
 pub(crate) async fn select_adapter(
@@ -287,9 +288,40 @@ pub(crate) async fn select_adapter(
     selection: GpuSelection,
     validate: fn(&wgpu::Limits) -> Result<(), GpuError>,
 ) -> Result<(wgpu::Adapter, GpuInfo), GpuError> {
+    let mut candidates = enumerate_requested(selection).await?;
+    let index = select_from(&candidates, options, selection, validate)?;
+    let candidate = candidates.swap_remove(index);
+    Ok((candidate.adapter, candidate.info))
+}
+
+/// Selection's first step: the adapters of `selection`'s API, if this build
+/// compiles it, in enumeration order.
+///
+/// # Errors
+/// An API this build does not compile is unavailable; an enumeration that
+/// cannot be stored is an allocation failure.
+pub(crate) async fn enumerate_requested(
+    selection: GpuSelection,
+) -> Result<Vec<Candidate>, GpuError> {
     let requested = requested_backends(selection.api, wgpu::Instance::enabled_backend_features())?;
-    let mut candidates = enumerate(requested).await?;
-    let index = choose(
+    enumerate(requested).await
+}
+
+/// Selection's second step: the index in `candidates` of the adapter the hard
+/// policy ranks first among those advertising compute shaders whose limits
+/// pass `validate`.
+///
+/// # Errors
+/// No adapter, no adapter matching the policy, or none passing `validate`,
+/// each with its typed refusal; a non-capacity `validate` failure is returned
+/// as is.
+pub(crate) fn select_from(
+    candidates: &[Candidate],
+    options: GpuOptions,
+    selection: GpuSelection,
+    validate: fn(&wgpu::Limits) -> Result<(), GpuError>,
+) -> Result<usize, GpuError> {
+    choose(
         candidates
             .iter()
             .enumerate()
@@ -307,9 +339,7 @@ pub(crate) async fn select_adapter(
                 validate,
             )
         },
-    )?;
-    let candidate = candidates.swap_remove(index);
-    Ok((candidate.adapter, candidate.info))
+    )
 }
 
 fn check_capabilities(

@@ -59,9 +59,12 @@ pub(crate) fn with_diagnostics(
         options,
     );
     let result = crate::publication::solve(
-        input,
-        None,
+        crate::publication::Admitted {
+            input,
+            expansion: None,
+        },
         config,
+        &crate::ExecutionResources::default(),
         &mut invocation,
         &mut diagnostics,
         cancellation,

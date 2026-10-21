@@ -70,6 +70,17 @@ impl GpuFormulaOracle {
         ))
     }
 
+    /// Construct on the device `source` provides: as [`Self::new_selected`]
+    /// does for a selected or discovered source, requesting compute-pass
+    /// timestamps as [`Self::new_selected_with_timing`] does when its `timing`
+    /// is set, and as [`Self::from_context`] does for a context.
+    ///
+    /// # Errors
+    /// The typed failures of the constructor matching `source`, at the same step.
+    pub fn from_source(source: crate::GpuDeviceSource<'_>) -> Result<Self, GpuError> {
+        Ok(Self::with_profile(GpuFormulaProfile::from_source(source)?))
+    }
+
     /// Create an independently owned native device and kernel for this projection.
     ///
     /// Uses the same hard API and physical-device selection policy as

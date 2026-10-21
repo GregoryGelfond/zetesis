@@ -650,6 +650,16 @@ The profile includes its exact context and gate projection. It cannot be paired
 with a different device through an independent field. The builder clones shared
 handles, so the original variables need not outlive the session.
 
+`ExecutionResources::discovering(&config)` retains no device: for a GPU
+configuration it begins that backend's adapter enumeration on a background
+thread, which the command line does after validating its configuration and
+before reading its sources. The session's primitive selects over the
+adapter enumeration exactly as it would over its own, with its own capability check,
+then requests its own device; adapter choice, errors and timestamp requests are
+unchanged. The adapter enumeration serves one primitive, and dropping the
+resources before one takes it waits for it to finish. A CPU configuration
+starts nothing.
+
 Resource ownership does not choose an execution policy. `Backend::Cpu` ignores
 a supplied context. `Backend::Gpu(None)` requests the platform's native API;
 `Backend::Gpu(Some(GpuApi::Metal))` and `Backend::Gpu(Some(GpuApi::Vulkan))`

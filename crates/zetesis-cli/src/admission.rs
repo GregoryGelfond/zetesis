@@ -121,6 +121,7 @@ impl FormulaInput {
     fn solve(
         &self,
         options: &Options,
+        resources: &crate::ExecutionResources,
         renderer: &mut impl crate::AnswerRenderer,
         diagnostics: &mut Diagnostics<impl Write>,
         cancellation: &Cancellation,
@@ -129,9 +130,12 @@ impl FormulaInput {
         self.warnings(diagnostics)?;
         self.comparison_forms(diagnostics)?;
         crate::publication::solve(
-            self.prepared(),
-            None,
+            crate::publication::Admitted {
+                input: self.prepared(),
+                expansion: None,
+            },
             &crate::PublicationConfig::from(options),
+            resources,
             renderer,
             diagnostics,
             cancellation,
@@ -153,6 +157,7 @@ fn validate_formula(options: &Options) -> Result<(), RunError> {
 pub(crate) fn source(
     source: String,
     options: &Options,
+    resources: &crate::ExecutionResources,
     renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
     cancellation: &Cancellation,
@@ -210,9 +215,12 @@ pub(crate) fn source(
             Ok(AutomaticAdmission::Extended(admitted)) => {
                 diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
                 return crate::publication::solve(
-                    crate::PreparedInput::admitted(&admitted),
-                    Some(*admitted.expansion_usage()),
+                    crate::publication::Admitted {
+                        input: crate::PreparedInput::admitted(&admitted),
+                        expansion: Some(*admitted.expansion_usage()),
+                    },
                     &crate::PublicationConfig::from(options),
+                    resources,
                     renderer,
                     diagnostics,
                     cancellation,
@@ -241,6 +249,7 @@ pub(crate) fn source(
     solve_source_formula(
         prepared,
         options,
+        resources,
         renderer,
         diagnostics,
         cancellation,
@@ -251,6 +260,7 @@ pub(crate) fn source(
 fn solve_source_formula(
     prepared: Result<zetesis_themelios::PreparedFormula, zetesis_themelios::FormulaFailure>,
     options: &Options,
+    resources: &crate::ExecutionResources,
     renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
     cancellation: &Cancellation,
@@ -284,12 +294,20 @@ fn solve_source_formula(
             return Err(RunError::FormulaAdmission(error).into());
         }
     };
-    admitted.solve(options, renderer, diagnostics, cancellation, phases)
+    admitted.solve(
+        options,
+        resources,
+        renderer,
+        diagnostics,
+        cancellation,
+        phases,
+    )
 }
 
 pub(crate) fn bundle(
     bundle: SourceBundle,
     options: &Options,
+    resources: &crate::ExecutionResources,
     renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
     cancellation: &Cancellation,
@@ -302,19 +320,7 @@ pub(crate) fn bundle(
     {
         return Ok(report);
     }
-    diagnostics.metadata(
-        Label::Source,
-        format_args!(
-            "{} original {} ({} bytes)",
-            bundle.sources().len(),
-            if bundle.sources().len() == 1 {
-                "file"
-            } else {
-                "files"
-            },
-            bundle.total_bytes()
-        ),
-    )?;
+    report_bundle_sources(&bundle, diagnostics)?;
     let formula_policy = validate_formula(options);
     let prepared = if options.oracle == Oracle::Countermodel {
         formula_policy?;
@@ -357,9 +363,12 @@ pub(crate) fn bundle(
             Ok(AutomaticAdmission::Extended(admitted)) => {
                 diagnostics.metadata(Label::Oracle, format_args!("reduct closure"))?;
                 return crate::publication::solve(
-                    crate::PreparedInput::bundle(&admitted),
-                    Some(*admitted.expansion_usage()),
+                    crate::publication::Admitted {
+                        input: crate::PreparedInput::bundle(&admitted),
+                        expansion: Some(*admitted.expansion_usage()),
+                    },
                     &crate::PublicationConfig::from(options),
+                    resources,
                     renderer,
                     diagnostics,
                     cancellation,
@@ -389,10 +398,27 @@ pub(crate) fn bundle(
     solve_bundle_formula(
         prepared,
         options,
+        resources,
         renderer,
         diagnostics,
         cancellation,
         phases,
+    )
+}
+
+/// Report the bundle's sources: their file count and total bytes.
+fn report_bundle_sources(
+    bundle: &SourceBundle,
+    diagnostics: &mut Diagnostics<impl Write>,
+) -> std::io::Result<()> {
+    let files = bundle.sources().len();
+    diagnostics.metadata(
+        Label::Source,
+        format_args!(
+            "{files} original {} ({} bytes)",
+            if files == 1 { "file" } else { "files" },
+            bundle.total_bytes()
+        ),
     )
 }
 
@@ -402,6 +428,7 @@ fn solve_bundle_formula(
         zetesis_themelios::FormulaBundleFailure,
     >,
     options: &Options,
+    resources: &crate::ExecutionResources,
     renderer: &mut impl crate::AnswerRenderer,
     diagnostics: &mut Diagnostics<impl Write>,
     cancellation: &Cancellation,
@@ -435,7 +462,14 @@ fn solve_bundle_formula(
             return Err(RunError::FormulaBundleAdmission(error).into());
         }
     };
-    admitted.solve(options, renderer, diagnostics, cancellation, phases)
+    admitted.solve(
+        options,
+        resources,
+        renderer,
+        diagnostics,
+        cancellation,
+        phases,
+    )
 }
 
 fn source_failure(

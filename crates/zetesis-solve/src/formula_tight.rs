@@ -11,28 +11,17 @@ use crate::{ExecutionObservation, SolveConfig, SolveError};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, TightPlan, TightVerdict};
 use zetesis_sat::{BatchVerdict, Incomplete};
-use zetesis_wgpu::{GpuContext, GpuOptions, GpuTightOracle, TightGpuError, TightGpuLimits};
+use zetesis_wgpu::{GpuDeviceSource, GpuTightOracle, TightGpuError, TightGpuLimits};
 
 impl Execution {
     pub(super) fn tight(
         options: &SolveConfig,
-        context: Option<&GpuContext>,
+        source: GpuDeviceSource<'_>,
         plan: Arc<TightPlan>,
         control: &Cancellation,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
-        let oracle = match context {
-            Some(context) => GpuTightOracle::from_context(context),
-            None if options.stats => GpuTightOracle::new_selected_with_timing(
-                GpuOptions::default(),
-                crate::engine::selection(options.backend),
-            ),
-            None => GpuTightOracle::new_selected(
-                GpuOptions::default(),
-                crate::engine::selection(options.backend),
-            ),
-        }
-        .map_err(SolveError::Gpu)?;
+        let oracle = GpuTightOracle::from_source(source).map_err(SolveError::Gpu)?;
         observations.record(ExecutionObservation::DeviceTight {
             adapter: oracle.info().metadata(),
             grounder: options.grounder,

@@ -260,6 +260,12 @@ pub(crate) enum Kernel {
 }
 
 impl Kernel {
+    /// Whether this kernel's oracle reads compute-pass timestamps: the formula
+    /// and tight oracles do; a fixed kernel's never does.
+    pub(crate) fn measures_compute_time(self) -> bool {
+        matches!(self, Self::Formula(_) | Self::Tight(_))
+    }
+
     pub(crate) fn options(self) -> Option<GpuKernelOptions> {
         match self {
             Self::Fixed => None,

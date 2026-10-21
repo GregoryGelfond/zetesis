@@ -47,9 +47,12 @@ fn corrupt_identity(selection: GpuSelection) -> GpuAggregateOracle {
     // is deliberately corrupt, so successful submissions cannot become verdicts.
     let shader = SHADER.replace("output[result] = dimensions.epoch;", "output[result] = 0u;");
     assert_ne!(shader, SHADER);
-    let runtime = pollster::block_on(Runtime::new(
-        GpuOptions::default(),
-        selection,
+    let runtime = pollster::block_on(Runtime::open(
+        crate::GpuDeviceSource::Selected {
+            options: GpuOptions::default(),
+            selection,
+            timing: false,
+        },
         DeviceProfile {
             device_label: "aggregate malformed readback control",
             shader_label: "aggregate corrupted epoch control",

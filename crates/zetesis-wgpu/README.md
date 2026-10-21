@@ -41,6 +41,13 @@ policy; a primitive built on that context checks its own granted limits.
 `GpuContext` lets distinct primitives retain prepared subjects on one device.
 Standalone `new` and `new_selected` constructors create independent contexts;
 `from_context` shares device resources and their failure boundary.
+The solve-path primitives also take a `GpuDeviceSource` through `from_source`:
+an independent selection, an existing context, or a `GpuDiscovery`, the adapter
+enumeration an independent constructor performs, begun earlier on a background
+thread and creating no device. A primitive constructed from a discovery selects
+over that adapter enumeration exactly as `new_selected` does, with its own capability
+check and typed errors, then requests its own device. A discovery serves one
+primitive, and dropping it waits for its thread.
 `GpuFormulaProfile` additionally retains a validated formula shader on its exact
 context and the pipeline of each workgroup size compiled for it, a fitted size
 by the first check that dispatches it; `GpuFormulaOracle::from_profile` shares

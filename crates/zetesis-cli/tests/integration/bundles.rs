@@ -86,6 +86,39 @@ fn stdin_syntax_failure_renders_each_diagnostic_once() {
     }
 }
 
+// The GPU-enabled binary solves GPU requests itself; the CPU front hands them
+// to its sibling before reading any source.
+#[cfg(feature = "gpu")]
+#[test]
+fn a_gpu_backend_syntax_failure_reports_the_cpu_diagnostic() {
+    // A GPU solve begins its adapter enumeration once its configuration is
+    // validated, before reading its sources; a source that fails to parse
+    // never constructs a GPU primitive, so the enumeration reports nothing,
+    // whether or not the host has a device.
+    let fixture = BundleFixture::new();
+    fixture.write("entry.lp", MALFORMED_CHOICE);
+    let solve = |backend: &str| {
+        Command::new(env!("CARGO_BIN_EXE_zetesis"))
+            .args(["--backend", backend, "--models", "0", "--color", "never"])
+            .arg(fixture.path("entry.lp"))
+            .stdin(Stdio::null())
+            .output()
+            .unwrap()
+    };
+    let cpu = solve("cpu");
+    let gpu = solve("gpu");
+    let diagnostic = String::from_utf8(cpu.stderr).unwrap();
+    assert_eq!(cpu.status.code(), Some(2));
+    assert_eq!(
+        diagnostic.matches("error[syntax::").count(),
+        3,
+        "{diagnostic}"
+    );
+    assert_eq!(gpu.status.code(), cpu.status.code());
+    assert_eq!(gpu.stdout, cpu.stdout);
+    assert_eq!(String::from_utf8(gpu.stderr).unwrap(), diagnostic);
+}
+
 #[test]
 fn syntax_failure_exposes_each_original_diagnostic() {
     let fixture = BundleFixture::new();

@@ -28,8 +28,14 @@ impl GpuRelationExecutor {
         options: GpuOptions,
         selection: GpuSelection,
     ) -> Result<Self, RelationGpuError> {
-        let runtime =
-            pollster::block_on(runtime::Runtime::new(options, selection, Self::profile()))?;
+        let runtime = pollster::block_on(runtime::Runtime::open(
+            crate::GpuDeviceSource::Selected {
+                options,
+                selection,
+                timing: false,
+            },
+            Self::profile(),
+        ))?;
         Ok(Self::with_runtime(runtime))
     }
 
@@ -42,7 +48,10 @@ impl GpuRelationExecutor {
     /// Refuses an active or invalidated context, unsupported granted limits,
     /// allocation and shader validation failure. No adapter selection occurs.
     pub fn from_context(context: &crate::GpuContext) -> Result<Self, RelationGpuError> {
-        let runtime = pollster::block_on(runtime::Runtime::from_context(context, Self::profile()))?;
+        let runtime = pollster::block_on(runtime::Runtime::open(
+            crate::GpuDeviceSource::Context(context),
+            Self::profile(),
+        ))?;
         Ok(Self::with_runtime(runtime))
     }
 

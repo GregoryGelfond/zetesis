@@ -10,7 +10,7 @@ use super::{
 };
 use crate::runtime::{DeviceProfile, ErrorScopes, Runtime};
 use crate::timing::{BatchTiming, ComputeTimer};
-use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
+use crate::{GpuDeviceSource, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
 use std::time::Duration;
 use zetesis_backend::{BatchComputeTime, ComputeTimingStatus};
 use zetesis_cpu::Cancellation;
@@ -107,14 +107,22 @@ impl GpuTightOracle {
         options: GpuOptions,
         selection: GpuSelection,
     ) -> Result<Self, GpuError> {
-        let support = TightSupport::Atomic;
-        let runtime = pollster::block_on(Runtime::new_with_timing(
+        Self::from_source(GpuDeviceSource::Selected {
             options,
             selection,
-            Self::profile(support),
-            true,
-        ))?;
-        Ok(Self::with_runtime(runtime, support))
+            timing: true,
+        })
+    }
+
+    /// Construct on the device `source` provides: as [`Self::new_selected`]
+    /// does for a selected or discovered source, requesting compute-pass
+    /// timestamps as [`Self::new_selected_with_timing`] does when its `timing`
+    /// is set, and as [`Self::from_context`] does for a context.
+    ///
+    /// # Errors
+    /// The typed failures of the constructor matching `source`, at the same step.
+    pub fn from_source(source: GpuDeviceSource<'_>) -> Result<Self, GpuError> {
+        Self::open(source, TightSupport::Atomic)
     }
 
     /// Create a device with an explicit producer-support construction policy.
@@ -132,8 +140,14 @@ impl GpuTightOracle {
         selection: GpuSelection,
         support: TightSupport,
     ) -> Result<Self, GpuError> {
-        let runtime = pollster::block_on(Runtime::new(options, selection, Self::profile(support)))?;
-        Ok(Self::with_runtime(runtime, support))
+        Self::open(
+            GpuDeviceSource::Selected {
+                options,
+                selection,
+                timing: false,
+            },
+            support,
+        )
     }
 
     /// Compile this primitive's shader on an existing device context; the
@@ -159,7 +173,11 @@ impl GpuTightOracle {
         context: &crate::GpuContext,
         support: TightSupport,
     ) -> Result<Self, GpuError> {
-        let runtime = pollster::block_on(Runtime::from_context(context, Self::profile(support)))?;
+        Self::open(GpuDeviceSource::Context(context), support)
+    }
+
+    fn open(source: GpuDeviceSource<'_>, support: TightSupport) -> Result<Self, GpuError> {
+        let runtime = pollster::block_on(Runtime::open(source, Self::profile(support)))?;
         Ok(Self::with_runtime(runtime, support))
     }
 
@@ -187,7 +205,8 @@ impl GpuTightOracle {
     ) -> Result<Self, GpuError> {
         let mut profile = Self::profile(support);
         profile.kernel = crate::kernel::Kernel::Tight(options);
-        let runtime = pollster::block_on(Runtime::from_context(context, profile))?;
+        let runtime =
+            pollster::block_on(Runtime::open(GpuDeviceSource::Context(context), profile))?;
         Ok(Self::with_runtime(runtime, support))
     }
 

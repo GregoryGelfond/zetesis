@@ -2,7 +2,9 @@
 
 use super::GateProjection;
 use crate::runtime::{DeviceProfile, Runtime};
-use crate::{GpuContext, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
+use crate::{
+    GpuContext, GpuDeviceSource, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection,
+};
 use std::sync::Arc;
 
 /// One finite-formula kernel on one exact device context, shared by every
@@ -55,17 +57,23 @@ impl GpuFormulaProfile {
         options: GpuOptions,
         selection: GpuSelection,
     ) -> Result<Self, GpuError> {
-        let projection = GateProjection::default();
-        let runtime = pollster::block_on(Runtime::new_with_timing(
+        Self::from_source(GpuDeviceSource::Selected {
             options,
             selection,
-            Self::descriptor(projection)?,
-            true,
-        ))?;
-        Ok(Self {
-            runtime: Arc::new(runtime),
-            projection,
+            timing: true,
         })
+    }
+
+    /// The default gate implementation on the device `source` provides: as
+    /// [`Self::new_selected`], or [`Self::new_selected_with_timing`] when the
+    /// source requests timestamps, for a selected or discovered source, and as
+    /// [`Self::from_context`] for a context.
+    ///
+    /// # Errors
+    /// The typed failures of the constructor matching `source`, at the same step.
+    pub(crate) fn from_source(source: GpuDeviceSource<'_>) -> Result<Self, GpuError> {
+        let projection = GateProjection::default();
+        Self::open(source, projection, Self::descriptor(projection)?)
     }
 
     /// Select a native device and compile exactly the requested implementation's
@@ -82,15 +90,15 @@ impl GpuFormulaProfile {
         selection: GpuSelection,
         projection: GateProjection,
     ) -> Result<Self, GpuError> {
-        let runtime = pollster::block_on(Runtime::new(
-            options,
-            selection,
-            Self::descriptor(projection)?,
-        ))?;
-        Ok(Self {
-            runtime: Arc::new(runtime),
+        Self::open(
+            GpuDeviceSource::Selected {
+                options,
+                selection,
+                timing: false,
+            },
             projection,
-        })
+            Self::descriptor(projection)?,
+        )
     }
 
     /// Compile the default implementation's shader on an existing context; its
@@ -140,7 +148,15 @@ impl GpuFormulaProfile {
     ) -> Result<Self, GpuError> {
         let mut descriptor = Self::descriptor(projection)?;
         descriptor.kernel = crate::kernel::Kernel::Formula(options);
-        let runtime = pollster::block_on(Runtime::from_context(context, descriptor))?;
+        Self::open(GpuDeviceSource::Context(context), projection, descriptor)
+    }
+
+    fn open(
+        source: GpuDeviceSource<'_>,
+        projection: GateProjection,
+        descriptor: DeviceProfile,
+    ) -> Result<Self, GpuError> {
+        let runtime = pollster::block_on(Runtime::open(source, descriptor))?;
         Ok(Self {
             runtime: Arc::new(runtime),
             projection,

@@ -16,6 +16,12 @@ Notable changes by release. Versions follow Semantic Versioning.
   propagation for controlled comparisons. Fitted workgroup sizes and dense
   propagation are the defaults.
 - Requested GPU statistics report the workgroup size the device checks used.
+- The GPU library can begin adapter enumeration ahead of the primitive that uses
+  it (`GpuDiscovery`, which creates no device). Each solve-path primitive takes a
+  `GpuDeviceSource` (`from_source`): its own selection, a selection over such an
+  adapter enumeration, or an existing context. `ExecutionResources::discovering`
+  retains an adapter enumeration for a session. Adapter choice, errors and
+  timestamp requests are those of ordinary selection.
 - GPU formula sessions size their candidate slates, the candidates checked and
   committed together, adaptively by default. Slates start at the batch size,
   double after a filled slate whose answers leave the objective bound unchanged,
@@ -67,6 +73,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   `TightGpuLimits` gains `min_update_candidates`. `TightGpuBatchStats` reports
   routes and the update route's availability, and the tight kernel requires
   eight storage buffers per shader stage.
+- Command-line GPU solves begin adapter enumeration once their configuration is
+  validated, while the program is read and grounded, so the device is ready
+  sooner; CPU solves start none.
 - GPU tight checking evaluates independent formulas in parallel. General reduct
   propagation alternates directions through the same dependency schedule, carrying
   deductions between parents and operands; bounded checks retain exact CPU completion.

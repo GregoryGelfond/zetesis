@@ -342,27 +342,14 @@ impl Execution {
         control: &zetesis_cpu::Cancellation,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
-        let context = resources
-            .gpu_for(options.backend)
-            .map_err(SolveError::Gpu)?;
-        // Explicit resources retain their exact identity and granted features.
-        // Independent constructors retain profile-specific adapter eligibility.
+        let source = resources.device_source(options).map_err(SolveError::Gpu)?;
         if let Some(plan) = tight_plan {
-            return Self::tight(options, context, plan, control, observations);
+            return Self::tight(options, source, plan, control, observations);
         }
-        let oracle = match (resources.formula_profile(), context) {
-            (Some(profile), _) => zetesis_wgpu::GpuFormulaOracle::from_profile(profile),
-            (None, Some(context)) => zetesis_wgpu::GpuFormulaOracle::from_context(context),
-            (None, None) if options.stats => {
-                zetesis_wgpu::GpuFormulaOracle::new_selected_with_timing(
-                    zetesis_wgpu::GpuOptions::default(),
-                    crate::engine::selection(options.backend),
-                )
-            }
-            (None, None) => zetesis_wgpu::GpuFormulaOracle::new_selected(
-                zetesis_wgpu::GpuOptions::default(),
-                crate::engine::selection(options.backend),
-            ),
+        // A supplied profile is used exactly, with its shader and pipelines.
+        let oracle = match resources.formula_profile() {
+            Some(profile) => zetesis_wgpu::GpuFormulaOracle::from_profile(profile),
+            None => zetesis_wgpu::GpuFormulaOracle::from_source(source),
         }
         .map_err(SolveError::Gpu)?;
         let adapter = format!(

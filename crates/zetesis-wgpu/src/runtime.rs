@@ -2,7 +2,7 @@
 //! Profile capability checks, shader identity and result decoding remain explicit.
 
 use crate::context::Effects;
-use crate::{GpuContext, GpuError, GpuErrorKind, GpuOptions, GpuSelection};
+use crate::{GpuContext, GpuDeviceSource, GpuError, GpuErrorKind};
 use std::sync::mpsc;
 use std::time::Duration;
 use wgpu::util::DeviceExt as _;
@@ -82,49 +82,64 @@ fn unavailable(size: crate::GpuWorkgroupSize) -> GpuError {
 }
 
 impl Runtime {
-    pub(crate) async fn new(
-        options: GpuOptions,
-        selection: GpuSelection,
+    /// Open `profile`'s runtime on the device `source` provides.
+    ///
+    /// A selected or discovered source checks the profile's limits against the
+    /// adapters' advertised limits during selection and against the new
+    /// device's granted limits before any shader is created. A context source
+    /// leases the context, then checks its health and the profile's limits
+    /// against its granted limits. Only formula and tight kernels act on the
+    /// source's timestamp request.
+    pub(crate) async fn open(
+        source: GpuDeviceSource<'_>,
         profile: DeviceProfile,
     ) -> Result<Self, GpuError> {
-        Self::new_with_timing(options, selection, profile, false).await
-    }
-
-    pub(crate) async fn new_with_timing(
-        options: GpuOptions,
-        selection: GpuSelection,
-        profile: DeviceProfile,
-        timing: bool,
-    ) -> Result<Self, GpuError> {
-        // Independent constructors retain both early advertised-limit validation
-        // and the granted-limit check before shader construction.
-        let context = GpuContext::create_with_timing(
-            options,
-            selection,
-            profile.device_label,
-            profile.validate_limits,
-            timing,
-        )
-        .await?;
+        let measures = profile.kernel.measures_compute_time();
+        let context = match source {
+            GpuDeviceSource::Selected {
+                options,
+                selection,
+                timing,
+            } => {
+                GpuContext::create_with_timing(
+                    options,
+                    selection,
+                    profile.device_label,
+                    profile.validate_limits,
+                    timing && measures,
+                )
+                .await?
+            }
+            GpuDeviceSource::Discovered {
+                discovery,
+                options,
+                timing,
+            } => {
+                discovery
+                    .context(
+                        options,
+                        profile.device_label,
+                        profile.validate_limits,
+                        timing && measures,
+                    )
+                    .await?
+            }
+            GpuDeviceSource::Context(context) => {
+                let _lease = context.lease()?;
+                context.check_health()?;
+                (profile.validate_limits)(context.limits())?;
+                return Self::compile(context, profile).await;
+            }
+        };
         let _lease = context.lease()?;
         Self::compile(&context, profile).await
     }
 
-    pub(crate) async fn from_context(
-        context: &GpuContext,
-        profile: DeviceProfile,
-    ) -> Result<Self, GpuError> {
-        let _lease = context.lease()?;
-        context.check_health()?;
-        (profile.validate_limits)(context.limits())?;
-        Self::compile(context, profile).await
-    }
-
-    // Both entry points retain their context lease through all scopes. The
-    // independent path already checked advertised and granted profile limits.
-    // A static or fixed kernel compiles its one pipeline here; a fitted kernel
-    // creates and validates its shader module and compiles each size at the
-    // first check that dispatches it (`ensure_pipeline`).
+    // Every source retains its context lease through all scopes, and its
+    // profile limits are already checked. A static or fixed kernel compiles its
+    // one pipeline here; a fitted kernel creates and validates its shader
+    // module and compiles each size at the first check that dispatches it
+    // (`ensure_pipeline`).
     async fn compile(context: &GpuContext, profile: DeviceProfile) -> Result<Self, GpuError> {
         profile.kernel.validate(context.limits())?;
         let source = profile.kernel.source(profile.shader, context.features())?;
