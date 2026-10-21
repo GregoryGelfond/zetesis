@@ -334,6 +334,31 @@ fn formula_json_keeps_submission_limits_and_decoding_distinct() {
 }
 
 #[test]
+fn slate_json_reports_committed_slates_their_largest_and_resets() {
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    statistics.gpu_slates = 7;
+    statistics.gpu_largest_slate = Some(32);
+    statistics.gpu_slate_resets = 2;
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(&mut out, Some(&statistics)).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    assert_eq!(value["gpu_slates"], 7);
+    assert_eq!(value["gpu_largest_slate"], 32);
+    assert_eq!(value["gpu_slate_resets"], 2);
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(
+        &mut out,
+        Some(&crate::FormulaExecutionStatistics::default()),
+    )
+    .unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    // Before the first commit, and on CPU routes, no slate was committed.
+    assert_eq!(value["gpu_slates"], 0);
+    assert!(value["gpu_largest_slate"].is_null());
+    assert_eq!(value["gpu_slate_resets"], 0);
+}
+
+#[test]
 fn tight_json_distinguishes_scheduled_and_completed_work() {
     let mut statistics = crate::FormulaExecutionStatistics::default();
     statistics.tight_work_per_candidate = Some(123);

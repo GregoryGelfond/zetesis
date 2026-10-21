@@ -117,7 +117,7 @@ fn integration_selections_admit_other_packages_empty_binaries() {
 fn physical_selection_is_a_fixed_contract() {
     for table in [
         TABLE.replacen("lazy|integration|4|", "altered|integration|4|", 1),
-        TABLE.replacen("solve-context|lib|3|", "cli-context|lib|3|", 1),
+        TABLE.replacen("solve-context|lib|4|", "cli-context|lib|4|", 1),
         TABLE.replacen(
             "language-consumers|integration|2|",
             "language-consumers|formula_gpu|2|",
@@ -262,6 +262,10 @@ fn metal_selection_refuses_vulkan_substitution() {
             "formula_execution::tests::resource_tests::vulkan_formula_sessions_reuse_the_supplied_profile",
         ),
         (
+            "formula_execution::tests::resource_tests::metal_steady_enumeration_grows_candidate_slates",
+            "formula_execution::tests::resource_tests::vulkan_steady_enumeration_grows_candidate_slates",
+        ),
+        (
             "metal_formula_profiles_preserve_independent_sessions",
             "vulkan_formula_profiles_preserve_independent_sessions",
         ),
@@ -380,7 +384,7 @@ fn physical_metadata_keeps_floor_populations_separate() {
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 63);
+    assert_eq!(record["expected_physical_tests"], 64);
     assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 14);
     assert_eq!(
         record["project_added_filename_filters"],
@@ -416,7 +420,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
             ["world-views", "test", "integration", 4],
             ["relation", "test", "integration", 2],
             ["context", "test", "integration", 1],
-            ["solve-context", "lib", "workspace libraries", 3],
+            ["solve-context", "lib", "workspace libraries", 4],
             ["session-resources", "test", "integration", 13],
             ["language-consumers", "test", "integration", 2],
             ["static", "test", "integration", 2]
@@ -431,7 +435,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
     ]);
     assert_eq!(groups[12]["tests"], language_tests);
     let tests = record["physical_tests"].as_array().unwrap();
-    assert_eq!(tests.len(), 63);
+    assert_eq!(tests.len(), 64);
     let formula_tests = serde_json::json!([
         "formula_gpu::physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays",
         "formula_gpu::physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors",
@@ -465,10 +469,11 @@ fn physical_metadata_retains_the_reviewed_schedule() {
         .collect();
     assert_eq!(tests.iter().collect::<Vec<_>>(), grouped_tests);
     let scope = record["physical_scope"].as_str().unwrap();
-    assert!(scope.starts_with("63 exact Metal tests: "));
+    assert!(scope.starts_with("64 exact Metal tests: "));
     assert!(scope.contains("complete tight families, the general device route for non-tight theories, and tight work refusal before dispatch"));
     assert!(scope.contains("completed-support table joins with actual GPU candidates and complete CPU/Metal answer families"));
     assert!(scope.contains("static constructor and complete closure/reference checks"));
+    assert!(scope.contains("grows its adaptive candidate slates during steady enumeration"));
     assert!(
         scope.contains(
             "combined language-consumer families with scored observations and optimum ties"
@@ -574,9 +579,9 @@ fn each_physical_stage_names_its_backend() {
             record["workspace_stages"],
             serde_json::json!(["portable", label])
         );
-        assert_eq!(record["expected_physical_tests"], 63);
+        assert_eq!(record["expected_physical_tests"], 64);
         let scope = record["physical_scope"].as_str().unwrap();
-        assert!(scope.starts_with(&format!("63 exact {} tests: ", api.name())));
+        assert!(scope.starts_with(&format!("64 exact {} tests: ", api.name())));
         assert!(scope.contains(&format!("complete CPU/{} answer families", api.name())));
     }
 }

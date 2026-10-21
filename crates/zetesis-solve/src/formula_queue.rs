@@ -87,6 +87,27 @@ impl BatchQueue {
         self.ready.len()
     }
 
+    /// Candidate slates this GPU formula queue committed with at least one
+    /// candidate.
+    #[cfg(feature = "gpu")]
+    pub(crate) const fn slates(&self) -> u64 {
+        self.batching.slates()
+    }
+
+    /// The largest slate this GPU formula queue committed; absent before its
+    /// first.
+    #[cfg(feature = "gpu")]
+    pub(crate) const fn largest_slate(&self) -> Option<NonZeroUsize> {
+        self.batching.largest()
+    }
+
+    /// The selections that returned this GPU formula queue to its batch size
+    /// because the previous slate's answers tightened the objective bound.
+    #[cfg(feature = "gpu")]
+    pub(crate) const fn slate_resets(&self) -> u64 {
+        self.batching.resets()
+    }
+
     /// The checker sees original candidates, never models already returned by
     /// the stable iterator. A restriction cannot erase these verified queued
     /// interpretations; they must still be scored or explicitly left unreported.
@@ -108,7 +129,7 @@ impl BatchQueue {
                 return None;
             }
             #[cfg(feature = "gpu")]
-            let max_candidates = self.batching.target(models, options);
+            let max_candidates = self.batching.select(models, options);
             #[cfg(not(feature = "gpu"))]
             let max_candidates = options.batch_size;
             let limits = BatchLimits {
@@ -150,11 +171,14 @@ impl BatchQueue {
             }
             match result {
                 Ok(batch) => {
+                    // The bound generation is read after the commit and
+                    // before any of the slate's models is scored.
                     #[cfg(feature = "gpu")]
                     self.batching.committed(
                         limits.max_candidates,
                         accepted_prefix.0,
                         accepted_prefix.1,
+                        models.bound_generation(),
                     );
                     self.ready = batch.into();
                 }

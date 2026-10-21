@@ -76,13 +76,16 @@ pub struct SolveConfig {
     /// capacity, owner-index entries, allocator/Arc overhead, subjects, execution
     /// state and transient old/new replacement overlap; this is not RSS.
     pub max_optimal_bytes: usize,
-    /// Maximum candidates per owned batch, or the initial proposal target with
-    /// [`GpuBatching::Adaptive`] on a GPU formula route.
+    /// Maximum candidates per owned batch. On a GPU formula route under
+    /// [`GpuBatching::Adaptive`], the size of the first candidate slate and of
+    /// the slate bound feedback returns to; no device prefix shrinks a slate
+    /// below it.
     pub batch_size: NonZeroUsize,
     /// Proposal scheduling for general and tight GPU formula membership.
-    /// Fixed by default; adaptive growth remains memory bounded and preserves
-    /// the same ordered, all-or-nothing batch commit. CPU and closure routes
-    /// retain `batch_size` independently of this GPU formula policy.
+    /// Adaptive by default ([`GpuBatching::DEFAULT`]); adaptive growth remains
+    /// memory bounded and preserves the same ordered, all-or-nothing batch
+    /// commit. CPU and closure routes retain `batch_size` independently of this
+    /// GPU formula policy.
     pub gpu_batching: GpuBatching,
     /// Worker count: the closure route's pool, and the walkers of the
     /// region tree under the regions method, one being the scalar walk.

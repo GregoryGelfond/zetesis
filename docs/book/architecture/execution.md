@@ -709,13 +709,24 @@ device checking do not overlap. Membership, scoring and objective feedback keep
 the same original-theory and completed-batch boundaries. Failed device execution
 never triggers a hidden CPU replacement.
 
-GPU formula sessions use fixed candidate batches by default. Library callers can
-select `GpuBatching::Adaptive` in `SolveConfig`; `batch_size` then supplies the
-initial target. A filled, checked and committed batch can grow the next target
-within the pending-memory allowance. A smaller admitted device prefix bounds
-further growth. Failed checks retain the same pending candidates and target.
-Larger batches can reduce submissions but delay answer delivery and objective
-feedback; adaptive sizing is not a performance or allocation guarantee.
+A slate is the candidates the stream proposes together for one membership
+check and commit; the device checks a slate in one or more submissions. GPU
+formula sessions size their slates adaptively by default
+(`GpuBatching::Adaptive` in `SolveConfig`). Slates start at `batch_size`. The
+next slate is sized when it is selected, after the previous slate committed
+completely and its answers were scored. It returns to `batch_size` when those
+answers tightened the objective bound, doubles after a filled slate that left
+the bound unchanged, and otherwise keeps its size. The session's last selection
+follows its last non-empty slate and precedes the empty proposal that
+establishes exhaustion. Growth stops at the smallest device prefix observed,
+never below `batch_size`, and the pending-memory allowance bounds every slate.
+Under either policy a device submission takes as much of a slate as the device
+admits. Failed checks retain the same pending candidates and size. Larger
+slates mean fewer slates and submissions, but release their answers only after
+the whole slate is checked, and are produced under the bound as it stood when
+they started. `GpuBatching::Fixed` keeps every slate at `batch_size` for
+controlled comparisons. Adaptive sizing is not a performance or allocation
+guarantee, and it never changes answer sets, optima or ties.
 
 The library also exposes `TightSupport::Grouped` through
 `GpuTightOracle::new_with_support`. Packing places each original producer in the

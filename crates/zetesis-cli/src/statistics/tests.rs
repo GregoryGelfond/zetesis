@@ -374,6 +374,9 @@ fn hybrid_statistics_preserve_reported_fields() {
         execution.queued_models = queued;
         execution.peak_accounted_bytes = 456;
         execution.gpu_workgroup_size = Some(128);
+        execution.gpu_slates = 9;
+        execution.gpu_largest_slate = Some(256);
+        execution.gpu_slate_resets = 5;
         report.formula_execution = Some(execution);
         if !completed {
             report.completion = Completion::Interrupted;
@@ -390,6 +393,8 @@ fn hybrid_statistics_preserve_reported_fields() {
         )));
         assert!(text.contains("peak authored GPU bytes=456"));
         assert!(text.contains("workgroup size=128"));
+        assert!(text.contains("adaptive slates; initial and reset slate size=64"));
+        assert!(text.contains("formula GPU slates: committed=9; largest=256; feedback resets=5"));
         assert!(text.contains("GPU compute passes: status=not_requested; elapsed_ns=unavailable"));
         assert!(text.contains("propagation sweeps/candidate=17; propagation work/candidate=789"));
         assert!(text.contains("submitted: batches=3; candidates=10"));

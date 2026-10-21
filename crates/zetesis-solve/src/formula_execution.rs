@@ -68,8 +68,25 @@ pub struct FormulaExecutionStatistics {
     pub gpu_submitted_batches: u64,
     /// Candidate worlds actually submitted, including unreturned results.
     pub gpu_submitted_candidates: u64,
-    /// Successfully dispatched and decoded GPU batches.
+    /// Successfully dispatched and decoded GPU batches: device submissions,
+    /// of which one candidate slate can take several.
     pub gpu_batches: u64,
+    /// Candidate slates a GPU formula session committed with at least one
+    /// candidate. A slate is the candidates the stream proposes together for
+    /// one membership check and commit; the device checks it in one or more
+    /// submissions. Zero for CPU routes.
+    pub gpu_slates: u64,
+    /// The largest committed slate's candidate count: at most the batch size
+    /// under fixed batching, possibly more under adaptive batching. Absent
+    /// before the first commit and for CPU routes.
+    pub gpu_largest_slate: Option<usize>,
+    /// Selections that returned adaptive slates to the batch size because the
+    /// previous slate's answers tightened the objective bound. Every such
+    /// selection counts, including one already at the batch size and the
+    /// session's last selection, so a program reports one reset per slate
+    /// whose answers installed a bound. Always zero under fixed batching and
+    /// for CPU routes.
+    pub gpu_slate_resets: u64,
     /// Candidate worlds returned by successful GPU dispatches.
     pub gpu_candidates: u64,
     /// Charged primitive work from successfully decoded results; not time or
@@ -271,14 +288,16 @@ impl MembershipExecution for Execution {
                 queue, statistics, ..
             } => {
                 let batch = models.batch_statistics();
-                Some(FormulaExecutionStatistics {
+                let mut snapshot = FormulaExecutionStatistics {
                     cpu_residuals: batch.residuals,
                     gpu_decided: batch.propagated,
                     pending_candidates: batch.pending,
                     queued_models: queue.len(),
                     completion: queue.accounting(),
                     ..statistics.as_ref().clone()
-                })
+                };
+                record_slates(queue, &mut snapshot);
+                Some(snapshot)
             }
         }
     }
@@ -355,10 +374,30 @@ fn propagate(
     cancellation: &zetesis_cpu::Cancellation,
     phases: &Recorder,
 ) -> Result<crate::batch_executor::DeviceVerdicts, Failure> {
-    let mut limits = device_limits(options);
-    if options.gpu_batching == crate::GpuBatching::Adaptive {
-        limits.max_candidates = candidates.len();
-    }
+    let limits = slate_limits(options, candidates.len());
+    propagate_within(
+        oracle,
+        statistics,
+        theory,
+        candidates,
+        limits,
+        cancellation,
+        phases,
+    )
+}
+
+/// Check one slate in as many submissions as `limits` and the device's
+/// admission require, in order.
+#[cfg(feature = "gpu")]
+fn propagate_within(
+    oracle: &mut zetesis_wgpu::GpuFormulaOracle,
+    statistics: &mut FormulaExecutionStatistics,
+    theory: &zetesis_ferraris::Theory,
+    candidates: &[Interpretation],
+    limits: zetesis_wgpu::FormulaLimits,
+    cancellation: &zetesis_cpu::Cancellation,
+    phases: &Recorder,
+) -> Result<crate::batch_executor::DeviceVerdicts, Failure> {
     // The device API returns one ordered verdict per candidate. Reserve its
     // host conversion before dispatch so allocation failure cannot hide a
     // successfully decoded batch from the execution counters.
@@ -439,10 +478,27 @@ fn decoded_verdict(
     })
 }
 
+/// Copy a GPU formula queue's slate statistics into `statistics`.
 #[cfg(feature = "gpu")]
-fn device_limits(options: &SolveConfig) -> zetesis_wgpu::FormulaLimits {
+pub(crate) fn record_slates(
+    queue: &crate::formula_queue::BatchQueue,
+    statistics: &mut FormulaExecutionStatistics,
+) {
+    statistics.gpu_slates = queue.slates();
+    statistics.gpu_largest_slate = queue.largest_slate().map(std::num::NonZeroUsize::get);
+    statistics.gpu_slate_resets = queue.slate_resets();
+}
+
+/// Device limits for a slate of `offered` candidates. Under either batching
+/// policy one submission may take the whole slate: the policy decides the
+/// slate, and the device returns the largest prefix it admits under the byte
+/// allowance and its granted limits. The checker submits the rest of a slate
+/// in further submissions. Under fixed batching a slate never exceeds the
+/// batch size, so no submission does either.
+#[cfg(feature = "gpu")]
+fn slate_limits(options: &SolveConfig, offered: usize) -> zetesis_wgpu::FormulaLimits {
     zetesis_wgpu::FormulaLimits {
-        max_candidates: options.batch_size.get(),
+        max_candidates: offered,
         max_batch_bytes: options.max_batch_bytes,
         max_work_per_candidate: options.gpu_formula_work,
         max_rounds: options.gpu_formula_rounds,

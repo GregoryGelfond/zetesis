@@ -2051,11 +2051,12 @@ existing host checker; an interruption or fault cannot discharge its pending
 candidates. Rust ownership, resource compliance and transport identities remain
 implementation obligations.
 
-Optional adaptive GPU batching changes the next proposal target only after a
-complete successful commit. The existing pending owner supplies the memory
-capacity; a shortened checked device prefix supplies a physical ceiling.
-Neither observation is semantic evidence. Failed checks preserve pending
-candidates and the prior target. The existing batch laws still require exact
+Adaptive GPU batching, the default for GPU formula sessions, chooses each
+proposal target at the next selection after a complete successful commit, from
+the committed slate's fill, the candidate bound's generation, the pending
+owner's memory capacity and a shortened checked device prefix. None of these
+observations is semantic evidence. Failed checks preserve pending candidates and
+the prior target. The existing batch laws still require exact
 classification of every occurrence before commit. Checked sizing, allocation
 refusals and propagation of prefix observations remain Rust obligations.
 

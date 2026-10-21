@@ -1175,6 +1175,12 @@ fn execution_statistics(
     out.number_field("gpu_submitted_batches", stats.gpu_submitted_batches)?;
     out.number_field("gpu_submitted_candidates", stats.gpu_submitted_candidates)?;
     out.number_field("gpu_batches", stats.gpu_batches)?;
+    out.number_field("gpu_slates", stats.gpu_slates)?;
+    match stats.gpu_largest_slate {
+        Some(largest) => out.number_field("gpu_largest_slate", largest)?,
+        None => out.text(",\"gpu_largest_slate\":null")?,
+    }
+    out.number_field("gpu_slate_resets", stats.gpu_slate_resets)?;
     out.number_field("gpu_candidates", stats.gpu_candidates)?;
     out.number_field("gpu_work", stats.gpu_work)?;
     out.number_field("gpu_rounds", stats.gpu_rounds)?;

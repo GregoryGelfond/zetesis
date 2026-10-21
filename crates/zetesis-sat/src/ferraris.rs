@@ -837,6 +837,19 @@ impl StableModels {
     pub const fn exhausted(&self) -> bool {
         self.exhausted
     }
+
+    /// Bounds installed so far by [`Self::tighten_candidate_bound`]: zero
+    /// before the first, one more after each successful installation. A
+    /// refused or failed tightening, a permanent [`Self::restrict_candidates`]
+    /// addition and every batch operation leave it unchanged; it never
+    /// decreases. It is the generation the region proposer assigns to the
+    /// current bound. A scheduling observation only: membership, exhaustion
+    /// and optimality never depend on it.
+    #[must_use]
+    pub const fn bound_generation(&self) -> u64 {
+        self.bound_generation
+    }
+
     /// Cumulative work, including an incomplete terminal attempt.
     #[must_use]
     pub fn statistics(&self) -> Statistics {

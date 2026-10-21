@@ -12,7 +12,8 @@ use super::test_harness::{Record, admitted, run, run_consuming};
 use crate::formula_execution::{Failure, FormulaExecutionStatistics, MembershipExecution};
 use crate::formula_queue::BatchQueue;
 use crate::{
-    Backend, Completion, Interruption, Oracle, PreparedInput, Session, SolveConfig, SolveError,
+    Backend, Completion, GpuBatching, Interruption, Oracle, PreparedInput, Session, SolveConfig,
+    SolveError,
 };
 
 /// How the native test route answers each candidate of a batch.
@@ -49,9 +50,50 @@ struct NativeBatch {
     queue: BatchQueue,
     snapshots: Vec<(BatchStatistics, Statistics, usize)>,
     proposed: Vec<Vec<Vec<usize>>>,
+    /// Each selection of a slate: the candidate bound's generation and the
+    /// proposals the slate received, zero for the session's last selection,
+    /// which finds the stream run out and calls no checker.
+    selections: Vec<(u64, usize)>,
+    /// The queue is the production GPU formula queue, which keeps round
+    /// statistics.
+    #[cfg(feature = "gpu")]
+    joint: bool,
     stop: Option<Incomplete>,
     answers: Answers,
     fault: Fault,
+}
+
+impl NativeBatch {
+    /// The production GPU formula queue under `config`'s batching policy. The
+    /// reference checker decides every candidate, establishing the original
+    /// satisfaction the joint protocol requires of its checker.
+    #[cfg(feature = "gpu")]
+    fn joint(config: &SolveConfig) -> Self {
+        Self {
+            queue: BatchQueue::for_joint_oracle(config).unwrap(),
+            joint: true,
+            answers: Answers::Decided,
+            ..Self::default()
+        }
+    }
+}
+
+/// The independent residual harness (no policy) and, with GPU support, the
+/// production GPU formula queue under each batching policy.
+fn harnesses(config: SolveConfig) -> Vec<(Option<GpuBatching>, SolveConfig, NativeBatch)> {
+    #[cfg(feature = "gpu")]
+    let joint = [GpuBatching::Fixed, GpuBatching::Adaptive].map(|policy| {
+        let config = SolveConfig {
+            gpu_batching: policy,
+            ..config
+        };
+        (Some(policy), config, NativeBatch::joint(&config))
+    });
+    #[cfg(not(feature = "gpu"))]
+    let joint = [];
+    std::iter::once((None, config, NativeBatch::default()))
+        .chain(joint)
+        .collect()
 }
 
 /// The reference checker's reduct verdict for one original model.
@@ -82,6 +124,12 @@ impl MembershipExecution for NativeBatch {
         cancellation: &Cancellation,
         _: &crate::phase_timing::Recorder,
     ) -> Option<Result<Interpretation, Failure>> {
+        // Bounds change only while the session scores returned models, so the
+        // generation now is the one at any selection this pull makes, which
+        // it makes exactly when no verified model is queued.
+        let generation = models.bound_generation();
+        let selects = self.queue.len() == 0 && !models.exhausted();
+        let checked = self.proposed.len();
         let result = self.queue.next(models, options, cancellation, |batch| {
             let theory = batch.theory();
             let candidates = batch.candidates();
@@ -142,11 +190,22 @@ impl MembershipExecution for NativeBatch {
             models.statistics(),
             self.queue.len(),
         ));
+        if selects {
+            let proposed = self.proposed[checked..].first().map_or(0, Vec::len);
+            self.selections.push((generation, proposed));
+        }
         result
     }
 
     fn statistics(&self, _: &StableModels) -> Option<FormulaExecutionStatistics> {
-        // Actual native batches have no physical adapter, GPU work or upload counters.
+        // Actual native batches have no physical adapter, GPU work or upload
+        // counters; the production GPU formula queue still keeps its rounds.
+        #[cfg(feature = "gpu")]
+        if self.joint {
+            let mut statistics = FormulaExecutionStatistics::default();
+            crate::formula_execution::record_slates(&self.queue, &mut statistics);
+            return Some(statistics);
+        }
         None
     }
 }
@@ -192,18 +251,28 @@ fn native_batches_preserve_complete_full_answers() {
             })
             .collect();
         expected.sort();
-        let mut execution = NativeBatch::default();
-        let actual = run(&owner, &config, &Cancellation::default(), &mut execution);
-        assert!(actual.error.is_none(), "{source}: {:?}", actual.error);
-        assert_eq!(actual.outcome.completion(), Some(Completion::Exhausted));
-        assert_eq!(actual.records(), expected, "{source}");
-        let (batch, search, queued) = execution.snapshots.last().unwrap();
-        assert_eq!((batch.pending, *queued), (0, 0));
-        assert_eq!(batch.committed, search.candidates);
-        assert_eq!(batch.residuals, search.candidates);
-        assert_eq!(batch.propagated, 0);
-        assert!(execution.proposed.iter().all(|batch| batch.len() <= 3));
-        assert!(actual.outcome.formula_execution().is_none());
+        for (policy, config, mut execution) in harnesses(config) {
+            let actual = run(&owner, &config, &Cancellation::default(), &mut execution);
+            assert!(actual.error.is_none(), "{source}: {:?}", actual.error);
+            assert_eq!(actual.outcome.completion(), Some(Completion::Exhausted));
+            assert_eq!(actual.records(), expected, "{source}");
+            let (batch, search, queued) = execution.snapshots.last().unwrap();
+            assert_eq!((batch.pending, *queued), (0, 0));
+            assert_eq!(batch.committed, search.candidates);
+            if policy.is_none() {
+                assert_eq!(batch.residuals, search.candidates);
+                assert_eq!(batch.propagated, 0);
+                assert!(actual.outcome.formula_execution().is_none());
+            } else {
+                assert_eq!(batch.propagated, search.candidates);
+                assert_eq!(batch.residuals, 0);
+            }
+            if policy == Some(GpuBatching::Adaptive) {
+                assert_adaptive_schedule(&execution.selections, 3);
+            } else {
+                assert!(execution.proposed.iter().all(|batch| batch.len() <= 3));
+            }
+        }
     }
 }
 
@@ -324,20 +393,21 @@ fn objective_bounds_preserve_queued_optimal_ties() {
         if !enabled {
             config.max_objective_bound_work = 0;
         }
-        let mut execution = NativeBatch::default();
-        let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
-        assert!(capture.error.is_none());
-        assert_eq!(capture.outcome.completion(), Some(Completion::Exhausted));
-        let optimum = capture.outcome.incumbent().unwrap();
-        assert_eq!(optimum.tied_models, 2);
-        assert_eq!(optimum.score.costs(), [(0, 1)]);
-        assert_eq!(capture.records(), expected);
-        assert_eq!(optimum.scored_models, 3);
-        assert!(capture.outcome.optimum_proved());
-        if enabled {
-            assert!(execution.snapshots.iter().any(|(_, statistics, queued)| {
-                statistics.candidate_restrictions > 0 && *queued > 0
-            }));
+        for (_, config, mut execution) in harnesses(config) {
+            let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
+            assert!(capture.error.is_none());
+            assert_eq!(capture.outcome.completion(), Some(Completion::Exhausted));
+            let optimum = capture.outcome.incumbent().unwrap();
+            assert_eq!(optimum.tied_models, 2);
+            assert_eq!(optimum.score.costs(), [(0, 1)]);
+            assert_eq!(capture.records(), expected);
+            assert_eq!(optimum.scored_models, 3);
+            assert!(capture.outcome.optimum_proved());
+            if enabled {
+                assert!(execution.snapshots.iter().any(|(_, statistics, queued)| {
+                    statistics.candidate_restrictions > 0 && *queued > 0
+                }));
+            }
         }
     }
 }
@@ -496,4 +566,95 @@ fn mixed_decisions_and_residuals_share_one_commit() {
         ),
         (4, 1, 3, 0)
     );
+}
+
+/// Check recorded selections against the adaptive rule with no memory or
+/// device bound: after a slate whose answers moved the bound a slate requests
+/// the batch size, after a filled quiet slate twice that slate's request, and
+/// otherwise the same request. Each slate receives its request unless the
+/// stream runs out, after which no selection receives a proposal.
+fn assert_adaptive_schedule(selections: &[(u64, usize)], batch_size: usize) {
+    let mut requested = batch_size;
+    for (index, &(generation, proposed)) in selections.iter().enumerate() {
+        if let Some(&(previous_generation, previous)) = index.checked_sub(1).map(|i| &selections[i])
+        {
+            requested = if generation != previous_generation {
+                batch_size
+            } else if previous == requested {
+                2 * requested
+            } else {
+                requested
+            };
+        }
+        let ran_out = selections[index + 1..].iter().all(|&(_, later)| later == 0);
+        assert!(
+            proposed == requested || (proposed < requested && ran_out),
+            "selection {index} of {selections:?}"
+        );
+    }
+}
+
+/// A program whose answers keep improving its objective under a fresh bound.
+#[cfg(feature = "gpu")]
+const IMPROVING: &str = "{a;b;c;d;e;f}. #minimize{1,a:a;2,b:b;4,c:c;8,d:d;16,e:e;32,f:f}.";
+
+#[cfg(feature = "gpu")]
+fn adaptive(batch_size: usize) -> SolveConfig {
+    SolveConfig {
+        gpu_batching: GpuBatching::Adaptive,
+        batch_size: NonZeroUsize::new(batch_size).unwrap(),
+        ..config()
+    }
+}
+
+#[cfg(feature = "gpu")]
+#[test]
+fn the_slate_after_a_tightening_slate_has_the_batch_size() {
+    let owner = admitted(IMPROVING);
+    let config = adaptive(2);
+    let mut execution = NativeBatch::joint(&config);
+    let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
+    assert!(capture.error.is_none());
+    assert_eq!(capture.outcome.completion(), Some(Completion::Exhausted));
+    let selections = &execution.selections;
+    let mut tightened = 0;
+    for slate in 1..selections.len() {
+        // A generation that moved between two selections was installed while
+        // the earlier slate's answers were scored. The session's last
+        // selection counts too: it follows the last non-empty slate.
+        let ((before, _), (after, proposed)) = (selections[slate - 1], selections[slate]);
+        if after != before {
+            tightened += 1;
+            // Fewer only when the stream runs out in that slate, so that no
+            // later selection receives a proposal.
+            assert!(proposed == 2 || selections[slate + 1..].iter().all(|&(_, later)| later == 0));
+        }
+    }
+    assert!(tightened >= 1);
+    let statistics = capture.outcome.formula_execution().unwrap();
+    assert_eq!(statistics.gpu_slate_resets, tightened);
+    let nonempty = selections.iter().filter(|&&(_, proposed)| proposed > 0);
+    assert_eq!(
+        statistics.gpu_slates,
+        u64::try_from(nonempty.count()).unwrap()
+    );
+}
+
+#[cfg(feature = "gpu")]
+#[test]
+fn a_quiet_filled_slate_doubles_the_next_slate() {
+    let owner = admitted("{a;b;c;d;e}.");
+    let config = adaptive(2);
+    let mut execution = NativeBatch::joint(&config);
+    let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
+    assert!(capture.error.is_none());
+    assert_eq!(capture.outcome.completion(), Some(Completion::Exhausted));
+    assert_eq!(capture.answers.len(), 32);
+    let slates: Vec<_> = execution.proposed.iter().map(Vec::len).collect();
+    assert_eq!(slates, [2, 4, 8, 16, 2]);
+    let statistics = capture.outcome.formula_execution().unwrap();
+    assert_eq!(statistics.gpu_slate_resets, 0);
+    assert_eq!(statistics.gpu_slates, 5);
+    // The last slate requests 32 but receives the remaining 2.
+    assert_eq!(statistics.gpu_largest_slate, Some(16));
 }

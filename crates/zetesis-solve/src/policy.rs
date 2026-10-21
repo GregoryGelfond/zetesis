@@ -4,18 +4,37 @@
 
 /// Candidate proposal scheduling for general and tight GPU formula checks.
 /// Relational closure and CPU execution keep their configured batch size.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+/// The ordinary policy, [`Self::DEFAULT`], is [`Self::Adaptive`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum GpuBatching {
-    /// Keep [`crate::SolveConfig::batch_size`] as the proposal ceiling.
-    #[default]
+    /// Propose every slate, the candidates checked and committed together, at
+    /// [`crate::SolveConfig::batch_size`]; for controlled comparisons.
     Fixed,
-    /// Start at [`crate::SolveConfig::batch_size`] and double a filled batch's
-    /// target only after every verdict has been committed. Pending-memory
-    /// capacity and an observed smaller device prefix bound further growth.
-    /// Larger batches can delay the first answer in a batch and objective-bound
-    /// feedback; they do not change membership or partial-publication rules.
+    /// Slates start at [`crate::SolveConfig::batch_size`]. The size of the next
+    /// slate is chosen when it is selected, after the previous slate committed
+    /// completely and its answers were scored: it returns to the batch size
+    /// when those answers tightened the objective bound, doubles after a filled
+    /// slate that left the bound unchanged, and otherwise stays. Growth stops at
+    /// the smallest device prefix observed, never below the batch size, and the
+    /// pending-memory allowance bounds every slate. A retried slate keeps its
+    /// count. Under either policy a device submission takes as much of a slate
+    /// as the device admits. A larger slate releases its answers only after the
+    /// whole slate is checked, and is produced under the bound as it stood when
+    /// it started; membership, optima and partial-publication rules are
+    /// unchanged.
     Adaptive,
+}
+
+impl GpuBatching {
+    /// The ordinary policy, [`Self::Adaptive`]; [`Default`] returns it.
+    pub const DEFAULT: Self = Self::Adaptive;
+}
+
+impl Default for GpuBatching {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
 }
 
 /// Materialization policy, independent of execution hardware.

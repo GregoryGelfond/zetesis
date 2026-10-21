@@ -59,11 +59,14 @@ support is enabled by default; use `default-features = false` for a CPU-only
 consumer. Cargo feature unification can enable it through another dependency.
 Compiling GPU support does not select a device.
 
-GPU formula checks use fixed candidate batches by default. Library callers may
-select `GpuBatching::Adaptive`: `batch_size` becomes the initial target, with
-growth after successful batch commits bounded by pending memory and admitted
-device prefixes. Larger batches may delay answers and objective feedback; they
-do not alter membership or permit partial batch publication.
+GPU formula checks size their candidate slates, the candidates checked and
+committed together, adaptively by default (`GpuBatching::Adaptive`). Slates
+start at `batch_size`, return to it after a slate whose answers tightened the
+objective bound, and double after a filled slate that left the bound unchanged,
+bounded by pending memory and, never below `batch_size`, by admitted device
+prefixes. `GpuBatching::Fixed` keeps every slate at `batch_size` for controlled
+comparisons. Larger slates may delay answers and objective feedback; they do not
+alter membership or permit partial batch publication.
 
 `SessionBuilder` can accept shared `ExecutionResources`, optional
 `SolveMeasurements`, and an `ExecutionObserver`. Membership is always decided by

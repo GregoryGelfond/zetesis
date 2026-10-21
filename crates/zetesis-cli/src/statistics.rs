@@ -1085,11 +1085,23 @@ fn formula(
             "  formula accounting: pending candidates={}; queued verified models={}",
             execution.pending_candidates, execution.queued_models
         )?;
-        writeln!(
-            sink,
-            "  formula batch limits: candidates={}; pending bytes={}",
-            config.batch_size, config.max_batch_bytes
-        )?;
+        if config.gpu_batching == zetesis_solve::GpuBatching::Adaptive
+            && !execution.adapter.is_empty()
+        {
+            // Adaptive GPU slates have no ceiling; the batch size is where
+            // they start and where bound feedback returns them.
+            writeln!(
+                sink,
+                "  formula batch limits: adaptive slates; initial and reset slate size={}; pending bytes={}",
+                config.batch_size, config.max_batch_bytes
+            )?;
+        } else {
+            writeln!(
+                sink,
+                "  formula batch limits: candidates={}; pending bytes={}",
+                config.batch_size, config.max_batch_bytes
+            )?;
+        }
         if !execution.adapter.is_empty() {
             formula_gpu(sink, execution)?;
         }
@@ -1120,6 +1132,15 @@ fn formula_gpu(
         sink,
         "  formula GPU submitted: batches={}; candidates={}; completed work/sweeps for unreturned results=unavailable",
         execution.gpu_submitted_batches, execution.gpu_submitted_candidates
+    )?;
+    writeln!(
+        sink,
+        "  formula GPU slates: committed={}; largest={}; feedback resets={}; each slate takes one or more submitted batches",
+        execution.gpu_slates,
+        execution
+            .gpu_largest_slate
+            .map_or_else(|| "none".to_owned(), |largest| largest.to_string()),
+        execution.gpu_slate_resets
     )?;
     if let Some(residuals) = execution.gpu_residuals {
         writeln!(

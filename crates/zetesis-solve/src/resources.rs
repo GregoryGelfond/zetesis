@@ -115,7 +115,7 @@ impl Resources {
             max_optimal_atoms: self.cells(32, size_of::<usize>()),
             max_optimal_bytes: self.bytes(32),
             batch_size: DEFAULT_BATCH_SIZE,
-            gpu_batching: GpuBatching::Fixed,
+            gpu_batching: GpuBatching::DEFAULT,
             workers: self.workers,
             completion_workers: NonZeroUsize::MIN,
             max_reduct_bytes: self.bytes(32) as u64,

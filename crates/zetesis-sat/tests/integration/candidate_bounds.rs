@@ -214,3 +214,48 @@ fn clauses_retain_equivalent_bounds_and_independent_restrictions() {
         BTreeSet::from([vec![0, 1]])
     );
 }
+
+#[test]
+fn the_bound_generation_counts_installed_bounds() {
+    let original = choices(3);
+    for route in ROUTES {
+        let mut search = route.search(&original, Cancellation::default());
+        assert_eq!(search.bound_generation(), 0);
+        search.tighten_candidate_bound(&disjunction(3)).unwrap();
+        assert_eq!(search.bound_generation(), 1);
+        search.tighten_candidate_bound(&conjunction(3)).unwrap();
+        assert_eq!(search.bound_generation(), 2);
+    }
+}
+
+#[test]
+fn a_refused_tightening_keeps_the_bound_generation() {
+    let original = choices(2);
+    for route in ROUTES {
+        let mut search = route.search(&original, Cancellation::default());
+        search.tighten_candidate_bound(&conjunction(2)).unwrap();
+        assert!(matches!(
+            search.tighten_candidate_bound(&choices(3)),
+            Err(Incomplete::RestrictionUniverse { .. })
+        ));
+        assert_eq!(search.bound_generation(), 1);
+        search.stop().unwrap();
+        assert_eq!(
+            search.tighten_candidate_bound(&conjunction(2)),
+            Err(Incomplete::ClosedEnumerator)
+        );
+        assert_eq!(search.bound_generation(), 1);
+    }
+}
+
+#[test]
+fn a_permanent_restriction_keeps_the_bound_generation() {
+    let original = choices(3);
+    for route in ROUTES {
+        let mut search = route.search(&original, Cancellation::default());
+        search.tighten_candidate_bound(&disjunction(3)).unwrap();
+        search.restrict_candidates(&conjunction(3)).unwrap();
+        assert_eq!(search.bound_generation(), 1);
+        assert_eq!(search.statistics().candidate_restrictions, 2);
+    }
+}

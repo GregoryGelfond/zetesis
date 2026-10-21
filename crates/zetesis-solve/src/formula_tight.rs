@@ -72,11 +72,10 @@ pub(crate) fn check(
     cancellation: &Cancellation,
     phases: &Recorder,
 ) -> Result<crate::batch_executor::DeviceVerdicts, Failure> {
+    // As for general propagation, one submission may take the whole slate
+    // under either batching policy; the device's admission bounds its prefix.
     let limits = TightGpuLimits {
-        max_candidates: match options.gpu_batching {
-            crate::GpuBatching::Fixed => options.batch_size.get(),
-            crate::GpuBatching::Adaptive => candidates.len(),
-        },
+        max_candidates: candidates.len(),
         max_batch_bytes: options.max_batch_bytes,
         max_work_per_candidate: u64::from(options.gpu_formula_work),
         ..Default::default()

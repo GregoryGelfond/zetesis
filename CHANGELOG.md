@@ -14,6 +14,17 @@ Notable changes by release. Versions follow Semantic Versioning.
   propagation for controlled comparisons. Fitted workgroup sizes and dense
   propagation are the defaults.
 - Requested GPU statistics report the workgroup size the device checks used.
+- GPU formula sessions size their candidate slates, the candidates checked and
+  committed together, adaptively by default. Slates start at the batch size,
+  double after a filled slate whose answers leave the objective bound unchanged,
+  and return to the batch size after a slate whose answers tighten it. Growth
+  stops at the device's admitted prefix, never below the batch size, and at the
+  pending-memory allowance. `GpuBatching::Fixed` keeps every slate at the batch
+  size for controlled comparisons. Answer sets, optima and ties are unchanged.
+- Requested GPU statistics report committed candidate slates, the largest slate
+  and the slates that returned to the batch size on objective-bound feedback.
+- `StableModels::bound_generation` reports how many objective bounds the
+  candidate stream has installed.
 - A maintained draw-poker workload checks complete enumeration against clingo,
   with portable filenames and a recorded 36-answer contract.
 

@@ -153,6 +153,32 @@ it is absent before the first decoded batch. Device timings, sweep counts and
 round- or work-limit residuals can differ between sizes, so compare them only
 between runs that dispatched the same size, or report the sizes beside them.
 
+## GPU candidate slates
+
+A slate is the candidates a GPU formula session's stream proposes together for
+one membership check and commit; `batch_size` is the size of the first slate
+and of the slate bound feedback returns to. The device checks a slate in one or
+more submissions: `gpu_submitted_batches` and `gpu_batches` count those
+submissions, and `gpu_rounds` counts propagation sweeps, which are unrelated to
+slates. Three statistics, in `FormulaExecutionStatistics`, the JSON and the
+human "formula GPU slates" line, describe the slates:
+
+- `gpu_slates` ("committed"): slates committed with at least one candidate.
+- `gpu_largest_slate` ("largest"): the largest committed slate's candidate
+  count, at most the batch size under `GpuBatching::Fixed` and possibly more
+  under the adaptive default. It is absent before the first commit.
+- `gpu_slate_resets` ("feedback resets"): the selections that returned adaptive
+  slates to the batch size because the previous slate's answers tightened the
+  objective bound. Every such selection counts, including one already at the
+  batch size and the session's last selection, which follows its last
+  non-empty slate; a program reports one reset per slate whose answers
+  installed a bound. It is zero under fixed batching and for programs without
+  objectives.
+
+All three are zero or absent on CPU routes. Slate sizes change search and
+device work, so compare runs with matching policies, or report these
+statistics beside them.
+
 ## Thread and failure contracts
 
 The measurement owner is `Send + Sync`. Short internal locks protect fixed-size

@@ -104,6 +104,13 @@ original theory and every independent restriction.
 Original theory and reduct membership are unchanged. Exhaustion covers the
 constrained candidate family, not the unrestricted world view.
 
+`StableModels::bound_generation()` counts the bounds installed so far by
+`tighten_candidate_bound`: zero before the first, one more after each successful
+installation. A refused or failed tightening, a permanent `restrict_candidates`
+addition and every batch operation leave it unchanged; it never decreases. It is
+the generation the region proposer assigns to the current bound. A scheduling
+observation only: membership, exhaustion and optimality never depend on it.
+
 Region modes replace the bound's immutable index after successful preparation
 and charging. Per-region bound knowledge has a checked, non-wrapping generation
 and is reset before using a different bound DAG. Permanent restrictions added
