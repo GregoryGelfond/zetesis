@@ -39,6 +39,7 @@ fn graph(certificate: &TightPlan, support: TightSupport) -> Graph {
         Packing {
             device: &wgpu::Limits::default(),
             support,
+            workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(crate::GpuWorkgroupSize::Threads64),
         },
     )
     .unwrap()
@@ -179,7 +180,10 @@ fn grouped_indices_obey_device_storage_limits() {
             &certificate,
             Packing {
                 device: &device,
-                support: TightSupport::Atomic
+                support: TightSupport::Atomic,
+                workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(
+                    crate::GpuWorkgroupSize::Threads64
+                ),
             }
         )
         .is_ok()
@@ -189,7 +193,10 @@ fn grouped_indices_obey_device_storage_limits() {
             &certificate,
             Packing {
                 device: &device,
-                support: TightSupport::Grouped
+                support: TightSupport::Grouped,
+                workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(
+                    crate::GpuWorkgroupSize::Threads64
+                ),
             }
         )
         .err()

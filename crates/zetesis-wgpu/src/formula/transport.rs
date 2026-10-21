@@ -58,7 +58,7 @@ impl Resident {
     ) -> Result<runtime::Completion<DecodedBatch>, GpuError> {
         let device = runtime.device();
         let queue = runtime.queue();
-        let pipeline = &runtime.pipeline;
+        let pipeline = runtime.pipeline_for(self.graph.workgroup_size)?;
         if self.transport.is_none() {
             self.transport = Some(Transport::new(device, pipeline, self, plan)?);
         }

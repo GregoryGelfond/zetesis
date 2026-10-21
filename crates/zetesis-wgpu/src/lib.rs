@@ -46,7 +46,7 @@ use runtime::{DeviceProfile, ErrorScopes, Runtime};
 
 pub use checked_batch::CheckedBatch;
 pub use context::GpuContext;
-pub use kernel::{GpuKernelOptions, GpuPropagation, GpuWorkgroupSize};
+pub use kernel::{GpuKernelOptions, GpuPropagation, GpuWorkgroupSize, GpuWorkgroupSizing};
 
 pub use formula::{
     FormulaBatchStats, FormulaCheck, FormulaLimits, FormulaStatistics, FormulaVerdict,
@@ -76,7 +76,9 @@ pub use selection::{GpuInfo, GpuSelection, compiled_apis, discover_adapters};
 
 /// Maximum dense atoms in this shader's workgroup closure bitset.
 pub const MAX_ATOMS: usize = 4096;
-/// Invocations sharing ownership of one frozen candidate.
+/// Invocations sharing ownership of one frozen candidate in the static
+/// least-model oracle, also the stride the lazy per-world kernel reserves. The
+/// formula and tight kernels choose their size through [`GpuWorkgroupSizing`].
 pub const WORKGROUP_SIZE: u32 = 64;
 const SHADER: &str = include_str!("oracle.wgsl");
 const UNIFORM_BYTES: u64 = 32;

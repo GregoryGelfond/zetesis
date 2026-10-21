@@ -21,8 +21,13 @@ pub(crate) struct DeviceProfile {
 // keeping residency, epochs and result accounting in each fresh oracle.
 pub(crate) struct Runtime {
     pub(crate) context: GpuContext,
+    /// The kernel's first compiled pipeline: a static kernel's only one, or
+    /// the smallest size a formula or tight kernel compiled.
     pub(crate) pipeline: wgpu::ComputePipeline,
     pub(crate) kernel: crate::kernel::Kernel,
+    /// Each size a formula or tight kernel compiled, ascending, with its
+    /// pipeline; empty for a static kernel.
+    by_size: Vec<(crate::GpuWorkgroupSize, wgpu::ComputePipeline)>,
 }
 
 impl Runtime {
@@ -69,35 +74,79 @@ impl Runtime {
     async fn compile(context: &GpuContext, profile: DeviceProfile) -> Result<Self, GpuError> {
         profile.kernel.validate(context.limits())?;
         let source = profile.kernel.source(profile.shader, context.features())?;
-        let constants = profile.kernel.options().map(|options| {
-            [(
-                "WORKGROUP_SIZE",
-                f64::from(options.workgroup_size.invocations()),
-            )]
-        });
+        // A fixed kernel compiles its size, a fitted one every size it may
+        // select on this device; a static kernel compiles its one shader.
+        let sizes: Vec<Option<crate::GpuWorkgroupSize>> = match profile.kernel.options() {
+            Some(options) => {
+                crate::kernel::candidate_sizes(options.workgroup_sizing, context.limits())
+                    .map(Some)
+                    .collect()
+            }
+            None => vec![None],
+        };
+        // Validation admitted the base size; refuse before any device effect.
+        let Some((&first, rest)) = sizes.split_first() else {
+            return Err(GpuError::new(
+                GpuErrorKind::Validation,
+                "no kernel size to compile",
+            ));
+        };
         let device = context.device();
         let scopes = ErrorScopes::new(device);
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some(profile.shader_label),
             source: wgpu::ShaderSource::Wgsl(source),
         });
-        let pipeline = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some(profile.pipeline_label),
-            layout: None,
-            module: &shader,
-            entry_point: Some(profile.entry_point),
-            compilation_options: wgpu::PipelineCompilationOptions {
-                constants: constants.as_ref().map_or(&[], |values| values.as_slice()),
-                ..Default::default()
-            },
-            cache: None,
-        });
+        let compile = |size| {
+            create_pipeline(
+                device,
+                &shader,
+                profile.entry_point,
+                profile.pipeline_label,
+                size,
+            )
+        };
+        let pipeline = compile(first);
+        let by_size = first
+            .map(|size| (size, pipeline.clone()))
+            .into_iter()
+            .chain(
+                rest.iter()
+                    .flatten()
+                    .map(|&size| (size, compile(Some(size)))),
+            )
+            .collect();
         context.complete(scopes.finish().await, Ok(()), Effects::MayBeLive)?;
         Ok(Self {
             context: context.clone(),
             pipeline,
             kernel: profile.kernel,
+            by_size,
         })
+    }
+
+    /// The pipeline this formula or tight kernel compiled for `size`.
+    ///
+    /// # Errors
+    /// A size this runtime did not compile, including any size of a static
+    /// kernel, is a validation failure.
+    pub(crate) fn pipeline_for(
+        &self,
+        size: crate::GpuWorkgroupSize,
+    ) -> Result<&wgpu::ComputePipeline, GpuError> {
+        self.by_size
+            .iter()
+            .find(|(compiled, _)| *compiled == size)
+            .map(|(_, pipeline)| pipeline)
+            .ok_or_else(|| {
+                GpuError::new(
+                    GpuErrorKind::Validation,
+                    format!(
+                        "no {}-invocation pipeline was compiled for this kernel",
+                        size.invocations()
+                    ),
+                )
+            })
     }
 
     pub(crate) fn device(&self) -> &wgpu::Device {
@@ -173,6 +222,29 @@ pub(crate) struct Dispatch<'a> {
     /// oracle, not bytes from a previous dispatch, authorizes retained truth.
     pub(crate) clear_result: bool,
     pub(crate) timing: Option<&'a crate::timing::PassTimer>,
+}
+
+/// A compute pipeline over `shader`'s entry point, overriding `WORKGROUP_SIZE`
+/// when the kernel compiles a size.
+fn create_pipeline(
+    device: &wgpu::Device,
+    shader: &wgpu::ShaderModule,
+    entry_point: &'static str,
+    label: &'static str,
+    size: Option<crate::GpuWorkgroupSize>,
+) -> wgpu::ComputePipeline {
+    let constants = size.map(|size| [("WORKGROUP_SIZE", f64::from(size.invocations()))]);
+    device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+        label: Some(label),
+        layout: None,
+        module: shader,
+        entry_point: Some(entry_point),
+        compilation_options: wgpu::PipelineCompilationOptions {
+            constants: constants.as_ref().map_or(&[], |values| values.as_slice()),
+            ..Default::default()
+        },
+        cache: None,
+    })
 }
 
 pub(crate) fn submit(

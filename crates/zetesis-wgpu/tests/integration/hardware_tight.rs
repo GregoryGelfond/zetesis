@@ -13,7 +13,7 @@ use zetesis_ferraris::{
 };
 use zetesis_wgpu::{
     GpuErrorKind, GpuKernelOptions, GpuOptions, GpuSelection, GpuTightOracle, GpuWorkgroupSize,
-    TightGpuActivity, TightGpuError, TightGpuLimits, TightSupport,
+    GpuWorkgroupSizing, TightGpuActivity, TightGpuError, TightGpuLimits, TightSupport,
 };
 
 fn certificate(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> TightPlan {
@@ -349,10 +349,10 @@ fn qualify_support_matches_exact_reduct_semantics(backend: GpuApi, support: Tigh
 fn qualify_kernel_options(oracle: &GpuTightOracle) {
     let context = oracle.context().clone();
     println!("tight granted features={:?}", context.features());
-    for workgroup_size in [GpuWorkgroupSize::Threads32, GpuWorkgroupSize::Threads64] {
+    for workgroup_sizing in SIZINGS {
         for optional_features in [false, true] {
             let options = GpuKernelOptions {
-                workgroup_size,
+                workgroup_sizing,
                 optional_features,
                 ..GpuKernelOptions::default()
             };
@@ -364,7 +364,12 @@ fn qualify_kernel_options(oracle: &GpuTightOracle) {
             assert_eq!(configured.support(), oracle.support());
             println!("tight qualified options={options:?}");
             native::qualify(&mut configured);
+            assert_dispatched_size(
+                workgroup_sizing,
+                configured.last_batch_stats().unwrap().workgroup_size,
+            );
             qualify_dependency_schedules(&mut configured);
+            qualify_size_boundaries(&mut configured, workgroup_sizing);
         }
     }
 }
@@ -391,43 +396,50 @@ fn qualify_support_preserves_batch_isolation(backend: GpuApi, support: TightSupp
     compare_skewed_support(&mut oracle);
     compare_word_witnesses(&mut oracle);
     for atoms in [1, 31, 32, 33, 63, 64, 65, 4097] {
-        let certificate = certificate(atoms, vec![Node::atom(atoms - 1)], vec![0]);
-        let theory = certificate.theory();
-        let patterns = [
-            Interpretation::new(theory, []).unwrap(),
-            Interpretation::new(theory, [atoms - 1]).unwrap(),
-            Interpretation::new(theory, 0..atoms).unwrap(),
-        ];
-        for worlds in [1, 31, 32, 33, 63, 64, 65] {
-            let candidates: Vec<_> = (0..worlds)
-                .map(|world| patterns[world % 3].clone())
-                .collect();
-            let results = oracle
-                .check_batch(
-                    &certificate,
-                    &candidates,
-                    TightGpuLimits::default(),
-                    &Cancellation::default(),
-                )
-                .unwrap();
-            assert_eq!(results.len(), worlds);
-            for (candidate, result) in candidates.iter().zip(results) {
-                assert_eq!(
-                    result.verdict(),
-                    certificate
-                        .check(
-                            candidate,
-                            TightCheckLimits::default(),
-                            &Cancellation::default()
-                        )
-                        .unwrap()
-                        .verdict
-                );
-            }
-            let stats = oracle.last_batch_stats().unwrap();
-            assert_eq!(stats.theory_uploaded, worlds == 1);
-            assert!(stats.transport_allocated);
+        compare_atom_boundary(&mut oracle, atoms);
+    }
+}
+
+// One root over the last of `atoms` atoms: every candidate-local atom and word
+// loop runs to its bound under batches of 1 to 65 candidates, compared with the
+// scalar plan. The first batch uploads the theory; each batch size reallocates.
+fn compare_atom_boundary(oracle: &mut GpuTightOracle, atoms: usize) {
+    let certificate = certificate(atoms, vec![Node::atom(atoms - 1)], vec![0]);
+    let theory = certificate.theory();
+    let patterns = [
+        Interpretation::new(theory, []).unwrap(),
+        Interpretation::new(theory, [atoms - 1]).unwrap(),
+        Interpretation::new(theory, 0..atoms).unwrap(),
+    ];
+    for worlds in [1, 31, 32, 33, 63, 64, 65] {
+        let candidates: Vec<_> = (0..worlds)
+            .map(|world| patterns[world % 3].clone())
+            .collect();
+        let results = oracle
+            .check_batch(
+                &certificate,
+                &candidates,
+                TightGpuLimits::default(),
+                &Cancellation::default(),
+            )
+            .unwrap();
+        assert_eq!(results.len(), worlds);
+        for (candidate, result) in candidates.iter().zip(results) {
+            assert_eq!(
+                result.verdict(),
+                certificate
+                    .check(
+                        candidate,
+                        TightCheckLimits::default(),
+                        &Cancellation::default()
+                    )
+                    .unwrap()
+                    .verdict
+            );
         }
+        let stats = oracle.last_batch_stats().unwrap();
+        assert_eq!(stats.theory_uploaded, worlds == 1);
+        assert!(stats.transport_allocated);
     }
 }
 
@@ -1173,4 +1185,86 @@ fn qualify_truth_invalidation(
         )
         .unwrap();
     assert!(!oracle.last_batch_stats().unwrap().original_truth_reused);
+}
+
+/// Rule, root and producer counts one below, at and one above the sizes 64, 128
+/// and 256, each with the size the fitted policy selects for that many rules on
+/// one dependency level over two atom leaves (level sizes 2 and the count).
+const LEVEL_BOUNDARIES: [(usize, u32); 9] = [
+    (63, 64),
+    (64, 64),
+    (65, 128),
+    (127, 128),
+    (128, 128),
+    (129, 256),
+    (255, 256),
+    (256, 256),
+    (257, 256),
+];
+
+/// Atom counts one below, at and one above 128 and 256, then the atom counts
+/// whose candidates span that many 32-bit words.
+const ATOM_BOUNDARIES: [usize; 12] = [
+    127,
+    128,
+    129,
+    255,
+    256,
+    257,
+    32 * 127,
+    32 * 128,
+    32 * 129,
+    32 * 255,
+    32 * 256,
+    32 * 257,
+];
+
+// `count` separate rules `1 :- 0`: structural duplicates are not interned, so
+// each is its own node, root and producer of atom 1.
+fn level_boundary(count: usize) -> TightPlan {
+    let mut nodes = vec![Node::atom(0), Node::atom(1)];
+    nodes.extend(std::iter::repeat_n(Node::implies(0, 1), count));
+    certificate(2, nodes, (2..count + 2).collect())
+}
+
+// Each boundary fixture is checked exactly under `sizing`, which dispatches the
+// fixed size or the size the fitted policy selects for the fixture's schedule;
+// a single-node fixture has a serial schedule, which keeps 64.
+fn qualify_size_boundaries(oracle: &mut GpuTightOracle, sizing: GpuWorkgroupSizing) {
+    let limits = oracle.context().limits();
+    assert!(
+        limits
+            .max_compute_invocations_per_workgroup
+            .min(limits.max_compute_workgroup_size_x)
+            >= 256,
+        "the fitted expectations assume a device granting 256 invocations"
+    );
+    let dispatched = |oracle: &GpuTightOracle| oracle.last_batch_stats().unwrap().workgroup_size;
+    let expected = |fitted: u32| sizing.fixed().map_or(fitted, GpuWorkgroupSize::invocations);
+    for (count, fitted) in LEVEL_BOUNDARIES {
+        compare(oracle, &level_boundary(count));
+        assert_eq!(dispatched(oracle), expected(fitted), "{count} rules");
+    }
+    for atoms in ATOM_BOUNDARIES {
+        compare_atom_boundary(oracle, atoms);
+        assert_eq!(dispatched(oracle), expected(64), "{atoms} atoms");
+    }
+}
+
+/// Every size a tight kernel compiles, fixed, and the fitted policy.
+const SIZINGS: [GpuWorkgroupSizing; 5] = [
+    GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads32),
+    GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads64),
+    GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads128),
+    GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads256),
+    GpuWorkgroupSizing::Fitted,
+];
+
+/// A fixed size dispatches as requested; a fitted one dispatches a size the
+/// fitted policy may select.
+fn assert_dispatched_size(requested: GpuWorkgroupSizing, dispatched: u32) {
+    match requested.fixed() {
+        Some(size) => assert_eq!(dispatched, size.invocations()),
+        None => assert!(matches!(dispatched, 64 | 128 | 256)),
+    }
 }

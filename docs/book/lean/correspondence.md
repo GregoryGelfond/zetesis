@@ -1530,7 +1530,7 @@ proves that exact finite partitioning preserves an eligible-atom count and maxim
 index. Zero availability excludes a fitting strict-subset completion; one
 available atom must be false in every such completion. The maximum names that
 atom only under the count-one premise. The formula kernel distributes this scan
-over 32 or 64 lanes and merges their summaries. Supported subgroup reductions
+over its workgroup's 32, 64, 128 or 256 invocations and merges their summaries. Supported subgroup reductions
 may combine summaries first; no subgroup width is assumed and the final
 workgroup barrier remains. Its strided coverage, bounded `u32`
 arithmetic, immutable scan inputs, atom correspondence and synchronization remain

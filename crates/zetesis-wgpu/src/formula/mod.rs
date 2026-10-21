@@ -40,8 +40,9 @@ pub struct FormulaLimits {
     /// other DAGs charge their number of occupied dependency levels.
     /// Leaf nodes are visited but need no separate domain initialization store.
     /// A sweep reserves `9*nodes+2*edges+atoms+65+levels` units, including eight possible gate
-    /// truth-table rows per binary node, two native operand walks, 64 lane-summary merges and one strict-subset
-    /// projection and the dependency-level walk. Both setup and each sweep additionally reserve `48*n+32` for
+    /// truth-table rows per binary node, two native operand walks, the dependency-level walk and
+    /// a constant 65 for one strict-subset reduction, merging the invocations' summaries and
+    /// applying one projection, whatever the workgroup size. Both setup and each sweep additionally reserve `48*n+32` for
     /// each variable threshold and `24*n+16` for each variable extremum cut,
     /// where `n` is its number of condition occurrences. These cover linear
     /// condition visits and portable limb arithmetic; constant guards carry no
@@ -145,4 +146,7 @@ pub struct FormulaBatchStats {
     pub resident_transport_bytes: u64,
     /// Conservative authored allocation sum checked against the batch ceiling.
     pub accounted_bytes: u64,
+    /// The workgroup size dispatched, in invocations per candidate: the fixed
+    /// size, or the size the theory's dependency schedule fits.
+    pub workgroup_size: u32,
 }

@@ -389,7 +389,8 @@ impl GpuFormulaOracle {
                 epoch,
                 cancellation,
             )?
-            .with_propagation(self.profile.kernel_options().propagation);
+            .with_propagation(self.profile.kernel_options().propagation)
+            .with_workgroup_sizing(self.profile.kernel_options().workgroup_sizing);
             identities(theory, candidates)?;
             self.resident = None;
             let (prepared, exact) =
@@ -443,6 +444,7 @@ impl GpuFormulaOracle {
             resident_theory_bytes: graph.schedule.bytes,
             resident_transport_bytes: plan.transport + timing_bytes,
             accounted_bytes: plan.accounted + timing_bytes,
+            workgroup_size: graph.workgroup_size.invocations(),
         };
         if stats.transport_allocated {
             self.candidates.release();

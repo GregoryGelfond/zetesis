@@ -1183,6 +1183,8 @@ fn execution_statistics(
     out.number_field("pending_candidates", stats.pending_candidates)?;
     out.number_field("queued_models", stats.queued_models)?;
     out.number_field("peak_accounted_bytes", stats.peak_accounted_bytes)?;
+    out.text(",\"gpu_workgroup_size\":")?;
+    out.optional_number(stats.gpu_workgroup_size.map(u64::from))?;
     out.text(",\"gpu_compute_timing\":{")?;
     let timing = &stats.gpu_compute_timing;
     out.text("\"status\":")?;

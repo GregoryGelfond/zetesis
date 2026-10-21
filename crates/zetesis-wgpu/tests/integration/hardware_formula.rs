@@ -14,7 +14,7 @@ use zetesis_theory_support::theories::theory;
 use zetesis_wgpu::{
     FormulaLimits, FormulaVerdict, GateProjection, GpuErrorKind, GpuFormulaOracle,
     GpuFormulaProfile, GpuKernelOptions, GpuOptions, GpuPropagation, GpuSelection,
-    GpuWorkgroupSize, ResidualReason,
+    GpuWorkgroupSize, GpuWorkgroupSizing, ResidualReason,
 };
 
 fn oracle(backend: GpuApi, projection: GateProjection) -> GpuFormulaOracle {
@@ -341,7 +341,13 @@ fn qualify_frozen_queries(backend: GpuApi, projection: GateProjection) {
 fn qualify_kernel_options(oracle: &mut GpuFormulaOracle) {
     let context = oracle.context().clone();
     println!("formula granted features={:?}", context.features());
-    for workgroup_size in [GpuWorkgroupSize::Threads32, GpuWorkgroupSize::Threads64] {
+    for workgroup_sizing in [
+        GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads32),
+        GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads64),
+        GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads128),
+        GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads256),
+        GpuWorkgroupSizing::Fitted,
+    ] {
         for optional_features in [false, true] {
             for propagation in [
                 GpuPropagation::Dense,
@@ -349,7 +355,7 @@ fn qualify_kernel_options(oracle: &mut GpuFormulaOracle) {
                 GpuPropagation::IncrementalGroups,
             ] {
                 let options = GpuKernelOptions {
-                    workgroup_size,
+                    workgroup_sizing,
                     optional_features,
                     propagation,
                 };
@@ -373,11 +379,14 @@ fn qualify_kernel_options(oracle: &mut GpuFormulaOracle) {
                 }
                 for theory in scheduled_theories() {
                     compare(&mut configured, &theory);
-                    assert_eq!(
-                        configured.last_batch_stats().unwrap().propagation,
-                        requested_groups(&configured, &theory)
-                    );
+                    let stats = configured.last_batch_stats().unwrap();
+                    assert_eq!(stats.propagation, requested_groups(&configured, &theory));
+                    match workgroup_sizing.fixed() {
+                        Some(size) => assert_eq!(stats.workgroup_size, size.invocations()),
+                        None => assert!(matches!(stats.workgroup_size, 64 | 128 | 256)),
+                    }
                 }
+                qualify_size_boundaries(&mut configured, workgroup_sizing);
                 native::qualify(&mut configured);
                 native::qualify_shared_ordinals(&mut configured);
                 if propagation != GpuPropagation::Dense {
@@ -401,6 +410,74 @@ fn qualify_kernel_options(oracle: &mut GpuFormulaOracle) {
                 }
             }
         }
+    }
+}
+
+/// Gate and root counts one below, at and one above the sizes 64, 128 and 256,
+/// each with the size the fitted policy selects for that many gates on one
+/// dependency level over two atom leaves (level sizes 2 and the count).
+const LEVEL_BOUNDARIES: [(usize, u32); 9] = [
+    (63, 64),
+    (64, 64),
+    (65, 128),
+    (127, 128),
+    (128, 128),
+    (129, 256),
+    (255, 256),
+    (256, 256),
+    (257, 256),
+];
+
+/// Atom counts one below, at and one above 128 and 256, then the atom counts
+/// whose candidates span that many 32-bit words.
+const ATOM_BOUNDARIES: [usize; 12] = [
+    127,
+    128,
+    129,
+    255,
+    256,
+    257,
+    32 * 127,
+    32 * 128,
+    32 * 129,
+    32 * 255,
+    32 * 256,
+    32 * 257,
+];
+
+// Each boundary fixture is decided exactly under `sizing`, which dispatches the
+// fixed size or the size the fitted policy selects for the fixture's schedule;
+// a single-node fixture has a serial schedule, which keeps 64. `count` separate
+// roots `0 -> 1` are not interned, so each is its own gate and root.
+fn qualify_size_boundaries(oracle: &mut GpuFormulaOracle, sizing: GpuWorkgroupSizing) {
+    let limits = oracle.context().limits();
+    assert!(
+        limits
+            .max_compute_invocations_per_workgroup
+            .min(limits.max_compute_workgroup_size_x)
+            >= 256,
+        "the fitted expectations assume a device granting 256 invocations"
+    );
+    let dispatched = |oracle: &GpuFormulaOracle| oracle.last_batch_stats().unwrap().workgroup_size;
+    let expected = |fitted: u32| sizing.fixed().map_or(fitted, GpuWorkgroupSize::invocations);
+    for (count, fitted) in LEVEL_BOUNDARIES {
+        let mut nodes = vec![Node::atom(0), Node::atom(1)];
+        nodes.extend(std::iter::repeat_n(Node::implies(0, 1), count));
+        compare(oracle, &theory(2, nodes, (2..count + 2).collect()));
+        assert_eq!(dispatched(oracle), expected(fitted), "{count} gates");
+    }
+    for atoms in ATOM_BOUNDARIES {
+        let graph = theory(atoms, vec![Node::atom(atoms - 1)], vec![0]);
+        let inputs = [
+            Interpretation::new(&graph, []).unwrap(),
+            Interpretation::new(&graph, [atoms - 1]).unwrap(),
+        ];
+        let results = oracle
+            .propagate_batch(&graph, &inputs, FormulaLimits::default())
+            .unwrap();
+        assert_eq!(results[0].verdict(), FormulaVerdict::NotModel);
+        assert_eq!(results[1].verdict(), FormulaVerdict::NoProperSubset);
+        assert_eq!(dispatched(oracle), expected(64), "{atoms} atoms");
     }
 }
 
@@ -767,8 +844,8 @@ fn qualify_subset_strides(oracle: &mut GpuFormulaOracle) {
         }
         // Authored constants: 133 nodes, 131 atoms, 131-|available| facts.
         // Setup visits nodes twice, atoms once, roots once and one level. Each sweep
-        // reserves 9 per node, one per atom, 64 summaries, one application and
-        // one dependency level.
+        // reserves 9 per node, one per atom, one dependency level and the constant
+        // 65 of one strict-subset reduction, whatever the workgroup size.
         let setup = 529 - u32::try_from(available.len()).unwrap();
         let sweep = 1394;
         let expected = match available.len() {

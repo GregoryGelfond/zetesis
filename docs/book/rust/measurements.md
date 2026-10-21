@@ -140,6 +140,17 @@ statistics show the corresponding interval and availability. The maintained
 benchmark runner already requests these statistics and preserves them in its raw
 native reports.
 
+## GPU workgroup size
+
+`FormulaExecutionStatistics::gpu_workgroup_size`, the JSON key
+`gpu_workgroup_size` and the human "workgroup size" report the invocations that
+cooperated on each candidate in the decoded device batches. Under the default
+fitted sizing this is the size the retained theory's dependency schedule fits
+(see [formula evaluation on the device](../architecture/execution.md#formula-evaluation-on-the-device));
+it is absent before the first decoded batch. Device timings, sweep counts and
+round- or work-limit residuals can differ between sizes, so compare them only
+between runs that dispatched the same size, or report the sizes beside them.
+
 ## Thread and failure contracts
 
 The measurement owner is `Send + Sync`. Short internal locks protect fixed-size

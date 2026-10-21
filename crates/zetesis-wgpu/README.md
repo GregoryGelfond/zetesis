@@ -93,9 +93,13 @@ retirement, allocator bookkeeping and the existing requested seed/result host
 allowance are separate from these measured staging capacities.
 
 `GpuKernelOptions` keeps physical choices below the semantic interface. Formula
-and tight profiles accept 32 or 64 cooperating invocations, checked against the
-context's granted limits and supplied through a WGSL pipeline constant. Sixty-four
-remains the default until measurements justify another choice. Supported subgroup
+and tight profiles choose their cooperating invocations through
+`GpuWorkgroupSizing`. By default each retained theory dispatches the size its
+dependency schedule fits: 64, 128 or 256 within the granted limits, and 64 for
+serial schedules and levels of at most 64 nodes. `Fixed` selects 32, 64, 128 or
+256 for controlled comparisons. Each size the sizing may dispatch is compiled
+with the kernel through a WGSL pipeline constant, after the base size is checked
+against the context's granted limits; batch statistics report the size dispatched. Supported subgroup
 instructions combine strict-subset summaries before their workgroup-wide merge;
 no subgroup width is assumed. The portable alternative uses the same integer
 reduction and barriers. This changes neither the frozen candidate nor the

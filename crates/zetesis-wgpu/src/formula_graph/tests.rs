@@ -609,3 +609,99 @@ fn numeric_directory_reservation_obeys_staging_allowance() {
     shape.rows.release();
     assert_eq!(shape.rows.bytes().unwrap(), 0);
 }
+
+#[test]
+fn a_serial_schedule_has_no_level_sizes() {
+    let packed = [7, 9];
+    assert_eq!(
+        dependency::level_sizes(&packed, 2, 0)
+            .unwrap()
+            .collect::<Vec<_>>(),
+        Vec::<u32>::new()
+    );
+}
+
+#[test]
+fn level_sizes_are_offset_differences() {
+    // Two root IDs, then the starts of three levels and the node count.
+    let packed = [7, 9, 0, 3, 3, 7, 4, 5, 6];
+    assert_eq!(
+        dependency::level_sizes(&packed, 2, 3)
+            .unwrap()
+            .collect::<Vec<_>>(),
+        [3, 0, 4]
+    );
+}
+
+#[test]
+fn level_offsets_beyond_the_schedule_are_refused() {
+    let packed = [7, 9, 0, 3];
+    assert_eq!(
+        dependency::level_sizes(&packed, 2, 3)
+            .err()
+            .map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
+}
+
+#[test]
+fn decreasing_level_offsets_are_refused() {
+    let packed = [7, 9, 0, 5, 3, 7];
+    assert_eq!(
+        dependency::level_sizes(&packed, 2, 3)
+            .err()
+            .map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
+}
+
+/// The largest loop bound the formula and tight kernels admit.
+const STRIDED_END: u32 = u32::MAX - crate::kernel::MAX_FORMULA_STRIDE;
+
+#[test]
+fn schedule_words_end_within_the_stride_headroom() {
+    // Roots, then the starts of three levels and the node count, then 8 nodes.
+    let roots = STRIDED_END - (3 + 1 + 8);
+    assert_eq!(dependency::root_words(8, roots, 3).unwrap(), STRIDED_END);
+    assert_eq!(
+        dependency::root_words(8, roots + 1, 3)
+            .err()
+            .map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
+}
+
+#[test]
+fn incidence_directories_end_within_the_stride_headroom() {
+    // One binary gate over one variable: the variable's start, a closing
+    // offset and three entries (two operands and the gate) take five words.
+    let gate = [2, 0, 0, 0];
+    let layout = |offset| incidence::Layout::new(&gate, 1, 1, offset, &Cancellation::default());
+    let at = layout(STRIDED_END - 5).unwrap().unwrap();
+    assert_eq!(at.offset + at.words, STRIDED_END);
+    assert_eq!(
+        layout(STRIDED_END - 4).err().map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
+}
+
+#[test]
+fn group_maps_end_within_the_stride_headroom() {
+    // One empty group over one variable: a three-word directory, then a map
+    // word per node and a closing word.
+    let group = [5, 0, 0, 0];
+    let grouped = |offset| {
+        incidence::Layout::new(&group, 1, 1, offset, &Cancellation::default())
+            .and_then(|layout| layout.unwrap().with_groups())
+    };
+    let at = grouped(STRIDED_END - 5).unwrap();
+    assert_eq!(at.offset + at.words, STRIDED_END);
+    // The directory alone still fits; only the map crosses the headroom.
+    assert!(
+        incidence::Layout::new(&group, 1, 1, STRIDED_END - 4, &Cancellation::default()).is_ok()
+    );
+    assert_eq!(
+        grouped(STRIDED_END - 4).err().map(|error| error.kind()),
+        Some(GpuErrorKind::Capacity)
+    );
+}

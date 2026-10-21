@@ -118,6 +118,9 @@ pub struct TightGpuBatchStats {
     pub dispatches: u64,
     /// Dependency levels evaluated cooperatively; zero selects serial original truth.
     pub truth_levels: u32,
+    /// The workgroup size dispatched, in invocations per candidate: the fixed
+    /// size, or the size the theory's dependency schedule fits.
+    pub workgroup_size: u32,
     /// A wholly successful same-subject/count batch supplied original truth.
     /// This selects change detection; it does not assert that any gate was skipped.
     pub original_truth_reused: bool,

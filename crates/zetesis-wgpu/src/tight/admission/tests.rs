@@ -5,6 +5,7 @@ fn atomic(device: &wgpu::Limits) -> Packing<'_> {
     Packing {
         device,
         support: super::super::TightSupport::Atomic,
+        workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(crate::GpuWorkgroupSize::Threads64),
     }
 }
 

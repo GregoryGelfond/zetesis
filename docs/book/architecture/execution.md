@@ -797,6 +797,23 @@ one node per level keeps
 the serial fold because it contains no independent node work. Other narrow
 levels may still pay more in barriers than they gain in parallel evaluation.
 
+Each kernel strides every level, and every dense node, atom, root and word loop,
+by its workgroup size. By default the size fits the retained schedule. With
+`I(W) = Σ ⌈n_l / W⌉` the strided depth over the level sizes `n_l`, the kernel
+dispatches, among the granted sizes 64, 128 and 256 whose invocation slots
+`W·I(W)` stay within twice those of 64, the smallest size attaining the least
+depth. A serial schedule, or one whose levels hold at most 64 nodes, keeps 64.
+Where a batch leaves the device latency-bound, per-candidate time follows the
+strided depth; where a batch oversubscribes the device it follows the invocation
+slots, which the bound keeps within twice the 64-invocation time. Every candidate
+size is compiled when the kernel is created, and the batch statistics report the
+size dispatched. A size changes which invocation evaluates which node, never a
+node's value. Under frozen-reduct propagation sibling gates narrow shared domains
+through atomics, so the number of sweeps, and whether a candidate reaches a sweep
+or work limit, can differ between sizes; such a residual is completed exactly on
+the host. Work allowances do not depend on the size. `GpuKernelOptions` can fix
+one size for controlled comparisons.
+
 Dense frozen-reduct propagation reuses those levels, starting downward and
 alternating direction each sweep. Asserted roots can constrain operands across
 several depths in a downward sweep; an upward sweep carries child consequences

@@ -5,6 +5,7 @@ fn atomic(device: &wgpu::Limits) -> Packing<'_> {
     Packing {
         device,
         support: TightSupport::Atomic,
+        workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(crate::GpuWorkgroupSize::Threads64),
     }
 }
 
@@ -140,6 +141,9 @@ fn valid_rank_choices_do_not_change_cached_producers() {
             Packing {
                 device: &wgpu::Limits::default(),
                 support,
+                workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(
+                    crate::GpuWorkgroupSize::Threads64,
+                ),
             },
         )
         .unwrap();
@@ -856,6 +860,9 @@ fn native_tight_rows_retain_tail_and_complete_scan_allowance() {
             Packing {
                 device: &device,
                 support,
+                workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(
+                    crate::GpuWorkgroupSize::Threads64,
+                ),
             },
         )
         .unwrap();
@@ -952,6 +959,9 @@ fn threshold_producer_bodies_use_physical_result_addresses() {
             Packing {
                 device: &wgpu::Limits::default(),
                 support,
+                workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(
+                    crate::GpuWorkgroupSize::Threads64,
+                ),
             },
         )
         .unwrap();
@@ -1014,6 +1024,9 @@ fn ordinal_producer_bodies_use_physical_result_addresses() {
             Packing {
                 device: &wgpu::Limits::default(),
                 support,
+                workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(
+                    crate::GpuWorkgroupSize::Threads64,
+                ),
             },
         )
         .unwrap();

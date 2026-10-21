@@ -128,6 +128,7 @@ pub(crate) fn check(
             add(&mut statistics.gpu_work, batch.work)?;
             statistics.peak_accounted_bytes =
                 statistics.peak_accounted_bytes.max(batch.accounted_bytes);
+            super::formula_execution::record_workgroup_size(statistics, batch.workgroup_size);
         }
         verdicts
             .values

@@ -70,6 +70,7 @@ pub(super) struct Packed {
 pub(super) struct Packing<'a> {
     pub(super) device: &'a wgpu::Limits,
     pub(super) support: TightSupport,
+    pub(super) workgroup_sizing: crate::GpuWorkgroupSizing,
 }
 
 pub(super) struct Graph {
@@ -90,7 +91,11 @@ pub(super) struct Graph {
     /// Simultaneous host packing, including temporary grouped-write cursors.
     pub(super) packing_bytes: u64,
     pub(super) work: u32,
+    /// The workgroup size this graph dispatches: the fixed size, or the size
+    /// its packed schedule fits.
+    pub(super) workgroup_size: crate::GpuWorkgroupSize,
     support: TightSupport,
+    workgroup_sizing: crate::GpuWorkgroupSizing,
 }
 impl Graph {
     const fn result_marker(&self) -> u32 {
@@ -125,7 +130,7 @@ impl Graph {
         // Reserve the maximum kernel stride after each loop's last valid address.
         if [atoms, nodes, roots, producers]
             .into_iter()
-            .any(|n| n > u32::MAX - 64)
+            .any(|n| !crate::kernel::fits_strided_loop(n))
         {
             return Err(capacity("tight strided loop increment exceeds u32"));
         }
@@ -160,7 +165,9 @@ impl Graph {
             bytes,
             packing_bytes,
             work: 0,
+            workgroup_size: crate::kernel::base_size(packing.workgroup_sizing),
             support: packing.support,
+            workgroup_sizing: packing.workgroup_sizing,
         };
         shape.work = words
             .checked_mul(2)
@@ -229,7 +236,13 @@ impl Graph {
                 Err(error) => return Err(error),
             }
         }
-        self.pack_columns(certificate, nodes, cancellation)
+        let packed = self.pack_columns(certificate, nodes, cancellation)?;
+        self.workgroup_size = crate::kernel::dispatch_size(
+            self.workgroup_sizing,
+            dependency::level_sizes(&packed.roots, self.roots, self.levels)?,
+            device,
+        );
+        Ok(packed)
     }
 
     #[cfg(test)]

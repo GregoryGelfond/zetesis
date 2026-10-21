@@ -29,7 +29,9 @@ use zetesis_ferraris::{Interpretation, TightPlan};
 /// limb arithmetic. No Boolean numeric expansion or optional-width feature is
 /// required. Work is linear in candidates times nodes, row occurrences, roots,
 /// producers and atoms. Each workgroup evaluates independent nodes of each
-/// dependency level across 64 invocations, then shares root/support scans.
+/// dependency level across its workgroup size of invocations, by default the
+/// size the theory's schedule fits (see [`crate::GpuWorkgroupSizing`]), then
+/// shares root/support scans.
 /// Pure chains and cold preparations without room for the additional schedule
 /// retain serial original-truth evaluation. Truth uses one word per node; candidate membership and
 /// producer support use one bit per atom, in separate world-major arrays. Heads
@@ -365,11 +367,12 @@ impl GpuTightOracle {
             .as_mut()
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident tight graph"))
             .and_then(|resident| {
+                let pipeline = self.runtime.pipeline_for(resident.graph.workgroup_size)?;
                 resident.dispatch(
                     &Execution {
                         device: self.runtime.device(),
                         queue: self.runtime.queue(),
-                        pipeline: &self.runtime.pipeline,
+                        pipeline,
                         timeout: limits.timeout,
                         cancellation,
                     },
@@ -423,6 +426,7 @@ impl GpuTightOracle {
             Packing {
                 device: self.runtime.limits(),
                 support: self.support,
+                workgroup_sizing: self.kernel_options().workgroup_sizing,
             },
             self.resident
                 .as_ref()

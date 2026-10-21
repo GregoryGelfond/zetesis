@@ -106,8 +106,8 @@ fn optional_instructions_require_granted_features() {
                 naga::valid::Validator::new(naga::valid::ValidationFlags::all(), capabilities)
                     .validate(&module)
                     .unwrap();
-            for width in [GpuWorkgroupSize::Threads32, GpuWorkgroupSize::Threads64] {
-                let constants = [("WORKGROUP_SIZE".to_owned(), f64::from(width.invocations()))]
+            for size in GpuWorkgroupSize::ALL {
+                let constants = [("WORKGROUP_SIZE".to_owned(), f64::from(size.invocations()))]
                     .into_iter()
                     .collect();
                 let (compiled, _) = naga::back::pipeline_constants::process_overrides(
@@ -116,7 +116,7 @@ fn optional_instructions_require_granted_features() {
                 .unwrap();
                 assert_eq!(
                     compiled.entry_points[0].workgroup_size,
-                    [width.invocations(), 1, 1]
+                    [size.invocations(), 1, 1]
                 );
             }
             if !features.is_empty() {

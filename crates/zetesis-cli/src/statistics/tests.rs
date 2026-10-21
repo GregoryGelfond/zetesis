@@ -378,6 +378,7 @@ fn hybrid_statistics_preserve_reported_fields() {
             pending_candidates: pending,
             queued_models: queued,
             peak_accounted_bytes: 456,
+            gpu_workgroup_size: Some(128),
         });
         if !completed {
             report.completion = Completion::Interrupted;
@@ -393,6 +394,7 @@ fn hybrid_statistics_preserve_reported_fields() {
             "pending candidates={pending}; queued verified models={queued}"
         )));
         assert!(text.contains("peak authored GPU bytes=456"));
+        assert!(text.contains("workgroup size=128"));
         assert!(text.contains("GPU compute passes: status=not_requested; elapsed_ns=unavailable"));
         assert!(text.contains("propagation sweeps/candidate=17; propagation work/candidate=789"));
         assert!(text.contains("submitted: batches=3; candidates=10"));

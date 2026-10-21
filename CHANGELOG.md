@@ -10,8 +10,10 @@ Notable changes by release. Versions follow Semantic Versioning.
   eight optimal answers alongside the existing 94 cases.
 - Requested GPU statistics include compute-pass time when the device supports
   timestamps, separately from host preparation and waiting.
-- The GPU library exposes checked workgroup choices and optional changed-dependency
-  propagation for controlled comparisons. Dense propagation remains the default.
+- The GPU library exposes workgroup sizing and optional changed-dependency
+  propagation for controlled comparisons. Fitted workgroup sizes and dense
+  propagation are the defaults.
+- Requested GPU statistics report the workgroup size the device checks used.
 - A maintained draw-poker workload checks complete enumeration against clingo,
   with portable filenames and a recorded 36-answer contract.
 
@@ -32,6 +34,10 @@ Notable changes by release. Versions follow Semantic Versioning.
 - GPU formula checking retains shared numeric aggregate rows instead of expanding
   them into Boolean formulas. Original satisfaction and reduct membership keep
   their existing meaning; unresolved device checks still receive exact CPU checks.
+- GPU formula and tight checks choose each program's workgroup size from its
+  dependency schedule: 128 or 256 invocations evaluate wide levels together,
+  while serial and narrow schedules keep 64. Answer sets are unchanged; bounded
+  device checks still receive exact CPU checks.
 - GPU tight checking evaluates independent formulas in parallel. General reduct
   propagation alternates directions through the same dependency schedule, carrying
   deductions between parents and operands; bounded checks retain exact CPU completion.

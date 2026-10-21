@@ -85,10 +85,11 @@ impl Shape {
         let variables = atoms
             .checked_add(auxiliary)
             .ok_or_else(|| capacity("formula variable addresses overflow"))?;
-        // Strided GPU loops increment by at most 64 after their last valid address.
+        // Strided GPU loops add at most the widest kernel stride after their last
+        // valid address.
         if [atoms, nodes, roots, variables]
             .into_iter()
-            .any(|n| n > u32::MAX - 64)
+            .any(|n| !crate::kernel::fits_strided_loop(n))
         {
             return Err(capacity("formula loop increment overflows u32"));
         }
@@ -190,6 +191,9 @@ impl Schedule {
 pub(super) struct Graph {
     pub(super) shape: Shape,
     pub(super) schedule: Schedule,
+    /// The workgroup size this graph dispatches: the fixed size, or the size
+    /// its packed schedule fits.
+    pub(super) workgroup_size: crate::GpuWorkgroupSize,
 }
 
 pub(super) struct Plan {

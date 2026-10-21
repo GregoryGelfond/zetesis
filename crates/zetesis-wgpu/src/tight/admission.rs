@@ -100,6 +100,7 @@ pub(super) fn batch_stats(
         work: u64::from(plan.worlds) * u64::from(plan.work),
         dispatches: 1,
         truth_levels: plan.levels,
+        workgroup_size: graph.workgroup_size.invocations(),
         original_truth_reused: plan.original_truth_reused,
         uploaded_bytes: PARAM_BYTES + plan.seeds + if fresh { graph.bytes } else { 0 },
         downloaded_bytes: plan.results,

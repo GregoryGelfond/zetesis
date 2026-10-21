@@ -5,9 +5,10 @@ use crate::runtime::{DeviceProfile, Runtime};
 use crate::{GpuContext, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
 use std::sync::Arc;
 
-/// One compiled finite-formula pipeline on one exact device context.
+/// One compiled finite-formula kernel on one exact device context: a pipeline
+/// for each workgroup size its sizing may dispatch there.
 ///
-/// Cloning retains the same pipeline, context and gate implementation in constant
+/// Cloning retains the same pipelines, context and gate implementation in constant
 /// time. Independent compilation has a different identity even on the same
 /// context. No theory, transport, epoch, search state or batch statistics belong
 /// to this owner. Each [`super::GpuFormulaOracle::from_profile`] starts those

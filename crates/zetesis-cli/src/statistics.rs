@@ -1149,8 +1149,11 @@ fn formula_gpu(
     }
     writeln!(
         sink,
-        "  formula GPU resources: peak authored GPU bytes={}",
-        execution.peak_accounted_bytes
+        "  formula GPU resources: peak authored GPU bytes={}; workgroup size={}",
+        execution.peak_accounted_bytes,
+        execution
+            .gpu_workgroup_size
+            .map_or_else(|| "unavailable".to_owned(), |size| size.to_string())
     )?;
     let timing = &execution.gpu_compute_timing;
     writeln!(
