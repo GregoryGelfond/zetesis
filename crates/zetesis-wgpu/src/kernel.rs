@@ -167,6 +167,7 @@ fn fitted(levels: impl Iterator<Item = u32>, candidates: &[GpuWorkgroupSize]) ->
 
 /// Gate scheduling for the general frozen-reduct primitive.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum GpuPropagation {
     /// Visit every gate each sweep; the established execution route.
     #[default]

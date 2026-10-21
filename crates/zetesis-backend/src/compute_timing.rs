@@ -4,6 +4,7 @@ use std::time::Duration;
 
 /// Availability of explicitly requested device timestamp measurements.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum ComputeTimingStatus {
     /// The device context was created without requesting timestamps.
     #[default]

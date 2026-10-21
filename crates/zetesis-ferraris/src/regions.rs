@@ -451,6 +451,7 @@ pub struct SupportExplanationStatistics {
 
 /// The work one narrowing charged.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct NarrowingStatistics {
     /// Charged node reads, root tests, producer checks and threshold operations.
     pub work: u64,

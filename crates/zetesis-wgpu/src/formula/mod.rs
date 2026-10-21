@@ -131,6 +131,7 @@ impl FormulaCheck {
 
 /// Residency and allocation diagnostics for a successful nonempty batch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct FormulaBatchStats {
     /// Actual gate scheduling after optional storage/work admission. This can
     /// be dense even when the compiled profile requests changed dependencies.

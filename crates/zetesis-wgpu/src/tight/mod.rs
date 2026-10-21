@@ -99,6 +99,7 @@ impl TightGpuCheck {
 
 /// Resource evidence for the last successful nonempty batch.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct TightGpuBatchStats {
     /// A different immutable theory required graph upload.
     pub theory_uploaded: bool,

@@ -45,6 +45,7 @@ pub struct BatchLimits {
 
 /// Proposal/check/commit counters, including unresolved work after a failure.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct BatchStatistics {
     /// Original-satisfaction evaluation work, including failed attempts. This is
     /// separate from cumulative candidate-search and exact-reduct work.

@@ -5,6 +5,7 @@
 /// Candidate proposal scheduling for general and tight GPU formula checks.
 /// Relational closure and CPU execution keep their configured batch size.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum GpuBatching {
     /// Keep [`crate::SolveConfig::batch_size`] as the proposal ceiling.
     #[default]

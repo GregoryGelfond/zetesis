@@ -24,14 +24,13 @@ fn region_json_preserves_support_work_components() {
 
 #[test]
 fn frozen_positive_json_preserves_failed_attempt_work() {
+    let mut reduct = zetesis_sat::ReductStatistics::default();
+    reduct.frozen_positive_attempts = 3;
+    reduct.frozen_positive_completed = 2;
+    reduct.frozen_positive_preparation_work = 5;
+    reduct.frozen_positive_work = 17;
     let statistics = zetesis_sat::Statistics {
-        reduct: zetesis_sat::ReductStatistics {
-            frozen_positive_attempts: 3,
-            frozen_positive_completed: 2,
-            frozen_positive_preparation_work: 5,
-            frozen_positive_work: 17,
-            ..zetesis_sat::ReductStatistics::default()
-        },
+        reduct,
         ..zetesis_sat::Statistics::default()
     };
     let mut output = Buffer::new(4096);

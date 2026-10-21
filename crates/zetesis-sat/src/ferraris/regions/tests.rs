@@ -569,13 +569,12 @@ fn failed_narrowing_keeps_support_explanation_receipts() {
         work: 19,
         peak_bytes: 43,
     };
+    let mut statistics = zetesis_ferraris::NarrowingStatistics::default();
+    statistics.work = 31;
+    statistics.support_explanations = explanations;
     let attempt = NarrowingAttempt {
         result: Err(Incomplete::WorkLimit),
-        statistics: zetesis_ferraris::NarrowingStatistics {
-            work: 31,
-            support_explanations: explanations,
-            ..zetesis_ferraris::NarrowingStatistics::default()
-        },
+        statistics,
     };
     let mut counts = RegionCounts::default();
     assert_eq!(account(&attempt, &mut counts), Err(Incomplete::WorkLimit));

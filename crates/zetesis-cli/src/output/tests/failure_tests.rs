@@ -300,17 +300,15 @@ fn failure_envelopes_never_invent_search_coverage() {
 
 #[test]
 fn formula_json_keeps_submission_limits_and_decoding_distinct() {
-    let statistics = crate::FormulaExecutionStatistics {
-        gpu_limits: Some(crate::FormulaDeviceLimits {
-            work_per_candidate: 789,
-            rounds_per_candidate: 17,
-        }),
-        gpu_submitted_batches: 3,
-        gpu_submitted_candidates: 10,
-        gpu_batches: 2,
-        gpu_candidates: 7,
-        ..Default::default()
-    };
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    statistics.gpu_limits = Some(crate::FormulaDeviceLimits {
+        work_per_candidate: 789,
+        rounds_per_candidate: 17,
+    });
+    statistics.gpu_submitted_batches = 3;
+    statistics.gpu_submitted_candidates = 10;
+    statistics.gpu_batches = 2;
+    statistics.gpu_candidates = 7;
     let mut out = Buffer::new(4096);
     super::execution_statistics(&mut out, Some(&statistics)).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
@@ -336,12 +334,10 @@ fn formula_json_keeps_submission_limits_and_decoding_distinct() {
 
 #[test]
 fn tight_json_distinguishes_scheduled_and_completed_work() {
-    let statistics = crate::FormulaExecutionStatistics {
-        tight_work_per_candidate: Some(123),
-        gpu_scheduled_work: Some(246),
-        gpu_submitted_candidates: 2,
-        ..Default::default()
-    };
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    statistics.tight_work_per_candidate = Some(123);
+    statistics.gpu_scheduled_work = Some(246);
+    statistics.gpu_submitted_candidates = 2;
     let mut out = Buffer::new(4096);
     super::execution_statistics(&mut out, Some(&statistics)).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
@@ -354,15 +350,12 @@ fn tight_json_distinguishes_scheduled_and_completed_work() {
 
 #[test]
 fn residual_json_distinguishes_decoding_from_cpu_completion() {
-    let statistics = crate::FormulaExecutionStatistics {
-        gpu_residuals: Some(crate::FormulaResidualStatistics {
-            fixed_point: 2,
-            round_limit: 3,
-            work_limit: 1,
-        }),
-        cpu_residuals: 0,
-        ..Default::default()
-    };
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    statistics.gpu_residuals = Some(crate::FormulaResidualStatistics {
+        fixed_point: 2,
+        round_limit: 3,
+        work_limit: 1,
+    });
     let mut out = Buffer::new(4096);
     super::execution_statistics(&mut out, Some(&statistics)).unwrap();
     let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
@@ -406,10 +399,8 @@ fn compute_timing_json_distinguishes_absence_from_zero() {
     ] {
         let mut timing = ComputeTiming::new(status);
         timing.record(sample);
-        let statistics = crate::FormulaExecutionStatistics {
-            gpu_compute_timing: timing,
-            ..Default::default()
-        };
+        let mut statistics = crate::FormulaExecutionStatistics::default();
+        statistics.gpu_compute_timing = timing;
         let mut out = Buffer::new(4096);
         super::execution_statistics(&mut out, Some(&statistics)).unwrap();
         let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();

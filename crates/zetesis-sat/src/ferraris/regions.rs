@@ -59,6 +59,7 @@ impl SearchMethod {
 /// What a walk over a region tree counted, cumulatively: the candidate
 /// tree's walk, or the proper-subset queries' walks together.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RegionCounts {
     /// Regions narrowed, the root included.
     pub regions: usize,
@@ -242,6 +243,7 @@ pub struct RegionSearchStatistics {
 
 /// Applicability of the optional original generator preference.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum GeneratorOrderStatus {
     /// The complete producer fragment or a generating head is absent.
     #[default]

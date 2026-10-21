@@ -47,6 +47,7 @@ pub struct FormulaResidualStatistics {
 
 /// Actual formula GPU work and explicitly retained candidate results.
 #[derive(Clone, Debug, Default)]
+#[non_exhaustive]
 pub struct FormulaExecutionStatistics {
     /// Physical adapter name and native API selected during this invocation.
     pub adapter: String,

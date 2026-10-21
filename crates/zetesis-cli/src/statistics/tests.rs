@@ -356,30 +356,25 @@ fn hybrid_statistics_preserve_reported_fields() {
     for (pending, queued, completed) in [(0, 0, true), (3, 2, false)] {
         let options = options(&["--oracle", "countermodel"]);
         let mut report = actual("a | b.", &options, &Cancellation::default()).unwrap();
-        report.formula_execution = Some(crate::FormulaExecutionStatistics {
-            completion: crate::CompletionAccounting::default(),
-            gpu_residuals: None,
-            tight_work_per_candidate: None,
-            gpu_scheduled_work: None,
-            gpu_compute_timing: zetesis_backend::ComputeTiming::default(),
-            gpu_limits: Some(crate::FormulaDeviceLimits {
-                work_per_candidate: 789,
-                rounds_per_candidate: 17,
-            }),
-            gpu_submitted_batches: 3,
-            gpu_submitted_candidates: 10,
-            adapter: "FORMAT FIXTURE: no physical execution".to_owned(),
-            gpu_batches: 2,
-            gpu_candidates: 7,
-            gpu_work: 123,
-            gpu_rounds: 4,
-            cpu_residuals: 2,
-            gpu_decided: 2,
-            pending_candidates: pending,
-            queued_models: queued,
-            peak_accounted_bytes: 456,
-            gpu_workgroup_size: Some(128),
+        let mut execution = crate::FormulaExecutionStatistics::default();
+        execution.gpu_limits = Some(crate::FormulaDeviceLimits {
+            work_per_candidate: 789,
+            rounds_per_candidate: 17,
         });
+        execution.gpu_submitted_batches = 3;
+        execution.gpu_submitted_candidates = 10;
+        "FORMAT FIXTURE: no physical execution".clone_into(&mut execution.adapter);
+        execution.gpu_batches = 2;
+        execution.gpu_candidates = 7;
+        execution.gpu_work = 123;
+        execution.gpu_rounds = 4;
+        execution.cpu_residuals = 2;
+        execution.gpu_decided = 2;
+        execution.pending_candidates = pending;
+        execution.queued_models = queued;
+        execution.peak_accounted_bytes = 456;
+        execution.gpu_workgroup_size = Some(128);
+        report.formula_execution = Some(execution);
         if !completed {
             report.completion = Completion::Interrupted;
             report.interruption = Some(crate::Interruption::Countermodel(
@@ -483,14 +478,13 @@ fn incomplete_and_requested_model_statistics_do_not_claim_exhaustion_or_optimali
 
 #[test]
 fn frozen_positive_statistics_report_incomplete_attempts() {
+    let mut reduct = zetesis_sat::ReductStatistics::default();
+    reduct.frozen_positive_attempts = 3;
+    reduct.frozen_positive_completed = 2;
+    reduct.frozen_positive_preparation_work = 5;
+    reduct.frozen_positive_work = 17;
     let statistics = zetesis_sat::Statistics {
-        reduct: zetesis_sat::ReductStatistics {
-            frozen_positive_attempts: 3,
-            frozen_positive_completed: 2,
-            frozen_positive_preparation_work: 5,
-            frozen_positive_work: 17,
-            ..zetesis_sat::ReductStatistics::default()
-        },
+        reduct,
         ..zetesis_sat::Statistics::default()
     };
     let mut output = Vec::new();
