@@ -1496,7 +1496,7 @@ and Builder; aggregate transactions append and detach only their own suffix,
 leaving previously interned atomic nodes intact. Negative literals, unheld
 positive depths and nested element joins keep their existing path. Factored
 components use their own copied literal positions and a separate owner for each
-fixed head binding. Scalar-rejected rows name no atoms; the existence preflight
+component cursor. Scalar-rejected rows name no atoms; the existence preflight
 still precedes every component's publication.
 
 The public `row_atoms` count records successful emission/capture
