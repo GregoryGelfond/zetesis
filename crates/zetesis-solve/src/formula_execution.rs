@@ -45,6 +45,83 @@ pub struct FormulaResidualStatistics {
     pub work_limit: u64,
 }
 
+/// Decoded tight-support device slots by the route that evaluated them, summed
+/// over the decoded batches.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct TightRouteStatistics {
+    /// Slots without reuse authority: complete evaluation.
+    pub complete: u64,
+    /// Slots that reused a retained evaluation and re-evaluated every node.
+    pub dense_reuse: u64,
+    /// Dense-reuse slots that first counted their change and found it beyond
+    /// the update route's threshold; included in `dense_reuse`.
+    pub beyond_threshold: u64,
+    /// Slots that updated a retained evaluation to their new candidate.
+    pub update: u64,
+    /// Nodes the update slots re-evaluated.
+    pub nodes_evaluated: u64,
+}
+
+/// Whether the tight-support update route was available to a batch, and why
+/// not.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TightUpdateAvailability {
+    /// No batch has held reuse authority yet.
+    #[default]
+    Pending,
+    /// The per-slot state was bound and the route allowed.
+    Admitted,
+    /// Original truth was evaluated serially.
+    SerialSchedule,
+    /// Dense evaluation takes too few workgroup strides per level for the
+    /// route to pay.
+    NarrowSchedule,
+    /// The batch offered fewer candidates than the batch size.
+    CandidateCeiling,
+    /// The theory exceeds the readers index's intrinsic bounds.
+    IndexBounds,
+    /// The state-inclusive layout did not fit the batch's byte allowance.
+    Bytes,
+    /// The route's reservation did not fit the device work allowance.
+    Work,
+    /// The route was declined.
+    Declined,
+}
+
+impl TightUpdateAvailability {
+    /// The serialized name: `pending`, `admitted`, `serial_schedule`,
+    /// `narrow_schedule`, `candidate_ceiling`, `index_bounds`, `bytes`, `work`
+    /// or `declined`.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Pending => "pending",
+            Self::Admitted => "admitted",
+            Self::SerialSchedule => "serial_schedule",
+            Self::NarrowSchedule => "narrow_schedule",
+            Self::CandidateCeiling => "candidate_ceiling",
+            Self::IndexBounds => "index_bounds",
+            Self::Bytes => "bytes",
+            Self::Work => "work",
+            Self::Declined => "declined",
+        }
+    }
+}
+
+/// The tight-support update route's availability in the run's steady state:
+/// as the last decoded batch that held reuse authority reported it, since a
+/// batch without authority cannot update whatever its limits.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct TightUpdateStatistics {
+    /// Whether the route was available, and why not.
+    pub availability: TightUpdateAvailability,
+    /// Bits of each per-head support count, while the route was admitted.
+    pub count_bits: Option<u32>,
+}
+
 /// Actual formula GPU work and explicitly retained candidate results.
 #[derive(Clone, Debug, Default)]
 #[non_exhaustive]
@@ -58,12 +135,20 @@ pub struct FormulaExecutionStatistics {
     /// Decoded residual reasons for the general GPU primitive. Absent for CPU
     /// and tight-support execution; distinct from committed `cpu_residuals`.
     pub gpu_residuals: Option<FormulaResidualStatistics>,
-    /// Complete tight-support scan work ceiling. Present only for that device
+    /// Tight-support work ceiling per candidate. Present only for that device
     /// primitive; propagation sweep limits do not apply to a support scan.
     pub tight_work_per_candidate: Option<u64>,
-    /// Scheduled conservative work, including unreturned submitted tight batches.
+    /// Work of submitted tight batches, including unreturned ones: what a
+    /// validated readback reports performed, or else the submission's
+    /// reservation, each candidate's allowance for the routes it may take.
     /// Propagation has candidate-dependent work and leaves this absent.
     pub gpu_scheduled_work: Option<u64>,
+    /// Decoded tight-support slots by route; absent before the first decoded
+    /// tight batch and for other primitives.
+    pub gpu_tight_routes: Option<TightRouteStatistics>,
+    /// The tight-support update route's steady-state availability; absent
+    /// before the first decoded tight batch and for other primitives.
+    pub gpu_tight_updates: Option<TightUpdateStatistics>,
     /// Batches actually submitted, including submissions without a decoded result.
     pub gpu_submitted_batches: u64,
     /// Candidate worlds actually submitted, including unreturned results.
@@ -630,6 +715,50 @@ fn record_flush(
         statistics.gpu_compute_timing.record(report);
         statistics.gpu_compute_timing.record_flush_submission();
     }
+}
+
+/// Add a decoded tight batch's routes, and its update availability when the
+/// batch held reuse authority.
+#[cfg(feature = "gpu")]
+pub(super) fn record_tight_routes(
+    statistics: &mut FormulaExecutionStatistics,
+    batch: &zetesis_wgpu::TightGpuBatchStats,
+) -> Result<(), Failure> {
+    use zetesis_wgpu::{TightGpuUpdateUnavailable as Reason, TightGpuUpdates};
+    let routes = statistics
+        .gpu_tight_routes
+        .get_or_insert_with(Default::default);
+    add(&mut routes.complete, batch.routes.complete)?;
+    add(&mut routes.dense_reuse, batch.routes.dense_reuse)?;
+    add(&mut routes.beyond_threshold, batch.routes.beyond_threshold)?;
+    add(&mut routes.update, batch.routes.update)?;
+    add(&mut routes.nodes_evaluated, batch.nodes_evaluated)?;
+    let updates = statistics
+        .gpu_tight_updates
+        .get_or_insert_with(Default::default);
+    if batch.original_truth_reused {
+        (updates.availability, updates.count_bits) = match batch.updates {
+            TightGpuUpdates::Admitted { count_bits, .. } => {
+                (TightUpdateAvailability::Admitted, Some(count_bits))
+            }
+            TightGpuUpdates::Unavailable(reason) => (
+                match reason {
+                    Reason::SerialSchedule => TightUpdateAvailability::SerialSchedule,
+                    Reason::NarrowSchedule => TightUpdateAvailability::NarrowSchedule,
+                    Reason::CandidateCeiling => TightUpdateAvailability::CandidateCeiling,
+                    Reason::IndexBounds => TightUpdateAvailability::IndexBounds,
+                    Reason::Bytes => TightUpdateAvailability::Bytes,
+                    Reason::Work => TightUpdateAvailability::Work,
+                    Reason::Declined => TightUpdateAvailability::Declined,
+                    // A reason added later still reports the route unavailable.
+                    _ => TightUpdateAvailability::Pending,
+                },
+                None,
+            ),
+            _ => (TightUpdateAvailability::Pending, None),
+        };
+    }
+    Ok(())
 }
 
 /// Record the workgroup size a decoded batch dispatched: the size of the one

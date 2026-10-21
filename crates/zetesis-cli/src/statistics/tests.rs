@@ -406,6 +406,35 @@ fn hybrid_statistics_preserve_reported_fields() {
 }
 
 #[test]
+fn tight_statistics_report_routes_and_update_availability() {
+    // Only rendering is exercised here, with authored values.
+    let options = options(&["--oracle", "countermodel"]);
+    let mut report = actual("a | b.", &options, &Cancellation::default()).unwrap();
+    let mut execution = crate::FormulaExecutionStatistics::default();
+    "FORMAT FIXTURE: no physical execution".clone_into(&mut execution.adapter);
+    execution.tight_work_per_candidate = Some(500);
+    execution.gpu_scheduled_work = Some(4_000);
+    let mut routes = zetesis_solve::TightRouteStatistics::default();
+    routes.complete = 4;
+    routes.dense_reuse = 3;
+    routes.beyond_threshold = 1;
+    routes.update = 9;
+    routes.nodes_evaluated = 85;
+    execution.gpu_tight_routes = Some(routes);
+    let mut updates = zetesis_solve::TightUpdateStatistics::default();
+    updates.availability = zetesis_solve::TightUpdateAvailability::Bytes;
+    execution.gpu_tight_updates = Some(updates);
+    report.formula_execution = Some(execution);
+    let text = every_prefix(&options, &Ok(report));
+    assert!(text.contains("tight GPU limits: work/candidate=500"));
+    assert!(text.contains("tight GPU scheduled work=4000; performed by decoded batches"));
+    assert!(text.contains(
+        "tight GPU routes: complete=4; dense reuse=3 (beyond update threshold=1); update=9; nodes evaluated by update=85"
+    ));
+    assert!(text.contains("tight GPU update route: bytes; count width=unavailable"));
+}
+
+#[test]
 fn failed_statistics_preserve_missing_completion() {
     let options = options(&["--grounder", "lazy"]);
     let failure = run_finalized_with_diagnostics(

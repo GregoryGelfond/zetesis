@@ -4,6 +4,7 @@ mod admission;
 mod device;
 mod packing;
 mod transport;
+mod update;
 
 use crate::GpuError;
 pub use device::GpuTightOracle;
@@ -54,7 +55,33 @@ pub struct TightGpuLimits {
     /// Every scan completes, including initialization and scans after an original
     /// failure; this differs from scalar early-exit work. Insufficient work is
     /// refused before dispatch, never converted into a logical result.
+    ///
+    /// Reusing a wholly successful batch's original truth adds
+    /// `2 * nodes + edges + 4` for change detection; it runs only when that
+    /// fits. The update route (see [`Self::min_update_candidates`]) runs only
+    /// when its derived worst case also fits; with per-slot state bound, the
+    /// complete and dense routes add the state's writes, `words + 2`, or
+    /// `3 * words + 2` after the update route's change count. Each check then
+    /// reports the work its route performed, never more than was reserved.
     pub max_work_per_candidate: u64,
+    /// The fewest candidates whose per-slot update state a batch must admit
+    /// before the update route is used.
+    ///
+    /// Once a theory's batches of one count hold reuse authority, the oracle
+    /// can retain, per candidate slot, the candidate it last evaluated and that
+    /// evaluation's support summaries, and then re-evaluate only the nodes a
+    /// new candidate changes. That state is counted in each batch's
+    /// [`Self::max_batch_bytes`]. A prefix call admits it only when the
+    /// state-inclusive layout still admits at least this many candidates; an
+    /// exact call admits it only when that layout admits its whole count. The
+    /// state never turns an admitted batch into a refusal: without it the dense
+    /// routes run as before. Zero declines the update route.
+    ///
+    /// Independently of this limit, the route engages only on a schedule wide
+    /// enough to repay its additional synchronization: dense evaluation must
+    /// take at least sixteen workgroup strides per dependency level. Narrower
+    /// schedules report [`TightGpuUpdateUnavailable::NarrowSchedule`].
+    pub min_update_candidates: usize,
     /// Bounded submission wait, with control polling at most 50 ms apart while
     /// waiting. Not GPU preemption or a bound on device creation, allocation,
     /// shader compilation or error-scope drainage.
@@ -68,6 +95,7 @@ impl Default for TightGpuLimits {
             max_candidates: 1024,
             max_batch_bytes: 128 * 1024 * 1024,
             max_work_per_candidate: 100_000_000,
+            min_update_candidates: 1,
             timeout: Duration::from_secs(30),
         }
     }
@@ -90,7 +118,9 @@ impl TightGpuCheck {
         self.verdict
     }
 
-    /// Conservative completed operation allowance under [`TightGpuLimits`].
+    /// Operations the check's route performed, under the units of
+    /// [`TightGpuLimits::max_work_per_candidate`]: the complete and dense
+    /// routes charge their fixed allowance, the update route what it ran.
     #[must_use]
     pub const fn work(&self) -> u64 {
         self.work
@@ -105,15 +135,17 @@ pub struct TightGpuBatchStats {
     pub theory_uploaded: bool,
     /// Exact candidate-count transport was allocated or replaced.
     pub transport_allocated: bool,
-    /// Requested immutable header/operand, root and producer buffer bytes, with padding.
+    /// Requested immutable header/operand, root and producer buffer bytes, with
+    /// padding; the producer buffer includes a built readers index.
     pub resident_theory_bytes: u64,
-    /// Requested uniform, candidate, truth, support, result and readback bytes.
+    /// Requested uniform, candidate, truth, support, result and readback
+    /// bytes, and the per-slot update state or its placeholder.
     pub resident_transport_bytes: u64,
     /// Conservative authored payload checked against the batch byte ceiling.
     pub accounted_bytes: u64,
     /// Fully checked input occurrences, preserving repetitions.
     pub candidates: u64,
-    /// Sum of conservative completed operation allowances across candidates.
+    /// Sum of the operations each candidate's route performed.
     pub work: u64,
     /// Actual compute submissions; one for this nonempty successful batch.
     pub dispatches: u64,
@@ -125,10 +157,82 @@ pub struct TightGpuBatchStats {
     /// A wholly successful same-subject/count batch supplied original truth.
     /// This selects change detection; it does not assert that any gate was skipped.
     pub original_truth_reused: bool,
-    /// Authored initialized/write-buffer payload, not measured bus traffic.
+    /// Candidate slots per route.
+    pub routes: TightGpuRoutes,
+    /// Nodes re-evaluated by update-route slots, summed over the batch.
+    pub nodes_evaluated: u64,
+    /// Whether the update route was available to this batch, and why not.
+    pub updates: TightGpuUpdates,
+    /// Authored initialized/write-buffer payload, not measured bus traffic,
+    /// including the rebuilt producer buffer of a batch that builds the index.
     pub uploaded_bytes: u64,
     /// Successfully decoded readback payload, not measured bus traffic.
     pub downloaded_bytes: u64,
+}
+
+/// Candidate slots of one batch by the route that evaluated them.
+///
+/// Each slot takes exactly one route. The complete route evaluates everything;
+/// dense reuse re-evaluates every node against a retained evaluation; the
+/// update route re-evaluates only the nodes a candidate's change reaches.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct TightGpuRoutes {
+    /// Slots without reuse authority.
+    pub complete: u64,
+    /// Slots that reused a retained evaluation and re-evaluated every node.
+    pub dense_reuse: u64,
+    /// Dense-reuse slots that first counted their change and found it beyond
+    /// the update route's threshold; included in `dense_reuse`.
+    pub beyond_threshold: u64,
+    /// Slots that brought a retained evaluation to their new candidate.
+    pub update: u64,
+}
+
+/// The update route's availability to one batch.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TightGpuUpdates {
+    /// No batch of this theory has held reuse authority yet, so no readers
+    /// index exists.
+    #[default]
+    Pending,
+    /// Per-slot state was bound and the route was allowed.
+    Admitted {
+        /// Bits of each per-head support count: 8, 16 or 32.
+        count_bits: u32,
+        /// This batch uploaded the theory's readers index.
+        index_built: bool,
+    },
+    /// The route did not run in this batch, for the given reason.
+    Unavailable(TightGpuUpdateUnavailable),
+}
+
+/// Why the update route was unavailable to a batch.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum TightGpuUpdateUnavailable {
+    /// The batch evaluates original truth serially, which has no levels.
+    SerialSchedule,
+    /// Dense evaluation of the resident schedule takes fewer than sixteen
+    /// workgroup strides per dependency level on average, where the update
+    /// route's additional synchronization costs more than it saves. Decided
+    /// once per resident theory and workgroup size.
+    NarrowSchedule,
+    /// A prefix call admits fewer candidates than
+    /// [`TightGpuLimits::min_update_candidates`] before any state is
+    /// considered: its input or its `max_candidates` is shorter.
+    CandidateCeiling,
+    /// The theory exceeds the readers index's intrinsic bounds; this holds
+    /// for as long as the theory stays resident.
+    IndexBounds,
+    /// The state-inclusive layout did not admit enough candidates within the
+    /// batch's byte allowance.
+    Bytes,
+    /// The route's worst case did not fit the work allowance.
+    Work,
+    /// [`TightGpuLimits::min_update_candidates`] was zero.
+    Declined,
 }
 
 /// Evidence retained even when a batch fails. Reset at each new check.
@@ -142,11 +246,12 @@ pub struct TightGpuActivity {
     pub submissions: u64,
     /// Input occurrences included in those submissions.
     pub submitted_candidates: u64,
-    /// Conservative work allowance scheduled by submitted commands.
+    /// Work allowance reserved by submitted commands: each candidate's
+    /// allowance for the routes it may take.
     pub scheduled_work: u64,
     /// Occurrences whose complete records were validated before return.
     pub completed_candidates: u64,
-    /// Conservative work allowance reported by validated device records.
+    /// Work the validated device records report as performed.
     pub completed_work: u64,
     /// Authored initialization/write-buffer bytes issued in this attempt.
     pub uploaded_bytes: u64,

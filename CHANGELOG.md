@@ -27,6 +27,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   and the slates that returned to the batch size on objective-bound feedback.
 - `StableModels::bound_generation` reports how many objective bounds the
   candidate stream has installed.
+- Requested GPU statistics report how tight support checking evaluated each
+  candidate (complete, dense reuse or update) and whether the update route was
+  available, with its reason when it was not.
 - A maintained draw-poker workload checks complete enumeration against clingo,
   with portable filenames and a recorded 36-answer contract.
 
@@ -51,6 +54,18 @@ Notable changes by release. Versions follow Semantic Versioning.
   dependency schedule: 128 or 256 invocations evaluate wide levels together,
   while serial and narrow schedules keep 64. Answer sets are unchanged; bounded
   device checks still receive exact CPU checks.
+- GPU tight checking can bring each candidate slot's previous evaluation to its
+  next candidate when successive batches share a program and size, evaluating
+  again only the formulas the change reaches; larger changes keep evaluating
+  every formula. It engages only for programs whose dependency levels are wide
+  enough that evaluating every formula takes several passes per level; other
+  programs keep evaluating every formula. Each slot's retained state counts
+  toward the batch's memory allowance, so adaptive slates can settle at a
+  smaller device prefix, never below the batch size. Answer sets are unchanged.
+- In the GPU library, tight checks report the work their route performed, and
+  `TightGpuLimits` gains `min_update_candidates`. `TightGpuBatchStats` reports
+  routes and the update route's availability, and the tight kernel requires
+  eight storage buffers per shader stage.
 - GPU tight checking evaluates independent formulas in parallel. General reduct
   propagation alternates directions through the same dependency schedule, carrying
   deductions between parents and operands; bounded checks retain exact CPU completion.

@@ -59,6 +59,8 @@ impl MembershipExecution for Injected {
             gpu_residuals: None,
             tight_work_per_candidate: None,
             gpu_scheduled_work: None,
+            gpu_tight_routes: None,
+            gpu_tight_updates: None,
             gpu_submitted_batches: 0,
             gpu_submitted_candidates: 0,
             adapter: "injected native checker; no physical device".into(),

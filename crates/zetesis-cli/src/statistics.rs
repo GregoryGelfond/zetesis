@@ -1152,13 +1152,34 @@ fn formula_gpu(
     if let Some(work) = execution.tight_work_per_candidate {
         writeln!(
             sink,
-            "  tight GPU limits: complete support scan work/candidate={work}; propagation sweeps=not applicable"
+            "  tight GPU limits: work/candidate={work}; propagation sweeps=not applicable"
         )?;
     }
     if let Some(work) = execution.gpu_scheduled_work {
         writeln!(
             sink,
-            "  tight GPU scheduled full-scan work={work}; includes submitted unreturned batches"
+            "  tight GPU scheduled work={work}; performed by decoded batches, reserved by submitted unreturned batches"
+        )?;
+    }
+    if let Some(routes) = execution.gpu_tight_routes {
+        writeln!(
+            sink,
+            "  tight GPU routes: complete={}; dense reuse={} (beyond update threshold={}); update={}; nodes evaluated by update={}",
+            routes.complete,
+            routes.dense_reuse,
+            routes.beyond_threshold,
+            routes.update,
+            routes.nodes_evaluated
+        )?;
+    }
+    if let Some(updates) = execution.gpu_tight_updates {
+        writeln!(
+            sink,
+            "  tight GPU update route: {}; count width={}",
+            updates.availability.label(),
+            updates
+                .count_bits
+                .map_or_else(|| "unavailable".to_owned(), |bits| bits.to_string())
         )?;
     }
     if let Some(limits) = execution.gpu_limits {

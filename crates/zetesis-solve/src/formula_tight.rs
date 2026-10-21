@@ -79,10 +79,14 @@ pub(crate) fn check(
 ) -> Result<crate::batch_executor::DeviceVerdicts, Failure> {
     // As for general propagation, one submission may take the whole slate
     // under either batching policy; the device's admission bounds its prefix.
+    // The update state may not shrink that prefix below the batch size, the
+    // slates' floor: a shorter prefix would split every slate into submissions
+    // of alternating counts, which hold no reuse authority.
     let limits = TightGpuLimits {
         max_candidates: candidates.len(),
         max_batch_bytes: options.max_batch_bytes,
         max_work_per_candidate: u64::from(options.gpu_formula_work),
+        min_update_candidates: options.batch_size.get(),
         ..Default::default()
     };
     let mut verdicts =
@@ -106,10 +110,16 @@ pub(crate) fn check(
                     .map_err(|_| Failure::Search(Incomplete::CounterOverflow))?,
             ),
         );
-        let scheduled = add(
-            statistics.gpu_scheduled_work.get_or_insert(0),
-            activity.scheduled_work,
-        );
+        // A validated readback reports the work performed, never more than was
+        // reserved; a submission without one keeps its reservation.
+        let attributed = if activity.submissions != 0
+            && activity.completed_candidates == activity.submitted_candidates
+        {
+            activity.completed_work
+        } else {
+            activity.scheduled_work
+        };
+        let scheduled = add(statistics.gpu_scheduled_work.get_or_insert(0), attributed);
         let checks = result.map_err(|error| match error {
             TightGpuError::Stopped(stop) => Failure::Search(stop.into()),
             TightGpuError::Gpu(error) => Failure::Run(SolveError::Gpu(error)),
@@ -134,6 +144,7 @@ pub(crate) fn check(
             statistics.peak_accounted_bytes =
                 statistics.peak_accounted_bytes.max(batch.accounted_bytes);
             super::formula_execution::record_workgroup_size(statistics, batch.workgroup_size);
+            super::formula_execution::record_tight_routes(statistics, batch)?;
         }
         verdicts
             .values

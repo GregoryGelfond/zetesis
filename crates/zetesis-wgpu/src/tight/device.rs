@@ -1,11 +1,12 @@
 //! Device ownership for a separately checked complete-theory certificate.
 
 use super::admission::Admission;
-use super::packing::{Graph, Packed, Packing, Plan};
+use super::packing::{Graph, Packed, Packing, Plan, StateLayout};
 use super::transport::{Execution, Resident};
+use super::update::{self, Bounds, Built, Index, Stage};
 use super::{
     SHADER, TightGpuActivity, TightGpuBatchStats, TightGpuCheck, TightGpuError, TightGpuLimits,
-    TightSupport, poll,
+    TightGpuUpdateUnavailable, TightGpuUpdates, TightSupport, poll,
 };
 use crate::runtime::{DeviceProfile, ErrorScopes, Runtime};
 use crate::timing::{BatchTiming, ComputeTimer};
@@ -40,6 +41,16 @@ use zetesis_ferraris::{Interpretation, TightPlan};
 /// sharing a support word use atomic OR by default. Grouped support instead
 /// visits each word's producers sequentially in one invocation; this trades
 /// contention for an index and potentially uneven parallel work.
+///
+/// Successive batches of one theory and count may also update retained
+/// evaluations (see [`TightGpuLimits::min_update_candidates`]). The first such
+/// batch appends a readers index to the producer storage: for each node the
+/// connectives and numeric-row owners reading it, the heads of the producers
+/// whose body it is and the root positions holding it, and for each atom its
+/// atom nodes. Each candidate slot then retains the candidate it evaluated, its
+/// support counts per head, and its false-root and unsupported-atom sets, and
+/// re-evaluates in dependency-level order only the nodes a new candidate's
+/// changed atoms reach.
 /// Shared graph and transport storage have explicit byte bounds. The oracle
 /// retains one shared theory handle and one exact transport
 /// shape, without cloning the caller's certificate or storing its ranks.
@@ -61,6 +72,17 @@ struct PreparedCall {
     fresh: Option<(Graph, Packed)>,
     plan: Plan,
     stats: TightGpuBatchStats,
+    /// A readers index to install before dispatch.
+    build: Option<Built>,
+}
+
+/// The update route's per-batch admission before the dense charges are known.
+enum Updates {
+    /// No state is bound; the route is unavailable or not yet possible.
+    Stateless(TightGpuUpdates),
+    /// A state-inclusive plan was selected under `index`, which `build`
+    /// installs first when this batch builds it.
+    State { index: Index, build: Option<Built> },
 }
 
 impl GpuTightOracle {
@@ -314,9 +336,17 @@ impl GpuTightOracle {
     /// is sufficient for this producer cache; arbitrary supplied producers are
     /// never accepted. Transport is replaced when candidate count changes.
     /// Original truth may reuse unchanged dependencies from a wholly successful
-    /// prior batch with that same subject/count. Every root and producer remains
-    /// checked. Change detection is optional: if its conservative work allowance
-    /// does not fit, the existing complete evaluation runs without new storage.
+    /// prior batch with that same subject/count. Every root and producer
+    /// remains covered: the complete and dense routes check each of them, and
+    /// the update route maintains their support counts and the false-root and
+    /// unsupported sets. Both reuse routes are optional: change detection runs
+    /// only when its work allowance fits, otherwise the complete evaluation runs
+    /// without new storage; the update route runs only on a schedule wide enough
+    /// to engage it and when its per-slot state and its reservation are
+    /// admitted, otherwise the dense routes run. A later
+    /// call that cannot admit a held state releases it and keeps its truth and
+    /// result authority; a built readers index stays resident and accounted,
+    /// like a retained schedule.
     /// Host upload words reuse initialized scratch for that same subject/count.
     /// Their actual capacity is charged, and an oversized optional allocation is
     /// replaced when a smaller allowance fits fresh storage. Replacement drops
@@ -426,14 +456,26 @@ impl GpuTightOracle {
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
-        let PreparedCall { fresh, plan, stats } =
-            self.prepare(certificate, candidates, limits, cancellation, size)?;
+        let PreparedCall {
+            fresh,
+            plan,
+            mut stats,
+            build,
+        } = self.prepare(certificate, candidates, limits, cancellation, size)?;
         poll(cancellation)?;
         let scopes = ErrorScopes::new(self.runtime.device());
         if let Some((mut graph, packed)) = fresh {
             graph.rows.release();
             self.activity.uploaded_bytes = graph.bytes;
             self.resident = Some(Resident::new(self.runtime.device(), graph, &packed));
+        }
+        if let Some(built) = build
+            && let Some(resident) = self.resident.as_mut()
+        {
+            let bytes = resident.install_index(self.runtime.device(), &built);
+            self.activity.uploaded_bytes += bytes;
+            stats.uploaded_bytes += bytes;
+            stats.resident_theory_bytes = resident.graph.bytes;
         }
         let status = context.compute_timing();
         if status == ComputeTimingStatus::Enabled && self.timer.is_none() {
@@ -462,9 +504,9 @@ impl GpuTightOracle {
                     &mut timing,
                 )
             });
-        let result = self.runtime.complete(scopes, outcome).and_then(|checks| {
+        let result = self.runtime.complete(scopes, outcome).and_then(|decoded| {
             poll(cancellation)?;
-            Ok(checks)
+            Ok(decoded)
         });
         if self.activity.submissions != 0 {
             self.reported = crate::timing::settle_call(
@@ -475,13 +517,15 @@ impl GpuTightOracle {
                 self.runtime.queue().get_timestamp_period(),
             );
         }
-        if result.is_ok() {
-            if let Some(resident) = self.resident.as_mut() {
-                resident.complete_original_truth();
-            }
-            self.last = Some(stats);
+        let decoded = result?;
+        if let Some(resident) = self.resident.as_mut() {
+            resident.complete_original_truth();
         }
-        result
+        stats.routes = decoded.routes;
+        stats.nodes_evaluated = decoded.nodes_evaluated;
+        stats.work = decoded.work;
+        self.last = Some(stats);
+        Ok(decoded.checks)
     }
 
     fn prepare(
@@ -538,6 +582,14 @@ impl GpuTightOracle {
             cancellation,
         )?;
         self.select_prefix(&mut admission, size, admitted_limits, timed, cancellation)?;
+        let updates = self.admit_updates(
+            &mut admission,
+            certificate,
+            size,
+            admitted_limits,
+            timed,
+            cancellation,
+        )?;
         let Admission {
             fresh,
             mut plan,
@@ -549,17 +601,6 @@ impl GpuTightOracle {
                 resident.transport = None;
             }
         }
-        // The timer is the oracle's; only the readback tail is transport.
-        stats.resident_transport_bytes += if timed {
-            crate::timing::READBACK_BYTES
-        } else {
-            0
-        };
-        stats.downloaded_bytes += if timed {
-            crate::timing::READBACK_BYTES
-        } else {
-            0
-        };
         let graph = fresh
             .as_ref()
             .or_else(|| self.resident.as_ref().map(|r| &r.graph))
@@ -571,8 +612,13 @@ impl GpuTightOracle {
         {
             plan.reuse_original_truth(graph, admitted_limits.max_work_per_candidate);
         }
-        stats.original_truth_reused = plan.original_truth_reused;
-        stats.work = u64::from(plan.worlds) * u64::from(plan.work);
+        let (availability, build) = bind_updates(
+            &mut plan,
+            graph,
+            updates,
+            admitted_limits.max_work_per_candidate,
+        );
+        planned_stats(&mut stats, &plan, availability, timed);
         stats.accounted_bytes = plan.pack(
             graph,
             &candidates[..plan.worlds as usize],
@@ -584,7 +630,107 @@ impl GpuTightOracle {
             fresh: fresh.zip(packed),
             plan,
             stats,
+            build,
         })
+    }
+
+    /// Decide the update route's state for this batch, after the stateless
+    /// prefix is selected. A fresh theory, a declined route, a serial or narrow
+    /// schedule, a prefix call offering fewer than `min_update_candidates`
+    /// candidates and an index refused by its bounds bind no state. Without an
+    /// index, one is built only at a batch holding reuse authority at the
+    /// stateless count, and only when the route's reservation fits the work
+    /// allowance. A batch then selects its layout with each slot's state: an
+    /// exact call only when the whole count fits, a prefix call only when at
+    /// least `min_update_candidates` fit. Otherwise the stateless plan stands,
+    /// and a transport holding state releases it while keeping its truth and
+    /// result authority; the next batch admitting the state allocates it
+    /// zeroed.
+    fn admit_updates(
+        &mut self,
+        admission: &mut Admission,
+        certificate: &TightPlan,
+        size: crate::candidates::BatchSize,
+        limits: TightGpuLimits,
+        timed: bool,
+        cancellation: &Cancellation,
+    ) -> Result<Updates, GpuError> {
+        let stateless = |availability| Ok(Updates::Stateless(availability));
+        let (None, Some(resident)) = (&admission.fresh, self.resident.as_mut()) else {
+            return stateless(TightGpuUpdates::Pending);
+        };
+        if let Some(reason) = declined(resident.updates, &admission.plan, size, limits) {
+            return stateless(TightGpuUpdates::Unavailable(reason));
+        }
+        let device = self.runtime.limits();
+        let (layout, bounds) = match state_layout(resident, &admission.plan, device) {
+            Ok(layout) => layout,
+            Err(availability) => return stateless(availability),
+        };
+        let graph = &resident.graph;
+        if let Some(bounds) = bounds
+            && !admits_work(
+                graph,
+                admission.plan.levels,
+                &bounds,
+                limits.max_work_per_candidate,
+            )
+        {
+            return stateless(TightGpuUpdates::Unavailable(
+                TightGpuUpdateUnavailable::Work,
+            ));
+        }
+        let epoch = admission.plan.epoch;
+        let layout_plan = |count: usize| {
+            let plan = Plan::with_state(graph, count, limits, device, false, epoch, Some(layout))?;
+            crate::timing::readback_size(plan.results, timed, device.max_buffer_size)?;
+            Ok(plan)
+        };
+        let selected = if size.is_exact() {
+            layout_plan(admission.plan.worlds as usize)
+        } else {
+            size.select(limits.max_candidates, cancellation, layout_plan)
+        };
+        let plan = match selected {
+            Ok(plan) if size.is_exact() || plan.worlds as usize >= limits.min_update_candidates => {
+                plan
+            }
+            Err(error) if error.kind() != GpuErrorKind::Capacity => return Err(error),
+            _ => {
+                return stateless(TightGpuUpdates::Unavailable(
+                    TightGpuUpdateUnavailable::Bytes,
+                ));
+            }
+        };
+        let (index, build) = match (resident.updates, bounds) {
+            (Stage::Built(index), _) => (index, None),
+            (_, Some(bounds)) => {
+                let records = graph.pack_producers(certificate, cancellation)?;
+                let built = update::build(
+                    graph,
+                    certificate,
+                    &graph.owners,
+                    bounds,
+                    &records,
+                    cancellation,
+                )?;
+                (built.index, Some(built))
+            }
+            _ => {
+                return Err(GpuError::new(
+                    GpuErrorKind::Device,
+                    "missing tight update bounds",
+                ));
+            }
+        };
+        admission.stats = super::admission::batch_stats(
+            graph,
+            &plan,
+            false,
+            !resident.matches_count(plan.worlds as usize),
+        );
+        admission.plan = plan;
+        Ok(Updates::State { index, build })
     }
     fn select_prefix(
         &self,
@@ -630,6 +776,143 @@ impl GpuTightOracle {
     }
 }
 
+/// Complete `stats` with what `plan` decides once its update state is bound:
+/// its routes' reservation, the update route's availability, and its transport
+/// and download, which under timing carry the 16-byte readback tail. The timer
+/// is the oracle's, so its storage counts in the batch's bytes alone.
+fn planned_stats(
+    stats: &mut TightGpuBatchStats,
+    plan: &Plan,
+    availability: TightGpuUpdates,
+    timed: bool,
+) {
+    let tail = if timed {
+        crate::timing::READBACK_BYTES
+    } else {
+        0
+    };
+    stats.original_truth_reused = plan.original_truth_reused;
+    stats.updates = availability;
+    stats.resident_transport_bytes = plan.transport + tail;
+    stats.downloaded_bytes += tail;
+    stats.work = u64::from(plan.worlds) * u64::from(plan.allowance);
+}
+
+/// The reason a batch with this resident's `stage` and stateless `plan` cannot
+/// use the update route, before any index or state is considered.
+fn declined(
+    stage: Stage,
+    plan: &Plan,
+    size: crate::candidates::BatchSize,
+    limits: TightGpuLimits,
+) -> Option<TightGpuUpdateUnavailable> {
+    use TightGpuUpdateUnavailable::{
+        CandidateCeiling, Declined, IndexBounds, NarrowSchedule, SerialSchedule,
+    };
+    if limits.min_update_candidates == 0 {
+        return Some(Declined);
+    }
+    match stage {
+        Stage::Serial => return Some(SerialSchedule),
+        Stage::Narrow => return Some(NarrowSchedule),
+        Stage::Refused => return Some(IndexBounds),
+        Stage::Pending | Stage::Bounded(_) | Stage::Built(_) => {}
+    }
+    // A tighter work allowance can bypass a resident schedule.
+    if plan.levels == 0 {
+        return Some(SerialSchedule);
+    }
+    match size {
+        crate::candidates::BatchSize::Prefix(offered)
+            if offered.min(limits.max_candidates) < limits.min_update_candidates =>
+        {
+            Some(CandidateCeiling)
+        }
+        _ => None,
+    }
+}
+
+/// Each slot's state layout and, before the index exists, its bounds. An index
+/// is decided only at a batch holding reuse authority at the stateless count;
+/// before one, the route is pending. A refusal by the bounds is kept, and the
+/// owner column it no longer needs is released.
+fn state_layout(
+    resident: &mut Resident,
+    plan: &Plan,
+    device: &wgpu::Limits,
+) -> Result<(StateLayout, Option<Bounds>), TightGpuUpdates> {
+    if let Stage::Built(index) = resident.updates {
+        let layout = StateLayout {
+            slot_words: index.slot_words,
+            index_bytes: 0,
+            build_bytes: 0,
+        };
+        return Ok((layout, None));
+    }
+    if !(resident.original_truth_valid() && resident.matches_count(plan.worlds as usize)) {
+        return Err(TightGpuUpdates::Pending);
+    }
+    let Some(bounds) = resident
+        .updates
+        .bounds(|| Bounds::new(&resident.graph, device))
+    else {
+        resident.graph.owners = Vec::new();
+        resident.graph.owner_bytes = 0;
+        return Err(TightGpuUpdates::Unavailable(
+            TightGpuUpdateUnavailable::IndexBounds,
+        ));
+    };
+    let layout = StateLayout {
+        slot_words: bounds.slot_words,
+        index_bytes: bounds.index_bytes(&resident.graph),
+        build_bytes: bounds.build_bytes(&resident.graph),
+    };
+    Ok((layout, Some(bounds)))
+}
+
+/// Bind the batch's update state, once the dense charges are known.
+fn bind_updates(
+    plan: &mut Plan,
+    graph: &Graph,
+    updates: Updates,
+    ceiling: u64,
+) -> (TightGpuUpdates, Option<Built>) {
+    match updates {
+        Updates::Stateless(availability) => (availability, None),
+        Updates::State { index, build } => {
+            let availability = if plan.bind_state(graph, &index, ceiling) {
+                TightGpuUpdates::Admitted {
+                    count_bits: index.count_bits,
+                    index_built: build.is_some(),
+                }
+            } else {
+                TightGpuUpdates::Unavailable(TightGpuUpdateUnavailable::Work)
+            };
+            (availability, build)
+        }
+    }
+}
+
+/// Whether the update route's reservation fits: the larger of its worst case
+/// at `bounds` and dense reuse with the count pass and the state's writes.
+fn admits_work(graph: &Graph, levels: u32, bounds: &Bounds, ceiling: u64) -> bool {
+    let dense = u64::from(graph.work)
+        + u64::from(levels)
+        + 2 * u64::from(graph.nodes)
+        + u64::from(graph.edges)
+        + 4
+        + 3 * u64::from(graph.words)
+        + 2;
+    update::worst_case(
+        graph,
+        levels,
+        bounds.count_bits,
+        bounds.entries,
+        bounds.atom_entries,
+    )
+    .is_some_and(|worst| worst.max(dense) <= ceiling.min(u64::from(u32::MAX)))
+}
+
 // Reserve optional observation storage before ordinary batch admission. This
 // leaves graph/work policy unchanged and keeps all authored bytes in one limit.
 fn reserve_timing(limits: TightGpuLimits, timed: bool) -> Result<(TightGpuLimits, u64), GpuError> {
@@ -660,12 +943,12 @@ fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
         ("workgroup width", 64, limits.max_compute_workgroup_size_x),
         (
             "workgroup storage",
-            8,
+            40,
             limits.max_compute_workgroup_storage_size,
         ),
         (
             "storage bindings",
-            7,
+            8,
             limits.max_storage_buffers_per_shader_stage,
         ),
         (
@@ -673,7 +956,7 @@ fn check_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
             1,
             limits.max_uniform_buffers_per_shader_stage,
         ),
-        ("bindings per group", 8, limits.max_bindings_per_bind_group),
+        ("bindings per group", 9, limits.max_bindings_per_bind_group),
     ] {
         if available < required {
             return Err(GpuError::new(

@@ -45,8 +45,8 @@ fn cold_admission_accounts_graph_upload() {
     assert_eq!(admission.stats.candidates, 1);
     assert_eq!(admission.stats.work, 5);
     assert_eq!(admission.stats.dispatches, 1);
-    assert_eq!(admission.stats.uploaded_bytes, 32 + 4 + 16 + 4 + 16);
-    assert_eq!(admission.stats.downloaded_bytes, 24);
+    assert_eq!(admission.stats.uploaded_bytes, 64 + 4 + 16 + 4 + 16);
+    assert_eq!(admission.stats.downloaded_bytes, 36);
     assert_eq!(admission.plan.epoch, 1);
 }
 
@@ -68,7 +68,7 @@ fn matching_identity_reuses_immutable_upload() {
     assert!(admission.fresh.is_none());
     assert!(!admission.stats.theory_uploaded);
     assert!(!admission.stats.transport_allocated);
-    assert_eq!(admission.stats.uploaded_bytes, 36);
+    assert_eq!(admission.stats.uploaded_bytes, 68);
     assert_eq!(admission.plan.epoch, 5);
 }
 

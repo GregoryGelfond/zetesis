@@ -100,7 +100,7 @@ fn decode_present(
     cancellation: &Cancellation,
 ) -> Result<Vec<TightGpuCheck>, GpuError> {
     let seeds = vec![7; usize::try_from(plan.seeds / 4).unwrap()];
-    super::decode(records, graph, plan, &seeds, cancellation)
+    super::decode(records, graph, plan, &seeds, cancellation).map(|decoded| decoded.checks)
 }
 
 #[test]
@@ -120,7 +120,7 @@ fn certificate_packing_retains_original_formula_structure() {
     assert_eq!(graph.work, 28);
     assert_eq!(
         plan(&graph, 2, true).params(&graph),
-        [3, 9, 4, 3, 1, 0, 28, 7]
+        [3, 9, 4, 3, 1, 0, 28, 7, 0, 0, 0, 0, 0, 0, 0, 0]
     );
 }
 
@@ -356,11 +356,13 @@ fn cold_bytes_include_simultaneous_host_graph_packing() {
     let cold = plan(&graph, 2, true);
     let hot = plan(&graph, 2, false);
     assert_eq!(graph.bytes, 9 * 16 + 4 * 4 + 3 * 16);
-    assert_eq!(hot.transport, 32 + 8 + 72 + 8 + 48 + 48);
+    // Parameters, candidates, truth, support, results and their readback, and
+    // the placeholder bound in the update state's place.
+    assert_eq!(hot.transport, 64 + 8 + 72 + 8 + 72 + 72 + 16);
     assert_eq!(cold.accounted - hot.accounted, graph.bytes);
     assert_eq!(
         hot.accounted,
-        graph.bytes + hot.transport + 32 + 8 + 2 * std::mem::size_of::<TightGpuCheck>() as u64
+        graph.bytes + hot.transport + 64 + 8 + 2 * std::mem::size_of::<TightGpuCheck>() as u64
     );
 }
 
@@ -518,7 +520,26 @@ fn zero_epoch_cannot_alias_cleared_result_storage() {
 fn false_root_witnesses_use_assertion_order() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let records = [7, 0, 1, 0, 28, RESULT_MAGIC, 7, 1, 1, 3, 28, RESULT_MAGIC];
+    let records = [
+        7,
+        0,
+        1,
+        0,
+        28,
+        RESULT_MAGIC,
+        0,
+        0,
+        0,
+        7,
+        1,
+        1,
+        3,
+        28,
+        RESULT_MAGIC,
+        0,
+        0,
+        0,
+    ];
     let result = decode_present(&records, &graph, &plan, &Cancellation::default()).unwrap();
     assert_eq!(result[0].verdict(), TightVerdict::NotModel { root: 8 });
     assert_eq!(result[1].verdict(), TightVerdict::NotModel { root: 1 });
@@ -536,18 +557,27 @@ fn all_verdict_kinds_decode_without_losing_witnesses() {
         0,
         28,
         RESULT_MAGIC,
+        0,
+        0,
+        0,
         7,
         1,
         2,
         2,
         28,
         RESULT_MAGIC,
+        0,
+        0,
+        0,
         7,
         2,
         1,
         1,
         28,
         RESULT_MAGIC,
+        0,
+        0,
+        0,
     ];
     let result = decode_present(&records, &graph, &plan, &Cancellation::default()).unwrap();
     assert_eq!(
@@ -569,8 +599,44 @@ fn all_verdict_kinds_decode_without_losing_witnesses() {
 fn corrupt_records_never_produce_a_partial_batch() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let valid = [7, 0, 0, 0, 28, RESULT_MAGIC, 7, 1, 2, 2, 28, RESULT_MAGIC];
-    for (index, value) in [(6, 0), (7, 0), (8, 3), (9, 3), (10, 29), (11, 0), (8, 0)] {
+    let valid = [
+        7,
+        0,
+        0,
+        0,
+        28,
+        RESULT_MAGIC,
+        0,
+        0,
+        0,
+        7,
+        1,
+        2,
+        2,
+        28,
+        RESULT_MAGIC,
+        0,
+        0,
+        0,
+    ];
+    // The second record's epoch, slot, status, witness, work and marker, a
+    // route other than complete without reuse, an evaluation receipt, and a
+    // seeded record without the update route allowed.
+    for (index, value) in [
+        (9, 0),
+        (10, 0),
+        (11, 3),
+        (12, 3),
+        (13, 29),
+        (14, 0),
+        (11, 0),
+        (15, ROUTE_DENSE),
+        (15, ROUTE_UPDATE),
+        (15, ROUTE_BEYOND_THRESHOLD),
+        (15, 4),
+        (16, 1),
+        (17, 1),
+    ] {
         let mut corrupt = valid;
         corrupt[index] = value;
         assert_eq!(
@@ -581,7 +647,7 @@ fn corrupt_records_never_produce_a_partial_batch() {
         );
     }
     assert_eq!(
-        decode_present(&valid[..11], &graph, &plan, &Cancellation::default())
+        decode_present(&valid[..17], &graph, &plan, &Cancellation::default())
             .unwrap_err()
             .kind(),
         GpuErrorKind::Readback
@@ -594,7 +660,7 @@ fn out_of_range_root_ordinals_are_readback_failures() {
     let plan = plan(&graph, 1, false);
     assert_eq!(
         decode_present(
-            &[7, 0, 1, 4, 28, RESULT_MAGIC],
+            &[7, 0, 1, 4, 28, RESULT_MAGIC, 0, 0, 0],
             &graph,
             &plan,
             &Cancellation::default()
@@ -617,7 +683,7 @@ fn cancellation_prevents_completed_results() {
         graph.pack(&certificate, &cancellation).err().unwrap(),
         candidate_words(&plan, &graph, &input, &cancellation).unwrap_err(),
         decode_present(
-            &[7, 0, 0, 0, 28, RESULT_MAGIC],
+            &[7, 0, 0, 0, 28, RESULT_MAGIC, 0, 0, 0],
             &graph,
             &plan,
             &cancellation,
@@ -632,7 +698,26 @@ fn cancellation_prevents_completed_results() {
 fn absent_residual_witnesses_are_readback_failures() {
     let graph = graph();
     let plan = plan(&graph, 2, false);
-    let records = [7, 0, 2, 2, 28, RESULT_MAGIC, 7, 1, 2, 2, 28, RESULT_MAGIC];
+    let records = [
+        7,
+        0,
+        2,
+        2,
+        28,
+        RESULT_MAGIC,
+        0,
+        0,
+        0,
+        7,
+        1,
+        2,
+        2,
+        28,
+        RESULT_MAGIC,
+        0,
+        0,
+        0,
+    ];
     let present = Interpretation::new(&graph.theory, [0, 1, 2]).unwrap();
     let absent = Interpretation::new(&graph.theory, [0, 1]).unwrap();
     let mut staging = crate::candidates::Staging::default();
@@ -683,7 +768,7 @@ fn malformed_candidate_storage_cannot_validate_receipts() {
     let plan = plan(&graph, 1, false);
     assert_eq!(
         super::decode(
-            &[7, 0, 0, 0, 28, RESULT_MAGIC],
+            &[7, 0, 0, 0, 28, RESULT_MAGIC, 0, 0, 0],
             &graph,
             &plan,
             &[],
@@ -718,18 +803,19 @@ fn empty_storage_padding_never_becomes_a_witness() {
     let empty = plan(&graph, 1, false);
     let cancellation = Cancellation::default();
     let stable = super::decode(
-        &[7, 0, STATUS_STABLE, 0, 0, RESULT_MAGIC],
+        &[7, 0, STATUS_STABLE, 0, 0, RESULT_MAGIC, 0, 0, 0],
         &graph,
         &empty,
         &[0],
         &cancellation,
     )
-    .unwrap();
+    .unwrap()
+    .checks;
     assert_eq!(stable[0].verdict(), TightVerdict::Stable);
     assert_eq!(stable[0].work(), 0);
     for status in [STATUS_NOT_MODEL, STATUS_RESIDUAL] {
         let error = super::decode(
-            &[7, 0, status, 0, 0, RESULT_MAGIC],
+            &[7, 0, status, 0, 0, RESULT_MAGIC, 0, 0, 0],
             &graph,
             &empty,
             &[0],
@@ -752,20 +838,21 @@ fn empty_storage_padding_never_becomes_a_witness() {
     let graph = Graph::new(&certificate, atomic(&wgpu::Limits::default())).unwrap();
     let asserted = plan(&graph, 1, false);
     let result = super::decode(
-        &[7, 0, STATUS_NOT_MODEL, 0, 2, RESULT_MAGIC],
+        &[7, 0, STATUS_NOT_MODEL, 0, 2, RESULT_MAGIC, 0, 0, 0],
         &graph,
         &asserted,
         &[0],
         &cancellation,
     )
-    .unwrap();
+    .unwrap()
+    .checks;
     assert_eq!(result[0].verdict(), TightVerdict::NotModel { root: 0 });
 }
 
 #[test]
 fn uniform_storage_requires_its_full_size() {
     let graph = empty_graph();
-    for (max_buffer_size, admitted) in [(32, true), (31, false)] {
+    for (max_buffer_size, admitted) in [(64, true), (63, false)] {
         let device = wgpu::Limits {
             max_buffer_size,
             ..Default::default()
@@ -775,10 +862,10 @@ fn uniform_storage_requires_its_full_size() {
         match result {
             Ok(plan) => {
                 // Every storage buffer fits even the smaller limit. Only the
-                // uniform's independent 32-byte requirement separates the cases.
+                // uniform's independent 64-byte requirement separates the cases.
                 assert_eq!(
                     (plan.seeds, plan.truth, plan.support, plan.results),
-                    (4, 4, 4, 24)
+                    (4, 4, 4, 36)
                 );
             }
             Err(error) => {
@@ -810,7 +897,7 @@ fn result_addressing_has_an_independent_ceiling() {
     // allocated for these deliberately hypothetical device dimensions.
     let largest = usize::try_from(u32::MAX).unwrap() / RESULT_WORDS;
     let boundary = Plan::new(&graph, largest, limits, &device, false, 1).unwrap();
-    assert_eq!(boundary.results, u64::try_from(largest).unwrap() * 6 * 4);
+    assert_eq!(boundary.results, u64::try_from(largest).unwrap() * 9 * 4);
     assert_eq!(
         (boundary.seeds, boundary.truth, boundary.support),
         (4, 4, 4)
@@ -1066,18 +1153,19 @@ fn dependency_schedule_preserves_ids_and_charges_cold_storage() {
     assert_eq!(graph.levels, 3);
     assert_eq!(selected.levels, 3);
     assert_eq!(selected.work, 31);
+    // The scheduled roots twice, resident and packing. The schedule is too
+    // narrow for the update route, so the per-head producer counter its
+    // admission reserved is released.
     assert_eq!(selected.accounted, serial_bytes + 104);
     assert_eq!(
         packed.roots,
         [8, 5, 7, 1, 0, 4, 6, 9, 0, 1, 2, 3, 4, 6, 5, 7, 8]
     );
-    assert!(
-        packed
-            .nodes
-            .chunks_exact(4)
-            .take(graph.nodes as usize)
-            .all(|node| node[3] == 0)
-    );
+    // Header word 3 holds each node's position in the level order.
+    let order = &packed.roots[4 + 3 + 1..];
+    for (position, &node) in order.iter().enumerate() {
+        assert_eq!(packed.nodes[node as usize * 4 + 3] as usize, position);
+    }
     assert_eq!(selected.params(&graph)[5], 3);
 }
 

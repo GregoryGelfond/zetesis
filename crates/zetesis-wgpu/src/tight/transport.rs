@@ -1,7 +1,8 @@
 //! Exact-shape resident storage and the shared bounded device lifecycle.
 
-use super::packing::{self, Graph, PARAM_BYTES, Packed, Plan};
-use super::{TightGpuActivity, TightGpuCheck, poll};
+use super::packing::{self, Decoded, Graph, PARAM_BYTES, Packed, Plan};
+use super::update::{self, Built, Stage};
+use super::{TightGpuActivity, poll};
 use crate::runtime::{self, Dispatch, buffer, entry, initialized};
 use crate::{GpuError, GpuErrorKind};
 use std::time::Duration;
@@ -12,12 +13,23 @@ pub(super) struct Resident {
     nodes: wgpu::Buffer,
     roots: wgpu::Buffer,
     producers: wgpu::Buffer,
+    /// Counts producer-buffer replacements, so a transport bound to an older
+    /// buffer rebinds before its next dispatch.
+    producers_generation: u64,
+    /// The update route's admission for this theory.
+    pub(super) updates: Stage,
     pub(super) transport: Option<Transport>,
 }
 impl Resident {
     pub(super) fn new(device: &wgpu::Device, graph: Graph, packed: &Packed) -> Self {
         Self {
-            graph,
+            updates: if graph.levels == 0 {
+                Stage::Serial
+            } else if update::engages(graph.strided_depth, graph.levels) {
+                Stage::Pending
+            } else {
+                Stage::Narrow
+            },
             nodes: initialized(
                 device,
                 "tight nodes",
@@ -36,6 +48,8 @@ impl Resident {
                 &packed.producers,
                 wgpu::BufferUsages::STORAGE,
             ),
+            producers_generation: 0,
+            graph,
             transport: None,
         }
     }
@@ -65,6 +79,27 @@ impl Resident {
         }
     }
 
+    /// Replace the producer buffer with the records and the readers index, and
+    /// account the index as resident theory storage. The owner column is no
+    /// longer needed and is released. Returns the bytes uploaded.
+    pub(super) fn install_index(&mut self, device: &wgpu::Device, built: &Built) -> u64 {
+        let bytes = u64::try_from(built.words.len()).unwrap_or(u64::MAX) * 4;
+        self.producers = initialized(
+            device,
+            "tight producers and readers",
+            &built.words,
+            wgpu::BufferUsages::STORAGE,
+        );
+        self.producers_generation += 1;
+        let graph = &mut self.graph;
+        graph.bytes = graph.bytes - graph.producer_bytes + bytes;
+        graph.producer_bytes = bytes;
+        graph.owners = Vec::new();
+        graph.owner_bytes = 0;
+        self.updates = Stage::Built(built.index);
+        bytes
+    }
+
     pub(super) fn dispatch(
         &mut self,
         execution: &Execution<'_>,
@@ -72,7 +107,7 @@ impl Resident {
         plan: &Plan,
         activity: &mut TightGpuActivity,
         timing: &mut crate::timing::BatchTiming,
-    ) -> Result<runtime::Completion<Vec<TightGpuCheck>>, GpuError> {
+    ) -> Result<runtime::Completion<Decoded>, GpuError> {
         let Execution {
             device,
             queue,
@@ -81,8 +116,15 @@ impl Resident {
             cancellation,
             timer,
         } = *execution;
-        if self.transport.is_none() {
-            self.transport = Some(Transport::new(device, pipeline, self, plan)?);
+        let bindings = Bindings {
+            nodes: &self.nodes,
+            roots: &self.roots,
+            producers: &self.producers,
+            generation: self.producers_generation,
+        };
+        match self.transport.as_mut() {
+            Some(transport) => transport.conform(device, pipeline, &bindings, plan),
+            None => self.transport = Some(Transport::new(device, pipeline, &bindings, plan)?),
         }
         let transport = self
             .transport
@@ -90,6 +132,7 @@ impl Resident {
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing tight transport"))?;
         // Consume the host authority before the first queue write. Every error
         // after this point leaves retained truth unavailable to the next call.
+        // Clearing the result hints also clears each slot's seeded record.
         let retained = std::mem::take(&mut transport.original_truth_valid);
         let clear_result = !retained || !plan.original_truth_reused;
         poll(cancellation)?;
@@ -118,7 +161,8 @@ impl Resident {
         );
         activity.submissions = 1;
         activity.submitted_candidates = u64::from(plan.worlds);
-        activity.scheduled_work = u64::from(plan.worlds) * u64::from(plan.work);
+        activity.scheduled_work = u64::from(plan.worlds) * u64::from(plan.allowance);
+        let mut performed = 0;
         let result = runtime::read_polled(
             device,
             &transport.readback,
@@ -127,15 +171,16 @@ impl Resident {
             || poll(cancellation),
             |words| {
                 let (words, tail) = crate::timing::split_readback(words, transport.timed)?;
-                let checks = packing::decode(words, &self.graph, plan, seeds, cancellation)?;
+                let decoded = packing::decode(words, &self.graph, plan, seeds, cancellation)?;
+                performed = decoded.work;
                 timing.tail = tail;
-                Ok(checks)
+                Ok(decoded)
             },
         );
         timing.window = result.window_since(submission.at);
         if result.is_ok() {
             activity.completed_candidates = u64::from(plan.worlds);
-            activity.completed_work = activity.scheduled_work;
+            activity.completed_work = performed;
             activity.downloaded_bytes = plan.results
                 + if transport.timed {
                     crate::timing::READBACK_BYTES
@@ -157,13 +202,29 @@ pub(super) struct Execution<'a> {
     pub(super) timer: Option<&'a crate::timing::ComputeTimer>,
 }
 
+/// The resident theory's buffers a transport binds.
+struct Bindings<'a> {
+    nodes: &'a wgpu::Buffer,
+    roots: &'a wgpu::Buffer,
+    producers: &'a wgpu::Buffer,
+    generation: u64,
+}
+
 pub(super) struct Transport {
     worlds: u32,
     params: wgpu::Buffer,
     seeds: wgpu::Buffer,
+    truth: wgpu::Buffer,
+    support: wgpu::Buffer,
     results: wgpu::Buffer,
     readback: wgpu::Buffer,
+    /// The per-slot update state, or a placeholder when none is bound.
+    state: wgpu::Buffer,
+    /// The state's bytes; zero for the placeholder.
+    state_bytes: u64,
     group: wgpu::BindGroup,
+    /// The producer buffer generation `group` binds.
+    generation: u64,
     // The readback carries a timestamp tail after the logical results.
     timed: bool,
     original_truth_valid: bool,
@@ -172,7 +233,7 @@ impl Transport {
     fn new(
         device: &wgpu::Device,
         pipeline: &wgpu::ComputePipeline,
-        resident: &Resident,
+        bindings: &Bindings<'_>,
         plan: &Plan,
     ) -> Result<Self, GpuError> {
         let timed = device.features().contains(wgpu::Features::TIMESTAMP_QUERY);
@@ -216,29 +277,106 @@ impl Transport {
             readback_bytes,
             wgpu::BufferUsages::COPY_DST | wgpu::BufferUsages::MAP_READ,
         );
-        let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("resident tight support"),
-            layout: &pipeline.get_bind_group_layout(0),
-            entries: &[
-                entry(0, &params),
-                entry(1, &resident.nodes),
-                entry(2, &resident.roots),
-                entry(3, &resident.producers),
-                entry(4, &seeds),
-                entry(5, &truth),
-                entry(6, &support),
-                entry(7, &results),
-            ],
-        });
+        let state = state_buffer(device, plan.state);
+        let group = bind(
+            device,
+            pipeline,
+            bindings,
+            [&params, &seeds, &truth, &support, &results, &state],
+        );
         Ok(Self {
             worlds: plan.worlds,
             params,
             seeds,
+            truth,
+            support,
             results,
             readback,
+            state,
+            state_bytes: plan.state,
             group,
+            generation: bindings.generation,
             timed,
             original_truth_valid: false,
         })
     }
+
+    /// Bring a retained transport to `plan`'s state and the resident's current
+    /// producer buffer, keeping its truth and result authority. A state is
+    /// added only where the placeholder was bound, so the previous records,
+    /// written without the route allowed, say no slot is seeded; a dropped
+    /// state takes its retained evaluations with it, and this batch, without the
+    /// route, records every slot unseeded. Either change rebinds.
+    fn conform(
+        &mut self,
+        device: &wgpu::Device,
+        pipeline: &wgpu::ComputePipeline,
+        bindings: &Bindings<'_>,
+        plan: &Plan,
+    ) {
+        let state_changed = self.state_bytes != plan.state;
+        if state_changed {
+            self.state = state_buffer(device, plan.state);
+            self.state_bytes = plan.state;
+        }
+        if state_changed || self.generation != bindings.generation {
+            self.group = bind(
+                device,
+                pipeline,
+                bindings,
+                [
+                    &self.params,
+                    &self.seeds,
+                    &self.truth,
+                    &self.support,
+                    &self.results,
+                    &self.state,
+                ],
+            );
+            self.generation = bindings.generation;
+        }
+    }
+}
+
+/// The update state of `bytes`, or the placeholder when `bytes` is zero.
+/// Device buffers start zeroed, so every slot starts unseeded.
+fn state_buffer(device: &wgpu::Device, bytes: u64) -> wgpu::Buffer {
+    if bytes == 0 {
+        buffer(
+            device,
+            "tight update placeholder",
+            update::PLACEHOLDER_BYTES,
+            wgpu::BufferUsages::STORAGE,
+        )
+    } else {
+        buffer(
+            device,
+            "tight update state",
+            bytes,
+            wgpu::BufferUsages::STORAGE,
+        )
+    }
+}
+
+fn bind(
+    device: &wgpu::Device,
+    pipeline: &wgpu::ComputePipeline,
+    bindings: &Bindings<'_>,
+    [params, seeds, truth, support, results, state]: [&wgpu::Buffer; 6],
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("resident tight support"),
+        layout: &pipeline.get_bind_group_layout(0),
+        entries: &[
+            entry(0, params),
+            entry(1, bindings.nodes),
+            entry(2, bindings.roots),
+            entry(3, bindings.producers),
+            entry(4, seeds),
+            entry(5, truth),
+            entry(6, support),
+            entry(7, results),
+            entry(8, state),
+        ],
+    })
 }

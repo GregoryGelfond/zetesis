@@ -120,7 +120,8 @@ pub use execution_observation::{ExecutionObservation, ExecutionObserver, Streame
 pub use execution_resources::ExecutionResources;
 pub use formula_execution::{
     CompletionAccounting, FormulaDeviceLimits, FormulaExecutionStatistics,
-    FormulaResidualStatistics,
+    FormulaResidualStatistics, TightRouteStatistics, TightUpdateAvailability,
+    TightUpdateStatistics,
 };
 pub use grounding_timing::{GroundingMeasurement, GroundingTimings};
 pub use hybrid_session::HybridExecutionStatistics;

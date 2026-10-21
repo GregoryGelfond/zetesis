@@ -100,6 +100,42 @@ fn numeric_qualifies(node: Node, index: u32, width: u32) -> bool {
     let less = row_less(width, numeric_value(node, index, width), numeric_bound(node));
     return select(!less, less, node.tag == 8u);
 }
+// A row's measure under current condition truth: a threshold row's sum of true
+// conditions' values, or an ordinal row's least and greatest true rank.
+struct NumericMeasure { sum: vec4<u32>, minimum: vec4<u32>, maximum: vec4<u32> }
+fn numeric_measure(base: u32, node: Node, width: u32) -> NumericMeasure {
+    var sum = vec4<u32>(0u);
+    let descriptor = params.nodes * 4u + node.left;
+    var minimum = vec4<u32>(0u);
+    var maximum = vec4<u32>(0u);
+    if (node.tag != 7u) {
+        // rank_count itself can need an extra limb (e.g. 2^32); only the
+        // empty sentinel after this exact subtraction is certified narrow.
+        minimum = wide_sub(vec4<u32>(nodes[descriptor + 3u], nodes[descriptor + 4u], 0u, 0u),
+            vec4<u32>(1u, 0u, 0u, 0u));
+    }
+    for (var position = 0u; position < node.right; position++) {
+        if ((frozen[base + numeric_condition(node, position)] & 1u) != 0u) {
+            let value = numeric_value(node, position, width);
+            if (node.tag == 7u) {
+                sum = row_add(width, sum, value);
+            } else {
+                if (row_less(width, value, minimum)) { minimum = value; }
+                if (row_less(width, maximum, value)) { maximum = value; }
+            }
+        }
+    }
+    return NumericMeasure(sum, minimum, maximum);
+}
+// One live guard's truth under its row's measure.
+fn numeric_guard(guard: Node, width: u32, measure: NumericMeasure) -> bool {
+    let bound = numeric_bound(guard);
+    var value = false;
+    if (guard.tag == 7u) { value = !row_less(width, measure.sum, bound); }
+    if (guard.tag == 8u) { value = row_less(width, measure.minimum, bound); }
+    if (guard.tag == 9u) { value = !row_less(width, measure.maximum, bound); }
+    return value;
+}
 // One owner reduces each authoritative row and writes every nonconstant guard.
 // Followers do not write: they may run before the owner in the same dependency
 // level. All guards read identical children, so the existing level barrier makes
@@ -126,36 +162,10 @@ fn numeric_original(base: u32, index: u32, node: Node, reuse: bool) {
             return;
         }
     }
-    var sum = vec4<u32>(0u);
-    let descriptor = params.nodes * 4u + node.left;
-    var minimum = vec4<u32>(0u);
-    var maximum = vec4<u32>(0u);
-    if (node.tag != 7u) {
-        // rank_count itself can need an extra limb (e.g. 2^32); only the
-        // empty sentinel after this exact subtraction is certified narrow.
-        minimum = wide_sub(vec4<u32>(nodes[descriptor + 3u], nodes[descriptor + 4u], 0u, 0u),
-            vec4<u32>(1u, 0u, 0u, 0u));
-    }
-    for (var position = 0u; position < node.right; position++) {
-        if ((frozen[base + numeric_condition(node, position)] & 1u) != 0u) {
-            let value = numeric_value(node, position, width);
-            if (node.tag == 7u) {
-                sum = row_add(width, sum, value);
-            } else {
-                if (row_less(width, value, minimum)) { minimum = value; }
-                if (row_less(width, maximum, value)) { maximum = value; }
-            }
-        }
-    }
+    let measure = numeric_measure(base, node, width);
     for (var position = 0u; position < count; position++) {
         let guard = nodes[guards + position];
-        let guard_node = node_at(guard);
-        let bound = numeric_bound(guard_node);
-        var value = false;
-        if (guard_node.tag == 7u) { value = !row_less(width, sum, bound); }
-        if (guard_node.tag == 8u) { value = row_less(width, minimum, bound); }
-        if (guard_node.tag == 9u) { value = !row_less(width, maximum, bound); }
-        let next = select(0u, 1u, value);
+        let next = select(0u, 1u, numeric_guard(node_at(guard), width, measure));
         let changed = reuse && next != (frozen[base + guard] & 1u);
         frozen[base + guard] = next | select(0u, 2u, changed);
     }

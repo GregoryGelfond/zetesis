@@ -69,7 +69,7 @@ pub use relation::{
 };
 pub use tight::{
     GpuTightOracle, TightGpuActivity, TightGpuBatchStats, TightGpuCheck, TightGpuError,
-    TightGpuLimits, TightSupport,
+    TightGpuLimits, TightGpuRoutes, TightGpuUpdateUnavailable, TightGpuUpdates, TightSupport,
 };
 
 pub use selection::{GpuInfo, GpuSelection, compiled_apis, discover_adapters};

@@ -260,7 +260,19 @@ fn readback_requires_the_selected_support_policy() {
             1,
         )
         .unwrap();
-        let record = |marker| [1, 0, STATUS_STABLE, 0, plan.work, marker];
+        let record = |marker| {
+            [
+                1,
+                0,
+                STATUS_STABLE,
+                0,
+                plan.work,
+                marker,
+                ROUTE_COMPLETE,
+                0,
+                0,
+            ]
+        };
         assert_eq!(
             decode(
                 &record(marker),
@@ -269,7 +281,8 @@ fn readback_requires_the_selected_support_policy() {
                 &[1],
                 &Cancellation::default()
             )
-            .unwrap()[0]
+            .unwrap()
+            .checks[0]
                 .verdict(),
             TightVerdict::Stable
         );

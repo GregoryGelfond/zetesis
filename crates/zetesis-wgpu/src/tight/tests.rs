@@ -47,9 +47,19 @@ fn shader_constants_preserve_the_wire_contract() {
         ("STATUS_STABLE", 0),
         ("STATUS_NOT_MODEL", 1),
         ("STATUS_RESIDUAL", 2),
-        ("RESULT_WORDS", 6),
+        ("RESULT_WORDS", 9),
         ("RESULT_MAGIC", 0x5453_5031),
         ("RESULT_GROUPED_MAGIC", 0x5453_4731),
+        ("ROUTE_COMPLETE", super::update::ROUTE_COMPLETE),
+        ("ROUTE_DENSE", super::update::ROUTE_DENSE),
+        ("ROUTE_UPDATE", super::update::ROUTE_UPDATE),
+        (
+            "ROUTE_BEYOND_THRESHOLD",
+            super::update::ROUTE_BEYOND_THRESHOLD,
+        ),
+        ("READER_NODE", super::update::READER_NODE >> 30),
+        ("READER_PRODUCER", super::update::READER_PRODUCER >> 30),
+        ("SUMMARY_WORDS", super::update::SUMMARY_WORDS),
     ] {
         let (_, constant) = module
             .constants
@@ -66,7 +76,7 @@ fn shader_constants_preserve_the_wire_contract() {
 #[test]
 fn shader_structs_match_host_buffer_strides() {
     let module = naga::front::wgsl::parse_str(SHADER).unwrap();
-    for (name, expected) in [("Params", 32), ("Node", 16), ("Producer", 16)] {
+    for (name, expected) in [("Params", 64), ("Node", 16), ("Producer", 16), ("Slot", 36)] {
         let (_, ty) = module
             .types
             .iter()

@@ -47,7 +47,7 @@ pub(crate) fn level_widths(
     packed: &[u32],
     roots: u32,
     levels: u32,
-) -> Result<impl Iterator<Item = u32> + '_, GpuError> {
+) -> Result<impl Iterator<Item = u32> + Clone + '_, GpuError> {
     let offsets: &[u32] = if levels == 0 {
         &[]
     } else {

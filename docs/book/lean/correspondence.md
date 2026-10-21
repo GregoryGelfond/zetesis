@@ -329,6 +329,14 @@ that realize the rule, numeric updates and the maintained support counts and
 sets are argued in the source documentation of `TightWorkspace` and its update
 and checked by a differential property against complete evaluation; no Lean law
 covers them.
+The device's update route applies the same rule in dependency-level order, a
+permutation of table order that respects every dependency, since each reader's
+level exceeds the levels it reads. The level-order permutation, the readers
+index, the packed support counts, the settled unsupported and false-root sets,
+and the owner's re-reduction of a numeric row, which writes the row's followers
+in its own round, are WGSL and Rust obligations: `TightEvaluation`'s node type
+does not model row re-reduction. Differential physical tests compare every
+update with the scalar certificate and assert each slot's route and receipts.
 All original roots and producers remain covered. On the complete route support
 is reset before reuse, and the final check intersects each candidate word with
 the complement of its support word, returning the first unsupported atom; an

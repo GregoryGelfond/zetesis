@@ -204,6 +204,25 @@ All three are zero or absent on CPU routes. Slate sizes change search and
 device work, so compare runs with matching policies, or report these
 statistics beside them.
 
+## Tight GPU routes
+
+Tight support checking reports which route evaluated each decoded slot.
+`FormulaExecutionStatistics::gpu_tight_routes` and the JSON key
+`gpu_tight_routes` hold `complete`, `dense_reuse` (with `beyond_threshold`, the
+dense slots whose change count exceeded the update threshold), `update` and
+`nodes_evaluated`, the nodes the update slots re-evaluated, summed over the
+decoded batches. `gpu_tight_updates` holds the update route's `availability`
+(`pending`, `admitted`, `serial_schedule`, `narrow_schedule`,
+`candidate_ceiling`, `index_bounds`, `bytes`, `work` or `declined`) and its
+support counts' `count_bits`, as the last decoded batch holding reuse authority
+reported them: a batch without authority cannot update, whatever its limits.
+Both are absent before the first decoded tight batch and for other primitives.
+`gpu_scheduled_work` attributes to each submitted tight batch the work its
+validated readback reports, or else its reservation. Admitting the update state
+can shorten the device's admitted prefix, and with it adaptive slates, never
+below the batch size. Compare tight device timings only between runs whose
+routes and slate statistics are reported beside them.
+
 ## Thread and failure contracts
 
 The measurement owner is `Send + Sync`. Short internal locks protect fixed-size

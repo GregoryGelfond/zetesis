@@ -375,6 +375,42 @@ fn tight_json_distinguishes_scheduled_and_completed_work() {
 }
 
 #[test]
+fn tight_json_separates_routes_from_update_availability() {
+    let json = |statistics: &crate::FormulaExecutionStatistics| {
+        let mut out = Buffer::new(4096);
+        super::execution_statistics(&mut out, Some(statistics)).unwrap();
+        serde_json::from_slice::<serde_json::Value>(&out.bytes).unwrap()
+    };
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    let absent = json(&statistics);
+    assert!(absent["gpu_tight_routes"].is_null());
+    assert!(absent["gpu_tight_updates"].is_null());
+    let mut routes = zetesis_solve::TightRouteStatistics::default();
+    routes.complete = 4;
+    routes.dense_reuse = 3;
+    routes.beyond_threshold = 1;
+    routes.update = 9;
+    routes.nodes_evaluated = 85;
+    statistics.gpu_tight_routes = Some(routes);
+    let mut updates = zetesis_solve::TightUpdateStatistics::default();
+    updates.availability = zetesis_solve::TightUpdateAvailability::Admitted;
+    updates.count_bits = Some(16);
+    statistics.gpu_tight_updates = Some(updates);
+    let value = json(&statistics);
+    assert_eq!(
+        value["gpu_tight_routes"],
+        serde_json::json!({
+            "complete": 4, "dense_reuse": 3, "beyond_threshold": 1, "update": 9,
+            "nodes_evaluated": 85,
+        })
+    );
+    assert_eq!(
+        value["gpu_tight_updates"],
+        serde_json::json!({"availability": "admitted", "count_bits": 16})
+    );
+}
+
+#[test]
 fn residual_json_distinguishes_decoding_from_cpu_completion() {
     let mut statistics = crate::FormulaExecutionStatistics::default();
     statistics.gpu_residuals = Some(crate::FormulaResidualStatistics {

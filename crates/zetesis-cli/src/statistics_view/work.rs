@@ -389,6 +389,33 @@ fn device(rows: &mut Vec<Row>, execution: &crate::FormulaExecutionStatistics) {
         execution.cpu_residuals,
         "completed exact residual results committed",
     ));
+    if let Some(routes) = execution.gpu_tight_routes {
+        rows.push(Row::new([
+            "Tight GPU slots by route".to_owned(),
+            format!(
+                "{} complete; {} dense reuse; {} update",
+                routes.complete, routes.dense_reuse, routes.update
+            ),
+            format!(
+                "dense reuse includes {} beyond the update threshold; updates re-evaluated {} nodes",
+                routes.beyond_threshold, routes.nodes_evaluated
+            ),
+        ]));
+    }
+    if let Some(updates) = execution.gpu_tight_updates {
+        rows.push(Row::new([
+            "Tight GPU update route".to_owned(),
+            updates.availability.label().to_owned(),
+            updates.count_bits.map_or_else(
+                || "as the last batch with reuse authority reported".to_owned(),
+                |bits| {
+                    format!(
+                        "{bits}-bit support counts; as the last batch with reuse authority reported"
+                    )
+                },
+            ),
+        ]));
+    }
     rows.push(Row::new(compute_passes(&execution.gpu_compute_timing)));
 }
 
@@ -499,5 +526,35 @@ mod tests {
             rendered.contains(r#""GPU workgroup size", "256""#),
             "{rendered}"
         );
+    }
+
+    #[test]
+    fn tight_device_rows_report_routes_and_update_availability() {
+        let mut execution = crate::FormulaExecutionStatistics::default();
+        "FORMAT FIXTURE: no physical execution".clone_into(&mut execution.adapter);
+        let mut routes = zetesis_solve::TightRouteStatistics::default();
+        routes.complete = 4;
+        routes.dense_reuse = 3;
+        routes.beyond_threshold = 1;
+        routes.update = 9;
+        routes.nodes_evaluated = 85;
+        execution.gpu_tight_routes = Some(routes);
+        let mut updates = zetesis_solve::TightUpdateStatistics::default();
+        updates.availability = zetesis_solve::TightUpdateAvailability::Admitted;
+        updates.count_bits = Some(16);
+        execution.gpu_tight_updates = Some(updates);
+        let mut rows = Vec::new();
+        device(&mut rows, &execution);
+        let text = format!("{rows:?}");
+        for expected in [
+            "Tight GPU slots by route",
+            "4 complete; 3 dense reuse; 9 update",
+            "dense reuse includes 1 beyond the update threshold; updates re-evaluated 85 nodes",
+            "Tight GPU update route",
+            "admitted",
+            "16-bit support counts",
+        ] {
+            assert!(text.contains(expected), "{expected}: {text}");
+        }
     }
 }

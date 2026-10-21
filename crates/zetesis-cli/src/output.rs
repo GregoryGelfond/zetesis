@@ -1162,6 +1162,7 @@ fn execution_statistics(
     out.optional_number(stats.tight_work_per_candidate)?;
     out.text(",\"gpu_scheduled_work\":")?;
     out.optional_number(stats.gpu_scheduled_work)?;
+    tight_routes(out, stats)?;
     out.text(",\"gpu_residuals\":")?;
     if let Some(residuals) = stats.gpu_residuals {
         out.text("{\"fixed_point\":")?;
@@ -1223,6 +1224,35 @@ fn execution_statistics(
     out.text(",\"complete\":")?;
     out.text(if stats.overflowed { "false" } else { "true" })?;
     out.text("}}")
+}
+
+/// The tight slots per route and the update route's availability, each `null`
+/// before the first decoded tight batch.
+fn tight_routes(
+    out: &mut Buffer,
+    stats: &crate::FormulaExecutionStatistics,
+) -> Result<(), RunError> {
+    out.text(",\"gpu_tight_routes\":")?;
+    if let Some(routes) = stats.gpu_tight_routes {
+        out.text("{\"complete\":")?;
+        out.text(&routes.complete.to_string())?;
+        out.number_field("dense_reuse", routes.dense_reuse)?;
+        out.number_field("beyond_threshold", routes.beyond_threshold)?;
+        out.number_field("update", routes.update)?;
+        out.number_field("nodes_evaluated", routes.nodes_evaluated)?;
+        out.text("}")?;
+    } else {
+        out.text("null")?;
+    }
+    out.text(",\"gpu_tight_updates\":")?;
+    let Some(updates) = stats.gpu_tight_updates else {
+        return out.text("null");
+    };
+    out.text("{\"availability\":")?;
+    out.string(updates.availability.label())?;
+    out.text(",\"count_bits\":")?;
+    out.optional_number(updates.count_bits.map(u64::from))?;
+    out.text("}")
 }
 
 fn expansion_usage(
