@@ -832,7 +832,12 @@ size changes which invocation evaluates which node, never a node's value. Under
 frozen-reduct propagation sibling gates narrow shared domains through atomics,
 so the number of sweeps, and whether a candidate reaches a sweep or work limit,
 can differ between sizes; such a residual is completed exactly on the host.
-Work allowances do not depend on the size.
+Away from those limits a candidate's verdict class agrees across sizes where
+every transfer is order-preserving, which the contract tests establish for
+binary gates; for native groups, thresholds and extremum cuts it is a stated
+[implementation obligation](../lean/correspondence.md#ownership-and-execution-correspondence)
+that the physical tests check but do not prove. Work allowances do not depend on
+the size.
 
 Dense frozen-reduct propagation reuses those levels, starting downward and
 alternating direction each sweep. Asserted roots can constrain operands across

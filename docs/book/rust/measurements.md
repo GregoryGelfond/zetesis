@@ -165,6 +165,11 @@ size the theory's dependency schedule fits
 it is absent before the first decoded batch. Device timings, sweep counts and
 round- or work-limit residuals can differ between sizes, so compare them only
 between runs that dispatched the same size, or report the sizes beside them.
+Fixed-point residuals agree across sizes where every propagation transfer is
+order-preserving: established for binary gates, and checked on the device but
+not proved for native groups and numeric rows
+([the obligation](../lean/correspondence.md#ownership-and-execution-correspondence)),
+so report the size beside a comparison of verdict classes too.
 
 ## GPU candidate slates
 

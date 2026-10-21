@@ -11,8 +11,10 @@ use std::borrow::Cow;
 /// gates of a level interact through atomic domain narrowing, so the number of
 /// sweeps to quiescence, and with it whether a candidate reaches a sweep or work
 /// limit, can differ between sizes; a residual is completed exactly on the host.
-/// A larger size is not promised to be faster; compare complete solves on the
-/// intended device.
+/// Away from those limits a verdict class agrees across sizes where every
+/// transfer is order-preserving: established for binary gates, and checked on
+/// the device but not proved for native groups and numeric rows. A larger size
+/// is not promised to be faster; compare complete solves on the intended device.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum GpuWorkgroupSize {

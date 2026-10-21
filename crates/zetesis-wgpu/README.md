@@ -64,9 +64,9 @@ strict-subset condition. Their counts and last eligible positions are merged
 before a zero count refutes the query or a unique eligible atom is required to be
 false. Auxiliary nodes never witness strict removal. This uses 24 bytes of
 workgroup storage; a sweep reserves `9*nodes+2*edges+atoms+65+levels` policy work
-units, including a constant 65 for one strict-subset reduction, whatever the
-workgroup size, and the dependency-level walk. These units are not GPU instruction
-counts.
+units, including a constant 65 for one strict-subset reduction, merging the
+invocations' summaries and applying one projection, whatever the workgroup size,
+and the dependency-level walk. These units are not GPU instruction counts.
 Original truth is evaluated before propagation. A cold graph groups original
 node IDs by dependency level; both formula and tight checkers reuse this layout.
 Nodes in a level run in parallel and a barrier precedes dependent reads. General

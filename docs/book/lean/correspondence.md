@@ -1559,6 +1559,18 @@ completion. Packed-level coverage, collective barriers, atomic refinement and
 the changed work receipts remain Rust/WGSL obligations. No new shader-verification
 claim follows from reusing the schedule.
 
+Soundness alone does not make two schedules agree. A sweep that changes nothing
+ends at the same fixed point under every schedule, and so in the same verdict
+class away from round and work limits, only if every transfer is also
+order-preserving in the domains it reads: from smaller domains it removes at
+least as much, so a stale sibling read can only weaken a step. The contract
+tests establish this for the binary gate transfer. For the native AND/OR group
+transfers and the threshold and extremum-cut projections it is a further
+Rust/WGSL obligation; the physical tests check verdict agreement across every
+workgroup size on fixtures that each size schedules differently, which is
+evidence, not proof. Answer sets do not depend on it: every outcome other than a
+refutation is completed exactly.
+
 Optional changed-dependency propagation requires a separate wakeup argument. Its
 directory covers every operand and output domain, including atom aliases. Every
 gate starts eligible; an intersection marks both current and next generations,

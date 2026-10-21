@@ -1,6 +1,7 @@
 //! Explicit physical API qualification of the partial frozen-query primitive.
 //! No adapter absence or residual query is replaced by a CPU GPU-result claim.
 
+mod agreement;
 mod native;
 
 use crate::support::physical;
@@ -411,6 +412,7 @@ fn qualify_kernel_options(oracle: &mut GpuFormulaOracle) {
             }
         }
     }
+    agreement::qualify(&context, oracle.projection());
 }
 
 /// Gate and root counts one below, at and one above the sizes 64, 128 and 256,
