@@ -18,6 +18,7 @@ impl Execution {
         options: &SolveConfig,
         context: Option<&GpuContext>,
         plan: Arc<TightPlan>,
+        control: &Cancellation,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
         let oracle = match context {
@@ -59,6 +60,10 @@ impl Execution {
                 gpu_compute_timing,
                 ..Default::default()
             }),
+            settlement: crate::formula_execution::Settlement::new(
+                control,
+                TightGpuLimits::default().timeout,
+            ),
         })
     }
 }
@@ -87,6 +92,10 @@ pub(crate) fn check(
         let result = phases.measure(SolvePhase::GpuHostOracle, || {
             oracle.check_prefix(plan, pending, limits, cancellation)
         });
+        // A failed call can still report the batch before it, as unavailable.
+        if let Some(report) = oracle.reported_compute_time() {
+            statistics.gpu_compute_timing.record(report);
+        }
         // The primitive submits one ordered batch, even if its readback fails.
         // Retain that receipt before propagating the original device error.
         let activity = oracle.activity();
@@ -118,9 +127,6 @@ pub(crate) fn check(
         let checks = checks
             .into_checks(plan.theory(), &pending[..count])
             .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
-        statistics
-            .gpu_compute_timing
-            .record(oracle.last_compute_time());
         if let Some(batch) = oracle.last_batch_stats() {
             add(&mut statistics.gpu_batches, batch.dispatches)?;
             add(&mut statistics.gpu_candidates, batch.candidates)?;

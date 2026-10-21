@@ -102,7 +102,7 @@ impl Resident {
         let result = runtime::read_polled(
             runtime.device(),
             &transport.readback,
-            submission,
+            submission.index,
             timeout,
             || poll(cancellation),
             |words| packing::decode(words, &self.numeric, plan, masks, cancellation),

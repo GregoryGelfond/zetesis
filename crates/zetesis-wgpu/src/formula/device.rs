@@ -5,7 +5,10 @@ use super::preparation::{Preparation, PreparedGraph};
 use super::transport::Resident;
 use super::{FormulaBatchStats, FormulaCheck, FormulaLimits, GateProjection, GpuFormulaProfile};
 use crate::runtime::ErrorScopes;
+use crate::timing::{BatchTiming, ComputeTimer};
 use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
+use std::time::Duration;
+use zetesis_backend::{BatchComputeTime, ComputeTimingStatus};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
 
@@ -28,7 +31,10 @@ pub struct GpuFormulaOracle {
     epoch: u32,
     last: Option<FormulaBatchStats>,
     last_submission_candidates: Option<usize>,
-    last_compute_time: Option<std::time::Duration>,
+    // Timestamp storage and pair ledger, from the first timed batch until the
+    // residency is cleared; transports and theories come and go beneath it.
+    timer: Option<ComputeTimer>,
+    reported: Option<BatchComputeTime>,
 }
 
 struct PreparedCall {
@@ -149,7 +155,8 @@ impl GpuFormulaOracle {
             epoch: 0,
             last: None,
             last_submission_candidates: None,
-            last_compute_time: None,
+            timer: None,
+            reported: None,
         }
     }
 
@@ -177,22 +184,84 @@ impl GpuFormulaOracle {
     pub const fn last_submission_candidates(&self) -> Option<usize> {
         self.last_submission_candidates
     }
-    /// Valid device compute-pass duration for the latest completely decoded batch.
-    /// Absent for disabled/unsupported timing, invalid timestamps and incomplete
-    /// batches. Zero is a valid measurement. Host preparation and waits are excluded.
+    /// The compute-pass time of the batch this oracle's latest call consumed.
+    ///
+    /// Under enabled timing, a submitting call that completes reports the batch
+    /// completed by the previous submitting call, from that batch's own interval;
+    /// its own batch's interval is read by the next submitting call or by
+    /// [`Self::flush_compute_time`]. A call that fails after submission reports
+    /// the previous batch unavailable, abandons its own and retires the timer, so
+    /// the next timed batch starts a fresh one. The flush reports the batch it
+    /// resolved, and [`Self::clear_residency`] reports a discarded unresolved
+    /// batch unavailable. Under unsupported timing each completing call
+    /// reports its own batch unavailable; disabled timing reports nothing.
+    /// `None` when the latest call consumed no batch: every call clears it at its
+    /// start, including empty and refused calls. A measured duration is never
+    /// zero and excludes host preparation, transfers and waits.
     #[must_use]
-    pub const fn last_compute_time(&self) -> Option<std::time::Duration> {
-        self.last_compute_time
+    pub const fn reported_compute_time(&self) -> Option<BatchComputeTime> {
+        self.reported
     }
-    /// Release authored resident handles. This neither cancels GPU work nor
-    /// repairs an invalidated device; driver retirement can occur later.
-    /// Clears the last batch and submission receipts.
+    /// Whether a completed batch still waits for its interval to be resolved by
+    /// the next submitting call or by [`Self::flush_compute_time`].
+    #[must_use]
+    pub fn compute_time_unresolved(&self) -> bool {
+        self.timer.as_ref().is_some_and(ComputeTimer::pending)
+    }
+    /// Resolve the unresolved batch's interval with one resolve-only submission.
+    ///
+    /// Returns at once, with no report, when no batch is unresolved. Otherwise a
+    /// zero `timeout` is refused; the context lease is taken, and `Busy` submits
+    /// nothing; `cancellation` and context health are then checked once, and a
+    /// stop or an unhealthy context submits nothing. Each refusal leaves the
+    /// batch unresolved and a healthy context reusable. The flush then waits at most
+    /// `timeout` for its submission, polling no control. On observed completion
+    /// the batch is reported, measured or unavailable, and the context stays
+    /// reusable. A timeout or a mapping, device or scope failure reports it
+    /// unavailable, retires the timer and invalidates the context, as for any
+    /// submission whose completion is unknown or faulted. The flush allocates nothing and
+    /// downloads 16 bytes; batch statistics and submission receipts exclude it.
+    ///
+    /// # Errors
+    /// Returns the refusals and failures above.
+    pub fn flush_compute_time(
+        &mut self,
+        timeout: Duration,
+        cancellation: &Cancellation,
+    ) -> Result<(), GpuError> {
+        self.reported = None;
+        let Some(timer) = self.timer.as_mut().filter(|timer| timer.pending()) else {
+            return Ok(());
+        };
+        crate::runtime::positive_timeout(timeout)?;
+        let runtime = &self.profile.runtime;
+        let _lease = runtime.context.lease()?;
+        cancellation.poll().map_err(GpuError::interrupted)?;
+        runtime.check_health()?;
+        let scopes = ErrorScopes::new(runtime.device());
+        let completion = timer.flush(runtime.device(), runtime.queue(), timeout);
+        match runtime.complete(scopes, Ok(completion)) {
+            Ok(tail) => {
+                self.reported = timer.flushed(tail, runtime.queue().get_timestamp_period());
+                Ok(())
+            }
+            Err(error) => {
+                self.reported = crate::timing::retire(&mut self.timer);
+                Err(error)
+            }
+        }
+    }
+    /// Release authored resident handles and the compute timer. This neither
+    /// cancels GPU work nor repairs an invalidated device; driver retirement can
+    /// occur later. Clears the last batch and submission receipts. A batch still
+    /// unresolved is reported unavailable, since it can never be resolved; the
+    /// next timed batch starts a fresh timer.
     pub fn clear_residency(&mut self) {
         self.resident = None;
         self.candidates.release();
         self.last = None;
         self.last_submission_candidates = None;
-        self.last_compute_time = None;
+        self.reported = crate::timing::retire(&mut self.timer);
     }
     /// Evaluate original roots, freeze M, and cooperatively narrow the proper-
     /// subset query. Results retain input order and no partial batch is returned.
@@ -300,7 +369,7 @@ impl GpuFormulaOracle {
     ) -> Result<Vec<FormulaCheck>, GpuError> {
         self.last = None;
         self.last_submission_candidates = None;
-        self.last_compute_time = None;
+        self.reported = None;
         let context = self.profile.runtime.context.clone();
         let _lease = context.lease()?;
         cancellation.poll().map_err(GpuError::interrupted)?;
@@ -318,8 +387,12 @@ impl GpuFormulaOracle {
         if let Some(prepared) = fresh {
             self.resident = Some(Resident::new(self.profile.runtime.device(), prepared));
         }
+        let status = context.compute_timing();
+        if status == ComputeTimingStatus::Enabled && self.timer.is_none() {
+            self.timer = Some(ComputeTimer::new(self.profile.runtime.device()));
+        }
         self.epoch = epoch;
-        let outcome = self
+        let dispatched = self
             .resident
             .as_mut()
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident formula"))
@@ -330,13 +403,29 @@ impl GpuFormulaOracle {
                     &plan,
                     limits.timeout,
                     cancellation,
-                    &mut self.last_submission_candidates,
+                    self.timer.as_ref(),
                 )
             });
-        let batch = self.profile.runtime.complete(scopes, outcome)?;
+        let (outcome, timing) = match dispatched {
+            Ok(dispatched) => {
+                self.last_submission_candidates = Some(dispatched.candidates);
+                (Ok(dispatched.completion), dispatched.timing)
+            }
+            Err(error) => (Err(error), BatchTiming::default()),
+        };
+        let checks = self.profile.runtime.complete(scopes, outcome);
+        if self.last_submission_candidates.is_some() {
+            self.reported = crate::timing::settle_call(
+                status,
+                &mut self.timer,
+                checks.is_ok(),
+                &timing,
+                self.profile.runtime.queue().get_timestamp_period(),
+            );
+        }
+        let checks = checks?;
         self.last = Some(stats);
-        self.last_compute_time = batch.compute_time;
-        Ok(batch.checks)
+        Ok(checks)
     }
 
     // All cold staging is owned and admitted before device effects. Minimum
@@ -442,7 +531,13 @@ impl GpuFormulaOracle {
                     .as_ref()
                     .is_none_or(|resident| !resident.matches(&plan)),
             resident_theory_bytes: graph.schedule.bytes,
-            resident_transport_bytes: plan.transport + timing_bytes,
+            // The timer is the oracle's; only the readback tail is transport.
+            resident_transport_bytes: plan.transport
+                + if timing_bytes == 0 {
+                    0
+                } else {
+                    crate::timing::READBACK_BYTES
+                },
             accounted_bytes: plan.accounted + timing_bytes,
             workgroup_size: graph.workgroup_size.invocations(),
         };

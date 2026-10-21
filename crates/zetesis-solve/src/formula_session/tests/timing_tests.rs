@@ -58,6 +58,7 @@ fn interleaved_sessions_preserve_all_phase_attempts() {
                 &config,
                 &ExecutionResources::default(),
                 None,
+                &cancellation,
                 &mut observations,
             )
             .unwrap(),

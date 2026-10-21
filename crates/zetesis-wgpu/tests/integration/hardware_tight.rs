@@ -139,7 +139,9 @@ fn compare(oracle: &mut GpuTightOracle, certificate: &TightPlan) -> usize {
             )
             .unwrap();
         assert_eq!(results.len(), candidates.len());
-        if let Some(elapsed) = oracle.last_compute_time() {
+        if let Some(zetesis_backend::BatchComputeTime::Measured(elapsed)) =
+            oracle.reported_compute_time()
+        {
             assert_eq!(
                 oracle.context().compute_timing(),
                 zetesis_backend::ComputeTimingStatus::Enabled
@@ -847,7 +849,7 @@ fn qualify_dependency_schedules(oracle: &mut GpuTightOracle) {
             &Cancellation::default(),
         )
         .unwrap();
-    assert_eq!(oracle.last_compute_time(), None);
+    assert_eq!(oracle.reported_compute_time(), None);
 }
 
 fn qualify_prefixes(oracle: &mut GpuTightOracle) {

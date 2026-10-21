@@ -115,30 +115,43 @@ tight oracles also have `new_selected_with_timing` constructors.
 `GpuContext::compute_timing()` reports `NotRequested`, `Unsupported` or `Enabled`.
 Unsupported timestamps do not prevent solving.
 
-`FormulaExecutionStatistics::gpu_compute_timing` sums valid durations from
-successfully decoded batches. `elapsed` stays absent until a valid sample is
-recorded. Equal device counter readings are unavailable: they do not distinguish
-an unresolved interval from zero compute cost.
-`is_complete()` requires at least one valid sample and no missing sample or
-accounting overflow among decoded batches. Submitted batches that fail before
-decoding retain their submission receipts separately. Neither timing completeness
-nor a timestamp establishes complete enumeration or optimality.
+`FormulaExecutionStatistics::gpu_compute_timing` counts each successfully
+decoded batch once: measured, with its own compute pass's duration; unavailable,
+when that interval was not established; or unresolved, when the record was taken
+before the interval could be read. `elapsed` sums the measured durations and stays
+absent until a valid sample is recorded. Equal device counter readings are
+unavailable: they do not distinguish an unresolved interval from zero compute
+cost. So are failed samples, unwritten or unrewritten counter slots, and intervals
+longer than the host's own observation of their submission.
+`measured + unavailable + unresolved` equals the decoded batches.
+`is_complete()` requires at least one valid sample, no unavailable or unresolved
+batch, and no accounting overflow. Submitted batches that fail before decoding
+retain their submission receipts separately. Neither timing completeness nor a
+timestamp establishes complete enumeration or optimality.
 
 The interval covers the compute pass, including memory access within it. It
 excludes host preparation, command-buffer copies, submission and waiting.
 `GpuHostOracle` continues to measure the broader host call; these durations are
-not interchangeable. Each resident transport reuses two timestamp slots and a
-resolve buffer, appending the result to its ordinary readback. There is no
-additional submission or wait. Admission reserves 48 logical bytes for the query
-slots, resolve buffer and readback tail; this allowance does not measure
-additional driver-private allocation. Timing adds device work and should be
-kept consistent across measured versions.
+not interchangeable. Each device oracle owns four timestamp slots, used as two
+pairs, for as long as it keeps its residency. A batch writes the pair that is not
+pending. After its pass, the same command buffer resolves the previous batch's
+pair, whose completion the host has already observed, and appends it to the
+batch's ordinary readback, so every batch reports the one before it from that
+batch's own pass. No batch adds a submission or a wait. When an execution
+settles, one resolve-only submission reads its final batch's interval and is
+counted as a flush, not a batch. A stopped execution skips it, and a settlement
+that meets a busy or unhealthy context cannot make it; either reports that batch
+unresolved. Admission reserves 80 logical bytes per timed batch: the
+oracle's query slots, resolve buffer and flush readback, and the transport's
+16-byte readback tail. This allowance does not measure additional driver-private
+allocation. Timing adds device work and should be kept consistent across measured
+versions.
 
-JSON statistics retain the status, elapsed nanoseconds, measured and unavailable
-batch counts, and the explicit `decoded_device_compute_passes` scope. Human
-statistics show the corresponding interval and availability. The maintained
-benchmark runner already requests these statistics and preserves them in its raw
-native reports.
+JSON statistics retain the status, elapsed nanoseconds, the measured,
+unavailable and unresolved batch counts, the flush submissions, and the explicit
+`decoded_device_compute_passes` scope. Human statistics show the corresponding
+interval and counts. The maintained benchmark runner already requests these
+statistics and preserves them in its raw native reports.
 
 ## GPU workgroup size
 

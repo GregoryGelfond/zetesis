@@ -252,6 +252,8 @@ const NORMAL_STRING: &str = "a :- not b. b :- not a. value(\"7\"). -tag(\"7\"). 
 const FORMULA_FIRST: &str = "1 {a;b} 1. value(7). -tag(\"7\"). #minimize {1@2,a:a;2@2,b:b}. #show.";
 const FORMULA_SECOND: &str =
     "1 {a;b} 1. value(7). -tag(\"7\"). #minimize {9@2,a:a;4@2,b:b}. #show.";
+// Sixty-four answers in batches of four: an answer arrives before the last batch.
+const FORMULA_MANY: &str = "{a;b;c;d;e;f}.";
 
 fn independent_closures(resources: &ExecutionResources, device: GpuApi) {
     let first = normal(NORMAL_NUMBER);
@@ -392,6 +394,7 @@ fn independent_sessions(device: GpuApi) {
     drop(context);
     independent_closures(&retained, device);
     independent_formulas(&retained, device);
+    stopped_timed_session(device);
     let value = Value::Number(7);
     let query = relation
         .query(&[(0, (&value).into())], Limits::default())
@@ -410,6 +413,62 @@ fn independent_sessions(device: GpuApi) {
     assert_eq!(selected.row(1).unwrap().source_index(), 0);
     assert_eq!(prepared.activity().submissions, 1);
     assert_eq!(prepared.activity().completed_queries, 1);
+}
+
+// Each decoded batch is reported once: measured, unavailable, or unresolved
+// while its execution has not settled.
+fn assert_timing_identity(outcome: &SemanticOutcome) {
+    let execution = outcome.formula_execution().unwrap();
+    let timing = execution.gpu_compute_timing;
+    assert_eq!(
+        timing.measured_batches + timing.unavailable_batches + timing.unresolved_batches,
+        execution.gpu_batches
+    );
+}
+
+// A session stopped by its control after a completed device batch leaves that
+// batch's interval unresolved, and the supplied timed context keeps serving.
+fn stopped_timed_session(device: GpuApi) {
+    let context =
+        GpuContext::new_selected_with_timing(GpuOptions::default(), device.selection()).unwrap();
+    let enabled = context.compute_timing() == zetesis_backend::ComputeTimingStatus::Enabled;
+    let resources = ExecutionResources::with_gpu(&context);
+    let owner = formula(FORMULA_MANY);
+    let control = Cancellation::default();
+    let mut session = Session::builder(
+        PreparedInput::formula(&owner),
+        config(device.backend(), Profile::Formula),
+        control.clone(),
+    )
+    .resources(&resources)
+    .selection(AnswerSelection::All)
+    .start()
+    .unwrap();
+    session.next().unwrap().unwrap();
+    control.cancel();
+    let stopped = session.stop();
+    assert_timing_identity(&stopped);
+    let timing = stopped.formula_execution().unwrap().gpu_compute_timing;
+    assert_eq!(timing.flush_submissions, 0);
+    assert_eq!(timing.unresolved_batches, u64::from(enabled));
+    let subject = Subject::Theory(owner.theory().clone());
+    let completed = solve(
+        PreparedInput::formula(&owner),
+        &subject,
+        config(device.backend(), Profile::Formula),
+        &resources,
+        AnswerSelection::All,
+    );
+    require_device(&completed, device, Profile::Formula);
+    assert_eq!(completed.records.len(), 64);
+    assert_timing_identity(&completed.outcome);
+    let timing = completed
+        .outcome
+        .formula_execution()
+        .unwrap()
+        .gpu_compute_timing;
+    assert_eq!(timing.unresolved_batches, 0);
+    assert_eq!(timing.flush_submissions, u64::from(enabled));
 }
 
 fn resource_variants(device: GpuApi) -> [ExecutionResources; 2] {
@@ -1113,6 +1172,39 @@ fn terminal_families(device: GpuApi) {
             .collect();
         assert_eq!(shown.symbols(), expected);
     }
+    // A terminal-definition solve ending at its model limit settles its base
+    // execution, which reads the final batch's interval.
+    let timed =
+        GpuContext::new_selected_with_timing(GpuOptions::default(), device.selection()).unwrap();
+    let enabled = timed.compute_timing() == zetesis_backend::ComputeTimingStatus::Enabled;
+    let limited = solve(
+        PreparedInput::terminal(&owner),
+        &subject,
+        SolveConfig {
+            grounder: Grounder::Auto,
+            models: 2,
+            ..config(device.backend(), Profile::Formula)
+        },
+        &ExecutionResources::with_gpu(&timed),
+        AnswerSelection::All,
+    );
+    assert_eq!(limited.records.len(), 2);
+    assert_eq!(
+        limited.outcome.completion(),
+        Some(Completion::RequestedModels)
+    );
+    // A limited solve leaves later candidates queued; only the route is shared
+    // with the complete solve's checks.
+    assert_eq!(limited.routes.device_formula, 1);
+    assert!(limited.outcome.formula_execution().unwrap().gpu_batches > 0);
+    assert_timing_identity(&limited.outcome);
+    let timing = limited
+        .outcome
+        .formula_execution()
+        .unwrap()
+        .gpu_compute_timing;
+    assert_eq!(timing.unresolved_batches, 0);
+    assert_eq!(timing.flush_submissions, u64::from(enabled));
 }
 
 #[test]

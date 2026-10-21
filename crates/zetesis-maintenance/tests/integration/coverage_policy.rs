@@ -384,7 +384,7 @@ fn physical_metadata_keeps_floor_populations_separate() {
         record["floor_profiles"],
         serde_json::json!(["workspace", "cli-cpu"])
     );
-    assert_eq!(record["expected_physical_tests"], 64);
+    assert_eq!(record["expected_physical_tests"], 65);
     assert_eq!(record["physical_test_groups"].as_array().unwrap().len(), 14);
     assert_eq!(
         record["project_added_filename_filters"],
@@ -419,7 +419,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
             ["cli-formula", "test", "integration", 3],
             ["world-views", "test", "integration", 4],
             ["relation", "test", "integration", 2],
-            ["context", "test", "integration", 1],
+            ["context", "test", "integration", 2],
             ["solve-context", "lib", "workspace libraries", 4],
             ["session-resources", "test", "integration", 13],
             ["language-consumers", "test", "integration", 2],
@@ -435,7 +435,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
     ]);
     assert_eq!(groups[12]["tests"], language_tests);
     let tests = record["physical_tests"].as_array().unwrap();
-    assert_eq!(tests.len(), 64);
+    assert_eq!(tests.len(), 65);
     let formula_tests = serde_json::json!([
         "formula_gpu::physical::ordinary_metal_formula_batches_match_complete_cpu_models_costs_and_displays",
         "formula_gpu::physical::ordinary_metal_formula_limits_preserve_partial_coverage_and_writer_errors",
@@ -469,7 +469,7 @@ fn physical_metadata_retains_the_reviewed_schedule() {
         .collect();
     assert_eq!(tests.iter().collect::<Vec<_>>(), grouped_tests);
     let scope = record["physical_scope"].as_str().unwrap();
-    assert!(scope.starts_with("64 exact Metal tests: "));
+    assert!(scope.starts_with("65 exact Metal tests: "));
     assert!(scope.contains("complete tight families, the general device route for non-tight theories, and tight work refusal before dispatch"));
     assert!(scope.contains("completed-support table joins with actual GPU candidates and complete CPU/Metal answer families"));
     assert!(scope.contains("static constructor and complete closure/reference checks"));
@@ -579,9 +579,9 @@ fn each_physical_stage_names_its_backend() {
             record["workspace_stages"],
             serde_json::json!(["portable", label])
         );
-        assert_eq!(record["expected_physical_tests"], 64);
+        assert_eq!(record["expected_physical_tests"], 65);
         let scope = record["physical_scope"].as_str().unwrap();
-        assert!(scope.starts_with(&format!("64 exact {} tests: ", api.name())));
+        assert!(scope.starts_with(&format!("65 exact {} tests: ", api.name())));
         assert!(scope.contains(&format!("complete CPU/{} answer families", api.name())));
     }
 }

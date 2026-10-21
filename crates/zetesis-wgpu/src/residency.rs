@@ -89,7 +89,7 @@ impl ResidentGraph {
         Ok(runtime::read_polled(
             device,
             &transport.readback,
-            submission,
+            submission.index,
             timeout,
             || cancellation.poll().map_err(GpuError::interrupted),
             |words| packing::decode(words, plan, packed),

@@ -1179,7 +1179,7 @@ fn formula_gpu(
     let timing = &execution.gpu_compute_timing;
     writeln!(
         sink,
-        "  GPU compute passes: status={}; elapsed_ns={}; measured batches={}; unavailable batches={}; complete={}; host preparation, transfers and waits excluded",
+        "  GPU compute passes: status={}; elapsed_ns={}; measured batches={}; unavailable batches={}; unresolved batches={}; flush submissions={}; complete={}; host preparation, transfers and waits excluded",
         timing.status.label(),
         timing.elapsed.map_or_else(
             || "unavailable".to_owned(),
@@ -1187,6 +1187,8 @@ fn formula_gpu(
         ),
         timing.measured_batches,
         timing.unavailable_batches,
+        timing.unresolved_batches,
+        timing.flush_submissions,
         timing.is_complete(),
     )
 }

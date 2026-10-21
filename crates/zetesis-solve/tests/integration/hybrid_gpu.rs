@@ -160,6 +160,31 @@ fn complete_scored_families(api: GpuApi) {
         }
     }
     rejected_cheapest_answer(api, &resources);
+    settled_timing(api, &owner);
+}
+
+// A completed hybrid solve settles its core execution, which reads the final
+// batch's interval: each decoded batch is then measured or unavailable.
+fn settled_timing(api: GpuApi, owner: &zetesis_themelios::HybridFormula) {
+    let context =
+        GpuContext::new_selected_with_timing(GpuOptions::default(), GpuSelection { api }).unwrap();
+    let enabled = context.compute_timing() == zetesis_backend::ComputeTimingStatus::Enabled;
+    let (_, outcome, routes) = capture(
+        PreparedInput::hybrid(owner),
+        config(api, Oracle::Auto),
+        &ExecutionResources::with_gpu(&context),
+        AnswerSelection::All,
+    );
+    assert_eq!(routes.cpu, 0);
+    let execution = outcome.formula_execution().unwrap();
+    let timing = execution.gpu_compute_timing;
+    assert!(execution.gpu_batches > 0);
+    assert_eq!(
+        timing.measured_batches + timing.unavailable_batches + timing.unresolved_batches,
+        execution.gpu_batches
+    );
+    assert_eq!(timing.unresolved_batches, 0);
+    assert_eq!(timing.flush_submissions, u64::from(enabled));
 }
 
 fn rejected_cheapest_answer(api: GpuApi, resources: &ExecutionResources) {

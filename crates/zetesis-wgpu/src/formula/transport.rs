@@ -7,11 +7,13 @@ use crate::runtime::{self, Dispatch, buffer, entry, initialized};
 use crate::{GpuError, GpuErrorKind};
 use std::time::Duration;
 
-/// Logical checks and timing are published only after shared scope settlement.
-#[derive(Debug)]
-pub(super) struct DecodedBatch {
-    pub(super) checks: Vec<FormulaCheck>,
-    pub(super) compute_time: Option<Duration>,
+/// A submitted batch. Its logical checks are published only after shared scope
+/// settlement; its readback tail and host window are for the oracle's timer.
+pub(super) struct Dispatched {
+    pub(super) completion: runtime::Completion<Vec<FormulaCheck>>,
+    /// Candidates submitted, whether or not the readback decodes.
+    pub(super) candidates: usize,
+    pub(super) timing: crate::timing::BatchTiming,
 }
 
 pub(super) struct Resident {
@@ -54,8 +56,8 @@ impl Resident {
         plan: &Plan,
         timeout: Duration,
         cancellation: &zetesis_cpu::Cancellation,
-        submitted_candidates: &mut Option<usize>,
-    ) -> Result<runtime::Completion<DecodedBatch>, GpuError> {
+        timer: Option<&crate::timing::ComputeTimer>,
+    ) -> Result<Dispatched, GpuError> {
         let device = runtime.device();
         let queue = runtime.queue();
         let pipeline = runtime.pipeline_for(self.graph.workgroup_size)?;
@@ -85,32 +87,29 @@ impl Resident {
                 readback: &transport.readback,
                 result_bytes: plan.results,
                 clear_result: false,
-                timing: transport.timing.as_ref(),
+                timing: timer,
             },
         );
-        *submitted_candidates = Some(plan.worlds as usize);
-        Ok(runtime::read_polled(
+        let mut timing = crate::timing::BatchTiming::default();
+        let completion = runtime::read_polled(
             device,
             &transport.readback,
-            submission,
+            submission.index,
             timeout,
             || cancellation.poll().map_err(GpuError::interrupted),
             |words| {
-                let (words, measured) = crate::timing::split_readback(
-                    words,
-                    transport.timing.as_ref(),
-                    transport
-                        .timing
-                        .as_ref()
-                        .map_or(0.0, |_| queue.get_timestamp_period()),
-                )?;
+                let (words, tail) = crate::timing::split_readback(words, transport.timed)?;
                 let checks = packing::decode(words, plan)?;
-                Ok(DecodedBatch {
-                    checks,
-                    compute_time: measured,
-                })
+                timing.tail = tail;
+                Ok(checks)
             },
-        ))
+        );
+        timing.window = completion.window_since(submission.at);
+        Ok(Dispatched {
+            completion,
+            candidates: plan.worlds as usize,
+            timing,
+        })
     }
 }
 pub(super) struct Transport {
@@ -120,7 +119,8 @@ pub(super) struct Transport {
     results: wgpu::Buffer,
     readback: wgpu::Buffer,
     group: wgpu::BindGroup,
-    timing: Option<crate::timing::PassTimer>,
+    // The readback carries a timestamp tail after the logical results.
+    timed: bool,
 }
 impl Transport {
     fn new(
@@ -132,7 +132,6 @@ impl Transport {
         let timed = device.features().contains(wgpu::Features::TIMESTAMP_QUERY);
         let readback_bytes =
             crate::timing::readback_size(plan.results, timed, device.limits().max_buffer_size)?;
-        let timing = crate::timing::PassTimer::new(device);
         let params = buffer(
             device,
             "formula parameters",
@@ -189,7 +188,7 @@ impl Transport {
             results,
             readback,
             group,
-            timing,
+            timed,
         })
     }
 }

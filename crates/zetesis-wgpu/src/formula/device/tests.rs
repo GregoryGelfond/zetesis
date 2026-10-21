@@ -508,8 +508,9 @@ fn submitted_interruption(
     cancelled: &Cancellation,
 ) {
     // Invoke the same transport after host admission with already-stopped control.
-    // The receipt is written only after queue.submit; readback then observes Stop.
-    // This controls the phase exactly, without a race against shader duration.
+    // A dispatch returns its receipt only after queue.submit; readback then
+    // observes Stop. This controls the phase exactly, without a race against
+    // shader duration.
     let runtime = &oracle.profile.runtime;
     let _lease = runtime.context.lease().unwrap();
     let resident = oracle.resident.as_mut().unwrap();
@@ -531,18 +532,22 @@ fn submitted_interruption(
     )
     .unwrap();
     let scopes = ErrorScopes::new(runtime.device());
-    let outcome = resident.dispatch(
-        runtime,
-        oracle.candidates.words(),
-        &plan,
-        limits.timeout,
-        cancelled,
-        &mut oracle.last_submission_candidates,
-    );
-    let failure = runtime.complete(scopes, outcome).unwrap_err();
+    let dispatched = resident
+        .dispatch(
+            runtime,
+            oracle.candidates.words(),
+            &plan,
+            limits.timeout,
+            cancelled,
+            None,
+        )
+        .unwrap();
+    assert_eq!(dispatched.candidates, 2);
+    let failure = runtime
+        .complete(scopes, Ok(dispatched.completion))
+        .unwrap_err();
     assert_eq!(failure.kind(), GpuErrorKind::Interrupted);
     assert_eq!(failure.interruption(), Some(zetesis_cpu::Stop::Cancelled));
-    assert_eq!(oracle.last_submission_candidates, Some(2));
     assert!(oracle.last.is_none());
     assert_eq!(
         runtime.check_health().unwrap_err().kind(),

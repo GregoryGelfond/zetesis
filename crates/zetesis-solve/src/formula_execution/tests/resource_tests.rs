@@ -2,6 +2,7 @@
 
 use super::Execution;
 use crate::{Backend, ExecutionResources, GpuApi, SolveConfig};
+use zetesis_cpu::Cancellation;
 use zetesis_wgpu::{GpuContext, GpuOptions};
 
 fn supplied_context(backend: Backend, expected_api: &str) {
@@ -16,6 +17,7 @@ fn supplied_context(backend: Backend, expected_api: &str) {
         },
         &ExecutionResources::with_gpu(&context),
         None,
+        &Cancellation::default(),
         &mut crate::execution_observation::Ignore,
     )
     .unwrap();
@@ -45,6 +47,7 @@ fn supplied_context(backend: Backend, expected_api: &str) {
         },
         &ExecutionResources::with_gpu(&context),
         Some(plan),
+        &Cancellation::default(),
         &mut crate::execution_observation::Ignore,
     )
     .unwrap();
@@ -97,6 +100,7 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
                 &options,
                 &resources,
                 None,
+                &Cancellation::default(),
                 &mut crate::execution_observation::Ignore,
             )
             .unwrap();
@@ -104,6 +108,7 @@ fn supplied_profile(backend: Backend, expected_api: &str) {
                 oracle,
                 queue,
                 statistics,
+                ..
             } = &mut execution
             else {
                 panic!("forced formula execution retains a compiled oracle");

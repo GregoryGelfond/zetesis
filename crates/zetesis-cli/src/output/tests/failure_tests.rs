@@ -404,27 +404,32 @@ fn residual_json_distinguishes_decoding_from_cpu_completion() {
 
 #[test]
 fn compute_timing_json_distinguishes_absence_from_zero() {
-    use zetesis_backend::{ComputeTiming, ComputeTimingStatus};
-    for (status, sample, expected) in [
+    use zetesis_backend::{BatchComputeTime, ComputeTiming, ComputeTimingStatus};
+    for (status, report, expected) in [
         (
             ComputeTimingStatus::NotRequested,
-            None,
+            BatchComputeTime::Unavailable,
             serde_json::Value::Null,
         ),
         (
             ComputeTimingStatus::Unsupported,
-            None,
+            BatchComputeTime::Unavailable,
             serde_json::Value::Null,
         ),
-        (ComputeTimingStatus::Enabled, None, serde_json::Value::Null),
         (
             ComputeTimingStatus::Enabled,
-            Some(std::time::Duration::ZERO),
+            BatchComputeTime::Unavailable,
+            serde_json::Value::Null,
+        ),
+        (
+            ComputeTimingStatus::Enabled,
+            BatchComputeTime::Measured(std::time::Duration::ZERO),
             serde_json::json!(0),
         ),
     ] {
         let mut timing = ComputeTiming::new(status);
-        timing.record(sample);
+        timing.record(report);
+        let measured_report = matches!(report, BatchComputeTime::Measured(_));
         let mut statistics = crate::FormulaExecutionStatistics::default();
         statistics.gpu_compute_timing = timing;
         let mut out = Buffer::new(4096);
@@ -433,13 +438,33 @@ fn compute_timing_json_distinguishes_absence_from_zero() {
         let measured = &value["gpu_compute_timing"];
         assert_eq!(measured["status"], status.label());
         assert_eq!(measured["elapsed_ns"], expected);
-        assert_eq!(measured["complete"], sample.is_some());
-        assert_eq!(measured["measured_batches"], u64::from(sample.is_some()));
+        assert_eq!(measured["complete"], measured_report);
+        assert_eq!(measured["measured_batches"], u64::from(measured_report));
         assert_eq!(
             measured["unavailable_batches"],
-            u64::from(status != ComputeTimingStatus::NotRequested && sample.is_none())
+            u64::from(status != ComputeTimingStatus::NotRequested && !measured_report)
         );
         assert_eq!(measured["scope"], "decoded_device_compute_passes");
         assert_eq!(measured["host_oracle"], "excluded");
     }
+}
+
+#[test]
+fn compute_timing_json_reports_unresolved_batches_and_flushes() {
+    use zetesis_backend::{BatchComputeTime, ComputeTiming, ComputeTimingStatus};
+    let mut timing = ComputeTiming::new(ComputeTimingStatus::Enabled);
+    timing.record(BatchComputeTime::Measured(std::time::Duration::from_nanos(
+        7,
+    )));
+    timing.unresolved_batches = 1;
+    timing.record_flush_submission();
+    let mut statistics = crate::FormulaExecutionStatistics::default();
+    statistics.gpu_compute_timing = timing;
+    let mut out = Buffer::new(4096);
+    super::execution_statistics(&mut out, Some(&statistics)).unwrap();
+    let value: serde_json::Value = serde_json::from_slice(&out.bytes).unwrap();
+    let measured = &value["gpu_compute_timing"];
+    assert_eq!(measured["unresolved_batches"], 1);
+    assert_eq!(measured["flush_submissions"], 1);
+    assert_eq!(measured["complete"], false);
 }

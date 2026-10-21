@@ -76,8 +76,11 @@ impl GpuContext {
     ///
     /// Unsupported timing leaves solving available and is reported explicitly by
     /// [`Self::compute_timing`]. Other constructors leave timestamps disabled.
-    /// Formula and tight-support transports allocate bounded timestamp storage
-    /// only when a nonempty batch is admitted; no extra queue wait is introduced.
+    /// A formula or tight-support oracle allocates its bounded timestamp storage
+    /// with its first admitted nonempty batch and keeps it until it clears its
+    /// residency. Batches add no submission or queue wait; reading the final
+    /// batch's interval takes one resolve-only submission, made only on request
+    /// (`flush_compute_time`).
     ///
     /// # Errors
     /// Returns the same adapter, policy and device failures as [`Self::new_selected`].

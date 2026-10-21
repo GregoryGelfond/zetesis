@@ -1197,6 +1197,8 @@ fn execution_statistics(
     out.string(timing.status.label())?;
     out.number_field("measured_batches", timing.measured_batches)?;
     out.number_field("unavailable_batches", timing.unavailable_batches)?;
+    out.number_field("unresolved_batches", timing.unresolved_batches)?;
+    out.number_field("flush_submissions", timing.flush_submissions)?;
     out.text(",\"elapsed_ns\":")?;
     optional_number(out, timing.elapsed.map(|elapsed| elapsed.as_nanos()))?;
     out.text(",\"complete\":")?;

@@ -171,9 +171,12 @@ impl Runtime {
         scopes: ErrorScopes,
         outcome: Result<Completion<T>, GpuError>,
     ) -> Result<T, GpuError> {
-        let Completion { outcome, effects } = outcome.unwrap_or_else(|error| Completion {
+        let Completion {
+            outcome, effects, ..
+        } = outcome.unwrap_or_else(|error| Completion {
             outcome: Err(error),
             effects: Effects::MayBeLive,
+            observed: None,
         });
         self.context
             .complete(pollster::block_on(scopes.finish()), outcome, effects)
@@ -202,10 +205,19 @@ impl Runtime {
 pub(crate) struct Completion<T> {
     outcome: Result<T, GpuError>,
     effects: Effects,
+    // The instant at which the wait observed the submission's completion.
+    observed: Option<std::time::Instant>,
 }
 impl<T> Completion<T> {
     pub(crate) fn is_ok(&self) -> bool {
         self.outcome.is_ok()
+    }
+
+    /// The host window from `submitted` to the observed completion; absent when
+    /// the wait did not observe completion.
+    pub(crate) fn window_since(&self, submitted: std::time::Instant) -> Option<Duration> {
+        self.observed
+            .map(|observed| observed.saturating_duration_since(submitted))
     }
 }
 
@@ -221,7 +233,13 @@ pub(crate) struct Dispatch<'a> {
     /// Clear prior receipt hints in this encoder before computing. The owning
     /// oracle, not bytes from a previous dispatch, authorizes retained truth.
     pub(crate) clear_result: bool,
-    pub(crate) timing: Option<&'a crate::timing::PassTimer>,
+    pub(crate) timing: Option<&'a crate::timing::ComputeTimer>,
+}
+
+/// A queue submission and the host instant just before it was made.
+pub(crate) struct Submission {
+    pub(crate) index: wgpu::SubmissionIndex,
+    pub(crate) at: std::time::Instant,
 }
 
 /// A compute pipeline over `shader`'s entry point, overriding `WORKGROUP_SIZE`
@@ -251,7 +269,7 @@ pub(crate) fn submit(
     device: &wgpu::Device,
     queue: &wgpu::Queue,
     dispatch: &Dispatch<'_>,
-) -> wgpu::SubmissionIndex {
+) -> Submission {
     let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
         label: Some(dispatch.command_label),
     });
@@ -261,7 +279,7 @@ pub(crate) fn submit(
     {
         let mut pass = encoder.begin_compute_pass(&wgpu::ComputePassDescriptor {
             label: Some(dispatch.pass_label),
-            timestamp_writes: dispatch.timing.map(crate::timing::PassTimer::writes),
+            timestamp_writes: dispatch.timing.map(crate::timing::ComputeTimer::writes),
         });
         pass.set_pipeline(dispatch.pipeline);
         pass.set_bind_group(0, dispatch.group, &[]);
@@ -278,7 +296,12 @@ pub(crate) fn submit(
     if let Some(timing) = dispatch.timing {
         timing.resolve(&mut encoder, dispatch.readback, dispatch.result_bytes);
     }
-    queue.submit([encoder.finish()])
+    let command = encoder.finish();
+    let at = std::time::Instant::now();
+    Submission {
+        index: queue.submit([command]),
+        at,
+    }
 }
 
 /// Admit a dispatch's wait policy before any device allocation or submission.
@@ -324,7 +347,8 @@ pub(crate) fn read_polled<T>(
         },
         || started.elapsed(),
     );
-    finish_read(
+    let observed = wait.completed.then(std::time::Instant::now);
+    let mut completion = finish_read(
         wait,
         || {
             receiver
@@ -352,7 +376,9 @@ pub(crate) fn read_polled<T>(
         // alone does not establish queue completion or permit context reuse.
         || readback.unmap(),
         &mut cancellation,
-    )
+    );
+    completion.observed = observed;
+    completion
 }
 
 struct SubmissionWait {
@@ -390,6 +416,7 @@ fn finish_read<T>(
         } else {
             Effects::MayBeLive
         },
+        observed: None,
     }
 }
 

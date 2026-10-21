@@ -659,23 +659,32 @@ mod physical {
             zetesis_backend::ComputeTimingStatus::NotRequested
         );
         assert!(!timing.overflowed);
+        // Each decoded batch is reported once: measured, unavailable, or
+        // unresolved while its execution has not settled.
         assert_eq!(
-            timing.measured_batches + timing.unavailable_batches,
+            timing.measured_batches + timing.unavailable_batches + timing.unresolved_batches,
             stats.gpu_batches
         );
         assert_eq!(timing.elapsed.is_some(), timing.measured_batches > 0);
         if timing.status == zetesis_backend::ComputeTimingStatus::Unsupported {
             assert_eq!(timing.measured_batches, 0);
+            assert_eq!(timing.flush_submissions, 0);
+        } else if stats.gpu_batches > 0 {
+            // The completed solve settled once, reading its final batch.
+            assert_eq!(timing.unresolved_batches, 0);
+            assert_eq!(timing.flush_submissions, 1);
         }
         let elapsed = timing.elapsed.map_or_else(
             || "unavailable".to_owned(),
             |duration| duration.as_nanos().to_string(),
         );
         let expected = format!(
-            "GPU compute passes: status={}; elapsed_ns={elapsed}; measured batches={}; unavailable batches={}; complete={}; host preparation, transfers and waits excluded",
+            "GPU compute passes: status={}; elapsed_ns={elapsed}; measured batches={}; unavailable batches={}; unresolved batches={}; flush submissions={}; complete={}; host preparation, transfers and waits excluded",
             timing.status.label(),
             timing.measured_batches,
             timing.unavailable_batches,
+            timing.unresolved_batches,
+            timing.flush_submissions,
             timing.is_complete(),
         );
         assert!(

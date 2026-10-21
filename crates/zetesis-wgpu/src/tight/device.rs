@@ -8,8 +8,10 @@ use super::{
     TightSupport, poll,
 };
 use crate::runtime::{DeviceProfile, ErrorScopes, Runtime};
+use crate::timing::{BatchTiming, ComputeTimer};
 use crate::{GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
 use std::time::Duration;
+use zetesis_backend::{BatchComputeTime, ComputeTimingStatus};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, TightPlan};
 
@@ -49,7 +51,10 @@ pub struct GpuTightOracle {
     epoch: u32,
     last: Option<TightGpuBatchStats>,
     activity: TightGpuActivity,
-    last_compute_time: Option<Duration>,
+    // Timestamp storage and pair ledger, from the first timed batch until the
+    // residency is cleared; transports and theories come and go beneath it.
+    timer: Option<ComputeTimer>,
+    reported: Option<BatchComputeTime>,
 }
 
 struct PreparedCall {
@@ -178,7 +183,8 @@ impl GpuTightOracle {
             epoch: 0,
             last: None,
             activity: TightGpuActivity::default(),
-            last_compute_time: None,
+            timer: None,
+            reported: None,
         }
     }
 
@@ -211,12 +217,72 @@ impl GpuTightOracle {
     pub fn last_batch_stats(&self) -> Option<&TightGpuBatchStats> {
         self.last.as_ref()
     }
-    /// Optional device timestamp interval for the last successful compute pass.
-    /// Excludes host packing, uploads, readback and waits; unavailable unless
-    /// timing was requested on a context supporting compute-pass timestamps.
+    /// The compute-pass time of the batch this oracle's latest call consumed.
+    ///
+    /// Under enabled timing, a submitting call that completes reports the batch
+    /// completed by the previous submitting call, from that batch's own interval;
+    /// its own batch's interval is read by the next submitting call or by
+    /// [`Self::flush_compute_time`]. A call that fails after submission reports
+    /// the previous batch unavailable, abandons its own and retires the timer, so
+    /// the next timed batch starts a fresh one. The flush reports the batch it
+    /// resolved, and [`Self::clear_residency`] reports a discarded unresolved
+    /// batch unavailable. Under unsupported timing each completing call
+    /// reports its own batch unavailable; disabled timing reports nothing.
+    /// `None` when the latest call consumed no batch: every call clears it at its
+    /// start, including empty and refused calls. A measured duration is never
+    /// zero and excludes host packing, uploads, readback and waits.
     #[must_use]
-    pub const fn last_compute_time(&self) -> Option<Duration> {
-        self.last_compute_time
+    pub const fn reported_compute_time(&self) -> Option<BatchComputeTime> {
+        self.reported
+    }
+    /// Whether a completed batch still waits for its interval to be resolved by
+    /// the next submitting call or by [`Self::flush_compute_time`].
+    #[must_use]
+    pub fn compute_time_unresolved(&self) -> bool {
+        self.timer.as_ref().is_some_and(ComputeTimer::pending)
+    }
+    /// Resolve the unresolved batch's interval with one resolve-only submission.
+    ///
+    /// Returns at once, with no report, when no batch is unresolved. Otherwise a
+    /// zero `timeout` is refused; the context lease is taken, and `Busy` submits
+    /// nothing; `cancellation` and context health are then checked once, and a
+    /// stop or an unhealthy context submits nothing. Each refusal leaves the
+    /// batch unresolved and a healthy context reusable. The flush then waits at most
+    /// `timeout` for its submission, polling no control. On observed completion
+    /// the batch is reported, measured or unavailable, and the context stays
+    /// reusable. A timeout or a mapping, device or scope failure reports it
+    /// unavailable, retires the timer and invalidates the context, as for any
+    /// submission whose completion is unknown or faulted. The flush allocates nothing and
+    /// downloads 16 bytes; batch statistics and [`Self::activity`] exclude it.
+    ///
+    /// # Errors
+    /// Returns the refusals and failures above.
+    pub fn flush_compute_time(
+        &mut self,
+        timeout: Duration,
+        cancellation: &Cancellation,
+    ) -> Result<(), GpuError> {
+        self.reported = None;
+        let Some(timer) = self.timer.as_mut().filter(|timer| timer.pending()) else {
+            return Ok(());
+        };
+        crate::runtime::positive_timeout(timeout)?;
+        let runtime = &self.runtime;
+        let _lease = runtime.context.lease()?;
+        poll(cancellation)?;
+        runtime.check_health()?;
+        let scopes = ErrorScopes::new(runtime.device());
+        let completion = timer.flush(runtime.device(), runtime.queue(), timeout);
+        match runtime.complete(scopes, Ok(completion)) {
+            Ok(tail) => {
+                self.reported = timer.flushed(tail, runtime.queue().get_timestamp_period());
+                Ok(())
+            }
+            Err(error) => {
+                self.reported = crate::timing::retire(&mut self.timer);
+                Err(error)
+            }
+        }
     }
     /// Submitted and validated work in the latest attempt, including failure.
     /// Absence of completion never establishes that submitted work did not run.
@@ -224,14 +290,16 @@ impl GpuTightOracle {
     pub const fn activity(&self) -> TightGpuActivity {
         self.activity
     }
-    /// Drop authored resident handles and successful-batch statistics. Preserve
-    /// latest-attempt activity. Does not cancel work, reset the epoch, or repair
-    /// a device invalidated by timeout, control interruption or execution failure.
+    /// Drop authored resident handles, the compute timer and successful-batch
+    /// statistics. Preserve latest-attempt activity. Does not cancel work, reset
+    /// the epoch, or repair a device invalidated by timeout, control interruption
+    /// or execution failure. A batch still unresolved is reported unavailable,
+    /// since it can never be resolved; the next timed batch starts a fresh timer.
     pub fn clear_residency(&mut self) {
         self.resident = None;
         self.candidates.release();
         self.last = None;
-        self.last_compute_time = None;
+        self.reported = crate::timing::retire(&mut self.timer);
     }
 
     /// Check complete original truth and support for every ordered occurrence.
@@ -258,13 +326,17 @@ impl GpuTightOracle {
     /// Returns no partial result vector on foreign identity, capacity, work,
     /// allocation, cancellation, deadline, validation, device or readback failure.
     /// Host preparation refusals leave the oracle reusable. Failures after device
-    /// allocation/submission invalidate the entire context; a fresh context is
-    /// required before retrying. Busy contention submits no work and permits retry.
+    /// allocation/submission invalidate the entire context, and a fresh context is
+    /// required before retrying, except a cancellation or deadline stop whose
+    /// submission was observed to complete and whose readback was mapped and
+    /// released: that leaves the context reusable, as [`crate::GpuContext`]
+    /// documents. Busy contention submits no work and permits retry.
     /// Cancellation is polled during packing, waiting, decoding and before returning.
     /// A tighter work limit can bypass a resident dependency schedule. Its bytes
     /// remain charged: a smaller byte limit may refuse that retained layout.
-    /// Requested device timing adds its query, resolve and readback payload to
-    /// the same batch allowance; it never changes logical verdicts.
+    /// Requested device timing charges 80 bytes to the same batch allowance: the
+    /// oracle's query slots, resolve buffer and flush readback, and the readback
+    /// tail of the batch's transport. It never changes logical verdicts.
     pub fn check_batch(
         &mut self,
         certificate: &TightPlan,
@@ -273,7 +345,7 @@ impl GpuTightOracle {
         cancellation: &Cancellation,
     ) -> Result<Vec<TightGpuCheck>, TightGpuError> {
         self.last = None;
-        self.last_compute_time = None;
+        self.reported = None;
         self.activity = TightGpuActivity::default();
         self.check(
             certificate,
@@ -307,7 +379,7 @@ impl GpuTightOracle {
     ) -> Result<crate::CheckedBatch<'a, TightGpuCheck>, TightGpuError> {
         self.last = None;
         self.activity = TightGpuActivity::default();
-        self.last_compute_time = None;
+        self.reported = None;
         let checks = self.check(
             certificate,
             candidates,
@@ -363,7 +435,12 @@ impl GpuTightOracle {
             self.activity.uploaded_bytes = graph.bytes;
             self.resident = Some(Resident::new(self.runtime.device(), graph, &packed));
         }
+        let status = context.compute_timing();
+        if status == ComputeTimingStatus::Enabled && self.timer.is_none() {
+            self.timer = Some(ComputeTimer::new(self.runtime.device()));
+        }
         self.epoch = plan.epoch;
+        let mut timing = BatchTiming::default();
         let outcome = self
             .resident
             .as_mut()
@@ -377,24 +454,32 @@ impl GpuTightOracle {
                         pipeline,
                         timeout: limits.timeout,
                         cancellation,
+                        timer: self.timer.as_ref(),
                     },
                     self.candidates.words(),
                     &plan,
                     &mut self.activity,
-                    &mut self.last_compute_time,
+                    &mut timing,
                 )
             });
         let result = self.runtime.complete(scopes, outcome).and_then(|checks| {
             poll(cancellation)?;
             Ok(checks)
         });
+        if self.activity.submissions != 0 {
+            self.reported = crate::timing::settle_call(
+                status,
+                &mut self.timer,
+                result.is_ok(),
+                &timing,
+                self.runtime.queue().get_timestamp_period(),
+            );
+        }
         if result.is_ok() {
             if let Some(resident) = self.resident.as_mut() {
                 resident.complete_original_truth();
             }
             self.last = Some(stats);
-        } else {
-            self.last_compute_time = None;
         }
         result
     }
@@ -464,7 +549,12 @@ impl GpuTightOracle {
                 resident.transport = None;
             }
         }
-        stats.resident_transport_bytes += timing_bytes;
+        // The timer is the oracle's; only the readback tail is transport.
+        stats.resident_transport_bytes += if timed {
+            crate::timing::READBACK_BYTES
+        } else {
+            0
+        };
         stats.downloaded_bytes += if timed {
             crate::timing::READBACK_BYTES
         } else {

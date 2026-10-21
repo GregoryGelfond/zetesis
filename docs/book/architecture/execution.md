@@ -1000,10 +1000,12 @@ Performance work measures the actual boundary: admission, source work,
 candidate generation, oracle calls, residual completion, scoring and output.
 Host elapsed time around a GPU call includes transport and waiting; it is not
 kernel time. When statistics are requested, a newly created device context also
-requests optional wgpu timestamp queries. Formula and tight batches then measure
-their compute pass through the existing submission and readback. Unsupported,
-invalid or equal counter readings remain explicitly unavailable: equal readings
-do not establish zero compute cost. Caller-supplied contexts retain
+requests optional wgpu timestamp queries. Each formula or tight batch then reads
+the previous batch's compute pass through its own submission and readback, after
+the host has observed that batch complete, and a settling execution reads its
+final batch with one resolve-only submission. Unsupported, invalid or equal
+counter readings remain explicitly unavailable: equal readings do not establish
+zero compute cost. Caller-supplied contexts retain
 their granted features; statistics never replace them. Timing storage is accounted
 separately and absent when disabled. Logical storage budgets are not process RSS or total device memory.
 The [outcome contracts](../rust/outcomes.md) preserve these distinctions for

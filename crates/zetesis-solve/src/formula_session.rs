@@ -54,9 +54,16 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
     }
 
     /// Stop candidate production and join native workers without cancelling the
-    /// caller's shared token. Refresh receipts after the workers have settled.
+    /// caller's shared token. A device execution then reads its last batch's
+    /// compute-pass interval, unless the session's control, which it kept from
+    /// construction, has fired. Every completion, failure and stop of this
+    /// session or of an owning hybrid or terminal-definition session passes
+    /// here. Refresh receipts after the workers and the execution have settled.
     pub(crate) fn stop(&mut self, phases: &Recorder) -> Result<(), zetesis_sat::Incomplete> {
         let result = self.models.as_mut().map_or(Ok(()), StableModels::stop);
+        if let Some(execution) = self.execution.as_mut() {
+            execution.settle(phases);
+        }
         if let Some(previous) = self.final_outcome.take() {
             let mut outcome = self.snapshot(phases);
             outcome.search_state = previous.search_state;
@@ -606,6 +613,7 @@ impl<'a> FormulaSession<'a, crate::formula_execution::Execution> {
                     config,
                     resources,
                     plan,
+                    cancellation,
                     observations,
                 )
             })?);

@@ -110,8 +110,11 @@ pub struct FormulaExecutionStatistics {
     /// value describes the solve: its execution owns one oracle checking one
     /// theory instance, whose retained graph fixes the size.
     pub gpu_workgroup_size: Option<u32>,
-    /// Optional device compute-pass time from completely decoded batches.
-    /// Separate from host-oracle, transfer, waiting and exact residual time.
+    /// Optional device compute-pass time of the decoded batches, each reported
+    /// once from its own interval: measured, unavailable, or unresolved while
+    /// the execution has not settled or when its settlement could not read it. Separate from host-oracle, transfer,
+    /// waiting and exact residual time; a settlement's resolve-only submission
+    /// is counted as a flush, not a batch.
     pub gpu_compute_timing: zetesis_backend::ComputeTiming,
 }
 
@@ -146,6 +149,32 @@ pub(crate) trait MembershipExecution {
         phases: &Recorder,
     ) -> Option<Result<Interpretation, Failure>>;
     fn statistics(&self, models: &StableModels) -> Option<FormulaExecutionStatistics>;
+    /// Read the last completed device batch's compute-pass interval before the
+    /// execution's final snapshot. A device execution observes the control and
+    /// waits at most the time it kept from construction, so every path into a
+    /// settlement reaches them. Settling again, or settling an execution without
+    /// an unresolved device batch, does nothing. A settlement never changes the
+    /// solve's outcome.
+    fn settle(&mut self, _phases: &Recorder) {}
+}
+
+/// What a device execution's settlement needs, kept from construction: the
+/// owning session's control and the wait its batches are given, the device
+/// limits' default timeout.
+#[cfg(feature = "gpu")]
+pub(crate) struct Settlement {
+    control: zetesis_cpu::Cancellation,
+    wait: std::time::Duration,
+}
+
+#[cfg(feature = "gpu")]
+impl Settlement {
+    pub(crate) fn new(control: &zetesis_cpu::Cancellation, wait: std::time::Duration) -> Self {
+        Self {
+            control: control.clone(),
+            wait,
+        }
+    }
 }
 
 pub(crate) enum Execution {
@@ -158,6 +187,7 @@ pub(crate) enum Execution {
         oracle: Box<zetesis_wgpu::GpuFormulaOracle>,
         queue: Box<crate::formula_queue::BatchQueue>,
         statistics: Box<FormulaExecutionStatistics>,
+        settlement: Settlement,
     },
     #[cfg(feature = "gpu")]
     Tight {
@@ -165,14 +195,18 @@ pub(crate) enum Execution {
         plan: Arc<zetesis_ferraris::TightPlan>,
         queue: Box<crate::formula_queue::BatchQueue>,
         statistics: Box<FormulaExecutionStatistics>,
+        settlement: Settlement,
     },
 }
 
 impl Execution {
+    /// Choose the execution route. A device execution keeps `control`, the
+    /// owning session's, for its settlement.
     pub(crate) fn with_resources(
         options: &SolveConfig,
         resources: &ExecutionResources,
         tight_plan: Option<Arc<zetesis_ferraris::TightPlan>>,
+        control: &zetesis_cpu::Cancellation,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
         if options.backend == Backend::Cpu {
@@ -198,7 +232,7 @@ impl Execution {
             }
             return Ok(Self::Cpu);
         }
-        Self::gpu(options, resources, tight_plan, observations)
+        Self::gpu(options, resources, tight_plan, control, observations)
     }
 
     #[cfg(not(feature = "gpu"))]
@@ -206,6 +240,7 @@ impl Execution {
         _: &SolveConfig,
         _: &ExecutionResources,
         _: Option<Arc<zetesis_ferraris::TightPlan>>,
+        _: &zetesis_cpu::Cancellation,
         _: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
         Err(SolveError::BackendUnavailable)
@@ -216,6 +251,7 @@ impl Execution {
         options: &SolveConfig,
         resources: &ExecutionResources,
         tight_plan: Option<Arc<zetesis_ferraris::TightPlan>>,
+        control: &zetesis_cpu::Cancellation,
         observations: &mut impl ExecutionSink,
     ) -> Result<Self, SolveError> {
         let context = resources
@@ -224,7 +260,7 @@ impl Execution {
         // Explicit resources retain their exact identity and granted features.
         // Independent constructors retain profile-specific adapter eligibility.
         if let Some(plan) = tight_plan {
-            return Self::tight(options, context, plan, observations);
+            return Self::tight(options, context, plan, control, observations);
         }
         let oracle = match (resources.formula_profile(), context) {
             (Some(profile), _) => zetesis_wgpu::GpuFormulaOracle::from_profile(profile),
@@ -267,6 +303,11 @@ impl Execution {
                 gpu_compute_timing,
                 ..Default::default()
             }),
+            // The wait every slate's submissions use, whatever the slate size.
+            settlement: Settlement::new(
+                control,
+                slate_limits(options, options.batch_size.get()).timeout,
+            ),
         })
     }
 }
@@ -282,22 +323,65 @@ impl MembershipExecution for Execution {
             )),
             #[cfg(feature = "gpu")]
             Self::Hybrid {
-                queue, statistics, ..
+                oracle,
+                queue,
+                statistics,
+                ..
+            } => Some(device_statistics(
+                models,
+                queue,
+                statistics,
+                oracle.compute_time_unresolved(),
+            )),
+            #[cfg(feature = "gpu")]
+            Self::Tight {
+                oracle,
+                queue,
+                statistics,
+                ..
+            } => Some(device_statistics(
+                models,
+                queue,
+                statistics,
+                oracle.compute_time_unresolved(),
+            )),
+        }
+    }
+
+    fn settle(&mut self, phases: &Recorder) {
+        match self {
+            Self::Cpu | Self::Batched { .. } => {
+                let _ = phases;
             }
-            | Self::Tight {
-                queue, statistics, ..
+            #[cfg(feature = "gpu")]
+            Self::Hybrid {
+                oracle,
+                statistics,
+                settlement,
+                ..
             } => {
-                let batch = models.batch_statistics();
-                let mut snapshot = FormulaExecutionStatistics {
-                    cpu_residuals: batch.residuals,
-                    gpu_decided: batch.propagated,
-                    pending_candidates: batch.pending,
-                    queued_models: queue.len(),
-                    completion: queue.accounting(),
-                    ..statistics.as_ref().clone()
-                };
-                record_slates(queue, &mut snapshot);
-                Some(snapshot)
+                if oracle.compute_time_unresolved() {
+                    // A failed flush leaves its fault in the context's health.
+                    let _ = phases.measure(SolvePhase::GpuHostOracle, || {
+                        oracle.flush_compute_time(settlement.wait, &settlement.control)
+                    });
+                    record_flush(statistics, oracle.reported_compute_time());
+                }
+            }
+            #[cfg(feature = "gpu")]
+            Self::Tight {
+                oracle,
+                statistics,
+                settlement,
+                ..
+            } => {
+                if oracle.compute_time_unresolved() {
+                    // A failed flush leaves its fault in the context's health.
+                    let _ = phases.measure(SolvePhase::GpuHostOracle, || {
+                        oracle.flush_compute_time(settlement.wait, &settlement.control)
+                    });
+                    record_flush(statistics, oracle.reported_compute_time());
+                }
             }
         }
     }
@@ -330,6 +414,7 @@ impl MembershipExecution for Execution {
                 oracle,
                 queue,
                 statistics,
+                ..
             } => queue.next(models, options, cancellation, |batch| {
                 let verdicts = propagate(
                     oracle,
@@ -348,6 +433,7 @@ impl MembershipExecution for Execution {
                 plan,
                 queue,
                 statistics,
+                ..
             } => queue.next(models, options, cancellation, |batch| {
                 let verdicts = super::formula_tight::check(
                     oracle,
@@ -408,6 +494,10 @@ fn propagate_within(
         let result = phases.measure(SolvePhase::GpuHostOracle, || {
             oracle.propagate_prefix_with_cancellation(theory, pending, limits, cancellation)
         });
+        // A failed call can still report the batch before it, as unavailable.
+        if let Some(report) = oracle.reported_compute_time() {
+            statistics.gpu_compute_timing.record(report);
+        }
         // Submission is observable even when mapping or decoding fails. Preserve
         // that operation's original error over a secondary accounting overflow.
         let submitted = record_submission(statistics, oracle.last_submission_candidates());
@@ -427,9 +517,6 @@ fn propagate_within(
         let checks = checks
             .into_checks(theory, &pending[..count])
             .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
-        statistics
-            .gpu_compute_timing
-            .record(oracle.last_compute_time());
         add(&mut statistics.gpu_batches, 1)?;
         add(
             &mut statistics.gpu_candidates,
@@ -503,6 +590,42 @@ fn slate_limits(options: &SolveConfig, offered: usize) -> zetesis_wgpu::FormulaL
         max_work_per_candidate: options.gpu_formula_work,
         max_rounds: options.gpu_formula_rounds,
         ..Default::default()
+    }
+}
+
+/// A device execution's snapshot: its retained statistics with the stream's
+/// current batch and slate accounting, and its last completed batch counted
+/// unresolved while that batch's interval has not been read.
+#[cfg(feature = "gpu")]
+fn device_statistics(
+    models: &StableModels,
+    queue: &crate::formula_queue::BatchQueue,
+    statistics: &FormulaExecutionStatistics,
+    timing_pending: bool,
+) -> FormulaExecutionStatistics {
+    let batch = models.batch_statistics();
+    let mut snapshot = FormulaExecutionStatistics {
+        cpu_residuals: batch.residuals,
+        gpu_decided: batch.propagated,
+        pending_candidates: batch.pending,
+        queued_models: queue.len(),
+        completion: queue.accounting(),
+        ..statistics.clone()
+    };
+    snapshot.gpu_compute_timing.unresolved_batches = u64::from(timing_pending);
+    record_slates(queue, &mut snapshot);
+    snapshot
+}
+
+/// Record a settlement flush: a flush that submitted always reports its batch.
+#[cfg(feature = "gpu")]
+fn record_flush(
+    statistics: &mut FormulaExecutionStatistics,
+    report: Option<zetesis_backend::BatchComputeTime>,
+) {
+    if let Some(report) = report {
+        statistics.gpu_compute_timing.record(report);
+        statistics.gpu_compute_timing.record_flush_submission();
     }
 }
 

@@ -263,7 +263,7 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
             runtime::read_polled(
                 runtime.device(),
                 &transport.readback,
-                submission,
+                submission.index,
                 limits.timeout,
                 || poll(cancellation),
                 |words| plan.decode(self.relation, queries, words, packed.masks, cancellation),

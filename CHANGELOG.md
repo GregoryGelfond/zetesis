@@ -9,7 +9,9 @@ Notable changes by release. Versions follow Semantic Versioning.
 - The regular benchmark corpus includes integrated Family Crossing, checking all
   eight optimal answers alongside the existing 94 cases.
 - Requested GPU statistics include compute-pass time when the device supports
-  timestamps, separately from host preparation and waiting.
+  timestamps, separately from host preparation and waiting. Each batch's time is
+  measured from its own compute pass; the final batch is read once when the solve
+  settles, and a solve that stops, or cannot read it then, reports it unresolved.
 - The GPU library exposes workgroup sizing and optional changed-dependency
   propagation for controlled comparisons. Fitted workgroup sizes and dense
   propagation are the defaults.

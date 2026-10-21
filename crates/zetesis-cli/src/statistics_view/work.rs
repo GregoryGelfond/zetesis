@@ -389,24 +389,32 @@ fn device(rows: &mut Vec<Row>, execution: &crate::FormulaExecutionStatistics) {
         execution.cpu_residuals,
         "completed exact residual results committed",
     ));
-    let timing = &execution.gpu_compute_timing;
-    rows.push(Row::new([
+    rows.push(Row::new(compute_passes(&execution.gpu_compute_timing)));
+}
+
+// The total covers measured batches only; an unresolved batch, whose interval
+// was not read before the record was taken, leaves it incomplete.
+fn compute_passes(timing: &zetesis_backend::ComputeTiming) -> [String; 3] {
+    [
         "GPU compute passes".to_owned(),
         timing.elapsed.map_or_else(
             || format!("unavailable ({})", timing.status.label()),
             |elapsed| format!("{:.3} ms", elapsed.as_secs_f64() * 1_000.0),
         ),
         format!(
-            "{} measured batches; {} unavailable; host preparation, transfers and waits excluded{}",
+            "{} measured batches; {} unavailable; {} unresolved; host preparation, transfers and waits excluded{}",
             timing.measured_batches,
             timing.unavailable_batches,
+            timing.unresolved_batches,
             if timing.overflowed {
                 "; accounting incomplete"
+            } else if timing.unresolved_batches != 0 {
+                "; total incomplete"
             } else {
                 ""
             },
         ),
-    ]));
+    ]
 }
 
 fn completion(rows: &mut Vec<Row>, execution: &crate::CompletionAccounting) {
@@ -450,7 +458,34 @@ fn count(label: &str, value: impl Display, scope: &str) -> Row {
 
 #[cfg(test)]
 mod tests {
-    use super::device;
+    use super::{compute_passes, device};
+    use zetesis_backend::{BatchComputeTime, ComputeTiming, ComputeTimingStatus};
+
+    fn measured() -> ComputeTiming {
+        let mut timing = ComputeTiming::new(ComputeTimingStatus::Enabled);
+        timing.record(BatchComputeTime::Measured(
+            std::time::Duration::from_micros(1_500),
+        ));
+        timing
+    }
+
+    #[test]
+    fn a_settled_total_is_not_marked_incomplete() {
+        let [_, total, scope] = compute_passes(&measured());
+        assert_eq!(total, "1.500 ms");
+        assert!(scope.starts_with("1 measured batches; 0 unavailable; 0 unresolved;"));
+        assert!(!scope.contains("incomplete"), "{scope}");
+    }
+
+    #[test]
+    fn an_unresolved_batch_marks_the_total_incomplete() {
+        let mut timing = measured();
+        timing.unresolved_batches = 1;
+        let [_, total, scope] = compute_passes(&timing);
+        assert_eq!(total, "1.500 ms");
+        assert!(scope.contains("1 unresolved"), "{scope}");
+        assert!(scope.ends_with("; total incomplete"), "{scope}");
+    }
 
     #[test]
     fn device_rows_report_the_dispatched_workgroup_size() {

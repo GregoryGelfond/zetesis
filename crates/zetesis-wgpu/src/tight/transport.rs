@@ -71,7 +71,7 @@ impl Resident {
         seeds: &[u32],
         plan: &Plan,
         activity: &mut TightGpuActivity,
-        compute_time: &mut Option<Duration>,
+        timing: &mut crate::timing::BatchTiming,
     ) -> Result<runtime::Completion<Vec<TightGpuCheck>>, GpuError> {
         let Execution {
             device,
@@ -79,6 +79,7 @@ impl Resident {
             pipeline,
             timeout,
             cancellation,
+            timer,
         } = *execution;
         if self.transport.is_none() {
             self.transport = Some(Transport::new(device, pipeline, self, plan)?);
@@ -112,7 +113,7 @@ impl Resident {
                 readback: &transport.readback,
                 result_bytes: plan.results,
                 clear_result,
-                timing: transport.timing.as_ref(),
+                timing: timer,
             },
         );
         activity.submissions = 1;
@@ -121,28 +122,22 @@ impl Resident {
         let result = runtime::read_polled(
             device,
             &transport.readback,
-            submission,
+            submission.index,
             timeout,
             || poll(cancellation),
             |words| {
-                let (words, measured) = crate::timing::split_readback(
-                    words,
-                    transport.timing.as_ref(),
-                    transport
-                        .timing
-                        .as_ref()
-                        .map_or(0.0, |_| queue.get_timestamp_period()),
-                )?;
+                let (words, tail) = crate::timing::split_readback(words, transport.timed)?;
                 let checks = packing::decode(words, &self.graph, plan, seeds, cancellation)?;
-                *compute_time = measured;
+                timing.tail = tail;
                 Ok(checks)
             },
         );
+        timing.window = result.window_since(submission.at);
         if result.is_ok() {
             activity.completed_candidates = u64::from(plan.worlds);
             activity.completed_work = activity.scheduled_work;
             activity.downloaded_bytes = plan.results
-                + if transport.timing.is_some() {
+                + if transport.timed {
                     crate::timing::READBACK_BYTES
                 } else {
                     0
@@ -158,6 +153,8 @@ pub(super) struct Execution<'a> {
     pub(super) pipeline: &'a wgpu::ComputePipeline,
     pub(super) timeout: Duration,
     pub(super) cancellation: &'a Cancellation,
+    /// The oracle's timer, present under enabled timing.
+    pub(super) timer: Option<&'a crate::timing::ComputeTimer>,
 }
 
 pub(super) struct Transport {
@@ -167,7 +164,8 @@ pub(super) struct Transport {
     results: wgpu::Buffer,
     readback: wgpu::Buffer,
     group: wgpu::BindGroup,
-    timing: Option<crate::timing::PassTimer>,
+    // The readback carries a timestamp tail after the logical results.
+    timed: bool,
     original_truth_valid: bool,
 }
 impl Transport {
@@ -177,12 +175,9 @@ impl Transport {
         resident: &Resident,
         plan: &Plan,
     ) -> Result<Self, GpuError> {
-        let timing = crate::timing::PassTimer::new(device);
-        let readback_bytes = crate::timing::readback_size(
-            plan.results,
-            timing.is_some(),
-            device.limits().max_buffer_size,
-        )?;
+        let timed = device.features().contains(wgpu::Features::TIMESTAMP_QUERY);
+        let readback_bytes =
+            crate::timing::readback_size(plan.results, timed, device.limits().max_buffer_size)?;
         let params = buffer(
             device,
             "tight parameters",
@@ -242,7 +237,7 @@ impl Transport {
             results,
             readback,
             group,
-            timing,
+            timed,
             original_truth_valid: false,
         })
     }
