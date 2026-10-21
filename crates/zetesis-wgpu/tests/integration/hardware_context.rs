@@ -157,12 +157,12 @@ fn compare_timing_accounting(
     assert_eq!(untimed.reported_compute_time(), None);
     assert!(!untimed.compute_time_unresolved());
     let untimed_cold = untimed.last_batch_stats().unwrap();
-    // The oracle's four query slots, resolve buffer and flush readback, and the
-    // transport's 16-byte readback tail: 80 logical bytes, excluding any
+    // The oracle's four query slots, two resolve buffers and flush readback, and
+    // the transport's 16-byte readback tail: 96 logical bytes, excluding any
     // driver-private query allocation. Only the tail belongs to the transport.
     let (accounted, transport) =
         if formula.context().compute_timing() == ComputeTimingStatus::Enabled {
-            (80, 16)
+            (96, 16)
         } else {
             (0, 0)
         };

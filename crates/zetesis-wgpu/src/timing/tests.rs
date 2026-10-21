@@ -93,6 +93,8 @@ fn invalid_periods_are_unavailable() {
 enum Event {
     /// A submitting call that completed.
     Complete,
+    /// A submitting call that completed, though its resolve wrote nothing.
+    CompleteUnresolved,
     /// A submitting call that failed after submission, retiring the timer.
     Fail,
     /// A call that submitted nothing.
@@ -105,8 +107,9 @@ enum Event {
     Clear,
 }
 
-const EVENTS: [Event; 6] = [
+const EVENTS: [Event; 7] = [
     Event::Complete,
+    Event::CompleteUnresolved,
     Event::Fail,
     Event::Idle,
     Event::Flush,
@@ -114,13 +117,15 @@ const EVENTS: [Event; 6] = [
     Event::Clear,
 ];
 
-/// A device's four query slots and the ledger, against a reference that knows
-/// which batch is pending. Batch `k` writes `(1000k + 1, 1000k + 1 + k)`, so a
-/// measured report names the batch whose pass it measured.
+/// A device's four query slots, the timer's per-pair resolve buffers and the
+/// ledger, against a reference that knows which batch is unresolved. Batch `k`
+/// writes `(1000k + 1, 1000k + 1 + k)`, so a measured report names the batch
+/// whose pass it measured.
 #[derive(Default)]
 struct Model {
     ledger: PairLedger,
     slots: [u64; 4],
+    resolved: [[u64; 2]; 2],
     pending: Option<u64>,
     completed: Vec<u64>,
     reported: Vec<u64>,
@@ -129,11 +134,16 @@ struct Model {
 }
 
 impl Model {
-    fn tail(&self) -> Option<[u64; 2]> {
-        self.ledger.resolving().map(|pair| {
+    // Resolve the pending pair into its own buffer, or leave that buffer as it
+    // is when the resolve writes nothing; the tail copies the buffer.
+    fn tail(&mut self, writes: bool) -> Option<[u64; 2]> {
+        let pair = self.ledger.resolving()?;
+        let buffer = pair.resolve_buffer();
+        if writes {
             let begin = pair.begin() as usize;
-            [self.slots[begin], self.slots[begin + 1]]
-        })
+            self.resolved[buffer] = [self.slots[begin], self.slots[begin + 1]];
+        }
+        Some(self.resolved[buffer])
     }
 
     // A submitting call's pass writes its pair before the same command buffer
@@ -154,11 +164,12 @@ impl Model {
         batch
     }
 
-    // The next timed batch starts a fresh timer and query set, whose unwritten
-    // slots resolve to zero.
+    // The next timed batch starts a fresh timer: a query set whose unwritten
+    // slots resolve to zero, and zero-initialized resolve buffers.
     fn retire(&mut self) {
         self.ledger = PairLedger::default();
         self.slots = [0; 4];
+        self.resolved = [[0; 2]; 2];
     }
 
     fn expect(&mut self, report: Option<BatchComputeTime>, measured: bool) {
@@ -183,14 +194,17 @@ impl Model {
                 .for_each(|consumed| *consumed = true);
         }
         match event {
-            Event::Complete => {
+            Event::Complete | Event::CompleteUnresolved => {
                 let batch = self.submit();
+                let writes = matches!(event, Event::Complete);
                 let timing = BatchTiming {
-                    tail: Some(self.tail().unwrap_or_default()),
+                    tail: Some(self.tail(writes).unwrap_or_default()),
                     window: Some(WINDOW),
                 };
                 let report = self.ledger.completed(&timing, 1.0);
-                self.expect(report, true);
+                // A resolve that wrote nothing repeats its own pair's last-read
+                // values, or zero: unavailable, never another batch's interval.
+                self.expect(report, writes);
                 self.pending = Some(batch);
                 self.completed.push(batch);
                 self.consumed_after.push(false);
@@ -203,8 +217,8 @@ impl Model {
             }
             Event::Idle => {}
             Event::Flush => {
-                // An oracle without a pending batch returns before submitting.
-                if let Some(tail) = self.tail() {
+                // An oracle without an unresolved batch returns before submitting.
+                if let Some(tail) = self.tail(true) {
                     let report = self.ledger.flushed(tail, 1.0);
                     self.expect(report, true);
                 }
@@ -286,6 +300,45 @@ fn a_pair_still_holding_its_last_read_values_is_unavailable() {
         ledger.completed(&read([11, 15]), 1.0),
         Some(BatchComputeTime::Unavailable)
     );
+}
+
+#[test]
+fn the_two_pairs_resolve_into_separate_buffers() {
+    assert_ne!(Pair::First.resolve_buffer(), Pair::Second.resolve_buffer());
+}
+
+#[test]
+fn a_resolve_that_writes_nothing_repeats_its_own_pair() {
+    // Batch 1 writes the first pair; batch 2 resolves it into the first buffer
+    // and writes the second pair; batch 3 resolves that into the second buffer
+    // and writes the first pair again; batch 4's resolve of the first pair
+    // writes nothing. A shared buffer would then hold batch 2's valid interval
+    // and report it as batch 3's; the first pair's own buffer still holds
+    // batch 1's, already read, which rule 3 refuses.
+    let mut model = Model::default();
+    for (event, expected) in [
+        (Event::Complete, None),
+        (
+            Event::Complete,
+            Some(BatchComputeTime::Measured(Duration::from_nanos(1))),
+        ),
+        (
+            Event::Complete,
+            Some(BatchComputeTime::Measured(Duration::from_nanos(2))),
+        ),
+        (
+            Event::CompleteUnresolved,
+            Some(BatchComputeTime::Unavailable),
+        ),
+    ] {
+        let writes = matches!(event, Event::Complete);
+        model.submit();
+        let timing = BatchTiming {
+            tail: Some(model.tail(writes).unwrap_or_default()),
+            window: Some(WINDOW),
+        };
+        assert_eq!(model.ledger.completed(&timing, 1.0), expected);
+    }
 }
 
 #[test]

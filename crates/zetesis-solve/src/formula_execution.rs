@@ -152,8 +152,11 @@ pub(crate) trait MembershipExecution {
     /// Read the last completed device batch's compute-pass interval before the
     /// execution's final snapshot. A device execution observes the control and
     /// waits at most the time it kept from construction, so every path into a
-    /// settlement reaches them. Settling again, or settling an execution without
-    /// an unresolved device batch, does nothing. A settlement never changes the
+    /// settlement reaches them. Settling an execution without an unresolved
+    /// device batch does nothing; a settlement refused by a busy or unhealthy
+    /// context leaves the batch unresolved, and the next settlement retries it.
+    /// At most one flush submits per execution, because a submitted flush either
+    /// reads the batch or retires the timer. A settlement never changes the
     /// solve's outcome.
     fn settle(&mut self, _phases: &Recorder) {}
 }
@@ -601,7 +604,7 @@ fn device_statistics(
     models: &StableModels,
     queue: &crate::formula_queue::BatchQueue,
     statistics: &FormulaExecutionStatistics,
-    timing_pending: bool,
+    timing_unresolved: bool,
 ) -> FormulaExecutionStatistics {
     let batch = models.batch_statistics();
     let mut snapshot = FormulaExecutionStatistics {
@@ -612,7 +615,7 @@ fn device_statistics(
         completion: queue.accounting(),
         ..statistics.clone()
     };
-    snapshot.gpu_compute_timing.unresolved_batches = u64::from(timing_pending);
+    snapshot.gpu_compute_timing.unresolved_batches = u64::from(timing_unresolved);
     record_slates(queue, &mut snapshot);
     snapshot
 }

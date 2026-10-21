@@ -279,7 +279,8 @@ instructions.
 Native GPU reports also retain optional compute-pass timestamps in
 `gpu_compute_timing`. Each successfully decoded device batch is counted once,
 measured from its own compute pass, unavailable, or unresolved when its run
-stopped before the interval could be read; host preparation, command-buffer
+stopped, or its settlement met a busy or unhealthy context, before the interval
+could be read; host preparation, command-buffer
 copies and waiting are excluded, and process and host oracle timings remain
 separate. An unavailable timestamp is not a measured zero.
 The normal `--stats` request enables timing when supported without changing the

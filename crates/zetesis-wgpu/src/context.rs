@@ -78,7 +78,7 @@ impl GpuContext {
     /// [`Self::compute_timing`]. Other constructors leave timestamps disabled.
     /// A formula or tight-support oracle allocates its bounded timestamp storage
     /// with its first admitted nonempty batch and keeps it until it clears its
-    /// residency. Batches add no submission or queue wait; reading the final
+    /// residency or a failure follows one of its submissions. Batches add no submission or queue wait; reading the final
     /// batch's interval takes one resolve-only submission, made only on request
     /// (`flush_compute_time`).
     ///

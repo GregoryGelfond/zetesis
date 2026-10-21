@@ -206,7 +206,7 @@ impl GpuFormulaOracle {
     /// the next submitting call or by [`Self::flush_compute_time`].
     #[must_use]
     pub fn compute_time_unresolved(&self) -> bool {
-        self.timer.as_ref().is_some_and(ComputeTimer::pending)
+        self.timer.as_ref().is_some_and(ComputeTimer::unresolved)
     }
     /// Resolve the unresolved batch's interval with one resolve-only submission.
     ///
@@ -230,7 +230,7 @@ impl GpuFormulaOracle {
         cancellation: &Cancellation,
     ) -> Result<(), GpuError> {
         self.reported = None;
-        let Some(timer) = self.timer.as_mut().filter(|timer| timer.pending()) else {
+        let Some(timer) = self.timer.as_mut().filter(|timer| timer.unresolved()) else {
             return Ok(());
         };
         crate::runtime::positive_timeout(timeout)?;

@@ -123,7 +123,8 @@ absent until a valid sample is recorded. Equal device counter readings are
 unavailable: they do not distinguish an unresolved interval from zero compute
 cost. So are failed samples, unwritten or unrewritten counter slots, and intervals
 longer than the host's own observation of their submission.
-`measured + unavailable + unresolved` equals the decoded batches.
+`measured + unavailable + unresolved` equals the decoded batches the solver
+accepted; a failed execution's record is partial evidence.
 `is_complete()` requires at least one valid sample, no unavailable or unresolved
 batch, and no accounting overflow. Submitted batches that fail before decoding
 retain their submission receipts separately. Neither timing completeness nor a
@@ -133,18 +134,24 @@ The interval covers the compute pass, including memory access within it. It
 excludes host preparation, command-buffer copies, submission and waiting.
 `GpuHostOracle` continues to measure the broader host call; these durations are
 not interchangeable. Each device oracle owns four timestamp slots, used as two
-pairs, for as long as it keeps its residency. A batch writes the pair that is not
-pending. After its pass, the same command buffer resolves the previous batch's
-pair, whose completion the host has already observed, and appends it to the
-batch's ordinary readback, so every batch reports the one before it from that
-batch's own pass. No batch adds a submission or a wait. When an execution
-settles, one resolve-only submission reads its final batch's interval and is
-counted as a flush, not a batch. A stopped execution skips it, and a settlement
-that meets a busy or unhealthy context cannot make it; either reports that batch
-unresolved. Admission reserves 80 logical bytes per timed batch: the
-oracle's query slots, resolve buffer and flush readback, and the transport's
-16-byte readback tail. This allowance does not measure additional driver-private
-allocation. Timing adds device work and should be kept consistent across measured
+pairs, and one resolve buffer per pair, until it clears its residency or a
+failure follows one of its submissions. A batch writes the pair that is not
+pending. After its pass, the batch's wgpu command buffer records the resolve of
+the previous batch's pair, whose completion the host has already observed, into
+that pair's resolve buffer, and its copy into the batch's ordinary readback, so
+every batch reports the one before it from that batch's own pass. Because that
+pair was written by an earlier submission, wgpu-core runs the resolve in a hal
+command buffer of its own and the copy in another (on Metal, two more
+`MTLCommandBuffer`s), within the batch's one queue submission: no batch adds a
+submission or a wait. A resolve that writes nothing leaves its pair's buffer with
+values already read, or zero, which are refused, never the other pair's interval.
+When an execution settles, one resolve-only submission reads its final batch's
+interval and is counted as a flush, not a batch. A stopped execution skips it,
+and a settlement that meets a busy or unhealthy context cannot make it; either
+reports that batch unresolved. Admission reserves 96 logical bytes per timed
+batch: the oracle's query slots, two resolve buffers and flush readback, and the
+transport's 16-byte readback tail. This allowance does not measure additional
+driver-private allocation. Timing adds device work and should be kept consistent across measured
 versions.
 
 JSON statistics retain the status, elapsed nanoseconds, the measured,

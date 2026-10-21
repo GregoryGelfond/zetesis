@@ -239,7 +239,7 @@ impl GpuTightOracle {
     /// the next submitting call or by [`Self::flush_compute_time`].
     #[must_use]
     pub fn compute_time_unresolved(&self) -> bool {
-        self.timer.as_ref().is_some_and(ComputeTimer::pending)
+        self.timer.as_ref().is_some_and(ComputeTimer::unresolved)
     }
     /// Resolve the unresolved batch's interval with one resolve-only submission.
     ///
@@ -263,7 +263,7 @@ impl GpuTightOracle {
         cancellation: &Cancellation,
     ) -> Result<(), GpuError> {
         self.reported = None;
-        let Some(timer) = self.timer.as_mut().filter(|timer| timer.pending()) else {
+        let Some(timer) = self.timer.as_mut().filter(|timer| timer.unresolved()) else {
             return Ok(());
         };
         crate::runtime::positive_timeout(timeout)?;
@@ -334,9 +334,9 @@ impl GpuTightOracle {
     /// Cancellation is polled during packing, waiting, decoding and before returning.
     /// A tighter work limit can bypass a resident dependency schedule. Its bytes
     /// remain charged: a smaller byte limit may refuse that retained layout.
-    /// Requested device timing charges 80 bytes to the same batch allowance: the
-    /// oracle's query slots, resolve buffer and flush readback, and the readback
-    /// tail of the batch's transport. It never changes logical verdicts.
+    /// Requested device timing charges 96 bytes to the same batch allowance: the
+    /// oracle's query slots, two resolve buffers and flush readback, and the
+    /// readback tail of the batch's transport. It never changes logical verdicts.
     pub fn check_batch(
         &mut self,
         certificate: &TightPlan,

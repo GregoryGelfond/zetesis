@@ -1,13 +1,22 @@
 //! Optional compute-pass timestamps, owned by one device oracle for its lifetime.
 //!
-//! A timer has four query slots used as two pairs. Each timed batch writes the
-//! pair that is not pending through its single compute pass. After that pass,
-//! the same command buffer resolves the pending pair, written by an earlier
-//! submission whose completion the host has already observed, into the batch's
-//! readback tail. The pair a batch writes is therefore read by the oracle's next
-//! submitting call, or by a flush. One batch is in flight per oracle at a time,
-//! so two pairs suffice; an asynchronous schedule would need one more pair per
-//! batch in flight and resolution in completion order.
+//! A timer has four query slots used as two pairs, and one resolve buffer per
+//! pair. Each timed batch writes the pair that is not pending through its single
+//! compute pass. After that pass, the batch's wgpu command buffer records the
+//! resolve of the pending pair, written by an earlier queue submission whose
+//! completion the host has already observed, into that pair's resolve buffer,
+//! and a copy of it into the batch's readback tail. Because the pair was written
+//! outside this command buffer, wgpu-core defers the resolve to a hal command
+//! buffer of its own at submission and records the copy in another, so the
+//! batch's one queue submission carries two more hal command buffers (each an
+//! `MTLCommandBuffer` on Metal) than an untimed batch's one.
+//!
+//! The pair a batch writes is read by the oracle's next submitting call, or by
+//! a flush. One batch is in flight per oracle at a time, so two pairs suffice;
+//! an asynchronous schedule would need one more pair per batch in flight and
+//! resolution in completion order. A resolve that writes nothing leaves its
+//! pair's buffer holding that pair's last-read values, or zero when fresh, never
+//! the other pair's interval; validation refuses both.
 
 use crate::{GpuError, GpuErrorKind};
 use std::time::Duration;
@@ -17,9 +26,9 @@ use zetesis_backend::BatchComputeTime;
 /// read by a flush.
 pub(crate) const READBACK_BYTES: u64 = 16;
 /// Logical timing payload of one timed batch: the oracle's four query slots,
-/// resolve buffer and flush readback, plus the transport's readback tail.
+/// two resolve buffers and flush readback, plus the transport's readback tail.
 /// Query-slot allowance is not a measurement of driver-private allocation.
-pub(crate) const OVERHEAD_BYTES: u64 = 5 * READBACK_BYTES;
+pub(crate) const OVERHEAD_BYTES: u64 = 6 * READBACK_BYTES;
 
 pub(crate) fn readback_size(results: u64, timed: bool, maximum: u64) -> Result<u64, GpuError> {
     results
@@ -124,6 +133,16 @@ impl Pair {
         match self {
             Self::First => 0,
             Self::Second => 2,
+        }
+    }
+
+    // Each pair resolves into its own buffer. A resolve destination's offset must
+    // be a multiple of `wgpu::QUERY_RESOLVE_BUFFER_ALIGNMENT` (256 bytes), so two
+    // 16-byte buffers replace the halves of one 32-byte buffer.
+    const fn resolve_buffer(self) -> usize {
+        match self {
+            Self::First => 0,
+            Self::Second => 1,
         }
     }
 }
@@ -261,32 +280,39 @@ fn duration(begin: u64, end: u64, period_ns: f32) -> Option<Duration> {
 }
 
 /// The timestamp storage and pair ledger one device oracle owns, from its first
-/// timed batch until it clears its residency or drops. Count, theory, cold
-/// preparation and workgroup-size changes leave it in place: the pending pair
-/// belongs to the oracle's sequence of batches, not to a transport.
+/// timed batch until it clears its residency, fails after a submission or drops.
+/// Count, theory, cold preparation and workgroup-size changes leave it in place:
+/// the pending pair belongs to the oracle's sequence of batches, not to a
+/// transport.
 pub(crate) struct ComputeTimer {
     queries: wgpu::QuerySet,
-    resolved: wgpu::Buffer,
+    resolved: [wgpu::Buffer; 2],
     flush: wgpu::Buffer,
     ledger: PairLedger,
 }
 
 impl ComputeTimer {
-    /// Allocate four query slots, a resolve buffer and a flush readback on a
-    /// device that enabled timestamp queries.
+    /// Allocate four query slots, a resolve buffer per pair and a flush
+    /// readback on a device that enabled timestamp queries.
     pub(crate) fn new(device: &wgpu::Device) -> Self {
+        let resolve = |label| {
+            crate::runtime::buffer(
+                device,
+                label,
+                READBACK_BYTES,
+                wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
+            )
+        };
         Self {
             queries: device.create_query_set(&wgpu::QuerySetDescriptor {
                 label: Some("compute pass timestamps"),
                 ty: wgpu::QueryType::Timestamp,
                 count: 4,
             }),
-            resolved: crate::runtime::buffer(
-                device,
-                "resolved compute timestamps",
-                READBACK_BYTES,
-                wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
-            ),
+            resolved: [
+                resolve("first pair's resolved compute timestamps"),
+                resolve("second pair's resolved compute timestamps"),
+            ],
             flush: crate::runtime::buffer(
                 device,
                 "flushed compute timestamps",
@@ -307,8 +333,9 @@ impl ComputeTimer {
         }
     }
 
-    /// After the batch's pass, resolve the pending pair into `readback` at
-    /// `offset`. Without a pending pair the tail is left unwritten and ignored.
+    /// After the batch's pass, record the resolve of the pending pair into that
+    /// pair's own resolve buffer and its copy into `readback` at `offset`.
+    /// Without a pending pair the tail is left unwritten and ignored.
     pub(crate) fn resolve(
         &self,
         encoder: &mut wgpu::CommandEncoder,
@@ -317,13 +344,14 @@ impl ComputeTimer {
     ) {
         if let Some(pair) = self.ledger.resolving() {
             let begin = pair.begin();
-            encoder.resolve_query_set(&self.queries, begin..begin + 2, &self.resolved, 0);
-            encoder.copy_buffer_to_buffer(&self.resolved, 0, readback, offset, READBACK_BYTES);
+            let resolved = &self.resolved[pair.resolve_buffer()];
+            encoder.resolve_query_set(&self.queries, begin..begin + 2, resolved, 0);
+            encoder.copy_buffer_to_buffer(resolved, 0, readback, offset, READBACK_BYTES);
         }
     }
 
-    /// Whether a completed batch still waits for its interval to be resolved.
-    pub(crate) const fn pending(&self) -> bool {
+    /// Whether a completed batch is still unresolved: its pair is pending.
+    pub(crate) const fn unresolved(&self) -> bool {
         self.ledger.pending()
     }
 
