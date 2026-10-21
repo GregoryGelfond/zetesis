@@ -106,8 +106,8 @@ wgpu timestamp queries when the session creates its own device. The CLI's
 selected primitive's capability requirements. No timing feature or storage is
 requested by the ordinary statistics-off constructors.
 
-Caller-supplied resources retain their exact context and compiled profile;
-statistics do not replace either owner. To opt in explicitly, use
+Caller-supplied resources retain their exact context and profile; statistics do
+not replace either owner. To opt in explicitly, use
 `GpuContext::new_selected_with_timing` and pass it through
 `ExecutionResources::with_gpu`, or create a
 `GpuFormulaProfile::new_selected_with_timing` for reuse. Standalone formula and
@@ -176,7 +176,10 @@ Fixed-point residuals agree across sizes where every propagation transfer is
 order-preserving: established for binary gates, and checked on the device but
 not proved for native groups and numeric rows
 ([the obligation](../lean/correspondence.md#ownership-and-execution-correspondence)),
-so report the size beside a comparison of verdict classes too.
+so report the size beside a comparison of verdict classes too. Under fitted
+sizing the dispatched size's pipeline is compiled by the solve's first device
+check, so its compilation time falls in that check's `GpuHostOracle` phase
+rather than in `ExecutionSetup`; a fixed size is compiled during setup.
 
 ## GPU candidate slates
 

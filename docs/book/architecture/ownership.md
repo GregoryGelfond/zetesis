@@ -289,10 +289,12 @@ in `search.candidate_regions.frontier`.
 
 [`GpuContext`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/context.rs)
 owns a selected device, queue, granted capabilities and shared health. Each
-primitive retains its pipeline and prepared subject. Its `from_context`
+primitive retains its pipelines and prepared subject. Its `from_context`
 constructor shares these device resources; existing `new_selected`
 constructors create independent contexts. `GpuFormulaProfile` explicitly retains
-one compiled formula pipeline, its exact context and gate implementation.
+a validated formula shader, the pipeline of each workgroup size compiled for it,
+its exact context and gate implementation; a fitted size is compiled by the
+first check, from any oracle sharing the profile, that dispatches it.
 `GpuFormulaOracle::from_profile` checks Busy, health and granted formula
 capabilities, then starts fresh residency, epoch and batch accounting.
 `GpuFormulaProfile::same_instance` compares the compiled owner; equal shader or
@@ -346,8 +348,9 @@ prepared objects sharing a context or include device infrastructure. There is no
 global context, pipeline registry or unbounded work queue. Ordinary sessions can
 share an explicitly supplied context through `ExecutionResources` and
 `Session::builder`. `ExecutionResources::with_formula_profile` additionally
-reuses the supplied compilation across ordinary formula sessions and derives
-its context from that profile, preventing mismatched context/profile pairs.
+shares the supplied profile's shader and pipelines across ordinary formula
+sessions and derives its context from that profile, preventing mismatched
+context/profile pairs.
 Each session still owns its executor, subject residency, search, candidate queue,
 counters and incumbent. Context-only resources compile per session; neither
 form installs a global cache. Hard adapter policy is checked before profile

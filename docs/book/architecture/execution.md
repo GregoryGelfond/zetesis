@@ -904,10 +904,13 @@ bypass for a tight work allowance occupies the whole workgroup with one
 invocation, up to four times the 64-invocation cost, and the opt-in active-word
 routes are not modelled.
 
-Every granted size is compiled when the kernel is created, so a failure to
-compile any of them fails construction and invalidates the context, as every
-compilation failure does; `GpuKernelOptions` can fix one size, which is then
-the only size compiled. The batch statistics report the size dispatched. A
+Creating a kernel validates its shader. Each fitted size is compiled by the
+first check that dispatches it, before that check's dispatch, so a solve
+compiles only the size it uses. A failure to compile fails that check and
+invalidates the context, as every compilation failure does; no theory stays
+resident, because only a freshly prepared theory can need a size first and its
+cold preparation released the previous one. `GpuKernelOptions` can fix one size, which is then
+compiled when the kernel is created. The batch statistics report the size dispatched. A
 size changes which invocation evaluates which node, never a node's value. Under
 frozen-reduct propagation sibling gates narrow shared domains through atomics,
 so the number of sweeps, and whether a candidate reaches a sweep or work limit,

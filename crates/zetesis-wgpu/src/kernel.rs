@@ -65,10 +65,12 @@ pub enum GpuWorkgroupSizing {
     /// 64; where 128 is granted, a widest level of 65 to 128 nodes selects it.
     /// Batch statistics report the size dispatched.
     ///
-    /// Every granted fitted size is compiled when the kernel is created. A
-    /// failure to compile any of them fails construction and, like every
-    /// compilation failure, invalidates the context it was compiled on, a
-    /// shared context included; [`Self::Fixed`] compiles one size.
+    /// Creating the kernel validates its shader; each fitted size is compiled
+    /// by the first check that dispatches it, so one solve compiles the one
+    /// size it uses. A failure to compile that size fails that check before
+    /// any dispatch and, like every compilation failure, invalidates the
+    /// context it was compiled on, a shared context included;
+    /// [`Self::Fixed`] compiles its one size when the kernel is created.
     #[default]
     Fitted,
     /// One size for every theory, checked against the granted limits before

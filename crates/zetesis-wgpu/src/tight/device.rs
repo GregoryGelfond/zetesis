@@ -86,8 +86,10 @@ enum Updates {
 }
 
 impl GpuTightOracle {
-    /// Create an independently owned device/pipeline using hard adapter filters.
-    /// Construction and compilation costs are outside per-batch limits.
+    /// Create an independently owned device and kernel using hard adapter
+    /// filters. The default fitted sizing compiles a size's pipeline at the
+    /// first check that dispatches it. Neither construction nor that
+    /// compilation is charged to per-batch limits.
     ///
     /// # Errors
     /// Returns typed adapter, capability, allocation, validation or device errors.
@@ -134,7 +136,9 @@ impl GpuTightOracle {
         Ok(Self::with_runtime(runtime, support))
     }
 
-    /// Compile this primitive on an existing device context.
+    /// Compile this primitive's shader on an existing device context; the
+    /// default fitted sizing compiles a size's pipeline at the first check that
+    /// dispatches it.
     ///
     /// Prepared subjects belong to this primitive; device health and execution
     /// serialization are shared with all primitives using the context.
@@ -146,7 +150,7 @@ impl GpuTightOracle {
         Self::from_context_with_support(context, TightSupport::Atomic)
     }
 
-    /// Compile the selected implementation on an existing shared context.
+    /// Compile the selected implementation's shader on an existing shared context.
     ///
     /// # Errors
     /// Reports the same context, capability and compilation failures as
@@ -165,16 +169,17 @@ impl GpuTightOracle {
         &self.runtime.context
     }
 
-    /// Compile explicit physical choices on an existing context.
+    /// Compile the shader of explicit physical choices on an existing context.
     ///
     /// The original-truth and support contracts are unchanged. Optional integer
     /// instructions require granted features and retain exact wide arithmetic.
     ///
     /// # Errors
     /// Reports the failures of [`Self::from_context`], including a fixed
-    /// workgroup size exceeding the granted limits, and a failure to compile
-    /// any size the sizing may dispatch, which invalidates the context. No
-    /// different device or support policy is substituted.
+    /// workgroup size exceeding the granted limits, and a failure to create the
+    /// shader or compile a fixed size, which invalidates the context; a fitted
+    /// size's compilation failure is reported by the first check that needs it.
+    /// No different device or support policy is substituted.
     pub fn from_context_with_kernel(
         context: &crate::GpuContext,
         support: TightSupport,
@@ -184,6 +189,12 @@ impl GpuTightOracle {
         profile.kernel = crate::kernel::Kernel::Tight(options);
         let runtime = pollster::block_on(Runtime::from_context(context, profile))?;
         Ok(Self::with_runtime(runtime, support))
+    }
+
+    /// The workgroup sizes this oracle's runtime has compiled.
+    #[cfg(test)]
+    pub(crate) fn compiled_sizes(&self) -> Vec<crate::GpuWorkgroupSize> {
+        self.runtime.compiled_sizes()
     }
 
     /// Physical options retained by this kernel; no device operation.
@@ -367,6 +378,11 @@ impl GpuTightOracle {
     /// Requested device timing charges 96 bytes to the same batch allowance: the
     /// oracle's query slots, two resolve buffers and flush readback, and the
     /// readback tail of the batch's transport. It never changes logical verdicts.
+    /// Under fitted sizing, the first call that dispatches a size compiles its
+    /// pipeline. A failure to compile it is reported before any dispatch and
+    /// invalidates the context; the size stays uncompiled, and no theory stays
+    /// resident, because only a freshly prepared theory can need a size first
+    /// and its cold preparation released the previous one.
     pub fn check_batch(
         &mut self,
         certificate: &TightPlan,
@@ -463,6 +479,21 @@ impl GpuTightOracle {
             build,
         } = self.prepare(certificate, candidates, limits, cancellation, size)?;
         poll(cancellation)?;
+        // The dispatched size's pipeline is compiled at first need, before this
+        // call's scopes and before the fresh graph becomes resident. Only a
+        // freshly prepared graph can need a size first, and its preparation has
+        // released any previous resident, so a refusal leaves none, as a
+        // cold-preparation failure does.
+        let workgroup_size = fresh
+            .as_ref()
+            .map(|(graph, _)| graph.workgroup_size)
+            .or_else(|| {
+                self.resident
+                    .as_ref()
+                    .map(|resident| resident.graph.workgroup_size)
+            })
+            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident tight graph"))?;
+        self.runtime.ensure_pipeline(workgroup_size)?;
         let scopes = ErrorScopes::new(self.runtime.device());
         if let Some((mut graph, packed)) = fresh {
             graph.rows.release();

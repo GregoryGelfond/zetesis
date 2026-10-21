@@ -134,7 +134,7 @@ impl FormulaCheck {
 #[non_exhaustive]
 pub struct FormulaBatchStats {
     /// Actual gate scheduling after optional storage/work admission. This can
-    /// be dense even when the compiled profile requests changed dependencies.
+    /// be dense even when the profile requests changed dependencies.
     pub propagation: crate::GpuPropagation,
     /// Whether this call uploaded a different immutable Theory instance.
     pub theory_uploaded: bool,

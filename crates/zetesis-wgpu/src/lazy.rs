@@ -328,16 +328,17 @@ impl GpuLazyOracle {
             selection.retention,
         );
         let counters = self.statistics.submitted(plan, selection)?;
+        let pipeline = self.runtime.static_pipeline()?;
         if !selection.transition.is_reuse() {
             *cached = Some(cached.take().map_or_else(
-                || Transport::new(&self.runtime, selection.capacity),
-                |previous| previous.replace(&self.runtime, selection),
+                || Transport::new(&self.runtime, pipeline, selection.capacity),
+                |previous| previous.replace(&self.runtime, pipeline, selection),
             ));
         }
         let transport = cached.as_mut().ok_or_else(|| {
             GpuError::new(GpuErrorKind::Device, "lazy transport is not initialized")
         })?;
-        let submission = transport.submit(&self.runtime, chunk, plan, selection.uploads);
+        let submission = transport.submit(&self.runtime, pipeline, chunk, plan, selection.uploads);
         self.statistics = counters;
         let start = std::time::Instant::now();
         let result = runtime::read_polled(

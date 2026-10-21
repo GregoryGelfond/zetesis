@@ -641,8 +641,9 @@ its compilation without attempting device discovery.
 Resources retain device infrastructure, not programs, candidates, prepared
 formula graphs, worker pools or incumbents. Context-only resources create fresh
 primitive pipelines. `ExecutionResources::with_formula_profile(&profile)` also
-retains an exact compiled `GpuFormulaProfile`; repeated general formula sessions reuse
-that compilation while creating fresh subject preparation, residency and epochs.
+retains an exact `GpuFormulaProfile`; repeated general formula sessions share its
+shader and compiled pipelines while creating fresh subject preparation, residency
+and epochs.
 When tight support is selected, its distinct kernel compiles on the profile's
 exact context; the general formula pipeline is not used for support checking.
 The profile includes its exact context and gate projection. It cannot be paired
@@ -663,7 +664,7 @@ not invalidate it. Sessions retain separate work budgets and semantic evidence.
 Per-primitive allocation limits do not impose a combined context or process
 memory ceiling. See the [ownership contract](../architecture/ownership.md#device-resource-scope).
 
-The following example reuses one compiled formula profile for complete
+The following example reuses one formula profile for complete
 collections over distinct source owners. Collection includes nonoptimal answers
 and their scores. It requires an accessible physical GPU.
 

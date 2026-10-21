@@ -5,19 +5,27 @@ use crate::runtime::{DeviceProfile, Runtime};
 use crate::{GpuContext, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
 use std::sync::Arc;
 
-/// One compiled finite-formula kernel on one exact device context: a pipeline
-/// for each workgroup size its sizing may dispatch there.
+/// One finite-formula kernel on one exact device context, shared by every
+/// oracle started from it.
 ///
-/// Cloning retains the same pipelines, context and gate implementation in constant
-/// time. Independent compilation has a different identity even on the same
-/// context. No theory, transport, epoch, search state or batch statistics belong
-/// to this owner. Each [`super::GpuFormulaOracle::from_profile`] starts those
-/// mutable resources afresh; simultaneously live oracles retain separate storage.
+/// A profile retains its validated shader module and the pipeline of each
+/// workgroup size compiled for it. A fixed size's pipeline is compiled when the
+/// profile is created; a fitted size's by the first check, from any oracle
+/// sharing the profile, that dispatches that size. Oracles and sessions sharing
+/// a profile share its pipelines, so each size is compiled once per profile.
+///
+/// Cloning retains the same shader, pipelines, context and gate implementation
+/// in constant time. Independent compilation has a different identity even on
+/// the same context. No theory, transport, epoch, search state or batch
+/// statistics belong to this owner. Each
+/// [`super::GpuFormulaOracle::from_profile`] starts those mutable resources
+/// afresh; simultaneously live oracles retain separate storage.
 ///
 /// Compilation has driver-dependent allocation and duration outside dispatch
-/// limits. Keeping a profile alive retains its pipeline and device infrastructure;
-/// per-oracle byte limits do not account for that infrastructure or sum all live
-/// oracles. This is explicit reuse, with no global cache or concurrent scheduling.
+/// limits. Keeping a profile alive retains its shader, pipelines and device
+/// infrastructure; per-oracle byte limits do not account for that
+/// infrastructure or sum all live oracles. This is explicit reuse, with no
+/// global cache or concurrent scheduling.
 #[derive(Clone)]
 pub struct GpuFormulaProfile {
     pub(super) runtime: Arc<Runtime>,
@@ -25,7 +33,8 @@ pub struct GpuFormulaProfile {
 }
 
 impl GpuFormulaProfile {
-    /// Select a native device and compile the default gate implementation.
+    /// Select a native device and compile the default gate implementation's
+    /// shader; its pipelines are compiled as the type documents.
     ///
     /// # Errors
     /// Returns typed adapter, capacity, allocation, validation or device failure.
@@ -59,7 +68,8 @@ impl GpuFormulaProfile {
         })
     }
 
-    /// Select a native device and compile exactly the requested implementation.
+    /// Select a native device and compile exactly the requested implementation's
+    /// shader.
     ///
     /// Enumerated source is borrowed. Bitwise assembles one fixed source with a
     /// fallible reservation. Construction does not prepare a theory or dispatch.
@@ -83,7 +93,8 @@ impl GpuFormulaProfile {
         })
     }
 
-    /// Compile the default implementation on an existing context.
+    /// Compile the default implementation's shader on an existing context; its
+    /// pipelines are compiled as the type documents.
     ///
     /// # Errors
     /// Refuses an active or invalidated context, unsupported granted limits,
@@ -92,7 +103,7 @@ impl GpuFormulaProfile {
         Self::from_context_with_projection(context, GateProjection::default())
     }
 
-    /// Compile the requested implementation on an existing context.
+    /// Compile the requested implementation's shader on an existing context.
     ///
     /// The exact context is retained. This does not discover a replacement or
     /// reuse another independently compiled profile with equal metadata.
@@ -107,18 +118,21 @@ impl GpuFormulaProfile {
         Self::from_context_with_kernel(context, projection, crate::GpuKernelOptions::default())
     }
 
-    /// Compile explicit physical choices on the exact retained context.
+    /// Compile the shader of explicit physical choices on the exact retained
+    /// context.
     ///
-    /// The workgroup sizing's base size is checked against granted limits, and
-    /// every size the sizing may dispatch is compiled. Optional instructions
+    /// The workgroup sizing's base size is checked against granted limits and
+    /// the shader validated; a fixed size is compiled now, and a fitted size by
+    /// the first check that dispatches it. Optional instructions
     /// require granted features; otherwise the portable reduction is retained.
     /// None of these choices changes the frozen reduct or its work allowance.
     ///
     /// # Errors
     /// Reports the construction failures of [`Self::from_context`], including
     /// a fixed workgroup size exceeding the device's granted limits, and a
-    /// failure to compile any size the sizing may dispatch, which invalidates
-    /// the context.
+    /// failure to create the shader or compile a fixed size, which invalidates
+    /// the context. A fitted size's compilation failure is reported by the
+    /// first check that needs it.
     pub fn from_context_with_kernel(
         context: &GpuContext,
         projection: GateProjection,
@@ -161,7 +175,7 @@ impl GpuFormulaProfile {
         self.context().info()
     }
 
-    /// Whether both handles retain the exact same compiled pipeline owner.
+    /// Whether both handles retain the exact same shader and pipeline owner.
     ///
     /// Equal context, shader or projection metadata alone is insufficient.
     #[must_use]

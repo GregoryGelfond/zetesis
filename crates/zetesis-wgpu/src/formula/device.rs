@@ -43,7 +43,8 @@ struct PreparedCall {
     stats: FormulaBatchStats,
 }
 impl GpuFormulaOracle {
-    /// Select a native adapter and create this profile's separate device/pipeline.
+    /// Select a native adapter and create this oracle's separate device and
+    /// kernel, whose pipelines are compiled as [`GpuFormulaProfile`] documents.
     ///
     /// # Errors
     /// Returns typed adapter, capacity, allocation, validation or device failure.
@@ -69,13 +70,14 @@ impl GpuFormulaOracle {
         ))
     }
 
-    /// Create an independently owned native device/pipeline for this projection.
+    /// Create an independently owned native device and kernel for this projection.
     ///
     /// Uses the same hard API and physical-device selection policy as
     /// [`Self::new_selected`]. Construction does not ground, enumerate, or alter
     /// a theory. Enumerated source is borrowed; Bitwise assembles one fixed-size
     /// shader with a fallible reservation, then transfers it to shader creation.
-    /// Device/pipeline costs depend on the driver and are outside dispatch limits.
+    /// Device and compilation costs depend on the driver and are outside dispatch
+    /// limits.
     ///
     /// # Errors
     /// Returns typed adapter, capacity, allocation, validation or device failure.
@@ -89,7 +91,8 @@ impl GpuFormulaOracle {
         ))
     }
 
-    /// Compile this primitive on an existing device context.
+    /// Compile this primitive's shader on an existing device context; its
+    /// pipelines are compiled as [`GpuFormulaProfile`] documents.
     ///
     /// Prepared subjects belong to this primitive; device health and execution
     /// serialization are shared with all primitives using the context.
@@ -101,7 +104,7 @@ impl GpuFormulaOracle {
         Self::from_context_with_projection(context, GateProjection::default())
     }
 
-    /// Compile the selected implementation on an existing shared context.
+    /// Compile the selected implementation's shader on an existing shared context.
     ///
     /// # Errors
     /// Reports the same context, capability and compilation failures as
@@ -115,7 +118,7 @@ impl GpuFormulaOracle {
         ))
     }
 
-    /// Start fresh oracle state using a caller-owned compiled profile.
+    /// Start fresh oracle state using a caller-owned profile.
     ///
     /// Acquires the context's nonblocking lease, checks shared health and granted
     /// formula capabilities, then retains the exact compilation. No shader
@@ -135,7 +138,8 @@ impl GpuFormulaOracle {
         Ok(Self::with_profile(profile.clone()))
     }
 
-    /// Exact compiled pipeline owner retained by this oracle.
+    /// Exact profile retained by this oracle: the owner of its shader and
+    /// pipelines.
     #[must_use]
     pub const fn compiled_profile(&self) -> &GpuFormulaProfile {
         &self.profile
@@ -287,7 +291,12 @@ impl GpuFormulaOracle {
     /// preparation refusal releases the old resident handles and leaves a
     /// healthy, cold context without advancing its epoch. Driver retirement is
     /// excluded from authored byte limits. A propagation limit is an explicit
-    /// residual, never a proof of stability.
+    /// residual, never a proof of stability. Under fitted sizing, the first call
+    /// that dispatches a size compiles its pipeline. A failure to compile it is
+    /// reported before any dispatch and invalidates the context; the size stays
+    /// uncompiled, and no theory stays resident, because only a freshly
+    /// prepared theory can need a size first and its cold preparation released
+    /// the previous one.
     pub fn propagate_batch(
         &mut self,
         theory: &Theory,
@@ -383,6 +392,21 @@ impl GpuFormulaOracle {
         let PreparedCall { fresh, plan, stats } =
             self.prepare(theory, candidates, limits, cancellation, epoch, size)?;
         cancellation.poll().map_err(GpuError::interrupted)?;
+        // The dispatched size's pipeline is compiled at first need, before this
+        // call's scopes and before the fresh graph becomes resident. Only a
+        // freshly prepared graph can need a size first, and its preparation has
+        // released any previous resident, so a refusal leaves none, as a
+        // cold-preparation failure does.
+        let workgroup_size = fresh
+            .as_ref()
+            .map(|prepared| prepared.graph.workgroup_size)
+            .or_else(|| {
+                self.resident
+                    .as_ref()
+                    .map(|resident| resident.graph.workgroup_size)
+            })
+            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident formula"))?;
+        self.profile.runtime.ensure_pipeline(workgroup_size)?;
         let scopes = ErrorScopes::new(self.profile.runtime.device());
         if let Some(prepared) = fresh {
             self.resident = Some(Resident::new(self.profile.runtime.device(), prepared));

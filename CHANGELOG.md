@@ -52,7 +52,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   their existing meaning; unresolved device checks still receive exact CPU checks.
 - GPU formula and tight checks choose each program's workgroup size from its
   dependency schedule: 128 or 256 invocations evaluate wide levels together,
-  while serial and narrow schedules keep 64. Answer sets are unchanged; bounded
+  while serial and narrow schedules keep 64. Each solve compiles only the size it
+  uses, when its first device check needs it. Answer sets are unchanged; bounded
   device checks still receive exact CPU checks.
 - GPU tight checking can bring each candidate slot's previous evaluation to its
   next candidate when successive batches share a program and size, evaluating

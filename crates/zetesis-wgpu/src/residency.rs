@@ -60,7 +60,7 @@ impl ResidentGraph {
     ) -> Result<runtime::Completion<Vec<GpuCheck>>, GpuError> {
         let device = runtime.device();
         let queue = runtime.queue();
-        let pipeline = &runtime.pipeline;
+        let pipeline = runtime.static_pipeline()?;
         if self.transport.is_none() {
             self.transport = Some(Transport::new(device, pipeline, self, packed, plan));
         }

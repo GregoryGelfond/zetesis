@@ -235,8 +235,9 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
         poll(cancellation)?;
         self.executor.epoch = epoch;
         let runtime = &mut self.executor.runtime;
+        let pipeline = runtime.static_pipeline()?;
         let scopes = runtime::ErrorScopes::new(runtime.device());
-        let transport = Transport::new(runtime, &self.columns, &plan, &packed);
+        let transport = Transport::new(runtime, pipeline, &self.columns, &plan, &packed);
         self.activity.uploaded_bytes = PARAM_BYTES + plan.query_bytes + plan.equality_bytes;
         let outcome = poll(cancellation).map(|()| {
             let submission = runtime::submit(
@@ -245,7 +246,7 @@ impl<'owner, 'source> PreparedGpuRelation<'_, 'owner, 'source> {
                 &runtime::Dispatch {
                     command_label: "zetesis relation commands",
                     pass_label: "zetesis relation row tiles",
-                    pipeline: &runtime.pipeline,
+                    pipeline,
                     group: &transport.group,
                     workgroups: plan.workgroups,
                     result: &transport.result,
@@ -287,6 +288,7 @@ struct Transport {
 impl Transport {
     fn new(
         runtime: &runtime::Runtime,
+        pipeline: &wgpu::ComputePipeline,
         columns: &wgpu::Buffer,
         plan: &packing::Plan,
         packed: &packing::Packed,
@@ -324,7 +326,7 @@ impl Transport {
         );
         let group = device.create_bind_group(&wgpu::BindGroupDescriptor {
             label: Some("zetesis relation bindings"),
-            layout: &runtime.pipeline.get_bind_group_layout(0),
+            layout: &pipeline.get_bind_group_layout(0),
             entries: &[
                 runtime::entry(0, &params),
                 runtime::entry(1, columns),

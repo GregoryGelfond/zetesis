@@ -116,23 +116,37 @@ fn allocate(runtime: &Runtime, capacity: Capacity, slot: Slot) -> wgpu::Buffer {
 }
 
 impl Transport {
-    pub(super) fn new(runtime: &Runtime, capacity: Capacity) -> Self {
+    pub(super) fn new(
+        runtime: &Runtime,
+        pipeline: &wgpu::ComputePipeline,
+        capacity: Capacity,
+    ) -> Self {
         let buffers = Buffers::empty().complete(|slot| allocate(runtime, capacity, slot));
-        Self::from_buffers(runtime, capacity, buffers)
+        Self::from_buffers(runtime, pipeline, capacity, buffers)
     }
 
-    pub(super) fn replace(self, runtime: &Runtime, selection: Selection) -> Self {
+    pub(super) fn replace(
+        self,
+        runtime: &Runtime,
+        pipeline: &wgpu::ComputePipeline,
+        selection: Selection,
+    ) -> Self {
         let retained = release(self.group, self.buffers, selection.retention);
         let buffers = retained.complete(|slot| allocate(runtime, selection.capacity, slot));
-        Self::from_buffers(runtime, selection.capacity, buffers)
+        Self::from_buffers(runtime, pipeline, selection.capacity, buffers)
     }
 
-    fn from_buffers(runtime: &Runtime, capacity: Capacity, buffers: Buffers<wgpu::Buffer>) -> Self {
+    fn from_buffers(
+        runtime: &Runtime,
+        pipeline: &wgpu::ComputePipeline,
+        capacity: Capacity,
+        buffers: Buffers<wgpu::Buffer>,
+    ) -> Self {
         let group = runtime
             .device()
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("lazy round chunk"),
-                layout: &runtime.pipeline.get_bind_group_layout(0),
+                layout: &pipeline.get_bind_group_layout(0),
                 entries: &[
                     runtime::entry(0, &buffers.uniform),
                     runtime::entry(1, &buffers.inputs[0]),
@@ -170,6 +184,7 @@ impl Transport {
     pub(super) fn submit(
         &mut self,
         runtime: &Runtime,
+        pipeline: &wgpu::ComputePipeline,
         chunk: &lazy::Chunk<'_>,
         plan: &Plan,
         uploads: super::upload::Uploads,
@@ -211,7 +226,7 @@ impl Transport {
                 label: Some("lazy world consequences"),
                 timestamp_writes: None,
             });
-            pass.set_pipeline(&runtime.pipeline);
+            pass.set_pipeline(pipeline);
             pass.set_bind_group(0, &self.group, &[]);
             pass.dispatch_workgroups(plan.dimensions[2], 1, 1);
         }

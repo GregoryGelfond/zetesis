@@ -386,6 +386,215 @@ fn vulkan_profiles_identify_exact_compilations() {
     compilation_identity(GpuApi::Vulkan);
 }
 
+/// One atom, a serial schedule: it dispatches 64 invocations.
+fn narrow_theory() -> Theory {
+    Theory::new(
+        1,
+        zetesis_ferraris::FormulaParts::new(vec![zetesis_ferraris::Node::atom(0)], Vec::new())
+            .unwrap(),
+        vec![0],
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+/// 130 separate rules `1 :- 0` on one level: it dispatches 256 invocations.
+fn wide_theory() -> Theory {
+    use zetesis_ferraris::Node;
+    let mut nodes = vec![Node::atom(0), Node::atom(1)];
+    nodes.extend(std::iter::repeat_n(Node::implies(0, 1), 130));
+    Theory::new(
+        2,
+        zetesis_ferraris::FormulaParts::new(nodes, Vec::new()).unwrap(),
+        (2..132).collect(),
+        zetesis_ferraris::AdmissionLimits::default(),
+    )
+    .unwrap()
+}
+
+// A fitted profile compiles no pipeline when it is created. Each size is
+// compiled once, by the first check that dispatches it: a later check, or an
+// oracle sharing the profile, compiles nothing, and a theory fitting another
+// size compiles that size beside the first.
+fn fitted_compilation(backend: GpuApi) {
+    use crate::GpuWorkgroupSize::{Threads64, Threads256};
+    let profile =
+        GpuFormulaProfile::new_selected(GpuOptions::default(), GpuSelection { api: backend })
+            .unwrap();
+    require_profile_device(&profile, backend);
+    assert!(profile.runtime.compiled_sizes().is_empty());
+    let narrow = narrow_theory();
+    let candidates = [Interpretation::new(&narrow, [0]).unwrap()];
+    let mut first = GpuFormulaOracle::from_profile(&profile).unwrap();
+    for _ in 0..2 {
+        first
+            .propagate_batch(&narrow, &candidates, FormulaLimits::default())
+            .unwrap();
+        assert_eq!(profile.runtime.compiled_sizes(), [Threads64]);
+    }
+    let mut sibling = GpuFormulaOracle::from_profile(&profile).unwrap();
+    sibling
+        .propagate_batch(&narrow, &candidates, FormulaLimits::default())
+        .unwrap();
+    assert_eq!(profile.runtime.compiled_sizes(), [Threads64]);
+    let wide = wide_theory();
+    sibling
+        .propagate_batch(
+            &wide,
+            &[Interpretation::new(&wide, []).unwrap()],
+            FormulaLimits::default(),
+        )
+        .unwrap();
+    assert_eq!(sibling.last_batch_stats().unwrap().workgroup_size, 256);
+    assert_eq!(profile.runtime.compiled_sizes(), [Threads64, Threads256]);
+}
+
+#[test]
+#[ignore = "requires Metal: fitted profiles compile each dispatched size once"]
+fn metal_fitted_profiles_compile_each_dispatched_size_once() {
+    fitted_compilation(GpuApi::Metal);
+}
+
+#[test]
+#[ignore = "requires Vulkan: fitted profiles compile each dispatched size once"]
+fn vulkan_fitted_profiles_compile_each_dispatched_size_once() {
+    fitted_compilation(GpuApi::Vulkan);
+}
+
+// A fixed size is compiled when its kernel is created.
+fn fixed_compilation(backend: GpuApi) {
+    let context =
+        crate::GpuContext::new_selected(GpuOptions::default(), GpuSelection { api: backend })
+            .unwrap();
+    let fixed = GpuFormulaProfile::from_context_with_kernel(
+        &context,
+        GateProjection::default(),
+        crate::GpuKernelOptions {
+            workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(crate::GpuWorkgroupSize::Threads128),
+            ..crate::GpuKernelOptions::default()
+        },
+    )
+    .unwrap();
+    assert_eq!(
+        fixed.runtime.compiled_sizes(),
+        [crate::GpuWorkgroupSize::Threads128]
+    );
+}
+
+#[test]
+#[ignore = "requires Metal: fixed profiles compile their size with the kernel"]
+fn metal_fixed_profiles_compile_their_size_with_the_kernel() {
+    fixed_compilation(GpuApi::Metal);
+}
+
+#[test]
+#[ignore = "requires Vulkan: fixed profiles compile their size with the kernel"]
+fn vulkan_fixed_profiles_compile_their_size_with_the_kernel() {
+    fixed_compilation(GpuApi::Vulkan);
+}
+
+// A tight oracle owns its runtime and compiles its fitted size at its first
+// check, not when it is created.
+fn tight_first_need(backend: GpuApi) {
+    let narrow = narrow_theory();
+    let plan = zetesis_ferraris::TightPlan::compile(
+        &narrow,
+        zetesis_ferraris::TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap();
+    let mut tight =
+        crate::GpuTightOracle::new_selected(GpuOptions::default(), GpuSelection { api: backend })
+            .unwrap();
+    assert!(tight.compiled_sizes().is_empty());
+    tight
+        .check_batch(
+            &plan,
+            &[Interpretation::new(&narrow, [0]).unwrap()],
+            crate::TightGpuLimits::default(),
+            &Cancellation::default(),
+        )
+        .unwrap();
+    assert_eq!(tight.compiled_sizes(), [crate::GpuWorkgroupSize::Threads64]);
+}
+
+#[test]
+#[ignore = "requires Metal: tight oracles compile their fitted size at first need"]
+fn metal_tight_oracles_compile_their_fitted_size_at_first_need() {
+    tight_first_need(GpuApi::Metal);
+}
+
+#[test]
+#[ignore = "requires Vulkan: tight oracles compile their fitted size at first need"]
+fn vulkan_tight_oracles_compile_their_fitted_size_at_first_need() {
+    tight_first_need(GpuApi::Vulkan);
+}
+
+// A check whose freshly prepared graph needs a size the device refuses to
+// compile fails as documented: with the compilation's error, before any
+// dispatch, leaving no resident subject (cold preparation released the previous
+// one, as before any cold-preparation failure), the size's slot unwritten and
+// the context invalidated. The refusal is provoked through the test seam that
+// compiles one invocation past the granted maximum in place of the next first
+// need.
+fn refused_first_need(backend: GpuApi) {
+    let profile =
+        GpuFormulaProfile::new_selected(GpuOptions::default(), GpuSelection { api: backend })
+            .unwrap();
+    let mut oracle = GpuFormulaOracle::from_profile(&profile).unwrap();
+    let narrow = narrow_theory();
+    oracle
+        .propagate_batch(
+            &narrow,
+            &[Interpretation::new(&narrow, [0]).unwrap()],
+            FormulaLimits::default(),
+        )
+        .unwrap();
+    assert!(oracle.resident.is_some());
+    profile.runtime.refuse_next_compilation(
+        profile
+            .context()
+            .limits()
+            .max_compute_invocations_per_workgroup
+            + 1,
+    );
+    let wide = wide_theory();
+    let refused = oracle
+        .propagate_batch(
+            &wide,
+            &[Interpretation::new(&wide, []).unwrap()],
+            FormulaLimits::default(),
+        )
+        .unwrap_err();
+    // wgpu or the platform refuses it: the scope's validation or device kind.
+    assert!(
+        matches!(
+            refused.kind(),
+            GpuErrorKind::Validation | GpuErrorKind::Device
+        ),
+        "{refused}"
+    );
+    assert!(oracle.resident.is_none());
+    assert!(oracle.last_batch_stats().is_none());
+    assert_eq!(
+        profile.runtime.compiled_sizes(),
+        [crate::GpuWorkgroupSize::Threads64]
+    );
+    assert!(profile.context().check_health().is_err());
+}
+
+#[test]
+#[ignore = "requires Metal: a refused first-need compilation fails its check"]
+fn metal_a_refused_first_need_compilation_fails_its_check() {
+    refused_first_need(GpuApi::Metal);
+}
+
+#[test]
+#[ignore = "requires Vulkan: a refused first-need compilation fails its check"]
+fn vulkan_a_refused_first_need_compilation_fails_its_check() {
+    refused_first_need(GpuApi::Vulkan);
+}
+
 fn profile_lifecycle(backend: GpuApi) {
     let profile =
         GpuFormulaProfile::new_selected(GpuOptions::default(), GpuSelection { api: backend })

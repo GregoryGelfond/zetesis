@@ -41,9 +41,11 @@ policy; a primitive built on that context checks its own granted limits.
 `GpuContext` lets distinct primitives retain prepared subjects on one device.
 Standalone `new` and `new_selected` constructors create independent contexts;
 `from_context` shares device resources and their failure boundary.
-`GpuFormulaProfile` additionally retains a compiled formula pipeline on its exact
-context; `GpuFormulaOracle::from_profile` shares that compilation while starting
-fresh theory residency, transport, epochs and statistics. Overlapping operations
+`GpuFormulaProfile` additionally retains a validated formula shader on its exact
+context and the pipeline of each workgroup size compiled for it, a fitted size
+by the first check that dispatches it; `GpuFormulaOracle::from_profile` shares
+those pipelines while starting fresh theory residency, transport, epochs and
+statistics. Overlapping operations
 return `Busy` without waiting. Primitive byte ceilings retain their local scope. See
 [execution ownership](../../docs/book/architecture/ownership.md) and the
 [ordinary session example](../../docs/book/rust/sessions.md#share-execution-resources).
@@ -114,10 +116,12 @@ and tight profiles choose their cooperating invocations through
 `GpuWorkgroupSizing`. By default each retained theory dispatches the size its
 dependency schedule fits: 64, 128 or 256 within the granted limits, and 64 for
 serial schedules and levels of at most 64 nodes. `Fixed` selects 32, 64, 128 or
-256 for controlled comparisons. Each size the sizing may dispatch is compiled
-with the kernel through a WGSL pipeline constant, after the base size is checked
-against the context's granted limits; a failure to compile any of them fails
-construction and invalidates the context. Batch statistics report the size
+256 for controlled comparisons. Creating a kernel checks the base size against
+the context's granted limits and validates its shader. A fixed size is compiled
+then, through a WGSL pipeline constant; a fitted size is compiled by the first
+check that dispatches it, so a solve compiles only the size it uses. A
+compilation failure fails construction or that check, before any dispatch, and
+invalidates the context. Batch statistics report the size
 dispatched. Supported subgroup
 instructions combine strict-subset summaries before their workgroup-wide merge;
 no subgroup width is assumed. The portable alternative uses the same integer

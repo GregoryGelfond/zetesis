@@ -5,7 +5,8 @@
 /// The default retains no device and preserves ordinary per-session discovery.
 /// With the `gpu` feature, `with_gpu` retains the supplied context and compiles
 /// primitive pipelines per session. `with_formula_profile` also retains one
-/// explicit formula compilation for repeated formula sessions. Every session
+/// formula profile, whose shader and compiled pipelines repeated formula
+/// sessions share. Every session
 /// still owns fresh resident subjects, epochs, search state, budgets, pending
 /// answers, counters and incumbents. CPU worker pools remain session-owned.
 ///
@@ -49,12 +50,14 @@ impl ExecutionResources {
         }
     }
 
-    /// Retain a compiled formula pipeline for later ordinary formula sessions.
+    /// Retain a formula profile for later ordinary formula sessions.
     ///
     /// The profile's exact context also serves other GPU primitives. This makes
     /// one shared-owner clone with no discovery, health check, compilation or
-    /// submission. General formula sessions reuse this pipeline; a tight-support
-    /// session compiles its own primitive on the profile's exact context.
+    /// submission. General formula sessions share the profile's shader and its
+    /// pipelines, as [`zetesis_wgpu::GpuFormulaProfile`] documents; a
+    /// tight-support session creates its own primitive on the profile's exact
+    /// context.
     /// Each formula session validates policy, Busy, health and
     /// granted capabilities before starting independent residency and search.
     /// CPU sessions ignore these resources.
