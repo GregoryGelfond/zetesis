@@ -2052,7 +2052,10 @@ published child becomes visible. So every stop-free step permutes that frontier
 and the emitted leaves, and a slate reports exhaustion only from a stop-free
 join at a count of zero. The count, the output-slot reservation that bounds the
 regions in hand plus the emitted candidates, and the hand-over are Rust
-obligations beside the walker's queue and gate protocols.
+obligations beside the walker's queue and gate protocols, as is the stop's
+order: a failed region returns to a deque only after the stop closes the slate,
+and a producer checks for the close after each take, so no region is stepped
+again after its step failed.
 
 After producers join, emitted candidates enter the pending membership ledger.
 `BatchAccounting.exact_commit_preserves_soundness` justifies committing a fully

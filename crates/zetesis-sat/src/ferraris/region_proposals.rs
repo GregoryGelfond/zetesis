@@ -31,11 +31,15 @@
 //! All producers join before the next stage runs. Each holds one work lease
 //! for the slate, settled before it steals, before it waits and at its exit,
 //! so the coordinator's cumulative budget receives every charge, including
-//! failed attempts. A stop requeues the regions in hand, and a stop never
+//! failed attempts. A stop closes the slate before the stopping producer
+//! returns its region to a deque, and every producer checks for the close
+//! after it takes a region and before it steps it. So a region returned after
+//! a stop, a failed region included, is never stepped again, and every region
+//! in hand but a panicking producer's returns to a deque. A stop never
 //! establishes coverage. A cancellation or deadline that a producer observes
 //! once the slate is full is left to the next slate's first poll, which
-//! observes it again, so no stop follows the emission that fills a slate.
-//! Each producer retains its checker and worklists between slates. These are
+//! observes it again, so no stop follows the emission that fills a slate. Each
+//! producer retains its checker and worklists between slates. These are
 //! scratch for the same immutable source, not knowledge about a candidate: the
 //! latter travels with its frontier region. Candidate order depends on
 //! scheduling, while identity and coverage do not.
@@ -511,9 +515,8 @@ impl<'filter> SlateFill<'_, 'filter> {
 
     /// Publish a split's older child and keep its newer one in hand under the
     /// same output slot. A refused publication drops the older child
-    /// unpublished, leaving the count unchanged; the newer child goes back to
-    /// the deque when storage permits, and the recorded stop keeps the run
-    /// incomplete.
+    /// unpublished, leaving the count unchanged, and fails the newer child
+    /// (see [`Self::fail`]).
     fn hand_over(
         &self,
         index: usize,
@@ -523,11 +526,37 @@ impl<'filter> SlateFill<'_, 'filter> {
         match self.frontier.publish_split(index, [cut], reserve) {
             Ok(()) => Some(held),
             Err(error) => {
-                self.frontier.requeue(index, held);
-                self.stop(error);
+                self.fail(index, held, error);
                 None
             }
         }
+    }
+
+    /// Stop the slate on `error`, then return `entry`, a region producer
+    /// `index` could not resolve, to its deque when storage permits. The order
+    /// is the guarantee: the stop closes the slate before the region becomes
+    /// visible, so a producer that takes it acquires its deque after the close,
+    /// sees the close in [`Self::ready`] and returns it unstepped. The recorded
+    /// stop keeps the run incomplete whether or not the region is retained.
+    fn fail(&self, index: usize, entry: Entry, error: Incomplete) {
+        self.stop(error);
+        self.frontier.requeue(index, entry);
+    }
+
+    /// Whether `entry`, a region the producer has just taken, may be stepped.
+    /// Not once the slate has closed: the close is read after the take, so a
+    /// region a stopping producer returned is never stepped again. Nor when
+    /// control requests a stop, which is recorded. A refused region comes back
+    /// for the producer to return to its deque.
+    fn ready(&self, entry: Entry) -> Result<Entry, Entry> {
+        if self.frontier.termination.is_closed() {
+            return Err(entry);
+        }
+        if let Err(error) = self.cancellation.poll() {
+            self.stop_unless_full(error.into());
+            return Err(entry);
+        }
+        Ok(entry)
     }
 
     /// After a refutation the producer keeps its output slot when it finds
@@ -560,26 +589,27 @@ impl<'filter> SlateFill<'_, 'filter> {
     }
 
     /// Producer `index`'s part of the slate. It holds one lease throughout,
-    /// polls control before every step, keeps the newer child of each split in
-    /// hand, and returns a region it holds to its deque when the slate ends.
+    /// checks the slate and polls control after it takes each region and
+    /// before it steps it, keeps the newer child of each split in hand, and
+    /// returns a region it holds to its deque when the slate ends.
     fn produce(&self, index: usize, workspace: &mut Workspace<'filter>) {
         let mut lease = self.allowance.lease(self.cancellation);
         let mut search = SearchStatistics::default();
         let mut hand: Option<Entry> = None;
         loop {
-            if self.frontier.termination.has_ended() {
-                break;
-            }
-            if let Err(error) = self.cancellation.poll() {
-                self.stop_unless_full(error.into());
-                break;
-            }
-            let mut entry = match hand.take() {
+            let taken = match hand.take() {
                 Some(entry) => entry,
                 None => match self.acquire(index, &lease) {
                     Some(entry) => entry,
                     None => break,
                 },
+            };
+            let mut entry = match self.ready(taken) {
+                Ok(entry) => entry,
+                Err(entry) => {
+                    hand = Some(entry);
+                    break;
+                }
             };
             let mut counts = RegionCounts {
                 regions: 1,
@@ -611,10 +641,8 @@ impl<'filter> SlateFill<'_, 'filter> {
                 }
                 Ok(Step::Candidate(candidate)) => self.emit(candidate),
                 Err(error) => {
-                    // This region remains unresolved. Retain it when storage
-                    // permits; the explicit stop is authoritative either way.
-                    self.frontier.requeue(index, entry);
-                    self.stop(error);
+                    // This region remains unresolved.
+                    self.fail(index, entry, error);
                     break;
                 }
             }

@@ -1,10 +1,10 @@
 use std::num::NonZeroUsize;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use super::{
     Attempt, CandidateKnowledge, Entry, Mutex, Outcome, RegionProposals, SlateFill, Step,
-    Workspace, reserve_regions,
+    Termination, Workspace, reserve_regions,
 };
 use crate::search::{Budget, LocalQuota, SharedBudget};
 use crate::{
@@ -302,6 +302,58 @@ fn a_refused_publication_requeues_the_held_child_and_leaves_the_count() {
     assert!(slate.frontier.termination.is_closed());
     assert_eq!(slate.frontier.termination.unresolved(), 1);
     assert!(slate.frontier.take_local(0).unwrap().0.is_held(0));
+}
+
+#[test]
+fn a_region_taken_from_a_closed_slate_is_returned_unstepped() {
+    let driver = driver(tautologies(1), 2);
+    let slate = driver.slate(1);
+    let root = slate.frontier.take_local(0).unwrap();
+    slate.stop(Incomplete::WorkLimit);
+    assert!(slate.ready(root).is_err());
+}
+
+/// A protocol harness for a failed step: a peer spinning on steals must find
+/// the region the failing producer returns only after the stop has closed the
+/// slate, so the check after its take refuses it. Returning the region before
+/// the stop lets the peer take it from an open slate and step it again.
+#[test]
+fn a_failed_region_is_taken_only_from_a_closed_slate() {
+    const ROUNDS: usize = 1000;
+    let mut driver = driver(tautologies(1), 2);
+    let mut early = 0;
+    for _ in 0..ROUNDS {
+        // Each round starts open, with the root as the one region.
+        driver.proposals.frontier.termination = Termination::resuming(1);
+        let slate = driver.slate(1);
+        let root = slate.frontier.take_local(0).unwrap();
+        let spinning = AtomicBool::new(false);
+        std::thread::scope(|scope| {
+            let peer = scope.spawn(|| {
+                spinning.store(true, Ordering::Release);
+                loop {
+                    if let Some(entry) = slate.frontier.steal(1) {
+                        return (entry, slate.frontier.termination.is_closed());
+                    }
+                    std::hint::spin_loop();
+                }
+            });
+            // The peer is spinning before the region is returned.
+            while !spinning.load(Ordering::Acquire) {
+                std::hint::spin_loop();
+            }
+            slate.fail(0, root, Incomplete::WorkLimit);
+            let (entry, closed) = peer.join().unwrap();
+            if !closed {
+                early += 1;
+            }
+            slate.frontier.requeue(0, entry);
+        });
+    }
+    assert_eq!(
+        early, 0,
+        "rounds whose peer took the region from an open slate"
+    );
 }
 
 #[test]
