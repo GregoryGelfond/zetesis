@@ -106,7 +106,7 @@ fn a_panicked_worker_keeps_coverage_incomplete() {
     // held here, outside the queues). The panic closes the run, and the
     // waiter exits rather than hanging.
     search.record = engaged(2);
-    let _root = search.shared.take_local(0).unwrap();
+    let _root = search.shared.frontier.take_local(0).unwrap();
     let idle_shared = Arc::clone(&search.shared);
     let index = original(&theory);
     // The waiter owns the only remaining sender, so the channel disconnects

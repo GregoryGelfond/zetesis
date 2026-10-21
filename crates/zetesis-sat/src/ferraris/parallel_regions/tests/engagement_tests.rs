@@ -190,11 +190,7 @@ fn drain(
 }
 
 fn outstanding(search: &ParallelRegions) -> usize {
-    search
-        .shared
-        .termination
-        .outstanding
-        .load(Ordering::Acquire)
+    search.shared.frontier.termination.unresolved()
 }
 
 fn walking(search: &ParallelRegions) -> Duration {
@@ -205,7 +201,7 @@ fn walking(search: &ParallelRegions) -> Duration {
 }
 
 fn frontier_released(search: &ParallelRegions) -> bool {
-    search.shared.queues.iter().all(|queue| {
+    search.shared.frontier.queues.iter().all(|queue| {
         let queue = queue.lock().unwrap();
         queue.is_empty() && queue.capacity() == 0
     })
@@ -413,10 +409,11 @@ fn handoff(
                     Live::read(&shared.live.leaves),
                 );
                 let (regions, leaves) = *entry.get_or_insert(now);
-                let passed =
-                    now.0 > regions && (!refuted || now.1 > leaves) && shared.queue(0).len() > 1;
+                let passed = now.0 > regions
+                    && (!refuted || now.1 > leaves)
+                    && shared.frontier.queue(0).len() > 1;
                 if passed {
-                    frontier.set(Some(shared.queue(0).len()));
+                    frontier.set(Some(shared.frontier.queue(0).len()));
                 }
                 passed
             })
@@ -883,7 +880,7 @@ fn a_panic_in_a_coordinator_step_merges_nothing_of_its_pull() {
     assert_eq!(budget.statistics.work, spent.work, "the pull was accounted");
     assert!(matches!(search.record, WalkRecord::Unengaged { .. }));
     assert!(walking(&search) > walked);
-    assert!(search.shared.termination.is_closed());
+    assert!(search.shared.frontier.termination.is_closed());
     assert!(!search.exhausted);
     assert!(frontier_released(&search));
     assert!(search.coordinator.is_none());

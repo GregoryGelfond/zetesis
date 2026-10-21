@@ -47,7 +47,7 @@ fn cancellation_preserves_settled_interruption() {
             ready.send(()).unwrap();
             // No model is delivered and the sender remains owned by the
             // coordinator. Only terminal cleanup can settle this prefix.
-            while !shared.termination.is_closed() {
+            while !shared.frontier.termination.is_closed() {
                 std::thread::yield_now();
             }
             drop(lease);

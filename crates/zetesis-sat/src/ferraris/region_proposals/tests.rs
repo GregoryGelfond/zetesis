@@ -3,7 +3,7 @@ use std::num::NonZeroUsize;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use super::{CandidateKnowledge, Frontier, PendingRegion, Workspace};
+use super::{CandidateKnowledge, Entry, Frontier, Workspace};
 use crate::{
     Cancellation, Incomplete, Limits, RegionFeasibility, RegionFilter, RegionFilterWorker,
     StableModels,
@@ -22,7 +22,7 @@ fn index() -> Narrower {
 }
 
 /// A region after its first narrowing, knowing only the original theory.
-fn entry() -> PendingRegion {
+fn entry() -> Entry {
     let mut knowledge = CandidateKnowledge::default();
     knowledge.permanent(0, &index()).unwrap();
     (Region::all_open(2), knowledge)
@@ -41,9 +41,9 @@ fn frontier_counts_unused_entry_slots() {
     assert!(observed.capacity >= 8);
     assert_eq!(
         observed.retained_bytes,
-        size_of::<Vec<PendingRegion>>() as u128
+        size_of::<Vec<Entry>>() as u128
             + entry_bytes
-            + (observed.capacity - 1) as u128 * size_of::<PendingRegion>() as u128
+            + (observed.capacity - 1) as u128 * size_of::<Entry>() as u128
     );
 }
 
@@ -61,8 +61,7 @@ fn removing_regions_preserves_capacity_and_peak() {
     assert_eq!(empty.capacity, populated.capacity);
     assert_eq!(
         empty.retained_bytes,
-        size_of::<Vec<PendingRegion>>() as u128
-            + empty.capacity as u128 * size_of::<PendingRegion>() as u128
+        size_of::<Vec<Entry>>() as u128 + empty.capacity as u128 * size_of::<Entry>() as u128
     );
     assert_eq!(empty.peak_retained_bytes, populated.retained_bytes);
     assert_eq!(empty.peak_regions, 2);

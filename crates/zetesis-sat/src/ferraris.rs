@@ -34,6 +34,7 @@ use original_index::OriginalIndex;
 
 mod parallel_regions;
 pub use parallel_regions::Engagement;
+mod region_frontier;
 use parallel_regions::ParallelRegions;
 mod region_proposals;
 use region_proposals::RegionProposals;

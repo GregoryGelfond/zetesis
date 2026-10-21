@@ -25,14 +25,13 @@ use zetesis_cpu::regions::{Narrowing, Region};
 use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Theory};
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
+use super::region_frontier::{Entry, entry_payload};
 use super::regions::{self, RegionCounts, RegionFrontierStatistics, RegionSearchStatistics};
 use crate::search::{Budget, SharedBudget, WorkLease};
 use crate::{Cancellation, Incomplete, SearchStatistics};
 
 /// Idle producers poll control while another producer owns the last region.
 const CONTROL_WAIT: Duration = Duration::from_millis(1);
-
-type PendingRegion = (Region, CandidateKnowledge);
 
 #[derive(Default)]
 struct Workspace<'a> {
@@ -62,7 +61,7 @@ self_cell::self_cell! {
 /// Actual disjoint allocations and their headers fit comfortably in u128 on the
 /// supported 32/64-bit hosts; no search counter or resource limit is changed.
 struct Frontier {
-    entries: Vec<PendingRegion>,
+    entries: Vec<Entry>,
     payload_bytes: u128,
     statistics: RegionFrontierStatistics,
 }
@@ -80,7 +79,7 @@ impl Default for Frontier {
 }
 
 impl Frontier {
-    fn new(entry: PendingRegion) -> Result<Self, Incomplete> {
+    fn new(entry: Entry) -> Result<Self, Incomplete> {
         let mut frontier = Self {
             entries: crate::search::storage(1)?,
             ..Self::default()
@@ -103,31 +102,25 @@ impl Frontier {
         result
     }
 
-    fn push(&mut self, entry: PendingRegion) {
-        self.payload_bytes += Self::payload(&entry);
+    fn push(&mut self, entry: Entry) {
+        self.payload_bytes += entry_payload(&entry);
         self.entries.push(entry);
         self.record();
     }
 
-    fn pop(&mut self) -> Option<PendingRegion> {
+    fn pop(&mut self) -> Option<Entry> {
         let entry = self.entries.pop()?;
-        self.payload_bytes -= Self::payload(&entry);
+        self.payload_bytes -= entry_payload(&entry);
         self.record();
         Some(entry)
-    }
-
-    /// Entry headers already occupy slots in the outer vector. Count only
-    /// their owned allocations here, including unused knowledge slots.
-    fn payload((region, knowledge): &PendingRegion) -> u128 {
-        region.retained_bytes() - size_of::<Region>() as u128 + knowledge.allocated_bytes()
     }
 
     fn record(&mut self) {
         let statistics = &mut self.statistics;
         statistics.regions = self.entries.len();
         statistics.capacity = self.entries.capacity();
-        statistics.retained_bytes = size_of::<Vec<PendingRegion>>() as u128
-            + self.entries.capacity() as u128 * size_of::<PendingRegion>() as u128
+        statistics.retained_bytes = size_of::<Vec<Entry>>() as u128
+            + self.entries.capacity() as u128 * size_of::<Entry>() as u128
             + self.payload_bytes;
         statistics.peak_regions = statistics.peak_regions.max(statistics.regions);
         statistics.peak_capacity = statistics.peak_capacity.max(statistics.capacity);
@@ -438,7 +431,7 @@ struct Round<'a, 'filter> {
 
 enum Step {
     Refuted,
-    Split(PendingRegion, PendingRegion),
+    Split(Entry, Entry),
     Candidate(Interpretation),
 }
 
@@ -452,7 +445,7 @@ impl<'filter> Round<'_, 'filter> {
         self.changed.notify_all();
     }
 
-    fn take(&self) -> Option<PendingRegion> {
+    fn take(&self) -> Option<Entry> {
         let mut state = self.lock();
         loop {
             if state.stopped.is_some() || state.output.len() == self.maximum {
@@ -541,7 +534,7 @@ impl<'filter> Round<'_, 'filter> {
 
     fn step<'a>(
         &'a self,
-        (region, knowledge): &mut PendingRegion,
+        (region, knowledge): &mut Entry,
         scratch: &mut NarrowingScratch,
         budget: &mut Budget<'a, WorkLease<'a>>,
         counts: &mut RegionCounts,
