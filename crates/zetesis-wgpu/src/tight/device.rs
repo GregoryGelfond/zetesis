@@ -144,8 +144,10 @@ impl GpuTightOracle {
     /// instructions require granted features and retain exact wide arithmetic.
     ///
     /// # Errors
-    /// Reports the failures of [`Self::from_context`], including an unsupported
-    /// workgroup width. No different device or support policy is substituted.
+    /// Reports the failures of [`Self::from_context`], including a fixed
+    /// workgroup size exceeding the granted limits, and a failure to compile
+    /// any size the sizing may dispatch, which invalidates the context. No
+    /// different device or support policy is substituted.
     pub fn from_context_with_kernel(
         context: &crate::GpuContext,
         support: TightSupport,

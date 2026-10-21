@@ -239,7 +239,7 @@ impl Graph {
         let packed = self.pack_columns(certificate, nodes, cancellation)?;
         self.workgroup_size = crate::kernel::dispatch_size(
             self.workgroup_sizing,
-            dependency::level_sizes(&packed.roots, self.roots, self.levels)?,
+            dependency::level_widths(&packed.roots, self.roots, self.levels)?,
             device,
         );
         Ok(packed)

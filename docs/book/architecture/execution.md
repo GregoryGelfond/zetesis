@@ -798,21 +798,30 @@ the serial fold because it contains no independent node work. Other narrow
 levels may still pay more in barriers than they gain in parallel evaluation.
 
 Each kernel strides every level, and every dense node, atom, root and word loop,
-by its workgroup size. By default the size fits the retained schedule. With
-`I(W) = Σ ⌈n_l / W⌉` the strided depth over the level sizes `n_l`, the kernel
-dispatches, among the granted sizes 64, 128 and 256 whose invocation slots
-`W·I(W)` stay within twice those of 64, the smallest size attaining the least
-depth. A serial schedule, or one whose levels hold at most 64 nodes, keeps 64.
-Where a batch leaves the device latency-bound, per-candidate time follows the
-strided depth; where a batch oversubscribes the device it follows the invocation
-slots, which the bound keeps within twice the 64-invocation time. Every candidate
-size is compiled when the kernel is created, and the batch statistics report the
-size dispatched. A size changes which invocation evaluates which node, never a
-node's value. Under frozen-reduct propagation sibling gates narrow shared domains
-through atomics, so the number of sweeps, and whether a candidate reaches a sweep
-or work limit, can differ between sizes; such a residual is completed exactly on
-the host. Work allowances do not depend on the size. `GpuKernelOptions` can fix
-one size for controlled comparisons.
+by its workgroup size, the invocations cooperating on one candidate. By default
+the size fits the retained schedule. With `I(W) = Σ ⌈n_l / W⌉` the strided depth
+over the level widths `n_l` (each level's node count), the kernel dispatches,
+among the granted sizes 64, 128 and 256 whose invocation slots `W·I(W)` stay
+within twice those of 64, the smallest size attaining the least depth. A serial
+schedule, or one whose levels each hold at most 64 nodes, keeps 64. A widest
+level of 65 to 128 nodes selects 128, and 256 needs a wider level and
+`I(256) ≤ I(64)/2`. Where a batch leaves the device latency-bound, the dense level
+pass takes time following the strided depth; where a batch oversubscribes the
+device it follows the invocation slots, which the bound keeps within twice the
+64-invocation time. The bound covers that pass only: the tight kernel's serial
+bypass for a tight work allowance occupies the whole workgroup with one
+invocation, up to four times the 64-invocation cost, and the opt-in active-word
+routes are not modelled.
+
+Every granted size is compiled when the kernel is created, so a failure to
+compile any of them fails construction and invalidates the context, as every
+compilation failure does; `GpuKernelOptions` can fix one size, which is then
+the only size compiled. The batch statistics report the size dispatched. A
+size changes which invocation evaluates which node, never a node's value. Under
+frozen-reduct propagation sibling gates narrow shared domains through atomics,
+so the number of sweeps, and whether a candidate reaches a sweep or work limit,
+can differ between sizes; such a residual is completed exactly on the host.
+Work allowances do not depend on the size.
 
 Dense frozen-reduct propagation reuses those levels, starting downward and
 alternating direction each sweep. Asserted roots can constrain operands across

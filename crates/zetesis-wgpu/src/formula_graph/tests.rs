@@ -611,10 +611,10 @@ fn numeric_directory_reservation_obeys_staging_allowance() {
 }
 
 #[test]
-fn a_serial_schedule_has_no_level_sizes() {
+fn a_serial_schedule_has_no_level_widths() {
     let packed = [7, 9];
     assert_eq!(
-        dependency::level_sizes(&packed, 2, 0)
+        dependency::level_widths(&packed, 2, 0)
             .unwrap()
             .collect::<Vec<_>>(),
         Vec::<u32>::new()
@@ -622,11 +622,11 @@ fn a_serial_schedule_has_no_level_sizes() {
 }
 
 #[test]
-fn level_sizes_are_offset_differences() {
+fn level_widths_are_offset_differences() {
     // Two root IDs, then the starts of three levels and the node count.
     let packed = [7, 9, 0, 3, 3, 7, 4, 5, 6];
     assert_eq!(
-        dependency::level_sizes(&packed, 2, 3)
+        dependency::level_widths(&packed, 2, 3)
             .unwrap()
             .collect::<Vec<_>>(),
         [3, 0, 4]
@@ -637,7 +637,7 @@ fn level_sizes_are_offset_differences() {
 fn level_offsets_beyond_the_schedule_are_refused() {
     let packed = [7, 9, 0, 3];
     assert_eq!(
-        dependency::level_sizes(&packed, 2, 3)
+        dependency::level_widths(&packed, 2, 3)
             .err()
             .map(|error| error.kind()),
         Some(GpuErrorKind::Capacity)
@@ -648,7 +648,7 @@ fn level_offsets_beyond_the_schedule_are_refused() {
 fn decreasing_level_offsets_are_refused() {
     let packed = [7, 9, 0, 5, 3, 7];
     assert_eq!(
-        dependency::level_sizes(&packed, 2, 3)
+        dependency::level_widths(&packed, 2, 3)
             .err()
             .map(|error| error.kind()),
         Some(GpuErrorKind::Capacity)

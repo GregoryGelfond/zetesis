@@ -109,13 +109,16 @@ impl GpuFormulaProfile {
 
     /// Compile explicit physical choices on the exact retained context.
     ///
-    /// Workgroup width is checked against granted limits. Optional instructions
+    /// The workgroup sizing's base size is checked against granted limits, and
+    /// every size the sizing may dispatch is compiled. Optional instructions
     /// require granted features; otherwise the portable reduction is retained.
-    /// Neither choice changes the frozen reduct or its work allowance.
+    /// None of these choices changes the frozen reduct or its work allowance.
     ///
     /// # Errors
     /// Reports the construction failures of [`Self::from_context`], including
-    /// a requested workgroup width exceeding the device's granted limits.
+    /// a fixed workgroup size exceeding the device's granted limits, and a
+    /// failure to compile any size the sizing may dispatch, which invalidates
+    /// the context.
     pub fn from_context_with_kernel(
         context: &GpuContext,
         projection: GateProjection,

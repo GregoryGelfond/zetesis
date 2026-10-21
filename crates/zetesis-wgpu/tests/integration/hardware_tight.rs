@@ -1189,7 +1189,7 @@ fn qualify_truth_invalidation(
 
 /// Rule, root and producer counts one below, at and one above the sizes 64, 128
 /// and 256, each with the size the fitted policy selects for that many rules on
-/// one dependency level over two atom leaves (level sizes 2 and the count).
+/// one dependency level over two atom leaves (level widths 2 and the count).
 const LEVEL_BOUNDARIES: [(usize, u32); 9] = [
     (63, 64),
     (64, 64),

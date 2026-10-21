@@ -30,6 +30,8 @@ pub enum GpuWorkgroupSize {
 
 impl GpuWorkgroupSize {
     /// Every size the formula and tight kernels compile, in ascending order.
+    /// Its largest sets the address headroom every formula and tight packer
+    /// reserves. The fitted sizing selects among its own ruled subset.
     pub const ALL: [Self; 4] = [
         Self::Threads32,
         Self::Threads64,
@@ -54,16 +56,21 @@ impl GpuWorkgroupSize {
 #[non_exhaustive]
 pub enum GpuWorkgroupSizing {
     /// For each retained theory, the size its dependency-level schedule fits:
-    /// among the sizes of at least 64 invocations that the device grants, those
+    /// among the fitted sizes 64, 128 and 256 that the device grants, those
     /// whose invocation slots over the schedule stay within twice the
     /// 64-invocation slots, the smallest with the least strided depth. A
-    /// schedule whose levels hold at most 64 nodes, or a serial one, keeps 64.
-    /// All candidate sizes are compiled with the kernel; batch statistics
-    /// report the size dispatched.
+    /// serial schedule, or one whose levels each hold at most 64 nodes, keeps
+    /// 64; where 128 is granted, a widest level of 65 to 128 nodes selects it.
+    /// Batch statistics report the size dispatched.
+    ///
+    /// Every granted fitted size is compiled when the kernel is created. A
+    /// failure to compile any of them fails construction and, like every
+    /// compilation failure, invalidates the context it was compiled on, a
+    /// shared context included; [`Self::Fixed`] compiles one size.
     #[default]
     Fitted,
-    /// One size for every theory, checked against the granted limits when the
-    /// kernel is compiled.
+    /// One size for every theory, checked against the granted limits before
+    /// the kernel compiles it, the only size compiled.
     Fixed(GpuWorkgroupSize),
 }
 
@@ -78,9 +85,18 @@ impl GpuWorkgroupSizing {
     }
 }
 
+/// The sizes a fitted kernel may select, in ascending order: the ruled set,
+/// owned apart from [`GpuWorkgroupSize::ALL`] so that a size compiled only for
+/// fixed comparisons never joins the fitted rule.
+const FITTED: [GpuWorkgroupSize; 3] = [
+    GpuWorkgroupSize::Threads64,
+    GpuWorkgroupSize::Threads128,
+    GpuWorkgroupSize::Threads256,
+];
+
 /// The smallest size a fitted kernel selects, and the one it keeps for a
 /// schedule that a larger size cannot shorten.
-const FITTED_BASE: GpuWorkgroupSize = GpuWorkgroupSize::Threads64;
+const FITTED_BASE: GpuWorkgroupSize = FITTED[0];
 
 /// The size a kernel of `sizing` dispatches before a schedule selects one: the
 /// fixed size, or the fitted base.
@@ -116,8 +132,7 @@ const fn largest_size() -> u32 {
 }
 
 /// The sizes `sizing` may dispatch on a device granting `limits`, in ascending
-/// order: the fixed size, or every size of at least the fitted base within both
-/// granted limits.
+/// order: the fixed size, or each fitted size within both granted limits.
 pub(crate) fn candidate_sizes(
     sizing: GpuWorkgroupSizing,
     limits: &wgpu::Limits,
@@ -125,32 +140,33 @@ pub(crate) fn candidate_sizes(
     let granted = limits
         .max_compute_invocations_per_workgroup
         .min(limits.max_compute_workgroup_size_x);
-    GpuWorkgroupSize::ALL
-        .into_iter()
-        .filter(move |size| match sizing {
-            GpuWorkgroupSizing::Fixed(fixed) => *size == fixed,
-            GpuWorkgroupSizing::Fitted => {
-                size.invocations() >= FITTED_BASE.invocations() && size.invocations() <= granted
-            }
-        })
+    let fitted = sizing.fixed().is_none();
+    sizing.fixed().into_iter().chain(
+        FITTED
+            .into_iter()
+            .filter(move |size| fitted && size.invocations() <= granted),
+    )
 }
 
-/// The fitted size for a parallel schedule whose levels hold `levels` nodes
-/// each, among `candidates` (ascending, starting at the fitted base): with
-/// `I(W)` the strided depth `sum(ceil(level / W))`, the smallest candidate
+/// The fitted size for a parallel schedule whose levels have the node counts
+/// `widths`, among `candidates` (ascending, starting at the fitted base): with
+/// `I(W)` the strided depth `sum(ceil(width / W))`, the smallest candidate
 /// attaining the least `I(W)` among those with `W * I(W) <= 2 * 64 * I(64)`.
 /// A serial schedule passes no levels and keeps the base. One pass over the
 /// levels; exact integer arithmetic.
 ///
 /// The selected size never lengthens the strided depth. Where a batch leaves
-/// the device latency-bound, per-candidate time follows that depth; where a
-/// batch oversubscribes the device, time follows invocation slots, `W * I(W)`,
-/// which the bound keeps within twice the 64-invocation slots.
-fn fitted(levels: impl Iterator<Item = u32>, candidates: &[GpuWorkgroupSize]) -> GpuWorkgroupSize {
-    let mut depths = [0_u64; GpuWorkgroupSize::ALL.len()];
-    for level in levels {
+/// the device latency-bound, the dense level pass takes time following that
+/// depth; where a batch oversubscribes the device, it follows invocation
+/// slots, `W * I(W)`, which the bound keeps within twice the 64-invocation
+/// slots. Since `128 * I(128) <= 128 * I(64)`, 128 always meets the bound: a
+/// widest level of 65 to 128 nodes selects 128, and 256 needs a level of more
+/// than 128 nodes and `I(256) <= I(64) / 2`.
+fn fitted(widths: impl Iterator<Item = u32>, candidates: &[GpuWorkgroupSize]) -> GpuWorkgroupSize {
+    let mut depths = [0_u64; FITTED.len()];
+    for width in widths {
         for (depth, size) in depths.iter_mut().zip(candidates) {
-            *depth += u64::from(level.div_ceil(size.invocations()));
+            *depth += u64::from(width.div_ceil(size.invocations()));
         }
     }
     let base_slots = 2 * u64::from(FITTED_BASE.invocations()) * depths[0];
@@ -191,7 +207,7 @@ pub enum GpuPropagation {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct GpuKernelOptions {
     /// How the workgroup size, the invocations cooperating on each candidate,
-    /// is chosen.
+    /// is chosen: [`GpuWorkgroupSizing::Fitted`] by default.
     pub workgroup_sizing: GpuWorkgroupSizing,
     /// Use applicable, granted optional instructions; retain portable fallbacks.
     pub optional_features: bool,
@@ -210,24 +226,24 @@ impl Default for GpuKernelOptions {
     }
 }
 
-/// The size a formula or tight kernel dispatches for one retained schedule of
-/// `levels` level sizes on a device granting `limits`: the fixed size, or the
-/// [`fitted`] size among the granted candidates.
+/// The size a formula or tight kernel dispatches for one retained schedule
+/// whose levels have the node counts `widths`, on a device granting `limits`:
+/// the fixed size, or the [`fitted`] size among the granted candidates.
 pub(crate) fn dispatch_size(
     sizing: GpuWorkgroupSizing,
-    levels: impl Iterator<Item = u32>,
+    widths: impl Iterator<Item = u32>,
     limits: &wgpu::Limits,
 ) -> GpuWorkgroupSize {
     if let Some(size) = sizing.fixed() {
         return size;
     }
-    let mut candidates = [FITTED_BASE; GpuWorkgroupSize::ALL.len()];
+    let mut candidates = [FITTED_BASE; FITTED.len()];
     let mut count = 0;
     for size in candidate_sizes(sizing, limits) {
         candidates[count] = size;
         count += 1;
     }
-    fitted(levels, &candidates[..count])
+    fitted(widths, &candidates[..count])
 }
 
 /// Only formula kernels have tunable candidate-local traversal strides.

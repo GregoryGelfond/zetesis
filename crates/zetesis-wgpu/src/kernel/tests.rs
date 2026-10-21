@@ -1,11 +1,11 @@
 use super::*;
 
 #[test]
-fn kernel_width_must_fit_both_granted_limits() {
+fn the_base_workgroup_size_must_fit_both_granted_limits() {
     let kernel = Kernel::Formula(GpuKernelOptions::default());
-    for (width, invocations) in [(32, 64), (64, 32)] {
+    for (size_x, invocations) in [(32, 64), (64, 32)] {
         let limits = wgpu::Limits {
-            max_compute_workgroup_size_x: width,
+            max_compute_workgroup_size_x: size_x,
             max_compute_invocations_per_workgroup: invocations,
             ..Default::default()
         };
@@ -99,11 +99,30 @@ fn the_bound_excludes_sizes_beyond_twice_the_base_invocation_slots() {
 
 #[test]
 fn equal_depth_prefers_the_smaller_size() {
-    // Levels of 65 nodes need two strides at 64 and one at 128 or 256.
+    // A widest level of 65 to 128 nodes needs two strides at 64 and one at
+    // 128 or 256, as does every narrower level: 128 and 256 tie.
+    for widest in [65, 96, 128] {
+        assert_eq!(
+            fitted_size(&[widest, 1, 64, widest], &granted(1024, 1024)),
+            GpuWorkgroupSize::Threads128,
+            "widest level {widest}"
+        );
+    }
+}
+
+#[test]
+fn the_bound_admits_exactly_twice_the_base_invocation_slots() {
+    // Level widths 129 and 1: depths 4, 3 and 2 at 64, 128 and 256. At 256
+    // the slots are 256 * 2 = 512, exactly 2 * 64 * 4, which the bound admits.
     assert_eq!(
-        fitted_size(&[65; 10], &granted(1024, 1024)),
-        GpuWorkgroupSize::Threads128
+        fitted_size(&[129, 1], &granted(1024, 1024)),
+        GpuWorkgroupSize::Threads256
     );
+}
+
+#[test]
+fn the_fitted_rule_selects_among_64_128_and_256() {
+    assert_eq!(FITTED.map(GpuWorkgroupSize::invocations), [64, 128, 256]);
 }
 
 #[test]
@@ -153,4 +172,66 @@ fn strided_loops_keep_the_largest_compiled_size_of_headroom() {
     );
     assert!(fits_strided_loop(u32::MAX - 256));
     assert!(!fits_strided_loop(u32::MAX - 255));
+}
+
+/// Every level-width sequence of at most three levels drawn from widths around
+/// each size boundary, the serial schedule included.
+fn boundary_schedules() -> Vec<Vec<u32>> {
+    const WIDTHS: [u32; 11] = [1, 63, 64, 65, 127, 128, 129, 255, 256, 257, 640];
+    let mut schedules = vec![Vec::new()];
+    let mut previous = vec![Vec::new()];
+    for _ in 0..3 {
+        previous = previous
+            .iter()
+            .flat_map(|levels: &Vec<u32>| {
+                WIDTHS.into_iter().map(move |width| {
+                    let mut longer = levels.clone();
+                    longer.push(width);
+                    longer
+                })
+            })
+            .collect();
+        schedules.extend(previous.iter().cloned());
+    }
+    schedules
+}
+
+fn strided_depth(widths: &[u32], size: GpuWorkgroupSize) -> u64 {
+    widths
+        .iter()
+        .map(|width| u64::from(width.div_ceil(size.invocations())))
+        .sum()
+}
+
+#[test]
+fn every_fitted_selection_meets_the_rule_postcondition() {
+    // The selection is checked against the rule's postcondition, not against
+    // a second implementation of the selection: a granted fitted size within
+    // the bound, never deeper than 64, of least depth among the granted sizes
+    // within the bound, and the smallest of those on a tie.
+    for granted_size in [64, 128, 256, 1024] {
+        let limits = granted(granted_size, granted_size);
+        let admitted: Vec<_> = FITTED
+            .into_iter()
+            .filter(|size| size.invocations() <= granted_size)
+            .collect();
+        for widths in boundary_schedules() {
+            let selected = fitted_size(&widths, &limits);
+            let depth = |size| strided_depth(&widths, size);
+            let base = depth(GpuWorkgroupSize::Threads64);
+            let within = |size: GpuWorkgroupSize| {
+                u64::from(size.invocations()) * depth(size) <= 2 * 64 * base
+            };
+            let context = format!("{widths:?} granting {granted_size}");
+            assert!(admitted.contains(&selected), "{context}");
+            assert!(within(selected), "{context}");
+            assert!(depth(selected) <= base, "{context}");
+            for other in admitted.iter().copied().filter(|size| within(*size)) {
+                assert!(depth(selected) <= depth(other), "{context}");
+                if other.invocations() < selected.invocations() {
+                    assert!(depth(other) > depth(selected), "{context}");
+                }
+            }
+        }
+    }
 }

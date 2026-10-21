@@ -35,14 +35,15 @@ pub(crate) fn root_words(nodes: u32, roots: u32, levels: u32) -> Result<u32, Gpu
         .ok_or_else(|| capacity("formula schedule addresses overflow"))
 }
 
-/// The node count of each level of a packed parallel schedule, read from the
-/// `levels + 1` level-start offsets that follow its `roots` root IDs. A serial
-/// schedule (`levels = 0`) has no levels. Allocation-free; linear in `levels`.
+/// Each level's width, its node count, in a packed parallel schedule, read
+/// from the `levels + 1` level-start offsets that follow its `roots` root IDs.
+/// A serial schedule (`levels = 0`) has no levels. Allocation-free; linear in
+/// `levels`.
 ///
 /// # Errors
 /// Offsets outside `packed`, or decreasing, are a capacity failure; [`pack`]
 /// never produces either.
-pub(crate) fn level_sizes(
+pub(crate) fn level_widths(
     packed: &[u32],
     roots: u32,
     levels: u32,

@@ -34,6 +34,7 @@ representations. A representation name does not confer a semantic property.
 | A requested solver configuration | a validation `profile`, a request for a `SolveConfig` | None |
 | An ongoing solve | `zetesis_solve::Session` owns search and membership execution | Membership and coverage laws describe its semantic obligations |
 | Cooperative cancellation and a deadline | `zetesis_cpu::Cancellation` carries shared cancellation and an optional absolute deadline | Stopped coverage remains distinct from exhaustion |
+| A workgroup size: the invocations cooperating on one device candidate, also every candidate-local loop's stride; and the sizing that selects one size per retained graph from its level widths, each level's node count | `zetesis_wgpu::GpuWorkgroupSize` and `GpuWorkgroupSizing` (`Fitted` or `Fixed`) in `GpuKernelOptions::workgroup_sizing`; the batch statistics' `workgroup_size`; the solver's `gpu_workgroup_size` and its JSON key | None; a physical schedule that preserves original truth |
 
 A fact block stores source facts. The dense relation's block above groups
 execution tuples sharing a bound prefix; it is a separate representation.

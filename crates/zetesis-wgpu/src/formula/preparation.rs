@@ -156,7 +156,7 @@ impl Preparation {
         }
         let workgroup_size = crate::kernel::dispatch_size(
             self.workgroup_sizing,
-            dependency::level_sizes(&roots, self.shape.roots, schedule.levels)?,
+            dependency::level_widths(&roots, self.shape.roots, schedule.levels)?,
             device,
         );
         poll(cancellation)?;

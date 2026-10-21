@@ -88,9 +88,10 @@ pub struct FormulaExecutionStatistics {
     pub queued_models: usize,
     /// Conservative peak authored allocation accounting reported by the device API.
     pub peak_accounted_bytes: u64,
-    /// Workgroup size, the invocations that cooperated on each candidate, of
-    /// the decoded batches as the device primitive dispatched them; absent
-    /// before the first decoded batch. One theory's batches share one size.
+    /// The workgroup size, in invocations per candidate, that the decoded
+    /// device batches dispatched; absent before the first decoded batch. One
+    /// value describes the solve: its execution owns one oracle checking one
+    /// theory instance, whose retained graph fixes the size.
     pub gpu_workgroup_size: Option<u32>,
     /// Optional device compute-pass time from completely decoded batches.
     /// Separate from host-oracle, transfer, waiting and exact residual time.
@@ -449,15 +450,11 @@ fn device_limits(options: &SolveConfig) -> zetesis_wgpu::FormulaLimits {
     }
 }
 
-/// Record the workgroup size a decoded batch dispatched. One theory's batches
-/// share it; the largest seen is kept should that ever differ.
+/// Record the workgroup size a decoded batch dispatched: the size of the one
+/// retained graph that every batch of this execution's oracle dispatches.
 #[cfg(feature = "gpu")]
 pub(super) fn record_workgroup_size(statistics: &mut FormulaExecutionStatistics, size: u32) {
-    statistics.gpu_workgroup_size = Some(
-        statistics
-            .gpu_workgroup_size
-            .map_or(size, |seen| seen.max(size)),
-    );
+    statistics.gpu_workgroup_size = Some(size);
 }
 
 #[cfg(feature = "gpu")]

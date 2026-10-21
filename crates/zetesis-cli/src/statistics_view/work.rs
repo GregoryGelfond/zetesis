@@ -377,6 +377,13 @@ fn device(rows: &mut Vec<Row>, execution: &crate::FormulaExecutionStatistics) {
         execution.gpu_work,
         "primitive units; unreturned work unknown",
     ));
+    rows.push(Row::new([
+        "GPU workgroup size".to_owned(),
+        execution
+            .gpu_workgroup_size
+            .map_or_else(|| "unavailable".to_owned(), |size| size.to_string()),
+        "invocations per candidate in the decoded batches".to_owned(),
+    ]));
     rows.push(count(
         "CPU residuals committed",
         execution.cpu_residuals,
@@ -439,4 +446,23 @@ fn grounding_rows(rows: &mut Vec<Row>, grounding: &GroundingTimings) {
 
 fn count(label: &str, value: impl Display, scope: &str) -> Row {
     Row::new([label.to_owned(), value.to_string(), scope.to_owned()])
+}
+
+#[cfg(test)]
+mod tests {
+    use super::device;
+
+    #[test]
+    fn device_rows_report_the_dispatched_workgroup_size() {
+        let mut execution = crate::FormulaExecutionStatistics::default();
+        "FORMAT FIXTURE: no physical execution".clone_into(&mut execution.adapter);
+        execution.gpu_workgroup_size = Some(256);
+        let mut rows = Vec::new();
+        device(&mut rows, &execution);
+        let rendered = format!("{rows:?}");
+        assert!(
+            rendered.contains(r#""GPU workgroup size", "256""#),
+            "{rendered}"
+        );
+    }
 }

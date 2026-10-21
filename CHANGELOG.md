@@ -79,6 +79,17 @@ Notable changes by release. Versions follow Semantic Versioning.
   output now explains that it is not an installed copy and points to the
   installed one, instead of advising a reinstall that cannot repair it.
 
+### Compatibility
+
+- `FormulaBatchStats`, `TightGpuBatchStats` and `FormulaExecutionStatistics`
+  report the workgroup size each device batch dispatched. These statistics
+  structs are now non-exhaustive: read their fields by name, and build a
+  `FormulaExecutionStatistics` from `Default` before assigning its fields.
+- GPU formula and tight graphs whose largest address lies within 256 of
+  `u32::MAX` are refused with a capacity error, where 0.6.0 refused only those
+  within 64, keeping room for the largest workgroup stride. Device buffer limits
+  keep such graphs out of reach on the adapters measured.
+
 ## 0.6.0 — 2026-10-14
 
 ### Added
