@@ -20,6 +20,11 @@ const LT: u32 = 2u;
 const LE: u32 = 3u;
 const GT: u32 = 4u;
 const GE: u32 = 5u;
+// One element per lane: each of the 64 invocations writes its own element
+// before the first barrier, and each round of the tree, separated by a
+// barrier, reads [lane] and [lane + distance] for lane < distance <= 32, so
+// every index stays below 64. Invocation 0 reads element 0 after the last
+// round's barrier.
 var<workgroup> original_values: array<i32, 64>;
 var<workgroup> frozen_values: array<i32, 64>;
 var<workgroup> original_present: array<u32, 64>;

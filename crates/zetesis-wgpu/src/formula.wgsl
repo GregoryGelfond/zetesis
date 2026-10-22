@@ -21,10 +21,21 @@ struct Node { tag: u32, left: u32, right: u32, output: u32, }
 @group(0) @binding(4) var<storage, read_write> frozen: array<u32>;
 @group(0) @binding(5) var<storage, read_write> domains: array<atomic<u32>>;
 @group(0) @binding(6) var<storage, read_write> results: array<u32>;
+// Each sweep's flags: invocation 0 zeroes them at the sweep's start, the
+// sweep's opening barrier orders the zeroes before any narrowing, and
+// invocation 0 reads them after the barrier that follows its own narrowing.
 var<workgroup> changed: atomic<u32>;
 var<workgroup> conflict: atomic<u32>;
+// Invocation 0 zeroes it at entry; the barrier that ends original truth orders
+// the zero before any root's store, and invocation 0 reads it after the
+// barrier that follows the roots.
 var<workgroup> bad_root: atomic<u32>;
+// Written by invocation 0 and read by every invocation through
+// workgroupUniformLoad: whether to finish.
 var<workgroup> stage: u32;
+// The strict-subset summary: zeroed with the sweep's flags, merged through
+// merge_subset after the barrier that ends propagation, and read by invocation
+// 0 after the barrier that ends the merge.
 var<workgroup> subset_count: atomic<u32>;
 var<workgroup> subset_last: atomic<u32>;
 var<private> domain_base: u32;

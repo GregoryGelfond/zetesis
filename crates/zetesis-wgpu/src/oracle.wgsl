@@ -40,9 +40,22 @@ struct Rule {
 
 // 4096 atoms, 128 words, 512 bytes. The two additional atomics and one
 // synchronization value keep workgroup storage below 1 KiB.
+// The closure: strided invocations zero words [0, word_count) at entry, and
+// the entry barrier orders the zeroes before every rule's reads and ORs. Every
+// index is a word below word_count or an atom's word, and the host bounds the
+// atoms by 4096, word_count by their words and every rule's atoms by the atom
+// count, so the words from word_count on are never read.
 var<workgroup> known: array<atomic<u32>, 128>;
+// Invocation 0 zeroes it at each round's start; the round's opening barrier
+// orders the zero before any rule's store, and invocation 0 reads it after the
+// barrier that ends the round.
 var<workgroup> changed: atomic<u32>;
+// Invocation 0 zeroes it at entry; the entry barrier orders the zero before
+// any constraint's store, and invocation 0 reads it after the barriers that
+// follow the constraints.
 var<workgroup> violated: atomic<u32>;
+// Written by invocation 0 and read by every invocation through
+// workgroupUniformLoad: whether the round changed the closure.
 var<workgroup> round_changed: u32;
 
 fn seed_contains(world: u32, atom: u32) -> bool {

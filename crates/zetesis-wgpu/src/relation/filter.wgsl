@@ -24,6 +24,9 @@ const ROWS_PER_GROUP: u32 = 64u;
 const BITS_PER_WORD: u32 = 32u;
 const RECEIPT_WORDS: u32 = 5u;
 const RECEIPT_MARKER: u32 = 0x434f4c32u;
+// One element per lane: every invocation, tail lanes included, writes its own
+// element before the barrier, after which the lanes at 0 and 32 read the 32
+// elements from their own, so every index stays below ROWS_PER_GROUP.
 var<workgroup> matches: array<u32, ROWS_PER_GROUP>;
 
 @compute @workgroup_size(ROWS_PER_GROUP)

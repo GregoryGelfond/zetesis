@@ -72,13 +72,25 @@ struct Slot {
 // of `params.count_bits` bits per head. Only read or written while the update
 // route is allowed; otherwise it may be a placeholder.
 @group(0) @binding(8) var<storage, read_write> state: array<atomic<u32>>;
+// The least false root and unsupported atom: invocation 0 stores their bounds
+// at entry; without the update route the dense routes' barriers, and with it
+// the uniform load of entry_route, order those stores before any other
+// invocation's atomicMin, and invocation 0 reads both after the final barrier.
 var<workgroup> first_root: atomic<u32>;
 var<workgroup> first_atom: atomic<u32>;
+// Update-route counters, untouched without the route: invocation 0 zeroes them
+// before storing entry_route, whose uniform load orders the zeroes before any
+// other invocation's atomicAdd. Invocation 0 reads changed_atoms after the
+// barrier that ends the change count, and performed and evaluated, on the
+// update route only, after the final barrier.
 var<workgroup> changed_atoms: atomic<u32>;
 var<workgroup> performed: atomic<u32>;
 var<workgroup> evaluated: atomic<u32>;
 // Values steering barriered control flow, written by invocation 0 and read by
 // every invocation through workgroupUniformLoad, one variable per decision.
+// chosen_route is written after the barrier that ends the change count, and
+// verdict_counts is stored whole; its components are read from the loaded
+// value.
 var<workgroup> entry_route: u32;
 var<workgroup> chosen_route: u32;
 var<workgroup> summary_flag: u32;

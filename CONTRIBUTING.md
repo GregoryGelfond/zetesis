@@ -165,8 +165,10 @@ completes exactly. Without the fill an unwritten location would hold whatever
 the memory last held, which can be another program's data. Review every change
 to a kernel with workgroup memory against this rule, not only new kernels,
 workgroup variables and indices: moving, removing or conditioning a write, a
-barrier or a uniform load can break it too. Restate the rule in the kernel's
-header; the physical tests' CPU comparisons are evidence for it, not proof.
+barrier or a uniform load can break it too. Beside each workgroup variable's
+declaration, state who writes it and what orders that write before its reads,
+and restate the rule in the kernel's header; the physical tests' CPU
+comparisons are evidence for it, not proof.
 
 Separate three obligations: semantic laws, executable representation/refinement,
 and measured backend behavior. Existing Lean laws do not certify Rust, shaders,
