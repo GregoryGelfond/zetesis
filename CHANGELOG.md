@@ -84,8 +84,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   level from which the route engages. The tight kernel requires eight storage
   buffers per shader stage.
 - Command-line GPU solves begin adapter enumeration once their configuration is
-  validated, while the program is read and grounded, so the device is ready
-  sooner; CPU solves start none.
+  validated, while the program is read and admitted, and on the formula routes
+  grounded, so the device is ready sooner; CPU solves start none.
 - GPU tight checking evaluates independent formulas in parallel. General reduct
   propagation alternates directions through the same dependency schedule, carrying
   deductions between parents and operands; bounded checks retain exact CPU completion.

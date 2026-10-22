@@ -1026,14 +1026,17 @@ wgpu supplies portable device access, including Metal on supported macOS
 adapters. With default resources, device availability is discovered at runtime.
 A command-line GPU solve begins wgpu's adapter enumeration on a background
 thread once its configuration is validated and before it reads its sources, so
-the adapter enumeration overlaps reading and admission, and grounding on the
-formula and lazy routes; the static route constructs its primitive before static
-materialization. The solve's GPU primitive then selects over those adapters
-with its own capability check, as over an enumeration of its own, and requests
-its own device. Adapter choice and errors are therefore those of selection at
-the moment the enumeration began, milliseconds before construction, and
-timestamp requests are unchanged; an adapter added or removed in between is
-missed, or fails its device request (`GpuDiscovery` documents the snapshot). A
+the adapter enumeration overlaps reading and admission, and on the formula
+routes grounding as well. The relational routes construct their primitive
+before grounding: the lazy route grounds during its search, and the static
+route constructs its primitive before static materialization. The solve's GPU
+primitive then selects over those adapters with its own capability check, as
+over an enumeration of its own, and requests its own device. Adapter choice and
+errors are therefore those of selection at the moment the enumeration began,
+which precedes construction by the time to read and admit the program and, on
+the formula routes, to ground it, so the gap grows with the program; timestamp
+requests are unchanged. An adapter added or removed in between is missed, or
+fails its device request (`GpuDiscovery` documents the snapshot). A
 solve that ends before constructing a primitive waits for the rest of the
 adapter enumeration, and wgpu's loader can report on it; a CPU solve starts none.
 Library entry points select per session unless their caller supplies such

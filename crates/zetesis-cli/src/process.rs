@@ -260,9 +260,10 @@ enum Input {
 }
 
 /// Validate the invocation's configuration, then begin a GPU solve's adapter
-/// enumeration, so it runs while the sources are read, admitted and grounded,
-/// then read the sources. An invalid configuration starts nothing; a later
-/// failure waits, as the resources drop, for the adapter enumeration to finish.
+/// enumeration, so it runs while the sources are read and admitted, and on the
+/// formula routes grounded, then read the sources. An invalid configuration
+/// starts nothing; a later failure waits, as the resources drop, for the
+/// adapter enumeration to finish.
 fn load_input(options: &Options) -> Result<(Input, crate::ExecutionResources), RunError> {
     if !options.additional_inputs.is_empty()
         && std::iter::once(&options.input)

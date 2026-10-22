@@ -81,7 +81,7 @@ impl ExecutionResources {
     /// ordinary selection does, with its own capability check, then requests
     /// its own device. Adapter choice and failures are therefore those of a
     /// session without these resources started when the enumeration began, a
-    /// snapshot whose age [`zetesis_wgpu::GpuDiscovery`] bounds; timestamps are
+    /// snapshot whose age [`zetesis_wgpu::GpuDiscovery`] states; timestamps are
     /// requested as in that session. It serves one primitive; a later session,
     /// or a session of another API, selects as it would without it.
     /// Dropping the last clone before a primitive takes the adapter enumeration

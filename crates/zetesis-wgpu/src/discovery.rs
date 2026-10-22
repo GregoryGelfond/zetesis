@@ -33,10 +33,13 @@ use crate::{GpuContext, GpuError, GpuOptions, GpuSelection};
 /// An adapter added since is not seen; one removed since can still be chosen,
 /// and then fails its device request with the device error. The snapshot's age
 /// is the time from [`Self::spawn`] to the primitive's construction, which the
-/// caller controls: the command line begins one after validating its
-/// configuration and consumes it once the program is read, admitted and
-/// grounded. A caller that keeps a discovery across a possible device change
-/// should spawn a new one, or construct without it.
+/// caller controls. The command line begins one after validating its
+/// configuration and consumes it when the solve constructs its primitive: on
+/// the formula routes once the program is read, admitted and grounded, and on
+/// the relational routes once it is read and admitted, before any grounding.
+/// The age therefore grows with the time to read, admit and, on the formula
+/// routes, ground the program. A caller that keeps a discovery across a
+/// possible device change should spawn a new one, or construct without it.
 ///
 /// Cloning shares the discovery. It serves one primitive: the first primitive
 /// constructed from it takes its enumeration, and any later one enumerates as
