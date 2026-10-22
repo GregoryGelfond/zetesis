@@ -10,8 +10,10 @@
 // candidate's row; only the complete and dense routes build it.
 // Every workgroup location an invocation reads was written earlier in its
 // workgroup, by the same invocation or by another ordered before the read by a
-// barrier or uniform load, and every workgroup array index is within its array,
-// so the zero-fill of workgroup memory is never observed.
+// barrier or uniform load, and every workgroup array index is within its array.
+// The pipeline keeps WebGPU's zero-fill of workgroup memory, which this rule
+// makes unobservable; the rule is held pending a measurement of whether
+// dropping the fill pays.
 override WORKGROUP_SIZE: u32 = 64u;
 const NODE_FALSE: u32 = 0u;
 const NODE_ATOM: u32 = 1u;

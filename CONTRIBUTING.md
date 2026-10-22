@@ -152,12 +152,15 @@ uniform load. Every index into a workgroup array is within the array: the bounds
 policy wgpu compiles with replaces an out-of-range index with some in-range one,
 possibly a location nothing wrote. Pipelines keep WebGPU's zero-fill of
 workgroup memory (`ZERO_FILL_WORKGROUP_MEMORY` in the wgpu runtime), which this
-rule makes unobservable; the fill is removed only where a measured kernel-time
-gain repays it, and an unwritten location would then hold whatever the memory
-last held, which can be another program's data. Review every new kernel,
-workgroup variable and workgroup index against this rule, and restate it in the
-kernel's header; the physical tests' CPU comparisons are evidence for it, not
-proof.
+rule makes unobservable. The rule is held pending a measurement of whether
+dropping the fill pays: the fill is removed only where a measured kernel-time
+gain repays it, and only once that kernel's physical comparison also passes
+with every workgroup location first set to all zeros and to all ones, with
+identical result records. Without the fill an unwritten location would hold
+whatever the memory last held, which can be another program's data. Review
+every new kernel, workgroup variable and workgroup index against this rule, and
+restate it in the kernel's header; the physical tests' CPU comparisons are
+evidence for it, not proof.
 
 Separate three obligations: semantic laws, executable representation/refinement,
 and measured backend behavior. Existing Lean laws do not certify Rust, shaders,

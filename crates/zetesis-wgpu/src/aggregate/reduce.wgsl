@@ -1,8 +1,10 @@
 // One workgroup owns an occurrence. No floating point or optional subgroup ops.
 // Every workgroup location an invocation reads was written earlier in its
 // workgroup, by the same invocation or by another ordered before the read by a
-// barrier or uniform load, and every workgroup array index is within its array,
-// so the zero-fill of workgroup memory is never observed.
+// barrier or uniform load, and every workgroup array index is within its array.
+// The pipeline keeps WebGPU's zero-fill of workgroup memory, which this rule
+// makes unobservable; the rule is held pending a measurement of whether
+// dropping the fill pays.
 struct Dimensions { tuples: u32, guards: u32, worlds: u32, function: u32, stride: u32, epoch: u32, work: u32, reserved: u32 }
 @group(0) @binding(0) var<uniform> dimensions: Dimensions;
 @group(0) @binding(1) var<storage, read> contributions: array<u32>;
