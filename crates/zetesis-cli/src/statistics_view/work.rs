@@ -403,16 +403,17 @@ fn device(rows: &mut Vec<Row>, execution: &crate::FormulaExecutionStatistics) {
         ]));
     }
     if let Some(updates) = execution.gpu_tight_updates {
+        let source = if updates.steady_state {
+            "as the last batch with reuse authority reported"
+        } else {
+            "as the last batch reported; none held reuse authority"
+        };
         rows.push(Row::new([
             "Tight GPU update route".to_owned(),
             updates.availability.label().to_owned(),
             updates.count_bits.map_or_else(
-                || "as the last batch with reuse authority reported".to_owned(),
-                |bits| {
-                    format!(
-                        "{bits}-bit support counts; as the last batch with reuse authority reported"
-                    )
-                },
+                || source.to_owned(),
+                |bits| format!("{bits}-bit support counts; {source}"),
             ),
         ]));
     }
@@ -542,6 +543,7 @@ mod tests {
         let mut updates = zetesis_solve::TightUpdateStatistics::default();
         updates.availability = zetesis_solve::TightUpdateAvailability::Admitted;
         updates.count_bits = Some(16);
+        updates.steady_state = true;
         execution.gpu_tight_updates = Some(updates);
         let mut rows = Vec::new();
         device(&mut rows, &execution);
@@ -552,7 +554,25 @@ mod tests {
             "dense reuse includes 1 beyond the update threshold; updates re-evaluated 85 nodes",
             "Tight GPU update route",
             "admitted",
-            "16-bit support counts",
+            "16-bit support counts; as the last batch with reuse authority reported",
+        ] {
+            assert!(text.contains(expected), "{expected}: {text}");
+        }
+    }
+
+    #[test]
+    fn tight_update_row_says_when_no_batch_held_authority() {
+        let mut execution = crate::FormulaExecutionStatistics::default();
+        "FORMAT FIXTURE: no physical execution".clone_into(&mut execution.adapter);
+        let mut updates = zetesis_solve::TightUpdateStatistics::default();
+        updates.availability = zetesis_solve::TightUpdateAvailability::NarrowSchedule;
+        execution.gpu_tight_updates = Some(updates);
+        let mut rows = Vec::new();
+        device(&mut rows, &execution);
+        let text = format!("{rows:?}");
+        for expected in [
+            "narrow_schedule",
+            "as the last batch reported; none held reuse authority",
         ] {
             assert!(text.contains(expected), "{expected}: {text}");
         }

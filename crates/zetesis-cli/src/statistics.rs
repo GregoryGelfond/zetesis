@@ -1175,11 +1175,12 @@ fn formula_gpu(
     if let Some(updates) = execution.gpu_tight_updates {
         writeln!(
             sink,
-            "  tight GPU update route: {}; count width={}",
+            "  tight GPU update route: {}; count width={}; steady state={}",
             updates.availability.label(),
             updates
                 .count_bits
-                .map_or_else(|| "unavailable".to_owned(), |bits| bits.to_string())
+                .map_or_else(|| "unavailable".to_owned(), |bits| bits.to_string()),
+            updates.steady_state
         )?;
     }
     if let Some(limits) = execution.gpu_limits {

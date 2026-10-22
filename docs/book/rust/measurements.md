@@ -223,7 +223,12 @@ decoded batches. `gpu_tight_updates` holds the update route's `availability`
 `candidate_ceiling`, `index_bounds`, `bytes`, `work` or `declined`) and its
 support counts' `count_bits`, as the last decoded batch holding reuse authority
 reported them: a batch without authority cannot update, whatever its limits.
-Both are absent before the first decoded tight batch and for other primitives.
+Until a batch holds authority, they are the last decoded batch's report, which
+names the reason whenever that batch's schedule or limits already decline the
+route, so a narrow schedule reports `narrow_schedule` from its first batch;
+`pending` then means that no batch has held authority and the last did not
+decline the route. `steady_state` says which of the two the run reports. All are absent
+before the first decoded tight batch and for other primitives.
 `gpu_scheduled_work` attributes to each submitted tight batch the work its
 validated readback reports, or else its reservation. Admitting the update state
 can shorten the device's admitted prefix, and with it adaptive slates, never

@@ -431,7 +431,9 @@ fn tight_statistics_report_routes_and_update_availability() {
     assert!(text.contains(
         "tight GPU routes: complete=4; dense reuse=3 (beyond update threshold=1); update=9; nodes evaluated by update=85"
     ));
-    assert!(text.contains("tight GPU update route: bytes; count width=unavailable"));
+    assert!(
+        text.contains("tight GPU update route: bytes; count width=unavailable; steady state=false")
+    );
 }
 
 #[test]

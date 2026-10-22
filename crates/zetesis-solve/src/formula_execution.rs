@@ -68,7 +68,9 @@ pub struct TightRouteStatistics {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum TightUpdateAvailability {
-    /// No decoded batch has held reuse authority yet.
+    /// No decoded batch has held the reuse authority the route needs before
+    /// it builds the theory's readers index, and the last decoded batch's
+    /// schedule and limits did not already decline the route.
     #[default]
     Pending,
     /// The per-slot state was bound and the route allowed.
@@ -112,7 +114,9 @@ impl TightUpdateAvailability {
 
 /// The tight-support update route's availability in the run's steady state:
 /// as the last decoded batch that held reuse authority reported it, since a
-/// batch without authority cannot update whatever its limits.
+/// batch without authority cannot update whatever its limits. Until a batch
+/// holds authority, as the last decoded batch reported it, which names the
+/// reason whenever that batch's schedule or limits already decline the route.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct TightUpdateStatistics {
@@ -120,6 +124,9 @@ pub struct TightUpdateStatistics {
     pub availability: TightUpdateAvailability,
     /// Bits of each per-head support count, while the route was admitted.
     pub count_bits: Option<u32>,
+    /// A decoded batch held reuse authority, so the availability is the run's
+    /// steady state rather than the report of a batch without authority.
+    pub steady_state: bool,
 }
 
 /// Actual formula GPU work and explicitly retained candidate results.
@@ -146,8 +153,9 @@ pub struct FormulaExecutionStatistics {
     /// Decoded tight-support slots by route; absent before the first decoded
     /// tight batch and for other primitives.
     pub gpu_tight_routes: Option<TightRouteStatistics>,
-    /// The tight-support update route's steady-state availability; absent
-    /// before the first decoded tight batch and for other primitives.
+    /// The tight-support update route's steady-state availability, or the last
+    /// decoded batch's while none has held reuse authority; absent before the
+    /// first decoded tight batch and for other primitives.
     pub gpu_tight_updates: Option<TightUpdateStatistics>,
     /// Batches actually submitted, including submissions without a decoded result.
     pub gpu_submitted_batches: u64,
@@ -704,14 +712,12 @@ fn record_flush(
     }
 }
 
-/// Add a decoded tight batch's routes, and its update availability when the
-/// batch held reuse authority.
+/// Add a decoded tight batch's routes and fold in its update availability.
 #[cfg(feature = "gpu")]
 pub(super) fn record_tight_routes(
     statistics: &mut FormulaExecutionStatistics,
     batch: &zetesis_wgpu::TightGpuBatchStats,
 ) -> Result<(), Failure> {
-    use zetesis_wgpu::{TightGpuUpdateUnavailable as Reason, TightGpuUpdates};
     let routes = statistics
         .gpu_tight_routes
         .get_or_insert_with(Default::default);
@@ -720,34 +726,53 @@ pub(super) fn record_tight_routes(
     add(&mut routes.beyond_threshold, batch.routes.beyond_threshold)?;
     add(&mut routes.update, batch.routes.update)?;
     add(&mut routes.nodes_evaluated, batch.nodes_evaluated)?;
-    let updates = statistics
-        .gpu_tight_updates
-        .get_or_insert_with(Default::default);
-    if batch.original_truth_reused {
-        (updates.availability, updates.count_bits) = match batch.updates {
-            TightGpuUpdates::Admitted { count_bits, .. } => {
-                (TightUpdateAvailability::Admitted, Some(count_bits))
-            }
-            TightGpuUpdates::Unavailable(reason) => (
-                match reason {
-                    Reason::SerialSchedule => TightUpdateAvailability::SerialSchedule,
-                    Reason::NarrowSchedule => TightUpdateAvailability::NarrowSchedule,
-                    Reason::CandidateCeiling => TightUpdateAvailability::CandidateCeiling,
-                    Reason::IndexBounds => TightUpdateAvailability::IndexBounds,
-                    Reason::Bytes => TightUpdateAvailability::Bytes,
-                    Reason::Work => TightUpdateAvailability::Work,
-                    Reason::Declined => TightUpdateAvailability::Declined,
-                    // Every reason the library names is mapped above. One it
-                    // adds later reports `pending`, which names no reason,
-                    // until this statistic names it too.
-                    _ => TightUpdateAvailability::Pending,
-                },
-                None,
-            ),
-            _ => (TightUpdateAvailability::Pending, None),
-        };
-    }
+    record_update_availability(
+        statistics
+            .gpu_tight_updates
+            .get_or_insert_with(Default::default),
+        batch.original_truth_reused,
+        batch.updates,
+    );
     Ok(())
+}
+
+/// Fold one decoded batch's update availability into the run's. A batch
+/// holding reuse authority sets the steady state, which a later batch without
+/// authority leaves standing: such a batch cannot update whatever its limits.
+/// Until a batch holds authority, each batch's report replaces the last.
+#[cfg(feature = "gpu")]
+fn record_update_availability(
+    updates: &mut TightUpdateStatistics,
+    authority: bool,
+    report: zetesis_wgpu::TightGpuUpdates,
+) {
+    use zetesis_wgpu::{TightGpuUpdateUnavailable as Reason, TightGpuUpdates};
+    if updates.steady_state && !authority {
+        return;
+    }
+    updates.steady_state = authority;
+    (updates.availability, updates.count_bits) = match report {
+        TightGpuUpdates::Admitted { count_bits, .. } => {
+            (TightUpdateAvailability::Admitted, Some(count_bits))
+        }
+        TightGpuUpdates::Unavailable(reason) => (
+            match reason {
+                Reason::SerialSchedule => TightUpdateAvailability::SerialSchedule,
+                Reason::NarrowSchedule => TightUpdateAvailability::NarrowSchedule,
+                Reason::CandidateCeiling => TightUpdateAvailability::CandidateCeiling,
+                Reason::IndexBounds => TightUpdateAvailability::IndexBounds,
+                Reason::Bytes => TightUpdateAvailability::Bytes,
+                Reason::Work => TightUpdateAvailability::Work,
+                Reason::Declined => TightUpdateAvailability::Declined,
+                // Every reason the library names is mapped above. One it
+                // adds later reports `pending`, which names no reason,
+                // until this statistic names it too.
+                _ => TightUpdateAvailability::Pending,
+            },
+            None,
+        ),
+        _ => (TightUpdateAvailability::Pending, None),
+    };
 }
 
 /// Record the workgroup size a decoded batch dispatched: the size of the one

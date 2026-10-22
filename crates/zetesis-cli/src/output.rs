@@ -1257,6 +1257,12 @@ fn tight_routes(
     out.string(updates.availability.label())?;
     out.text(",\"count_bits\":")?;
     out.optional_number(updates.count_bits.map(u64::from))?;
+    out.text(",\"steady_state\":")?;
+    out.text(if updates.steady_state {
+        "true"
+    } else {
+        "false"
+    })?;
     out.text("}")
 }
 

@@ -40,7 +40,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   `search.candidate_regions.frontier_order` report the order the producers used.
 - Requested GPU statistics report how tight support checking evaluated each
   candidate (complete, dense reuse or update) and whether the update route was
-  available, with its reason when it was not.
+  available, with its reason when it was not, and whether any batch held the
+  reuse authority the route needs.
 - A maintained draw-poker workload checks complete enumeration against clingo,
   with portable filenames and a recorded 36-answer contract.
 
