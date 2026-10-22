@@ -205,9 +205,11 @@ impl Runtime {
     /// it. A fixed kernel's own size, and a fitted size already compiled,
     /// return at once. Otherwise the fitted size is compiled now, inside its own
     /// error scopes settled as at construction, and its slot written. The
-    /// caller holds the context lease, has finished preparing its batch, and has
-    /// neither opened its dispatch scopes nor replaced any residency, so a
-    /// failure leaves the oracle as it was.
+    /// caller holds the context lease, has finished preparing its batch and has
+    /// not opened its dispatch scopes. Only a freshly prepared graph can need a
+    /// size first, and its cold preparation has already released any previous
+    /// resident, so a failure leaves no resident theory, the slot unwritten and
+    /// the context invalidated.
     ///
     /// # Errors
     /// A size this runtime cannot provide is a validation failure. A
