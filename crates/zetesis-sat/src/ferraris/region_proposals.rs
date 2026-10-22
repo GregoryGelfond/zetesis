@@ -51,13 +51,14 @@
 //! a stop, a failed region included, is never stepped again, and every region
 //! in hand but a panicking producer's returns to a deque, unless the deque's
 //! entry capacity is refused: the region is then dropped under the recorded
-//! stop, which keeps the run incomplete. A stop never establishes coverage. A cancellation or deadline that a producer observes
-//! once the slate is full is left to the next slate's first poll, which
-//! observes it again, so no polled stop follows the emission that fills a
-//! slate. Each producer retains its checker and worklists between slates.
-//! These are scratch for the same immutable source, not knowledge about a
-//! candidate: the latter travels with its frontier region. Candidate order
-//! depends on scheduling, while identity and coverage do not.
+//! stop, which keeps the run incomplete. A stop never establishes coverage. A
+//! cancellation or deadline that a producer observes once the slate is full is
+//! left to the next slate's first poll, which observes it again, so no polled
+//! stop follows the emission that fills a slate. Each producer retains its
+//! checker and worklists between slates. These are scratch for the same
+//! immutable source, not knowledge about a candidate: the latter travels with
+//! its frontier region. Candidate order depends on scheduling, while identity
+//! and coverage do not.
 
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
