@@ -15,7 +15,7 @@ use zetesis_ferraris::{
 use zetesis_wgpu::{
     GpuErrorKind, GpuKernelOptions, GpuOptions, GpuSelection, GpuTightOracle, GpuWorkgroupSize,
     GpuWorkgroupSizing, TightGpuActivity, TightGpuBatchStats, TightGpuError, TightGpuLimits,
-    TightSupport,
+    TightGpuUpdateUnavailable, TightGpuUpdates, TightSupport,
 };
 
 fn certificate(atoms: usize, nodes: Vec<Node>, roots: Vec<usize>) -> TightPlan {
@@ -187,6 +187,11 @@ fn compare(oracle: &mut GpuTightOracle, certificate: &TightPlan) -> usize {
         assert_eq!(stats.transport_allocated, repeat == 0);
         assert_eq!(stats.original_truth_reused, repeat != 0);
         assert_dense_routes(&stats, repeat != 0);
+        // A declined route says so from a fresh theory's first batch on.
+        assert_eq!(
+            stats.updates,
+            TightGpuUpdates::Unavailable(TightGpuUpdateUnavailable::Declined)
+        );
         let activity = oracle.activity();
         assert_eq!(activity.submissions, 1);
         assert_eq!(activity.submitted_candidates, stats.candidates);

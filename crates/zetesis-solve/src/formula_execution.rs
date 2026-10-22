@@ -68,15 +68,15 @@ pub struct TightRouteStatistics {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum TightUpdateAvailability {
-    /// No batch has held reuse authority yet.
+    /// No decoded batch has held reuse authority yet.
     #[default]
     Pending,
     /// The per-slot state was bound and the route allowed.
     Admitted,
     /// Original truth was evaluated serially.
     SerialSchedule,
-    /// Dense evaluation takes too few workgroup strides per level for the
-    /// route to pay.
+    /// Dense evaluation takes fewer workgroup strides per level than the
+    /// route's engagement factor, below which it is not expected to pay.
     NarrowSchedule,
     /// The batch offered fewer candidates than the batch size.
     CandidateCeiling,
@@ -737,7 +737,9 @@ pub(super) fn record_tight_routes(
                     Reason::Bytes => TightUpdateAvailability::Bytes,
                     Reason::Work => TightUpdateAvailability::Work,
                     Reason::Declined => TightUpdateAvailability::Declined,
-                    // A reason added later still reports the route unavailable.
+                    // Every reason the library names is mapped above. One it
+                    // adds later reports `pending`, which names no reason,
+                    // until this statistic names it too.
                     _ => TightUpdateAvailability::Pending,
                 },
                 None,

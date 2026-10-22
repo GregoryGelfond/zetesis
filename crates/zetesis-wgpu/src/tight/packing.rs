@@ -602,7 +602,6 @@ impl Plan {
         index: &update::Index,
         ceiling: u64,
     ) -> bool {
-        let words = u64::from(graph.words);
         let worst = update::worst_case(
             graph,
             self.levels,
@@ -610,13 +609,7 @@ impl Plan {
             index.entries,
             index.atom_entries,
         );
-        let dense = u64::from(graph.work)
-            + u64::from(self.levels)
-            + 2 * u64::from(graph.nodes)
-            + u64::from(graph.edges)
-            + 4
-            + 3 * words
-            + 1;
+        let dense = update::dense_after_count(graph, self.levels);
         let allowed = self.levels != 0
             && worst.is_some_and(|worst| worst.max(dense) <= ceiling.min(u64::from(u32::MAX)));
         self.route = Route {

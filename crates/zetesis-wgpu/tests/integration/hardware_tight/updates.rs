@@ -13,14 +13,35 @@ use zetesis_wgpu::{
 };
 
 const UNBOUNDED: usize = usize::MAX;
-/// Ladder inputs whose four dependency levels, three of about 5,120 nodes and
-/// one of about 2,560, take 73 strides of 256 invocations and more at smaller
-/// sizes: above the 64 the update route needs, so it engages at every size.
-const WIDE: usize = 2560;
+/// The update route's engagement factor, from which every fixture that must
+/// engage, or must not, is sized.
+const STRIDES: u64 = GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES;
 /// The ladder's threshold family's bounds over its first six inputs.
 const BOUNDS: [i128; 3] = [2, 3, 5];
 /// Words of a result record, a part of every update's floor.
 const RECORD_WORDS: u64 = 9;
+
+/// Dense evaluation's strided iterations over level widths `widths` at `size`
+/// invocations.
+fn strided_depth(widths: &[u64], size: u64) -> u64 {
+    widths.iter().map(|width| width.div_ceil(size)).sum()
+}
+
+/// Whether a schedule of level widths `widths` engages the update route at
+/// every workgroup size; 256 invocations take the fewest strides.
+fn engages_at_every_size(widths: &[u64]) -> bool {
+    strided_depth(widths, 256) >= STRIDES * u64::try_from(widths.len()).unwrap()
+}
+
+/// The least of `start`, `start + step`, ... whose schedule, of level widths
+/// `widths(count)`, engages the update route at every workgroup size.
+fn least_engaging(start: u64, step: u64, widths: impl Fn(u64) -> Vec<u64>) -> usize {
+    let count = (0..1 << 20)
+        .map(|index| start + index * step)
+        .find(|&count| engages_at_every_size(&widths(count)))
+        .expect("a fixture engages within 2^20 steps");
+    usize::try_from(count).unwrap()
+}
 
 fn interpretation(theory: &Theory, atoms: &[bool]) -> Interpretation {
     Interpretation::new(
@@ -182,6 +203,20 @@ impl Ladder {
         self.inputs + self.disjunctions + BOUNDS.len()
     }
 
+    /// The level widths of a ladder of `inputs` inputs: the falsum and every
+    /// atom; the negations, the adjacent pairs and the three guards; the
+    /// choices, the disjunctions and the six guarded rules; the disjunctions'
+    /// rules.
+    fn widths(inputs: u64) -> Vec<u64> {
+        vec![2 * inputs + 1, 2 * inputs + 2, 2 * inputs + 3, inputs - 3]
+    }
+
+    /// The fewest inputs, in steps of 64, with which the update route engages
+    /// at every workgroup size.
+    fn wide() -> Self {
+        Self::new(least_engaging(64, 64, Self::widths))
+    }
+
     /// The answer set choosing `chosen` inputs.
     fn model(&self, chosen: &[bool]) -> Vec<bool> {
         let mut atoms = vec![false; self.atoms()];
@@ -237,7 +272,7 @@ impl Ladder {
 /// count, and the next update summarizes afresh; authority lost to a
 /// cancelled call restarts from the complete route.
 pub(super) fn qualify(oracle: &mut GpuTightOracle) {
-    let ladder = Ladder::new(WIDE);
+    let ladder = Ladder::wide();
     let certificate = &ladder.certificate;
     let limits = TightGpuLimits::default();
     let mut chosen = ladder.patterns(4, 0);
@@ -304,12 +339,16 @@ pub(super) fn qualify(oracle: &mut GpuTightOracle) {
     qualify_engagement_by_size(oracle);
 }
 
-/// The engagement rule is decided per resident theory and workgroup size:
-/// 1,200 rules over two atom leaves take 1 + 38 strides of 32 invocations over
-/// two levels, enough to engage, but only 1 + 19 strides of 64, 1 + 10 of 128
-/// and 1 + 5 of 256, which the fitted size selects; those decline the route.
+/// The engagement rule is decided per resident theory and workgroup size. Over
+/// two atom leaves, `32 * (2 * STRIDES - 1)` rules take `2 * STRIDES` strides
+/// of 32 invocations over two levels, enough to engage, but only
+/// `STRIDES + 1` of 64 and fewer at 128 and 256, which the fitted size
+/// selects; those decline the route.
 fn qualify_engagement_by_size(oracle: &mut GpuTightOracle) {
-    let certificate = super::level_boundary(1200);
+    let rules = 32 * (2 * STRIDES - 1);
+    assert_eq!(strided_depth(&[2, rules], 32), 2 * STRIDES);
+    assert!(strided_depth(&[2, rules], 64) < 2 * STRIDES);
+    let certificate = super::level_boundary(usize::try_from(rules).unwrap());
     let engages = oracle.kernel_options().workgroup_sizing
         == GpuWorkgroupSizing::Fixed(GpuWorkgroupSize::Threads32);
     let candidates = [vec![true, true], vec![false, false], vec![true, false]];
@@ -509,7 +548,7 @@ impl Model {
 /// presence pass, every evaluation and readers visit, settling and the verdict
 /// scan. Two updates in turn: the first summarizes, the second does not.
 fn qualify_receipts(oracle: &mut GpuTightOracle) {
-    let ladder = Ladder::new(WIDE);
+    let ladder = Ladder::wide();
     let certificate = &ladder.certificate;
     let theory = certificate.theory();
     let model = Model::new(certificate);
@@ -610,6 +649,18 @@ impl Narrow {
         }
     }
 
+    /// The level widths of `rungs` rungs beside `filler` filler nodes: the
+    /// falsum, inputs, filler atom and heads; the negations, the filler and the
+    /// first rung; the choices, the first rule and the second rung; then one
+    /// rung and one rule per level; the last rule.
+    fn widths(rungs: u64, filler: u64) -> Vec<u64> {
+        let inputs = u64::try_from(NARROW_INPUTS).unwrap();
+        let mut widths = vec![1 + inputs + 1 + rungs, inputs + filler + 1, inputs + 2];
+        widths.extend(std::iter::repeat_n(2, usize::try_from(rungs - 2).unwrap()));
+        widths.push(1);
+        widths
+    }
+
     fn model(&self, chosen: [bool; NARROW_INPUTS]) -> Vec<bool> {
         let mut atoms = chosen.to_vec();
         atoms.push(false);
@@ -628,10 +679,10 @@ impl Narrow {
 }
 
 fn qualify_narrow_levels(oracle: &mut GpuTightOracle) {
-    // Sixteen rungs over 18 levels; 72,000 filler nodes take 282 strides of 256
-    // invocations, which with the other levels' 17 exceed the 288 the route
-    // needs.
-    let narrow = Narrow::new(16, 72_000);
+    // Sixteen rungs over 18 levels, and the fewest filler nodes, in steps of
+    // 256, with which the route engages at every size.
+    let filler = least_engaging(0, 256, |filler| Narrow::widths(16, filler));
+    let narrow = Narrow::new(16, filler);
     let certificate = &narrow.certificate;
     let limits = TightGpuLimits::default();
     // Input patterns in turn, in two slots: the model, and the model with the
@@ -670,10 +721,16 @@ fn fan_in(producers: usize) -> TightPlan {
 }
 
 // Support counts take the narrowest width holding the most producers of one
-// head: 16 bits from 256 producers, 32 from 65,536. Both fans are wide enough
-// for the route to engage.
+// head: 16 bits from 256 producers, 32 from 65,536. The first fan has the
+// fewest producers, in steps of 256 from 256, with which the route engages at
+// every size; the second engages too.
 fn qualify_count_widths(oracle: &mut GpuTightOracle) {
-    for (producers, bits) in [(4_096, 16), (65_536, 32)] {
+    // The falsum, the head and the inputs; their negations and rules; the
+    // choices.
+    let widths = |producers: u64| vec![producers + 2, 2 * producers, producers];
+    assert!(engages_at_every_size(&widths(65_536)));
+    let sixteen = least_engaging(256, 256, widths);
+    for (producers, bits) in [(sixteen, 16), (65_536, 32)] {
         let certificate = fan_in(producers);
         let candidate = |chosen: &[usize]| {
             let mut atoms = vec![false; producers + 1];
@@ -714,8 +771,9 @@ fn qualify_unavailable(oracle: &mut GpuTightOracle) {
     use TightGpuUpdateUnavailable::{
         Bytes, CandidateCeiling, Declined, NarrowSchedule, SerialSchedule, Work,
     };
-    // A narrow ladder: its four levels of at most 83 nodes take at most 11
-    // strides even of 32 invocations, below the 64 the route needs.
+    // A narrow ladder: even at 32 invocations, the size with the most strides,
+    // dense evaluation takes fewer than the route needs.
+    assert!(strided_depth(&Ladder::widths(40), 32) < 4 * STRIDES);
     let narrow = Ladder::new(40);
     let narrow_candidates: Vec<_> = narrow
         .patterns(2, 2)
@@ -723,21 +781,18 @@ fn qualify_unavailable(oracle: &mut GpuTightOracle) {
         .enumerate()
         .map(|(slot, chosen)| narrow.candidate(slot, chosen))
         .collect();
-    checked(
-        oracle,
-        &narrow.certificate,
-        &narrow_candidates,
-        TightGpuLimits::default(),
-    );
-    let (stats, _) = checked(
-        oracle,
-        &narrow.certificate,
-        &narrow_candidates,
-        TightGpuLimits::default(),
-    );
-    unavailable(&stats, NarrowSchedule);
-    assert_eq!(stats.routes.dense_reuse, 2);
-    let ladder = Ladder::new(WIDE);
+    // The schedule declines the route from the fresh theory's first batch on.
+    for reused in [false, true] {
+        let (stats, _) = checked(
+            oracle,
+            &narrow.certificate,
+            &narrow_candidates,
+            TightGpuLimits::default(),
+        );
+        unavailable(&stats, NarrowSchedule);
+        assert_eq!(stats.routes.dense_reuse, if reused { 2 } else { 0 });
+    }
+    let ladder = Ladder::wide();
     let certificate = &ladder.certificate;
     let candidates: Vec<_> = ladder
         .patterns(2, 2)
@@ -804,10 +859,11 @@ fn qualify_unavailable(oracle: &mut GpuTightOracle) {
     // A single node is evaluated serially, which has no levels to update by.
     let serial = super::certificate(1, vec![Node::atom(0)], vec![0]);
     let fact = [vec![true], vec![false]];
-    checked(oracle, &serial, &fact, defaults);
-    let (stats, _) = checked(oracle, &serial, &fact, defaults);
-    assert_eq!(stats.truth_levels, 0);
-    unavailable(&stats, SerialSchedule);
+    for _ in 0..2 {
+        let (stats, _) = checked(oracle, &serial, &fact, defaults);
+        assert_eq!(stats.truth_levels, 0);
+        unavailable(&stats, SerialSchedule);
+    }
 }
 
 /// With the state counted in each slot's footprint, a byte-bound prefix
@@ -817,7 +873,7 @@ fn qualify_unavailable(oracle: &mut GpuTightOracle) {
 /// floor guard instead keeps the stateless count when the state-inclusive
 /// prefix falls below `min_update_candidates`.
 fn qualify_prefix_transition(oracle: &GpuTightOracle) {
-    let ladder = Ladder::new(WIDE);
+    let ladder = Ladder::wide();
     let certificate = &ladder.certificate;
     let theory = certificate.theory();
     let candidates: Vec<_> = ladder

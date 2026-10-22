@@ -719,27 +719,39 @@ them. Every node then holds its truth under the new candidate: the node-table
 rule of `TightEvaluation.updated_values_exact`, applied in level order.
 
 The route engages only where dense evaluation is wide enough to repay it.
-Dense evaluation of one candidate synchronizes the workgroup `levels + 4` times
-and takes `I(W) = Σ ⌈n_l / W⌉` strided iterations over the level widths `n_l`
-at the dispatched workgroup size `W`. An update synchronizes `levels + 8` times,
-`levels + 11` when it summarizes, and at each level scans the level's queued
-words and evaluates each word's taken nodes, maintaining their readers' queue
-bits, counts and root sets through storage atomics, in one invocation per word.
-A level therefore costs an update several dense strides even when little
-changed, and the strides an update saves are those beyond about one per level.
-A schedule engages the route when `I(W)` is at least sixteen times its level
-count. A narrower schedule declines it with the typed reason `NarrowSchedule`:
-it builds no index, holds no state and charges each route its stateless
-allowance, so the dense routes run exactly as without the update route.
-Admission of a scheduled layout reserves the owner column and the per-head
-producer counters before the level widths are known; a narrow schedule releases
-both once packed, and its batch accounts neither. Like the fitted size, the
-decision is structural, made once per resident theory and dispatched size, and
-on engaging schedules the change threshold still selects each slot's route.
-The factor is an execution choice. Calibration placed the break-even between
-about three and eight strides per level, depending on how many nodes of a level
-change together; declining forgoes gains but never regresses, so the factor
-keeps a margin of two above the highest estimate.
+Dense evaluation of one candidate takes `I(W) = Σ ⌈n_l / W⌉` strided iterations
+over the level widths `n_l` at the dispatched workgroup size `W`, and
+synchronizes the workgroup once per level and three more times. An update keeps
+the per-level synchronization, adds five more, eight when it summarizes, and at
+each level evaluates each queued word's taken nodes, maintaining their readers'
+queue bits, counts and root sets through storage atomics, in one invocation per
+word. A level therefore costs an update several dense strides even when little
+changed. A schedule engages the route when `I(W)` is at least
+`GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES`, thirty-two, times its level count.
+Like the fitted size, the decision is structural, made once per resident theory
+and dispatched size, and on engaging schedules the change threshold still
+selects each slot's route. The factor is an execution choice, calibrated by
+measurement on an Apple M4 Pro GPU under Metal, and changes no verdict. The
+break-even it approximates also depends on the device and on how many nodes of
+one queued word a change reaches, which no structural rule can see. Declining
+keeps the dense routes, so a factor set high forgoes gains on the schedules it
+declines, and one set low slows those it engages; on a schedule above the factor,
+changes that reach many nodes of one word can still take longer with the route
+than without it.
+
+A narrower schedule declines the route with the typed reason `NarrowSchedule`
+from its theory's first batch on. It builds no index and holds no state, and its
+routes neither read nor write the state, charge their stateless allowance and
+synchronize as they did before the route existed. What the route still costs
+such a schedule is its larger parameter block and result records, 64 rather
+than 32 bytes per batch and 36 rather than 24 per candidate, and a 16-byte
+placeholder for the state binding. Admission of a scheduled layout also
+reserves the owner column and the per-head producer counters before the level
+widths are known; a narrow schedule releases both once packed, and its batch
+accounts neither. An exact call whose cold batch fits the scheduled layout only
+without those reservations, within `8 · live numeric rows + 4 · atoms` bytes of
+its allowance, keeps the theory on the serial schedule while it is resident;
+prefix calls, which admit their cold layout at one candidate, are unaffected.
 
 Each slot's state counts in the batch's byte allowance once admitted. A prefix
 call admits it only when the state-inclusive layout still admits
@@ -751,18 +763,21 @@ it zeroed and seeds it. With the floor, the state never splits a fixed slate,
 and adaptive slates settle at or below the prefix the state admits, since their
 growth stops at the smallest prefix the device has admitted, the batch building
 the index included; without it, a shorter prefix would split every slate into
-submissions of alternating counts, which hold no reuse authority. The index stays resident with the theory and remains accounted, like
-a retained schedule. The route is allowed only when its derived worst case, and
-dense reuse after a change count, fit the work allowance. While it is allowed,
-the complete and dense routes also retain the evaluated candidate, `words + 1`
-operations. Each result record carries its route, the nodes an update
-evaluated and whether the slot's state was seeded; an update's work receipt is
-what it performed, at least a fixed floor of `5 * words + ceil(nodes / 32)`
-word operations, one queued-set scan per level and the record. Batch
-statistics report the slots per route and the route's availability, with a
-typed reason when it is unavailable. The route's speed is a measurement, not a
-consequence of these bounds: on narrow changes it replaces most node
-evaluations by word scans, and on dense changes it falls back to dense reuse.
+submissions of alternating counts, which hold no reuse authority. Authority
+needs successive batches of one count, so neither reuse route runs while
+adaptive slates are still growing. The index stays resident with the theory and
+remains accounted, like a retained schedule. The route is allowed only when its
+derived worst case, and dense reuse after a change count, fit the work
+allowance. While it is allowed, the complete and dense routes also retain the
+evaluated candidate, `words + 1` operations. Each result record carries its
+route, the nodes an update evaluated and whether the slot's state was seeded;
+an update's work receipt is what it performed, at least a fixed floor of
+`5 * words + ceil(nodes / 32)` word operations, one queued-set scan per level
+and the record. Batch statistics report the slots per route and the route's
+availability, with a typed reason when it is unavailable. The route's speed is a
+measurement, not a consequence of these bounds: on narrow changes it replaces
+most node evaluations by word scans, and on dense changes it falls back to dense
+reuse.
 
 Only complete decoding, healthy context completion and the final cancellation
 check authorize reuse. Dispatch consumes that authority before queue writes;

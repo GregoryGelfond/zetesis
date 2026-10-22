@@ -568,7 +568,7 @@ fn the_threshold_starts_at_the_cpu_rule() {
 }
 
 #[test]
-fn the_route_engages_from_sixteen_strides_per_level() {
+fn the_route_engages_from_the_factor_times_the_levels() {
     for levels in [1, 4, 18] {
         let threshold = ENGAGEMENT_STRIDES * u64::from(levels);
         assert!(engages(threshold, levels), "{levels} levels");
@@ -612,6 +612,15 @@ fn fan(rules: usize) -> TightPlan {
     .unwrap()
 }
 
+/// Rules of a [`fan`] whose gate level takes `3 * ENGAGEMENT_STRIDES - 2`
+/// strides of 32 invocations, so that with one stride for each other level the
+/// schedule engages at 32 invocations and, taking about half as many, not at
+/// 64.
+fn engaging_at_32() -> usize {
+    let gates = 32 * (3 * usize::try_from(ENGAGEMENT_STRIDES).unwrap() - 2);
+    gates - 2
+}
+
 /// The graph and cold plan of one candidate under a fixed `size`.
 fn prepared(certificate: &TightPlan, size: crate::GpuWorkgroupSize) -> (Graph, Plan) {
     let device = wgpu::Limits::default();
@@ -636,27 +645,35 @@ fn prepared(certificate: &TightPlan, size: crate::GpuWorkgroupSize) -> (Graph, P
 
 #[test]
 fn a_prepared_schedule_records_its_strided_depth() {
-    // Levels of 4 leaves, 1,602 gates and 2 rules: 1 + 51 + 1 strides of 32
-    // invocations, 1 + 26 + 1 of 64.
-    let certificate = fan(1600);
-    for (size, depth) in [
-        (crate::GpuWorkgroupSize::Threads32, 53),
-        (crate::GpuWorkgroupSize::Threads64, 28),
+    // Levels of 4 leaves, the gates and 2 rules: one stride each for the leaves
+    // and the rules at either size.
+    let rules = engaging_at_32();
+    let certificate = fan(rules);
+    for size in [
+        crate::GpuWorkgroupSize::Threads32,
+        crate::GpuWorkgroupSize::Threads64,
     ] {
         let (graph, _) = prepared(&certificate, size);
+        let gates = u64::try_from(rules + 2).unwrap();
         assert_eq!(graph.levels, 3);
-        assert_eq!(graph.strided_depth, depth, "{size:?}");
+        assert_eq!(
+            graph.strided_depth,
+            1 + gates.div_ceil(u64::from(size.invocations())) + 1,
+            "{size:?}"
+        );
     }
 }
 
 #[test]
 fn only_an_engaging_schedule_retains_the_update_inputs() {
-    let certificate = fan(1600);
-    // Fifty-three strides over three levels engage; twenty-eight do not.
+    let rules = engaging_at_32();
+    let certificate = fan(rules);
     let (wide, _) = prepared(&certificate, crate::GpuWorkgroupSize::Threads32);
-    assert_eq!(wide.largest_producers, 1600);
+    assert!(engages(wide.strided_depth, wide.levels));
+    assert_eq!(wide.largest_producers, u32::try_from(rules).unwrap());
     assert_eq!(wide.owners.len(), 1);
     let (narrow, _) = prepared(&certificate, crate::GpuWorkgroupSize::Threads64);
+    assert!(!engages(narrow.strided_depth, narrow.levels));
     assert_eq!(narrow.largest_producers, 0);
     assert!(narrow.owners.is_empty());
     assert_eq!(narrow.owner_bytes, 0);
@@ -666,7 +683,7 @@ fn only_an_engaging_schedule_retains_the_update_inputs() {
 fn a_narrow_schedule_accounts_none_of_the_update_inputs() {
     // Admission reserves the owner column, eight bytes for the one live row,
     // and a transient counter word per atom before the level widths are known.
-    let certificate = fan(1600);
+    let certificate = fan(engaging_at_32());
     let (wide, wide_plan) = prepared(&certificate, crate::GpuWorkgroupSize::Threads32);
     let (narrow, narrow_plan) = prepared(&certificate, crate::GpuWorkgroupSize::Threads64);
     assert_eq!(wide.owner_bytes, 8);

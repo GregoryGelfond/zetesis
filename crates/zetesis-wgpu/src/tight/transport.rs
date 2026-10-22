@@ -23,13 +23,7 @@ pub(super) struct Resident {
 impl Resident {
     pub(super) fn new(device: &wgpu::Device, graph: Graph, packed: &Packed) -> Self {
         Self {
-            updates: if graph.levels == 0 {
-                Stage::Serial
-            } else if update::engages(graph.strided_depth, graph.levels) {
-                Stage::Pending
-            } else {
-                Stage::Narrow
-            },
+            updates: Stage::of(&graph),
             nodes: initialized(
                 device,
                 "tight nodes",

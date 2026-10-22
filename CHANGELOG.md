@@ -76,8 +76,10 @@ Notable changes by release. Versions follow Semantic Versioning.
   smaller device prefix, never below the batch size. Answer sets are unchanged.
 - In the GPU library, tight checks report the work their route performed, and
   `TightGpuLimits` gains `min_update_candidates`. `TightGpuBatchStats` reports
-  routes and the update route's availability, and the tight kernel requires
-  eight storage buffers per shader stage.
+  routes and the update route's availability, and
+  `GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES` names the strides per dependency
+  level from which the route engages. The tight kernel requires eight storage
+  buffers per shader stage.
 - Command-line GPU solves begin adapter enumeration once their configuration is
   validated, while the program is read and grounded, so the device is ready
   sooner; CPU solves start none.

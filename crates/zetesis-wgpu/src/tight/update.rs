@@ -43,21 +43,19 @@ pub(super) const RECORD_WORDS: u64 = 9;
 /// Workgroup strides per dependency level that dense evaluation must take, on
 /// average, before the update route engages.
 ///
-/// Dense evaluation of one candidate synchronizes `levels + 4` times and takes
-/// `I(W) = sum(ceil(width / W))` strided iterations over the level widths at
-/// the dispatched workgroup size `W`. An update synchronizes `levels + 8`
-/// times (`levels + 11` when it summarizes) and, per level, scans the level's
-/// queued words and evaluates each word's taken nodes, maintaining their
-/// readers' queue bits, counts and root sets through storage atomics, in one
-/// invocation per word. A level therefore costs an update several dense
-/// strides even when little changed, while the strides it saves are those
-/// beyond about one per level, so the update pays only where `I(W)` exceeds
-/// the level count several times. Calibration placed the break-even between
-/// about three and eight strides per level, depending on how many nodes of a
-/// level change together; sixteen keeps a margin of two above the highest
-/// estimate. Declining keeps dense reuse, so a factor above the break-even
-/// forgoes gains but never regresses.
-pub(super) const ENGAGEMENT_STRIDES: u64 = 16;
+/// Dense evaluation of one candidate takes `I(W) = sum(ceil(width / W))`
+/// strided iterations over the level widths at the dispatched workgroup size
+/// `W`. An update keeps every level's synchronization, adds five per
+/// candidate (eight when it summarizes), and at each level evaluates each
+/// queued word's taken nodes, with their readers' queue bits, counts and root
+/// sets, in one invocation through storage atomics. It pays only where `I(W)`
+/// exceeds the level count several times; how many times depends on the
+/// device, and grows with how many nodes of one queued word a change reaches,
+/// which no structural rule can see. The factor is an execution choice,
+/// calibrated by measurement on an Apple M4 Pro GPU under Metal, and changes no
+/// verdict. Declining keeps the dense routes, so a factor set high forgoes
+/// gains, while one set low slows the schedules it engages.
+pub(super) const ENGAGEMENT_STRIDES: u64 = 32;
 
 /// Whether the update route engages for a resident schedule of `levels` levels
 /// whose dense strided depth at its workgroup size is `depth`.
@@ -225,6 +223,19 @@ pub(super) fn floor(graph: &Graph, levels: u32) -> u64 {
         + RECORD_WORDS
 }
 
+/// Dense reuse after the update route's change count, with the state's writes:
+/// the dense charge, the count's `2 * words` and the retained candidate's
+/// `words + 1`. Both the index's build gate and every allowed plan reserve it.
+pub(super) fn dense_after_count(graph: &Graph, levels: u32) -> u64 {
+    u64::from(graph.work)
+        + u64::from(levels)
+        + 2 * u64::from(graph.nodes)
+        + u64::from(graph.edges)
+        + 4
+        + 3 * u64::from(graph.words)
+        + 1
+}
+
 /// The update route's derived worst case per candidate: the change count, a
 /// summary, presence of `min(threshold, atoms)` changed atoms with every
 /// atom-node entry, every node evaluated once with all of its reads and every
@@ -278,9 +289,10 @@ pub(super) enum Stage {
     /// The theory evaluates original truth serially, which has no levels.
     Serial,
     /// Dense evaluation takes fewer than [`ENGAGEMENT_STRIDES`] strides per
-    /// level at the resident's workgroup size: the update route cannot pay.
+    /// level at the resident's workgroup size, so the rule declines the route.
     Narrow,
-    /// No batch has held reuse authority yet; the bounds are undecided.
+    /// No batch holding reuse authority at its stateless count has decided the
+    /// bounds yet.
     Pending,
     /// The bounds hold; the index awaits a batch that admits it.
     Bounded(Bounds),
@@ -291,6 +303,19 @@ pub(super) enum Stage {
 }
 
 impl Stage {
+    /// The stage a theory starts in once its schedule is packed: a serial
+    /// schedule has no levels to update by, and the engagement rule declines
+    /// a narrow one.
+    pub(super) const fn of(graph: &Graph) -> Self {
+        if graph.levels == 0 {
+            Self::Serial
+        } else if engages(graph.strided_depth, graph.levels) {
+            Self::Pending
+        } else {
+            Self::Narrow
+        }
+    }
+
     /// The theory's bounds at a batch holding reuse authority: decided once by
     /// `decide` and kept. A refusal is kept too, so no later batch decides the
     /// bounds again or builds. A serial or built stage has no bounds to decide.

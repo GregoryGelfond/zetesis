@@ -58,10 +58,11 @@ pub struct TightGpuLimits {
     ///
     /// Reusing a wholly successful batch's original truth adds
     /// `2 * nodes + edges + 4` for change detection; it runs only when that
-    /// fits. The update route (see [`Self::min_update_candidates`]) runs only
-    /// when its derived worst case also fits; with per-slot state bound, the
-    /// complete and dense routes add the state's writes, `words + 2`, or
-    /// `3 * words + 2` after the update route's change count. Each check then
+    /// fits. The update route (see [`Self::min_update_candidates`]) is
+    /// allowed only when its derived worst case and dense reuse after its
+    /// change count also fit; while it is allowed, the complete and dense
+    /// routes add the retained candidate's writes, `words + 1`, and dense reuse
+    /// after the change count adds the count's `2 * words`. Each check then
     /// reports the work its route performed, never more than was reserved.
     pub max_work_per_candidate: u64,
     /// The fewest candidates whose per-slot update state a batch must admit
@@ -77,10 +78,11 @@ pub struct TightGpuLimits {
     /// state never turns an admitted batch into a refusal: without it the dense
     /// routes run as before. Zero declines the update route.
     ///
-    /// Independently of this limit, the route engages only on a schedule wide
-    /// enough to repay its additional synchronization: dense evaluation must
-    /// take at least sixteen workgroup strides per dependency level. Narrower
-    /// schedules report [`TightGpuUpdateUnavailable::NarrowSchedule`].
+    /// Independently of this limit, the route engages only on a schedule whose
+    /// dense evaluation takes at least
+    /// [`GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES`](crate::GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES)
+    /// workgroup strides per dependency level. Narrower schedules report
+    /// [`TightGpuUpdateUnavailable::NarrowSchedule`].
     pub min_update_candidates: usize,
     /// Bounded submission wait, with control polling at most 50 ms apart while
     /// waiting. Not GPU preemption or a bound on device creation, allocation,
@@ -193,8 +195,10 @@ pub struct TightGpuRoutes {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum TightGpuUpdates {
-    /// No batch of this theory has held reuse authority yet, so no readers
-    /// index exists.
+    /// The batch held no reuse authority at its stateless count, which the
+    /// route needs before it builds the theory's readers index. A fresh
+    /// theory's first batch reports this unless its schedule or limits
+    /// already decline the route.
     #[default]
     Pending,
     /// Per-slot state was bound and the route was allowed.
@@ -214,10 +218,11 @@ pub enum TightGpuUpdates {
 pub enum TightGpuUpdateUnavailable {
     /// The batch evaluates original truth serially, which has no levels.
     SerialSchedule,
-    /// Dense evaluation of the resident schedule takes fewer than sixteen
-    /// workgroup strides per dependency level on average, where the update
-    /// route's additional synchronization costs more than it saves. Decided
-    /// once per resident theory and workgroup size.
+    /// Dense evaluation of the resident schedule takes fewer than
+    /// [`GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES`](crate::GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES)
+    /// workgroup strides per dependency level on average, below which the
+    /// route is not expected to pay. Decided once per resident theory and
+    /// workgroup size.
     NarrowSchedule,
     /// A prefix call admits fewer candidates than
     /// [`TightGpuLimits::min_update_candidates`] before any state is

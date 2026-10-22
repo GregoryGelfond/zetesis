@@ -506,42 +506,52 @@ fn check_support(world: u32, lane: u32, grouped: bool) {
     let prior = world * RESULT_WORDS;
     let marker = select(RESULT_MAGIC, RESULT_GROUPED_MAGIC, grouped);
     let slot = slot_at(world);
+    // The host either retained explicit successful ownership or cleared these
+    // hints in this same encoder. Epoch/slot/marker do not authorize reuse alone.
+    // Every invocation reads the same record, which only invocation 0 stores,
+    // after the barriers of every route.
+    let reuse = params.epoch > 1u && results[prior] == params.epoch - 1u &&
+        results[prior + 1u] == world && results[prior + 5u] == marker;
     if (lane == 0u) {
         atomicStore(&first_root, params.roots);
         atomicStore(&first_atom, params.atoms);
-        atomicStore(&changed_atoms, 0u);
-        atomicStore(&performed, 0u);
-        atomicStore(&evaluated, 0u);
-        // The host either retained explicit successful ownership or cleared these
-        // hints in this same encoder. Epoch/slot/marker do not authorize reuse alone.
-        let reuse = params.epoch > 1u && results[prior] == params.epoch - 1u &&
-            results[prior + 1u] == world && results[prior + 5u] == marker;
-        var route = ROUTE_COMPLETE;
-        if (reuse) {
-            route = ROUTE_DENSE;
-            // The previous record says whether that dispatch seeded the state.
-            if (params.allowed != 0u && results[prior + 8u] != 0u) { route = ROUTE_UPDATE; }
-        }
-        entry_route = route;
     }
-    var route = workgroupUniformLoad(&entry_route);
-    if (route == ROUTE_UPDATE) {
-        // Count changed atoms; more than the threshold take dense reuse.
-        for (var word = lane; word < params.words; word += WORKGROUP_SIZE) {
-            let changed = atomicLoad(&state[slot.retained + word]) ^ candidates[supported + word];
-            if (changed != 0u) { atomicAdd(&changed_atoms, countOneBits(changed)); }
-        }
-        workgroupBarrier();
-        if (lane == 0u) {
-            chosen_route = select(ROUTE_BEYOND_THRESHOLD, ROUTE_UPDATE,
-                atomicLoad(&changed_atoms) <= params.threshold);
-        }
-        route = workgroupUniformLoad(&chosen_route);
-    }
-    if (route == ROUTE_UPDATE) {
-        update_slot(world, lane, values, supported, slot);
+    var route = select(ROUTE_COMPLETE, ROUTE_DENSE, reuse);
+    if (params.allowed == 0u) {
+        // Without the update route, choosing complete or dense evaluation steers
+        // no barrier, so every invocation takes the choice from the record
+        // itself; the dense routes' barriers order the stores above before any
+        // other invocation's atomic.
+        evaluate_dense(world, lane, grouped, values, supported, slot, reuse);
     } else {
-        evaluate_dense(world, lane, grouped, values, supported, slot, route != ROUTE_COMPLETE);
+        if (lane == 0u) {
+            atomicStore(&changed_atoms, 0u);
+            atomicStore(&performed, 0u);
+            atomicStore(&evaluated, 0u);
+            // The previous record says whether that dispatch seeded the state.
+            entry_route = select(route, ROUTE_UPDATE, reuse && results[prior + 8u] != 0u);
+        }
+        // The routes synchronize differently, so the choice is broadcast.
+        var chosen = workgroupUniformLoad(&entry_route);
+        if (chosen == ROUTE_UPDATE) {
+            // Count changed atoms; more than the threshold take dense reuse.
+            for (var word = lane; word < params.words; word += WORKGROUP_SIZE) {
+                let changed = atomicLoad(&state[slot.retained + word]) ^ candidates[supported + word];
+                if (changed != 0u) { atomicAdd(&changed_atoms, countOneBits(changed)); }
+            }
+            workgroupBarrier();
+            if (lane == 0u) {
+                chosen_route = select(ROUTE_BEYOND_THRESHOLD, ROUTE_UPDATE,
+                    atomicLoad(&changed_atoms) <= params.threshold);
+            }
+            chosen = workgroupUniformLoad(&chosen_route);
+        }
+        if (chosen == ROUTE_UPDATE) {
+            update_slot(world, lane, values, supported, slot);
+        } else {
+            evaluate_dense(world, lane, grouped, values, supported, slot, chosen != ROUTE_COMPLETE);
+        }
+        route = chosen;
     }
     workgroupBarrier();
     if (lane == 0u) {

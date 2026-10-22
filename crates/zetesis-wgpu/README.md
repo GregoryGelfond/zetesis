@@ -114,9 +114,10 @@ the root positions holding it. An update counts a slot's changed atoms, takes
 dense reuse beyond `max(atoms / 8, 64)`, and otherwise re-evaluates, level by
 level, only the nodes the change reaches, maintaining per-head support counts
 and the false-root and unsupported sets. The route engages only for a schedule
-whose dense evaluation takes at least sixteen workgroup strides per dependency
-level, decided once per resident theory and workgroup size; narrower schedules
-report `NarrowSchedule` and keep the dense routes. Each slot's state counts in
+whose dense evaluation takes at least `GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES`
+workgroup strides per dependency level, decided once per resident theory and
+workgroup size; narrower schedules report `NarrowSchedule` and keep the dense
+routes. Each slot's state counts in
 the batch's byte allowance; `TightGpuLimits::min_update_candidates` keeps it from
 shrinking a prefix below the caller's floor, and zero declines the route. Batch
 statistics report the slots per route and the route's availability.

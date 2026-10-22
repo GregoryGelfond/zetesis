@@ -86,6 +86,13 @@ enum Updates {
 }
 
 impl GpuTightOracle {
+    /// Workgroup strides per dependency level that dense evaluation of a
+    /// resident schedule must take, on average, at its dispatched workgroup
+    /// size before the update route engages. Narrower schedules report
+    /// [`TightGpuUpdateUnavailable::NarrowSchedule`]. An execution choice that
+    /// changes no verdict.
+    pub const UPDATE_ENGAGEMENT_STRIDES: u64 = update::ENGAGEMENT_STRIDES;
+
     /// Create an independently owned device and kernel using hard adapter
     /// filters. The default fitted sizing compiles a size's pipeline at the
     /// first check that dispatches it. Neither construction nor that
@@ -706,7 +713,15 @@ impl GpuTightOracle {
         cancellation: &Cancellation,
     ) -> Result<Updates, GpuError> {
         let stateless = |availability| Ok(Updates::Stateless(availability));
-        let (None, Some(resident)) = (&admission.fresh, self.resident.as_mut()) else {
+        // A fresh theory holds no reuse authority yet, but its packed schedule
+        // already decides whether the route could ever run.
+        if let Some(graph) = admission.fresh.as_ref() {
+            return stateless(
+                declined(Stage::of(graph), &admission.plan, size, limits)
+                    .map_or(TightGpuUpdates::Pending, TightGpuUpdates::Unavailable),
+            );
+        }
+        let Some(resident) = self.resident.as_mut() else {
             return stateless(TightGpuUpdates::Pending);
         };
         if let Some(reason) = declined(resident.updates, &admission.plan, size, limits) {
@@ -946,13 +961,7 @@ fn bind_updates(
 /// Whether the update route's reservation fits: the larger of its worst case
 /// at `bounds` and dense reuse with the count pass and the state's writes.
 fn admits_work(graph: &Graph, levels: u32, bounds: &Bounds, ceiling: u64) -> bool {
-    let dense = u64::from(graph.work)
-        + u64::from(levels)
-        + 2 * u64::from(graph.nodes)
-        + u64::from(graph.edges)
-        + 4
-        + 3 * u64::from(graph.words)
-        + 2;
+    let dense = update::dense_after_count(graph, levels);
     update::worst_case(
         graph,
         levels,
