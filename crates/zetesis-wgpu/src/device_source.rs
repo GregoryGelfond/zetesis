@@ -9,11 +9,12 @@ use crate::{GpuContext, GpuDiscovery, GpuOptions, GpuSelection};
 /// A selected or discovered source chooses, among the adapters of the API that
 /// the policy admits, the best-ranked one advertising compute shaders and
 /// limits the constructing primitive accepts, then requests a device of its
-/// own from that adapter. The two choose the same adapter and report the same
-/// failures at the same steps; a discovery saves only the adapter enumeration's
-/// wait. A
-/// context source selects nothing: the primitive compiles on that exact
-/// context, which keeps the timestamp request it was created with.
+/// own from that adapter. A discovered source selects over the adapters present
+/// when its discovery began, so it chooses the adapter and reports the failures
+/// a selected source would have then, at the same steps; [`GpuDiscovery`]
+/// states what that snapshot's age means. A discovery saves only the adapter
+/// enumeration's wait. A context source selects nothing: the primitive compiles
+/// on that exact context, which keeps the timestamp request it was created with.
 ///
 /// `timing` requests compute-pass timestamps for the primitives that measure
 /// compute time, the formula and tight oracles; the other primitives request

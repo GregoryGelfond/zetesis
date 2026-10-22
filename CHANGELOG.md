@@ -21,7 +21,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   `GpuDeviceSource` (`from_source`): its own selection, a selection over such an
   adapter enumeration, or an existing context. `ExecutionResources::discovering`
   retains an adapter enumeration for a session. Adapter choice, errors and
-  timestamp requests are those of ordinary selection.
+  timestamp requests are those of ordinary selection at the moment the
+  enumeration began; the enumeration is a snapshot of the adapters present then.
 - GPU formula sessions size their candidate slates, the candidates checked and
   committed together, adaptively by default. Slates start at the batch size,
   double after a filled slate whose answers leave the objective bound unchanged,

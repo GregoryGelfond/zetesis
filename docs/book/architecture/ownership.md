@@ -358,7 +358,9 @@ shares the supplied profile's shader and pipelines across ordinary formula
 sessions and derives its context from that profile, preventing mismatched
 context/profile pairs. `ExecutionResources::discovering` instead retains an
 adapter enumeration begun before the session; the session's primitive selects
-over it exactly as ordinary selection does and requests its own device.
+over it as ordinary selection does and requests its own device. The enumeration
+is a snapshot of the adapters present when it began, as `GpuDiscovery`
+documents.
 Each session still owns its executor, subject residency, search, candidate queue,
 counters and incumbent. Context-only resources compile per session; neither
 form installs a global cache. Hard adapter policy is checked before profile

@@ -77,11 +77,13 @@ impl ExecutionResources {
     /// thread ([`zetesis_wgpu::GpuDiscovery`]); otherwise, and in a build
     /// without GPU support, the default.
     ///
-    /// The session's GPU primitive selects over the adapter enumeration exactly
-    /// as ordinary selection does, with its own capability check, then requests
-    /// its own device, so adapter choice, failures and timestamps are those of
-    /// a session without these resources. It serves one primitive; a later
-    /// session, or a session of another API, selects as it would without it.
+    /// The session's GPU primitive selects over the adapter enumeration as
+    /// ordinary selection does, with its own capability check, then requests
+    /// its own device. Adapter choice and failures are therefore those of a
+    /// session without these resources started when the enumeration began, a
+    /// snapshot whose age [`zetesis_wgpu::GpuDiscovery`] bounds; timestamps are
+    /// requested as in that session. It serves one primitive; a later session,
+    /// or a session of another API, selects as it would without it.
     /// Dropping the last clone before a primitive takes the adapter enumeration
     /// waits for it to finish.
     #[must_use]

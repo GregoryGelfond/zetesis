@@ -4,9 +4,10 @@
 //! enumeration an independent constructor would perform, and creates no device.
 //! A primitive constructed from it reruns its own selection over that
 //! enumeration, with its own policy and capability check, so it chooses the
-//! adapter and reports the error it would have without the discovery, at the
-//! same step; it then requests its device from the chosen adapter, whose handle
-//! nothing else has used.
+//! adapter and reports the error an independent constructor would have when
+//! the discovery began, at the same step; it then requests its device from the
+//! chosen adapter, whose handle nothing else has used. The enumeration is a
+//! snapshot: [`GpuDiscovery`] states what its age means.
 //!
 //! Ownership: the thread holds only its result, which it returns through its
 //! `JoinHandle`. The join handle lives in the state the consumers' handles
@@ -25,6 +26,17 @@ use crate::{GpuContext, GpuError, GpuOptions, GpuSelection};
 /// Adapter enumeration begun before the GPU primitive that will use it; it
 /// creates no device. A primitive takes it through
 /// [`crate::GpuDeviceSource::Discovered`].
+///
+/// The enumeration is a snapshot of the adapters present when the discovery
+/// began. A primitive constructed from it chooses the adapter, and reports the
+/// selection error, that an independent constructor would have at that moment.
+/// An adapter added since is not seen; one removed since can still be chosen,
+/// and then fails its device request with the device error. The snapshot's age
+/// is the time from [`Self::spawn`] to the primitive's construction, which the
+/// caller controls: the command line begins one after validating its
+/// configuration and consumes it once the program is read, admitted and
+/// grounded. A caller that keeps a discovery across a possible device change
+/// should spawn a new one, or construct without it.
 ///
 /// Cloning shares the discovery. It serves one primitive: the first primitive
 /// constructed from it takes its enumeration, and any later one enumerates as
@@ -86,14 +98,16 @@ impl GpuDiscovery {
     /// The enumeration, waiting for the thread if it is still running; `None`
     /// once taken, or when the thread never started or panicked.
     fn take(&self) -> Option<Result<Vec<Candidate>, GpuError>> {
-        let state = std::mem::replace(
-            &mut *self
+        let state = {
+            let mut state = self
                 .shared
                 .state
                 .lock()
-                .unwrap_or_else(PoisonError::into_inner),
-            State::Spent,
-        );
+                .unwrap_or_else(PoisonError::into_inner);
+            std::mem::replace(&mut *state, State::Spent)
+        };
+        // The lock is released before the join, so a waiting consumer never
+        // holds it while the enumeration finishes.
         match state {
             State::Running(thread) => thread.join().ok(),
             State::Spent => None,

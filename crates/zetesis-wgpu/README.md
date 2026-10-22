@@ -45,9 +45,12 @@ The solve-path primitives also take a `GpuDeviceSource` through `from_source`:
 an independent selection, an existing context, or a `GpuDiscovery`, the adapter
 enumeration an independent constructor performs, begun earlier on a background
 thread and creating no device. A primitive constructed from a discovery selects
-over that adapter enumeration exactly as `new_selected` does, with its own capability
-check and typed errors, then requests its own device. A discovery serves one
-primitive, and dropping it waits for its thread.
+over that adapter enumeration as `new_selected` does, with its own capability
+check and typed errors, then requests its own device. The enumeration is a
+snapshot of the adapters present when the discovery began: an adapter added
+since is not seen, and one removed since fails its device request, so a caller
+keeps a discovery only for as long as it would wait to construct. A discovery
+serves one primitive, and dropping it waits for its thread.
 `GpuFormulaProfile` additionally retains a validated formula shader on its exact
 context and the pipeline of each workgroup size compiled for it, a fitted size
 by the first check that dispatches it; `GpuFormulaOracle::from_profile` shares
