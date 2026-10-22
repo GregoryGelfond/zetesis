@@ -212,7 +212,10 @@ produces a bounded slate of candidates, joins, and then submits that slate for
 device membership checking. Its producers share the walker's deque, publication
 and idle protocols within each slate: one deque per producer, retained between
 slates, depth-first local work and stealing of a peer's oldest region only with
-an empty deque. CPU residual completion has its own worker setting.
+an empty deque. An optimizing search, which tightens its candidate bound between
+slates, has its producers share one deque and take the most recently published
+region instead, so that regions far from the current work wait for tighter
+bounds. CPU residual completion has its own worker setting.
 The routes share semantic region readings and split laws, but their scheduling
 costs differ. A scaling comparison must record the producer and completion worker
 counts, batch size and observed membership route separately; increasing host

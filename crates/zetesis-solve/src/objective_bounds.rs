@@ -131,6 +131,11 @@ impl Bounds {
         }
     }
 
+    /// Whether an improvement can still install a candidate bound.
+    pub(crate) const fn is_enabled(&self) -> bool {
+        self.enabled
+    }
+
     /// Call only after a strictly better, fully retained reduct-verified model.
     /// Bound generation borrows the same immutable plan used by score reads.
     pub(crate) fn improve(

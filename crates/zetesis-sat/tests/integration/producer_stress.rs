@@ -2,7 +2,8 @@
 //! producer counts and candidate slate sizes.
 //!
 //! The GPU route's region producers fill bounded slates from per-producer
-//! deques with work stealing. This test guards the *family*: a candidate lost
+//! deques with work stealing, or, for a caller that expects candidate bounds,
+//! from one deque they share. This test guards the *family*: a candidate lost
 //! or duplicated by a steal, a hand dropped at a slate's end, or a slate that
 //! ends early shows as a family that differs from the scalar walk's, and a
 //! count that never reaches zero hangs until the enumeration's deadline. It does
@@ -32,6 +33,10 @@ const QUEENS: &str =
 /// sixteen combinations, which samples interleavings while keeping the
 /// unoptimized portable suite within tens of seconds.
 const RUNS: usize = 4;
+/// Runs per combination with the shared deque, which half the time budget
+/// covers: every producer takes from one deque, so their interleavings vary
+/// less than those of separate deques.
+const SHARED_RUNS: usize = 2;
 /// Far above any correct run of these small instances, so it never fires in
 /// normal operation but turns a hang into a test failure.
 const HANG_GUARD: Duration = Duration::from_mins(1);
@@ -54,9 +59,9 @@ impl Slates {
 }
 
 /// Enumerate the complete family through `producers` producers and the given
-/// slate sizes. Asserts no candidate was proposed twice and the walk covered
-/// the space; returns the family.
-fn family(theory: &Theory, producers: usize, slates: Slates) -> BTreeSet<Vec<usize>> {
+/// slate sizes, sharing one deque when `shared`. Asserts no candidate was
+/// proposed twice and the walk covered the space; returns the family.
+fn family(theory: &Theory, producers: usize, slates: Slates, shared: bool) -> BTreeSet<Vec<usize>> {
     let mut search = StableModels::with_region_producers(
         theory,
         nonzero(producers),
@@ -64,6 +69,9 @@ fn family(theory: &Theory, producers: usize, slates: Slates) -> BTreeSet<Vec<usi
         Cancellation::with_deadline(Instant::now() + HANG_GUARD).unwrap(),
     )
     .unwrap();
+    if shared {
+        search.expect_candidate_bounds();
+    }
     let mut models = BTreeSet::new();
     let mut slate = 0;
     while !search.exhausted() {
@@ -93,8 +101,9 @@ fn scalar(theory: &Theory) -> BTreeSet<Vec<usize>> {
     models
 }
 
-#[test]
-fn producers_return_the_scalar_family_on_every_run() {
+/// Every combination of producer count and slate sizes, `runs` times each,
+/// returns the scalar walk's family.
+fn every_combination_returns_the_scalar_family(shared: bool, runs: usize) {
     let queens = formula(QUEENS).theory().clone();
     let inputs = [queens, choice_theories::choices(5), theories::mixed()];
     for theory in &inputs {
@@ -106,14 +115,24 @@ fn producers_return_the_scalar_family_on_every_run() {
                 Slates::Fixed(64),
                 Slates::Growing,
             ] {
-                for run in 0..RUNS {
+                for run in 0..runs {
                     assert_eq!(
-                        family(theory, producers, slates),
+                        family(theory, producers, slates, shared),
                         expected,
-                        "{producers} producers, {slates:?}, run {run} returned a different family"
+                        "{producers} producers, {slates:?}, shared {shared}, run {run} returned a different family"
                     );
                 }
             }
         }
     }
+}
+
+#[test]
+fn producers_return_the_scalar_family_on_every_run() {
+    every_combination_returns_the_scalar_family(false, RUNS);
+}
+
+#[test]
+fn producers_sharing_one_deque_return_the_scalar_family_on_every_run() {
+    every_combination_returns_the_scalar_family(true, SHARED_RUNS);
 }

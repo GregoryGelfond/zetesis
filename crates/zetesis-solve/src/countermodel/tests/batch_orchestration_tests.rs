@@ -6,7 +6,9 @@ use std::num::NonZeroUsize;
 use zetesis_core::Model;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory};
-use zetesis_sat::{BatchStatistics, BatchVerdict, Incomplete, StableModels, Statistics};
+use zetesis_sat::{
+    BatchStatistics, BatchVerdict, FrontierOrder, Incomplete, StableModels, Statistics,
+};
 
 use super::test_harness::{Record, admitted, run, run_consuming};
 use crate::formula_execution::{Failure, FormulaExecutionStatistics, MembershipExecution};
@@ -245,6 +247,12 @@ fn assert_produced(execution: &NativeBatch) {
     );
 }
 
+/// The order the producers took regions in, from the last snapshot.
+fn frontier_order(execution: &NativeBatch) -> Option<FrontierOrder> {
+    let (_, search, _) = execution.snapshots.last().unwrap();
+    search.regions.and_then(|regions| regions.frontier_order)
+}
+
 /// The scalar session's complete records for `owner`, sorted.
 fn scalar_records(owner: &zetesis_themelios::AdmittedFormula) -> Vec<Record> {
     let mut scalar = Session::new(
@@ -308,6 +316,26 @@ fn producer_objective_bounds_preserve_optimal_ties() {
         assert_eq!(capture.records(), expected);
         assert!(capture.outcome.optimum_proved());
         assert_produced(&execution);
+    }
+}
+
+#[test]
+fn optimizing_producer_sessions_share_one_frontier() {
+    let owner = admitted("1 {a;b;c} 1. #minimize{1,a:a;1,b:b;2,c:c}. #show.");
+    for (_, config, mut execution) in harnesses(producing(config())) {
+        let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
+        assert!(capture.error.is_none());
+        assert_eq!(frontier_order(&execution), Some(FrontierOrder::Shared));
+    }
+}
+
+#[test]
+fn enumerating_producer_sessions_keep_a_deque_per_producer() {
+    let owner = admitted("{a;b;c}.");
+    for (_, config, mut execution) in harnesses(producing(config())) {
+        let capture = run(&owner, &config, &Cancellation::default(), &mut execution);
+        assert!(capture.error.is_none());
+        assert_eq!(frontier_order(&execution), Some(FrontierOrder::PerProducer));
     }
 }
 

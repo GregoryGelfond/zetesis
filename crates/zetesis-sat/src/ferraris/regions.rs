@@ -245,6 +245,36 @@ pub struct RegionSearchStatistics {
     /// and the device route's pool starts at construction, so both report
     /// `None`.
     pub workers: Option<RegionWorkerStatistics>,
+    /// The order in which the parallel candidate producers take regions.
+    /// Routes without producers report `None`.
+    pub frontier_order: Option<FrontierOrder>,
+}
+
+/// The order in which the parallel candidate producers take regions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum FrontierOrder {
+    /// Each producer continues on its own deque and steals a peer's oldest
+    /// region only when its own deque is empty: the order for an enumeration,
+    /// which visits every region whatever the order.
+    PerProducer,
+    /// Every producer publishes to one shared deque and takes the region any
+    /// producer published most recently: the order for a caller that tightens
+    /// candidate bounds as it commits answers, which keeps production where the
+    /// latest splits are and leaves older, shallower regions for tighter
+    /// bounds.
+    Shared,
+}
+
+impl FrontierOrder {
+    /// Stable spelling in execution receipts.
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::PerProducer => "per_producer",
+            Self::Shared => "shared",
+        }
+    }
 }
 
 /// Applicability of the optional original generator preference.
@@ -473,6 +503,7 @@ pub(crate) fn open(
             generator_order: generator_statistics,
             frontier: None,
             workers: None,
+            frontier_order: None,
         },
         parts: OriginalParts {
             producers: extraction.producers,
@@ -560,6 +591,7 @@ impl RegionSearch {
             generator_order: self.statistics.generator_order,
             frontier: None,
             workers: None,
+            frontier_order: None,
         }
     }
 

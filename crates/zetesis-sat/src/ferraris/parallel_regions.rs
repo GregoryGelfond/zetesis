@@ -742,6 +742,7 @@ impl ParallelRegions {
             producers: self.statistics.producers,
             generator_order: self.statistics.generator_order,
             frontier: None,
+            frontier_order: None,
             workers: Some(RegionWorkerStatistics {
                 configured: self.shared.workers,
                 engagement_delay: self.delay,

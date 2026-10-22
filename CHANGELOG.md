@@ -33,6 +33,10 @@ Notable changes by release. Versions follow Semantic Versioning.
   and the slates that returned to the batch size on objective-bound feedback.
 - `StableModels::bound_generation` reports how many objective bounds the
   candidate stream has installed.
+- `StableModels::expect_candidate_bounds` declares a caller that tightens
+  candidate bounds as it commits answers, so GPU-route producers share one
+  frontier. `RegionSearchStatistics::frontier_order` and the statistics JSON's
+  `search.candidate_regions.frontier_order` report the order the producers used.
 - Requested GPU statistics report how tight support checking evaluated each
   candidate (complete, dense reuse or update) and whether the update route was
   available, with its reason when it was not.
@@ -114,8 +118,10 @@ Notable changes by release. Versions follow Semantic Versioning.
   only when a worker is waiting for one. Answer sets are unchanged.
 - GPU-route candidate producers keep a deque each, continue depth first on their
   own regions and steal a peer's oldest region only with an empty deque,
-  holding one work lease per slate instead of one per region. Proposal order
-  remains schedule-dependent, and answer sets are unchanged.
+  holding one work lease per slate instead of one per region. An optimizing
+  search's producers instead share one deque and take the region published most
+  recently, so regions far from the current work wait for tighter bounds.
+  Proposal order remains schedule-dependent, and answer sets are unchanged.
 
 ### Fixed
 

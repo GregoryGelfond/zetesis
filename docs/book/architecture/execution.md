@@ -455,7 +455,15 @@ The producers keep one deque each, retained between slates, and share the
 region walker's frontier protocols: the count of unresolved regions, split
 publication and the idle back-off. A producer steals only with an empty deque,
 so its deque holds at most one sibling per atom split along its current path.
-Each holds one work lease for the slate. A cancellation or deadline observed
+That order suits an enumeration, which visits every region whatever the order.
+An optimizing search tightens the candidate bound as it commits answers, so its
+producers instead share one deque and each takes the region any of them
+published most recently. Production then stays where the latest splits are,
+and older, shallower regions wait for the tighter bounds that refute them near
+the root; producers kept apart would each descend a large subtree under the
+bound in force when they took it. The shared deque gives up the per-deque bound
+on retained regions, which only the tree then bounds, as with the single stack
+the producers used before. Each holds one work lease for the slate. A cancellation or deadline observed
 once the slate is full is left to the next slate's first poll. A stopped
 validation retains its admitted prefix and reports the unfinished suffix
 explicitly. Every producer joins and settles its work before membership begins.

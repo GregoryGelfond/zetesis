@@ -41,8 +41,9 @@ use region_proposals::RegionProposals;
 pub(crate) use regions::ReductQuery;
 use regions::RegionSearch;
 pub use regions::{
-    GeneratorOrderStatistics, GeneratorOrderStatus, RegionCounts, RegionFrontierStatistics,
-    RegionSearchStatistics, RegionWalkEngagement, RegionWorkerStatistics, SearchMethod,
+    FrontierOrder, GeneratorOrderStatistics, GeneratorOrderStatus, RegionCounts,
+    RegionFrontierStatistics, RegionSearchStatistics, RegionWalkEngagement, RegionWorkerStatistics,
+    SearchMethod,
 };
 
 /// Whole-operation ceilings for a membership check or stable-model enumeration.
@@ -764,6 +765,24 @@ impl StableModels {
             self.statistics.candidate_restrictions = count;
         }
         result
+    }
+
+    /// Declare that the caller will tighten candidate bounds
+    /// ([`Self::tighten_candidate_bound`]) as it commits answers, as an
+    /// optimizing search does. Region producers
+    /// ([`Self::with_region_producers`]) then share one frontier
+    /// ([`FrontierOrder::Shared`]) from their next slate on: every producer
+    /// takes the region any producer published most recently, so a slate fills
+    /// from the area the latest splits opened, and older, shallower regions
+    /// wait for the tighter bounds that refute them near the root. Without the
+    /// declaration each producer keeps its own deque, the order an enumeration
+    /// prefers. Other routes are unaffected, and answer sets are unchanged
+    /// either way. Declare before the first proposal for the order to govern
+    /// every slate.
+    pub fn expect_candidate_bounds(&mut self) {
+        if let Proposer::Proposals(proposals) = &mut self.proposer {
+            proposals.share_frontier();
+        }
     }
 
     /// Install a caller-owned original-program condition before traversal.

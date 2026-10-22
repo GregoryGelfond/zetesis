@@ -21,6 +21,20 @@
 //! back-off are the frontier protocols the CPU walker shares
 //! (`region_frontier`).
 //!
+//! That is the order for an enumeration, which visits every region whatever the
+//! order: producers work apart and steal rarely. A caller that tightens
+//! candidate bounds as it commits answers declares so, and its producers then
+//! share one deque instead: every producer publishes there and takes the region
+//! any producer published most recently. Production stays where the latest
+//! splits are, so a slate fills from the area that is yielding leaves, and
+//! older, shallower regions wait for the tighter bounds that refute them near
+//! the root. Kept apart, producers would each descend a large subtree under the
+//! bound in force when they took it, or under none before the first. The shared
+//! deque gives up the per-deque bound on retained regions: a schedule in which
+//! producers keep leaving their paths for a newer region can queue far more
+//! than `w` paths' siblings, bounded only by the tree, as in the single stack
+//! the producers had before they kept deques.
+//!
 //! A slate ends full, stopped or with every region resolved, after finitely
 //! many steps. Each step consumes the one region it took: it refutes it, emits
 //! its leaf, or splits it on an atom the region leaves open, so no region is
@@ -56,7 +70,7 @@ use zetesis_ferraris::{Interpretation, Narrower, NarrowingScratch, Theory};
 
 use super::conditions::{Bound, CandidateKnowledge, Conditions};
 use super::region_frontier::{Attempt, Busy, Entry, RegionFrontier, Termination, reserve_regions};
-use super::regions::{self, RegionCounts, RegionSearchStatistics};
+use super::regions::{self, FrontierOrder, RegionCounts, RegionSearchStatistics};
 use crate::search::{Budget, SharedBudget, WorkLease};
 use crate::{Cancellation, Incomplete, SearchLimits, SearchPhaseTimings, SearchStatistics};
 
@@ -100,6 +114,8 @@ pub(crate) struct RegionProposals {
     restrictions: Conditions<(Theory, Narrower)>,
     /// One deque per producer, with exact receipts, retained between slates.
     frontier: RegionFrontier,
+    /// Whether producers keep their own deques or share deque 0.
+    order: FrontierOrder,
     pool: rayon::ThreadPool,
     statistics: RegionSearchStatistics,
     workers: Workers,
@@ -153,6 +169,7 @@ impl RegionProposals {
             parts,
             restrictions: Conditions::default(),
             frontier,
+            order: FrontierOrder::PerProducer,
             pool,
             statistics,
             workers: Workers::new(None, |_| Vec::new()),
@@ -198,8 +215,17 @@ impl RegionProposals {
     pub(crate) fn statistics(&self) -> RegionSearchStatistics {
         RegionSearchStatistics {
             frontier: self.frontier.statistics(),
+            frontier_order: Some(self.order),
             ..self.statistics
         }
+    }
+
+    /// From the next slate on, every producer shares deque 0, the deque that
+    /// holds the root: the order for a caller that tightens candidate bounds.
+    /// Regions already queued in other deques stay reachable, since a producer
+    /// whose shared deque is empty steals from the others.
+    pub(crate) fn share_frontier(&mut self) {
+        self.order = FrontierOrder::Shared;
     }
 
     pub(crate) fn restrict(
@@ -313,6 +339,7 @@ impl RegionProposals {
                     candidates: std::mem::take(output),
                     stopped: None,
                 }),
+                order: self.order,
             };
             self.pool.install(|| {
                 workspaces
@@ -415,6 +442,7 @@ struct SlateFill<'a, 'filter> {
     output_slots: AtomicUsize,
     /// A leaf lock: the slate closes only after it is released.
     outcome: Mutex<Outcome>,
+    order: FrontierOrder,
 }
 
 enum Step {
@@ -424,6 +452,15 @@ enum Step {
 }
 
 impl<'filter> SlateFill<'_, 'filter> {
+    /// The deque producer `index` publishes to, takes from first and returns
+    /// regions to: its own, or the one deque all producers share.
+    fn home(&self, index: usize) -> usize {
+        match self.order {
+            FrontierOrder::PerProducer => index,
+            FrontierOrder::Shared => 0,
+        }
+    }
+
     fn outcome(&self) -> MutexGuard<'_, Outcome> {
         self.outcome.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -470,26 +507,27 @@ impl<'filter> SlateFill<'_, 'filter> {
     }
 
     /// One attempt to take a region under a newly reserved output slot: the
-    /// producer's own newest region, or, with an empty deque, a peer's oldest.
-    /// Under the gate only `try_lock` is used, and an own deque found busy ends
-    /// the attempt without a steal: a thief holds it, and it may still hold
-    /// this producer's regions, which its next attempt outside the gate waits
-    /// for. Every failed attempt settles the lease, so the back-off never waits
-    /// holding permits.
+    /// newest region of the producer's home deque, or, with that deque empty,
+    /// another deque's oldest. Under the gate only `try_lock` is used, and a
+    /// home deque found busy ends the attempt without a steal: another producer
+    /// holds it, and it may still hold regions, which the next attempt outside
+    /// the gate waits for. Every failed attempt settles the lease, so the
+    /// back-off never waits holding permits.
     fn admit(&self, index: usize, attempt: Attempt, lease: &WorkLease<'_>) -> Option<Entry> {
         if !self.reserve_slot() {
             lease.settle();
             return None;
         }
+        let home = self.home(index);
         let local = match attempt {
-            Attempt::Outside => Ok(self.frontier.take_local(index)),
-            Attempt::UnderGate => self.frontier.try_take_local(index),
+            Attempt::Outside => Ok(self.frontier.take_local(home)),
+            Attempt::UnderGate => self.frontier.try_take_local(home),
         };
         let entry = match local {
             Ok(Some(entry)) => Some(entry),
             Ok(None) => {
                 lease.settle();
-                self.frontier.steal(index)
+                self.frontier.steal(home)
             }
             Err(Busy) => {
                 lease.settle();
@@ -523,7 +561,10 @@ impl<'filter> SlateFill<'_, 'filter> {
         (cut, held): (Entry, Entry),
         reserve: impl FnOnce(&mut VecDeque<Entry>, usize) -> Result<(), Incomplete>,
     ) -> Option<Entry> {
-        match self.frontier.publish_split(index, [cut], reserve) {
+        match self
+            .frontier
+            .publish_split(self.home(index), [cut], reserve)
+        {
             Ok(()) => Some(held),
             Err(error) => {
                 self.fail(index, held, error);
@@ -533,14 +574,15 @@ impl<'filter> SlateFill<'_, 'filter> {
     }
 
     /// Stop the slate on `error`, then return `entry`, a region producer
-    /// `index` could not resolve, to its deque when storage permits. The order
-    /// is the guarantee: the stop closes the slate before the region becomes
-    /// visible, so a producer that takes it acquires its deque after the close,
-    /// sees the close in [`Self::ready`] and returns it unstepped. The recorded
-    /// stop keeps the run incomplete whether or not the region is retained.
+    /// `index` could not resolve, to its home deque when storage permits. The
+    /// order is the guarantee: the stop closes the slate before the region
+    /// becomes visible, so a producer that takes it acquires the deque after
+    /// the close, sees the close in [`Self::ready`] and returns it unstepped.
+    /// The recorded stop keeps the run incomplete whether or not the region is
+    /// retained.
     fn fail(&self, index: usize, entry: Entry, error: Incomplete) {
         self.stop(error);
-        self.frontier.requeue(index, entry);
+        self.frontier.requeue(self.home(index), entry);
     }
 
     /// Whether `entry`, a region the producer has just taken, may be stepped.
@@ -560,12 +602,14 @@ impl<'filter> SlateFill<'_, 'filter> {
     }
 
     /// After a refutation the producer keeps its output slot when it finds
-    /// another region at once: its own newest, or, with an empty deque, a
-    /// peer's oldest after settling its lease. Otherwise the slot is released.
+    /// another region at once: its home deque's newest, or, with that deque
+    /// empty, another deque's oldest after settling its lease. Otherwise the
+    /// slot is released.
     fn after_refutation(&self, index: usize, lease: &WorkLease<'_>) -> Option<Entry> {
-        let next = self.frontier.take_local(index).or_else(|| {
+        let home = self.home(index);
+        let next = self.frontier.take_local(home).or_else(|| {
             lease.settle();
-            self.frontier.steal(index)
+            self.frontier.steal(home)
         });
         if next.is_none() {
             self.release_slot();
@@ -591,7 +635,7 @@ impl<'filter> SlateFill<'_, 'filter> {
     /// Producer `index`'s part of the slate. It holds one lease throughout,
     /// checks the slate and polls control after it takes each region and
     /// before it steps it, keeps the newer child of each split in hand, and
-    /// returns a region it holds to its deque when the slate ends.
+    /// returns a region it holds to its home deque when the slate ends.
     fn produce(&self, index: usize, workspace: &mut Workspace<'filter>) {
         let mut lease = self.allowance.lease(self.cancellation);
         let mut search = SearchStatistics::default();
@@ -652,7 +696,7 @@ impl<'filter> SlateFill<'_, 'filter> {
             }
         }
         if let Some(entry) = hand {
-            self.frontier.requeue(index, entry);
+            self.frontier.requeue(self.home(index), entry);
         }
     }
 

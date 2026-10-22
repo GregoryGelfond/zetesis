@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 
 use super::{
-    Attempt, CandidateKnowledge, Entry, Mutex, Outcome, RegionProposals, SlateFill, Step,
-    Termination, Workspace, reserve_regions,
+    Attempt, CandidateKnowledge, Entry, FrontierOrder, Mutex, Outcome, RegionProposals, SlateFill,
+    Step, Termination, Workspace, reserve_regions,
 };
 use crate::search::{Budget, LocalQuota, SharedBudget};
 use crate::{
@@ -112,6 +112,10 @@ fn driver(theory: Theory, producers: usize) -> Driver {
 
 impl Driver {
     fn slate(&self, maximum: usize) -> SlateFill<'_, '_> {
+        self.slate_in(maximum, FrontierOrder::PerProducer)
+    }
+
+    fn slate_in(&self, maximum: usize, order: FrontierOrder) -> SlateFill<'_, '_> {
         SlateFill {
             theory: &self.theory,
             filter: None,
@@ -129,6 +133,7 @@ impl Driver {
                 candidates: Vec::with_capacity(maximum),
                 stopped: None,
             }),
+            order,
         }
     }
 }
@@ -379,6 +384,80 @@ fn a_stop_keeps_emitted_candidates_and_every_returned_hand() {
     assert_eq!(emitted(&slate), 1);
     assert_eq!(slate.frontier.termination.unresolved(), 1);
     assert_eq!(slate.frontier.queue(1).len(), 1);
+}
+
+#[test]
+fn a_shared_order_publishes_every_split_on_the_shared_deque() {
+    let driver = driver(tautologies(1), 2);
+    let slate = driver.slate_in(2, FrontierOrder::Shared);
+    let lease = driver.allowance.lease(&driver.cancellation);
+    let mut root = slate.admit(1, Attempt::Outside, &lease).unwrap();
+    let Step::Split(cut, held) = step(&slate, &mut root) else {
+        panic!("a tautology's root splits");
+    };
+    let _hand = slate.hand_over(1, (cut, held), reserve_regions).unwrap();
+    assert_eq!(slate.frontier.queue(0).len(), 1);
+    assert!(slate.frontier.queue(1).is_empty());
+}
+
+#[test]
+fn a_shared_order_resumes_with_the_region_published_last() {
+    let driver = driver(tautologies(2), 2);
+    let slate = driver.slate_in(3, FrontierOrder::Shared);
+    let lease = driver.allowance.lease(&driver.cancellation);
+    let mut root = slate.admit(0, Attempt::Outside, &lease).unwrap();
+    let Step::Split(cut, held) = step(&slate, &mut root) else {
+        panic!("a tautology's root splits");
+    };
+    let mut first = slate.hand_over(0, (cut, held), reserve_regions).unwrap();
+    // The peer takes the published child and publishes a newer region.
+    let mut second = slate.admit(1, Attempt::Outside, &lease).unwrap();
+    let Step::Split(cut, held) = step(&slate, &mut second) else {
+        panic!("a region with an open atom splits");
+    };
+    let _peer = slate.hand_over(1, (cut, held), reserve_regions).unwrap();
+    let Step::Split(cut, held) = step(&slate, &mut first) else {
+        panic!("a region with an open atom splits");
+    };
+    let _own = slate.hand_over(0, (cut, held), reserve_regions).unwrap();
+    let published_last = slate.frontier.queue(0).back().unwrap().0.clone();
+    // Producer 1 published its region before producer 0 published this one,
+    // so after a refutation producer 1 takes producer 0's.
+    let next = slate.after_refutation(1, &lease).unwrap();
+    assert_eq!(next.0, published_last);
+}
+
+#[test]
+fn producers_keep_their_own_deques_unless_bounds_are_expected() {
+    let theory = tautologies(2);
+    let search = StableModels::with_region_producers(
+        &theory,
+        nonzero(2),
+        Limits::default(),
+        Cancellation::default(),
+    )
+    .unwrap();
+    assert_eq!(
+        search.statistics().regions.unwrap().frontier_order,
+        Some(FrontierOrder::PerProducer)
+    );
+}
+
+#[test]
+fn expecting_candidate_bounds_shares_the_producers_frontier() {
+    let theory = tautologies(2);
+    let mut search = StableModels::with_region_producers(
+        &theory,
+        nonzero(2),
+        Limits::default(),
+        Cancellation::default(),
+    )
+    .unwrap();
+    search.expect_candidate_bounds();
+    assert_eq!(
+        search.statistics().regions.unwrap().frontier_order,
+        Some(FrontierOrder::Shared)
+    );
 }
 
 #[test]

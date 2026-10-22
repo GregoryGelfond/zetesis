@@ -279,11 +279,17 @@ changed under the lock of the deque whose change causes it, so its history is a
 linearization of the deques' changes and its peak the maximum of that history;
 the count and byte peaks need not occur together.
 
-The observation excludes the regions producers hold, retired worker storage, temporary split copies, shared immutable
-indexes, candidate batches, thread stacks, allocator overhead and device storage.
-It is neither peak process memory nor a memory limit. Uninstrumented traversal
-routes report absence, not zero. The statistics JSON preserves that distinction
-in `search.candidate_regions.frontier`.
+The observation excludes the regions producers hold, at most one per producer
+and per output slot, so a peak omits at most that many; it also excludes retired
+worker storage, temporary split copies, shared immutable indexes, candidate
+batches, thread stacks, allocator overhead and device storage. It is neither
+peak process memory nor a memory limit. Uninstrumented traversal routes report
+absence, not zero. The statistics JSON preserves that distinction in
+`search.candidate_regions.frontier`. Beside it, `frontier_order` reports whether
+the producers kept a deque each (`per_producer`) or shared one (`shared`, an
+optimizing search's order), and is `null` on routes without producers. With a
+shared deque the queued regions have no per-deque bound; the receipts still
+record their exact peak.
 
 ## Device resource scope
 

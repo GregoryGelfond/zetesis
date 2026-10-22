@@ -250,6 +250,21 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
             preparation.observe(observations)?;
         }
         self.bounds = Bounds::new(config);
+        // An optimizing search tightens the candidate bound with each better
+        // answer, so its producers share one frontier: production then stays
+        // where the latest splits are, and older regions wait for the tighter
+        // bounds that can refute them near the root.
+        if self.selection == AnswerSelection::Optimal
+            && self.bounds.is_enabled()
+            && self
+                .objective_plan
+                .as_ref()
+                .and_then(Preparation::plan)
+                .is_some()
+            && let Some(models) = self.models.as_mut()
+        {
+            models.expect_candidate_bounds();
+        }
         Ok(())
     }
 

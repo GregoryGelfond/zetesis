@@ -41,7 +41,7 @@ pub use error::Incomplete;
 pub use ferraris::{
     BatchError, BatchLimits, BatchStatistics, BatchVerdict, CertificateError, CertificateLimits,
     CertificateOrder, CertificatePlanStatistics, CertifiedStatistics, Check, CompletionExecutor,
-    CompletionScratch, CompletionStatistics, Engagement, GeneratorOrderStatistics,
+    CompletionScratch, CompletionStatistics, Engagement, FrontierOrder, GeneratorOrderStatistics,
     GeneratorOrderStatus, Limits, RegionCounts, RegionFrontierStatistics, RegionSearchStatistics,
     RegionWalkEngagement, RegionWorkerStatistics, SearchMethod, StableModels, Statistics,
     SupportStatistics, SupportStatus, check, check_with,

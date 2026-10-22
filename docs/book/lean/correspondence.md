@@ -2055,7 +2055,11 @@ regions in hand plus the emitted candidates, and the hand-over are Rust
 obligations beside the walker's queue and gate protocols, as is the stop's
 order: a failed region returns to a deque only after the stop closes the slate,
 and a producer checks for the close after each take, so no region is stepped
-again after its step failed.
+again after its step failed. An optimizing search's producers share one deque,
+taking the region published most recently; the frontier is still the deques
+and the hands, every transition only moves a region between them, and the same
+permutation argument applies. Only the order of exploration, and the bound on
+queued regions, differ.
 
 After producers join, emitted candidates enter the pending membership ledger.
 `BatchAccounting.exact_commit_preserves_soundness` justifies committing a fully

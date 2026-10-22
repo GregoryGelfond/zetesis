@@ -1028,6 +1028,11 @@ fn region_statistics(
     out.text("}")?;
     out.text(",\"frontier\":")?;
     frontier_statistics(out, stats.frontier)?;
+    out.text(",\"frontier_order\":")?;
+    match stats.frontier_order {
+        Some(order) => out.string(order.label())?,
+        None => out.text("null")?,
+    }
     out.text(",\"workers\":")?;
     worker_statistics(out, stats.workers)?;
     out.text("}")
