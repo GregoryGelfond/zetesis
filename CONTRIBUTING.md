@@ -154,13 +154,19 @@ possibly a location nothing wrote. Pipelines keep WebGPU's zero-fill of
 workgroup memory (`ZERO_FILL_WORKGROUP_MEMORY` in the wgpu runtime), which this
 rule makes unobservable. The rule is held pending a measurement of whether
 dropping the fill pays: the fill is removed only where a measured kernel-time
-gain repays it, and only once that kernel's physical comparison also passes
-with every workgroup location first set to all zeros and to all ones, with
-identical result records. Without the fill an unwritten location would hold
-whatever the memory last held, which can be another program's data. Review
-every new kernel, workgroup variable and workgroup index against this rule, and
-restate it in the kernel's header; the physical tests' CPU comparisons are
-evidence for it, not proof.
+gain repays it, and only once, at the commit that removes it, that kernel is
+reviewed against this rule again and its physical comparison also passes with
+every workgroup location first set to all zeros and to all ones, with identical
+result records. The formula kernel's round and work counts are excluded from
+that comparison, since they vary between runs of one input with the order of
+its atomic narrowing; a read before write that changed only those counts would
+go undetected, within the round and work limits whose residuals the host
+completes exactly. Without the fill an unwritten location would hold whatever
+the memory last held, which can be another program's data. Review every change
+to a kernel with workgroup memory against this rule, not only new kernels,
+workgroup variables and indices: moving, removing or conditioning a write, a
+barrier or a uniform load can break it too. Restate the rule in the kernel's
+header; the physical tests' CPU comparisons are evidence for it, not proof.
 
 Separate three obligations: semantic laws, executable representation/refinement,
 and measured backend behavior. Existing Lean laws do not certify Rust, shaders,
