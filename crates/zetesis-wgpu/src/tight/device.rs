@@ -89,8 +89,16 @@ impl GpuTightOracle {
     /// Workgroup strides per dependency level that dense evaluation of a
     /// resident schedule must take, on average, at its dispatched workgroup
     /// size before the update route engages. Narrower schedules report
-    /// [`TightGpuUpdateUnavailable::NarrowSchedule`]. An execution choice that
-    /// changes no verdict.
+    /// [`TightGpuUpdateUnavailable::NarrowSchedule`].
+    ///
+    /// An execution choice that changes no verdict, calibrated by measurement
+    /// on an Apple M4 Pro GPU under Metal; another device or backend can break
+    /// even at a different factor. The choice is asymmetric: a declined
+    /// schedule keeps dense evaluation, so a factor set high only forgoes
+    /// gains, while one set low slows the schedules it engages. The rule sees
+    /// only the schedule's shape: a change that reaches many nodes of one
+    /// queued word can still make an engaged update slower than dense
+    /// evaluation.
     pub const UPDATE_ENGAGEMENT_STRIDES: u64 = update::ENGAGEMENT_STRIDES;
 
     /// Create an independently owned device and kernel using hard adapter
