@@ -548,18 +548,20 @@ candidate search algorithm or alter the original frozen reduct.
 
 Separate deques suit an enumeration, which visits every region whatever the
 order. A caller that tightens candidate bounds as it commits answers declares
-so with `StableModels::expect_candidate_bounds`, and the solver does for every
-optimizing search. Its producers then share one deque: each publishes there and
-takes the region any producer published most recently, so a slate fills from
-the area where the latest splits are, and older, shallower regions wait for the
-tighter bounds that refute them near the root. Kept apart, producers would each
-descend a large subtree under the bound in force when they took it, or under
-none before the first, exploring far more regions. The shared deque gives up
-the per-deque bound: a schedule in which producers keep leaving their paths for
-a newer region can queue regions bounded only by the tree, as with the single
-stack the producers used before they kept deques. Entry capacity still grows
-fallibly, and the frontier receipts record its exact peak. `frontier_order` in
-the region statistics reports which order ran.
+so with `StableModels::expect_candidate_bounds` before the stream's first
+proposal, and the solver does for every optimizing search; a started stream
+refuses the declaration, so one order governs every slate. Its producers then
+share one deque: each publishes there and takes the region any producer
+published most recently, so a slate fills from the area where the latest splits
+are, and older, shallower regions wait for the tighter bounds that refute them
+near the root. Kept apart, producers would each descend a large subtree under
+the bound in force when they took it, or under none before the first, exploring
+far more regions. The shared deque gives up the per-deque bound: a schedule in
+which producers keep leaving their paths for a newer region can queue regions
+bounded only by the tree, as with the single stack the producers used before
+they kept deques. Entry capacity still grows fallibly, and the frontier
+receipts record its exact peak. `frontier_order` in the region statistics
+reports the stream's order.
 
 Each region's lease settles before its worker waits for work or sends a model,
 returning unused permits to the other workers. The shared allowance includes

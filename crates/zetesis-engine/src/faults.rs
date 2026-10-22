@@ -226,6 +226,7 @@ fn sat_class(error: zetesis_sat::Incomplete) -> Class {
         | E::InvalidRegionConsequence
         | E::RegionFilterUnsupported
         | E::LateRegionFilter
+        | E::LateCandidateBounds
         | E::RegionFilterAlreadySet
         | E::InvalidWitness => Class::Engine,
     }

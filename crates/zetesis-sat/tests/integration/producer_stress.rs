@@ -34,8 +34,9 @@ const QUEENS: &str =
 /// unoptimized portable suite within tens of seconds.
 const RUNS: usize = 4;
 /// Runs per combination with the shared deque, which half the time budget
-/// covers: every producer takes from one deque, so their interleavings vary
-/// less than those of separate deques.
+/// covers: every producer publishes to and takes from one deque, so no
+/// producer ever steals a region, and the interleavings of stealing between
+/// separate deques do not arise.
 const SHARED_RUNS: usize = 2;
 /// Far above any correct run of these small instances, so it never fires in
 /// normal operation but turns a hang into a test failure.
@@ -70,7 +71,7 @@ fn family(theory: &Theory, producers: usize, slates: Slates, shared: bool) -> BT
     )
     .unwrap();
     if shared {
-        search.expect_candidate_bounds();
+        search.expect_candidate_bounds().unwrap();
     }
     let mut models = BTreeSet::new();
     let mut slate = 0;

@@ -220,10 +220,10 @@ impl RegionProposals {
         }
     }
 
-    /// From the next slate on, every producer shares deque 0, the deque that
-    /// holds the root: the order for a caller that tightens candidate bounds.
-    /// Regions already queued in other deques stay reachable, since a producer
-    /// whose shared deque is empty steals from the others.
+    /// Every producer shares deque 0, the deque that holds the root: the order
+    /// for a caller that tightens candidate bounds. The stream declares it
+    /// before its first proposal, while the root is the only queued region, so
+    /// every region the producers publish or return stays on the shared deque.
     pub(crate) fn share_frontier(&mut self) {
         self.order = FrontierOrder::Shared;
     }

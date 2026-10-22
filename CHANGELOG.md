@@ -34,10 +34,12 @@ Notable changes by release. Versions follow Semantic Versioning.
   and the slates that returned to the batch size on objective-bound feedback.
 - `StableModels::bound_generation` reports how many objective bounds the
   candidate stream has installed.
-- `StableModels::expect_candidate_bounds` declares a caller that tightens
-  candidate bounds as it commits answers, so GPU-route producers share one
-  frontier. `RegionSearchStatistics::frontier_order` and the statistics JSON's
-  `search.candidate_regions.frontier_order` report the order the producers used.
+- `StableModels::expect_candidate_bounds` declares, before the stream's first
+  proposal, a caller that tightens candidate bounds as it commits answers, so
+  GPU-route producers share one frontier for the whole stream; a started stream
+  refuses the declaration with `Incomplete::LateCandidateBounds`.
+  `RegionSearchStatistics::frontier_order` and the statistics JSON's
+  `search.candidate_regions.frontier_order` report the stream's order.
 - Requested GPU statistics report how tight support checking evaluated each
   candidate (complete, dense reuse or update) and whether the update route was
   available, with its reason when it was not, and whether any batch held the
@@ -145,6 +147,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   `u32::MAX` are refused with a capacity error, where 0.6.0 refused only those
   within 64, keeping room for the largest workgroup stride. Device buffer limits
   keep such graphs out of reach on the adapters measured.
+- `zetesis_sat::Incomplete` gains `LateCandidateBounds`, so an exhaustive match
+  on it needs an arm for the new variant.
 
 ## 0.6.0 — 2026-10-14
 

@@ -137,6 +137,7 @@ fn countermodel_stops_have_distinct_machine_codes() {
         (Incomplete::WrongTheory, "wrong_theory"),
         (Incomplete::ClosedEnumerator, "closed_enumerator"),
         (Incomplete::LateCertificate, "late_certificate"),
+        (Incomplete::LateCandidateBounds, "late_candidate_bounds"),
         (Incomplete::InvalidWitness, "invalid_witness"),
         (
             Incomplete::InvalidRegionConsequence,

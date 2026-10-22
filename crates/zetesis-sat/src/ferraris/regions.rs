@@ -245,8 +245,9 @@ pub struct RegionSearchStatistics {
     /// and the device route's pool starts at construction, so both report
     /// `None`.
     pub workers: Option<RegionWorkerStatistics>,
-    /// The order in which the parallel candidate producers take regions.
-    /// Routes without producers report `None`.
+    /// The order in which the parallel candidate producers take regions,
+    /// fixed for the stream before its first proposal. Routes without
+    /// producers report `None`.
     pub frontier_order: Option<FrontierOrder>,
 }
 

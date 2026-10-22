@@ -262,8 +262,12 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                 .and_then(Preparation::plan)
                 .is_some()
             && let Some(models) = self.models.as_mut()
+            && let Err(error) = models.expect_candidate_bounds()
         {
-            models.expect_candidate_bounds();
+            self.complete(
+                SearchState::Interrupted(Interruption::Countermodel(error)),
+                phases,
+            );
         }
         Ok(())
     }

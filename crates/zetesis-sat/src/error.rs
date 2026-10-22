@@ -74,6 +74,9 @@ pub enum Incomplete {
     RegionFilterUnsupported,
     /// A region filter cannot be installed after candidate traversal began.
     LateRegionFilter,
+    /// Candidate bounds cannot be declared after candidate traversal began:
+    /// the producers' frontier order is fixed for the whole stream.
+    LateCandidateBounds,
     /// An installed original-region filter cannot be replaced.
     RegionFilterAlreadySet,
     /// Optional candidate certification stopped without establishing membership.
@@ -153,6 +156,9 @@ impl fmt::Display for Incomplete {
             }
             Self::LateRegionFilter => {
                 f.write_str("candidate-region filtering requires an unstarted stream")
+            }
+            Self::LateCandidateBounds => {
+                f.write_str("declaring candidate bounds requires an unstarted stream")
             }
             Self::RegionFilterAlreadySet => {
                 f.write_str("candidate-region filter is already installed")

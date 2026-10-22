@@ -286,10 +286,10 @@ batches, thread stacks, allocator overhead and device storage. It is neither
 peak process memory nor a memory limit. Uninstrumented traversal routes report
 absence, not zero. The statistics JSON preserves that distinction in
 `search.candidate_regions.frontier`. Beside it, `frontier_order` reports whether
-the producers kept a deque each (`per_producer`) or shared one (`shared`, an
-optimizing search's order), and is `null` on routes without producers. With a
-shared deque the queued regions have no per-deque bound; the receipts still
-record their exact peak.
+the producers keep a deque each (`per_producer`) or share one (`shared`, an
+optimizing search's order), an order fixed before the stream's first proposal,
+and is `null` on routes without producers. With a shared deque the queued
+regions have no per-deque bound; the receipts still record their exact peak.
 
 ## Device resource scope
 

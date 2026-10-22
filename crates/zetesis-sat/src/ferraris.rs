@@ -767,22 +767,47 @@ impl StableModels {
         result
     }
 
-    /// Declare that the caller will tighten candidate bounds
-    /// ([`Self::tighten_candidate_bound`]) as it commits answers, as an
-    /// optimizing search does. Region producers
+    /// Declare, before the stream's first proposal, that the caller will
+    /// tighten candidate bounds ([`Self::tighten_candidate_bound`]) as it
+    /// commits answers, as an optimizing search does. Region producers
     /// ([`Self::with_region_producers`]) then share one frontier
-    /// ([`FrontierOrder::Shared`]) from their next slate on: every producer
-    /// takes the region any producer published most recently, so a slate fills
-    /// from the area the latest splits opened, and older, shallower regions
-    /// wait for the tighter bounds that refute them near the root. Without the
+    /// ([`FrontierOrder::Shared`]) for the whole stream: every producer takes
+    /// the region any producer published most recently, so a slate fills from
+    /// the area the latest splits opened, and older, shallower regions wait for
+    /// the tighter bounds that refute them near the root. Without the
     /// declaration each producer keeps its own deque, the order an enumeration
     /// prefers. Other routes are unaffected, and answer sets are unchanged
-    /// either way. Declare before the first proposal for the order to govern
-    /// every slate.
-    pub fn expect_candidate_bounds(&mut self) {
+    /// either way.
+    ///
+    /// # Errors
+    /// Refuses a closed or started stream, so one order governs every slate
+    /// and the region statistics' `frontier_order` names the order the
+    /// stream's producers take regions in.
+    pub fn expect_candidate_bounds(&mut self) -> Result<(), Incomplete> {
+        if self.terminal {
+            return Err(Incomplete::ClosedEnumerator);
+        }
+        if self.started() {
+            return Err(Incomplete::LateCandidateBounds);
+        }
         if let Proposer::Proposals(proposals) = &mut self.proposer {
             proposals.share_frontier();
         }
+        Ok(())
+    }
+
+    /// Whether candidate traversal has begun: an error or batch is pending, a
+    /// candidate was proposed or queried, or a region was visited. Choices
+    /// that must govern the whole traversal refuse a started stream.
+    fn started(&self) -> bool {
+        let statistics = self.statistics();
+        self.pending_error.is_some()
+            || !self.batch.pending.is_empty()
+            || statistics.candidates != 0
+            || statistics.candidate_queries != 0
+            || statistics
+                .regions
+                .is_some_and(|regions| regions.counts.regions != 0)
     }
 
     /// Install a caller-owned original-program condition before traversal.
@@ -801,15 +826,7 @@ impl StableModels {
         if self.terminal {
             return Err(Incomplete::ClosedEnumerator);
         }
-        let statistics = self.statistics();
-        if self.pending_error.is_some()
-            || !self.batch.pending.is_empty()
-            || statistics.candidates != 0
-            || statistics.candidate_queries != 0
-            || statistics
-                .regions
-                .is_some_and(|regions| regions.counts.regions != 0)
-        {
+        if self.started() {
             return Err(Incomplete::LateRegionFilter);
         }
         if self.proposer.filter().is_some() {

@@ -40,12 +40,20 @@ fn frontier_record_respects_the_output_limit() {
 
 #[test]
 fn region_statistics_name_the_producers_frontier_order() {
-    let mut statistics = zetesis_sat::RegionSearchStatistics::default();
-    statistics.frontier_order = Some(zetesis_sat::FrontierOrder::Shared);
-    let mut output = Buffer::new(4096);
-    region_statistics(&mut output, Some(&statistics)).unwrap();
-    let actual = String::from_utf8(output.bytes).unwrap();
-    assert!(actual.contains("\"frontier_order\":\"shared\""), "{actual}");
+    for (order, spelling) in [
+        (zetesis_sat::FrontierOrder::PerProducer, "per_producer"),
+        (zetesis_sat::FrontierOrder::Shared, "shared"),
+    ] {
+        let mut statistics = zetesis_sat::RegionSearchStatistics::default();
+        statistics.frontier_order = Some(order);
+        let mut output = Buffer::new(4096);
+        region_statistics(&mut output, Some(&statistics)).unwrap();
+        let actual = String::from_utf8(output.bytes).unwrap();
+        assert!(
+            actual.contains(&format!("\"frontier_order\":\"{spelling}\"")),
+            "{actual}"
+        );
+    }
 }
 
 #[test]

@@ -111,8 +111,57 @@ fn driver(theory: Theory, producers: usize) -> Driver {
 }
 
 impl Driver {
+    /// A driver over a stream's own producers and frontier, resuming them as
+    /// each proposal does, so its slates take the order the stream proposes
+    /// with.
+    fn of_stream(search: StableModels) -> Self {
+        let theory = search.theory.clone();
+        let super::super::Proposer::Proposals(proposals) = search.proposer else {
+            panic!("a stream with region producers proposes through them");
+        };
+        let mut proposals = *proposals;
+        proposals.frontier.termination =
+            Termination::resuming(proposals.frontier.termination.unresolved());
+        Self {
+            narrower: Narrower::new(&theory),
+            proposals,
+            allowance: SharedBudget::new(SearchLimits::default(), SearchStatistics::default()),
+            cancellation: Cancellation::default(),
+            theory,
+        }
+    }
+
     fn slate(&self, maximum: usize) -> SlateFill<'_, '_> {
         self.slate_in(maximum, FrontierOrder::PerProducer)
+    }
+
+    /// The deque on which producer `index` publishes its first split, in a
+    /// slate taking the stream's own order. Leaves it takes first are emitted.
+    fn first_publication(&self, index: usize, producers: usize) -> usize {
+        let slate = self.slate_in(64, self.proposals.order);
+        let lease = self.allowance.lease(&self.cancellation);
+        loop {
+            let mut entry = slate
+                .admit(index, Attempt::Outside, &lease)
+                .expect("a queued region remains");
+            match step(&slate, &mut entry) {
+                Step::Split(cut, held) => {
+                    let published = cut.0.clone();
+                    let _hand = slate.hand_over(index, (cut, held), reserve_regions);
+                    return (0..producers)
+                        .find(|&deque| {
+                            slate
+                                .frontier
+                                .queue(deque)
+                                .back()
+                                .is_some_and(|newest| newest.0 == published)
+                        })
+                        .expect("the published child is queued");
+                }
+                Step::Candidate(candidate) => slate.emit(candidate),
+                Step::Refuted => panic!("tautologies refute no region"),
+            }
+        }
     }
 
     fn slate_in(&self, maximum: usize, order: FrontierOrder) -> SlateFill<'_, '_> {
@@ -439,35 +488,82 @@ fn a_shared_order_resumes_with_the_region_published_last() {
 }
 
 #[test]
-fn producers_keep_their_own_deques_unless_bounds_are_expected() {
-    let theory = tautologies(2);
-    let search = StableModels::with_region_producers(
-        &theory,
+fn a_per_producer_order_publishes_each_split_on_its_producers_deque() {
+    let driver = driver(tautologies(1), 2);
+    let slate = driver.slate(2);
+    let lease = driver.allowance.lease(&driver.cancellation);
+    // Producer 1's deque is empty, so it steals the root from deque 0.
+    let mut root = slate.admit(1, Attempt::Outside, &lease).unwrap();
+    let Step::Split(cut, held) = step(&slate, &mut root) else {
+        panic!("a tautology's root splits");
+    };
+    let _hand = slate.hand_over(1, (cut, held), reserve_regions).unwrap();
+    assert_eq!(slate.frontier.queue(1).len(), 1);
+    assert!(slate.frontier.queue(0).is_empty());
+}
+
+fn two_producers(theory: &Theory) -> StableModels {
+    StableModels::with_region_producers(
+        theory,
         nonzero(2),
         Limits::default(),
         Cancellation::default(),
     )
-    .unwrap();
+    .unwrap()
+}
+
+#[test]
+fn producers_keep_their_own_deques_unless_bounds_are_expected() {
+    let search = two_producers(&tautologies(2));
     assert_eq!(
         search.statistics().regions.unwrap().frontier_order,
         Some(FrontierOrder::PerProducer)
     );
+    assert_eq!(Driver::of_stream(search).first_publication(1, 2), 1);
 }
 
 #[test]
 fn expecting_candidate_bounds_shares_the_producers_frontier() {
-    let theory = tautologies(2);
-    let mut search = StableModels::with_region_producers(
-        &theory,
-        nonzero(2),
-        Limits::default(),
-        Cancellation::default(),
-    )
-    .unwrap();
-    search.expect_candidate_bounds();
+    let mut search = two_producers(&tautologies(2));
+    search.expect_candidate_bounds().unwrap();
     assert_eq!(
         search.statistics().regions.unwrap().frontier_order,
         Some(FrontierOrder::Shared)
+    );
+    assert_eq!(Driver::of_stream(search).first_publication(1, 2), 0);
+}
+
+#[test]
+fn a_started_stream_refuses_candidate_bounds_and_keeps_its_order() {
+    let mut search = two_producers(&tautologies(4));
+    let limits = crate::BatchLimits {
+        max_candidates: nonzero(1),
+        max_pending_bytes: 4096,
+    };
+    let models = search
+        .next_batch(limits, |_, candidates| {
+            Ok::<_, std::convert::Infallible>(vec![crate::BatchVerdict::Residual; candidates.len()])
+        })
+        .unwrap();
+    assert_eq!(models.len(), 1);
+    assert_eq!(
+        search.expect_candidate_bounds(),
+        Err(Incomplete::LateCandidateBounds)
+    );
+    assert_eq!(
+        search.statistics().regions.unwrap().frontier_order,
+        Some(FrontierOrder::PerProducer)
+    );
+    assert_eq!(Driver::of_stream(search).first_publication(1, 2), 1);
+}
+
+#[test]
+fn a_closed_stream_refuses_candidate_bounds() {
+    let mut search = two_producers(&tautologies(2));
+    search.stop().unwrap();
+    assert_eq!(
+        search.expect_candidate_bounds(),
+        Err(Incomplete::ClosedEnumerator)
     );
 }
 
