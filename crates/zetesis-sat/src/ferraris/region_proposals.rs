@@ -52,11 +52,11 @@
 //! in hand but a panicking producer's returns to a deque. A stop never
 //! establishes coverage. A cancellation or deadline that a producer observes
 //! once the slate is full is left to the next slate's first poll, which
-//! observes it again, so no stop follows the emission that fills a slate. Each
-//! producer retains its checker and worklists between slates. These are
-//! scratch for the same immutable source, not knowledge about a candidate: the
-//! latter travels with its frontier region. Candidate order depends on
-//! scheduling, while identity and coverage do not.
+//! observes it again, so no polled stop follows the emission that fills a
+//! slate. Each producer retains its checker and worklists between slates.
+//! These are scratch for the same immutable source, not knowledge about a
+//! candidate: the latter travels with its frontier region. Candidate order
+//! depends on scheduling, while identity and coverage do not.
 
 use std::collections::VecDeque;
 use std::num::NonZeroUsize;
@@ -632,10 +632,19 @@ impl<'filter> SlateFill<'_, 'filter> {
         }
     }
 
+    /// Leaving the slate, producer `index` returns the region it holds, if
+    /// any, to its home deque, so the region stays queued for the next slate.
+    /// [`Self::produce`] leaves through this one transition on every exit.
+    fn leave(&self, index: usize, hand: Option<Entry>) {
+        if let Some(entry) = hand {
+            self.frontier.requeue(self.home(index), entry);
+        }
+    }
+
     /// Producer `index`'s part of the slate. It holds one lease throughout,
     /// checks the slate and polls control after it takes each region and
     /// before it steps it, keeps the newer child of each split in hand, and
-    /// returns a region it holds to its home deque when the slate ends.
+    /// leaves through [`Self::leave`] when the slate ends.
     fn produce(&self, index: usize, workspace: &mut Workspace<'filter>) {
         let mut lease = self.allowance.lease(self.cancellation);
         let mut search = SearchStatistics::default();
@@ -695,9 +704,7 @@ impl<'filter> SlateFill<'_, 'filter> {
                 break;
             }
         }
-        if let Some(entry) = hand {
-            self.frontier.requeue(self.home(index), entry);
-        }
+        self.leave(index, hand);
     }
 
     fn step<'a>(

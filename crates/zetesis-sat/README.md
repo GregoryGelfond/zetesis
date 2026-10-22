@@ -539,8 +539,8 @@ continued child, a refutation keeps it only while the producer finds another
 region at once, and a classical leaf consumes it. Each producer holds one work
 lease per slate. Every slate's producers join before device execution begins. A
 cancellation or deadline observed once the slate is full is left to the next
-slate, so no stop follows the emission that fills it. A checker failure keeps
-admitted candidates retryable; a producer or validation stop retains the
+slate, so no polled stop follows the emission that fills it. A checker failure
+keeps admitted candidates retryable; a producer or validation stop retains the
 completed admitted prefix and leaves enumeration incomplete. Output order is
 schedule-dependent. The batch payload limit excludes frontier knowledge and
 worker thread stacks; it is not an RSS bound. This does not introduce a new

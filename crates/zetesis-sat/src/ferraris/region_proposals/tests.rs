@@ -251,6 +251,10 @@ fn a_refutation_keeps_its_slot_only_while_work_can_be_found() {
     let slate = driver.slate(2);
     let lease = driver.allowance.lease(&driver.cancellation);
     let _refuted = slate.admit(0, Attempt::Outside, &lease).unwrap();
+    // Local work: the producer takes its own newest region.
+    slate.frontier.requeue(0, open(1));
+    assert!(slate.after_refutation(0, &lease).is_some());
+    assert_eq!(slots(&slate), 1);
     slate.frontier.requeue(1, open(1));
     // An empty own deque: the producer steals its peer's region.
     assert!(slate.after_refutation(0, &lease).is_some());
@@ -362,7 +366,21 @@ fn a_failed_region_is_taken_only_from_a_closed_slate() {
 }
 
 #[test]
-fn a_stop_keeps_emitted_candidates_and_every_returned_hand() {
+fn a_stop_keeps_emitted_candidates() {
+    let driver = driver(tautologies(0), 2);
+    let slate = driver.slate(2);
+    let lease = driver.allowance.lease(&driver.cancellation);
+    let mut root = slate.admit(0, Attempt::Outside, &lease).unwrap();
+    let Step::Candidate(candidate) = step(&slate, &mut root) else {
+        panic!("an atomless region is a leaf");
+    };
+    slate.emit(candidate);
+    slate.stop(Incomplete::WorkLimit);
+    assert_eq!(emitted(&slate), 1);
+}
+
+#[test]
+fn a_producer_leaving_a_stopped_slate_returns_its_hand() {
     let driver = driver(tautologies(1), 2);
     let slate = driver.slate(3);
     let lease = driver.allowance.lease(&driver.cancellation);
@@ -370,20 +388,13 @@ fn a_stop_keeps_emitted_candidates_and_every_returned_hand() {
     let Step::Split(cut, held) = step(&slate, &mut root) else {
         panic!("a tautology's root splits");
     };
-    let mut first = slate.hand_over(0, (cut, held), reserve_regions).unwrap();
-    // The peer steals the published child; the owner's hand becomes a leaf.
+    let _first = slate.hand_over(0, (cut, held), reserve_regions).unwrap();
+    // The peer steals the published child, and a stop ends the slate.
     let second = slate.admit(1, Attempt::Outside, &lease).unwrap();
-    let Step::Candidate(candidate) = step(&slate, &mut first) else {
-        panic!("a fully decided region is a leaf");
-    };
-    slate.emit(candidate);
     slate.stop(Incomplete::WorkLimit);
-    // Leaving a closed slate, the peer returns its hand.
-    slate.frontier.requeue(1, second);
-    assert_eq!(stopped(&slate), Some(Incomplete::WorkLimit));
-    assert_eq!(emitted(&slate), 1);
-    assert_eq!(slate.frontier.termination.unresolved(), 1);
+    slate.leave(1, Some(second));
     assert_eq!(slate.frontier.queue(1).len(), 1);
+    assert_eq!(slate.frontier.termination.unresolved(), 2);
 }
 
 #[test]

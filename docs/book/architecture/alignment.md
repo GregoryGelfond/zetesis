@@ -77,7 +77,7 @@ constraint satisfaction on the host. Formula solving combines host candidate pro
 backend. Explicit GPU execution with automatic membership policy uses complete
 tight certificates when available; other formulas use GPU propagation and exact
 host completion.
-With multiple workers, joined Rayon rounds produce bounded candidate batches
+With multiple workers, joined Rayon producers fill bounded candidate slates
 before device checking. Ordinary GPU formula execution retains native threshold
 and ordinal min/max rows. The separate `GpuAggregateOracle` remains an explicit
 library capability over supplied eligibility masks; ordinary solving does not

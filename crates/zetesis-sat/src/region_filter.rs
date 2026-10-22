@@ -79,7 +79,7 @@ pub trait RegionFilter: Debug + Send + Sync {
 ///
 /// A checker belongs to one enumeration and is never used concurrently. It must
 /// be transferable between threads: joined candidate production retains its
-/// task-local scratch between batches without fixing a task to an OS thread.
+/// task-local scratch between slates without fixing a task to an OS thread.
 pub trait RegionFilterWorker: Send {
     /// Read a region after original-theory and candidate-restriction narrowing.
     /// The theory and region are immutable; no learned restriction enters the
