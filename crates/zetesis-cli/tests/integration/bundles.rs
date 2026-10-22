@@ -92,9 +92,11 @@ fn stdin_syntax_failure_renders_each_diagnostic_once() {
 #[test]
 fn a_gpu_backend_syntax_failure_reports_the_cpu_diagnostic() {
     // A GPU solve begins its adapter enumeration once its configuration is
-    // validated, before reading its sources; a source that fails to parse
-    // never constructs a GPU primitive, so the enumeration reports nothing,
-    // whether or not the host has a device.
+    // validated, before reading its sources. A source that fails to parse never
+    // constructs a GPU primitive, so the solve reports the CPU diagnostic with
+    // the CPU status and output. The platform's loader may print lines of its
+    // own while it enumerates, for example a Vulkan loader on a host without a
+    // working driver, so the diagnostic's lines are matched in order among them.
     let fixture = BundleFixture::new();
     fixture.write("entry.lp", MALFORMED_CHOICE);
     let solve = |backend: &str| {
@@ -116,7 +118,14 @@ fn a_gpu_backend_syntax_failure_reports_the_cpu_diagnostic() {
     );
     assert_eq!(gpu.status.code(), cpu.status.code());
     assert_eq!(gpu.stdout, cpu.stdout);
-    assert_eq!(String::from_utf8(gpu.stderr).unwrap(), diagnostic);
+    let reported = String::from_utf8(gpu.stderr).unwrap();
+    let mut lines = reported.lines();
+    for expected in diagnostic.lines() {
+        assert!(
+            lines.any(|line| line == expected),
+            "{expected:?} missing, or out of order, in {reported}"
+        );
+    }
 }
 
 #[test]

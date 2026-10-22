@@ -74,52 +74,55 @@ fn dropping_an_unconsumed_discovery_joins_its_thread() {
     assert!(receiver.try_recv().is_ok());
 }
 
+/// One solve-path primitive's constructor, reporting the adapter it chose.
+type Construct = fn(GpuDeviceSource<'_>) -> crate::GpuInfo;
+
 // Each solve-path primitive constructed from a discovery selects over its
-// prefetched enumeration and chooses the adapter its independent constructor
-// chooses.
+// prefetched enumeration and chooses the adapter its own independent
+// constructor chooses, each under its own capability check.
 fn discovered_adapter(api: GpuApi) {
     let selection = GpuSelection { api };
     let options = GpuOptions::default();
-    let independent = crate::GpuFormulaOracle::new_selected(options, selection)
-        .unwrap()
-        .info()
-        .clone();
-    let discovered = |construct: &dyn Fn(GpuDeviceSource<'_>) -> crate::GpuInfo| {
+    let primitives: [Construct; 4] = [
+        |source| {
+            crate::GpuFormulaOracle::from_source(source)
+                .unwrap()
+                .info()
+                .clone()
+        },
+        |source| {
+            crate::GpuTightOracle::from_source(source)
+                .unwrap()
+                .info()
+                .clone()
+        },
+        |source| {
+            crate::GpuLazyOracle::from_source(source)
+                .unwrap()
+                .info()
+                .clone()
+        },
+        |source| {
+            crate::GpuOracle::from_source(source)
+                .unwrap()
+                .info()
+                .clone()
+        },
+    ];
+    for construct in primitives {
+        let independent = construct(GpuDeviceSource::Selected {
+            options,
+            selection,
+            timing: false,
+        });
         let discovery = GpuDiscovery::spawn(selection);
-        let info = construct(GpuDeviceSource::Discovered {
+        let discovered = construct(GpuDeviceSource::Discovered {
             discovery: &discovery,
             options,
             timing: false,
         });
         assert!(discovery.served());
-        info
-    };
-    let formula = discovered(&|source| {
-        crate::GpuFormulaOracle::from_source(source)
-            .unwrap()
-            .info()
-            .clone()
-    });
-    let tight = discovered(&|source| {
-        crate::GpuTightOracle::from_source(source)
-            .unwrap()
-            .info()
-            .clone()
-    });
-    let lazy = discovered(&|source| {
-        crate::GpuLazyOracle::from_source(source)
-            .unwrap()
-            .info()
-            .clone()
-    });
-    let closure = discovered(&|source| {
-        crate::GpuOracle::from_source(source)
-            .unwrap()
-            .info()
-            .clone()
-    });
-    for chosen in [formula, tight, lazy, closure] {
-        assert_eq!(chosen, independent);
+        assert_eq!(discovered, independent);
     }
 }
 
