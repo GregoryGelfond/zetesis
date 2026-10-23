@@ -919,13 +919,14 @@ among the granted sizes 64, 128 and 256 whose invocation slots `W·I(W)` stay
 within twice those of 64, the smallest size attaining the least depth. A serial
 schedule, or one whose levels each hold at most 64 nodes, keeps 64. A widest
 level of 65 to 128 nodes selects 128, and 256 needs a wider level and
-`I(256) ≤ I(64)/2`. Where a batch leaves the device latency-bound, the dense level
-pass takes time following the strided depth; where a batch oversubscribes the
-device it follows the invocation slots, which the bound keeps within twice the
-64-invocation time. The bound covers that pass only: the tight kernel's serial
-bypass for a tight work allowance occupies the whole workgroup with one
-invocation, up to four times the 64-invocation cost, and the opt-in active-word
-routes are not modelled.
+`I(256) ≤ I(64)/2`. The selection depends on the level widths and the granted
+limits only, not on the adapter's subgroup size. Where a batch leaves the device
+latency-bound, the dense level pass takes time following the strided depth;
+where a batch oversubscribes the device it follows the invocation slots, which
+the bound keeps within twice the 64-invocation time. The bound covers that pass
+only: the tight kernel's serial bypass for a tight work allowance occupies the
+whole workgroup with one invocation, up to four times the 64-invocation cost,
+and the opt-in active-word routes are not modelled.
 
 Creating a kernel validates its shader. Each fitted size is compiled by the
 first check that dispatches it, before that check's dispatch, so a solve

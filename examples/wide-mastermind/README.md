@@ -15,8 +15,10 @@ does not establish model identity or completeness.
 It is a different program from `examples/scalability/mastermind.lp`, the
 maintained scalability workload. Run at eight colours, as the scalability
 population also runs it, that program has the same 45,832 answers, but the two
-encodings take different routes through the GPU's tight kernel. The bundle is
-not part of the benchmark corpus.
+encodings take different routes through the GPU's tight kernel. The
+[contributor guide](../../CONTRIBUTING.md) names this program, by path, as the
+workload on which the tight kernel's zero-fill decision was measured. The bundle
+is not part of the benchmark corpus.
 
 From the repository root:
 
