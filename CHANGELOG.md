@@ -74,7 +74,8 @@ Notable changes by release. Versions follow Semantic Versioning.
   again only the formulas the change reaches; larger changes keep evaluating
   every formula. It engages only for programs whose dependency levels are wide
   enough that evaluating every formula takes several passes per level; other
-  programs keep evaluating every formula. Each slot's retained state counts
+  programs keep evaluating every formula, on a kernel compiled without the
+  route, which binds no retained state. Each slot's retained state counts
   toward the batch's memory allowance, so adaptive slates can settle at a
   smaller device prefix, never below the batch size. Answer sets are unchanged.
 - In the GPU library, tight checks report the work their route performed, and

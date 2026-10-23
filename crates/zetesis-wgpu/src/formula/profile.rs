@@ -206,6 +206,7 @@ impl GpuFormulaProfile {
             pipeline_label: "cooperative finite-formula query",
             shader: projection.shader()?,
             entry_point: "propagate",
+            dense_entry_point: None,
             validate_limits: check_limits,
             kernel: crate::kernel::Kernel::Formula(crate::GpuKernelOptions::default()),
         })

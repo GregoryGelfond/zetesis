@@ -8,7 +8,7 @@ use super::{
     SHADER, TightGpuActivity, TightGpuBatchStats, TightGpuCheck, TightGpuError, TightGpuLimits,
     TightGpuUpdateUnavailable, TightGpuUpdates, TightSupport, poll,
 };
-use crate::runtime::{DeviceProfile, ErrorScopes, Runtime};
+use crate::runtime::{DeviceProfile, ErrorScopes, Runtime, Variant};
 use crate::timing::{BatchTiming, ComputeTimer};
 use crate::{GpuDeviceSource, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
 use std::time::Duration;
@@ -74,6 +74,8 @@ struct PreparedCall {
     stats: TightGpuBatchStats,
     /// A readers index to install before dispatch.
     build: Option<Built>,
+    /// The kernel the batch runs, from the stage its preparation leaves.
+    variant: Variant,
 }
 
 /// The update route's per-batch admission before the dense charges are known.
@@ -231,6 +233,12 @@ impl GpuTightOracle {
         self.runtime.compiled_sizes()
     }
 
+    /// The pipelines this oracle's runtime has compiled, by size and variant.
+    #[cfg(test)]
+    pub(crate) fn compiled_pipelines(&self) -> Vec<(crate::GpuWorkgroupSize, Variant)> {
+        self.runtime.compiled()
+    }
+
     /// Physical options retained by this kernel; no device operation.
     ///
     /// # Panics
@@ -265,6 +273,10 @@ impl GpuTightOracle {
                 TightSupport::Atomic => "check",
                 TightSupport::Grouped => "check_grouped",
             },
+            dense_entry_point: Some(match support {
+                TightSupport::Atomic => "check_dense",
+                TightSupport::Grouped => "check_grouped_dense",
+            }),
             validate_limits: check_limits,
             kernel: crate::kernel::Kernel::Tight(crate::GpuKernelOptions::default()),
         }
@@ -511,6 +523,7 @@ impl GpuTightOracle {
             plan,
             mut stats,
             build,
+            variant,
         } = self.prepare(certificate, candidates, limits, cancellation, size)?;
         poll(cancellation)?;
         // The dispatched size's pipeline is compiled at first need, before this
@@ -527,7 +540,7 @@ impl GpuTightOracle {
                     .map(|resident| resident.graph.workgroup_size)
             })
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident tight graph"))?;
-        self.runtime.ensure_pipeline(workgroup_size)?;
+        self.runtime.ensure_pipeline(workgroup_size, variant)?;
         let scopes = ErrorScopes::new(self.runtime.device());
         if let Some((mut graph, packed)) = fresh {
             graph.rows.release();
@@ -553,12 +566,15 @@ impl GpuTightOracle {
             .as_mut()
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident tight graph"))
             .and_then(|resident| {
-                let pipeline = self.runtime.pipeline_for(resident.graph.workgroup_size)?;
+                let pipeline = self
+                    .runtime
+                    .pipeline_for(resident.graph.workgroup_size, variant)?;
                 resident.dispatch(
                     &Execution {
                         device: self.runtime.device(),
                         queue: self.runtime.queue(),
                         pipeline,
+                        variant,
                         timeout: limits.timeout,
                         cancellation,
                         timer: self.timer.as_ref(),
@@ -683,7 +699,17 @@ impl GpuTightOracle {
             updates,
             admitted_limits.max_work_per_candidate,
         );
-        planned_stats(&mut stats, &plan, availability, timed);
+        // The stage the admission leaves decides the kernel: a fresh graph's
+        // starting stage, or the resident's, which a refusal of the index's
+        // bounds has just made final for its residency.
+        let variant = match fresh.as_ref() {
+            Some(graph) => kernel_variant(&Stage::of(graph)),
+            None => self
+                .resident
+                .as_ref()
+                .map_or(Variant::Full, |resident| kernel_variant(&resident.updates)),
+        };
+        planned_stats(&mut stats, &plan, availability, timed, variant);
         stats.accounted_bytes = plan.pack(
             graph,
             &candidates[..plan.worlds as usize],
@@ -696,6 +722,7 @@ impl GpuTightOracle {
             plan,
             stats,
             build,
+            variant,
         })
     }
 
@@ -858,17 +885,36 @@ fn planned_stats(
     plan: &Plan,
     availability: TightGpuUpdates,
     timed: bool,
+    variant: Variant,
 ) {
     let tail = if timed {
         crate::timing::READBACK_BYTES
     } else {
         0
     };
+    // A stateless plan reserves the full kernel's placeholder; the dense twin
+    // binds no state, so its transport requests none.
+    let unbound = match variant {
+        Variant::Dense => update::PLACEHOLDER_BYTES,
+        Variant::Full => 0,
+    };
     stats.original_truth_reused = plan.original_truth_reused;
     stats.updates = availability;
-    stats.resident_transport_bytes = plan.transport + tail;
+    stats.resident_transport_bytes = plan.transport - unbound + tail;
     stats.downloaded_bytes += tail;
     stats.work = u64::from(plan.worlds) * u64::from(plan.allowance);
+}
+
+/// The kernel a batch runs. A theory whose update route is declined for its
+/// whole residency, by a serial or narrow schedule or by refused index bounds,
+/// runs the dense twin, which binds no update state and carries none of the
+/// route's code. Every other theory runs the full kernel, whose batches may
+/// still decline the route one at a time.
+fn kernel_variant(stage: &Stage) -> Variant {
+    match stage {
+        Stage::Serial | Stage::Narrow | Stage::Refused => Variant::Dense,
+        Stage::Pending | Stage::Bounded(_) | Stage::Built(_) => Variant::Full,
+    }
 }
 
 /// The reason a batch with this resident's `stage` and stateless `plan` cannot

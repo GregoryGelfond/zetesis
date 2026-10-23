@@ -17,10 +17,108 @@ fn support_shader_validates_without_optional_features() {
         &naga::back::PipelineConstants::default(),
     )
     .unwrap();
-    assert_eq!(module.entry_points.len(), 2);
-    for (entry, name) in module.entry_points.iter().zip(["check", "check_grouped"]) {
+    assert_eq!(module.entry_points.len(), 4);
+    for (entry, name) in module.entry_points.iter().zip([
+        "check",
+        "check_grouped",
+        "check_dense",
+        "check_grouped_dense",
+    ]) {
         assert_eq!(entry.name, name);
         assert_eq!(entry.workgroup_size, [64, 1, 1]);
+    }
+}
+
+/// The module as pipeline creation compiles it for `entry_point`: reduced to
+/// that entry point and what it reaches, with its workgroup size overridden.
+fn reduced_to(entry_point: &str) -> naga::Module {
+    let module = naga::front::wgsl::parse_str(SHADER).unwrap();
+    let info = naga::valid::Validator::new(
+        naga::valid::ValidationFlags::all(),
+        naga::valid::Capabilities::empty(),
+    )
+    .validate(&module)
+    .unwrap();
+    let constants = naga::back::PipelineConstants::from([("WORKGROUP_SIZE".to_owned(), 64.0)]);
+    naga::back::pipeline_constants::process_overrides(
+        &module,
+        &info,
+        Some((naga::ShaderStage::Compute, entry_point)),
+        &constants,
+    )
+    .unwrap()
+    .0
+    .into_owned()
+}
+
+/// The update route's own globals: the state at binding 8 and the counters and
+/// decisions only its phases use.
+const UPDATE_GLOBALS: [&str; 8] = [
+    "state",
+    "changed_atoms",
+    "performed",
+    "evaluated",
+    "entry_route",
+    "chosen_route",
+    "summary_flag",
+    "verdict_counts",
+];
+
+fn global_names(module: &naga::Module) -> Vec<String> {
+    module
+        .global_variables
+        .iter()
+        .filter_map(|(_, global)| global.name.clone())
+        .collect()
+}
+
+/// A theory whose route is declined for its residency runs a kernel that
+/// carries none of the route: no binding 8, so its pipeline binds no state, no
+/// update counter or decision, and no update function.
+#[test]
+fn dense_entry_points_carry_no_update_route() {
+    for entry_point in ["check_dense", "check_grouped_dense"] {
+        let module = reduced_to(entry_point);
+        let globals = global_names(&module);
+        for name in UPDATE_GLOBALS {
+            assert!(
+                !globals.iter().any(|global| global == name),
+                "{entry_point} keeps {name}"
+            );
+        }
+        assert!(
+            module.global_variables.iter().all(|(_, global)| global
+                .binding
+                .as_ref()
+                .is_none_or(|binding| binding.binding != 8)),
+            "{entry_point} binds the update state"
+        );
+        let functions: Vec<_> = module
+            .functions
+            .iter()
+            .filter_map(|(_, function)| function.name.clone())
+            .collect();
+        for name in ["update_slot", "summarize", "retain_for_update"] {
+            assert!(
+                !functions.iter().any(|function| function == name),
+                "{entry_point} keeps {name}"
+            );
+        }
+    }
+}
+
+/// The full entry points keep the route: the reduction that strips it from the
+/// dense twins leaves every update global in place here.
+#[test]
+fn full_entry_points_carry_the_update_route() {
+    for entry_point in ["check", "check_grouped"] {
+        let globals = global_names(&reduced_to(entry_point));
+        for name in UPDATE_GLOBALS {
+            assert!(
+                globals.iter().any(|global| global == name),
+                "{entry_point} lacks {name}"
+            );
+        }
     }
 }
 

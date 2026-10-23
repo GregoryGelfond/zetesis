@@ -141,7 +141,9 @@ pub struct TightGpuBatchStats {
     /// padding; the producer buffer includes a built readers index.
     pub resident_theory_bytes: u64,
     /// Requested uniform, candidate, truth, support, result and readback
-    /// bytes, and the per-slot update state or its placeholder.
+    /// bytes, and the per-slot update state, or the full kernel's placeholder
+    /// for it. A theory declined for its residency runs the dense kernel,
+    /// which binds neither.
     pub resident_transport_bytes: u64,
     /// Conservative authored payload checked against the batch byte ceiling.
     pub accounted_bytes: u64,
