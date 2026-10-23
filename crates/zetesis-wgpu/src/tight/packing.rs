@@ -1,8 +1,13 @@
 //! Pure bounded layout, canonical certificate packing and ordered result decoding.
 
-use super::update::{self, ROUTE_BEYOND_THRESHOLD, ROUTE_COMPLETE, ROUTE_DENSE, ROUTE_UPDATE};
-use super::{TightGpuCheck, TightGpuLimits, TightGpuRoutes, TightSupport, poll};
+use super::update::{
+    self, ROUTE_BEYOND_THRESHOLD, ROUTE_COMPLETE, ROUTE_DENSE, ROUTE_UPDATE, SEEDED,
+};
+use super::{
+    TightGpuCheck, TightGpuLimits, TightGpuRoutes, TightGpuUpdateUnavailable, TightSupport, poll,
+};
 use crate::formula_graph::dependency;
+use crate::runtime::Variant;
 use crate::{GpuError, GpuErrorKind};
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{Interpretation, Theory, TightPlan, TightVerdict};
@@ -109,6 +114,13 @@ pub(super) struct Graph {
     /// The workgroup size this graph dispatches: the fixed size, or the size
     /// its packed schedule fits.
     pub(super) workgroup_size: crate::GpuWorkgroupSize,
+    /// Dense reuse's least critical path for one candidate at the dispatched
+    /// size by the guard's cost table, the runtime guard's measure of dense
+    /// evaluation; zero unless the update route engages the schedule.
+    pub(super) dense_path: u64,
+    /// Each invocation's share of an update's uniform scans and record at the
+    /// dispatched size; zero unless the update route engages the schedule.
+    pub(super) floor_path: u32,
     support: TightSupport,
     workgroup_sizing: crate::GpuWorkgroupSizing,
 }
@@ -186,6 +198,8 @@ impl Graph {
             largest_producers: 0,
             strided_depth: 0,
             workgroup_size: crate::kernel::base_size(packing.workgroup_sizing),
+            dense_path: 0,
+            floor_path: 0,
             support: packing.support,
             workgroup_sizing: packing.workgroup_sizing,
         };
@@ -271,12 +285,17 @@ impl Graph {
             crate::kernel::dispatch_size(self.workgroup_sizing, widths.clone(), device);
         let size = self.workgroup_size.invocations();
         self.strided_depth = widths.map(|width| u64::from(width.div_ceil(size))).sum();
-        // Only a schedule the update route engages needs its inputs. A narrow
-        // one releases what its admission reserved, and its plan, admitted
-        // with more bytes, accounts exactly what remains.
+        // Only a schedule the update route engages needs its inputs, and the
+        // runtime guard's two paths at the size it dispatches. A narrow one
+        // releases what its admission reserved, and its plan, admitted with
+        // more bytes, accounts exactly what remains.
         if update::engages(self.strided_depth, self.levels) {
             self.owners = self.rows.owners(cancellation)?;
             self.largest_producers = largest_producers(certificate, self.atoms, cancellation)?;
+            self.dense_path = update::dense_path(self, &packed, size, self.support, cancellation)?;
+            let offsets = &packed.roots[self.roots as usize..=(self.roots + self.levels) as usize];
+            self.floor_path = update::floor_path(self.words, offsets, size)
+                .ok_or_else(|| capacity("tight update floor path exceeds u32"))?;
         } else if self.levels != 0 {
             self.owner_bytes = 0;
             self.packing_bytes -= u64::from(self.atoms) * 4;
@@ -431,7 +450,8 @@ pub(super) struct StateLayout {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(super) struct Route {
     /// The update route may run, and the complete and dense routes seed the
-    /// state for it. Requires bound state and a parallel schedule.
+    /// state for it. Requires the state and a parallel schedule. The batch
+    /// runs the full kernel exactly when it is set (see [`Plan::variant`]).
     pub(super) allowed: bool,
     pub(super) threshold: u32,
     pub(super) readers: u32,
@@ -440,6 +460,9 @@ pub(super) struct Route {
     pub(super) slot_words: u32,
     /// The fewest operations an update performs.
     pub(super) floor: u32,
+    /// The fewest operations of an update's critical path: each invocation's
+    /// share of the uniform scans and the record.
+    pub(super) floor_path: u32,
 }
 
 pub(super) struct Plan {
@@ -448,7 +471,7 @@ pub(super) struct Plan {
     pub(super) truth: u64,
     pub(super) support: u64,
     pub(super) results: u64,
-    /// The update state's bytes, or zero when the placeholder is bound.
+    /// The update state's bytes, or zero for a plan without state.
     pub(super) state: u64,
     pub(super) transport: u64,
     pub(super) accounted: u64,
@@ -526,12 +549,15 @@ impl Plan {
                 "tight uniform buffer exceeds granted device limits",
             ));
         }
-        let bound = if state.is_some() {
-            state_bytes
-        } else {
-            update::PLACEHOLDER_BYTES
-        };
-        let transport = sum(&[PARAM_BYTES, seeds, truth, support, results, results, bound])?;
+        let transport = sum(&[
+            PARAM_BYTES,
+            seeds,
+            truth,
+            support,
+            results,
+            results,
+            state_bytes,
+        ])?;
         let host_results = u64::from(count) * std::mem::size_of::<TightGpuCheck>() as u64;
         let (index_bytes, build_bytes) =
             state.map_or((0, 0), |layout| (layout.index_bytes, layout.build_bytes));
@@ -586,22 +612,27 @@ impl Plan {
     }
 
     /// Decide whether this plan, which binds the update state of `index`,
-    /// allows the update route, and charge the routes accordingly.
+    /// allows the update route, and charge the routes accordingly. Returns why
+    /// the route is not allowed, if it is not.
     ///
-    /// The route is allowed when the schedule is parallel and its reservation
-    /// fits `ceiling`: the larger of the update's worst case and dense reuse
-    /// after a change count, with the state's writes. Allowed, the complete and
-    /// dense routes write the slot's retained candidate and clear its summary,
-    /// `words + 1` operations; dense reuse after a change count adds the count's
-    /// `2 * words`, and with reuse authority every slot may take either route
-    /// or update, so each reserves the largest. Not allowed, no route writes
-    /// the state and every charge is the stateless one.
+    /// The route is allowed when the schedule is parallel, its reservation
+    /// fits `ceiling` (the larger of the update's worst case and dense reuse
+    /// after a change count, with the state's writes), and then, last, the
+    /// runtime guard `allows` it. Allowed, the complete and dense routes write
+    /// the slot's retained candidate and clear its summary, `words + 1`
+    /// operations; dense reuse after a change count adds the count's `2 *
+    /// words`, and with reuse authority every slot may take either route or
+    /// update, so each reserves the largest. Not allowed, for either reason, no
+    /// route writes the state and every charge is the stateless one, while the
+    /// layout stays state-inclusive and the state allocated: the batch runs the
+    /// dense twin, which leaves the state unbound.
     pub(super) fn bind_state(
         &mut self,
         graph: &Graph,
         index: &update::Index,
         ceiling: u64,
-    ) -> bool {
+        allows: bool,
+    ) -> Option<TightGpuUpdateUnavailable> {
         let worst = update::worst_case(
             graph,
             self.levels,
@@ -610,8 +641,9 @@ impl Plan {
             index.atom_entries,
         );
         let dense = update::dense_after_count(graph, self.levels);
-        let allowed = self.levels != 0
+        let fits = self.levels != 0
             && worst.is_some_and(|worst| worst.max(dense) <= ceiling.min(u64::from(u32::MAX)));
+        let allowed = fits && allows;
         self.route = Route {
             allowed,
             threshold: update::threshold(graph.atoms),
@@ -620,6 +652,7 @@ impl Plan {
             count_bits: index.count_bits,
             slot_words: index.slot_words,
             floor: u32::try_from(update::floor(graph, self.levels)).unwrap_or(u32::MAX),
+            floor_path: graph.floor_path,
         };
         if allowed {
             // The gate bounds every charge below by `ceiling` within u32.
@@ -635,9 +668,31 @@ impl Plan {
                 self.work
             };
         }
-        allowed
+        if !fits {
+            Some(TightGpuUpdateUnavailable::Work)
+        } else if !allows {
+            Some(TightGpuUpdateUnavailable::GuardDeclined)
+        } else {
+            None
+        }
     }
 
+    /// The kernel this plan runs: the full kernel exactly when the update
+    /// route is allowed, and otherwise its dense twin, which binds no update
+    /// state and carries none of the route's code. A theory whose route is
+    /// declined for its residency, a batch whose route a limit declines and a
+    /// batch the runtime guard declines therefore all run the twin; a plan
+    /// that holds the state keeps it allocated and accounted, unbound.
+    pub(super) const fn variant(&self) -> Variant {
+        if self.route.allowed {
+            Variant::Full
+        } else {
+            Variant::Dense
+        }
+    }
+
+    /// The parameter block. Words 9 and 15 are reserved: the kernel a batch
+    /// runs, not a parameter, says whether its update route is allowed.
     pub(super) fn params(&self, graph: &Graph) -> [u32; 16] {
         [
             graph.atoms,
@@ -649,12 +704,12 @@ impl Plan {
             self.work,
             self.epoch,
             self.route.threshold,
-            u32::from(self.route.allowed),
+            0,
             self.route.readers,
             self.route.atom_nodes,
             self.route.count_bits,
             self.route.slot_words,
-            0,
+            self.route.floor_path,
             0,
         ]
     }
@@ -690,6 +745,8 @@ pub(super) struct Decoded {
     pub(super) nodes_evaluated: u64,
     /// The sum of the work each check reports performed.
     pub(super) work: u64,
+    /// The largest path among the update slots; `None` without update slots.
+    pub(super) slowest_update_path: Option<u64>,
 }
 
 /// Validate every record against the batch and decode it in order.
@@ -700,8 +757,22 @@ pub(super) struct Decoded {
 /// beyond the threshold. Complete and dense records charge the plan's fixed
 /// work, dense reuse beyond the threshold adds the count's `2 * words`, and none
 /// evaluates a node by update; an update charges at least its floor and at most
-/// the reservation, and evaluates at most every node. Every record is seeded
-/// exactly when the route was allowed. Any other record is an invalid readback.
+/// the reservation, and evaluates at most every node. An update's path lies
+/// between the floor path and `path_ceiling`; every other route
+/// records a zero path. Every record is seeded exactly when the route was
+/// allowed, in the bit beside its route, and no other bit of that word is set.
+/// Any other record is an invalid readback.
+/// The largest path an update record that performed `performed` operations
+/// may carry: the floor path plus what the record counts beyond its floor.
+/// The path's phases are a subset of the work's: a summary counts in the work,
+/// and in the path only after the slot took dense reuse beyond the threshold;
+/// no phase's costliest invocation costs more than every invocation together;
+/// and no cost of the guard's table exceeds the work's charge for the same
+/// operation. Requires `performed` at least the floor.
+fn path_ceiling(route: &Route, performed: u32) -> u32 {
+    route.floor_path.saturating_add(performed - route.floor)
+}
+
 pub(super) fn decode(
     words: &[u32],
     graph: &Graph,
@@ -722,31 +793,36 @@ pub(super) fn decode(
     let mut routes = TightGpuRoutes::default();
     let mut nodes_evaluated = 0_u64;
     let mut work = 0_u64;
+    let mut slowest_update_path: Option<u64> = None;
     for (world, row) in words.chunks_exact(RESULT_WORDS).enumerate() {
         poll(cancellation)?;
         if row[0] != plan.epoch || row[1] as usize != world || row[5] != graph.result_marker() {
             return Err(fail());
         }
-        let (performed, route, evaluated, seeded) = (row[4], row[6], row[7], row[8]);
+        let (performed, evaluated, path) = (row[4], row[7], row[8]);
+        let (route, seeded) = (row[6] & !SEEDED, row[6] & SEEDED != 0);
         let reused = plan.original_truth_reused;
         let updating = reused && plan.route.allowed;
         let receipt = match route {
-            ROUTE_COMPLETE => !reused && performed == plan.work && evaluated == 0,
-            ROUTE_DENSE => reused && performed == plan.work && evaluated == 0,
+            ROUTE_COMPLETE => !reused && performed == plan.work && evaluated == 0 && path == 0,
+            ROUTE_DENSE => reused && performed == plan.work && evaluated == 0 && path == 0,
             ROUTE_BEYOND_THRESHOLD => {
                 updating
                     && plan.work.checked_add(2 * graph.words) == Some(performed)
                     && evaluated == 0
+                    && path == 0
             }
             ROUTE_UPDATE => {
                 updating
                     && evaluated <= graph.nodes
                     && plan.route.floor <= performed
                     && performed <= plan.allowance
+                    && plan.route.floor_path <= path
+                    && path <= path_ceiling(&plan.route, performed)
             }
             _ => false,
         };
-        if !receipt || seeded != u32::from(plan.route.allowed) {
+        if !receipt || seeded != plan.route.allowed {
             return Err(fail());
         }
         let verdict = match (row[2], row[3]) {
@@ -777,9 +853,13 @@ pub(super) fn decode(
         }
         nodes_evaluated += u64::from(evaluated);
         work += u64::from(performed);
+        if route == ROUTE_UPDATE {
+            slowest_update_path = slowest_update_path.max(Some(u64::from(path)));
+        }
         checks.push(TightGpuCheck {
             verdict,
             work: u64::from(performed),
+            critical_path: u64::from(path),
         });
     }
     Ok(Decoded {
@@ -787,6 +867,7 @@ pub(super) fn decode(
         routes,
         nodes_evaluated,
         work,
+        slowest_update_path,
     })
 }
 

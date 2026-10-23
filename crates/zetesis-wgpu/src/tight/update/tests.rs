@@ -1,6 +1,7 @@
 use super::*;
-use crate::tight::packing::{Packing, Plan, RESULT_MAGIC, StateLayout, decode};
-use crate::tight::{TightGpuLimits, TightSupport};
+use crate::runtime::Variant;
+use crate::tight::packing::{Packed, Packing, Plan, RESULT_MAGIC, StateLayout, decode};
+use crate::tight::{TightGpuLimits, TightGpuUpdateUnavailable, TightSupport};
 use zetesis_ferraris::{
     AdmissionLimits, FormulaNodes, FormulaParts, Node, Theory, TightPlanLimits, TightVerdict,
 };
@@ -251,13 +252,10 @@ fn the_state_is_part_of_each_slots_footprint() {
     let stateful = Plan::with_state(&graph, 3, limits, &device, false, 2, Some(layout)).unwrap();
     assert_eq!(stateless.state, 0);
     assert_eq!(stateful.state, 3 * 11 * 4);
-    assert_eq!(
-        stateful.transport,
-        stateless.transport - PLACEHOLDER_BYTES + stateful.state
-    );
+    assert_eq!(stateful.transport, stateless.transport + stateful.state);
     assert_eq!(
         stateful.accounted,
-        stateless.accounted - PLACEHOLDER_BYTES + stateful.state + 400 + 900
+        stateless.accounted + stateful.state + 400 + 900
     );
     let ceiling = TightGpuLimits {
         max_batch_bytes: stateful.accounted - 1,
@@ -290,14 +288,14 @@ fn allowed_routes_charge_the_states_writes() {
     // Without authority every slot is complete: the state's writes only.
     let mut complete = scheduled(&graph, false);
     let base = complete.work;
-    assert!(complete.bind_state(&graph, &index, u64::MAX));
+    assert_eq!(complete.bind_state(&graph, &index, u64::MAX, true), None);
     assert_eq!(complete.work, base + words + 1);
     assert_eq!(complete.allowance, complete.work);
     // With authority a slot may also count its change, or update: the
     // reservation covers the largest of them.
     let mut reused = scheduled(&graph, true);
     let dense = reused.work;
-    assert!(reused.bind_state(&graph, &index, u64::MAX));
+    assert_eq!(reused.bind_state(&graph, &index, u64::MAX, true), None);
     assert_eq!(reused.work, dense + words + 1);
     let worst = worst_case(
         &graph,
@@ -319,10 +317,110 @@ fn a_route_not_allowed_charges_what_the_stateless_routes_do() {
     let index = built(&certificate, &graph).index;
     let mut plan = scheduled(&graph, true);
     let dense = plan.work;
-    // Exactly dense reuse's allowance: the state is bound but nothing writes it.
-    assert!(!plan.bind_state(&graph, &index, u64::from(dense)));
+    // Exactly dense reuse's allowance: nothing writes the state.
+    assert_eq!(
+        plan.bind_state(&graph, &index, u64::from(dense), true),
+        Some(TightGpuUpdateUnavailable::Work)
+    );
     assert_eq!((plan.work, plan.allowance), (dense, dense));
     assert!(!plan.route.allowed);
+}
+
+/// A batch runs the full kernel exactly when its plan allows the update
+/// route. A plan without state runs the dense twin, and so does a plan with
+/// the state whose route the work allowance or the runtime guard declines; it
+/// keeps the state allocated and accounted.
+#[test]
+fn the_kernel_follows_whether_the_route_is_allowed() {
+    let certificate = certificate();
+    let graph = graph(&certificate, TightSupport::Atomic);
+    let index = built(&certificate, &graph).index;
+    let device = wgpu::Limits::default();
+    let layout = StateLayout {
+        slot_words: index.slot_words,
+        index_bytes: 0,
+        build_bytes: 0,
+    };
+    let stateful = || {
+        let mut plan = Plan::with_state(
+            &graph,
+            2,
+            TightGpuLimits::default(),
+            &device,
+            false,
+            2,
+            Some(layout),
+        )
+        .unwrap();
+        plan.levels = 3;
+        plan.work += 3;
+        plan.allowance = plan.work;
+        plan.reuse_original_truth(&graph, u64::MAX);
+        plan
+    };
+    let stateless = scheduled(&graph, true);
+    assert_eq!(stateless.state, 0);
+    assert_eq!(stateless.variant(), Variant::Dense);
+    let dense = u64::from(stateful().work);
+    for (ceiling, allows, reason, variant) in [
+        (
+            dense,
+            true,
+            Some(TightGpuUpdateUnavailable::Work),
+            Variant::Dense,
+        ),
+        (
+            u64::MAX,
+            false,
+            Some(TightGpuUpdateUnavailable::GuardDeclined),
+            Variant::Dense,
+        ),
+        (u64::MAX, true, None, Variant::Full),
+    ] {
+        let mut plan = stateful();
+        assert_eq!(plan.bind_state(&graph, &index, ceiling, allows), reason);
+        assert_eq!(plan.variant(), variant, "{reason:?}");
+        assert_eq!(plan.state, 2 * u64::from(index.slot_words) * 4);
+    }
+}
+
+/// A batch the runtime guard declines keeps the state-inclusive layout, so its
+/// count, prefix and bytes are an admitted batch's, while every charge is the
+/// stateless one; the guard acts after the work allowance is known to fit.
+#[test]
+fn a_guard_declined_plan_keeps_its_layout_and_charges_the_stateless_routes() {
+    let certificate = certificate();
+    let graph = graph(&certificate, TightSupport::Atomic);
+    let index = built(&certificate, &graph).index;
+    let device = wgpu::Limits::default();
+    let layout = StateLayout {
+        slot_words: index.slot_words,
+        index_bytes: 0,
+        build_bytes: 0,
+    };
+    let mut plan = Plan::with_state(
+        &graph,
+        2,
+        TightGpuLimits::default(),
+        &device,
+        false,
+        2,
+        Some(layout),
+    )
+    .unwrap();
+    plan.levels = 3;
+    plan.work += 3;
+    plan.allowance = plan.work;
+    plan.reuse_original_truth(&graph, u64::MAX);
+    let (dense, state, accounted) = (plan.work, plan.state, plan.accounted);
+    assert_eq!(
+        plan.bind_state(&graph, &index, u64::MAX, false),
+        Some(TightGpuUpdateUnavailable::GuardDeclined)
+    );
+    assert!(!plan.route.allowed);
+    assert_eq!((plan.work, plan.allowance), (dense, dense));
+    assert_eq!((plan.state, plan.accounted), (state, accounted));
+    assert_eq!(plan.state, 2 * u64::from(index.slot_words) * 4);
 }
 
 #[test]
@@ -400,10 +498,17 @@ fn a_rows_followers_share_its_owners_level() {
     assert!(level(7).is_some());
 }
 
-// An update record performing `work` and evaluating `nodes` nodes, in slot 0
-// of epoch 2, with a stable verdict and its state seeded.
+// A record of slot 0 of epoch 2 with a stable verdict: the route with its
+// seeded bit, the work performed, nodes evaluated, and the update path.
+fn record(route: u32, seeded: bool, work: u32, nodes: u32, path: u32) -> [u32; 9] {
+    let route = route | if seeded { SEEDED } else { 0 };
+    [2, 0, 0, 0, work, RESULT_MAGIC, route, nodes, path]
+}
+
+// An update record performing `work` and evaluating `nodes` nodes, its state
+// seeded, with the least path its floor admits.
 fn update_record(work: u32, nodes: u32) -> [u32; 9] {
-    [2, 0, 0, 0, work, RESULT_MAGIC, ROUTE_UPDATE, nodes, 1]
+    record(ROUTE_UPDATE, true, work, nodes, 7)
 }
 
 #[test]
@@ -415,6 +520,7 @@ fn update_receipts_lie_between_the_floor_and_the_reservation() {
     plan.original_truth_reused = true;
     plan.route.allowed = true;
     plan.route.floor = 40;
+    plan.route.floor_path = 7;
     plan.allowance = 90;
     let seeds = [0x3f];
     let cancellation = Cancellation::default();
@@ -454,17 +560,21 @@ fn routes_follow_the_batch_authority() {
         ROUTE_BEYOND_THRESHOLD => work + 2 * graph.words,
         _ => work,
     };
+    // An update's path lies above its floor path, zero here; every other
+    // route's is zero.
     let accepts = |plan: &Plan, route| {
-        let seeded = u32::from(plan.route.allowed);
-        let record = [2, 0, 0, 0, charge(route), RESULT_MAGIC, route, 0, seeded];
+        let path = u32::from(route == ROUTE_UPDATE);
+        let record = record(route, plan.route.allowed, charge(route), 0, path);
         decode(&record, &graph, plan, &seeds, &cancellation).is_ok()
     };
+    // The last is no route: bit 3, above the route's two bits and the seeded
+    // bit beside them.
     let all = [
         ROUTE_COMPLETE,
         ROUTE_DENSE,
         ROUTE_UPDATE,
         ROUTE_BEYOND_THRESHOLD,
-        4,
+        8,
     ];
     let permitted = |plan: &Plan| {
         all.iter()
@@ -494,24 +604,114 @@ fn records_are_seeded_exactly_when_the_route_is_allowed() {
     let mut plan = Plan::new(&graph, 1, TightGpuLimits::default(), &device, false, 2).unwrap();
     for allowed in [false, true] {
         plan.route.allowed = allowed;
-        for seeded in [0, 1] {
-            let record = [
-                2,
-                0,
-                0,
-                0,
-                plan.work,
-                RESULT_MAGIC,
-                ROUTE_COMPLETE,
-                0,
-                seeded,
-            ];
+        for seeded in [false, true] {
+            let record = record(ROUTE_COMPLETE, seeded, plan.work, 0, 0);
             assert_eq!(
                 decode(&record, &graph, &plan, &seeds, &cancellation).is_ok(),
-                seeded == u32::from(allowed)
+                seeded == allowed
             );
         }
     }
+}
+
+/// Word 6 holds the route in its two low bits and the seeded bit beside them;
+/// any other bit is an invalid readback.
+#[test]
+fn a_record_word_beyond_its_route_and_seeded_bits_is_refused() {
+    let certificate = certificate();
+    let graph = graph(&certificate, TightSupport::Atomic);
+    let device = wgpu::Limits::default();
+    let seeds = [0x3f];
+    let cancellation = Cancellation::default();
+    let mut plan = Plan::new(&graph, 1, TightGpuLimits::default(), &device, false, 2).unwrap();
+    plan.route.allowed = true;
+    let mut word = record(ROUTE_COMPLETE, true, plan.work, 0, 0);
+    assert!(decode(&word, &graph, &plan, &seeds, &cancellation).is_ok());
+    for stray in [1 << 3, 1 << 31] {
+        word[6] = ROUTE_COMPLETE | SEEDED | stray;
+        assert!(
+            decode(&word, &graph, &plan, &seeds, &cancellation).is_err(),
+            "{stray:#x}"
+        );
+    }
+}
+
+/// An update's path lies between the floor path and the floor path plus the
+/// work its phases counted, since no phase's busiest invocation performs more
+/// than all of them; every other route records a zero path.
+#[test]
+fn an_update_path_lies_between_its_floor_and_its_counted_work() {
+    let certificate = certificate();
+    let graph = graph(&certificate, TightSupport::Atomic);
+    let device = wgpu::Limits::default();
+    let seeds = [0x3f];
+    let cancellation = Cancellation::default();
+    let mut plan = Plan::new(&graph, 1, TightGpuLimits::default(), &device, false, 2).unwrap();
+    plan.original_truth_reused = true;
+    plan.route.allowed = true;
+    plan.route.floor = 40;
+    plan.route.floor_path = 7;
+    plan.allowance = u32::MAX;
+    let read = |record: [u32; 9]| decode(&record, &graph, &plan, &seeds, &cancellation);
+    // 55 operations, 15 beyond the floor of 40.
+    for (path, accepted) in [(7, true), (22, true), (6, false), (23, false)] {
+        assert_eq!(
+            read(record(ROUTE_UPDATE, true, 55, 0, path)).is_ok(),
+            accepted,
+            "{path}"
+        );
+    }
+    let decoded = read(record(ROUTE_UPDATE, true, 55, 0, 19)).unwrap();
+    assert_eq!(decoded.checks[0].critical_path(), 19);
+    assert_eq!(decoded.slowest_update_path, Some(19));
+    let dense = plan.work;
+    assert!(read(record(ROUTE_DENSE, true, dense, 0, 0)).is_ok());
+    assert!(read(record(ROUTE_DENSE, true, dense, 0, 1)).is_err());
+    let counted = dense + 2 * graph.words;
+    assert!(read(record(ROUTE_BEYOND_THRESHOLD, true, counted, 0, 1)).is_err());
+    let decoded = read(record(ROUTE_DENSE, true, dense, 0, 0)).unwrap();
+    assert_eq!(decoded.checks[0].critical_path(), 0);
+}
+
+/// A batch's slowest update path is its largest update record's path. Slots
+/// beyond the threshold took dense reuse after their count and are not update
+/// slots, so a batch of them alone has none.
+#[test]
+fn a_batchs_slowest_update_path_is_its_largest_update_records() {
+    let certificate = certificate();
+    let graph = graph(&certificate, TightSupport::Atomic);
+    let device = wgpu::Limits::default();
+    let seeds = [0x3f, 0x3f];
+    let cancellation = Cancellation::default();
+    let mut plan = Plan::new(&graph, 2, TightGpuLimits::default(), &device, false, 2).unwrap();
+    plan.original_truth_reused = true;
+    plan.route.allowed = true;
+    plan.route.floor = 40;
+    plan.route.floor_path = 7;
+    plan.allowance = u32::MAX;
+    let beyond = record(
+        ROUTE_BEYOND_THRESHOLD,
+        true,
+        plan.work + 2 * graph.words,
+        0,
+        0,
+    );
+    let slowest = |first: [u32; 9], mut second: [u32; 9]| {
+        second[1] = 1;
+        decode(
+            &[first, second].concat(),
+            &graph,
+            &plan,
+            &seeds,
+            &cancellation,
+        )
+        .unwrap()
+        .slowest_update_path
+    };
+    let update = |path| record(ROUTE_UPDATE, true, 55, 0, path);
+    assert_eq!(slowest(update(19), update(12)), Some(19));
+    assert_eq!(slowest(beyond, update(12)), Some(12));
+    assert_eq!(slowest(beyond, beyond), None);
 }
 
 #[test]
@@ -535,24 +735,14 @@ fn dense_receipts_evaluate_nothing_by_update_and_charge_their_route() {
         (ROUTE_BEYOND_THRESHOLD, work, 0, false),
         (ROUTE_BEYOND_THRESHOLD, counted, 1, false),
     ] {
-        let record = [2, 0, 0, 0, performed, RESULT_MAGIC, route, evaluated, 1];
+        let record = record(route, true, performed, evaluated, 0);
         assert_eq!(
             decode(&record, &graph, &plan, &seeds, &cancellation).is_ok(),
             accepted,
             "{route} {performed} {evaluated}"
         );
     }
-    let record = [
-        2,
-        0,
-        0,
-        0,
-        counted,
-        RESULT_MAGIC,
-        ROUTE_BEYOND_THRESHOLD,
-        0,
-        1,
-    ];
+    let record = record(ROUTE_BEYOND_THRESHOLD, true, counted, 0, 0);
     let decoded = decode(&record, &graph, &plan, &seeds, &cancellation).unwrap();
     assert_eq!(
         (decoded.routes.dense_reuse, decoded.routes.beyond_threshold),
@@ -689,4 +879,372 @@ fn a_narrow_schedule_accounts_none_of_the_update_inputs() {
     assert_eq!(wide.owner_bytes, 8);
     assert_eq!(wide.packing_bytes - narrow.packing_bytes, 4 * 4);
     assert_eq!(wide_plan.accounted - narrow_plan.accounted, 8 + 4 * 4);
+}
+
+/// The graph and packed schedule of one candidate under a fixed `size` and
+/// `support`.
+fn prepared_packed(
+    certificate: &TightPlan,
+    size: crate::GpuWorkgroupSize,
+    support: TightSupport,
+) -> (Graph, Packed) {
+    let device = wgpu::Limits::default();
+    let packing = Packing {
+        device: &device,
+        support,
+        workgroup_sizing: crate::GpuWorkgroupSizing::Fixed(size),
+    };
+    let mut graph = Graph::new(certificate, packing).unwrap();
+    let mut plan = Plan::new(&graph, 1, TightGpuLimits::default(), &device, true, 1).unwrap();
+    let packed = graph
+        .prepare(
+            certificate,
+            TightGpuLimits::default(),
+            &device,
+            &mut plan,
+            &Cancellation::default(),
+        )
+        .unwrap();
+    (graph, packed)
+}
+
+const SIZES: [crate::GpuWorkgroupSize; 4] = [
+    crate::GpuWorkgroupSize::Threads32,
+    crate::GpuWorkgroupSize::Threads64,
+    crate::GpuWorkgroupSize::Threads128,
+    crate::GpuWorkgroupSize::Threads256,
+];
+
+/// Dense reuse's least cost of each node of `theory` by the guard's cost table,
+/// read from the theory rather than the packed header: a pair or implication
+/// 3; a wide conjunction or disjunction 2, the node and the one operand that
+/// may end it; a numeric row's owner, its first live guard, its conditions and
+/// live guards, the scan and clears of an unchanged row; every other node 1,
+/// a follower's ownership check included.
+fn least_dense_costs(theory: &Theory) -> Vec<u64> {
+    let view = theory.view();
+    let mut rows = std::collections::BTreeMap::<usize, Vec<usize>>::new();
+    let mut costs: Vec<u64> = (0..view.len())
+        .map(|node| match view.node(node).unwrap() {
+            NodeView::Implies(..) => 3,
+            NodeView::And(children) | NodeView::Or(children) if children.len() == 2 => 3,
+            NodeView::And(_) | NodeView::Or(_) => 2,
+            NodeView::Threshold(threshold) => {
+                let total: i128 = threshold
+                    .weights
+                    .iter()
+                    .map(|&weight| i128::from(weight))
+                    .sum();
+                if threshold.bound > 0 && threshold.bound <= total {
+                    let descriptor = theory.nodes()[node].threshold_descriptor().unwrap();
+                    rows.entry(theory.parts().thresholds()[descriptor].row)
+                        .or_default()
+                        .push(node);
+                }
+                1
+            }
+            NodeView::ExtremumCut(_) => unreachable!("the fixtures hold no extremum cuts"),
+            NodeView::Atom(_) | NodeView::False => 1,
+        })
+        .collect();
+    for guards in rows.values() {
+        let NodeView::Threshold(threshold) = view.node(guards[0]).unwrap() else {
+            unreachable!("a row's guards are thresholds");
+        };
+        costs[guards[0]] = (threshold.conditions.len() + guards.len()) as u64;
+    }
+    costs
+}
+
+/// Every invocation of `size`, simulated: invocation `lane` evaluates a level's
+/// positions `start + lane + j * size` at `cost` each; the busiest one's sum per
+/// level, summed over the levels.
+fn simulated_levels(graph: &Graph, packed: &Packed, size: u32, cost: impl Fn(u32) -> u64) -> u64 {
+    let roots = graph.roots as usize;
+    let order = roots + graph.levels as usize + 1;
+    (0..graph.levels as usize)
+        .map(|level| {
+            let (start, end) = (packed.roots[roots + level], packed.roots[roots + level + 1]);
+            (0..size)
+                .map(|lane| {
+                    let mut total = 0;
+                    let mut position = start + lane;
+                    while position < end {
+                        total += cost(packed.roots[order + position as usize]);
+                        position += size;
+                    }
+                    total
+                })
+                .max()
+                .unwrap()
+        })
+        .sum()
+}
+
+/// The busiest invocation's iterations of a strided loop over `count` items.
+fn busiest(count: u32, size: u32) -> u64 {
+    (0..size)
+        .map(|lane| u64::from(count.saturating_sub(lane).div_ceil(size)))
+        .max()
+        .unwrap()
+}
+
+/// One head in the second support word with `rules` producers, each reading
+/// one atom of the first. Under grouped support the heaviest support word falls
+/// to the second invocation, which visits one root fewer than the first when
+/// `rules` leaves a remainder of one.
+fn heavy_head(rules: usize) -> TightPlan {
+    let mut leaves: Vec<Node> = (0..64).map(Node::atom).collect();
+    leaves.extend(std::iter::repeat_n(Node::implies(0, 40), rules));
+    let nodes = FormulaNodes::new(FormulaParts::new(leaves, vec![]).unwrap());
+    let theory = Theory::new(
+        64,
+        nodes.into_parts(),
+        (64..64 + rules).collect(),
+        AdmissionLimits::default(),
+    )
+    .unwrap();
+    TightPlan::compile(
+        &theory,
+        TightPlanLimits::default(),
+        &Cancellation::default(),
+    )
+    .unwrap()
+}
+
+/// Dense reuse's least cost of every packed node is the guard's table's for
+/// its kind, read from the theory: pairs, wide gates, a numeric row's owner and
+/// follower, a constant guard and the atoms.
+#[test]
+fn every_nodes_least_dense_cost_follows_the_table() {
+    for certificate in [certificate(), fan(engaging_at_32())] {
+        let costs = least_dense_costs(certificate.theory());
+        let (graph, packed) = prepared_packed(
+            &certificate,
+            crate::GpuWorkgroupSize::Threads32,
+            TightSupport::Atomic,
+        );
+        let packed_costs: Vec<u64> = (0..graph.nodes)
+            .map(|node| dense_cost(&packed.nodes, graph.nodes, node).unwrap())
+            .collect();
+        assert_eq!(packed_costs, costs);
+    }
+}
+
+/// The dense path, by the guard's cost table, simulated invocation by
+/// invocation: each level's bounds and busiest invocation over the positions
+/// `start + lane + j * size`; atomic support's clears, then its root and
+/// producer visits in one phase, or grouped support's root visits and support
+/// words with their groups in one phase; the unsupported scan's two words per
+/// candidate word; and the record.
+#[test]
+fn the_dense_path_follows_dense_reuses_lane_assignment_and_least_costs() {
+    let cancellation = Cancellation::default();
+    for certificate in [certificate(), fan(engaging_at_32()), heavy_head(97)] {
+        let costs = least_dense_costs(certificate.theory());
+        for size in SIZES {
+            for support in [TightSupport::Atomic, TightSupport::Grouped] {
+                let (graph, packed) = prepared_packed(&certificate, size, support);
+                assert_ne!(graph.levels, 0);
+                let lanes = size.invocations();
+                let levels = simulated_levels(&graph, &packed, lanes, |node| costs[node as usize])
+                    + u64::from(graph.levels);
+                let construction = match support {
+                    TightSupport::Atomic => {
+                        busiest(graph.words, lanes)
+                            + busiest(graph.roots, lanes)
+                            + busiest(graph.producers, lanes)
+                    }
+                    TightSupport::Grouped => {
+                        let offsets = graph.producers as usize * 4;
+                        let groups = &packed.producers[offsets..=offsets + graph.words as usize];
+                        (0..lanes as usize)
+                            .map(|lane| {
+                                let roots = (0..graph.roots as usize)
+                                    .filter(|root| root % lanes as usize == lane)
+                                    .count() as u64;
+                                roots
+                                    + groups
+                                        .windows(2)
+                                        .skip(lane)
+                                        .step_by(lanes as usize)
+                                        .map(|group| 1 + u64::from(group[1] - group[0]))
+                                        .sum::<u64>()
+                            })
+                            .max()
+                            .unwrap()
+                    }
+                };
+                let expected =
+                    levels + construction + 2 * busiest(graph.words, lanes) + RECORD_WORDS;
+                assert_eq!(
+                    dense_path(&graph, &packed, lanes, support, &cancellation).unwrap(),
+                    expected,
+                    "{size:?} {support:?}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn with_unit_costs_the_levels_path_is_the_strided_depth() {
+    let certificate = fan(engaging_at_32());
+    for size in SIZES {
+        let (graph, packed) = prepared_packed(&certificate, size, TightSupport::Atomic);
+        let unit = levels_path(
+            &graph,
+            &packed.roots,
+            size.invocations(),
+            |_| Ok(1),
+            &Cancellation::default(),
+        )
+        .unwrap();
+        assert_eq!(unit, graph.strided_depth, "{size:?}");
+    }
+}
+
+#[test]
+fn the_floor_path_is_each_phases_busiest_share_of_the_uniform_scans() {
+    for certificate in [certificate(), fan(engaging_at_32())] {
+        for size in SIZES {
+            let (graph, packed) = prepared_packed(&certificate, size, TightSupport::Atomic);
+            let lanes = size.invocations();
+            let offsets =
+                &packed.roots[graph.roots as usize..=(graph.roots + graph.levels) as usize];
+            // Each level's queued-word scan: invocation `lane` takes the words
+            // `floor(start / 32) + lane + j * size` below `ceil(end / 32)`.
+            let levels: u64 = offsets
+                .windows(2)
+                .map(|level| busiest(level[1].div_ceil(32) - level[0] / 32, lanes) + 1)
+                .sum();
+            let expected = 5 * busiest(graph.words, lanes) + levels + RECORD_WORDS;
+            assert_eq!(
+                u64::from(floor_path(graph.words, offsets, lanes).unwrap()),
+                expected,
+                "{size:?}"
+            );
+        }
+    }
+    // A level 32 words wide that starts inside a word spans 33 of them, so at
+    // 32 invocations the busiest scans two: one candidate word's five scans,
+    // the first level's word and round, the second's two words and round, and
+    // the record.
+    assert_eq!(floor_path(1, &[0, 1, 1 + 32 * 32], 32), Some(5 + 2 + 3 + 9));
+}
+
+#[test]
+fn an_engaging_schedule_records_its_floor_path_at_its_size() {
+    let certificate = fan(engaging_at_32());
+    let (wide, packed) = prepared_packed(
+        &certificate,
+        crate::GpuWorkgroupSize::Threads32,
+        TightSupport::Atomic,
+    );
+    assert!(engages(wide.strided_depth, wide.levels));
+    let offsets = &packed.roots[wide.roots as usize..=(wide.roots + wide.levels) as usize];
+    assert_eq!(
+        wide.floor_path,
+        floor_path(wide.words, offsets, 32).unwrap()
+    );
+    let (narrow, _) = prepared_packed(
+        &certificate,
+        crate::GpuWorkgroupSize::Threads64,
+        TightSupport::Atomic,
+    );
+    assert!(!engages(narrow.strided_depth, narrow.levels));
+    assert_eq!(narrow.floor_path, 0);
+}
+
+#[test]
+fn an_engaging_schedule_records_its_dense_path_at_its_size() {
+    let certificate = fan(engaging_at_32());
+    let (wide, packed) = prepared_packed(
+        &certificate,
+        crate::GpuWorkgroupSize::Threads32,
+        TightSupport::Atomic,
+    );
+    assert!(engages(wide.strided_depth, wide.levels));
+    let cancellation = Cancellation::default();
+    assert_eq!(
+        wide.dense_path,
+        dense_path(&wide, &packed, 32, TightSupport::Atomic, &cancellation).unwrap()
+    );
+    let (narrow, _) = prepared_packed(
+        &certificate,
+        crate::GpuWorkgroupSize::Threads64,
+        TightSupport::Atomic,
+    );
+    assert!(!engages(narrow.strided_depth, narrow.levels));
+    assert_eq!(narrow.dense_path, 0);
+}
+
+#[test]
+fn the_guard_declines_beyond_the_dense_path_and_not_at_equality() {
+    assert!(!declines(400, 400));
+    assert!(declines(401, 400));
+    let mut guard = Guard::new();
+    guard.settle(Some(400), 400);
+    assert!(guard.allows());
+    guard.settle(Some(401), 400);
+    assert!(!guard.allows());
+}
+
+#[test]
+fn a_batch_without_update_slots_is_not_judged() {
+    let mut guard = Guard::new();
+    guard.settle(None, 0);
+    assert_eq!(guard, Guard::new());
+}
+
+/// A batch decoded while the guard is declined counts toward the wait and is
+/// not judged, even with update slots, as when it was planned before the
+/// decline: one losing episode doubles the backoff once.
+#[test]
+fn a_batch_decoded_while_declined_is_not_judged() {
+    let mut guard = Guard::new();
+    guard.settle(Some(2), 1);
+    guard.settle(Some(u64::MAX), 0);
+    assert!(guard.allows());
+    assert_eq!(waits_after_losses(&mut guard, 1), [2]);
+}
+
+/// Settle losing judgments in turn, each followed by its wait, counted down by
+/// decoded batches without update slots, and a seeding batch, and return the
+/// waits.
+fn waits_after_losses(guard: &mut Guard, losses: usize) -> Vec<u32> {
+    (0..losses)
+        .map(|_| {
+            guard.settle(Some(2), 1);
+            let mut wait = 0;
+            while !guard.allows() {
+                guard.settle(None, 1);
+                wait += 1;
+            }
+            // The seeding batch: the route is allowed, and no slot updates.
+            guard.settle(None, 1);
+            assert!(guard.allows());
+            wait
+        })
+        .collect()
+}
+
+#[test]
+fn the_guards_waits_double_from_one_to_their_limit() {
+    let mut guard = Guard::new();
+    assert_eq!(
+        waits_after_losses(&mut guard, 8),
+        [1, 2, 4, 8, 16, 32, 32, 32]
+    );
+}
+
+#[test]
+fn a_passing_probe_keeps_the_route_and_the_backoff() {
+    let mut guard = Guard::new();
+    assert_eq!(waits_after_losses(&mut guard, 2), [1, 2]);
+    // The judged probe passes, at equality; the route stays allowed.
+    guard.settle(Some(1), 1);
+    assert!(guard.allows());
+    // The backoff never shrinks while the theory stays resident.
+    assert_eq!(waits_after_losses(&mut guard, 1), [4]);
 }

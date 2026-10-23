@@ -15,8 +15,8 @@ pub(crate) struct DeviceProfile {
     pub(crate) entry_point: &'static str,
     /// The entry point of a sized kernel's dense twin, which evaluates without
     /// the update route and so binds no update state: the tight kernel's, for
-    /// a theory whose route is declined for its residency. `None` for every
-    /// other kernel.
+    /// every batch whose update route is not allowed. `None` for every other
+    /// kernel.
     pub(crate) dense_entry_point: Option<&'static str>,
     pub(crate) validate_limits: fn(&wgpu::Limits) -> Result<(), GpuError>,
     pub(crate) kernel: crate::kernel::Kernel,
@@ -249,10 +249,14 @@ impl Runtime {
     /// pipeline included, returns at once. Otherwise it is compiled now, inside
     /// its own error scopes settled as at construction, and its slot written.
     /// The caller holds the context lease, has finished preparing its batch and
-    /// has not opened its dispatch scopes. Only a freshly prepared graph, or a
-    /// resident one whose route was just declined for its residency, can need a
-    /// pipeline first. A fresh graph's cold preparation has already released any
-    /// previous resident; a declined resident is left as it was. Either way a
+    /// has not opened its dispatch scopes. A freshly prepared graph can need a
+    /// size's first pipeline: for a tight theory the dense twin, since a fresh
+    /// theory's first batch never allows the update route. A resident tight
+    /// theory can need only the full kernel first, at its first batch allowing
+    /// the route, and only under fitted sizing: a fixed size compiles its full
+    /// pipeline at construction. A fresh graph's cold preparation has already
+    /// released any previous resident; a resident theory stays, and its oracle
+    /// invalidates its retained truth as after every failed call. Either way a
     /// failure leaves the slot unwritten and the context invalidated.
     ///
     /// # Errors

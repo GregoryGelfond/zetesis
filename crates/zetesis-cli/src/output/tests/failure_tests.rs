@@ -394,9 +394,10 @@ fn tight_json_separates_routes_from_update_availability() {
     routes.nodes_evaluated = 85;
     statistics.gpu_tight_routes = Some(routes);
     let mut updates = zetesis_solve::TightUpdateStatistics::default();
-    updates.availability = zetesis_solve::TightUpdateAvailability::Admitted;
+    updates.availability = zetesis_solve::TightUpdateAvailability::GuardDeclined;
     updates.count_bits = Some(16);
     updates.steady_state = true;
+    updates.guard_declined_batches = 3;
     statistics.gpu_tight_updates = Some(updates);
     let value = json(&statistics);
     assert_eq!(
@@ -408,7 +409,10 @@ fn tight_json_separates_routes_from_update_availability() {
     );
     assert_eq!(
         value["gpu_tight_updates"],
-        serde_json::json!({"availability": "admitted", "count_bits": 16, "steady_state": true})
+        serde_json::json!({
+            "availability": "guard_declined", "count_bits": 16, "steady_state": true,
+            "guard_declined_batches": 3,
+        })
     );
 }
 

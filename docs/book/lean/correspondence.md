@@ -337,6 +337,9 @@ and the owner's re-reduction of a numeric row, which writes the row's followers
 in its own round, are WGSL and Rust obligations: `TightEvaluation`'s node type
 does not model row re-reduction. Differential physical tests compare every
 update with the scalar certificate and assert each slot's route and receipts.
+Which route evaluates a batch, including the runtime guard's choice between the
+update and the dense routes, is an execution choice: every route returns the
+same verdict.
 All original roots and producers remain covered. On the complete route support
 is reset before reuse, and the final check intersects each candidate word with
 the complement of its support word, returning the first unsupported atom; an

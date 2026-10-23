@@ -4,12 +4,12 @@
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaNodes, FormulaParts,
-    FormulaTransaction, Interpretation, Node, NodeView, Theory, TightCheckLimits, TightPlan,
-    TightPlanLimits,
+    FormulaTransaction, Interpretation, Node, NodeView, Theory, Threshold, TightCheckLimits,
+    TightPlan, TightPlanLimits,
 };
 use zetesis_wgpu::{
     GpuTightOracle, GpuWorkgroupSize, GpuWorkgroupSizing, TightGpuBatchStats, TightGpuCheck,
-    TightGpuError, TightGpuLimits, TightGpuUpdateUnavailable, TightGpuUpdates,
+    TightGpuError, TightGpuLimits, TightGpuUpdateUnavailable, TightGpuUpdates, TightSupport,
 };
 
 const UNBOUNDED: usize = usize::MAX;
@@ -20,6 +20,8 @@ const STRIDES: u64 = GpuTightOracle::UPDATE_ENGAGEMENT_STRIDES;
 const BOUNDS: [i128; 3] = [2, 3, 5];
 /// Words of a result record, a part of every update's floor.
 const RECORD_WORDS: u64 = 9;
+/// The most batches the runtime guard waits after a losing judgment.
+const GUARD_WAIT_LIMIT: u32 = 32;
 
 /// Dense evaluation's strided iterations over level widths `widths` at `size`
 /// invocations.
@@ -233,62 +235,72 @@ impl Ladder {
         atoms
     }
 
-    /// Slot `slot`'s candidate: the model, the model without its first derived
-    /// head (a false rule), the model with an unsupported head, or the model.
+    /// Slot `slot`'s candidate: the model, perturbed by slot.
     fn candidate(&self, slot: usize, chosen: &[bool]) -> Vec<bool> {
-        let mut atoms = self.model(chosen);
-        let derived = self.inputs..self.atoms();
-        match slot % 4 {
-            1 => {
-                if let Some(head) = derived.clone().find(|&head| atoms[head]) {
-                    atoms[head] = false;
-                }
-            }
-            2 => {
-                if let Some(head) = derived.clone().find(|&head| !atoms[head]) {
-                    atoms[head] = true;
-                }
-            }
-            _ => {}
-        }
-        atoms
+        perturbed(self.model(chosen), self.inputs..self.atoms(), slot)
     }
 
     fn patterns(&self, slots: usize, seed: usize) -> Vec<Vec<bool>> {
-        (0..slots)
-            .map(|slot| {
-                (0..self.inputs)
-                    .map(|input| !(input * 7 + slot + seed).is_multiple_of(3))
-                    .collect()
-            })
-            .collect()
+        patterns(self.inputs, slots, seed)
     }
+}
+
+/// Slot `slot`'s candidate from the answer set `atoms`, whose derived heads
+/// are `derived`: the answer set, the answer set without its first derived
+/// head (a false rule), the answer set with an unsupported head, or the
+/// answer set.
+fn perturbed(mut atoms: Vec<bool>, derived: std::ops::Range<usize>, slot: usize) -> Vec<bool> {
+    match slot % 4 {
+        1 => {
+            if let Some(head) = derived.clone().find(|&head| atoms[head]) {
+                atoms[head] = false;
+            }
+        }
+        2 => {
+            if let Some(head) = derived.clone().find(|&head| !atoms[head]) {
+                atoms[head] = true;
+            }
+        }
+        _ => {}
+    }
+    atoms
+}
+
+/// The inputs `slots` slots choose among `inputs`, from `seed`.
+fn patterns(inputs: usize, slots: usize, seed: usize) -> Vec<Vec<bool>> {
+    (0..slots)
+        .map(|slot| {
+            (0..inputs)
+                .map(|input| !(input * 7 + slot + seed).is_multiple_of(3))
+                .collect()
+        })
+        .collect()
 }
 
 /// Every slot's route across controlled changes, under the oracle's own
 /// workgroup size and support construction: complete, then dense seeding the
 /// state, then updates with nothing changed and with sparse changes; exactly
 /// the threshold's change still updates, one more takes dense reuse after its
-/// count, and the next update summarizes afresh; authority lost to a
-/// cancelled call restarts from the complete route.
+/// count, and the next update summarizes afresh, its summary counted in its
+/// path; authority lost to a cancelled call restarts from the complete route.
+/// After every batch the runtime guard decides as the host model predicts.
 pub(super) fn qualify(oracle: &mut GpuTightOracle) {
     let ladder = Ladder::wide();
-    let certificate = &ladder.certificate;
-    let limits = TightGpuLimits::default();
     let mut chosen = ladder.patterns(4, 0);
     let mut candidates: Vec<Vec<bool>> = chosen
         .iter()
         .enumerate()
         .map(|(slot, chosen)| ladder.candidate(slot, chosen))
         .collect();
-    let (first, _) = checked(oracle, certificate, &candidates, limits);
+    let mut sequence = Sequence::new(oracle, &ladder.certificate);
+    let (first, _) = sequence.run(&candidates);
     assert_eq!(first.routes.complete, 4);
     assert_eq!(first.updates, TightGpuUpdates::Pending);
-    let (seeding, _) = checked(oracle, certificate, &candidates, limits);
+    let (seeding, _) = sequence.run(&candidates);
     assert_eq!(seeding.routes.dense_reuse, 4);
     assert_eq!(seeding.routes.beyond_threshold, 0);
     admitted(&seeding, 8, true);
-    let (unchanged, _) = checked(oracle, certificate, &candidates, limits);
+    let (unchanged, _) = sequence.run(&candidates);
     assert_eq!(unchanged.routes.update, 4);
     assert_eq!(unchanged.nodes_evaluated, 0);
     admitted(&unchanged, 8, false);
@@ -300,7 +312,7 @@ pub(super) fn qualify(oracle: &mut GpuTightOracle) {
         }
         candidates[slot] = ladder.candidate(slot, pattern);
     }
-    let (sparse, _) = checked(oracle, certificate, &candidates, limits);
+    let (sparse, _) = sequence.run(&candidates);
     assert_eq!(sparse.routes.update, 4);
     assert!(sparse.nodes_evaluated > 0);
     // Slot 0 changes exactly the threshold's atoms, max(atoms / 8, 64), then one
@@ -310,33 +322,108 @@ pub(super) fn qualify(oracle: &mut GpuTightOracle) {
         for atom in &mut candidates[0][..changed] {
             *atom = !*atom;
         }
-        let (stats, _) = checked(oracle, certificate, &candidates, limits);
+        let (stats, _) = sequence.run(&candidates);
         assert_eq!(stats.routes.dense_reuse, beyond, "{changed} changed atoms");
         assert_eq!(stats.routes.beyond_threshold, beyond);
         assert_eq!(stats.routes.update, 4 - beyond);
     }
-    // Slot 0's last route was dense: its next update summarizes afresh.
+    // Slot 0's last route was dense reuse beyond the threshold: its next update
+    // summarizes afresh, and `judge` asserts the summary in its path.
     candidates[0][100] = !candidates[0][100];
-    let (summarized, _) = checked(oracle, certificate, &candidates, limits);
+    assert_eq!(sequence.beyond, [true, false, false, false]);
+    let (summarized, _) = sequence.run(&candidates);
     assert_eq!(summarized.routes.update, 4);
     let cancelled = Cancellation::default();
     cancelled.cancel();
     let inputs: Vec<_> = candidates
         .iter()
-        .map(|atoms| interpretation(certificate.theory(), atoms))
+        .map(|atoms| interpretation(ladder.certificate.theory(), atoms))
         .collect();
     assert!(matches!(
-        oracle.check_batch(certificate, &inputs, limits, &cancelled),
+        sequence.oracle.check_batch(
+            &ladder.certificate,
+            &inputs,
+            TightGpuLimits::default(),
+            &cancelled
+        ),
         Err(TightGpuError::Stopped(_))
     ));
-    let (restarted, _) = checked(oracle, certificate, &candidates, limits);
+    let (restarted, _) = sequence.run(&candidates);
     assert_eq!(restarted.routes.complete, 4);
     admitted(&restarted, 8, false);
-    let (resumed, _) = checked(oracle, certificate, &candidates, limits);
+    let (resumed, _) = sequence.run(&candidates);
     assert_eq!(resumed.routes.update, 4);
     qualify_receipts(oracle);
     qualify_narrow_levels(oracle);
     qualify_engagement_by_size(oracle);
+    qualify_guard(oracle);
+}
+
+/// Exact batches of four slots on one certificate under default limits, each
+/// checked against the host model's paths and the predicted guard. While the
+/// guard waits after a batch, the sequence runs that batch's candidates
+/// unchanged until the probe has seeded every slot again.
+struct Sequence<'a> {
+    oracle: &'a mut GpuTightOracle,
+    certificate: &'a TightPlan,
+    model: Model,
+    guard: Predicted,
+    /// Each slot's candidate in the last batch.
+    previous: Vec<Vec<bool>>,
+    /// Whether the last batch's wait ended in a probe, which seeded every slot.
+    reseeded: bool,
+    /// Each slot that took dense reuse beyond the threshold in the last batch
+    /// and was not seeded again since: its next update counts its summary into
+    /// its path.
+    beyond: Vec<bool>,
+}
+
+impl<'a> Sequence<'a> {
+    fn new(oracle: &'a mut GpuTightOracle, certificate: &'a TightPlan) -> Self {
+        Self {
+            oracle,
+            certificate,
+            model: Model::new(certificate),
+            guard: Predicted::new(),
+            previous: Vec::new(),
+            reseeded: false,
+            beyond: Vec::new(),
+        }
+    }
+
+    /// Check `candidates` as the next batch, judge it, and wait out the guard.
+    fn run(&mut self, candidates: &[Vec<bool>]) -> (TightGpuBatchStats, Vec<TightGpuCheck>) {
+        let batch = checked(
+            self.oracle,
+            self.certificate,
+            candidates,
+            TightGpuLimits::default(),
+        );
+        let previous = if self.previous.is_empty() {
+            candidates
+        } else {
+            &self.previous
+        };
+        let beyond = judge(
+            self.oracle,
+            &self.model,
+            previous,
+            candidates,
+            &self.beyond,
+            &batch,
+            &mut self.guard,
+        );
+        self.reseeded = wait_out(
+            self.oracle,
+            self.certificate,
+            candidates,
+            &mut self.guard,
+            &batch.0,
+        );
+        self.beyond = if self.reseeded { Vec::new() } else { beyond };
+        self.previous = candidates.to_vec();
+        batch
+    }
 }
 
 /// The engagement rule is decided per resident theory and workgroup size. Over
@@ -372,8 +459,34 @@ struct Receipt {
     work: u64,
 }
 
+/// One update's change, from two complete CPU evaluations.
+struct Change {
+    before: Vec<bool>,
+    after: Vec<bool>,
+    /// The retained candidate's present atoms in each candidate word.
+    retained: Vec<u64>,
+    /// The atoms whose presence changed.
+    atoms: Vec<usize>,
+    /// The nodes taken from the queued set.
+    taken: std::collections::BTreeSet<usize>,
+    /// The atoms settling recomputes: the changed atoms and the heads of the
+    /// producers whose bodies changed.
+    touched: std::collections::BTreeSet<usize>,
+    /// The words the verdict scans: the false-root set's, the unsupported
+    /// set's, or none.
+    verdict: usize,
+}
+
+impl Change {
+    fn changed(&self, node: usize) -> bool {
+        self.before[node] != self.after[node]
+    }
+}
+
 /// The update route's work model, read from the theory: per node its readers
-/// entries and the reads of its evaluation, and per atom its atom nodes.
+/// entries, the reads of its evaluation and dense reuse's least cost by the
+/// guard's table, per atom its atom nodes, and the dependency schedule whose
+/// words the workgroup's invocations divide.
 struct Model {
     theory: Theory,
     producers: Vec<(usize, Option<usize>)>,
@@ -382,6 +495,85 @@ struct Model {
     queues: Vec<Vec<usize>>,
     reads: Vec<u64>,
     atom_nodes: Vec<Vec<usize>>,
+    /// Each row owner's live guards, the owner first: the owner's evaluation
+    /// visits the readers of every one of them that changes.
+    rows: std::collections::BTreeMap<usize, Vec<usize>>,
+    /// Each wide conjunction's and disjunction's operands, and whether it is a
+    /// conjunction: its reduction ends at the first operand that absorbs it.
+    gates: std::collections::BTreeMap<usize, (bool, Vec<usize>)>,
+    /// Dense reuse's least cost of each node by the guard's table.
+    dense: Vec<u64>,
+    /// Each node's schedule position.
+    positions: Vec<usize>,
+    /// The node at each schedule position.
+    order: Vec<usize>,
+    /// Each level's first position, then the schedule's end.
+    offsets: Vec<usize>,
+}
+
+/// Whether a threshold guard reads its row: neither every candidate nor none
+/// meets its bound.
+fn live(threshold: &Threshold<'_>) -> bool {
+    let total: i128 = threshold
+        .weights
+        .iter()
+        .map(|&weight| i128::from(weight))
+        .sum();
+    threshold.bound > 0 && threshold.bound <= total
+}
+
+/// The dependency schedule of `theory`'s nodes: each node's position, the
+/// levels in order of depth and a level's nodes in their original order; and
+/// each level's first position, then the schedule's end. Leaves and constant
+/// guards have depth zero; any other node lies one level beyond its deepest
+/// operand or condition.
+fn schedule(theory: &Theory) -> (Vec<usize>, Vec<usize>) {
+    let view = theory.view();
+    let mut depths: Vec<usize> = Vec::with_capacity(view.len());
+    for node in 0..view.len() {
+        let beyond = |operands: &[usize]| {
+            1 + operands
+                .iter()
+                .map(|&operand| depths[operand])
+                .max()
+                .unwrap()
+        };
+        let depth = match view.node(node).unwrap() {
+            NodeView::And(operands) | NodeView::Or(operands) => beyond(operands),
+            NodeView::Implies(left, right) => beyond(&[left, right]),
+            NodeView::Threshold(threshold) if live(&threshold) => beyond(threshold.conditions),
+            NodeView::ExtremumCut(_) => unreachable!("the model covers thresholds only"),
+            NodeView::Atom(_) | NodeView::False | NodeView::Threshold(_) => 0,
+        };
+        depths.push(depth);
+    }
+    let levels = depths.iter().max().unwrap() + 1;
+    let mut offsets = vec![0; levels + 1];
+    for &depth in &depths {
+        offsets[depth + 1] += 1;
+    }
+    for level in 0..levels {
+        offsets[level + 1] += offsets[level];
+    }
+    let mut next = offsets.clone();
+    let positions = depths
+        .iter()
+        .map(|&depth| {
+            next[depth] += 1;
+            next[depth] - 1
+        })
+        .collect();
+    (positions, offsets)
+}
+
+/// The most cost one of `size` invocations incurs in a phase whose items are
+/// strided among them from item `first`, given each share's item and cost.
+fn busiest(size: usize, first: usize, shares: impl IntoIterator<Item = (usize, u64)>) -> u64 {
+    let mut invocations = vec![0_u64; size];
+    for (item, cost) in shares {
+        invocations[(item - first) % size] += cost;
+    }
+    invocations.into_iter().max().unwrap()
 }
 
 impl Model {
@@ -392,17 +584,26 @@ impl Model {
         let mut readers = vec![0_u64; nodes];
         let mut queues = vec![Vec::new(); nodes];
         let mut reads = vec![0_u64; nodes];
+        let mut dense = vec![1_u64; nodes];
         let mut atom_nodes = vec![Vec::new(); theory.atom_count()];
+        let mut gates = std::collections::BTreeMap::new();
         // Live threshold guards by row: the first is the row's owner.
         let mut rows = std::collections::BTreeMap::<usize, Vec<usize>>::new();
         for (node, read) in reads.iter_mut().enumerate() {
             match view.node(node).unwrap() {
-                NodeView::And(children) | NodeView::Or(children) => {
+                view @ (NodeView::And(children) | NodeView::Or(children)) => {
                     for &child in children {
                         readers[child] += 1;
                         queues[child].push(node);
                     }
                     *read = children.len() as u64;
+                    if children.len() > 2 {
+                        let conjunction = matches!(view, NodeView::And(_));
+                        gates.insert(node, (conjunction, children.to_vec()));
+                        dense[node] = 2;
+                    } else {
+                        dense[node] = 3;
+                    }
                 }
                 NodeView::Implies(left, right) => {
                     for child in [left, right] {
@@ -410,15 +611,11 @@ impl Model {
                         queues[child].push(node);
                     }
                     *read = 2;
+                    dense[node] = 3;
                 }
                 NodeView::Atom(atom) => atom_nodes[atom].push(node),
                 NodeView::Threshold(threshold) => {
-                    let total: i128 = threshold
-                        .weights
-                        .iter()
-                        .map(|&weight| i128::from(weight))
-                        .sum();
-                    if threshold.bound > 0 && threshold.bound <= total {
+                    if live(&threshold) {
                         let descriptor = theory.nodes()[node].threshold_descriptor().unwrap();
                         let row = theory.parts().thresholds()[descriptor].row;
                         rows.entry(row).or_default().push(node);
@@ -436,6 +633,8 @@ impl Model {
                 queues[condition].push(owner);
             }
             reads[owner] = (span.length + guards.len()) as u64;
+            // An unchanged row's change-bit reads and guard clears.
+            dense[owner] = reads[owner];
         }
         let producers: Vec<_> = certificate
             .producers()
@@ -450,6 +649,11 @@ impl Model {
         for &root in theory.roots() {
             readers[root] += 1;
         }
+        let (positions, offsets) = schedule(&theory);
+        let mut order = vec![0; nodes];
+        for (node, &position) in positions.iter().enumerate() {
+            order[position] = node;
+        }
         Self {
             theory,
             producers,
@@ -457,7 +661,24 @@ impl Model {
             queues,
             reads,
             atom_nodes,
+            rows: rows
+                .into_values()
+                .map(|guards| (guards[0], guards))
+                .collect(),
+            gates,
+            dense,
+            positions,
+            order,
+            offsets,
         }
+    }
+
+    /// The schedule's level widths.
+    fn widths(&self) -> Vec<u64> {
+        self.offsets
+            .windows(2)
+            .map(|level| (level[1] - level[0]) as u64)
+            .collect()
     }
 
     fn truth(candidate: &Interpretation) -> Vec<bool> {
@@ -470,51 +691,44 @@ impl Model {
         attempt.result.unwrap().truth().to_vec()
     }
 
-    /// The receipt of an update from `old` to `new` in a schedule of `levels`
-    /// levels, summarizing first unless the slot's summary is current.
+    /// The receipt of an update from `old` to `new`, summarizing first unless
+    /// the slot's summary is current.
     fn receipt(
         &self,
         old: &Interpretation,
         new: &Interpretation,
-        levels: u32,
         count_bits: u32,
         summarized: bool,
     ) -> Receipt {
+        let change = self.change(old, new);
+        Receipt {
+            nodes: change.taken.len() as u64,
+            work: self.work(&change, count_bits, summarized),
+        }
+    }
+
+    fn change(&self, old: &Interpretation, new: &Interpretation) -> Change {
         let (before, after) = (Self::truth(old), Self::truth(new));
         let atoms = self.theory.atom_count();
-        let words = atoms.div_ceil(32) as u64;
-        let nodes = before.len();
-        let roots = self.theory.roots().len();
-        let root_words = roots.div_ceil(32) as u64;
-        let mut work = 5 * words + nodes.div_ceil(32) as u64 + u64::from(levels) + RECORD_WORDS;
-        if !summarized {
-            let per_word = 32 / count_bits as usize;
-            work += atoms.div_ceil(per_word) as u64
-                + 2 * words
-                + root_words
-                + self.producers.len() as u64
-                + roots as u64
-                + old.atoms().count() as u64;
+        let mut retained = vec![0_u64; atoms.div_ceil(32)];
+        for atom in old.atoms() {
+            retained[atom / 32] += 1;
         }
-        let present =
-            |interpretation: &Interpretation, atom| interpretation.atoms().any(|a| a == atom);
-        let changed_atoms: Vec<usize> = (0..atoms)
-            .filter(|&atom| present(old, atom) != present(new, atom))
-            .collect();
+        let presence = |interpretation: &Interpretation| {
+            let mut present = vec![false; atoms];
+            for atom in interpretation.atoms() {
+                present[atom] = true;
+            }
+            present
+        };
+        let (was, is) = (presence(old), presence(new));
+        let changed_atoms: Vec<usize> = (0..atoms).filter(|&atom| was[atom] != is[atom]).collect();
         let mut taken = std::collections::BTreeSet::new();
         for &atom in &changed_atoms {
-            work += 1 + self.atom_nodes[atom].len() as u64;
             taken.extend(self.atom_nodes[atom].iter().copied());
         }
-        let changed: Vec<usize> = (0..nodes)
-            .filter(|&node| before[node] != after[node])
-            .collect();
-        for &node in &changed {
-            work += self.readers[node];
+        for node in (0..before.len()).filter(|&node| before[node] != after[node]) {
             taken.extend(self.queues[node].iter().copied());
-        }
-        for &node in &taken {
-            work += 1 + self.reads[node];
         }
         let mut touched: std::collections::BTreeSet<usize> =
             changed_atoms.iter().copied().collect();
@@ -523,73 +737,614 @@ impl Model {
                 touched.insert(head);
             }
         }
-        work += touched.len() as u64;
-        let false_root = self.theory.roots().iter().any(|&root| !after[root]);
-        let unsupported = new.atoms().any(|atom| {
-            !self
-                .producers
-                .iter()
-                .any(|&(head, body)| head == atom && body.is_none_or(|body| after[body]))
-        });
-        if false_root {
-            work += root_words;
-        } else if unsupported {
-            work += words;
+        let mut supported = vec![false; atoms];
+        for &(head, body) in &self.producers {
+            if body.is_none_or(|body| after[body]) {
+                supported[head] = true;
+            }
         }
-        Receipt {
-            nodes: taken.len() as u64,
-            work,
+        let unsupported = new.atoms().any(|atom| !supported[atom]);
+        let roots = self.theory.roots();
+        let verdict = if roots.iter().any(|&root| !after[root]) {
+            roots.len().div_ceil(32)
+        } else if unsupported {
+            atoms.div_ceil(32)
+        } else {
+            0
+        };
+        Change {
+            before,
+            after,
+            retained,
+            atoms: changed_atoms,
+            taken,
+            touched,
+            verdict,
+        }
+    }
+
+    /// The work of an update: its floor, its summary when one runs, its
+    /// presence pass, every evaluation and readers visit, settling and the
+    /// verdict scan.
+    fn work(&self, change: &Change, count_bits: u32, summarized: bool) -> u64 {
+        let words = change.retained.len() as u64;
+        let levels = (self.offsets.len() - 1) as u64;
+        let mut work = 5 * words + change.before.len().div_ceil(32) as u64 + levels + RECORD_WORDS;
+        if !summarized {
+            let atoms = self.theory.atom_count();
+            let roots = self.theory.roots().len();
+            // The clears of the counts, the unsupported set and the false-root
+            // set; the producer and root visits; the retained words, with one
+            // count read per present atom.
+            work += (atoms.div_ceil(32 / count_bits as usize)
+                + atoms.div_ceil(32)
+                + roots.div_ceil(32)
+                + self.producers.len()
+                + roots) as u64
+                + words
+                + change.retained.iter().sum::<u64>();
+        }
+        for &atom in &change.atoms {
+            work += 1 + self.atom_nodes[atom].len() as u64;
+        }
+        for node in (0..change.before.len()).filter(|&node| change.changed(node)) {
+            work += self.readers[node];
+        }
+        for &node in &change.taken {
+            work += 1 + self.reads[node];
+        }
+        work + change.touched.len() as u64 + change.verdict as u64
+    }
+
+    /// The critical path of an update at `size` invocations, by the guard's
+    /// cost table: per phase after the summary, the costliest invocation, each
+    /// word's operations belonging to the invocation the phase's strided loop
+    /// hands that word; and the floor, each invocation's share of the uniform
+    /// scans and of the record.
+    fn path(&self, change: &Change, size: usize) -> u64 {
+        // A uniform strided loop's busiest invocation: the first.
+        let strided = |count: usize| count.div_ceil(size) as u64;
+        // The change count's, presence's and settling's scans, each level's
+        // bounds and queued words, and the record.
+        let mut path = 5 * strided(change.retained.len())
+            + self
+                .offsets
+                .windows(2)
+                .map(|level| strided(level[1].div_ceil(32) - level[0] / 32) + 1)
+                .sum::<u64>()
+            + RECORD_WORDS;
+        path += busiest(
+            size,
+            0,
+            change
+                .atoms
+                .iter()
+                .map(|&atom| (atom / 32, 1 + self.atom_nodes[atom].len() as u64)),
+        );
+        for level in self.offsets.windows(2) {
+            let span = level[0]..level[1];
+            path += busiest(
+                size,
+                level[0] / 32,
+                change
+                    .taken
+                    .iter()
+                    .filter(|&&node| span.contains(&self.positions[node]))
+                    .map(|&node| (self.positions[node] / 32, self.evaluation(change, node))),
+            );
+        }
+        path += busiest(size, 0, change.touched.iter().map(|&atom| (atom / 32, 1)));
+        path + strided(change.verdict)
+    }
+
+    /// What a summary adds to an update's path at `size` invocations when the
+    /// slot took dense reuse beyond the threshold before it: the costliest
+    /// invocation of each of its three phases. The clears of the counts at
+    /// `count_bits`, the unsupported set and the false-root set, and then the
+    /// producer and root visits, are uniform strided loops, whose first
+    /// invocation is the busiest; the retained-word scan costs each word one
+    /// operation and a count read per present atom.
+    fn summary_path(&self, change: &Change, count_bits: u32, size: usize) -> u64 {
+        let strided = |count: usize| count.div_ceil(size) as u64;
+        let atoms = self.theory.atom_count();
+        let roots = self.theory.roots().len();
+        let clears = strided(atoms.div_ceil(32 / count_bits as usize))
+            + strided(atoms.div_ceil(32))
+            + strided(roots.div_ceil(32));
+        let visits = strided(self.producers.len()) + strided(roots);
+        let scan = busiest(
+            size,
+            0,
+            change
+                .retained
+                .iter()
+                .enumerate()
+                .map(|(word, &present)| (word, 1 + present)),
+        );
+        clears + visits + scan
+    }
+
+    /// A taken node's cost by the guard's table: the node, the operands or
+    /// conditions it reads, a wide gate's only up to the first that absorbs
+    /// it, and the readers of each value that changes, its own or, for a row's
+    /// owner, every guard's.
+    fn evaluation(&self, change: &Change, node: usize) -> u64 {
+        let visits: u64 = match self.rows.get(&node) {
+            Some(guards) => guards
+                .iter()
+                .filter(|&&guard| change.changed(guard))
+                .map(|&guard| self.readers[guard])
+                .sum(),
+            None if change.changed(node) => self.readers[node],
+            None => 0,
+        };
+        let reads = match self.gates.get(&node) {
+            Some((conjunction, operands)) => operands
+                .iter()
+                .position(|&operand| change.after[operand] != *conjunction)
+                .map_or(operands.len(), |absorbing| absorbing + 1)
+                as u64,
+            None => self.reads[node],
+        };
+        1 + reads + visits
+    }
+
+    /// Dense reuse's least critical path for one candidate at `size`
+    /// invocations, by the guard's cost table: each level's bounds and its
+    /// busiest invocation over the positions `start + lane + j * size`; the
+    /// support construction's phases under `support`; the unsupported scan's
+    /// two words per candidate word; and the record.
+    fn dense_path(&self, size: usize, support: TightSupport) -> u64 {
+        let strided = |count: usize| count.div_ceil(size) as u64;
+        let levels: u64 = self
+            .offsets
+            .windows(2)
+            .map(|level| {
+                1 + busiest(
+                    size,
+                    level[0],
+                    (level[0]..level[1])
+                        .map(|position| (position, self.dense[self.order[position]])),
+                )
+            })
+            .sum();
+        let words = self.theory.atom_count().div_ceil(32);
+        let roots = self.theory.roots().len();
+        let construction = match support {
+            TightSupport::Atomic => strided(words) + strided(roots) + strided(self.producers.len()),
+            TightSupport::Grouped => {
+                let mut groups = vec![0_u64; words];
+                for &(head, _) in &self.producers {
+                    groups[head / 32] += 1;
+                }
+                busiest(
+                    size,
+                    0,
+                    (0..roots).map(|root| (root, 1)).chain(
+                        groups
+                            .iter()
+                            .enumerate()
+                            .map(|(word, &producers)| (word, 1 + producers)),
+                    ),
+                )
+            }
+        };
+        levels + construction + 2 * strided(words) + RECORD_WORDS
+    }
+}
+
+/// The runtime guard as its specification predicts it: engaged, or declined
+/// for a count of decoded batches, beside a backoff that starts at one batch
+/// and doubles up to the wait limit after every losing judgment.
+struct Predicted {
+    waiting: u32,
+    backoff: u32,
+}
+
+impl Predicted {
+    fn new() -> Self {
+        Self {
+            waiting: 0,
+            backoff: 1,
+        }
+    }
+
+    fn allows(&self) -> bool {
+        self.waiting == 0
+    }
+
+    /// Settle a decoded batch whose slowest update path is `slowest`, against
+    /// dense reuse's `dense`: declined, the batch counts the wait down;
+    /// engaged, a batch with update slots is judged.
+    fn settle(&mut self, slowest: Option<u64>, dense: u64) {
+        if self.waiting != 0 {
+            self.waiting -= 1;
+        } else if slowest.is_some_and(|slowest| slowest > dense) {
+            self.waiting = self.backoff;
+            self.backoff = (2 * self.backoff).min(GUARD_WAIT_LIMIT);
         }
     }
 }
 
+/// Check a decoded batch's critical paths against the host model and settle
+/// the predicted guard with them: dense reuse's least path at the dispatched
+/// size and the oracle's support construction; each update slot's path from
+/// its previous candidate, a slot having updated exactly when its check
+/// carries a path, with its summary when `beyond` marks the slot as having
+/// taken dense reuse beyond the threshold before; and the batch's slowest.
+/// Returns the slots that took dense reuse beyond the threshold in this batch:
+/// a batch with such slots runs with every slot seeded, so they are exactly
+/// its slots without a path.
+fn judge(
+    oracle: &GpuTightOracle,
+    model: &Model,
+    previous: &[Vec<bool>],
+    candidates: &[Vec<bool>],
+    beyond: &[bool],
+    (stats, results): &(TightGpuBatchStats, Vec<TightGpuCheck>),
+    guard: &mut Predicted,
+) -> Vec<bool> {
+    let size = stats.workgroup_size as usize;
+    let dense = model.dense_path(size, oracle.support());
+    assert_eq!(stats.dense_critical_path, dense);
+    let theory = &model.theory;
+    let mut slowest = None;
+    let mut updates = 0;
+    for (slot, result) in results.iter().enumerate() {
+        if result.critical_path() != 0 {
+            let change = model.change(
+                &interpretation(theory, &previous[slot]),
+                &interpretation(theory, &candidates[slot]),
+            );
+            let mut path = model.path(&change, size);
+            if beyond.get(slot) == Some(&true) {
+                let TightGpuUpdates::Admitted { count_bits, .. } = stats.updates else {
+                    panic!("an updating batch admits the route: {:?}", stats.updates);
+                };
+                path += model.summary_path(&change, count_bits, size);
+            }
+            assert_eq!(result.critical_path(), path, "slot {slot}");
+            slowest = slowest.max(Some(result.critical_path()));
+            updates += 1;
+        }
+    }
+    assert_eq!(stats.routes.update, updates);
+    assert_eq!(stats.update_critical_path, slowest.unwrap_or(0));
+    guard.settle(slowest, dense);
+    let took: Vec<bool> = results
+        .iter()
+        .map(|result| stats.routes.beyond_threshold != 0 && result.critical_path() == 0)
+        .collect();
+    assert_eq!(
+        took.iter().filter(|&&took| took).count() as u64,
+        stats.routes.beyond_threshold
+    );
+    took
+}
+
+/// While the predicted guard waits, run `candidates` unchanged: each batch
+/// reports `GuardDeclined` and reuses dense evaluation on every slot, its
+/// state still accounted as in `admitted`'s batch; then the probe seeds every
+/// slot, so that the next batch can update. Returns whether the guard waited.
+fn wait_out(
+    oracle: &mut GpuTightOracle,
+    certificate: &TightPlan,
+    candidates: &[Vec<bool>],
+    guard: &mut Predicted,
+    admitted: &TightGpuBatchStats,
+) -> bool {
+    if guard.allows() {
+        return false;
+    }
+    let slots = candidates.len() as u64;
+    let limits = TightGpuLimits::default();
+    while !guard.allows() {
+        let (declined, _) = checked(oracle, certificate, candidates, limits);
+        unavailable(&declined, TightGpuUpdateUnavailable::GuardDeclined);
+        assert_eq!(declined.routes.dense_reuse, slots);
+        assert_eq!(
+            declined.resident_transport_bytes,
+            admitted.resident_transport_bytes
+        );
+        guard.settle(None, 0);
+    }
+    let (probe, _) = checked(oracle, certificate, candidates, limits);
+    assert!(
+        matches!(
+            probe.updates,
+            TightGpuUpdates::Admitted {
+                index_built: false,
+                ..
+            }
+        ),
+        "{:?}",
+        probe.updates
+    );
+    assert_eq!(probe.routes.dense_reuse, slots);
+    guard.settle(None, 0);
+    true
+}
+
 /// An update's receipts equal the host model's: the nodes taken from the
-/// queued set, and the work of its floor, its summary when one runs, its
-/// presence pass, every evaluation and readers visit, settling and the verdict
-/// scan. Two updates in turn: the first summarizes, the second does not.
+/// queued set; the work of its floor, its summary when one runs, its presence
+/// pass, every evaluation and readers visit, settling and the verdict scan;
+/// and its critical path by the guard's cost table, each phase after the
+/// summary at its costliest invocation over the words it owns, plus the
+/// floor's share of the uniform scans. Two updates in turn: the first
+/// summarizes, the second does not unless the guard declined between them.
+/// On the ladder, and on wide gates, whose paths count the operands their
+/// reductions read.
 fn qualify_receipts(oracle: &mut GpuTightOracle) {
     let ladder = Ladder::wide();
-    let certificate = &ladder.certificate;
+    assert_eq!(
+        Model::new(&ladder.certificate).widths(),
+        Ladder::widths(u64::try_from(ladder.inputs).unwrap())
+    );
+    exact_receipts(
+        oracle,
+        &ladder.certificate,
+        ladder.patterns(4, 1),
+        |slot, chosen| ladder.candidate(slot, chosen),
+    );
+    let gates = Gates::wide();
+    assert_eq!(
+        Model::new(&gates.certificate).widths(),
+        Gates::widths(u64::try_from(gates.inputs).unwrap())
+    );
+    exact_receipts(
+        oracle,
+        &gates.certificate,
+        patterns(gates.inputs, 4, 1),
+        |slot, chosen| gates.candidate(slot, chosen),
+    );
+}
+
+/// Two updates in turn of four slots holding `candidate(slot, inputs)` for
+/// `chosen` inputs, each slot flipping one input per round, against the host
+/// model's receipts and paths.
+fn exact_receipts(
+    oracle: &mut GpuTightOracle,
+    certificate: &TightPlan,
+    mut chosen: Vec<Vec<bool>>,
+    candidate: impl Fn(usize, &[bool]) -> Vec<bool>,
+) {
     let theory = certificate.theory();
-    let model = Model::new(certificate);
-    let limits = TightGpuLimits::default();
-    let mut chosen = ladder.patterns(4, 1);
     let mut candidates: Vec<Vec<bool>> = chosen
         .iter()
         .enumerate()
-        .map(|(slot, chosen)| ladder.candidate(slot, chosen))
+        .map(|(slot, chosen)| candidate(slot, chosen))
         .collect();
-    checked(oracle, certificate, &candidates, limits);
-    let (seeding, _) = checked(oracle, certificate, &candidates, limits);
+    let mut sequence = Sequence::new(oracle, certificate);
+    sequence.run(&candidates);
+    let (seeding, _) = sequence.run(&candidates);
     let TightGpuUpdates::Admitted { count_bits, .. } = seeding.updates else {
         panic!("the update route is admitted: {:?}", seeding.updates);
     };
-    for (round, summarized) in [(0, false), (1, true)] {
+    // The first update after seeding summarizes; a probe after a wait seeds
+    // the state again, so the next update summarizes once more.
+    let mut summarized = false;
+    for round in 0..2 {
         let previous = candidates.clone();
         for (slot, pattern) in chosen.iter_mut().enumerate() {
-            let input = (5 * slot + 3 * round + 1) % ladder.inputs;
+            let input = (5 * slot + 3 * round + 1) % pattern.len();
             pattern[input] = !pattern[input];
-            candidates[slot] = ladder.candidate(slot, pattern);
+            candidates[slot] = candidate(slot, pattern);
         }
-        let (stats, results) = checked(oracle, certificate, &candidates, limits);
+        let (stats, results) = sequence.run(&candidates);
         assert_eq!(stats.routes.update, 4);
         let mut nodes = 0;
-        for slot in 0..4 {
-            let receipt = model.receipt(
+        for (slot, result) in results.iter().enumerate() {
+            let receipt = sequence.model.receipt(
                 &interpretation(theory, &previous[slot]),
                 &interpretation(theory, &candidates[slot]),
-                stats.truth_levels,
                 count_bits,
                 summarized,
             );
-            assert_eq!(
-                results[slot].work(),
-                receipt.work,
-                "slot {slot} round {round}"
-            );
+            assert_eq!(result.work(), receipt.work, "slot {slot} round {round}");
             nodes += receipt.nodes;
         }
         assert_eq!(stats.nodes_evaluated, nodes, "round {round}");
+        summarized = !sequence.reseeded;
+    }
+}
+
+/// Inputs choose freely; each three consecutive inputs derive one head by
+/// their conjunction and another by their disjunction, so that every update
+/// evaluates wide gates, whose reductions end at their first absorbing
+/// operand.
+struct Gates {
+    certificate: TightPlan,
+    inputs: usize,
+}
+
+impl Gates {
+    fn new(inputs: usize) -> Self {
+        let triples = inputs - 2;
+        let atoms = inputs + 2 * triples;
+        let mut nodes = FormulaNodes::new(FormulaParts::new(vec![Node::falsum()], vec![]).unwrap());
+        let mut transaction = nodes.transaction();
+        let atom: Vec<usize> = (0..atoms)
+            .map(|atom| push(&mut transaction, NodeView::Atom(atom)))
+            .collect();
+        let mut roots = Vec::new();
+        for &input in &atom[..inputs] {
+            let negation = push(&mut transaction, NodeView::Implies(input, 0));
+            let choice = [input, negation];
+            roots.push(push(&mut transaction, NodeView::Or(&choice)));
+        }
+        for index in 0..triples {
+            let triple = &atom[index..index + 3];
+            let conjunction = push(&mut transaction, NodeView::And(triple));
+            roots.push(push(
+                &mut transaction,
+                NodeView::Implies(conjunction, atom[inputs + index]),
+            ));
+            let disjunction = push(&mut transaction, NodeView::Or(triple));
+            roots.push(push(
+                &mut transaction,
+                NodeView::Implies(disjunction, atom[inputs + triples + index]),
+            ));
+        }
+        transaction.commit();
+        Self {
+            certificate: compile(atoms, nodes, roots),
+            inputs,
+        }
+    }
+
+    /// The level widths of `inputs` inputs: the falsum and every atom; the
+    /// negations and the wide gates; the choices and the gates' rules.
+    fn widths(inputs: u64) -> Vec<u64> {
+        let gates = inputs + 2 * (inputs - 2);
+        vec![1 + gates, gates, gates]
+    }
+
+    /// The fewest inputs, in steps of 64, with which the update route engages
+    /// at every workgroup size.
+    fn wide() -> Self {
+        Self::new(least_engaging(64, 64, Self::widths))
+    }
+
+    /// Slot `slot`'s candidate for `chosen` inputs: the answer set, perturbed
+    /// by slot.
+    fn candidate(&self, slot: usize, chosen: &[bool]) -> Vec<bool> {
+        let triples = self.inputs - 2;
+        let mut atoms = chosen.to_vec();
+        atoms.extend((0..triples).map(|index| chosen[index..index + 3].iter().all(|&input| input)));
+        atoms.extend((0..triples).map(|index| chosen[index..index + 3].iter().any(|&input| input)));
+        let derived = self.inputs..atoms.len();
+        perturbed(atoms, derived, slot)
+    }
+}
+
+/// The reach fixture's inputs: one candidate word.
+const REACH_INPUTS: usize = 32;
+
+/// Inputs no rule derives, each read by `fan` rules deriving a head of its
+/// own (`y :- x`): the two-level reach fixture of the route's crossover
+/// measurement, over one candidate word of inputs. Each input's node has
+/// `2 * fan` readers entries, its rules and their producers, all evaluated by
+/// the invocation owning the input's queued word.
+fn reach(fan: usize) -> TightPlan {
+    let atoms = REACH_INPUTS * (1 + fan);
+    let mut nodes = FormulaNodes::new(FormulaParts::new(vec![Node::falsum()], vec![]).unwrap());
+    let mut transaction = nodes.transaction();
+    let atom: Vec<usize> = (0..atoms)
+        .map(|atom| push(&mut transaction, NodeView::Atom(atom)))
+        .collect();
+    let roots = (0..REACH_INPUTS * fan)
+        .map(|rule| {
+            push(
+                &mut transaction,
+                NodeView::Implies(atom[rule / fan], atom[REACH_INPUTS + rule]),
+            )
+        })
+        .collect();
+    transaction.commit();
+    compile(atoms, nodes, roots)
+}
+
+/// The reach fixture's candidates: each slot's inputs follow a pattern of its
+/// own, every one flipped when `flipped` holds, and no head is held.
+fn reach_candidates(atoms: usize, flipped: bool) -> Vec<Vec<bool>> {
+    (0..4)
+        .map(|slot| {
+            (0..atoms)
+                .map(|atom| atom < REACH_INPUTS && (5 * atom + slot).is_multiple_of(3) != flipped)
+                .collect()
+        })
+        .collect()
+}
+
+/// The runtime guard on the reach fixture, with the fewest heads per input,
+/// in steps of 8, with which the route engages at every size. Each batch flips
+/// every input of every slot, a clustered change of one candidate word whose
+/// reach gives every update a path beyond dense reuse's, by the host model.
+/// The first judged batch updates and loses; the guard then declines the
+/// route for 1, 2 and 4 batches in turn, which reuse dense evaluation on the
+/// kernel without the update route with the state still accounted; each probe
+/// after a wait seeds the state, and the batch after it updates and is judged
+/// again. A cancelled call while the guard waits is not judged and consumes no
+/// wait. Every verdict is the scalar plan's.
+fn qualify_guard(oracle: &mut GpuTightOracle) {
+    let widths = |fan: u64| {
+        let inputs = REACH_INPUTS as u64;
+        vec![1 + inputs * (1 + fan), inputs * fan]
+    };
+    let certificate = &reach(least_engaging(8, 8, widths));
+    let model = Model::new(certificate);
+    let mut guard = Predicted::new();
+    let atoms = certificate.theory().atom_count();
+    let limits = TightGpuLimits::default();
+    let mut previous = reach_candidates(atoms, false);
+    let mut beyond = Vec::new();
+    let mut flipped = false;
+    let mut next = |oracle: &mut GpuTightOracle, guard: &mut Predicted| {
+        flipped = !flipped;
+        let candidates = reach_candidates(atoms, flipped);
+        let batch = checked(oracle, certificate, &candidates, limits);
+        beyond = judge(
+            oracle,
+            &model,
+            &previous,
+            &candidates,
+            &beyond,
+            &batch,
+            guard,
+        );
+        previous = candidates;
+        batch.0
+    };
+    let first = next(oracle, &mut guard);
+    assert_eq!(first.routes.complete, 4);
+    let seeding = next(oracle, &mut guard);
+    assert_eq!(seeding.routes.dense_reuse, 4);
+    let TightGpuUpdates::Admitted {
+        count_bits,
+        index_built: true,
+    } = seeding.updates
+    else {
+        panic!("the seeding batch builds the index: {:?}", seeding.updates);
+    };
+    let cancelled = Cancellation::default();
+    cancelled.cancel();
+    let inputs: Vec<_> = reach_candidates(atoms, false)
+        .iter()
+        .map(|atoms| interpretation(certificate.theory(), atoms))
+        .collect();
+    for wait in [1, 2, 4] {
+        let judged = next(oracle, &mut guard);
+        admitted(&judged, count_bits, false);
+        assert_eq!(judged.routes.update, 4);
+        // The host model predicts the loss, and the wait it sets.
+        assert_eq!(guard.waiting, wait);
+        for waited in 0..wait {
+            // The cancelled call drops reuse authority, so the batch after it
+            // restarts from the complete route, still declined.
+            let restarted = wait == 2 && waited == 1;
+            if restarted {
+                assert!(matches!(
+                    oracle.check_batch(certificate, &inputs, limits, &cancelled),
+                    Err(TightGpuError::Stopped(_))
+                ));
+            }
+            let declined = next(oracle, &mut guard);
+            unavailable(&declined, TightGpuUpdateUnavailable::GuardDeclined);
+            let reused = if restarted { 0 } else { 4 };
+            assert_eq!(
+                (declined.routes.dense_reuse, declined.routes.update),
+                (reused, 0)
+            );
+            assert_eq!(
+                declined.resident_transport_bytes,
+                judged.resident_transport_bytes
+            );
+        }
+        // The probe sets the route's parameter again: records written while
+        // the guard declined say unseeded, so every slot seeds.
+        let probe = next(oracle, &mut guard);
+        admitted(&probe, count_bits, false);
+        assert_eq!(probe.routes.dense_reuse, 4);
     }
 }
 
@@ -741,7 +1496,20 @@ fn qualify_count_widths(oracle: &mut GpuTightOracle) {
             atoms
         };
         let limits = TightGpuLimits::default();
-        let sequence = [vec![0, 1], vec![0, 1], vec![1], vec![], vec![5, 299]];
+        // The head's own change, as the chosen set empties, reaches every
+        // producer's rule: beyond dense reuse's path under atomic support, so
+        // the runtime guard may decline the next batch. Two unchanged batches
+        // let its wait and probe pass, and the count returns from zero by an
+        // update.
+        let sequence = [
+            vec![0, 1],
+            vec![0, 1],
+            vec![1],
+            vec![],
+            vec![],
+            vec![],
+            vec![5, 299],
+        ];
         let mut last = None;
         for chosen in &sequence {
             // The second slot keeps its head but loses its support.

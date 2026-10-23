@@ -1175,12 +1175,13 @@ fn formula_gpu(
     if let Some(updates) = execution.gpu_tight_updates {
         writeln!(
             sink,
-            "  tight GPU update route: {}; count width={}; steady state={}",
+            "  tight GPU update route: {}; count width={}; steady state={}; guard declined batches={}",
             updates.availability.label(),
             updates
                 .count_bits
                 .map_or_else(|| "unavailable".to_owned(), |bits| bits.to_string()),
-            updates.steady_state
+            updates.steady_state,
+            updates.guard_declined_batches
         )?;
     }
     if let Some(limits) = execution.gpu_limits {
