@@ -280,7 +280,7 @@ linearization of the deques' changes and its peak the maximum of that history;
 the count and byte peaks need not occur together.
 
 The observation excludes the regions producers hold, at most one per producer
-and per output slot, so a peak omits at most that many; it also excludes retired
+and per hand, so a peak omits at most that many; it also excludes retired
 worker storage, temporary split copies, shared immutable indexes, candidate
 batches, thread stacks, allocator overhead and device storage. It is neither
 peak process memory nor a memory limit. Uninstrumented traversal routes report

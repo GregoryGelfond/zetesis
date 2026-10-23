@@ -10,6 +10,8 @@ use crate::search::{Budget, increment};
 use crate::timing::{self, Phase};
 use zetesis_ferraris::{EvaluationLimits, Interpretation, Theory};
 
+#[cfg(test)]
+mod tests;
 mod validation;
 use validation::Validation;
 

@@ -102,11 +102,12 @@ pub(super) fn reserve_regions(
 /// premise to fail, a waiter could also find the publication still holding the
 /// deque, and would find the child after its bounded wait.
 pub(super) struct Termination {
-    /// Created-but-unresolved regions across every worker's deque and hand: a
-    /// split adds one (before pushing its children), a refuted or decided
-    /// region subtracts one. It starts at one for the root and reaches zero
-    /// exactly when the whole frontier is resolved; a read of zero is a true
-    /// zero, so a worker that finds every deque empty and reads zero is done.
+    /// Created-but-unresolved regions across every worker's deque and region
+    /// in hand: a split adds one (before pushing its children), a refuted or
+    /// decided region subtracts one. It starts at one for the root and reaches
+    /// zero exactly when the whole frontier is resolved; a read of zero is a
+    /// true zero, so a worker that finds every deque empty and reads zero is
+    /// done.
     outstanding: AtomicUsize,
     /// A stop was raised (error or cancellation) or the walk's consumer
     /// stopped listening; workers check it before each region and while idle,
@@ -401,17 +402,25 @@ impl RegionFrontier {
     }
 
     /// Return a region to worker `index`'s deque without changing the count:
-    /// a region taken but neither resolved nor split goes back. Best effort:
-    /// when entry capacity is refused the region is dropped, which only a path
-    /// that records a stop does, so the run stays incomplete.
-    pub(super) fn requeue(&self, index: usize, entry: Entry) {
+    /// a region taken but neither resolved nor split goes back. The injected
+    /// reservation is the sole fallible storage effect, as in
+    /// [`Self::publish_split`]. When it refuses entry capacity the region is
+    /// dropped and the refusal returned, for the caller to record as a stop:
+    /// the count still includes the region, so the run cannot claim
+    /// exhaustion, and the stop says why.
+    pub(super) fn requeue(
+        &self,
+        index: usize,
+        entry: Entry,
+        reserve: impl FnOnce(&mut VecDeque<Entry>, usize) -> Result<(), Incomplete>,
+    ) -> Result<(), Incomplete> {
         let mut queue = self.queue(index);
         let before = queue.capacity();
-        if reserve_regions(&mut queue, 1).is_ok() {
-            self.resized(before, queue.capacity());
-            self.inserted(&entry);
-            queue.push_back(entry);
-        }
+        reserve(&mut queue, 1)?;
+        self.resized(before, queue.capacity());
+        self.inserted(&entry);
+        queue.push_back(entry);
+        Ok(())
     }
 
     /// Take the oldest region of a peer's deque, trying peers in round-robin
