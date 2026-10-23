@@ -1,4 +1,4 @@
-//! Values keyed by the owner-scoped identity of canonical atoms.
+//! Values keyed by the row-scoped identity of canonical atoms.
 
 use std::{
     collections::HashMap,
@@ -8,13 +8,20 @@ use std::{
 
 use super::{AtomRef, Error, storage};
 
-/// Values keyed by the owner-scoped identity of canonical atoms, for any
-/// number of atom owners. A lookup hashes the owner's identity and then one
-/// identity word, instead of the atom's structure, so its cost does not grow
-/// with the number of owners. Owned ingress and carrier atoms have no identity
-/// here, and equal atoms of different owners are different keys. Each owner is
-/// retained by identity only, never by its payload; `retain_held` drops the
-/// owners nothing else holds.
+/// Values keyed by the row-scoped identity of canonical atoms, for any number
+/// of atom owners. A lookup hashes the scope's identity and then one identity
+/// word, instead of the atom's structure, so its cost does not grow with the
+/// number of owners. An atom's row scope is the owner whose rows name it: a
+/// row of a shared closed base is scoped by the base's source writer, so every
+/// descendant of that base, and the writer's own snapshots, present it under
+/// one identity; any other atom is scoped by its own atom owner, so equal
+/// atoms of different owners are different keys. Owned ingress and carrier
+/// atoms have no identity here. Each scope is retained by identity only, never
+/// by its payload; `retain_held` drops the scopes nothing else holds.
+///
+/// A value recorded through one presenter of a base row is found through every
+/// other, so a caller's value must depend on the atom alone, not on which
+/// owner presented it.
 #[derive(Debug)]
 pub struct AtomIdentityMap<T> {
     /// By the owner's address, which the entry's own scope handle keeps
@@ -60,19 +67,19 @@ impl<T> Default for AtomIdentityMap<T> {
 }
 
 impl<T: Copy> AtomIdentityMap<T> {
-    /// The value recorded for a canonical atom of a held owner.
+    /// The value recorded for a canonical atom of a held scope.
     #[must_use]
     pub fn get(&self, atom: AtomRef<'_>) -> Option<T> {
         let (read, id) = atom.canonical()?;
         self.owners
-            .get(&read.atom_owner_key()?)?
+            .get(&read.row_owner_key(id)?)?
             .values
             .get(&id)
             .copied()
     }
 
     /// Record `value` for a canonical atom, replacing an earlier value. An
-    /// atom without an owner-scoped identity is not recorded (`Ok(false)`).
+    /// atom without a row-scoped identity is not recorded (`Ok(false)`).
     ///
     /// # Errors
     /// Returns [`Error::Allocation`] when the entry cannot be reserved; no
@@ -81,7 +88,7 @@ impl<T: Copy> AtomIdentityMap<T> {
         let Some((read, id)) = atom.canonical() else {
             return Ok(false);
         };
-        let Some(scope) = read.atom_scope() else {
+        let Some(scope) = read.row_scope(id) else {
             return Ok(false);
         };
         let key = scope.key();

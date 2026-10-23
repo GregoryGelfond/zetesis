@@ -290,13 +290,19 @@ once, in identity order, and packs the decisions into a `PredicateMask`, one bit
 per predicate. `mask.decision(predicate)` answers a canonical predicate of that
 vocabulary admitted before preparation; owned ingress, another vocabulary or a
 later predicate has no decision, so the caller keeps its general procedure.
-`AtomIdentityMap` records values by the owner-scoped identity of canonical atoms,
-for any number of atom owners: a lookup hashes the owner's identity and one
+`AtomIdentityMap` records values by the row-scoped identity of canonical atoms,
+for any number of atom owners: a lookup hashes the scope's identity and one
 identity word rather than the atom's structure, so its cost does not grow with
-the number of owners. `retain_held` drops the owners nothing outside the map
-still holds, whose atoms can no longer be presented. Equal atoms of different owners are different
-keys, and owned ingress or carrier atoms are never recorded; callers that need
-structural identity keep a structural index as the authority.
+the number of owners. An atom's scope is the owner whose rows name it. A row of a
+closed catalog is scoped by the writer that was closed, so the writer's own
+snapshots and every descendant of the closed catalog present it under one
+identity; any other atom is scoped by its own owner, so equal atoms of different
+owners are otherwise different keys. A value recorded through one presenter of a
+closed row is found through every other, so a caller's value must depend on the
+atom alone. `retain_held` drops the scopes nothing outside the map still holds,
+whose atoms can no longer be presented. Owned ingress or carrier atoms are never
+recorded; callers that need structural identity keep a structural index as the
+authority.
 The [`scoped metadata API`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-core/src/catalog/terms.rs)
 documents each frame's storage allowance and stopped-operation behavior.
 

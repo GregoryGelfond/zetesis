@@ -257,16 +257,20 @@ JSON renderer additionally retains a bounded document atom table; each invocatio
 starts fresh indices. Structural equality decides each atom's index, so equal
 atoms of independent owners share one. The table copies each atom it spells once
 and retains no answer. Once a canonical atom has been found, the table answers
-its later occurrences by owner-scoped identity instead of hashing the atom's
-structure, for as long as something outside the table still holds that atom's
-owner. Owners are found by hashing their identity, so a lookup's cost does not
-grow with the number of owners; once the cached owners have doubled since the
-last prune, a record begins by forgetting the owners nothing else holds, whose
-atoms can no longer be presented — amortized constant work per record, whether
-or not the consumer keeps its answers. Interleaved closure workers therefore
-keep their identities across records, and answers that each bring their own
-owner, as answers with reconstructed terminal definitions do, leave the cache
-once they are released. The public
+its later occurrences by row-scoped identity instead of hashing the atom's
+structure, for as long as something outside the table still holds the atom's
+row scope: the owner whose rows name it. A row of a shared closed base is scoped
+by the base's source writer, whichever descendant presents it; any other atom is
+scoped by its own owner. Owners are found by hashing their identity, so a
+lookup's cost does not grow with the number of owners; once the cached owners
+have doubled since the last prune, a record begins by forgetting the owners
+nothing else holds, whose atoms can no longer be presented — amortized constant
+work per record, whether or not the consumer keeps its answers. Interleaved
+closure workers therefore keep their identities across records. Answers with
+reconstructed terminal definitions each bring their own descendant of one closed
+base: the base rows they present keep one identity while that base lives, and
+only the rows each answer appends leave the cache once that answer is
+released. The public
 `AtomTable::index` lookup is structural and records no identity. A refused record withdraws
 the atoms it entered together with their identities. Custom renderers own their encoding
 limits and any copies they retain. The controller retains no complete family

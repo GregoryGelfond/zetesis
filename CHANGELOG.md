@@ -128,6 +128,10 @@ Notable changes by release. Versions follow Semantic Versioning.
   search's producers instead share one deque and take the region published most
   recently, so regions far from the current work wait for tighter bounds.
   Proposal order remains schedule-dependent, and answer sets are unchanged.
+- JSON answer output recognizes the atoms that reconstructed answers inherit from
+  their shared base by identity instead of by structure, from the third answer
+  on: the first is written whole, and the second records the identities.
+  Documents are unchanged.
 
 ### Fixed
 
@@ -149,6 +153,12 @@ Notable changes by release. Versions follow Semantic Versioning.
   keep such graphs out of reach on the adapters measured.
 - `zetesis_sat::Incomplete` gains `LateCandidateBounds`, so an exhaustive match
   on it needs an arm for the new variant.
+- `zetesis_core::catalog::AtomIdentityMap` changes from owner-scoped to
+  row-scoped identity: it keys a row of a closed catalog by the writer that was
+  closed, so a value recorded for that atom through one descendant, or through
+  the writer's own snapshot, is found through every other. A caller's value must
+  therefore depend on the atom alone, not on the owner that presented it. Rows a
+  descendant appends keep their own owner's identity, as before.
 
 ## 0.6.0 — 2026-10-14
 
