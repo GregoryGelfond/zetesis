@@ -6,6 +6,11 @@ use zetesis_ferraris::native_aggregate::Function;
 use zetesis_theory_support::aggregate as reference;
 
 #[test]
+fn the_aggregate_kernel_translates_to_spirv() {
+    crate::spirv_translation::assert_profile_translates(&GpuAggregateOracle::profile());
+}
+
+#[test]
 fn granted_aggregate_resources_are_checked_individually() {
     let limits = wgpu::Limits::default();
     assert!(check_limits(&limits).is_ok());

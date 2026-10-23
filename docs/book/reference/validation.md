@@ -179,6 +179,14 @@ This includes complete terminal-definition reconstruction over device-verified
 base answers, compared with eager CPU answer sets and the original output queries.
 Logs and status files are retained under `target/hardware`.
 
+The portable tests also translate every kernel to SPIR-V as wgpu's Vulkan
+backend does: each entry point, at each workgroup size, optional-feature
+specialization, SPIR-V version and workgroup zero-fill mode that backend can
+choose ([`spirv_translation.rs`](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-wgpu/src/spirv_translation.rs)).
+That establishes on any host that no kernel depends on a construct the SPIR-V
+writer refuses. It does not qualify a Vulkan device; only the physical tests of
+`--vulkan` do.
+
 To include a backend's physical tests in coverage, run:
 
 ```sh

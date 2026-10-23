@@ -36,6 +36,8 @@ mod relation;
 mod residency;
 mod runtime;
 mod selection;
+#[cfg(test)]
+mod spirv_translation;
 mod tight;
 mod timing;
 
@@ -586,6 +588,11 @@ fn check_adapter_limits(limits: &wgpu::Limits) -> Result<(), GpuError> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_static_kernel_translates_to_spirv() {
+        crate::spirv_translation::assert_profile_translates(&super::GpuOracle::profile());
+    }
+
     #[test]
     fn static_parameters_match_the_uniform_layout() {
         let module = naga::front::wgsl::parse_str(super::SHADER).expect("WGSL parses");

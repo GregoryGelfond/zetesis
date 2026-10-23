@@ -462,6 +462,11 @@ mod tests {
     use zetesis_core::{AdmissionLimits, AtomPattern, Predicate, Program, Seed, Template};
     use zetesis_cpu::{Cancellation, lazy};
 
+    #[test]
+    fn the_lazy_kernel_translates_to_spirv() {
+        crate::spirv_translation::assert_profile_translates(&super::GpuLazyOracle::profile());
+    }
+
     pub(super) fn inspect(mut assertion: impl FnMut(&lazy::Chunk<'_>)) {
         let a = AtomPattern::new(Predicate::new("a", 0).unwrap(), vec![]).unwrap();
         let program = Program::new(

@@ -1,6 +1,14 @@
 use super::*;
 
 #[test]
+fn both_tight_kernels_translate_to_spirv() {
+    // Each support policy's kernel, with its dense twin.
+    for support in [TightSupport::Atomic, TightSupport::Grouped] {
+        crate::spirv_translation::assert_profile_translates(&GpuTightOracle::profile(support));
+    }
+}
+
+#[test]
 fn device_profile_refuses_each_insufficient_capability() {
     let good = wgpu::Limits::default();
     check_limits(&good).unwrap();
