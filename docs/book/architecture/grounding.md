@@ -116,7 +116,10 @@ by one native at-most-one constraint. The compiler certifies every unordered
 pair within each connected component of one authored constraint; duplicates or
 reversed pairs cannot fill a missing pair. Eager emission retains ordinary
 constraints for uncertified components. Hybrid emission retires a streamed
-template only when its entire validated family is replaced. Both paths use the
+template only when its entire validated family moves into the core: each
+certified component as its native constraint, and each two-atom component as its
+pair constraint, once, which no native constraint would make smaller. An
+incomplete larger component keeps the whole template streamed. Both paths use the
 same collector and existing native threshold operations. The
 [compiler contract](https://github.com/GregoryGelfond/zetesis/blob/main/crates/zetesis-themelios/docs/pairwise-exclusions.md)
 states the eligibility and costs; the
@@ -342,7 +345,8 @@ are scored only after the original constraint check completes. Constraints
 containing aggregates, projected atoms or conditional
 scopes remain eager; ordinary atom/scalar constraints use the shared binding
 and evaluation operations. Certified complete pairwise exclusions become native
-constraints in the core; remaining templates stay streamed. Existing eager entry
+constraints in the core, with the two-atom components of the same template as
+their pair constraints; remaining templates stay streamed. Existing eager entry
 points remain unchanged.
 
 Hybrid admission still completes possible support and original source-family

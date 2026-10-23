@@ -433,7 +433,10 @@ fn unfinished_region_check_never_yields_a_core_answer() {
 
 #[test]
 fn cancellation_preserves_only_the_verified_prefix() {
-    let admitted = hybrid("a|b. :-a,b.", &limits());
+    // The double negation keeps the constraint a stream that accepts the
+    // prefix: pair capture would move `:-a,b.` into the core.
+    let admitted = hybrid("a|b. :-a,not not b.", &limits());
+    assert_eq!(admitted.streamed_templates(), 1);
     let cancellation = Cancellation::default();
     let mut session = Session::builder(
         PreparedInput::hybrid(&admitted),

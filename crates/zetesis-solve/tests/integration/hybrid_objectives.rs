@@ -13,6 +13,9 @@ use zetesis_solve::{
 use zetesis_test_support::programs::model;
 use zetesis_themelios::AdmittedFormula;
 
+// The constraints of `PRIORITIES` and `FALLBACK` are written `:- a, not not b.`
+// so that the core proposes {a,b} and the stream rejects it: pair capture would
+// move `:- a, b.` into the core, which would then never propose it.
 const PRIORITIES: &str = include_str!("../fixtures/hybrid-objectives/priorities.lp");
 const FALLBACK: &str = include_str!("../fixtures/hybrid-objectives/fallback.lp");
 const REQUIRED: &str = include_str!("../fixtures/hybrid-objectives/required.lp");
@@ -77,6 +80,7 @@ fn routes() -> impl Iterator<Item = SolveConfig> {
 fn lazy_objectives_preserve_complete_scored_answers() {
     let original = eager(PRIORITIES);
     let owner = hybrid(PRIORITIES);
+    assert_eq!(owner.streamed_templates(), 1);
     let (expected, _) = capture(
         PreparedInput::formula(&original),
         SolveConfig {

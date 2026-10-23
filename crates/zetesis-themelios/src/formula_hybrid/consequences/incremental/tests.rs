@@ -6,7 +6,10 @@ mod retention;
 mod wakeups;
 
 use super::*;
-use crate::test_support::hybrid;
+// These tests exercise the streamed route, so their fixtures are grounded with
+// pairwise-exclusion capture off: capture would move a pairwise family whose
+// every component is complete into the core.
+use crate::test_support::streamed_hybrid as hybrid;
 use crate::{
     AdmissionOptions, ConstraintCheckLimits, ConstraintRegionPass, ExpansionLimits, HybridFormula,
 };
