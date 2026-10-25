@@ -11,7 +11,10 @@
 //!
 //! Memory supplies conservative, independent named capacity shares: support and
 //! formula storage use quarters, canonical/source owners eighths, and ancillary
-//! metadata/output owners sixteenths or smaller. Population limits use logical
+//! metadata/output owners sixteenths or smaller. Device batches use
+//! thirty-seconds, except the GPU tight support batch, which uses a sixteenth
+//! so that its per-slot update state still admits the batch size under smaller
+//! allowances. Population limits use logical
 //! cell envelopes within those shares. These owners can overlap; their sum is
 //! not the allowance, and neither the allowance nor these counts guarantee RSS.
 //! Allocator overhead, source-library allocations and thread stacks remain outside
@@ -134,6 +137,9 @@ impl Resources {
             max_substitutions: usize::MAX,
             max_ground_rules: self.cells(8, 64),
             max_batch_bytes: self.bytes(32) as u64,
+            // Twice the other device batches' share: the update state charges
+            // every slot, and admits itself only when the batch size still fits.
+            max_tight_batch_bytes: self.bytes(16) as u64,
         }
     }
 

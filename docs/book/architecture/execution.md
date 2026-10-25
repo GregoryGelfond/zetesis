@@ -763,7 +763,13 @@ it zeroed and seeds it. With the floor, the state never splits a fixed slate,
 and adaptive slates settle at or below the prefix the state admits, since their
 growth stops at the smallest prefix the device has admitted, the batch building
 the index included; without it, a shorter prefix would split every slate into
-submissions of alternating counts, which hold no reuse authority. Authority
+submissions of alternating counts, which hold no reuse authority. The tight
+check has its own byte allowance for this reason: a sixteenth of the memory
+allowance under the ordinary `Resources` policy, where every other device batch
+has a thirty-second, so the state reaches the floor under smaller allowances.
+On a theory of about 790,000 nodes and 262,000 atoms, the default allowance
+admits it on hosts with about 9.3 GiB of memory rather than about 18.7 GiB.
+Authority
 needs successive batches of one count, so neither reuse route runs while
 adaptive slates are still growing. The index stays resident with the theory and
 remains accounted, like a retained schedule. The route is allowed only when its

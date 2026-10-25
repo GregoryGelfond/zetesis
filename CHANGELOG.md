@@ -128,6 +128,12 @@ Notable changes by release. Versions follow Semantic Versioning.
   search's producers instead share one deque and take the region published most
   recently, so regions far from the current work wait for tighter bounds.
   Proposal order remains schedule-dependent, and answer sets are unchanged.
+- GPU tight support checks may account a sixteenth of the memory allowance per
+  batch, rather than the thirty-second other device batches use, so that their
+  update route engages under smaller allowances. On a theory of about 790,000
+  nodes and 262,000 atoms, the default allowance engages it on hosts with about
+  9.3 GiB of memory, rather than about 18.7 GiB. Requested statistics report the
+  tight batch bytes beside the batch bytes. Answer sets are unchanged.
 
 ### Fixed
 
@@ -149,6 +155,16 @@ Notable changes by release. Versions follow Semantic Versioning.
   keep such graphs out of reach on the adapters measured.
 - `zetesis_sat::Incomplete` gains `LateCandidateBounds`, so an exhaustive match
   on it needs an arm for the new variant.
+- `SolveConfig` has a new public field, `max_tight_batch_bytes`, which bounds
+  the accounted bytes of each GPU tight support batch. A struct literal that
+  names every field must add it; one completed from `SolveConfig::default()` or
+  `SolveConfig::for_allowance` needs no change.
+- `SolveConfig::max_batch_bytes` no longer bounds GPU tight support checks;
+  `max_tight_batch_bytes` does. Code that sets only `max_batch_bytes` still
+  compiles, but its tight checks keep the ceiling the configuration was built
+  with: a sixteenth of the allowance from `Resources`, and 128 MiB under
+  `SolveConfig::DEFAULT`. A caller who bounds device memory through these fields
+  sets both.
 
 ## 0.6.0 — 2026-10-14
 

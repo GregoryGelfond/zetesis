@@ -37,6 +37,7 @@ fn doubling_memory_scales_only_named_capacities() {
         max_closure_batch_bytes: 2 * base.max_closure_batch_bytes,
         max_closure_bytes: 2 * base.max_closure_bytes,
         max_batch_bytes: 2 * base.max_batch_bytes,
+        max_tight_batch_bytes: 2 * base.max_tight_batch_bytes,
         ..base
     };
     // The full comparison also preserves mandatory/optional work, device
@@ -65,6 +66,7 @@ fn maximal_memory_respects_host_and_coordinate_extents() {
     assert!(vast.max_closure_batch_bytes >= default.max_closure_batch_bytes);
     assert_eq!(vast.max_closure_bytes, vast.max_closure_batch_bytes);
     assert!(vast.max_batch_bytes >= default.max_batch_bytes);
+    assert!(vast.max_tight_batch_bytes >= default.max_tight_batch_bytes);
     // Projection entries follow memory; trie coordinates additionally saturate
     // at their u32 representation. The host extent is tighter on 32-bit hosts.
     assert_eq!(

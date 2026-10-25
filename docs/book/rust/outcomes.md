@@ -317,8 +317,9 @@ in statistics; it is not elapsed time or a performance guarantee. Optional
 fail-open analyses and bounded device dispatches retain their separate effort
 limits.
 
-Source admission, derived atoms, carrier storage, batch bytes, objective
-retention and complete `WorldView` capture remain independently bounded.
+Source admission, derived atoms, carrier storage, device batch bytes (with the
+GPU tight support batch's own `max_tight_batch_bytes`), objective retention and
+complete `WorldView` capture remain independently bounded.
 The named memory allowances are not a process-wide RSS cap; requesting every
 answer does not remove them. Standalone primitive limit types keep their
 operation-specific defaults, and a library caller's explicit work, decision or

@@ -398,6 +398,17 @@ fn statistics_print_expansion_usage_beside_its_ceilings() {
 }
 
 #[test]
+fn the_storage_line_states_both_device_batch_ceilings() {
+    // A 2 GiB allowance: a thirty-second for device batches, a sixteenth for
+    // the tight support batch.
+    let (_, _, text) = solve("{a}.", &options(&["--stats", "--memory", "2147483648"]));
+    assert!(
+        text.contains("; batch bytes=67108864; tight batch bytes=134217728\n"),
+        "{text}"
+    );
+}
+
+#[test]
 fn the_closure_limits_line_states_the_derived_allowance() {
     let mut eight = options(&["--stats", "--memory", "2147483648"]);
     eight.workers = std::num::NonZeroUsize::new(8).unwrap();
