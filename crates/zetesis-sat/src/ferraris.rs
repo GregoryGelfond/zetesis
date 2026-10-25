@@ -9,7 +9,10 @@ use crate::{
 };
 
 mod batch;
-pub use batch::{BatchError, BatchLimits, BatchStatistics, BatchVerdict};
+pub use batch::{
+    BatchError, BatchLimits, BatchStatistics, BatchVerdict, Lookahead, LookaheadDeclined,
+    SlateProposal, SlateTicket,
+};
 
 mod completion;
 pub use completion::{CompletionExecutor, CompletionScratch, CompletionStatistics};
@@ -793,6 +796,9 @@ impl StableModels {
         if let Proposer::Proposals(proposals) = &mut self.proposer {
             proposals.share_frontier();
         }
+        // A slate produced ahead would be produced under a bound its
+        // predecessor's answers may tighten, so such a stream never proposes ahead.
+        self.batch.bounds_expected = true;
         Ok(())
     }
 

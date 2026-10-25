@@ -462,12 +462,12 @@ fn joined_validation_retains_only_the_exact_validated_prefix_on_failure() {
 
     let owner = numeric_theory();
     let mut search = StableModels::new(&owner, Limits::default(), Cancellation::default()).unwrap();
-    search.batch.pending = vec![
+    let mut pending = vec![
         Interpretation::new(&owner, [1]).unwrap(),
         Interpretation::new(&owner, [0]).unwrap(),
         Interpretation::new(&owner, [0, 1]).unwrap(),
     ];
-    search.admit_produced(
+    let production = search.admit_produced(
         &crate::ferraris::region_proposals::Produced {
             exhausted: true,
             stopped: None,
@@ -475,11 +475,12 @@ fn joined_validation_retains_only_the_exact_validated_prefix_on_failure() {
         },
         usize::MAX,
         crate::ferraris::batch::OriginalCheck::Independent,
+        &mut pending,
     );
-    assert_eq!(search.batch.pending.len(), 1);
-    assert_eq!(search.batch.pending[0].atoms().collect::<Vec<_>>(), vec![1]);
-    assert!(!search.batch.exhausted);
-    assert_eq!(search.pending_error, Some(Incomplete::InvalidWitness));
+    assert_eq!(pending.len(), 1);
+    assert_eq!(pending[0].atoms().collect::<Vec<_>>(), vec![1]);
+    assert!(!production.exhausted);
+    assert_eq!(production.stop, Some(Incomplete::InvalidWitness));
     assert_eq!(search.statistics().candidates, 1);
 }
 

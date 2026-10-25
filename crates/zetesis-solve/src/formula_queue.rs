@@ -192,6 +192,11 @@ impl BatchQueue {
                         actual,
                     })));
                 }
+                // The closure form never names a slate by ticket, so its
+                // receipts are bound to their batch by slice, as before.
+                Err(BatchError::SlateOrder) => {
+                    return Some(Err(Failure::from(crate::ExecutorError::ForeignBatch)));
+                }
             }
         }
     }
