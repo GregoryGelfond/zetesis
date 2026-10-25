@@ -968,6 +968,59 @@ fn vulkan_tight_sessions_preserve_complete_families() {
     tight_families(GpuApi::Vulkan);
 }
 
+/// An enumeration proposes its next slate while the device checks the
+/// current one, on each device route, and returns the CPU's family.
+fn enumeration_lookahead(device: GpuApi) {
+    let resources = ExecutionResources::with_gpu(&device.context());
+    // Thirty-two answers over slates of four and more.
+    let owner = formula("{a;b;c;d;e}.");
+    let subject = Subject::Theory(owner.theory().clone());
+    let cpu = solve(
+        PreparedInput::formula(&owner),
+        &subject,
+        config(Backend::Cpu, Profile::Formula),
+        &ExecutionResources::default(),
+        AnswerSelection::All,
+    );
+    for (oracle, routes) in [(Oracle::Countermodel, (1, 0)), (Oracle::Auto, (0, 1))] {
+        let mut options = config(device.backend(), Profile::Formula);
+        options.oracle = oracle;
+        let gpu = solve(
+            PreparedInput::formula(&owner),
+            &subject,
+            options,
+            &resources,
+            AnswerSelection::All,
+        );
+        assert_eq!(gpu.records, cpu.records, "oracle={oracle:?}");
+        assert_eq!(
+            (gpu.routes.device_formula, gpu.routes.device_tight),
+            routes,
+            "oracle={oracle:?}"
+        );
+        assert_eq!(gpu.outcome.completion(), Some(Completion::Exhausted));
+        let stats = gpu.outcome.formula_execution().unwrap();
+        assert!(stats.gpu_lookahead_slates > 0, "oracle={oracle:?}");
+        assert_eq!(
+            stats.gpu_lookahead,
+            Some(zetesis_solve::GpuLookahead::Engaged),
+            "oracle={oracle:?}"
+        );
+    }
+}
+
+#[test]
+#[ignore = "requires Metal: an enumeration proposes slates ahead on the device routes with the CPU's family"]
+fn metal_enumeration_looks_ahead_with_the_same_family() {
+    enumeration_lookahead(GpuApi::Metal);
+}
+
+#[test]
+#[ignore = "requires Vulkan: an enumeration proposes slates ahead on the device routes with the CPU's family"]
+fn vulkan_enumeration_looks_ahead_with_the_same_family() {
+    enumeration_lookahead(GpuApi::Vulkan);
+}
+
 fn general_formula_selection(device: GpuApi) {
     let resources = ExecutionResources::with_gpu(&device.context());
     for (source, oracle) in [

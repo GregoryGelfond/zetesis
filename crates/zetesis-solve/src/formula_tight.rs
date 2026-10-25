@@ -109,10 +109,7 @@ pub(crate) fn check(
             activity.scheduled_work
         };
         let scheduled = add(statistics.gpu_scheduled_work.get_or_insert(0), attributed);
-        let checks = result.map_err(|error| match error {
-            TightGpuError::Stopped(stop) => Failure::Search(stop.into()),
-            TightGpuError::Gpu(error) => Failure::Run(SolveError::Gpu(error)),
-        })?;
+        let checks = result.map_err(tight_failure)?;
         submission?;
         scheduled?;
         let count = checks.checks().len();
@@ -140,6 +137,142 @@ pub(crate) fn check(
             .extend(checks.into_iter().map(|check| verdict(check.verdict())));
     }
     Ok(verdicts)
+}
+
+/// Tight support's device side of a GPU enumeration's two-phase slates,
+/// recording each submission's receipts as [`check`] does.
+pub(crate) struct TightDevice<'a> {
+    pub(crate) oracle: &'a mut GpuTightOracle,
+    pub(crate) plan: &'a TightPlan,
+    pub(crate) statistics: &'a mut FormulaExecutionStatistics,
+    pub(crate) options: &'a SolveConfig,
+}
+
+impl crate::formula_queue::device::SlateDevice for TightDevice<'_> {
+    type Prepared<'d>
+        = zetesis_wgpu::PreparedTightSubmission<'d>
+    where
+        Self: 'd;
+    type Checked = Result<zetesis_wgpu::CheckedSlate<zetesis_wgpu::TightGpuCheck>, TightGpuError>;
+
+    fn prepare<'d>(
+        &'d mut self,
+        slate: zetesis_ferraris::SlateRef<'_>,
+        offset: usize,
+        cancellation: &Cancellation,
+    ) -> Result<Self::Prepared<'d>, Failure> {
+        // As in `check`: one submission may take the whole slate, and the
+        // update state may not shrink a prefix below the batch size.
+        let limits = TightGpuLimits {
+            max_candidates: slate.candidates().len(),
+            max_batch_bytes: self.options.max_batch_bytes,
+            max_work_per_candidate: u64::from(self.options.gpu_formula_work),
+            min_update_candidates: self.options.batch_size.get(),
+            ..Default::default()
+        };
+        self.oracle
+            .prepare(self.plan, slate, offset, limits, cancellation)
+            .map_err(tight_failure)
+    }
+
+    fn decode(
+        &mut self,
+        checked: Self::Checked,
+        theory: &zetesis_ferraris::Theory,
+        slate: zetesis_ferraris::SlateId,
+        offset: usize,
+        offered: usize,
+    ) -> Result<crate::formula_queue::device::Decoded, Failure> {
+        // A failed call can still report the batch before it, as unavailable.
+        let compute = self.oracle.reported_compute_time();
+        if let Some(report) = compute {
+            self.statistics.gpu_compute_timing.record(report);
+        }
+        // The primitive submits one ordered batch, even if its readback fails.
+        // Retain that receipt before propagating the original device error.
+        let activity = self.oracle.activity();
+        let submission = record_submission(
+            self.statistics,
+            (activity.submissions != 0).then_some(
+                usize::try_from(activity.submitted_candidates)
+                    .map_err(|_| Failure::Search(Incomplete::CounterOverflow))?,
+            ),
+        );
+        // A validated readback reports the work performed, never more than was
+        // reserved; a submission without one keeps its reservation.
+        let attributed = if activity.submissions != 0
+            && activity.completed_candidates == activity.submitted_candidates
+        {
+            activity.completed_work
+        } else {
+            activity.scheduled_work
+        };
+        let scheduled = add(
+            self.statistics.gpu_scheduled_work.get_or_insert(0),
+            attributed,
+        );
+        let checks = checked.map_err(tight_failure)?;
+        submission?;
+        scheduled?;
+        let count = checks.count();
+        if count == 0 || count > offered {
+            return Err(Failure::Run(SolveError::FormulaBatchShape {
+                expected: offered,
+                actual: count,
+            }));
+        }
+        let checks = checks
+            .into_checks(theory, slate, offset)
+            .map_err(|error| Failure::Run(SolveError::Gpu(error)))?;
+        if let Some(batch) = self.oracle.last_batch_stats() {
+            add(&mut self.statistics.gpu_batches, batch.dispatches)?;
+            add(&mut self.statistics.gpu_candidates, batch.candidates)?;
+            add(&mut self.statistics.gpu_work, batch.work)?;
+            self.statistics.peak_accounted_bytes = self
+                .statistics
+                .peak_accounted_bytes
+                .max(batch.accounted_bytes);
+            super::formula_execution::record_workgroup_size(self.statistics, batch.workgroup_size);
+            super::formula_execution::record_tight_routes(self.statistics, batch)?;
+        }
+        let mut verdicts = Vec::new();
+        verdicts
+            .try_reserve_exact(checks.len())
+            .map_err(|_| Failure::Search(Incomplete::Allocation))?;
+        verdicts.extend(checks.into_iter().map(|check| verdict(check.verdict())));
+        Ok(crate::formula_queue::device::Decoded { verdicts, compute })
+    }
+}
+
+impl crate::formula_queue::device::PreparedSubmission
+    for zetesis_wgpu::PreparedTightSubmission<'_>
+{
+    type Checked = Result<zetesis_wgpu::CheckedSlate<zetesis_wgpu::TightGpuCheck>, TightGpuError>;
+
+    fn count(&self) -> usize {
+        Self::count(self)
+    }
+
+    fn check(self, cancellation: &Cancellation) -> Self::Checked {
+        Self::check(self, cancellation)
+    }
+
+    fn check_overlapping<R>(
+        self,
+        cancellation: &Cancellation,
+        during: impl FnOnce() -> R,
+    ) -> (Self::Checked, Option<R>) {
+        Self::check_overlapping(self, cancellation, during)
+    }
+}
+
+/// A tight device operation's failure: a stop of the control is the search's,
+/// any other is the run's.
+fn tight_failure(error: TightGpuError) -> Failure {
+    match error {
+        TightGpuError::Stopped(stop) => Failure::Search(stop.into()),
+        TightGpuError::Gpu(error) => Failure::Run(SolveError::Gpu(error)),
+    }
 }
 
 fn verdict(verdict: TightVerdict) -> BatchVerdict {

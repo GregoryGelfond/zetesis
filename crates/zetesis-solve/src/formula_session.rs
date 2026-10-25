@@ -337,11 +337,19 @@ impl<'a, E: MembershipExecution> FormulaSession<'a, E> {
                 .models
                 .as_mut()
                 .expect("unfinished session has a candidate stream");
-            let next = self
+            let execution = self
                 .execution
                 .as_mut()
-                .expect("unfinished session has a membership executor")
-                .next(models, config, cancellation, phases);
+                .expect("unfinished session has a membership executor");
+            // An enumeration owes the answers it has not yet yielded; a
+            // request of zero is unbounded.
+            let enumerates = self.selection == AnswerSelection::All;
+            execution.demand(
+                enumerates,
+                (enumerates && config.models != 0)
+                    .then(|| config.models.saturating_sub(self.yielded)),
+            );
+            let next = execution.next(models, config, cancellation, phases);
             let interpretation = match next {
                 Some(Ok(model)) => model,
                 Some(Err(Failure::Search(error))) => {
