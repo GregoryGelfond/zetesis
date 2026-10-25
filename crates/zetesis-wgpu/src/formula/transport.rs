@@ -3,7 +3,7 @@
 use super::FormulaCheck;
 use super::packing::{self, Graph, PARAM_BYTES, Plan};
 use super::preparation::PreparedGraph;
-use crate::runtime::{self, Dispatch, Variant, buffer, entry, initialized};
+use crate::runtime::{self, Dispatch, Observation, Variant, buffer, entry, initialized};
 use crate::{GpuError, GpuErrorKind};
 use std::time::Duration;
 
@@ -11,8 +11,6 @@ use std::time::Duration;
 /// settlement; its readback tail and host window are for the oracle's timer.
 pub(super) struct Dispatched {
     pub(super) completion: runtime::Completion<Vec<FormulaCheck>>,
-    /// Candidates submitted, whether or not the readback decodes.
-    pub(super) candidates: usize,
     pub(super) timing: crate::timing::BatchTiming,
 }
 
@@ -49,15 +47,16 @@ impl Resident {
             .as_ref()
             .is_some_and(|transport| transport.worlds as usize == count)
     }
-    pub(super) fn dispatch(
+    /// Write and submit the batch, and request its readback's mapping. The
+    /// submission is in flight when this returns; [`Self::finish`] waits for
+    /// it. An error leaves nothing in flight.
+    pub(super) fn submit(
         &mut self,
         runtime: &runtime::Runtime,
         seeds: &[u32],
         plan: &Plan,
-        timeout: Duration,
-        cancellation: &zetesis_cpu::Cancellation,
         timer: Option<&crate::timing::ComputeTimer>,
-    ) -> Result<Dispatched, GpuError> {
+    ) -> Result<Submitted, GpuError> {
         let device = runtime.device();
         let queue = runtime.queue();
         let pipeline = runtime.pipeline_for(self.graph.workgroup_size, Variant::Full)?;
@@ -90,12 +89,36 @@ impl Resident {
                 timing: timer,
             },
         );
+        Ok(Submitted {
+            pending: runtime::request_read(&transport.readback, submission.index),
+            at: submission.at,
+            candidates: plan.worlds as usize,
+        })
+    }
+
+    /// Wait for the submitted batch, observing the control as `observation`
+    /// says, then decode its readback. The transport is the one `submit` used:
+    /// nothing replaces it within one check.
+    pub(super) fn finish(
+        &self,
+        runtime: &runtime::Runtime,
+        submitted: Submitted,
+        observation: Observation,
+        plan: &Plan,
+        timeout: Duration,
+        cancellation: &zetesis_cpu::Cancellation,
+    ) -> Result<Dispatched, GpuError> {
+        let transport = self
+            .transport
+            .as_ref()
+            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing formula transport"))?;
         let mut timing = crate::timing::BatchTiming::default();
-        let completion = runtime::read_polled(
-            device,
+        let completion = runtime::finish_pending(
+            runtime.device(),
             &transport.readback,
-            submission.index,
+            submitted.pending,
             timeout,
+            observation,
             || cancellation.poll().map_err(GpuError::interrupted),
             |words| {
                 let (words, tail) = crate::timing::split_readback(words, transport.timed)?;
@@ -104,13 +127,18 @@ impl Resident {
                 Ok(checks)
             },
         );
-        timing.window = completion.window_since(submission.at);
-        Ok(Dispatched {
-            completion,
-            candidates: plan.worlds as usize,
-            timing,
-        })
+        timing.window = completion.window_since(submitted.at);
+        Ok(Dispatched { completion, timing })
     }
+}
+
+/// A submitted batch awaiting its finish: its pending readback, the host
+/// instant just before its submission, and the candidates it submitted,
+/// whether or not its readback decodes.
+pub(super) struct Submitted {
+    pending: runtime::PendingRead,
+    at: std::time::Instant,
+    pub(super) candidates: usize,
 }
 pub(super) struct Transport {
     worlds: u32,

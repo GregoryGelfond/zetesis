@@ -407,6 +407,29 @@ impl Runtime {
         scopes: ErrorScopes,
         outcome: Result<Completion<T>, GpuError>,
     ) -> Result<T, GpuError> {
+        self.complete_settled(pollster::block_on(scopes.finish()), outcome)
+    }
+
+    /// Complete an operation whose error scopes are in either state.
+    pub(crate) fn complete_scopes<T>(
+        &self,
+        scopes: Scopes,
+        outcome: Result<Completion<T>, GpuError>,
+    ) -> Result<T, GpuError> {
+        match scopes {
+            Scopes::Open(scopes) => self.complete(scopes, outcome),
+            Scopes::Settled(validation) => self.complete_settled(validation, outcome),
+        }
+    }
+
+    /// Complete an operation whose error scopes were already popped, as an
+    /// overlapping check pops them right after its submission, before the
+    /// caller's work runs. `validation` is their settled outcome.
+    fn complete_settled<T>(
+        &self,
+        validation: Result<(), GpuError>,
+        outcome: Result<Completion<T>, GpuError>,
+    ) -> Result<T, GpuError> {
         let Completion {
             outcome, effects, ..
         } = outcome.unwrap_or_else(|error| Completion {
@@ -414,8 +437,7 @@ impl Runtime {
             effects: Effects::MayBeLive,
             observed: None,
         });
-        self.context
-            .complete(pollster::block_on(scopes.finish()), outcome, effects)
+        self.context.complete(validation, outcome, effects)
     }
 
     /// For operations that submitted no queue work and released mapped access.
@@ -586,19 +608,81 @@ pub(crate) fn read_polled<T>(
     readback: &wgpu::Buffer,
     submission: wgpu::SubmissionIndex,
     timeout: Duration,
-    mut cancellation: impl FnMut() -> Result<(), GpuError>,
+    cancellation: impl FnMut() -> Result<(), GpuError>,
     decode: impl FnOnce(&[u32]) -> Result<T, GpuError>,
 ) -> Completion<T> {
+    let pending = request_read(readback, submission);
+    finish_pending(
+        device,
+        readback,
+        pending,
+        timeout,
+        Observation::Polled,
+        cancellation,
+        decode,
+    )
+}
+
+/// A readback whose mapping was requested at its submission, and whose wait
+/// follows whatever the caller runs while the submission is in flight.
+pub(crate) struct PendingRead {
+    receiver: mpsc::Receiver<Result<(), wgpu::BufferAsyncError>>,
+    submission: wgpu::SubmissionIndex,
+    // The submission's timeout runs from here, just after the submit.
+    requested: std::time::Instant,
+}
+
+/// Request `readback`'s mapping for `submission`. The mapping resolves when
+/// the submission completes; [`finish_pending`] waits for it.
+pub(crate) fn request_read(
+    readback: &wgpu::Buffer,
+    submission: wgpu::SubmissionIndex,
+) -> PendingRead {
     let (sender, receiver) = mpsc::sync_channel(1);
     readback
         .slice(..)
         .map_async(wgpu::MapMode::Read, move |mapped| {
             let _ = sender.try_send(mapped);
         });
-    let started = std::time::Instant::now();
+    PendingRead {
+        receiver,
+        submission,
+        requested: std::time::Instant::now(),
+    }
+}
+
+/// How a pending read's wait observes the caller's control.
+pub(crate) enum Observation {
+    /// Between bounded waits, as every synchronous read does.
+    Polled,
+    /// Not at all: the control fired while the caller's work ran beside the
+    /// submission. The wait then only establishes the submission's completion,
+    /// within its timeout, and the read reports this stop after it without
+    /// decoding, so a completed and released readback leaves the context
+    /// reusable.
+    AfterStop(GpuError),
+}
+
+/// Wait for a pending read's submission, then map, decode and release its
+/// readback, observing the control as `observation` says.
+pub(crate) fn finish_pending<T>(
+    device: &wgpu::Device,
+    readback: &wgpu::Buffer,
+    pending: PendingRead,
+    timeout: Duration,
+    observation: Observation,
+    mut cancellation: impl FnMut() -> Result<(), GpuError>,
+    decode: impl FnOnce(&[u32]) -> Result<T, GpuError>,
+) -> Completion<T> {
+    let PendingRead {
+        receiver,
+        submission,
+        requested,
+    } = pending;
     let submission = Some(submission);
-    let wait = wait_for_submission(
+    let wait = wait_observing(
         timeout,
+        observation,
         &mut cancellation,
         |wait| {
             device.poll(wgpu::PollType::Wait {
@@ -606,7 +690,7 @@ pub(crate) fn read_polled<T>(
                 timeout: Some(wait),
             })
         },
-        || started.elapsed(),
+        || requested.elapsed(),
     );
     let observed = wait.completed.then(std::time::Instant::now);
     let mut completion = finish_read(
@@ -678,6 +762,34 @@ fn finish_read<T>(
             Effects::MayBeLive
         },
         observed: None,
+    }
+}
+
+// The wait's observation of the control, factored so deterministic controls
+// cover it without a device. After a stop the caller's work observed, the wait
+// polls no control: it reports that stop once completion is observed, which
+// skips decoding, and otherwise the wait's own failure, which says why
+// completion was not observed.
+fn wait_observing(
+    timeout: Duration,
+    observation: Observation,
+    cancellation: impl FnMut() -> Result<(), GpuError>,
+    poll: impl FnMut(Duration) -> Result<wgpu::PollStatus, wgpu::PollError>,
+    elapsed: impl FnMut() -> Duration,
+) -> SubmissionWait {
+    match observation {
+        Observation::Polled => wait_for_submission(timeout, cancellation, poll, elapsed),
+        Observation::AfterStop(stop) => {
+            let wait = wait_for_submission(timeout, || Ok(()), poll, elapsed);
+            SubmissionWait {
+                outcome: if wait.completed {
+                    Err(stop)
+                } else {
+                    wait.outcome
+                },
+                completed: wait.completed,
+            }
+        }
     }
 }
 
@@ -760,6 +872,25 @@ pub(crate) fn entry(binding: u32, buffer: &wgpu::Buffer) -> wgpu::BindGroupEntry
     wgpu::BindGroupEntry {
         binding,
         resource: buffer.as_entire_binding(),
+    }
+}
+
+/// An operation's error scopes: still open, as a synchronous operation keeps
+/// them until its readback settles, or already popped with their outcome, as an
+/// overlapping check pops them right after its submission.
+pub(crate) enum Scopes {
+    Open(ErrorScopes),
+    Settled(Result<(), GpuError>),
+}
+
+impl Scopes {
+    /// Pop open scopes now, keeping their outcome for the settlement.
+    pub(crate) fn settle(&mut self) {
+        if let Self::Open(_) = self
+            && let Self::Open(scopes) = std::mem::replace(self, Self::Settled(Ok(())))
+        {
+            *self = Self::Settled(pollster::block_on(scopes.finish()));
+        }
     }
 }
 

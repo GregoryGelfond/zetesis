@@ -46,15 +46,15 @@ const SELECTIONS: [(GpuApi, &str); 2] = [
 pub fn selection(table: &str) -> Result<Selection, Error> {
     const EXPECTED: [(&str, &str, usize); 14] = [
         ("wgpu-lib", "lib", 20),
-        ("tight", "integration", 4),
-        ("formula", "integration", 2),
+        ("tight", "integration", 5),
+        ("formula", "integration", 3),
         ("aggregate", "integration", 3),
         ("lazy", "integration", 4),
         ("cli-lazy", "integration", 5),
         ("cli-formula", "integration", 3),
         ("world-views", "integration", 4),
         ("relation", "integration", 2),
-        ("context", "integration", 2),
+        ("context", "integration", 4),
         ("solve-context", "lib", 4),
         ("session-resources", "integration", 13),
         ("language-consumers", "integration", 2),
@@ -66,13 +66,13 @@ pub fn selection(table: &str) -> Result<Selection, Error> {
         .map(|(api, _)| *api)
         .ok_or_else(|| {
             Error::Invalid(
-                "physical qualification requires one reviewed selection of 70 exact test identities".into(),
+                "physical qualification requires one reviewed selection of 74 exact test identities".into(),
             )
         })?;
     let rows: Vec<_> = table.lines().collect();
     require(
         rows.len() == EXPECTED.len(),
-        "physical qualification requires all fourteen groups and 70 named tests",
+        "physical qualification requires all fourteen groups and 74 named tests",
     )?;
     let mut groups = Vec::new();
     let mut all_names = BTreeSet::new();

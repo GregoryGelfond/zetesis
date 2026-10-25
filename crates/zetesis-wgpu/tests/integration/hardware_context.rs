@@ -9,11 +9,13 @@ use zetesis_core::{
     relation::{Limits, Relation},
 };
 use zetesis_cpu::{Cancellation, Stop};
-use zetesis_ferraris::{AdmissionLimits, Interpretation, Node, Theory, TightPlan, TightPlanLimits};
+use zetesis_ferraris::{
+    AdmissionLimits, Interpretation, Node, SlateId, SlateRef, Theory, TightPlan, TightPlanLimits,
+};
 use zetesis_wgpu::{
-    FormulaCheck, FormulaLimits, FormulaVerdict, GpuContext, GpuError, GpuFormulaOracle,
-    GpuOptions, GpuRelationExecutor, GpuSelection, GpuTightOracle, RelationGpuLimits,
-    TightGpuError, TightGpuLimits,
+    FormulaCheck, FormulaLimits, FormulaVerdict, GpuContext, GpuError, GpuErrorKind,
+    GpuFormulaOracle, GpuOptions, GpuRelationExecutor, GpuSelection, GpuTightOracle,
+    RelationGpuLimits, TightGpuError, TightGpuLimits,
 };
 
 fn qualify_timing(context: &GpuContext) -> bool {
@@ -561,4 +563,128 @@ fn metal_compute_times_belong_to_their_own_batches() {
 #[ignore = "requires Vulkan: compute times belong to their own batches"]
 fn vulkan_compute_times_belong_to_their_own_batches() {
     attribute(GpuApi::Vulkan);
+}
+
+#[test]
+#[ignore = "requires Metal: a stop during overlapped production observes the submission"]
+fn metal_stop_during_overlapped_production_observes_the_submission() {
+    stop_during_overlapped_production(GpuApi::Metal);
+}
+
+#[test]
+#[ignore = "requires Vulkan: a stop during overlapped production observes the submission"]
+fn vulkan_stop_during_overlapped_production_observes_the_submission() {
+    stop_during_overlapped_production(GpuApi::Vulkan);
+}
+
+/// The control fired while the host produces beside a heavy submission: each
+/// oracle's overlapping check reports the stop after observing the
+/// submission's completion, so the shared context stays reusable, and the next
+/// check on it succeeds.
+fn stop_during_overlapped_production(backend: GpuApi) {
+    let context =
+        GpuContext::new_selected(GpuOptions::default(), GpuSelection { api: backend }).unwrap();
+    physical::verify(backend, context.info());
+    let subject = layered(128, 256, 8);
+    let theory = subject.plan.theory();
+    let slate = SlateId::first(theory).unwrap();
+    let view = SlateRef::new(slate, theory, &subject.candidates).unwrap();
+
+    let tight_limits = TightGpuLimits {
+        max_batch_bytes: BATCH_BYTES,
+        ..TightGpuLimits::default()
+    };
+    let mut tight = GpuTightOracle::from_context(&context).unwrap();
+    let control = Cancellation::default();
+    let prepared = tight
+        .prepare(&subject.plan, view, 0, tight_limits, &control)
+        .unwrap();
+    let (checked, produced) = prepared.check_overlapping(&control, || {
+        control.cancel();
+        "produced"
+    });
+    assert_eq!(produced, Some("produced"));
+    assert!(matches!(
+        checked,
+        Err(TightGpuError::Stopped(Stop::Cancelled))
+    ));
+    assert_eq!(tight.activity().submissions, 1);
+    tight
+        .check_batch(
+            &subject.plan,
+            &subject.candidates[..2],
+            tight_limits,
+            &Cancellation::default(),
+        )
+        .unwrap();
+
+    let formula_limits = FormulaLimits {
+        max_batch_bytes: BATCH_BYTES,
+        ..FormulaLimits::default()
+    };
+    let mut formula = GpuFormulaOracle::from_context(&context).unwrap();
+    let control = Cancellation::default();
+    let prepared = formula.prepare(view, 0, formula_limits, &control).unwrap();
+    let submitted = prepared.count();
+    let (checked, produced) = prepared.check_overlapping(&control, || {
+        control.cancel();
+        "produced"
+    });
+    assert_eq!(produced, Some("produced"));
+    assert_eq!(checked.unwrap_err().interruption(), Some(Stop::Cancelled));
+    assert_eq!(formula.last_submission_candidates(), Some(submitted));
+    formula
+        .propagate_batch(theory, &subject.candidates[..2], formula_limits)
+        .unwrap();
+    println!("overlapped stops observed their submissions and kept the context reusable");
+}
+
+#[test]
+#[ignore = "requires Metal: a panic during overlapped production invalidates the context"]
+fn metal_panic_during_overlapped_production_invalidates_the_context() {
+    panic_during_overlapped_production(GpuApi::Metal);
+}
+
+#[test]
+#[ignore = "requires Vulkan: a panic during overlapped production invalidates the context"]
+fn vulkan_panic_during_overlapped_production_invalidates_the_context() {
+    panic_during_overlapped_production(GpuApi::Vulkan);
+}
+
+/// A panic in the production beside a heavy submission unwinds through the
+/// overlapping check with the submission's completion unobserved, so the
+/// shared context is invalidated for every primitive on it.
+fn panic_during_overlapped_production(backend: GpuApi) {
+    let context =
+        GpuContext::new_selected(GpuOptions::default(), GpuSelection { api: backend }).unwrap();
+    physical::verify(backend, context.info());
+    let subject = layered(128, 256, 8);
+    let theory = subject.plan.theory();
+    let slate = SlateId::first(theory).unwrap();
+    let view = SlateRef::new(slate, theory, &subject.candidates).unwrap();
+    let limits = TightGpuLimits {
+        max_batch_bytes: BATCH_BYTES,
+        ..TightGpuLimits::default()
+    };
+    let mut tight = GpuTightOracle::from_context(&context).unwrap();
+    let control = Cancellation::default();
+    let prepared = tight
+        .prepare(&subject.plan, view, 0, limits, &control)
+        .unwrap();
+    let unwound = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        prepared.check_overlapping(&control, || -> () { panic!("production failed") })
+    }));
+    assert!(unwound.is_err());
+    assert_eq!(tight.activity().submissions, 1);
+    match tight.check_batch(&subject.plan, &subject.candidates[..2], limits, &control) {
+        Err(TightGpuError::Gpu(error)) => assert_eq!(error.kind(), GpuErrorKind::Device),
+        other => panic!("an invalidated context must refuse the next check: {other:?}"),
+    }
+    assert_eq!(
+        GpuFormulaOracle::from_context(&context)
+            .err()
+            .map(|error| error.kind()),
+        Some(GpuErrorKind::Device)
+    );
+    println!("a panic during overlapped production invalidated the context");
 }

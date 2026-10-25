@@ -410,6 +410,20 @@ fn qualify_kernel_options(oracle: &GpuTightOracle) {
 }
 
 #[test]
+#[ignore = "requires Metal: overlapped support checks match sequential checks"]
+fn metal_support_overlapped_checks_match_sequential_checks() {
+    updates::qualify_overlapped(GpuApi::Metal, TightSupport::Atomic);
+    updates::qualify_overlapped(GpuApi::Metal, TightSupport::Grouped);
+}
+
+#[test]
+#[ignore = "requires Vulkan: overlapped support checks match sequential checks"]
+fn vulkan_support_overlapped_checks_match_sequential_checks() {
+    updates::qualify_overlapped(GpuApi::Vulkan, TightSupport::Atomic);
+    updates::qualify_overlapped(GpuApi::Vulkan, TightSupport::Grouped);
+}
+
+#[test]
 #[ignore = "requires Metal: support preserves batch isolation"]
 fn metal_support_preserves_batch_isolation() {
     qualify_support_preserves_batch_isolation(GpuApi::Metal, TightSupport::Atomic);

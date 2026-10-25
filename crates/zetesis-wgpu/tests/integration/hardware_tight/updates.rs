@@ -1,11 +1,12 @@
 //! The update route against the scalar plan: per-slot routes, receipts and
 //! verdicts across controlled candidate changes, and the route's availability.
 
+use zetesis_backend::GpuApi;
 use zetesis_cpu::Cancellation;
 use zetesis_ferraris::{
     AdmissionLimits, EvaluationLimits, EvaluationWorkspace, FormulaNodes, FormulaParts,
-    FormulaTransaction, Interpretation, Node, NodeView, Theory, Threshold, TightCheckLimits,
-    TightPlan, TightPlanLimits,
+    FormulaTransaction, Interpretation, Node, NodeView, SlateId, SlateRef, Theory, Threshold,
+    TightCheckLimits, TightPlan, TightPlanLimits,
 };
 use zetesis_wgpu::{
     GpuTightOracle, GpuWorkgroupSize, GpuWorkgroupSizing, TightGpuBatchStats, TightGpuCheck,
@@ -357,6 +358,66 @@ pub(super) fn qualify(oracle: &mut GpuTightOracle) {
     qualify_narrow_levels(oracle);
     qualify_engagement_by_size(oracle);
     qualify_guard(oracle);
+}
+
+/// Overlapping checks of a wide ladder's slates match the same slates checked
+/// synchronously by a second oracle of the same construction, batch by batch:
+/// equal checks, the scalar plan's verdicts, and equal routes and update
+/// availability, across the complete route, dense seeding, an unchanged update
+/// and sparse changes, so the update route runs across consecutive overlapping
+/// checks. Each overlapping check's production returns a marker, so the
+/// comparison isolates the schedule.
+pub(super) fn qualify_overlapped(backend: GpuApi, support: TightSupport) {
+    let ladder = Ladder::wide();
+    let certificate = &ladder.certificate;
+    let theory = certificate.theory();
+    let mut synchronous = super::oracle(backend, support);
+    let mut overlapped = super::oracle(backend, support);
+    let control = Cancellation::default();
+    let mut chosen = ladder.patterns(4, 0);
+    let mut slate = SlateId::first(theory).unwrap();
+    let mut updates = 0;
+    for round in 0..6 {
+        if round >= 3 {
+            for (slot, pattern) in chosen.iter_mut().enumerate() {
+                let input = (7 * round + slot) % ladder.inputs;
+                pattern[input] = !pattern[input];
+            }
+        }
+        let candidates: Vec<Interpretation> = chosen
+            .iter()
+            .enumerate()
+            .map(|(slot, pattern)| interpretation(theory, &ladder.candidate(slot, pattern)))
+            .collect();
+        let expected = synchronous
+            .check_prefix(
+                certificate,
+                &candidates,
+                TightGpuLimits::default(),
+                &control,
+            )
+            .unwrap()
+            .into_checks(theory, &candidates)
+            .unwrap();
+        let expected_stats = *synchronous.last_batch_stats().unwrap();
+        let view = SlateRef::new(slate, theory, &candidates).unwrap();
+        let prepared = overlapped
+            .prepare(certificate, view, 0, TightGpuLimits::default(), &control)
+            .unwrap();
+        assert_eq!(prepared.count(), candidates.len());
+        let (checked, produced) = prepared.check_overlapping(&control, || round);
+        assert_eq!(produced, Some(round));
+        let checks = checked.unwrap().into_checks(theory, slate, 0).unwrap();
+        compare(certificate, &candidates, &checks);
+        assert_eq!(checks, expected, "round {round}");
+        let stats = *overlapped.last_batch_stats().unwrap();
+        assert_eq!(stats.routes, expected_stats.routes, "round {round}");
+        assert_eq!(stats.updates, expected_stats.updates, "round {round}");
+        updates += stats.routes.update;
+        slate = slate.successor().unwrap();
+    }
+    assert!(updates > 0, "no overlapping check took the update route");
+    println!("tight overlapped checks: {updates} update slots over six slates");
 }
 
 /// Exact batches of four slots on one certificate under default limits, each

@@ -2,19 +2,21 @@
 
 use super::admission::Admission;
 use super::packing::{Graph, Packed, Packing, Plan, StateLayout};
-use super::transport::{Execution, Resident};
+use super::transport::{Call, Execution, Resident};
 use super::update::{self, Bounds, Built, Index, Stage};
 use super::{
     SHADER, TightGpuActivity, TightGpuBatchStats, TightGpuCheck, TightGpuError, TightGpuLimits,
     TightGpuUpdateUnavailable, TightGpuUpdates, TightSupport, poll,
 };
-use crate::runtime::{DeviceProfile, ErrorScopes, Runtime, Variant};
+use crate::runtime::{DeviceProfile, ErrorScopes, Observation, Runtime, Scopes, Variant};
 use crate::timing::{BatchTiming, ComputeTimer};
-use crate::{GpuDeviceSource, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection};
+use crate::{
+    CheckedSlate, GpuDeviceSource, GpuError, GpuErrorKind, GpuInfo, GpuOptions, GpuSelection,
+};
 use std::time::Duration;
 use zetesis_backend::{BatchComputeTime, ComputeTimingStatus};
 use zetesis_cpu::Cancellation;
-use zetesis_ferraris::{Interpretation, TightPlan};
+use zetesis_ferraris::{Interpretation, SlateId, SlateRef, Theory, TightPlan};
 
 /// Real-device original satisfaction and ranked producer support checking.
 ///
@@ -512,6 +514,85 @@ impl GpuTightOracle {
         ))
     }
 
+    /// Prepare the next submission of `slate`: admit the largest nonempty
+    /// prefix of its candidates from `offset` on, as [`Self::check_prefix`]
+    /// admits a prefix, pack it into this oracle's reused upload storage, and
+    /// plan it: reuse authority, the update route's engagement under the
+    /// runtime guard, the kernel and the epoch. Nothing is submitted.
+    ///
+    /// The returned submission holds this oracle's mutable borrow until a
+    /// check consumes it, so no other operation on the oracle, and no second
+    /// preparation, can run between the plan and its check: the state it was
+    /// planned from is the state it runs on. Dropping it submits nothing and
+    /// releases the borrow; any retained state its preparation replaced stays
+    /// released, and the next check prepares again. The context's lease is
+    /// taken by the check, not here, and this polls control and context health
+    /// before preparing.
+    ///
+    /// # Errors
+    /// Refuses a slate whose theory is not the certificate's instance, an
+    /// offset that leaves no candidate, and every refusal and failure of
+    /// [`Self::check_prefix`]'s preparation, which leaves the oracle reusable
+    /// and its retained truth invalidated, as after every failed call.
+    pub fn prepare<'o>(
+        &'o mut self,
+        certificate: &TightPlan,
+        slate: SlateRef<'_>,
+        offset: usize,
+        limits: TightGpuLimits,
+        cancellation: &Cancellation,
+    ) -> Result<PreparedTightSubmission<'o>, TightGpuError> {
+        self.last = None;
+        self.activity = TightGpuActivity::default();
+        self.reported = None;
+        let prepared = (|| {
+            if !certificate.theory().same_instance(slate.theory()) {
+                return Err(GpuError::new(
+                    GpuErrorKind::Seed,
+                    "the slate does not belong to this tight certificate's theory",
+                ));
+            }
+            let candidates = slate
+                .candidates()
+                .get(offset..)
+                .filter(|rest| !rest.is_empty())
+                .ok_or_else(|| {
+                    GpuError::new(
+                        GpuErrorKind::Capacity,
+                        "no candidate of the slate remains at the offset",
+                    )
+                })?;
+            poll(cancellation)?;
+            self.runtime.check_health()?;
+            let call = self.prepare_call(
+                certificate,
+                candidates,
+                limits,
+                cancellation,
+                crate::candidates::BatchSize::Prefix(candidates.len()),
+            )?;
+            poll(cancellation)?;
+            Ok(call)
+        })();
+        match prepared {
+            Ok(call) => Ok(PreparedTightSubmission {
+                count: call.plan.worlds as usize,
+                oracle: self,
+                call,
+                theory: slate.theory().clone(),
+                slate: slate.id(),
+                offset,
+                timeout: limits.timeout,
+            }),
+            Err(error) => {
+                if let Some(resident) = self.resident.as_mut() {
+                    resident.invalidate_original_truth();
+                }
+                Err(error.into())
+            }
+        }
+    }
+
     fn check(
         &mut self,
         certificate: &TightPlan,
@@ -544,14 +625,37 @@ impl GpuTightOracle {
         if candidates.is_empty() {
             return Ok(Vec::new());
         }
+        let call = self.prepare_call(certificate, candidates, limits, cancellation, size)?;
+        poll(cancellation)?;
+        self.run(call, limits.timeout, cancellation, None)
+    }
+
+    /// Run a prepared batch under the caller's lease: compile its pipeline at
+    /// first need, install a fresh graph or readers index, submit, run
+    /// `during` while the submission is in flight, finish and settle.
+    ///
+    /// Without `during`, the error scopes close after the readback and the
+    /// wait polls the control, as every synchronous check does. With it, they
+    /// close right after the submission, so they capture none of `during`'s
+    /// device calls; a submission that fails before it is made runs no
+    /// `during`. When the control has fired by the time `during` returns, the
+    /// finish observes the submission's completion without polling the
+    /// control, within the batch's timeout, and reports the stop without
+    /// decoding: a completed, released readback leaves the context reusable.
+    fn run(
+        &mut self,
+        call: PreparedCall,
+        timeout: Duration,
+        cancellation: &Cancellation,
+        during: Option<&mut dyn FnMut()>,
+    ) -> Result<Vec<TightGpuCheck>, GpuError> {
         let PreparedCall {
             fresh,
             plan,
             mut stats,
             build,
             variant,
-        } = self.prepare(certificate, candidates, limits, cancellation, size)?;
-        poll(cancellation)?;
+        } = call;
         // The batch's pipeline, its size and kernel, is compiled at first need,
         // before this call's scopes and before a fresh graph becomes resident.
         // A fresh graph's preparation has released any previous resident, so a
@@ -569,50 +673,55 @@ impl GpuTightOracle {
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident tight graph"))?;
         self.runtime.ensure_pipeline(workgroup_size, variant)?;
         let scopes = ErrorScopes::new(self.runtime.device());
-        if let Some((mut graph, packed)) = fresh {
-            graph.rows.release();
-            self.activity.uploaded_bytes = graph.bytes;
-            self.resident = Some(Resident::new(self.runtime.device(), graph, &packed));
-        }
-        if let Some(built) = build
-            && let Some(resident) = self.resident.as_mut()
-        {
-            let bytes = resident.install_index(self.runtime.device(), &built);
-            self.activity.uploaded_bytes += bytes;
-            stats.uploaded_bytes += bytes;
-            stats.resident_theory_bytes = resident.graph.bytes;
-        }
-        let status = context.compute_timing();
+        self.install(fresh, build, &mut stats);
+        let status = self.runtime.context.compute_timing();
         if status == ComputeTimingStatus::Enabled && self.timer.is_none() {
             self.timer = Some(ComputeTimer::new(self.runtime.device()));
         }
         self.epoch = plan.epoch;
         let mut timing = BatchTiming::default();
+        let runtime = &self.runtime;
+        let mut scopes = Scopes::Open(scopes);
         let outcome = self
             .resident
             .as_mut()
             .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing resident tight graph"))
             .and_then(|resident| {
-                let pipeline = self
-                    .runtime
-                    .pipeline_for(resident.graph.workgroup_size, variant)?;
-                resident.dispatch(
-                    &Execution {
-                        device: self.runtime.device(),
-                        queue: self.runtime.queue(),
-                        pipeline,
-                        variant,
-                        timeout: limits.timeout,
-                        cancellation,
-                        timer: self.timer.as_ref(),
-                    },
-                    self.candidates.words(),
-                    &plan,
+                let pipeline = runtime.pipeline_for(resident.graph.workgroup_size, variant)?;
+                let execution = Execution {
+                    device: runtime.device(),
+                    queue: runtime.queue(),
+                    pipeline,
+                    variant,
+                    timeout,
+                    cancellation,
+                    timer: self.timer.as_ref(),
+                };
+                let call = Call {
+                    seeds: self.candidates.words(),
+                    plan: &plan,
+                };
+                let submitted = resident.submit(&execution, &call, &mut self.activity)?;
+                let observation = match during {
+                    None => Observation::Polled,
+                    Some(during) => {
+                        scopes.settle();
+                        during();
+                        poll(cancellation)
+                            .map_or_else(Observation::AfterStop, |()| Observation::Polled)
+                    }
+                };
+                resident.finish(
+                    &execution,
+                    submitted,
+                    observation,
+                    &call,
                     &mut self.activity,
                     &mut timing,
                 )
             });
-        let result = self.runtime.complete(scopes, outcome).and_then(|decoded| {
+        let settled = runtime.complete_scopes(scopes, outcome);
+        let result = settled.and_then(|decoded| {
             poll(cancellation)?;
             Ok(decoded)
         });
@@ -642,7 +751,30 @@ impl GpuTightOracle {
         Ok(decoded.checks)
     }
 
-    fn prepare(
+    /// Make a freshly prepared graph resident, or install the readers index
+    /// a batch builds, counting the bytes either uploads.
+    fn install(
+        &mut self,
+        fresh: Option<(Graph, Packed)>,
+        build: Option<Built>,
+        stats: &mut TightGpuBatchStats,
+    ) {
+        if let Some((mut graph, packed)) = fresh {
+            graph.rows.release();
+            self.activity.uploaded_bytes = graph.bytes;
+            self.resident = Some(Resident::new(self.runtime.device(), graph, &packed));
+        }
+        if let Some(built) = build
+            && let Some(resident) = self.resident.as_mut()
+        {
+            let bytes = resident.install_index(self.runtime.device(), &built);
+            self.activity.uploaded_bytes += bytes;
+            stats.uploaded_bytes += bytes;
+            stats.resident_theory_bytes = resident.graph.bytes;
+        }
+    }
+
+    fn prepare_call(
         &mut self,
         certificate: &TightPlan,
         candidates: &[Interpretation],
@@ -904,6 +1036,187 @@ impl GpuTightOracle {
             admission.plan = plan;
         }
         Ok(())
+    }
+}
+
+/// One submission of a slate that a [`GpuTightOracle`] admitted, packed and
+/// planned but has not submitted ([`GpuTightOracle::prepare`]).
+///
+/// It holds its oracle's mutable borrow until [`Self::check`] or
+/// [`Self::check_overlapping`] consumes it, so the plan's inputs (the
+/// retained truth's reuse authority, the runtime guard's state, the epoch and
+/// what is resident) are those its check runs on. It carries copies of its
+/// slate's identity, its offset and its count, and no borrow of the slate's
+/// candidates, so the slate's stream can be borrowed again while it runs.
+///
+/// A second preparation cannot begin while one exists:
+///
+/// ```compile_fail,E0499
+/// # use zetesis_wgpu::{GpuTightOracle, TightGpuLimits};
+/// # fn second(oracle: &mut GpuTightOracle, plan: &zetesis_ferraris::TightPlan,
+/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_cpu::Cancellation) {
+/// let first = oracle.prepare(plan, slate, 0, TightGpuLimits::default(), control);
+/// let second = oracle.prepare(plan, slate, 0, TightGpuLimits::default(), control);
+/// drop((first, second));
+/// # }
+/// ```
+///
+/// Nor can any other operation on the oracle run between a preparation and its
+/// check:
+///
+/// ```compile_fail,E0499
+/// # use zetesis_wgpu::{GpuTightOracle, TightGpuLimits};
+/// # fn between(oracle: &mut GpuTightOracle, plan: &zetesis_ferraris::TightPlan,
+/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_cpu::Cancellation) {
+/// let prepared = oracle.prepare(plan, slate, 0, TightGpuLimits::default(), control).unwrap();
+/// oracle.clear_residency();
+/// let _ = prepared.check(control);
+/// # }
+/// ```
+///
+/// And a prepared submission is checked only by its own oracle: the oracle has
+/// no public operation that takes a prepared submission, so one prepared
+/// elsewhere has nowhere to go.
+///
+/// ```compile_fail,E0624
+/// # use zetesis_wgpu::{GpuTightOracle, TightGpuLimits};
+/// # fn elsewhere(one: &mut GpuTightOracle, other: &mut GpuTightOracle,
+/// #     plan: &zetesis_ferraris::TightPlan, slate: zetesis_ferraris::SlateRef<'_>,
+/// #     control: &zetesis_cpu::Cancellation) {
+/// let prepared = one.prepare(plan, slate, 0, TightGpuLimits::default(), control).unwrap();
+/// let _ = other.check(prepared, control);
+/// # }
+/// ```
+///
+/// The same uses, in order, compile:
+///
+/// ```no_run
+/// # use zetesis_wgpu::{GpuTightOracle, TightGpuLimits};
+/// # fn in_order(oracle: &mut GpuTightOracle, plan: &zetesis_ferraris::TightPlan,
+/// #     slate: zetesis_ferraris::SlateRef<'_>, control: &zetesis_cpu::Cancellation) {
+/// let prepared = oracle.prepare(plan, slate, 0, TightGpuLimits::default(), control).unwrap();
+/// let _ = prepared.check(control);
+/// oracle.clear_residency();
+/// let next = oracle.prepare(plan, slate, 0, TightGpuLimits::default(), control).unwrap();
+/// let (_, during) = next.check_overlapping(control, || 1);
+/// assert_eq!(during, Some(1));
+/// # }
+/// ```
+#[must_use = "a prepared submission submits nothing until it is checked"]
+pub struct PreparedTightSubmission<'o> {
+    oracle: &'o mut GpuTightOracle,
+    call: PreparedCall,
+    theory: Theory,
+    slate: SlateId,
+    offset: usize,
+    count: usize,
+    timeout: Duration,
+}
+
+impl PreparedTightSubmission<'_> {
+    /// The identity of the slate this submission belongs to.
+    #[must_use]
+    pub const fn slate(&self) -> SlateId {
+        self.slate
+    }
+
+    /// The position of the submission's first candidate in its slate.
+    #[must_use]
+    pub const fn offset(&self) -> usize {
+        self.offset
+    }
+
+    /// The candidates the submission admitted: at least one, and at most the
+    /// rest of the slate from its offset.
+    #[must_use]
+    pub const fn count(&self) -> usize {
+        self.count
+    }
+
+    /// Submit the prepared batch and wait for it, as
+    /// [`GpuTightOracle::check_prefix`] checks a prefix: the context's lease is
+    /// taken, control and health are polled, and the wait polls control
+    /// between waits of at most 50 ms.
+    ///
+    /// # Errors
+    /// Has [`GpuTightOracle::check_prefix`]'s typed failures after
+    /// preparation, with its rules for context reuse; `Busy` contention
+    /// submits nothing. A failure invalidates the retained truth.
+    pub fn check(
+        self,
+        cancellation: &Cancellation,
+    ) -> Result<CheckedSlate<TightGpuCheck>, TightGpuError> {
+        self.run(cancellation, None)
+    }
+
+    /// Submit the prepared batch, run `during` while the device checks it,
+    /// then finish: wait for the submission, map, decode and settle it. One
+    /// submission is in flight while `during` runs, and none when this
+    /// returns; nothing this returns names the submission.
+    ///
+    /// The context's lease is held from before the submission to the finish,
+    /// including `during`, so another operation on the shared context is
+    /// refused with `Busy` meanwhile, and an operation on the same context
+    /// inside `during` is refused too. The error scopes close right after the
+    /// submission, before `during`. When the control has fired by the time
+    /// `during` returns, the finish observes the submission's completion
+    /// without polling the control, within the batch's timeout, so a completed
+    /// and released readback leaves the context reusable, and the stop is
+    /// reported without decoding. A panic in `during` unwinds through this
+    /// operation and invalidates the context, since its submission's
+    /// completion is then unobserved.
+    ///
+    /// Returns the check's outcome and `during`'s result. The result is absent
+    /// only when the check failed before submitting, in which case `during`
+    /// did not run.
+    pub fn check_overlapping<R>(
+        self,
+        cancellation: &Cancellation,
+        during: impl FnOnce() -> R,
+    ) -> (
+        Result<CheckedSlate<TightGpuCheck>, TightGpuError>,
+        Option<R>,
+    ) {
+        let mut during = Some(during);
+        let mut result = None;
+        let mut run = || {
+            if let Some(during) = during.take() {
+                result = Some(during());
+            }
+        };
+        let checked = self.run(cancellation, Some(&mut run));
+        (checked, result)
+    }
+
+    fn run(
+        self,
+        cancellation: &Cancellation,
+        during: Option<&mut dyn FnMut()>,
+    ) -> Result<CheckedSlate<TightGpuCheck>, TightGpuError> {
+        let Self {
+            oracle,
+            call,
+            theory,
+            slate,
+            offset,
+            count,
+            timeout,
+        } = self;
+        let context = oracle.runtime.context.clone();
+        let checked = context.lease().and_then(|_lease| {
+            poll(cancellation)?;
+            oracle.runtime.check_health()?;
+            oracle.run(call, timeout, cancellation, during)
+        });
+        match checked {
+            Ok(checks) => Ok(CheckedSlate::new(theory, slate, offset, count, checks)),
+            Err(error) => {
+                if let Some(resident) = oracle.resident.as_mut() {
+                    resident.invalidate_original_truth();
+                }
+                Err(error.into())
+            }
+        }
     }
 }
 

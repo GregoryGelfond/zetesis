@@ -3,7 +3,7 @@
 use super::packing::{self, Decoded, Graph, PARAM_BYTES, Packed, Plan};
 use super::update::{self, Built, Stage};
 use super::{TightGpuActivity, poll};
-use crate::runtime::{self, Dispatch, Variant, buffer, entry, initialized};
+use crate::runtime::{self, Dispatch, Observation, Variant, buffer, entry, initialized};
 use crate::{GpuError, GpuErrorKind};
 use std::time::Duration;
 use zetesis_cpu::Cancellation;
@@ -97,23 +97,25 @@ impl Resident {
         bytes
     }
 
-    pub(super) fn dispatch(
+    /// Write and submit the batch, and request its readback's mapping. The
+    /// submission is in flight when this returns; [`Self::finish`] waits for
+    /// it. An error leaves nothing in flight.
+    pub(super) fn submit(
         &mut self,
         execution: &Execution<'_>,
-        seeds: &[u32],
-        plan: &Plan,
+        call: &Call<'_>,
         activity: &mut TightGpuActivity,
-        timing: &mut crate::timing::BatchTiming,
-    ) -> Result<runtime::Completion<Decoded>, GpuError> {
+    ) -> Result<Submitted, GpuError> {
         let Execution {
             device,
             queue,
             pipeline,
             variant,
-            timeout,
             cancellation,
             timer,
+            ..
         } = *execution;
+        let Call { seeds, plan } = *call;
         let bindings = Bindings {
             nodes: &self.nodes,
             roots: &self.roots,
@@ -162,12 +164,42 @@ impl Resident {
         activity.submissions = 1;
         activity.submitted_candidates = u64::from(plan.worlds);
         activity.scheduled_work = u64::from(plan.worlds) * u64::from(plan.allowance);
+        Ok(Submitted {
+            pending: runtime::request_read(&transport.readback, submission.index),
+            at: submission.at,
+        })
+    }
+
+    /// Wait for the submitted batch, observing the control as `observation`
+    /// says, then decode its readback. The transport is the one `submit` used:
+    /// nothing replaces it within one check.
+    pub(super) fn finish(
+        &self,
+        execution: &Execution<'_>,
+        submitted: Submitted,
+        observation: Observation,
+        call: &Call<'_>,
+        activity: &mut TightGpuActivity,
+        timing: &mut crate::timing::BatchTiming,
+    ) -> Result<runtime::Completion<Decoded>, GpuError> {
+        let Execution {
+            device,
+            timeout,
+            cancellation,
+            ..
+        } = *execution;
+        let Call { seeds, plan } = *call;
+        let transport = self
+            .transport
+            .as_ref()
+            .ok_or_else(|| GpuError::new(GpuErrorKind::Device, "missing tight transport"))?;
         let mut performed = 0;
-        let result = runtime::read_polled(
+        let result = runtime::finish_pending(
             device,
             &transport.readback,
-            submission.index,
+            submitted.pending,
             timeout,
+            observation,
             || poll(cancellation),
             |words| {
                 let (words, tail) = crate::timing::split_readback(words, transport.timed)?;
@@ -177,7 +209,7 @@ impl Resident {
                 Ok(decoded)
             },
         );
-        timing.window = result.window_since(submission.at);
+        timing.window = result.window_since(submitted.at);
         if result.is_ok() {
             activity.completed_candidates = u64::from(plan.worlds);
             activity.completed_work = performed;
@@ -190,6 +222,20 @@ impl Resident {
         }
         Ok(result)
     }
+}
+
+/// One batch's host side: the candidate seeds it uploads and its plan.
+#[derive(Clone, Copy)]
+pub(super) struct Call<'a> {
+    pub(super) seeds: &'a [u32],
+    pub(super) plan: &'a Plan,
+}
+
+/// A submitted batch awaiting its finish: its pending readback and the host
+/// instant just before its submission, from which its window is measured.
+pub(super) struct Submitted {
+    pending: runtime::PendingRead,
+    at: std::time::Instant,
 }
 
 pub(super) struct Execution<'a> {

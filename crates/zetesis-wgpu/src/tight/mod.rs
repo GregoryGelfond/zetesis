@@ -7,7 +7,7 @@ mod transport;
 mod update;
 
 use crate::GpuError;
-pub use device::GpuTightOracle;
+pub use device::{GpuTightOracle, PreparedTightSubmission};
 use std::{fmt, time::Duration};
 use zetesis_cpu::{Cancellation, Stop};
 use zetesis_ferraris::TightVerdict;

@@ -9,7 +9,7 @@ mod transport;
 
 use std::time::Duration;
 
-pub use device::GpuFormulaOracle;
+pub use device::{GpuFormulaOracle, PreparedFormulaSubmission};
 pub use profile::GpuFormulaProfile;
 pub use projection::GateProjection;
 
