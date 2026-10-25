@@ -46,6 +46,9 @@ Notable changes by release. Versions follow Semantic Versioning.
   reuse authority the route needs.
 - A maintained draw-poker workload checks complete enumeration against clingo,
   with portable filenames and a recorded 36-answer contract.
+- A maintained wide Mastermind workload, outside the regular benchmark corpus,
+  checks complete enumeration against clingo, with its original sources kept
+  byte for byte and a recorded 45,832-answer contract.
 
 ### Changed
 

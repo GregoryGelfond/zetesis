@@ -14,8 +14,8 @@ does not establish model identity or completeness.
 
 It is a different program from `examples/scalability/mastermind.lp`, the
 maintained scalability workload. Run at eight colours, as the scalability
-population also runs it, that program has the same 45,832 answers, but the two
-encodings take different routes through the GPU's tight kernel. The
+population also runs it, that program is a different encoding of the same
+puzzle, with the same 45,832 codes. The
 [contributor guide](../../CONTRIBUTING.md) names this program, by path, as the
 workload on which the tight kernel's zero-fill decision was measured. The bundle
 is not part of the benchmark corpus.
